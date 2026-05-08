@@ -1,0 +1,21 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+data/memory/*.db
+data/memory/*.db-*
+data/memory/audit_log.jsonl
+data/embeddings/
+ui-dist/
+.ui-runtime/
+.api-runtime/
+node_modules/
+.DS_Store
+
+# Personal data — never commit
+Vault/
+.obsidian/
+

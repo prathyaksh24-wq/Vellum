@@ -1,0 +1,39 @@
+[project]
+name = "personal-langgraph-agent"
+version = "0.1.0"
+description = "Privacy-first Obsidian-native LangGraph agent."
+requires-python = ">=3.11"
+dependencies = [
+  "APScheduler>=3.10.4",
+  "aiosqlite>=0.20.0",
+  "httpx>=0.28.0",
+  "duckduckgo-search>=6.3.0",
+  "fastapi>=0.115.0",
+  "langchain-openai>=0.1.22",
+  "langchain-core>=0.3.0",
+  "langgraph>=0.2.0",
+  "langgraph-checkpoint-sqlite>=2.0.0",
+  "mcp>=1.27.0",
+  "numpy>=2.0.0",
+  "pydantic-settings>=2.6.0",
+  "python-dotenv>=1.0.1",
+  "qdrant-client>=1.12.0",
+  "rich>=13.7.1",
+  "sentence-transformers>=3.3.0",
+  "presidio-analyzer>=2.2.354",
+  "presidio-anonymizer>=2.2.354",
+  "spacy>=3.7.4",
+  "watchdog>=4.0.0",
+]
+
+[project.scripts]
+personal-agent = "agent.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

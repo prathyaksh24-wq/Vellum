@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vellum — mobile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #0c0c0e; }
+  body { font-family: 'DM Sans', sans-serif; }
+
+  @keyframes vEmberBreathe {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1; }
+  }
+  @keyframes vDrawAcross {
+    0%   { transform: scaleX(0); opacity: 0.4; }
+    50%  { opacity: 0.85; }
+    100% { transform: scaleX(1); opacity: 0.2; }
+  }
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="vellum-mobile.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+// ─────────────────────────────────────────────────────────────
+// Wrappers — drop Vellum UI inside platform device frames
+// ─────────────────────────────────────────────────────────────
+
+function IOSWrap({ children }) {
+  // iOS dynamic-island reserves ~60px of inset.
+  // The IOSDevice frame contains its own status bar + home indicator;
+  // we pass topInset=60, bottomInset=34 to children.
+  return (
+    <IOSDevice dark={true} width={390} height={844}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: '#0c0c0e',
+      }}>
+        {React.cloneElement(children, { topInset: 60, bottomInset: 34 })}
+      </div>
+    </IOSDevice>
+  );
+}
+
+function AndroidWrap({ children }) {
+  // Android: status bar 40 + app bar overlap ~12 → topInset 52
+  // Bottom gesture nav 24 → bottomInset 24
+  // The AndroidDevice frame handles its own status + nav bars.
+  // We render Vellum UI inside the content area; the frame already
+  // accounts for status/nav, so we use small insets.
+  return (
+    <AndroidDevice dark={true} width={400} height={844}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: '#0c0c0e',
+      }}>
+        {React.cloneElement(children, { topInset: 12, bottomInset: 12 })}
+      </div>
+    </AndroidDevice>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// CANVAS
+// ─────────────────────────────────────────────────────────────
+
+function App() {
+  return (
+    <DesignCanvas
+      title={<span style={{
+        fontFamily: '"Fraunces", serif', fontWeight: 300, fontSize: 28,
+        letterSpacing: '-0.025em',
+      }}>
+        <em style={{ fontStyle: 'italic' }}>v</em>ellum<span style={{
+          fontFamily: '"DM Sans", sans-serif', fontSize: 11, fontWeight: 500,
+          letterSpacing: '0.24em', textTransform: 'uppercase',
+          color: 'rgba(236,230,219,0.46)', marginLeft: 16,
+        }}>Mobile · iOS &amp; Android</span>
+      </span>}
+      bg="#0c0c0e"
+      defaultZoom={0.5}
+    >
+
+      {/* ────────────── iOS ────────────── */}
+      <DCSection id="ios" title="iOS">
+        <DCArtboard id="ios-landing"      label="Landing"      width={390} height={844}>
+          <IOSWrap><VLanding /></IOSWrap>
+        </DCArtboard>
+
+        <DCArtboard id="ios-threads"      label="The library"  width={390} height={844}>
+          <IOSWrap><VThreads /></IOSWrap>
+        </DCArtboard>
+
+        <DCArtboard id="ios-thinking"     label="Thinking"     width={390} height={844}>
+          <IOSWrap><VConversation thinking={true} /></IOSWrap>
+        </DCArtboard>
+
+        <DCArtboard id="ios-conversation" label="Answered"     width={390} height={844}>
+          <IOSWrap><VConversation /></IOSWrap>
+        </DCArtboard>
+
+        <DCArtboard id="ios-faculties"    label="Mind & Faculties" width={390} height={844}>
+          <IOSWrap><VFaculties /></IOSWrap>
+        </DCArtboard>
+      </DCSection>
+
+      {/* ────────────── Android ────────────── */}
+      <DCSection id="android" title="Android">
+        <DCArtboard id="and-landing"      label="Landing"      width={400} height={844}>
+          <AndroidWrap><VLanding /></AndroidWrap>
+        </DCArtboard>
+
+        <DCArtboard id="and-threads"      label="The library"  width={400} height={844}>
+          <AndroidWrap><VThreads /></AndroidWrap>
+        </DCArtboard>
+
+        <DCArtboard id="and-thinking"     label="Thinking"     width={400} height={844}>
+          <AndroidWrap><VConversation thinking={true} /></AndroidWrap>
+        </DCArtboard>
+
+        <DCArtboard id="and-conversation" label="Answered"     width={400} height={844}>
+          <AndroidWrap><VConversation /></AndroidWrap>
+        </DCArtboard>
+
+        <DCArtboard id="and-faculties"    label="Mind & Faculties" width={400} height={844}>
+          <AndroidWrap><VFaculties /></AndroidWrap>
+        </DCArtboard>
+      </DCSection>
+
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+
+</body>
+</html>

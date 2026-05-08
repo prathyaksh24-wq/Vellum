@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vellum · design preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root {
+    --graphite: #0c0c0e;
+    --charcoal: #131316;
+    --slate: #1a1a1c;
+    --warm-gray: #232326;
+    --parchment: #ece6db;
+    --vellum-paper: #f6f3ee;
+    --muted: rgba(236, 230, 219, 0.72);
+    --whisper: rgba(236, 230, 219, 0.46);
+    --faint: rgba(236, 230, 219, 0.22);
+    --ember: #d97746;
+    --soft-ember: #f1b27a;
+    --line: rgba(244, 237, 226, 0.10);
+    --line-2: rgba(244, 237, 226, 0.16);
+    --ease-exhale: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--graphite);
+    color: var(--parchment);
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* paper grain */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.9 0 0 0 0 0.86 0 0 0 0.06 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.4;
+    mix-blend-mode: overlay;
+  }
+
+  .serif { font-family: 'Fraunces', serif; font-weight: 300; letter-spacing: -0.01em; }
+  .mono  { font-family: 'DM Sans', sans-serif; font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; }
+
+  /* ===== Header ===== */
+  .header {
+    position: relative;
+    z-index: 5;
+    padding: 28px 48px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--line);
+  }
+  .header-name {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .header-meta {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--whisper);
+  }
+
+  /* ===== Compare Grid ===== */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    min-height: calc(100vh - 90px);
+    position: relative;
+    z-index: 2;
+  }
+
+  @media (max-width: 1100px) {
+    .compare { grid-template-columns: 1fr; grid-template-rows: auto auto; }
+    .compare .divider { width: 100%; height: 1px; }
+  }
+
+  .divider { background: var(--line); }
+
+  .pane {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 700px;
+  }
+
+  /* ===== Pane Headers ===== */
+  .pane-meta {
+    position: relative;
+    z-index: 8;
+    padding: 32px 40px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pane-label {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 9px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--whisper);
+  }
+  .pane-name {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 18px;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+  }
+
+  /* ===== Interface (centered chat area) ===== */
+  .stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 40px 40px 100px;
+  }
+
+  .interface {
+    width: 100%;
+    max-width: 460px;
+    position: relative;
+    z-index: 5;
+  }
+
+  .wordmark {
+    text-align: center;
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 32px;
+    letter-spacing: -0.025em;
+    margin-bottom: 6px;
+    color: var(--parchment);
+  }
+  .subtitle {
+    text-align: center;
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-style: italic;
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 56px;
+    letter-spacing: 0.005em;
+  }
+
+  /* ===== Input Shell ===== */
+  .input-shell {
+    position: relative;
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+    padding: 16px 22px 14px;
+    background: rgba(19, 19, 22, 0.85);
+    backdrop-filter: blur(8px);
+    transition: border-color 800ms var(--ease-exhale);
+    z-index: 6;
+  }
+  .input-shell.has-content {
+    border-color: rgba(217, 119, 70, 0.30);
+  }
+  .input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--parchment);
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 15px;
+    line-height: 1.5;
+    caret-color: var(--ember);
+  }
+  .input::placeholder {
+    color: var(--whisper);
+    font-style: italic;
+  }
+  .ember-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--ember);
+    opacity: 0;
+    transition: opacity 900ms var(--ease-exhale);
+    flex-shrink: 0;
+  }
+  .ember-dot.visible {
+    opacity: 1;
+    animation: breathe 5.5s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { opacity: 0.85; }
+    50% { opacity: 1; }
+  }
+
+  /* ===== Drawing Line (Direction A thinking state) ===== */
+  .drawing-line {
+    position: absolute;
+    bottom: 110px;
+    left: 80px;
+    right: 80px;
+    height: 1px;
+    background: var(--faint);
+    transform: scaleX(0);
+    transform-origin: left center;
+    z-index: 4;
+  }
+  .drawing-line.active {
+    animation: drawAcross 3.2s var(--ease-exhale) forwards;
+  }
+  @keyframes drawAcross {
+    0%   { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+
+  /* ===== Response ===== */
+  .response {
+    margin-top: 32px;
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(8px);
+    transition: opacity 1000ms var(--ease-exhale), transform 1000ms var(--ease-exhale), filter 1000ms var(--ease-exhale);
+  }
+  .response.visible {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+  .response-text {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--parchment);
+  }
+  .response-text em {
+    font-style: italic;
+    color: var(--vellum-paper);
+  }
+  sup.fn {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 9.5px;
+    color: var(--ember);
+    cursor: pointer;
+    margin: 0 1px;
+    transition: color 240ms ease;
+    vertical-align: super;
+    line-height: 0;
+  }
+  sup.fn:hover { color: var(--soft-ember); }
+
+  /* footnotes block (marginalia style, below) */
+  .footnotes {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .footnote {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--whisper);
+    padding-left: 16px;
+    border-left: 1px solid var(--line);
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transform: translateX(-3px);
+    transition: opacity 800ms var(--ease-exhale), transform 800ms var(--ease-exhale);
+  }
+  .response.visible .footnote {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .response.visible .footnote:nth-child(1) { transition-delay: 240ms; }
+  .response.visible .footnote:nth-child(2) { transition-delay: 440ms; }
+  .response.visible .footnote:nth-child(3) { transition-delay: 640ms; }
+
+  .fn-mark {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--ember);
+    flex-shrink: 0;
+    width: 14px;
+  }
+  .fn-text { color: var(--whisper); }
+  .fn-source {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* ===== Chop / Faculty Mark ===== */
+  .chop {
+    position: absolute;
+    bottom: 28px;
+    right: 32px;
+    z-index: 8;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 22px;
+    color: var(--whisper);
+    cursor: pointer;
+    transition: color 600ms var(--ease-exhale);
+    line-height: 1;
+    user-select: none;
+  }
+  .chop:hover { color: var(--muted); }
+
+  /* ===== Controls ===== */
+  .controls {
+    position: absolute;
+    top: 32px;
+    right: 32px;
+    z-index: 9;
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    overflow: hidden;
+    background: rgba(19, 19, 22, 0.92);
+    backdrop-filter: blur(8px);
+  }
+  .ctrl-btn {
+    background: transparent;
+    border: none;
+    color: var(--whisper);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 9px 13px;
+    cursor: pointer;
+    transition: color 400ms ease, background 400ms ease;
+    border-right: 1px solid var(--line);
+  }
+  .ctrl-btn:last-child { border-right: none; }
+  .ctrl-btn:hover { color: var(--muted); }
+  .ctrl-btn.active { color: var(--ember); background: rgba(217, 119, 70, 0.06); }
+
+  /* ===== Direction B specific layers ===== */
+  .water-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .glow-canvas {
+    position: absolute;
+    inset: -50px;
+    z-index: -1;
+    pointer-events: none;
+    border-radius: 30px;
+  }
+
+  .vault-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 1600ms var(--ease-exhale);
+    pointer-events: none;
+  }
+  .vault-canvas.visible {
+    opacity: 1;
+    pointer-events: auto;
+    cursor: grab;
+  }
+  .vault-canvas.visible:active { cursor: grabbing; }
+
+  /* When vault is visible, fade the interface */
+  .pane.vault-active .interface { opacity: 0.2; pointer-events: none; transition: opacity 1200ms var(--ease-exhale); }
+  .pane.vault-active .chop { opacity: 0.3; }
+
+  .vault-legend {
+    position: absolute;
+    bottom: 32px;
+    left: 32px;
+    z-index: 5;
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.7;
+    opacity: 0;
+    transition: opacity 1200ms var(--ease-exhale) 600ms;
+    max-width: 280px;
+  }
+  .pane.vault-active .vault-legend { opacity: 1; }
+  .vault-legend .v-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .v-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* Ink in water — Direction B thinking */
+  .ink {
+    position: absolute;
+    bottom: 130px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 280px;
+    height: 160px;
+    pointer-events: none;
+    opacity: 0;
+    z-index: 4;
+  }
+  .ink.active { animation: inkFall 4.5s var(--ease-exhale) forwards; }
+  @keyframes inkFall {
+    0%   { opacity: 0; transform: translateX(-50%) translateY(-20px) scale(0.3); filter: blur(0px); }
+    20%  { opacity: 0.8; }
+    60%  { opacity: 0.5; transform: translateX(-50%) translateY(20px) scale(1.6); filter: blur(2px); }
+    100% { opacity: 0; transform: translateX(-50%) translateY(40px) scale(2.6); filter: blur(8px); }
+  }
+
+  /* Privacy aura intensifies when typing in B */
+  .pane-b .input-shell.has-content + .glow-anchor .glow-canvas {
+    opacity: 1.4;
+  }
+
+  /* Bottom hint */
+  .pane-hint {
+    position: absolute;
+    bottom: 24px;
+    left: 32px;
+    z-index: 5;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 9px;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: var(--whisper);
+    opacity: 0.6;
+  }
+
+  /* hide native cursor when over vault */
+  .pane.vault-active .vault-canvas { cursor: grab; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-name"><em>vellum</em></div>
+  <div class="header-meta">design preview · two directions</div>
+</header>
+
+<div class="compare">
+
+  <!-- ============================================================ -->
+  <!-- DIRECTION A — PURE STILLNESS                                 -->
+  <!-- ============================================================ -->
+  <section class="pane pane-a" id="paneA">
+    <div class="pane-meta">
+      <div class="pane-label">Direction A</div>
+      <div class="pane-name">Pure stillness</div>
+    </div>
+
+    <div class="controls" data-pane="A">
+      <button class="ctrl-btn active" data-state="empty">Empty</button>
+      <button class="ctrl-btn" data-state="typing">Typing</button>
+      <button class="ctrl-btn" data-state="thinking">Thinking</button>
+      <button class="ctrl-btn" data-state="answered">Answered</button>
+    </div>
+
+    <div class="stage">
+      <div class="interface">
+        <div class="wordmark">vellum</div>
+        <div class="subtitle">What are you reading.</div>
+
+        <div class="input-shell" id="inputShellA">
+          <div class="input-row">
+            <input class="input" placeholder="Ask." id="inputA" autocomplete="off">
+            <div class="ember-dot" id="emberA"></div>
+          </div>
+        </div>
+
+        <div class="response" id="responseA">
+          <div class="response-text" id="responseTextA"></div>
+          <div class="footnotes" id="footnotesA"></div>
+        </div>
+      </div>
+
+      <div class="drawing-line" id="lineA"></div>
+    </div>
+
+    <div class="chop" title="Faculties"><em>&amp;</em></div>
+    <div class="pane-hint">Static · No 3D · One motion (drawing line)</div>
+  </section>
+
+  <div class="divider"></div>
+
+  <!-- ============================================================ -->
+  <!-- DIRECTION B — EARNED SPECTACLE                               -->
+  <!-- ============================================================ -->
+  <section class="pane pane-b" id="paneB">
+    <canvas class="water-canvas" id="waterCanvas"></canvas>
+    <canvas class="vault-canvas" id="vaultCanvas"></canvas>
+
+    <div class="pane-meta">
+      <div class="pane-label">Direction B</div>
+      <div class="pane-name">Earned spectacle</div>
+    </div>
+
+    <div class="controls" data-pane="B">
+      <button class="ctrl-btn active" data-state="empty">Empty</button>
+      <button class="ctrl-btn" data-state="typing">Typing</button>
+      <button class="ctrl-btn" data-state="thinking">Thinking</button>
+      <button class="ctrl-btn" data-state="answered">Answered</button>
+      <button class="ctrl-btn" data-state="vault">Vault</button>
+    </div>
+
+    <div class="stage">
+      <div class="interface">
+        <div class="wordmark">vellum</div>
+        <div class="subtitle">What are you reading.</div>
+
+        <div style="position: relative;">
+          <canvas class="glow-canvas" id="glowCanvas"></canvas>
+          <div class="input-shell" id="inputShellB">
+            <div class="input-row">
+              <input class="input" placeholder="Ask." id="inputB" autocomplete="off">
+              <div class="ember-dot" id="emberB"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="response" id="responseB">
+          <div class="response-text" id="responseTextB"></div>
+          <div class="footnotes" id="footnotesB"></div>
+        </div>
+      </div>
+
+      <svg class="ink" id="inkB" viewBox="0 0 280 160" preserveAspectRatio="none">
+        <defs>
+          <filter id="turb" x="-20%" y="-20%" width="140%" height="140%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.018 0.022" numOctaves="3" seed="3">
+              <animate attributeName="baseFrequency" values="0.018 0.022;0.025 0.030;0.018 0.022" dur="4.5s" repeatCount="indefinite"/>
+            </feTurbulence>
+            <feDisplacementMap in="SourceGraphic" scale="38" />
+          </filter>
+          <radialGradient id="inkGrad" cx="50%" cy="40%" r="50%">
+            <stop offset="0%" stop-color="#d97746" stop-opacity="0.85"/>
+            <stop offset="35%" stop-color="#a85a32" stop-opacity="0.4"/>
+            <stop offset="70%" stop-color="#5a3520" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="#5a3520" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <ellipse cx="140" cy="80" rx="80" ry="55" fill="url(#inkGrad)" filter="url(#turb)" />
+      </svg>
+    </div>
+
+    <div class="vault-legend" id="vaultLegend">
+      <div class="v-row"><span class="v-dot" style="background:#d97746"></span> <em>Books</em> · 45 notes</div>
+      <div class="v-row"><span class="v-dot" style="background:#ece6db"></span> <em>Sports</em> · 38 notes</div>
+      <div class="v-row"><span class="v-dot" style="background:#f1b27a"></span> <em>Agent</em> · 18 notes</div>
+      <div class="v-row"><span class="v-dot" style="background:#8a857c"></span> <em>private folders</em> · 64 notes</div>
+      <div style="margin-top:14px; color: var(--whisper); font-size:11px; font-style: normal;">drag to orbit · summoned with ⌘&nbsp;K</div>
+    </div>
+
+    <div class="chop" title="Faculties"><em>&amp;</em></div>
+    <div class="pane-hint">Living water · Ink-in-water · 3D vault on summon</div>
+  </section>
+
+</div>
+
+<script>
+  // ============================================================
+  //  Response copy — same for both panes
+  // ============================================================
+  const RESPONSE_HTML = `Tarkovsky's stillness is not the absence of action. It is the presence of attention. The long takes in <em>Stalker</em><sup class="fn">i</sup> and <em>Mirror</em><sup class="fn">ii</sup> hold their gaze the way a person holds a thought he refuses to interrupt — letting it ripen, letting it pass through, until what is in front of the camera becomes more than what was originally placed there.<sup class="fn">iii</sup>`;
+
+  const FOOTNOTES_HTML = `
+    <div class="footnote">
+      <span class="fn-mark"><em>i.</em></span>
+      <span class="fn-text">From your notes — <span class="fn-source">Books / Sculpting in Time, p. 114</span></span>
+    </div>
+    <div class="footnote">
+      <span class="fn-mark"><em>ii.</em></span>
+      <span class="fn-text">From your notes — <span class="fn-source">Books / Sculpting in Time, p. 79</span></span>
+    </div>
+    <div class="footnote">
+      <span class="fn-mark"><em>iii.</em></span>
+      <span class="fn-text">From your notes — <span class="fn-source">youtube / Tarkovsky on the long take · 2024</span></span>
+    </div>
+  `;
+
+  const SAMPLE_QUERY = "what did i make of stillness in tarkovsky";
+
+  // ============================================================
+  //  State controller
+  // ============================================================
+  function setState(pane, state) {
+    const ember = document.getElementById('ember' + pane);
+    const inputShell = document.getElementById('inputShell' + pane);
+    const inputElem = document.getElementById('input' + pane);
+    const response = document.getElementById('response' + pane);
+    const responseText = document.getElementById('responseText' + pane);
+    const footnotes = document.getElementById('footnotes' + pane);
+    const paneEl = document.getElementById('pane' + pane);
+
+    // Pane-specific elements
+    const line = pane === 'A' ? document.getElementById('lineA') : null;
+    const ink  = pane === 'B' ? document.getElementById('inkB')  : null;
+    const vault = pane === 'B' ? document.getElementById('vaultCanvas') : null;
+
+    // Reset everything
+    ember.classList.remove('visible');
+    inputShell.classList.remove('has-content');
+    response.classList.remove('visible');
+    paneEl.classList.remove('vault-active');
+    if (line) line.classList.remove('active');
+    if (ink)  ink.classList.remove('active');
+    if (vault) vault.classList.remove('visible');
+    inputElem.value = '';
+
+    // Apply state
+    if (state === 'typing') {
+      ember.classList.add('visible');
+      inputShell.classList.add('has-content');
+      inputElem.value = SAMPLE_QUERY;
+    } else if (state === 'thinking') {
+      ember.classList.add('visible');
+      inputShell.classList.add('has-content');
+      inputElem.value = SAMPLE_QUERY;
+      if (line) {
+        line.style.animation = 'none';
+        void line.offsetHeight;
+        line.style.animation = '';
+        line.classList.add('active');
+      }
+      if (ink) {
+        ink.style.animation = 'none';
+        void ink.offsetWidth;
+        ink.style.animation = '';
+        ink.classList.add('active');
+      }
+    } else if (state === 'answered') {
+      ember.classList.add('visible');
+      inputShell.classList.add('has-content');
+      inputElem.value = SAMPLE_QUERY;
+      responseText.innerHTML = RESPONSE_HTML;
+      footnotes.innerHTML = FOOTNOTES_HTML;
+      requestAnimationFrame(() => {
+        setTimeout(() => response.classList.add('visible'), 100);
+      });
+    } else if (state === 'vault') {
+      paneEl.classList.add('vault-active');
+      if (vault) vault.classList.add('visible');
+    }
+  }
+
+  document.querySelectorAll('.controls').forEach(group => {
+    const pane = group.dataset.pane;
+    group.querySelectorAll('.ctrl-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        setState(pane, btn.dataset.state);
+      });
+    });
+  });
+
+  // ============================================================
+  //  DIRECTION B — Water surface (WebGL)
+  //  Slow, warm, near-black. No blue. Ember tinted.
+  // ============================================================
+  (() => {
+    const canvas = document.getElementById('waterCanvas');
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false });
+    if (!gl) { console.warn('WebGL not supported'); return; }
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width  = canvas.offsetWidth  * dpr;
+      canvas.height = canvas.offsetHeight * dpr;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    resize();
+    new ResizeObserver(resize).observe(canvas);
+
+    const vsrc = `attribute vec2 a_position; void main(){ gl_Position=vec4(a_position,0.0,1.0); }`;
+    const fsrc = `
+      precision highp float;
+      uniform float u_time;
+      uniform vec2  u_res;
+
+      float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+      float noise(vec2 p){
+        vec2 i=floor(p), f=fract(p);
+        f=f*f*(3.0-2.0*f);
+        return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),
+                   mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);
+      }
+      float fbm(vec2 p){
+        float v=0.0, a=0.5;
+        for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.02; a*=0.5; }
+        return v;
+      }
+
+      void main(){
+        vec2 uv = gl_FragCoord.xy / u_res.xy;
+        vec2 q  = vec2(uv.x * (u_res.x/u_res.y), uv.y);
+
+        float t = u_time * 0.025;
+
+        float n1 = fbm(q * 1.4 + vec2(t, t*0.6));
+        float n2 = fbm(q * 2.6 - vec2(t*0.8, t*0.4) + vec2(n1*0.3));
+        float n  = mix(n1, n2, 0.55);
+
+        // Two warm tones, dim
+        vec3 deep    = vec3(0.040, 0.040, 0.046);   // graphite
+        vec3 ember   = vec3(0.85, 0.46, 0.27);      // #d97746
+        vec3 emberDim = ember * 0.10;
+
+        vec3 col = mix(deep, emberDim, smoothstep(0.35, 0.78, n));
+        col += emberDim * 0.4 * smoothstep(0.6, 0.9, n);
+
+        // off-axis vignette (warm light source upper-right)
+        float dist = length(uv - vec2(0.78, 0.88));
+        col *= 1.0 - smoothstep(0.0, 1.4, dist) * 0.85;
+
+        // soft inner darkening center
+        float cdist = length(uv - vec2(0.5, 0.5));
+        col = mix(col * 0.55, col, smoothstep(0.0, 0.7, cdist));
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `;
+
+    function compile(type, src) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(sh));
+      }
+      return sh;
+    }
+
+    const program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, vsrc));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fsrc));
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+    const posLoc = gl.getAttribLocation(program, 'a_position');
+    gl.enableVertexAttribArray(posLoc);
+    gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+    const tLoc = gl.getUniformLocation(program, 'u_time');
+    const rLoc = gl.getUniformLocation(program, 'u_res');
+
+    const start = performance.now();
+    function frame() {
+      const t = (performance.now() - start) / 1000;
+      gl.uniform1f(tLoc, t);
+      gl.uniform2f(rLoc, canvas.width, canvas.height);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  // ============================================================
+  //  DIRECTION B — Volumetric glow around input
+  //  Stacked radial gradients on canvas, breathing slowly.
+  // ============================================================
+  (() => {
+    const canvas = document.getElementById('glowCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resize() {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width  = canvas.offsetWidth  * dpr;
+      canvas.height = canvas.offsetHeight * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+    }
+    resize();
+    new ResizeObserver(resize).observe(canvas);
+
+    let t = 0;
+    function frame() {
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      ctx.clearRect(0, 0, w, h);
+
+      const breath = 0.85 + Math.sin(t * 0.5) * 0.15;
+
+      // anchor the input-shell has-content state for stronger glow
+      const intensity = document.getElementById('inputShellB').classList.contains('has-content') ? 1.35 : 1.0;
+
+      const layers = [
+        { x: 0.30, y: 0.50, size: 0.55, op: 0.10 },
+        { x: 0.70, y: 0.50, size: 0.55, op: 0.09 },
+        { x: 0.50, y: 0.30, size: 0.40, op: 0.07 },
+        { x: 0.50, y: 0.70, size: 0.40, op: 0.06 },
+        { x: 0.50, y: 0.50, size: 0.95, op: 0.045 },
+      ];
+
+      ctx.globalCompositeOperation = 'screen';
+
+      layers.forEach(l => {
+        const cx = w * l.x;
+        const cy = h * l.y;
+        const r = Math.max(w, h) * l.size * breath;
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+        const op = l.op * breath * intensity;
+        grad.addColorStop(0,   `rgba(217,119,70,${op})`);
+        grad.addColorStop(0.4, `rgba(217,119,70,${op * 0.45})`);
+        grad.addColorStop(1,   `rgba(217,119,70,0)`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+      });
+
+      t += 0.018;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  // ============================================================
+  //  DIRECTION B — Vault visualization (Three.js point cloud)
+  //  Obsidian folders as clusters. Drag to orbit.
+  // ============================================================
+  (() => {
+    const canvas = document.getElementById('vaultCanvas');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0c0c0e, 0.08);
+
+    const camera = new THREE.PerspectiveCamera(55, canvas.offsetWidth / canvas.offsetHeight, 0.1, 1000);
+    camera.position.set(0, 0, 9);
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    function resize() {
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+    resize();
+    new ResizeObserver(resize).observe(canvas);
+
+    // Folder clusters — accessible folders in ember/parchment, private in muted gray
+    const folders = [
+      { name: 'Books',         center: [-3.0,  1.7, -0.2], color: 0xd97746, count: 45, spread: 1.1 },
+      { name: 'Sports/NBA',    center: [ 2.6,  1.4, -0.8], color: 0xece6db, count: 22, spread: 0.7 },
+      { name: 'Sports/F1',     center: [ 3.4,  0.6,  0.2], color: 0xece6db, count: 16, spread: 0.6 },
+      { name: 'Agent',         center: [ 0.0,  0.0,  2.4], color: 0xf1b27a, count: 18, spread: 0.8 },
+      { name: 'X (private)',   center: [-2.5, -1.8,  1.2], color: 0x6e6963, count: 22, spread: 0.9 },
+      { name: 'youtube (priv)',center: [ 2.2, -1.6,  0.6], color: 0x6e6963, count: 30, spread: 1.0 },
+      { name: 'feedback (priv)',center:[-0.6,  2.6, -1.6], color: 0x6e6963, count: 12, spread: 0.6 },
+    ];
+
+    const positions = [];
+    const colors = [];
+    const sizes = [];
+
+    folders.forEach(f => {
+      const c = new THREE.Color(f.color);
+      for (let i = 0; i < f.count; i++) {
+        // gaussian-ish point
+        const dx = (Math.random() + Math.random() + Math.random() - 1.5) * f.spread;
+        const dy = (Math.random() + Math.random() + Math.random() - 1.5) * f.spread;
+        const dz = (Math.random() + Math.random() + Math.random() - 1.5) * f.spread;
+        positions.push(f.center[0] + dx, f.center[1] + dy, f.center[2] + dz);
+
+        const v = 0.78 + Math.random() * 0.22;
+        colors.push(c.r * v, c.g * v, c.b * v);
+        sizes.push(0.04 + Math.random() * 0.04);
+      }
+    });
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.085,
+      vertexColors: true,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+    });
+
+    const points = new THREE.Points(geo, mat);
+    scene.add(points);
+
+    // faint connecting lines between same-folder points (web of knowledge)
+    const lineGeoBuf = [];
+    let cursor = 0;
+    folders.forEach(f => {
+      const cx = f.center[0], cy = f.center[1], cz = f.center[2];
+      for (let i = 0; i < f.count; i++) {
+        const idx = cursor + i;
+        // line from each point to cluster center, very faint
+        if (Math.random() < 0.35) {
+          lineGeoBuf.push(positions[idx*3], positions[idx*3+1], positions[idx*3+2]);
+          lineGeoBuf.push(cx, cy, cz);
+        }
+      }
+      cursor += f.count;
+    });
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineGeoBuf, 3));
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0xece6db,
+      transparent: true,
+      opacity: 0.04,
+    });
+    const lines = new THREE.LineSegments(lineGeo, lineMat);
+    scene.add(lines);
+
+    // Drag controls
+    let dragging = false;
+    let lastX = 0, lastY = 0;
+    let rotX = 0, rotY = 0;
+    let targetRotX = 0, targetRotY = 0;
+
+    canvas.addEventListener('mousedown', e => {
+      if (!canvas.classList.contains('visible')) return;
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+    window.addEventListener('mouseup', () => dragging = false);
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const dx = e.clientX - lastX;
+      const dy = e.clientY - lastY;
+      targetRotY += dx * 0.005;
+      targetRotX += dy * 0.005;
+      targetRotX = Math.max(-1.0, Math.min(1.0, targetRotX));
+      lastX = e.clientX;
+      lastY = e.clientY;
+    });
+
+    function frame() {
+      // ambient slow drift
+      targetRotY += 0.0015;
+
+      // ease toward target
+      rotX += (targetRotX - rotX) * 0.06;
+      rotY += (targetRotY - rotY) * 0.06;
+
+      points.rotation.x = rotX;
+      points.rotation.y = rotY;
+      lines.rotation.x = rotX;
+      lines.rotation.y = rotY;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+</script>
+</body>
+</html>
