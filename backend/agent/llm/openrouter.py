@@ -19,10 +19,13 @@ from typing import Any
 import httpx
 
 from agent.config import get_settings
+from agent.telemetry.usage_ledger import UsageLedger
 
 logger = logging.getLogger(__name__)
 
 AUDIT_LOG = Path("data/memory/audit_log.jsonl")
+
+_or_ledger = UsageLedger(Path("data/memory/usage.db"))
 
 
 class OpenRouterError(RuntimeError):
@@ -167,13 +170,28 @@ async def _request_once(
         raise OpenRouterError(_http_error_message(exc)) from exc
     data = response.json()
     answer = _extract_answer(data)
+    usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
     _audit(
         model=str(data.get("model") or model),
         prompt_len=len(system) + len(user),
         response_len=len(answer),
         response_id=data.get("id"),
-        usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
+        usage=usage,
     )
+    try:
+        if usage:
+            in_tok = int(usage.get("prompt_tokens") or 0)
+            out_tok = int(usage.get("completion_tokens") or 0)
+            if in_tok or out_tok:
+                _or_ledger.record(
+                    thread_id="background",
+                    model=str(data.get("model") or model),
+                    in_tokens=in_tok,
+                    out_tokens=out_tok,
+                    source="cli",
+                )
+    except Exception:
+        pass
     return answer
 
 
