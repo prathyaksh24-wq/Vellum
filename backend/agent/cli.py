@@ -12,6 +12,8 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from pathlib import Path
+
 from agent.config import get_settings
 from agent.graph.agent import agent
 from agent.memory.long_term import LongTermMemory
@@ -19,6 +21,8 @@ from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
+from agent.telemetry.hooks import capture_from_invoke_result
+from agent.telemetry.usage_ledger import UsageLedger
 from agent.tools.obsidian_write import store_qa_pair
 
 settings = get_settings()
@@ -26,6 +30,18 @@ logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
 console = Console()
 memory = LongTermMemory()
+_LEDGER = UsageLedger(Path("data/memory/usage.db"))
+
+
+def _record_chat_usage(result: dict, cfg: dict) -> None:
+    thread_id = cfg.get("configurable", {}).get("thread_id", settings.thread_id)
+    capture_from_invoke_result(
+        ledger=_LEDGER,
+        result=result,
+        thread_id=thread_id,
+        fallback_model=settings.primary_model,
+        source="cli",
+    )
 
 HELP_TEXT = """
 [bold cyan]Commands:[/bold cyan]
@@ -174,6 +190,7 @@ async def chat_loop(
             messages = result.get("messages", []) if isinstance(result, dict) else []
             answer = _message_content(messages[-1] if messages else None) or "No response."
             tool_calls = _tool_call_names(messages)
+            _record_chat_usage(result, active_thread_config)
             active_console.print(render_answer(answer, tool_calls))
 
             if answer and "blocked for privacy" not in answer.casefold():
