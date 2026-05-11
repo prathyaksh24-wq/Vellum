@@ -63,3 +63,7 @@ app.command(name="usage", help="token ledger summary.")(usage_command)
 from agent.tui.cli.commands.config import config_app
 
 app.add_typer(config_app, name="config")
+
+from agent.tui.cli.commands.doctor import doctor_command
+
+app.command(name="doctor", help="diagnostics.")(doctor_command)
