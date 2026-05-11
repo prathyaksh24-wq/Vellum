@@ -46,6 +46,15 @@ class LongTermMemory:
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_category_id ON facts(category, id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_query_log_id ON query_log(id)")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS thread_titles (
+                    thread_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     @staticmethod
     def _now() -> str:
@@ -121,4 +130,25 @@ class LongTermMemory:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def set_thread_title(self, thread_id: str, title: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO thread_titles (thread_id, title, updated_at) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(thread_id) DO UPDATE SET title=excluded.title, updated_at=excluded.updated_at",
+                (thread_id, title, self._now()),
+            )
+
+    def get_thread_title(self, thread_id: str) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT title FROM thread_titles WHERE thread_id = ?",
+                (thread_id,),
+            ).fetchone()
+            return row["title"] if row else None
+
+    def delete_thread_title(self, thread_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM thread_titles WHERE thread_id = ?", (thread_id,))
 
