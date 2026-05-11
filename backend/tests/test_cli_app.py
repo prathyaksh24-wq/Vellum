@@ -20,3 +20,25 @@ def test_phrases_never_contain_emoji_or_exclamation():
 
 def test_main_is_callable():
     assert callable(main)
+
+
+from typer.testing import CliRunner
+
+from agent.tui.cli.app import app
+
+
+def test_version_flag_prints_version():
+    runner = CliRunner()
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert "vellum" in result.stdout
+    assert "0.1.0" in result.stdout
+
+
+def test_help_uses_brand_voice():
+    runner = CliRunner()
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "!" not in result.stdout
+    assert "great" not in result.stdout.lower()
+    assert "happy" not in result.stdout.lower()

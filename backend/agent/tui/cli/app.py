@@ -1,0 +1,38 @@
+"""Typer entry point for the `vellum` command."""
+
+from __future__ import annotations
+
+import typer
+
+VERSION = "0.1.0"
+
+app = typer.Typer(
+    name="vellum",
+    help="trained on you.",
+    add_completion=False,
+    no_args_is_help=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"vellum {VERSION}")
+        raise typer.Exit()
+
+
+@app.callback(invoke_without_command=True)
+def root(
+    ctx: typer.Context,
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_version_callback,
+        is_eager=True,
+        help="show version and exit.",
+    ),
+) -> None:
+    """trained on you."""
+    if ctx.invoked_subcommand is None:
+        # Bare `vellum` will route to chat in a later task.
+        typer.echo(ctx.get_help())
