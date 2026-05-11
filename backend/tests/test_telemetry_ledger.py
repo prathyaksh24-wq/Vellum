@@ -68,3 +68,77 @@ def test_summarize_aggregates_per_model(ledger: UsageLedger) -> None:
 def test_pragma_user_version_is_one(ledger: UsageLedger) -> None:
     ledger.record(thread_id="t1", model="x", in_tokens=0, out_tokens=0, source="tui")
     assert ledger.user_version() == 1
+
+
+from agent.telemetry.hooks import (
+    capture_from_invoke_result,
+    capture_from_stream_event,
+)
+
+
+class _FakeAIMessage:
+    def __init__(self, usage: dict | None) -> None:
+        self.usage_metadata = usage
+
+
+def test_capture_from_invoke_result_records_aimessage_usage(ledger: UsageLedger) -> None:
+    result = {
+        "messages": [
+            _FakeAIMessage({
+                "input_tokens": 120,
+                "output_tokens": 40,
+                "model_name": "google/gemma-4-31b-it",
+            })
+        ]
+    }
+    capture_from_invoke_result(
+        ledger=ledger,
+        result=result,
+        thread_id="t1",
+        fallback_model="google/gemma-4-31b-it",
+        source="cli",
+    )
+    rows = ledger.all_rows()
+    assert len(rows) == 1
+    assert rows[0]["in_tokens"] == 120
+    assert rows[0]["out_tokens"] == 40
+    assert rows[0]["source"] == "cli"
+
+
+def test_capture_from_invoke_result_skips_messages_without_usage(ledger: UsageLedger) -> None:
+    result = {"messages": [_FakeAIMessage(None), _FakeAIMessage({})]}
+    capture_from_invoke_result(
+        ledger=ledger, result=result, thread_id="t1",
+        fallback_model="x", source="cli",
+    )
+    assert ledger.all_rows() == []
+
+
+def test_capture_from_stream_event_records_on_chat_model_end(ledger: UsageLedger) -> None:
+    event = {
+        "event": "on_chat_model_end",
+        "data": {
+            "output": _FakeAIMessage({
+                "input_tokens": 50,
+                "output_tokens": 25,
+                "model_name": "google/gemma-3-12b-it",
+            })
+        },
+    }
+    capture_from_stream_event(
+        ledger=ledger, event=event, thread_id="t9",
+        fallback_model="google/gemma-3-12b-it", source="tui",
+    )
+    rows = ledger.all_rows()
+    assert len(rows) == 1
+    assert rows[0]["out_tokens"] == 25
+    assert rows[0]["source"] == "tui"
+
+
+def test_capture_from_stream_event_ignores_other_events(ledger: UsageLedger) -> None:
+    event = {"event": "on_chat_model_stream", "data": {}}
+    capture_from_stream_event(
+        ledger=ledger, event=event, thread_id="t9",
+        fallback_model="x", source="tui",
+    )
+    assert ledger.all_rows() == []
