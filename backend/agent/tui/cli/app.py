@@ -51,3 +51,7 @@ app.command(name="setup", help="begin configuration.")(setup_command)
 from agent.tui.cli.commands.models import models_command
 
 app.command(name="models", help="choose the primary model.")(models_command)
+
+from agent.tui.cli.commands.sessions import sessions_app
+
+app.add_typer(sessions_app, name="sessions")
