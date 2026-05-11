@@ -59,3 +59,7 @@ app.add_typer(sessions_app, name="sessions")
 from agent.tui.cli.commands.usage import usage_command
 
 app.command(name="usage", help="token ledger summary.")(usage_command)
+
+from agent.tui.cli.commands.config import config_app
+
+app.add_typer(config_app, name="config")
