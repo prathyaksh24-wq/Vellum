@@ -16,6 +16,8 @@ from agent.memory.long_term import LongTermMemory
 from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.scheduler.digest import start_scheduler
+from agent.telemetry.hooks import capture_from_stream_event
+from agent.telemetry.usage_ledger import UsageLedger
 from agent.tui.screens import LedgerScreen
 from agent.tui.slash_commands import resolve_command
 from agent.tui.widgets import LedgerSidebar, MessageList, SlashCommandPalette, ThreadsSidebar, VellumHeader, VellumInput
@@ -107,6 +109,7 @@ class VellumTuiApp(App[None]):
         self.last_tool_names: list[str] = []
         self.streaming_task: asyncio.Task[None] | None = None
         self.memory = LongTermMemory()
+        self.usage_ledger = UsageLedger(Path("data/memory/usage.db"))
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -213,6 +216,13 @@ class VellumTuiApp(App[None]):
                     name = str(event.get("name") or "")
                     if name:
                         self.last_tool_names.append(name)
+                capture_from_stream_event(
+                    ledger=self.usage_ledger,
+                    event=event,
+                    thread_id=self.active_thread_id,
+                    fallback_model=self.settings.primary_model,
+                    source="tui",
+                )
             messages.finish_assistant_message(self.last_tool_names)
         except Exception:
             messages.append_assistant_token("Unreachable.")
