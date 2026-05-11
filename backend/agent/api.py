@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException
@@ -20,7 +21,11 @@ from agent.obsidian.watcher import start_vault_watcher
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
+from agent.telemetry.hooks import capture_from_invoke_result, capture_from_stream_event
+from agent.telemetry.usage_ledger import UsageLedger
 from agent.tools.obsidian_write import store_qa_pair
+
+_api_ledger = UsageLedger(Path("data/memory/usage.db"))
 
 
 class ChatRequest(BaseModel):
@@ -110,6 +115,13 @@ async def _run_agent(message: str, thread_id: str | None) -> ChatResponse:
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": clean_message}]},
         config=_thread_config(active_thread_id),
+    )
+    capture_from_invoke_result(
+        ledger=_api_ledger,
+        result=result,
+        thread_id=active_thread_id,
+        fallback_model=get_settings().primary_model,
+        source="api",
     )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _message_content(messages[-1] if messages else None) or "No response."
@@ -249,6 +261,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                     if name:
                         tool_names.append(str(name))
                         yield f"event: tool\ndata: {json.dumps({'name': name})}\n\n"
+                capture_from_stream_event(
+                    ledger=_api_ledger,
+                    event=event,
+                    thread_id=active_thread_id,
+                    fallback_model=get_settings().primary_model,
+                    source="api",
+                )
             answer = "".join(answer_parts).strip() or "No response."
             response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
             if answer and "blocked for privacy" not in answer.casefold():
