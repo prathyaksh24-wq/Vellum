@@ -85,3 +85,26 @@ All settings load via `pydantic-settings` from [.env](./) into [backend/agent/co
 
 - [docs/langgraph-agent-build-plan.md](docs/langgraph-agent-build-plan.md) — original full spec. The implementation has drifted (e.g., access control is in tools, not its own node) — treat the code as authoritative when they disagree.
 - [docs/build-plan-changes.md](docs/build-plan-changes.md) — change log relative to the spec.
+
+## Working protocol (superpowers)
+
+For any non-trivial feature, bug, refactor, or design question in this repo, follow the full superpowers workflow:
+
+1. **Activate** `superpowers:using-superpowers` first and stay inside its workflows the whole way through.
+2. **Brainstorm** via `superpowers:brainstorming` — explore the problem deeply before committing to any approach. One clarifying question at a time. Propose 2–3 approaches with trade-offs.
+3. **Brainstorm audit** — apply the 9 lenses below to the proposed design *before* writing a plan. Refine until each lens returns "no findings" or "finding accepted as risk":
+   1. Assumption-check — what design decisions are unvalidated assertions?
+   2. Architecture stress — does the architecture handle obvious edge cases?
+   3. Alternative dismissal — chosen on merit, or by default?
+   4. Requirement gap — what user need is implicit but unaddressed?
+   5. Composability claim — do the parts actually compose, or is "they fit together" wishful?
+   6. Scope honesty — are sub-tasks honestly sized, or sneaking in big work?
+   7. API surface drift — are new APIs stable, or will they break with v2?
+   8. Failure mode map — what happens when each design choice fails IRL?
+   9. YAGNI sweep — what's in the design that no caller actually needs?
+4. **Write the plan** via `superpowers:writing-plans`.
+5. **Plan audit** — as an expert critic, identify flawed assumptions, edge cases, missing considerations, and alternative approaches; stress-test against real-world constraints; refine until robust, efficient, and defensible. Surface only the improved version.
+6. **Execute** via `superpowers:executing-plans` (or `subagent-driven-development` if independent tasks).
+7. Do not wait for further confirmation between phases — proceed automatically once each phase's gate is met.
+
+Skip this protocol only for trivial mechanical edits (typos, single-line fixes, renames). Everything else gets the full loop.
