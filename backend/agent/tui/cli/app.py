@@ -43,3 +43,7 @@ from agent.tui.cli.commands.chat import resume as _resume_cmd
 
 app.command(name="chat", help="open the chat surface.")(_chat_cmd)
 app.command(name="resume", help="reopen a saved thread.")(_resume_cmd)
+
+from agent.tui.cli.commands.setup import setup_command
+
+app.command(name="setup", help="begin configuration.")(setup_command)
