@@ -34,5 +34,12 @@ def root(
 ) -> None:
     """trained on you."""
     if ctx.invoked_subcommand is None:
-        # Bare `vellum` will route to chat in a later task.
-        typer.echo(ctx.get_help())
+        from agent.tui.cli.commands.chat import chat as chat_cmd
+        chat_cmd()
+
+
+from agent.tui.cli.commands.chat import chat as _chat_cmd
+from agent.tui.cli.commands.chat import resume as _resume_cmd
+
+app.command(name="chat", help="open the chat surface.")(_chat_cmd)
+app.command(name="resume", help="reopen a saved thread.")(_resume_cmd)

@@ -42,3 +42,16 @@ def test_help_uses_brand_voice():
     assert "!" not in result.stdout
     assert "great" not in result.stdout.lower()
     assert "happy" not in result.stdout.lower()
+
+
+def test_resume_requires_thread_id():
+    runner = CliRunner()
+    result = runner.invoke(app, ["resume"])
+    assert result.exit_code != 0  # missing required arg
+
+
+def test_chat_subcommand_exists():
+    runner = CliRunner()
+    result = runner.invoke(app, ["chat", "--help"])
+    assert result.exit_code == 0
+    assert "chat" in result.stdout.lower()
