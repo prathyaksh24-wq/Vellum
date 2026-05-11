@@ -47,3 +47,7 @@ app.command(name="resume", help="reopen a saved thread.")(_resume_cmd)
 from agent.tui.cli.commands.setup import setup_command
 
 app.command(name="setup", help="begin configuration.")(setup_command)
+
+from agent.tui.cli.commands.models import models_command
+
+app.command(name="models", help="choose the primary model.")(models_command)
