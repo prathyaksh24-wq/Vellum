@@ -55,3 +55,7 @@ app.command(name="models", help="choose the primary model.")(models_command)
 from agent.tui.cli.commands.sessions import sessions_app
 
 app.add_typer(sessions_app, name="sessions")
+
+from agent.tui.cli.commands.usage import usage_command
+
+app.command(name="usage", help="token ledger summary.")(usage_command)
