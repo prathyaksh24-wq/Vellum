@@ -18,6 +18,7 @@ def test_openrouter_payload_enforces_privacy_policy():
     )
 
     assert payload["provider"]["data_collection"] == "deny"
+    assert payload["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert payload["provider"]["zdr"] is True
     assert payload["stream"] is False
     assert payload["session_id"] == "thread-1"
@@ -54,6 +55,7 @@ def test_openrouter_chat_posts_to_chat_completions_and_audits_metadata(tmp_path,
     assert requests[0].url.path.endswith("/chat/completions")
     body = json.loads(requests[0].content)
     assert body["provider"]["data_collection"] == "deny"
+    assert body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert body["provider"]["zdr"] is True
 
     audit = (tmp_path / "audit_log.jsonl").read_text(encoding="utf-8")
@@ -104,6 +106,7 @@ def test_langchain_openrouter_provider_policy_uses_extra_body():
     llm = react_agent.build_llm()
 
     assert llm.extra_body["provider"]["data_collection"] == "deny"
+    assert llm.extra_body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert llm.extra_body["provider"]["zdr"] is True
     assert "provider" not in llm.model_kwargs
 
@@ -124,9 +127,9 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     assert compiled == "compiled-agent"
     assert captured["model"] == "llm"
     assert captured["checkpointer"] == "checkpointer"
-    assert captured["prompt"] == react_agent.SYSTEM_PROMPT
+    assert captured["prompt"] == react_agent.VELLUM_SYSTEM_PROMPT
     assert {tool.name for tool in captured["tools"]} >= {"search_my_notes", "web_search", "search_amazon"}
-    assert "Always search the vault first" in react_agent.SYSTEM_PROMPT
+    assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
 
 
 def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):

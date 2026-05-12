@@ -17,7 +17,6 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from agent.config import get_settings
-from agent.memory.long_term import LongTermMemory
 from agent.privacy.scrubber import PrivacyScrubber
 
 logger = logging.getLogger(__name__)
@@ -26,6 +25,7 @@ scrubber = PrivacyScrubber()
 APIFY_CALL_ACTOR_TOOL = "call-actor"
 ASIN_RE = re.compile(r"\b(?:ASIN[:\s#-]*)?[A-Z0-9]{10}\b")
 URL_RE = re.compile(r"https?://\S+", re.I)
+PRESIDIO_URL_RE = re.compile(r"\[URL_\d+\]")
 
 
 def _apify_mcp_url() -> str:
@@ -50,6 +50,7 @@ def _content_text(result: Any) -> str:
 def sanitize_apify_result(raw_text: str) -> str:
     clean, _ = scrubber.scrub(raw_text or "")
     clean = URL_RE.sub("[URL_REDACTED]", clean)
+    clean = PRESIDIO_URL_RE.sub("[URL_REDACTED]", clean)
     clean = ASIN_RE.sub("[ASIN_REDACTED]", clean)
     return clean[:4000]
 
@@ -90,10 +91,6 @@ async def _run_tool_inner(params: dict) -> str:
                     },
                 )
                 raw_text = _content_text(result) or "No results."
-                LongTermMemory().store_fact(
-                    f"Amazon search '{query}': {raw_text[:500]}",
-                    category="amazon_search",
-                )
                 return sanitize_apify_result(raw_text)
     except Exception as exc:
         logger.error("[APIFY] Error: %s", exc)

@@ -19,6 +19,7 @@ RED_PATTERNS = (
 )
 
 RED_LABELS = {"SECRET", "CRYPTO_KEY", "GOVERNMENT_ID", "CREDIT_CARD", "FINANCIAL_ID"}
+PUBLIC_ONLY_LABELS = {"ORGANIZATION"}
 
 
 def classify(text: str) -> tuple[DataClass, str]:
@@ -34,6 +35,9 @@ def classify(text: str) -> tuple[DataClass, str]:
     red = next((item for item in detections if item.label in RED_LABELS), None)
     if red is not None:
         return DataClass.RED, f"{red.label.replace('_', ' ').title()} detected."
+
+    if {item.label for item in detections} <= PUBLIC_ONLY_LABELS:
+        return DataClass.GREEN, "No sensitive data detected."
 
     labels = sorted({item.label.replace("_", " ").title() for item in detections})
     return DataClass.YELLOW, f"PII detected: {', '.join(labels)}."

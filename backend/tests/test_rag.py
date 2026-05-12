@@ -87,13 +87,8 @@ def test_vault_search_uses_vector_backend_and_filters_private_chunks(monkeypatch
                 },
             ]
 
-    class FakeMemory:
-        def log_query(self, query, source, confidence):
-            return 1
-
     monkeypatch.setattr(vault_search, "Embedder", FakeEmbedder)
     monkeypatch.setattr(vault_search, "VectorStore", FakeStore)
-    monkeypatch.setattr(vault_search, "LongTermMemory", FakeMemory)
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
     monkeypatch.setattr(
         vault_search,
@@ -129,13 +124,8 @@ def test_vault_search_falls_back_to_vault_when_vector_backend_unavailable(monkey
                 }
             ]
 
-    class FakeMemory:
-        def log_query(self, query, source, confidence):
-            return 1
-
     monkeypatch.setattr(vault_search, "Embedder", BrokenEmbedder)
     monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
-    monkeypatch.setattr(vault_search, "LongTermMemory", FakeMemory)
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
     monkeypatch.setattr(vault_search, "_rerank", lambda query, results: [(item["score"], item) for item in results])
 

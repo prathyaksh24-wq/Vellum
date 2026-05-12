@@ -20,7 +20,7 @@ def _reader() -> SessionsReader:
     base = Path("data") / "memory"
     return SessionsReader(
         checkpoints_db=base / "checkpoints.db",
-        long_term_db=base / "long_term.db",
+        sessions_db=base / "sessions.db",
     )
 
 

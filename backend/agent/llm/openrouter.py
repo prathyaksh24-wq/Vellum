@@ -78,6 +78,7 @@ def _build_payload(
     settings = get_settings()
     provider: dict[str, Any] = {
         "data_collection": "deny",
+        "order": ["Fireworks", "Together", "DeepInfra"],
         "allow_fallbacks": True,
     }
     if settings.zdr_only:

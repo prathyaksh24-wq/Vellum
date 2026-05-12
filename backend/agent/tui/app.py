@@ -12,7 +12,7 @@ from textual.widgets import Input, Static
 
 from agent.config import get_settings
 from agent.graph.agent import agent
-from agent.memory.long_term import LongTermMemory
+from agent.memory.fts5 import FTS5Memory
 from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.scheduler.digest import start_scheduler
@@ -108,7 +108,7 @@ class VellumTuiApp(App[None]):
         self.last_user_input = ""
         self.last_tool_names: list[str] = []
         self.streaming_task: asyncio.Task[None] | None = None
-        self.memory = LongTermMemory()
+        self.memory = FTS5Memory()
         self.usage_ledger = UsageLedger(Path("data/memory/usage.db"))
 
     def compose(self) -> ComposeResult:
@@ -264,8 +264,8 @@ class VellumTuiApp(App[None]):
             self.action_faculties()
             return True
         if slash_command.action == "memory":
-            facts = self.memory.get_recent_facts(limit=15)
-            text = "\n".join(f"i. {fact}" for fact in facts) if facts else "No learned facts yet."
+            rows = self.memory.recent_documents(limit=15)
+            text = "\n".join(f"i. {row['content'][:240]}" for row in rows) if rows else "No indexed exchanges yet."
             self.query_one(MessageList).add_vellum_note(escape(text), source="memory")
             return True
         if slash_command.action == "reindex":

@@ -1,21 +1,21 @@
 from datetime import datetime
 import asyncio
 
-from agent.memory.long_term import LongTermMemory
+from agent.memory.fts5 import FTS5Memory
 from agent.obsidian.vault import ObsidianVault
 from agent.scheduler import digest
 
 
 def test_build_digest_prompt_lists_facts():
-    prompt = digest.build_digest_prompt(["User likes NBA", "User reads books"])
+    prompt = digest.build_digest_prompt(["Q: NBA\nA: User likes NBA", "Q: Books\nA: User reads books"])
 
-    assert "- User likes NBA" in prompt
-    assert "- User reads books" in prompt
+    assert "A: User likes NBA" in prompt
+    assert "A: User reads books" in prompt
     assert "Summary:" in prompt
 
 
 def test_run_digest_returns_none_without_facts(tmp_path):
-    memory = LongTermMemory(tmp_path / "memory.db")
+    memory = FTS5Memory(tmp_path / "fts5.db")
     vault = ObsidianVault(tmp_path / "Vault")
 
     result = asyncio.run(digest.run_digest(memory=memory, vault=vault, now=datetime(2026, 5, 5)))
@@ -25,8 +25,13 @@ def test_run_digest_returns_none_without_facts(tmp_path):
 
 
 def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
-    memory = LongTermMemory(tmp_path / "memory.db")
-    memory.store_fact("User is interested in F1 standings", category="sports")
+    memory = FTS5Memory(tmp_path / "fts5.db")
+    memory.add_qa_pair(
+        query="What about F1 standings?",
+        answer="User is interested in F1 standings.",
+        thread_id="sports",
+        source_paths=[],
+    )
     vault = ObsidianVault(tmp_path / "Vault")
     captured = {}
 

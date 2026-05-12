@@ -15,7 +15,8 @@ from pydantic import BaseModel, Field
 
 from agent.config import get_settings
 from agent.graph.agent import agent
-from agent.memory.long_term import LongTermMemory
+from agent.memory.fts5 import FTS5Memory
+from agent.memory.honcho_client import HonchoMemory
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.privacy.classifier import DataClass, classify
@@ -26,6 +27,7 @@ from agent.telemetry.usage_ledger import UsageLedger
 from agent.tools.obsidian_write import store_qa_pair
 
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
+_fts5_memory = FTS5Memory()
 
 
 class ChatRequest(BaseModel):
@@ -128,12 +130,12 @@ async def _run_agent(message: str, thread_id: str | None) -> ChatResponse:
     tools = _tool_call_names(messages)
 
     if answer and "blocked for privacy" not in answer.casefold():
-        asyncio.create_task(_background_learn(clean_message, answer))
+        asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
 
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
 
 
-async def _background_learn(query: str, answer: str) -> None:
+async def _background_learn(query: str, answer: str, thread_id: str = "default") -> None:
     try:
         data_class, _reason = classify(query)
         if data_class == DataClass.RED:
@@ -142,6 +144,16 @@ async def _background_learn(query: str, answer: str) -> None:
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
         await asyncio.to_thread(store_qa_pair, clean_query, clean_answer)
+        await asyncio.to_thread(_fts5_memory.add_qa_pair, query=clean_query, answer=clean_answer, thread_id=thread_id, source_paths=[])
+        settings = get_settings()
+        honcho = HonchoMemory(
+            base_url=settings.honcho_base_url,
+            app_id=settings.honcho_app_id,
+            user_id=settings.honcho_user_id,
+        )
+        session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
+        await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
+        await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
     except Exception:
         return
 
@@ -271,7 +283,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             answer = "".join(answer_parts).strip() or "No response."
             response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer))
+                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
             yield f"event: final\ndata: {response.model_dump_json()}\n\n"
         except Exception as exc:
             yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
@@ -290,13 +302,13 @@ async def reindex() -> ReindexResponse:
 
 @router.get("/memory/recent")
 async def recent_memory(limit: int = 15) -> dict[str, list[str]]:
-    facts = await asyncio.to_thread(LongTermMemory().get_recent_facts, limit=limit)
-    return {"facts": facts}
+    rows = await asyncio.to_thread(_fts5_memory.recent_documents, limit=limit)
+    return {"facts": [row["content"] for row in rows]}
 
 
 @router.get("/memory/entries")
 async def recent_memory_entries(limit: int = 30) -> dict[str, list[dict[str, Any]]]:
-    entries = await asyncio.to_thread(LongTermMemory().get_recent_entries, None, limit)
+    entries = await asyncio.to_thread(_fts5_memory.recent_documents, limit=limit)
     return {"entries": entries}
 
 
@@ -315,6 +327,7 @@ async def public_settings() -> dict[str, Any]:
     settings = get_settings()
     return {
         "thread_id": settings.thread_id,
+        "honcho_base_url": settings.honcho_base_url,
         "vault_path": str(settings.obsidian_vault_path),
         "agent_notes_folder": settings.agent_notes_folder,
         "primary_model": settings.primary_model,

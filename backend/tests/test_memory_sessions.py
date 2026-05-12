@@ -17,7 +17,7 @@ def workdir(tmp_path: Path, monkeypatch) -> Path:
 def reader(workdir: Path) -> SessionsReader:
     return SessionsReader(
         checkpoints_db=workdir / "data" / "memory" / "checkpoints.db",
-        long_term_db=workdir / "data" / "memory" / "long_term.db",
+        sessions_db=workdir / "data" / "memory" / "sessions.db",
     )
 
 

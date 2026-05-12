@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -16,7 +15,8 @@ from pathlib import Path
 
 from agent.config import get_settings
 from agent.graph.agent import agent
-from agent.memory.long_term import LongTermMemory
+from agent.memory.fts5 import FTS5Memory
+from agent.memory.honcho_client import HonchoMemory
 from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
@@ -29,7 +29,7 @@ settings = get_settings()
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger(__name__)
 console = Console()
-memory = LongTermMemory()
+memory = FTS5Memory()
 _LEDGER = UsageLedger(Path("data/memory/usage.db"))
 
 
@@ -115,9 +115,9 @@ async def handle_command(
         return True, current_thread_config
 
     if normalized == "/memory":
-        facts = memory.get_recent_facts(limit=15)
-        body = "\n".join(f"- {fact}" for fact in facts) if facts else "No learned facts yet."
-        active_console.print(Panel(body, title="[bold]Recently Learned[/bold]", border_style="yellow"))
+        rows = memory.recent_documents(limit=15)
+        body = "\n".join(f"- {row['content'][:240]}" for row in rows) if rows else "No indexed exchanges yet."
+        active_console.print(Panel(body, title="[bold]Recent Exchanges[/bold]", border_style="yellow"))
         return True, current_thread_config
 
     if normalized == "/reindex":
@@ -194,7 +194,8 @@ async def chat_loop(
             active_console.print(render_answer(answer, tool_calls))
 
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(user_input, answer))
+                thread_id = active_thread_config.get("configurable", {}).get("thread_id", settings.thread_id)
+                asyncio.create_task(_background_learn(user_input, answer, thread_id))
     finally:
         close = getattr(active_agent, "aclose", None)
         if close is not None:
@@ -206,8 +207,8 @@ async def chat() -> None:
     await chat_loop()
 
 
-async def _background_learn(query: str, answer: str) -> None:
-    """Store Q&A and extract facts without blocking chat."""
+async def _background_learn(query: str, answer: str, thread_id: str = "default") -> None:
+    """Store Q&A and update local memory without blocking chat."""
     try:
         data_class, reason = classify(query)
         if data_class == DataClass.RED:
@@ -218,40 +219,17 @@ async def _background_learn(query: str, answer: str) -> None:
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
         store_qa_pair(clean_query, clean_answer)
-        await _extract_facts(clean_query, clean_answer)
+        memory.add_qa_pair(query=clean_query, answer=clean_answer, thread_id=thread_id, source_paths=[])
+        honcho = HonchoMemory(
+            base_url=settings.honcho_base_url,
+            app_id=settings.honcho_app_id,
+            user_id=settings.honcho_user_id,
+        )
+        session_id = honcho.get_or_create_session(thread_id)
+        honcho.add_message(session_id, content=clean_query, role="user")
+        honcho.add_message(session_id, content=clean_answer, role="assistant")
     except Exception as exc:
         logger.warning("Background learn failed: %s", exc)
-
-
-async def _extract_facts(query: str, answer: str) -> None:
-    """Extract concise learnable facts from an interaction using the fast model."""
-    from agent.llm.openrouter import openrouter_chat
-
-    prompt = f"""Extract 0-2 concise facts worth remembering from this exchange.
-Return only a JSON array of short strings. Return [] if nothing notable.
-
-Q: {query}
-A: {answer[:400]}
-
-JSON:"""
-    try:
-        raw = await openrouter_chat(
-            system="Extract facts. Return only a JSON array of strings.",
-            user=prompt,
-            model_override=settings.fast_model,
-            max_tokens=150,
-        )
-        cleaned = raw.strip().replace("```json", "").replace("```", "")
-        facts = json.loads(cleaned)
-    except Exception as exc:
-        logger.debug("Fact extraction skipped: %s", exc)
-        return
-
-    if not isinstance(facts, list):
-        return
-    for fact in facts[:2]:
-        if isinstance(fact, str) and len(fact) > 5:
-            memory.store_fact(fact, category="interaction")
 
 
 def main() -> None:

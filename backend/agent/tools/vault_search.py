@@ -9,7 +9,6 @@ import re
 from langchain_core.tools import tool
 
 from agent.config import get_settings
-from agent.memory.long_term import LongTermMemory
 from agent.obsidian.folder_policy import can_send_to_llm, needs_scrubbing
 from agent.obsidian.vault import ObsidianVault
 from agent.privacy.classifier import DataClass, classify
@@ -107,7 +106,6 @@ def search_my_notes(query: str) -> str:
     if len(context) > max_chars:
         context = context[:max_chars] + "\n[TRUNCATED]"
 
-    LongTermMemory().log_query(query, "vault_search", top_score)
     return context
 
 

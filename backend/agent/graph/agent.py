@@ -16,7 +16,7 @@ from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
 
-SYSTEM_PROMPT = """You are a private personal AI assistant.
+VELLUM_SYSTEM_PROMPT = """You are Vellum, a self-learning personal archivist for one person.
 
 Tools:
 1. search_my_notes - Search the user's private Obsidian vault. Always use this first.
@@ -29,12 +29,15 @@ Tools:
 
 Rules:
 - Always search the vault first.
+- Distinguish vault-grounded, inferred, and external knowledge. Never present one as another.
+- If the vault does not contain enough support, say: "Nothing on this in your library."
 - Never make up facts not present in retrieved context or tool results.
-- Be conversational and natural.
+- Be plain, restrained, and useful. Do not flatter.
 - Reference sources when relevant.
 - For private folder content, paraphrase and summarize rather than quoting raw text.
 - Treat Amazon/Apify results as private and summarize without exposing raw scraped data.
 - Offer to save useful insights when appropriate.
+- Do not write outside the Agent/ folder in the Obsidian vault.
 """
 
 CHECKPOINT_DB = Path("data/memory/checkpoints.db")
@@ -60,6 +63,7 @@ def build_llm(model: str | None = None):
         extra_body={
             "provider": {
                 "data_collection": "deny",
+                "order": ["Fireworks", "Together", "DeepInfra"],
                 "zdr": settings.zdr_only,
             }
         },
@@ -100,7 +104,7 @@ def build_agent(model: str | None = None):
             append_to_note,
         ],
         checkpointer=build_checkpointer(),
-        prompt=SYSTEM_PROMPT,
+        prompt=VELLUM_SYSTEM_PROMPT,
     )
 
 
@@ -117,7 +121,7 @@ async def build_async_agent(model: str | None = None):
             append_to_note,
         ],
         checkpointer=await build_async_checkpointer(),
-        prompt=SYSTEM_PROMPT,
+        prompt=VELLUM_SYSTEM_PROMPT,
     )
 
 

@@ -9,6 +9,8 @@ data/memory/*.db
 data/memory/*.db-*
 data/memory/audit_log.jsonl
 data/embeddings/
+backend/data/
+backend/.test-data/
 ui-dist/
 .ui-runtime/
 .api-runtime/

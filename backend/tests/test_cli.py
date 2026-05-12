@@ -37,8 +37,8 @@ def test_chat_loop_invokes_agent_once(monkeypatch):
     fake_agent = FakeAgent()
     background_calls = []
 
-    async def fake_background(query, answer):
-        background_calls.append((query, answer))
+    async def fake_background(query, answer, thread_id="default"):
+        background_calls.append((query, answer, thread_id))
 
     class DoneTask:
         pass
@@ -66,8 +66,8 @@ def test_memory_command_prints_recent_facts(monkeypatch):
     console = Console(file=output, force_terminal=False)
 
     class FakeMemory:
-        def get_recent_facts(self, limit=15):
-            return ["Fact one"]
+        def recent_documents(self, limit=15):
+            return [{"content": "Q: old\nA: Fact one"}]
 
     monkeypatch.setattr(cli, "memory", FakeMemory())
 

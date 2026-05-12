@@ -55,7 +55,7 @@ def test_filesystem_tool_lists_vault(monkeypatch):
 
     assert result == "Sports\nBooks"
     assert fake_session.calls[0][0] == "list_directory"
-    assert "Vault" in fake_session.calls[0][1]["path"]
+    assert "vault" in fake_session.calls[0][1]["path"].casefold()
 
 
 def test_filesystem_tool_rejects_paths_outside_vault():
@@ -80,12 +80,6 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
     fake_session = FakeSession(
         text="ASIN B0ABCDEF12 https://amazon.com/dp/B0ABCDEF12 seller@example.com"
     )
-    stored = []
-
-    class FakeMemory:
-        def store_fact(self, fact, category="interaction"):
-            stored.append((fact, category))
-
     seen = {}
 
     def fake_streamablehttp_client(url, headers=None, timeout=None, sse_read_timeout=None):
@@ -101,7 +95,6 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
 
     monkeypatch.setattr(apify_tools, "streamablehttp_client", fake_streamablehttp_client)
     monkeypatch.setattr(apify_tools, "ClientSession", lambda read, write: fake_session)
-    monkeypatch.setattr(apify_tools, "LongTermMemory", FakeMemory)
 
     result = asyncio.run(apify_tools.run_tool_async({"query": "latest amazon price", "max_items": 2}))
 
@@ -110,7 +103,6 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
     assert fake_session.calls[0][0] == apify_tools.APIFY_CALL_ACTOR_TOOL
     assert fake_session.calls[0][1]["input"]["maxItems"] == 2
     assert fake_session.calls[0][1]["callOptions"]["timeout"] == 300
-    assert stored and stored[0][1] == "amazon_search"
     assert seen["url"] == "https://mcp.apify.com"
     assert seen["headers"]["Authorization"].startswith("Bearer ")
     assert seen["timeout"] == 300

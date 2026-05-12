@@ -1,8 +1,8 @@
 """
 Nightly self-learning digest.
 
-Reads recent long-term-memory facts, summarizes them with the fast OpenRouter
-model, and writes the digest back into the local Obsidian vault.
+Reads recent indexed Q&A pairs, summarizes them with the fast OpenRouter model,
+and writes the digest back into the local Obsidian vault.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from agent.config import get_settings
 from agent.llm.openrouter import openrouter_chat
-from agent.memory.long_term import LongTermMemory
+from agent.memory.fts5 import FTS5Memory
 from agent.obsidian.vault import ObsidianVault
 
 logger = logging.getLogger(__name__)
@@ -35,17 +35,17 @@ Summary:"""
 
 async def run_digest(
     *,
-    memory: LongTermMemory | None = None,
+    memory: FTS5Memory | None = None,
     vault: ObsidianVault | None = None,
     now: datetime | None = None,
 ) -> str | None:
     settings = get_settings()
-    memory = memory or LongTermMemory()
+    memory = memory or FTS5Memory()
     vault = vault or ObsidianVault(settings.obsidian_vault_path)
     now = now or datetime.now()
 
     logger.info("[DIGEST] Starting nightly self-learning digest.")
-    facts = memory.get_recent_facts(limit=50)
+    facts = [item["content"] for item in memory.recent_documents(limit=50)]
     if not facts:
         logger.info("[DIGEST] No new facts to digest.")
         return None

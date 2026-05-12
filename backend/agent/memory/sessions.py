@@ -1,4 +1,4 @@
-"""Reads and writes thread metadata. Joins checkpoints.db with thread_titles."""
+"""Reads and writes thread metadata. Joins checkpoints.db with sessions.db."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from agent.memory.long_term import LongTermMemory
+SESSIONS_DB = Path("data/memory/sessions.db")
 
 
 class SessionsReader:
-    def __init__(self, *, checkpoints_db: Path, long_term_db: Path) -> None:
+    def __init__(self, *, checkpoints_db: Path, sessions_db: Path = SESSIONS_DB) -> None:
         self.checkpoints_db = Path(checkpoints_db)
-        self.long_term_db = Path(long_term_db)
+        self.sessions_db = Path(sessions_db)
 
     def _checkpoint_rows(self) -> list[tuple[str, int]]:
         """Return (thread_id, msg_count) tuples ordered newest-first.
@@ -44,23 +44,49 @@ class SessionsReader:
         finally:
             conn.close()
 
-    def _memory(self) -> LongTermMemory:
-        return LongTermMemory(db_path=self.long_term_db)
+    def _connect_sessions(self) -> sqlite3.Connection:
+        self.sessions_db.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.sessions_db))
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS thread_titles (
+                thread_id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        return conn
+
+    def _get_title(self, thread_id: str) -> str | None:
+        with self._connect_sessions() as conn:
+            row = conn.execute("SELECT title FROM thread_titles WHERE thread_id = ?", (thread_id,)).fetchone()
+            return row["title"] if row else None
 
     def list_sessions(self) -> list[dict[str, Any]]:
         rows = self._checkpoint_rows()
-        mem = self._memory()
         return [
             {
                 "thread_id": thread_id,
-                "title": mem.get_thread_title(thread_id) or thread_id,
+                "title": self._get_title(thread_id) or thread_id,
                 "msgs": msgs,
             }
             for thread_id, msgs in rows
         ]
 
     def rename(self, thread_id: str, title: str) -> None:
-        self._memory().set_thread_title(thread_id, title)
+        with self._connect_sessions() as conn:
+            conn.execute(
+                """
+                INSERT INTO thread_titles (thread_id, title, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    title=excluded.title,
+                    updated_at=excluded.updated_at
+                """,
+                (thread_id, title),
+            )
 
     def delete(self, thread_id: str) -> None:
         if self.checkpoints_db.exists():
@@ -78,4 +104,5 @@ class SessionsReader:
                 conn.commit()
             finally:
                 conn.close()
-        self._memory().delete_thread_title(thread_id)
+        with self._connect_sessions() as conn:
+            conn.execute("DELETE FROM thread_titles WHERE thread_id = ?", (thread_id,))

@@ -97,10 +97,14 @@ def doctor_command() -> None:
     line, err = _row("checkpoints.db readable", status, detail)
     lines.append(line); any_error = any_error or err
 
-    # long_term.db readable
-    status, detail = _check_db_readable(Path("data/memory/long_term.db"))
-    line, err = _row("long_term.db readable", status, detail)
-    lines.append(line); any_error = any_error or err
+    for label, path in [
+        ("fts5.db readable", Path("data/memory/fts5.db")),
+        ("resolved.db readable", Path("data/memory/resolved.db")),
+        ("sessions.db readable", Path("data/memory/sessions.db")),
+    ]:
+        status, detail = _check_db_readable(path)
+        line, err = _row(label, status, detail)
+        lines.append(line); any_error = any_error or err
 
     # usage.db readable
     status, detail = _check_db_readable(Path("data/memory/usage.db"))
