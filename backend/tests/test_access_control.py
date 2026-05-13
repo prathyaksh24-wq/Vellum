@@ -10,7 +10,7 @@ from agent.obsidian.folder_policy import (
 
 
 def test_private_folders_are_local_only():
-    for folder in ("X", "Youtube", "Books", "feedback"):
+    for folder in ("Youtube", "Books", "feedback"):
         assert can_store(folder) is True
         assert can_index(folder) is True
         assert can_send_to_llm(folder) is False
@@ -18,12 +18,13 @@ def test_private_folders_are_local_only():
         assert needs_scrubbing(folder) is True
 
 
-def test_public_x_collections_can_go_to_llm_and_tools():
-    assert can_store("X/naval") is True
-    assert can_index("X/naval") is True
-    assert can_send_to_llm("X/naval") is True
-    assert can_use_tools("X/naval") is True
-    assert needs_scrubbing("X/naval") is False
+def test_x_folder_can_go_to_llm_and_tools():
+    for folder in ("X", "X/naval", "X/another-public-profile"):
+        assert can_store(folder) is True
+        assert can_index(folder) is True
+        assert can_send_to_llm(folder) is True
+        assert can_use_tools(folder) is True
+        assert needs_scrubbing(folder) is False
 
 
 def test_sports_folders_can_go_to_llm_and_tools():
