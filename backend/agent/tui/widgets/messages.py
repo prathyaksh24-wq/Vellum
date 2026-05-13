@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, UTC
+from typing import Any
 
-from textual.widgets import Static
 from textual.containers import VerticalScroll
+from textual.widgets import Static
+
+from agent.tui.widgets.markdown_message import MarkdownMessage
+from agent.tui.widgets.tool_panel import ToolCallPanel
 
 
 def _now_label() -> str:
@@ -11,16 +15,22 @@ def _now_label() -> str:
 
 
 class MessageList(VerticalScroll):
-    """Scrollable transcript with book-like messages."""
+    """Scrollable transcript with markdown rendering and tool-call panels."""
 
-    assistant_message_id: str | None = None
-    assistant_text: str = ""
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._assistant: MarkdownMessage | None = None
+        self._assistant_text: str = ""
+        self._tool_panels: dict[str, ToolCallPanel] = {}
 
     def on_mount(self) -> None:
         self.show_landing()
 
     def show_landing(self) -> None:
         self.remove_children()
+        self._assistant = None
+        self._assistant_text = ""
+        self._tool_panels.clear()
         self.mount(
             Static(
                 "[italic #ece6db]vellum[/]\n\n"
@@ -46,54 +56,57 @@ class MessageList(VerticalScroll):
         )
         self.scroll_end(animate=False)
 
+    def add_tool_panel(self, key: str, name: str, args: Any = None) -> ToolCallPanel:
+        """Mount a running tool-call panel and return it."""
+        self.clear_landing()
+        panel = ToolCallPanel(name=name, args=args)
+        self._tool_panels[key] = panel
+        self.mount(panel)
+        self.scroll_end(animate=False)
+        return panel
+
+    def complete_tool_panel(
+        self,
+        key: str,
+        summary: str,
+        citations: list[dict] | None = None,
+        success: bool = True,
+    ) -> None:
+        panel = self._tool_panels.get(key)
+        if panel is not None:
+            panel.set_result(summary, citations=citations, success=success)
+
     def begin_assistant_message(self, source: str = "from your library") -> None:
         self.clear_landing()
-        stamp = int(datetime.now(UTC).timestamp() * 1000)
-        self.assistant_message_id = f"assistant-{stamp}"
-        self.assistant_text = ""
-        self.mount(
-            Static(
-                f"[#716d68]vellum . {source}[/]\n\n[#ece6db][/]\n\n[#d97746]>[/]",
-                id=self.assistant_message_id,
-                classes="message message-vellum",
-            )
-        )
+        self._assistant = MarkdownMessage(source=source)
+        self._assistant_text = ""
+        self.mount(self._assistant)
         self.scroll_end(animate=False)
 
     def append_assistant_token(self, text: str) -> None:
-        if self.assistant_message_id is None:
+        if self._assistant is None:
             self.begin_assistant_message()
-        self.assistant_text += text
-        widget = self.query_one(f"#{self.assistant_message_id}", Static)
-        drawn = "-" * min(72, max(1, len(self.assistant_text) // 4))
-        widget.update(
-            "[#716d68]vellum . from your library[/]\n\n"
-            f"[#ece6db]{self.assistant_text}[/]\n\n"
-            f"[#d97746]{drawn}>[/]"
-        )
+        self._assistant_text += text
+        assert self._assistant is not None
+        self._assistant.append_token(text)
         self.scroll_end(animate=False)
 
-    def finish_assistant_message(self, tool_names: list[str] | None = None) -> None:
-        if self.assistant_message_id is None:
+    def finish_assistant_message(
+        self,
+        tool_names: list[str] | None = None,
+        citations: list[dict] | None = None,
+    ) -> None:
+        if self._assistant is None:
             return
-        widget = self.query_one(f"#{self.assistant_message_id}", Static)
-        tools = ""
-        if tool_names:
-            rendered = ", ".join(dict.fromkeys(tool_names))
-            tools = f"\n\n[#716d68]i. {rendered}[/]"
-        widget.update(
-            "[#716d68]vellum . from your library[/]\n\n"
-            f"[#ece6db]{self.assistant_text or 'No response.'}[/]"
-            f"{tools}"
-        )
+        self._assistant.finalize(citations=citations)
         self.scroll_end(animate=False)
 
     def latest_assistant_response(self) -> str:
-        return self.assistant_text.strip()
+        return self._assistant_text.strip()
 
     def add_vellum_note(self, text: str, source: str = "local") -> None:
         self.clear_landing()
-        self.assistant_text = text
+        self._assistant_text = text
         self.mount(
             Static(
                 f"[#716d68]vellum . {source}[/]\n\n[#ece6db]{text}[/]",

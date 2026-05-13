@@ -28,7 +28,9 @@ COMMANDS: tuple[SlashCommand, ...] = (
     SlashCommand("/reindex", "reindex", "re-index your library"),
     SlashCommand("/thread", "thread", "switch thread", accepts_argument=True),
     SlashCommand("/new", "new_thread", "start a new thread", aliases=("/new-thread",)),
-    SlashCommand("/model", "model", "show active model"),
+    SlashCommand("/model", "model", "pick a model", accepts_argument=True),
+    SlashCommand("/provider", "provider", "switch provider", accepts_argument=True),
+    SlashCommand("/temp", "temperature", "set temperature 0.0-2.0", accepts_argument=True),
     SlashCommand("/faculties", "faculties", "show faculties"),
     SlashCommand("/quit", "quit", "close vellum", aliases=("/exit",)),
 )

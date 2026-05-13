@@ -10,6 +10,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import create_react_agent
 
 from agent.config import get_settings
+from agent.llm.providers import get_provider_registry
 from agent.tools.apify import search_amazon
 from agent.tools.filesystem import list_files, read_file
 from agent.tools.obsidian_write import append_to_note, create_note
@@ -50,23 +51,33 @@ def build_llm(model: str | None = None):
     except ImportError as exc:
         raise RuntimeError("langchain-openai is required to build the ReAct agent.") from exc
 
+    registry = get_provider_registry()
+    active_entry, active_temp = registry.current()
+    resolved_id = model or active_entry.id
+
+    provider_config: dict = {
+        "data_collection": "deny",
+        "zdr": settings.zdr_only,
+    }
+    # Only constrain provider order for open-weights models hosted by multiple
+    # privacy-respecting upstreams. Vendor-hosted models (Anthropic, OpenAI,
+    # Gemini, Grok) have a single upstream — adding an order list would block
+    # routing.
+    entry = registry._find_by_id(resolved_id) or active_entry
+    if entry.open_weights:
+        provider_config["order"] = ["Fireworks", "Together", "DeepInfra"]
+
     return ChatOpenAI(
-        model=model or settings.primary_model,
+        model=resolved_id,
         api_key=settings.openrouter_api_key,
         base_url=settings.openrouter_base_url,
-        temperature=0.3,
+        temperature=active_temp,
         max_tokens=2048,
         default_headers={
             "HTTP-Referer": "http://localhost",
             "X-Title": "PersonalAgent",
         },
-        extra_body={
-            "provider": {
-                "data_collection": "deny",
-                "order": ["Fireworks", "Together", "DeepInfra"],
-                "zdr": settings.zdr_only,
-            }
-        },
+        extra_body={"provider": provider_config},
     )
 
 

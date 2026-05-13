@@ -12,15 +12,25 @@ from textual.widgets import Input, Static
 
 from agent.config import get_settings
 from agent.graph.agent import agent
+from agent.llm.providers import get_provider_registry
 from agent.memory.fts5 import FTS5Memory
 from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.scheduler.digest import start_scheduler
 from agent.telemetry.hooks import capture_from_stream_event
 from agent.telemetry.usage_ledger import UsageLedger
-from agent.tui.screens import LedgerScreen
+from agent.tools import vault_search as vault_search_module
+from agent.tui.screens import LedgerScreen, ModelPickerModal
 from agent.tui.slash_commands import resolve_command
-from agent.tui.widgets import LedgerSidebar, MessageList, SlashCommandPalette, ThreadsSidebar, VellumHeader, VellumInput
+from agent.tui.widgets import (
+    BootSplash,
+    LedgerSidebar,
+    MessageList,
+    SlashCommandPalette,
+    ThreadsSidebar,
+    VellumHeader,
+    VellumInput,
+)
 
 
 def thread_config(thread_id: str | None = None) -> dict[str, dict[str, str]]:
@@ -104,6 +114,7 @@ class VellumTuiApp(App[None]):
     def __init__(self) -> None:
         super().__init__()
         self.settings = get_settings()
+        self.registry = get_provider_registry()
         self.active_thread_id = self.settings.thread_id
         self.last_user_input = ""
         self.last_tool_names: list[str] = []
@@ -137,10 +148,25 @@ class VellumTuiApp(App[None]):
     def on_mount(self) -> None:
         start_scheduler()
         header = self.query_one(VellumHeader)
-        header.model_name = self.settings.primary_model
+        header.model_name = self.registry.current_model().label
         header.thread_title = self.active_thread_id
         self.query_one(SlashCommandPalette).hide()
         self.query_one(VellumInput).focus()
+        self._mount_boot_splash()
+
+    def _mount_boot_splash(self) -> None:
+        splash = BootSplash(id="boot-splash")
+        try:
+            self.mount(splash)
+        except Exception:
+            pass
+
+    def _refresh_header_model(self) -> None:
+        header = self.query_one(VellumHeader)
+        entry, temp = self.registry.current()
+        suffix = "" if abs(temp - 0.3) < 1e-6 else f"  ·  t {temp:.1f}"
+        header.model_name = f"{entry.label}{suffix}"
+        header.shimmer()
 
     def on_input_changed(self, event: Input.Changed) -> None:
         palette = self.query_one(SlashCommandPalette)
@@ -200,6 +226,8 @@ class VellumTuiApp(App[None]):
 
     async def _stream_agent(self, prompt: str) -> None:
         messages = self.query_one(MessageList)
+        active_tool_keys: dict[str, str] = {}  # run_id -> tool name
+        latest_citations: list[dict] = []
         try:
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": prompt}]},
@@ -208,6 +236,7 @@ class VellumTuiApp(App[None]):
             )
             async for event in stream:
                 kind = event.get("event")
+                run_id = str(event.get("run_id") or "")
                 if kind == "on_chat_model_stream":
                     text = stream_chunk_text(event.get("data", {}).get("chunk"))
                     if text:
@@ -216,20 +245,51 @@ class VellumTuiApp(App[None]):
                     name = str(event.get("name") or "")
                     if name:
                         self.last_tool_names.append(name)
+                        args = (event.get("data") or {}).get("input")
+                        active_tool_keys[run_id] = name
+                        messages.add_tool_panel(run_id, name, args=args)
+                elif kind == "on_tool_end":
+                    name = active_tool_keys.pop(run_id, str(event.get("name") or ""))
+                    output = (event.get("data") or {}).get("output")
+                    summary, citations = self._summarize_tool_output(name, output)
+                    if citations:
+                        latest_citations = citations
+                    messages.complete_tool_panel(run_id, summary, citations=citations, success=True)
                 capture_from_stream_event(
                     ledger=self.usage_ledger,
                     event=event,
                     thread_id=self.active_thread_id,
-                    fallback_model=self.settings.primary_model,
+                    fallback_model=self.registry.current_model().id,
                     source="tui",
                 )
-            messages.finish_assistant_message(self.last_tool_names)
+            messages.finish_assistant_message(self.last_tool_names, citations=latest_citations)
         except Exception:
             messages.append_assistant_token("Unreachable.")
             messages.finish_assistant_message()
         finally:
             self._set_attending(False)
             self.query_one(VellumInput).focus()
+
+    @staticmethod
+    def _summarize_tool_output(name: str, output) -> tuple[str, list[dict]]:
+        text = ""
+        if output is None:
+            text = "done"
+        elif isinstance(output, str):
+            text = output
+        else:
+            content = getattr(output, "content", None)
+            text = content if isinstance(content, str) else str(output)
+        citations: list[dict] = []
+        if name == "search_my_notes":
+            citations = vault_search_module.get_last_citations()
+        if citations:
+            top = citations[0].get("score", 0.0)
+            summary = f"{len(citations)} notes · top score {float(top):.2f}"
+        else:
+            length = len(text)
+            summary = "no results" if length < 30 else f"{length} chars"
+        return summary, citations
 
     async def _handle_slash_command(self, value: str) -> bool:
         command = value.casefold()
@@ -258,7 +318,46 @@ class VellumTuiApp(App[None]):
             self.action_new_thread()
             return True
         if slash_command.action == "model":
-            self.action_model_picker()
+            arg = value.split(" ", 1)[1].strip() if " " in value else ""
+            if not arg:
+                self.action_model_picker()
+                return True
+            entry = self.registry.resolve(arg)
+            if entry is None:
+                self.notify(f"no model matches '{arg}'", timeout=2)
+                return True
+            self.registry.set_active(entry.id)
+            self._refresh_header_model()
+            self.notify(f"model: {entry.label}", timeout=2)
+            return True
+        if slash_command.action == "provider":
+            arg = value.split(" ", 1)[1].strip() if " " in value else ""
+            if not arg:
+                valid = ", ".join(group.key for group in self.registry.list_groups())
+                self.notify(f"usage: /provider <{valid}>", timeout=3)
+                return True
+            group = self.registry.find_group(arg)
+            if group is None:
+                valid = ", ".join(group.key for group in self.registry.list_groups())
+                self.notify(f"unknown provider '{arg}'. try: {valid}", timeout=3)
+                return True
+            entry = self.registry.set_active(group.default_id)
+            self._refresh_header_model()
+            self.notify(f"provider: {group.label} ({entry.label})", timeout=2)
+            return True
+        if slash_command.action == "temperature":
+            arg = value.split(" ", 1)[1].strip() if " " in value else ""
+            if not arg:
+                self.notify(f"usage: /temp 0.0-2.0 (current: {self.registry.current_temperature():.2f})", timeout=3)
+                return True
+            try:
+                temp = float(arg)
+                self.registry.set_temperature(temp)
+            except ValueError:
+                self.notify("temp must be between 0 and 2", timeout=2)
+                return True
+            self._refresh_header_model()
+            self.notify(f"temperature: {temp:.2f}", timeout=2)
             return True
         if slash_command.action == "faculties":
             self.action_faculties()
@@ -364,7 +463,11 @@ class VellumTuiApp(App[None]):
         self.notify("faculties pending", timeout=2)
 
     def action_model_picker(self) -> None:
-        self.notify(self.settings.primary_model, timeout=3)
+        def _after_pick(entry):
+            if entry is not None:
+                self._refresh_header_model()
+                self.notify(f"model: {entry.label}", timeout=2)
+        self.push_screen(ModelPickerModal(), _after_pick)
 
     async def on_unmount(self) -> None:
         close = getattr(agent, "aclose", None)

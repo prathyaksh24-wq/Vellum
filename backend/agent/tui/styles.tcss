@@ -222,3 +222,132 @@ LedgerScreen {
     background: $graphite;
     color: $muted;
 }
+
+/* === Tool-call panel === */
+.tool-panel {
+    height: auto;
+    width: 72;
+    margin-bottom: 1;
+    padding: 0;
+    background: $graphite;
+}
+
+.tool-panel-header {
+    height: 1;
+    width: 100%;
+}
+
+.tool-panel-header > Static {
+    height: 1;
+    width: auto;
+}
+
+.tool-panel-running {
+    color: $muted;
+}
+
+.tool-panel-done {
+    color: $whisper;
+}
+
+.tool-panel-error {
+    color: $ember;
+}
+
+/* === Marching stream rule === */
+.marching-rule {
+    height: 1;
+    color: $ember;
+    margin-top: 1;
+}
+
+/* === Markdown message === */
+MarkdownMessage {
+    height: auto;
+    width: 100%;
+    margin-bottom: 2;
+}
+
+.message-meta {
+    height: 1;
+    color: $whisper;
+}
+
+.message-footnotes {
+    height: auto;
+    color: $whisper;
+    margin-top: 1;
+}
+
+/* === Boot splash === */
+.boot-splash {
+    layer: overlay;
+    width: 100%;
+    height: 100%;
+    align: center middle;
+    background: $graphite;
+}
+
+#boot-logo {
+    width: auto;
+    height: 1;
+    text-align: center;
+    color: $parchment;
+    text-style: italic;
+}
+
+#boot-tagline {
+    width: auto;
+    height: 1;
+    text-align: center;
+    margin-top: 1;
+}
+
+/* === Model picker modal === */
+ModelPickerModal {
+    align: center middle;
+    background: $graphite 60%;
+}
+
+#model-picker-root {
+    width: 44;
+    height: auto;
+    padding: 1 2;
+    border: solid $line;
+    background: $charcoal;
+}
+
+#picker-title {
+    height: 1;
+    margin-bottom: 1;
+    color: $parchment;
+}
+
+#picker-list {
+    height: auto;
+    color: $muted;
+}
+
+#picker-filter {
+    height: 1;
+    margin-top: 1;
+    border: none;
+    padding: 0 1;
+    background: $graphite;
+    color: $parchment;
+}
+
+#picker-help {
+    height: 1;
+    margin-top: 1;
+    color: $whisper;
+}
+
+/* === Sliding sidebars: smoother open/close === */
+ThreadsSidebar {
+    transition: offset 180ms in_out_cubic;
+}
+
+LedgerSidebar {
+    transition: offset 180ms in_out_cubic;
+}

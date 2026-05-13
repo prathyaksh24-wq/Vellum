@@ -20,6 +20,16 @@ from agent.rag.store import VectorStore
 logger = logging.getLogger(__name__)
 
 
+# Module-level capture of citations from the most recent search_my_notes call.
+# Process-local; read by the TUI on `on_tool_end` to render footnotes.
+_LAST_CITATIONS: list[dict] = []
+
+
+def get_last_citations() -> list[dict]:
+    """Return citations from the most recent search_my_notes call."""
+    return list(_LAST_CITATIONS)
+
+
 def _settings():
     return get_settings()
 
@@ -61,6 +71,7 @@ def search_my_notes(query: str) -> str:
         return f"Query blocked for privacy reasons: {reason}. Please rephrase without sensitive personal identifiers."
 
     clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
+    _LAST_CITATIONS.clear()
     _store_query(query)
 
     results: list[dict]
@@ -96,6 +107,7 @@ def search_my_notes(query: str) -> str:
     for score, chunk in ranked[: settings.max_context_chunks * 2]:
         metadata = chunk.get("metadata", {})
         folder = metadata.get("folder", "")
+        path = metadata.get("path", "")
         if not can_send_to_llm(folder):
             logger.info("[TOOL:vault] Skipping private folder: %s", folder)
             continue
@@ -104,12 +116,20 @@ def search_my_notes(query: str) -> str:
         if needs_scrubbing(folder):
             text, _ = scrubber.scrub(text)
 
-        allowed_chunks.append({"text": text, "folder": folder, "score": score})
+        allowed_chunks.append({"text": text, "folder": folder, "score": score, "path": path})
         if len(allowed_chunks) >= settings.max_context_chunks:
             break
 
     if not allowed_chunks:
+        _LAST_CITATIONS.clear()
         return "Found relevant notes, but none are allowed to be surfaced directly by the folder policy."
+
+    # Capture citations for the TUI to render as footnotes.
+    _LAST_CITATIONS.clear()
+    _LAST_CITATIONS.extend(
+        {"n": index, "folder": chunk["folder"], "path": chunk["path"], "score": float(chunk["score"])}
+        for index, chunk in enumerate(allowed_chunks, 1)
+    )
 
     context = "\n\n---\n\n".join(
         f"[Note {index} - {chunk['folder']}]\n{chunk['text']}"
