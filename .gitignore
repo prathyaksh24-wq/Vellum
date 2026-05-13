@@ -8,6 +8,7 @@ __pycache__/
 data/memory/*.db
 data/memory/*.db-*
 data/memory/audit_log.jsonl
+data/logs/
 data/embeddings/
 backend/data/
 backend/.test-data/
