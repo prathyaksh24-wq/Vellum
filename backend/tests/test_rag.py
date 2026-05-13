@@ -8,6 +8,17 @@ from agent.rag.store import VectorStore
 from agent.tools import vault_search
 
 
+class FakeSettings:
+    min_retrieval_score = 0.65
+    max_context_chunks = 5
+    max_context_tokens = 3000
+    agent_notes_folder = "Agent"
+    obsidian_vault_path = None
+    enable_vector_search = False
+    enable_cross_encoder_rerank = False
+    enable_query_vector_storage = False
+
+
 class FakeSentenceTransformer:
     def __init__(self, model_name):
         self.model_name = model_name
@@ -89,6 +100,7 @@ def test_vault_search_uses_vector_backend_and_filters_private_chunks(monkeypatch
 
     monkeypatch.setattr(vault_search, "Embedder", FakeEmbedder)
     monkeypatch.setattr(vault_search, "VectorStore", FakeStore)
+    monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
     monkeypatch.setattr(
         vault_search,
@@ -126,6 +138,7 @@ def test_vault_search_falls_back_to_vault_when_vector_backend_unavailable(monkey
 
     monkeypatch.setattr(vault_search, "Embedder", BrokenEmbedder)
     monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
+    monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
     monkeypatch.setattr(vault_search, "_rerank", lambda query, results: [(item["score"], item) for item in results])
 
@@ -138,3 +151,31 @@ def test_vault_search_blocks_red_queries():
     result = vault_search.search_my_notes.func("password=super-secret")
 
     assert "blocked for privacy" in result.casefold()
+
+
+def test_vault_search_default_path_does_not_require_vector_backend(monkeypatch):
+    class ExplodingEmbedder:
+        def embed(self, text):
+            raise AssertionError("vector embedding should not run by default")
+
+    class FakeVault:
+        def __init__(self, vault_path):
+            self.vault_path = vault_path
+
+        def search_notes(self, query, limit=12):
+            return [
+                {
+                    "text": "Naval note about attention",
+                    "score": 1.0,
+                    "metadata": {"folder": "X/naval", "path": "X/naval/latest-50.md"},
+                }
+            ]
+
+    monkeypatch.setattr(vault_search, "_settings", lambda: FakeSettings())
+    monkeypatch.setattr(vault_search, "Embedder", ExplodingEmbedder)
+    monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
+    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
+
+    result = vault_search.search_my_notes.func("naval attention")
+
+    assert "Naval note about attention" in result

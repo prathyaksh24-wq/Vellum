@@ -25,6 +25,9 @@ def _settings():
 
 
 def _rerank(clean_query: str, results: list[dict]) -> list[tuple[float, dict]]:
+    if not getattr(_settings(), "enable_cross_encoder_rerank", False):
+        return _lexical_rerank(clean_query, results)
+
     try:
         from sentence_transformers import CrossEncoder
 
@@ -33,13 +36,17 @@ def _rerank(clean_query: str, results: list[dict]) -> list[tuple[float, dict]]:
         return sorted(zip(scores, results), key=lambda item: item[0], reverse=True)
     except Exception as exc:
         logger.warning("[TOOL:vault] Cross-encoder unavailable; using lexical rerank: %s", exc)
-        terms = {term.casefold() for term in re.findall(r"[A-Za-z0-9]+", clean_query) if len(term) > 2}
-        scored = []
-        for item in results:
-            text = item.get("text", "").casefold()
-            score = sum(1 for term in terms if term in text) / max(len(terms), 1)
-            scored.append((max(float(item.get("score", 0.0)), score), item))
-        return sorted(scored, key=lambda item: item[0], reverse=True)
+        return _lexical_rerank(clean_query, results)
+
+
+def _lexical_rerank(clean_query: str, results: list[dict]) -> list[tuple[float, dict]]:
+    terms = {term.casefold() for term in re.findall(r"[A-Za-z0-9]+", clean_query) if len(term) > 2}
+    scored = []
+    for item in results:
+        text = item.get("text", "").casefold()
+        score = sum(1 for term in terms if term in text) / max(len(terms), 1)
+        scored.append((max(float(item.get("score", 0.0)), score), item))
+    return sorted(scored, key=lambda item: item[0], reverse=True)
 
 
 @tool
@@ -56,15 +63,21 @@ def search_my_notes(query: str) -> str:
     clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
     _store_query(query)
 
-    try:
-        results = VectorStore().search(
-            collection="obsidian_vault",
-            embedding=Embedder().embed(clean_query),
-            top_k=12,
-            score_threshold=0.40,
-        )
-    except Exception as exc:
-        logger.warning("[TOOL:vault] Vector search unavailable; using vault fallback: %s", exc)
+    results: list[dict]
+    if getattr(settings, "enable_vector_search", False):
+        try:
+            results = VectorStore().search(
+                collection="obsidian_vault",
+                embedding=Embedder().embed(clean_query),
+                top_k=12,
+                score_threshold=0.40,
+            )
+        except Exception as exc:
+            logger.warning("[TOOL:vault] Vector search unavailable; using vault fallback: %s", exc)
+            vault = ObsidianVault(settings.obsidian_vault_path)
+            results = vault.search_notes(clean_query, limit=12)
+    else:
+        logger.info("[TOOL:vault] Vector search disabled; using vault fallback.")
         vault = ObsidianVault(settings.obsidian_vault_path)
         results = vault.search_notes(clean_query, limit=12)
 
@@ -112,25 +125,29 @@ def search_my_notes(query: str) -> str:
 def _store_query(query: str) -> None:
     """Store a query locally after deduplication."""
     settings = _settings()
+    if getattr(settings, "enable_query_vector_storage", False):
+        try:
+            embedder = Embedder()
+            store = VectorStore()
+            embedding = embedder.embed(query)
+            existing = store.search("agent_queries", embedding, top_k=1, score_threshold=0.92)
+            if existing:
+                return
+            store.upsert(
+                collection="agent_queries",
+                text=query,
+                embedding=embedding,
+                metadata={"timestamp": datetime.now().isoformat(), "type": "query"},
+            )
+        except Exception as exc:
+            logger.warning("[TOOL:vault] Query vector storage skipped: %s", exc)
+
     try:
-        embedder = Embedder()
-        store = VectorStore()
-        embedding = embedder.embed(query)
-        existing = store.search("agent_queries", embedding, top_k=1, score_threshold=0.92)
-        if existing:
-            return
-        store.upsert(
-            collection="agent_queries",
-            text=query,
-            embedding=embedding,
-            metadata={"timestamp": datetime.now().isoformat(), "type": "query"},
+        ObsidianVault(settings.obsidian_vault_path).create_note(
+            folder=f"{settings.agent_notes_folder}/Queries",
+            title=f"Query {datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            content=f"**Query logged at {datetime.now().strftime('%Y-%m-%d %H:%M')}**\n\n{query}",
         )
     except Exception as exc:
-        logger.warning("[TOOL:vault] Query vector storage skipped: %s", exc)
-
-    ObsidianVault(settings.obsidian_vault_path).create_note(
-        folder=f"{settings.agent_notes_folder}/Queries",
-        title=f"Query {datetime.now().strftime('%Y%m%d_%H%M%S')}",
-        content=f"**Query logged at {datetime.now().strftime('%Y-%m-%d %H:%M')}**\n\n{query}",
-    )
+        logger.warning("[TOOL:vault] Query note logging skipped: %s", exc)
 

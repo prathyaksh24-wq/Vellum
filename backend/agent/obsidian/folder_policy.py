@@ -61,6 +61,7 @@ AGENT_ACCESSIBLE = _permissions(
 
 FOLDER_POLICIES: dict[str, FolderPolicy] = {
     "X": FolderPolicy("X", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
+    "X/naval": FolderPolicy("X/naval", SPORTS_ACCESSIBLE, requires_scrubbing=False),
     "Youtube": FolderPolicy("Youtube", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "Books": FolderPolicy("Books", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "feedback": FolderPolicy("feedback", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),

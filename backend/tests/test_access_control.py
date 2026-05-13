@@ -18,6 +18,14 @@ def test_private_folders_are_local_only():
         assert needs_scrubbing(folder) is True
 
 
+def test_public_x_collections_can_go_to_llm_and_tools():
+    assert can_store("X/naval") is True
+    assert can_index("X/naval") is True
+    assert can_send_to_llm("X/naval") is True
+    assert can_use_tools("X/naval") is True
+    assert needs_scrubbing("X/naval") is False
+
+
 def test_sports_folders_can_go_to_llm_and_tools():
     for folder in ("Sports", "Sports/NBA", "Sports/Formula One", "Sports/football"):
         assert can_store(folder) is True

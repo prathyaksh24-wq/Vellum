@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     min_retrieval_score: float = Field(default=0.65, alias="MIN_RETRIEVAL_SCORE")
     max_context_chunks: int = Field(default=5, alias="MAX_CONTEXT_CHUNKS")
     max_context_tokens: int = Field(default=3000, alias="MAX_CONTEXT_TOKENS")
+    enable_vector_search: bool = Field(default=False, alias="ENABLE_VECTOR_SEARCH")
+    enable_cross_encoder_rerank: bool = Field(default=False, alias="ENABLE_CROSS_ENCODER_RERANK")
+    enable_query_vector_storage: bool = Field(default=False, alias="ENABLE_QUERY_VECTOR_STORAGE")
 
     # MCP
     filesystem_mcp_path: Path = Field(alias="FILESYSTEM_MCP_PATH")
