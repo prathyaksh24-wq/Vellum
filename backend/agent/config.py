@@ -19,6 +19,15 @@ class Settings(BaseSettings):
         default="https://openrouter.ai/api/v1",
         alias="OPENROUTER_BASE_URL",
     )
+
+    # Direct provider keys (optional). When set, openai/* models bypass
+    # OpenRouter and hit api.openai.com directly. Privacy contract differs:
+    # the vendor's own data-retention policy applies, not OpenRouter's ZDR.
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        alias="OPENAI_BASE_URL",
+    )
     primary_model: str = Field(default="google/gemma-4-31b-it", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")

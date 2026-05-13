@@ -55,6 +55,19 @@ def build_llm(model: str | None = None):
     active_entry, active_temp = registry.current()
     resolved_id = model or active_entry.id
 
+    # Direct OpenAI path: if the model is an OpenAI vendor model and a native
+    # key is configured, skip OpenRouter. Trades OpenRouter's ZDR enforcement
+    # for OpenAI's own data-retention terms; intentional, user-configured.
+    if resolved_id.startswith("openai/") and settings.openai_api_key:
+        bare_id = resolved_id.split("/", 1)[1]
+        return ChatOpenAI(
+            model=bare_id,
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url,
+            temperature=active_temp,
+            max_tokens=2048,
+        )
+
     provider_config: dict = {
         "data_collection": "deny",
         "zdr": settings.zdr_only,
