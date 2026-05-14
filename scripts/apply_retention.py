@@ -16,6 +16,7 @@ from typing import Any
 
 
 RAW_ROOTS = ("X", "Youtube", "Sports")
+AGENT_DIRECT_RETENTION_ROOTS = ("Agent/Queries", "Agent/Responses")
 ARCHIVE_ROOT = "Archive"
 MEMORY_ROOT = Path("Agent") / "Memories"
 RETENTION_NOTE = "Archived from:"
@@ -78,6 +79,13 @@ def file_datetime(path: Path) -> datetime:
     return datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
 
 
+def retention_keep(path: Path) -> bool:
+    metadata = parse_frontmatter(path.read_text(encoding="utf-8", errors="ignore"))
+    pinned = metadata.get("pinned", "").casefold()
+    retention = metadata.get("retention", "").casefold()
+    return pinned in {"true", "yes", "1"} or retention in {"keep", "never", "permanent"}
+
+
 def parse_datetime(value: str) -> datetime | None:
     value = value.strip()
     if not value:
@@ -101,7 +109,7 @@ def discover_hot_files(vault: Path) -> list[RetentionFile]:
             continue
         for path in sorted(base.rglob("*.md")):
             rel = path.relative_to(vault).as_posix()
-            if should_skip_hot(rel):
+            if should_skip_hot(rel) or retention_keep(path):
                 continue
             files.append(RetentionFile(path=path, rel_path=rel, captured_at=file_datetime(path)))
     return files
@@ -121,10 +129,32 @@ def discover_archive_files(vault: Path) -> list[RetentionFile]:
     files = []
     for path in sorted(base.rglob("*.md")):
         rel = path.relative_to(vault).as_posix()
-        if rel.endswith("/_index.md"):
+        if rel.endswith("/_index.md") or retention_keep(path):
             continue
         files.append(RetentionFile(path=path, rel_path=rel, captured_at=file_datetime(path)))
     return files
+
+
+def discover_agent_direct_files(vault: Path) -> list[RetentionFile]:
+    files: list[RetentionFile] = []
+    for root in AGENT_DIRECT_RETENTION_ROOTS:
+        base = vault / root
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.md")):
+            rel = path.relative_to(vault).as_posix()
+            if rel.endswith("/_index.md") or retention_keep(path):
+                continue
+            files.append(RetentionFile(path=path, rel_path=rel, captured_at=file_datetime(path)))
+    return files
+
+
+def agent_retention_days(rel_path: str, *, query_days: int, response_days: int) -> int | None:
+    if rel_path.startswith("Agent/Queries/"):
+        return query_days
+    if rel_path.startswith("Agent/Responses/"):
+        return response_days
+    return None
 
 
 def archive_target(vault: Path, item: RetentionFile) -> Path:
@@ -163,6 +193,9 @@ def memory_target(vault: Path, item: RetentionFile) -> Path:
     if root == "Sports":
         category = parts[1] if len(parts) > 1 else "general"
         return vault / MEMORY_ROOT / "Sports" / category / f"{month}-memory.md"
+    if root == "Agent" and len(parts) > 1 and parts[1] in {"Queries", "Responses"}:
+        category = parts[1].casefold()
+        return vault / MEMORY_ROOT / "Conversations" / category / f"{month}-memory.md"
     return vault / MEMORY_ROOT / root / f"{month}-memory.md"
 
 
@@ -178,12 +211,15 @@ def distill_text(items: list[RetentionFile], vault: Path, now: datetime) -> str:
     sample = clean_excerpt(combined, max_words=90)
     sources = "\n".join(f"- `{path}`" for path in source_paths)
     theme_lines = "\n".join(f"- {theme}" for theme in themes) if themes else "- general"
+    is_conversation_memory = source_paths[0].startswith("Agent/")
+    retention_policy = "agent_queries_30_days_agent_responses_90_days" if is_conversation_memory else "archive_after_30_delete_after_90"
+    source_heading = "Conversation Sources Distilled" if is_conversation_memory else "Archived Sources Distilled"
     return f"""---
 type: retention_memory
 created: {now.date().isoformat()}
 source_root: {source_root}
 source_count: {len(items)}
-retention_policy: archive_after_30_delete_after_90
+retention_policy: {retention_policy}
 ---
 
 # {focus} Memory - {items[0].captured_at:%Y-%m}
@@ -201,8 +237,9 @@ retention_policy: archive_after_30_delete_after_90
 - Preserve what helps the agent become more truthful, kind, curious, articulate, and useful.
 - For Naval/X material, keep attention on life, spirituality, clarity, judgment, agency, truth, and articulate expression.
 - For YouTube and Sports material, keep preference patterns and meaning rather than raw transcripts or raw live data.
+- For Queries and Responses, preserve stable preferences, decisions, corrections, values, and useful self-model updates instead of raw conversation clutter.
 
-## Archived Sources Distilled
+## {source_heading}
 
 {sources}
 """
@@ -220,6 +257,10 @@ def memory_focus(rel_path: str) -> str:
         return "YouTube"
     if "/Sports/" in rel_path or rel_path.startswith("Archive/Sports/"):
         return "Sports"
+    if rel_path.startswith("Agent/Queries/"):
+        return "User Queries"
+    if rel_path.startswith("Agent/Responses/"):
+        return "Agent Responses"
     return "Source"
 
 
@@ -285,6 +326,8 @@ def run(
     now: datetime | None = None,
     archive_after_days: int = 30,
     delete_after_days: int = 90,
+    query_after_days: int = 30,
+    response_after_days: int = 90,
     dry_run: bool = True,
     ingester: Any | None = None,
 ) -> dict[str, int]:
@@ -307,10 +350,18 @@ def run(
 
     archived = discover_archive_files(vault)
     to_delete = [item for item in archived if (now - item.captured_at).days >= delete_after_days]
+    agent_direct = discover_agent_direct_files(vault)
+    agent_to_delete = [
+        item
+        for item in agent_direct
+        if (days := agent_retention_days(item.rel_path, query_days=query_after_days, response_days=response_after_days)) is not None
+        and (now - item.captured_at).days >= days
+    ]
     archive_memory_targets = set(group_for_memory([archived_item(vault, item) for item in to_archive], vault))
     delete_memory_targets = set(group_for_memory(to_delete, vault))
-    result["would_distill"] = len(archive_memory_targets | delete_memory_targets)
-    result["would_delete"] = len(to_delete)
+    agent_memory_targets = set(group_for_memory(agent_to_delete, vault))
+    result["would_distill"] = len(archive_memory_targets | delete_memory_targets | agent_memory_targets)
+    result["would_delete"] = len(to_delete) + len(agent_to_delete)
 
     if dry_run:
         return result
@@ -339,7 +390,17 @@ def run(
         now=now,
         ingester=ingester,
     )
+    result["distilled"] += write_memory_groups(
+        group_for_memory(agent_to_delete, vault),
+        vault=vault,
+        now=now,
+        ingester=ingester,
+    )
     for item in to_delete:
+        item.path.unlink()
+        result["deleted"] += 1
+        update_index(ingester, deleted=item.rel_path)
+    for item in agent_to_delete:
         item.path.unlink()
         result["deleted"] += 1
         update_index(ingester, deleted=item.rel_path)
@@ -362,6 +423,8 @@ def main() -> int:
     parser.add_argument("--vault-root", type=Path)
     parser.add_argument("--archive-after-days", type=int, default=30)
     parser.add_argument("--delete-after-days", type=int, default=90)
+    parser.add_argument("--query-after-days", type=int, default=30)
+    parser.add_argument("--response-after-days", type=int, default=90)
     parser.add_argument("--apply", action="store_true", help="Actually move/archive/delete files. Defaults to dry-run.")
     args = parser.parse_args()
 
@@ -370,6 +433,8 @@ def main() -> int:
         vault_root=vault,
         archive_after_days=args.archive_after_days,
         delete_after_days=args.delete_after_days,
+        query_after_days=args.query_after_days,
+        response_after_days=args.response_after_days,
         dry_run=not args.apply,
     )
     print(result)
