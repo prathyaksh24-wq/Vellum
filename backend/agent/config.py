@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     apify_mcp_url: str = Field(default="https://mcp.apify.com", alias="APIFY_MCP_URL")
     apify_api_token: str = Field(default="", alias="APIFY_API_TOKEN")
     apify_amazon_actor: str = Field(default="scrapeai/amazon-product-scraper", alias="APIFY_AMAZON_ACTOR")
+    apify_youtube_actor: str = Field(default="majdijm/youtube-channel-scraper", alias="APIFY_YOUTUBE_ACTOR")
     mcp_timeout_seconds: int = Field(default=300, alias="MCP_TIMEOUT_SECONDS")
 
     # Agent

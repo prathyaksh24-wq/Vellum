@@ -1,0 +1,24 @@
+{
+  "id": "skill-retention-memory-v1",
+  "name": "Retention memory",
+  "trigger": [
+    "archive",
+    "retention",
+    "memory",
+    "forget",
+    "remember",
+    "x data",
+    "youtube data",
+    "sports data",
+    "naval",
+    "agent memories"
+  ],
+  "confidence_threshold": 0.35,
+  "instructions": "When raw X, Youtube, or Sports notes are old, archived, unavailable, or deleted, search Agent/Memories before answering. Treat Agent/Memories as durable distilled knowledge created from raw ingestion notes before deletion. Use these memory cards for stable preference patterns, recurring influences, creator/channel context, sports interests, values, tone, and long-term adaptation. Do not treat retention memories as exact transcripts or exact quotes unless the memory itself contains a verified quote. If the user asks for an exact quote from a deleted raw source, explain that the raw source may have aged out and answer from the distilled memory only. Naval is a high-signal influence for this user: preserve life, spirituality, clarity, judgment, agency, truth-seeking, kindness, curiosity, and articulate expression. The agent should use retained memories to become more useful over time while staying truthful about what is summary versus source evidence.",
+  "citation_style": "Reference Agent/Memories note paths when using distilled memory, and raw X/Youtube/Sports notes only when those raw notes are still available.",
+  "output_format": "Concise prose that distinguishes durable memory from exact source evidence.",
+  "created": "2026-05-14",
+  "approved": "2026-05-14",
+  "use_count": 0,
+  "last_used": null
+}

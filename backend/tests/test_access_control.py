@@ -10,7 +10,7 @@ from agent.obsidian.folder_policy import (
 
 
 def test_private_folders_are_local_only():
-    for folder in ("Youtube", "Books", "feedback"):
+    for folder in ("Books", "feedback"):
         assert can_store(folder) is True
         assert can_index(folder) is True
         assert can_send_to_llm(folder) is False
@@ -18,8 +18,8 @@ def test_private_folders_are_local_only():
         assert needs_scrubbing(folder) is True
 
 
-def test_x_folder_can_go_to_llm_and_tools():
-    for folder in ("X", "X/naval", "X/another-public-profile"):
+def test_public_content_folders_can_go_to_llm_and_tools():
+    for folder in ("X", "X/naval", "X/another-public-profile", "Youtube", "Youtube/channels/moresidemen"):
         assert can_store(folder) is True
         assert can_index(folder) is True
         assert can_send_to_llm(folder) is True
@@ -29,6 +29,15 @@ def test_x_folder_can_go_to_llm_and_tools():
 
 def test_sports_folders_can_go_to_llm_and_tools():
     for folder in ("Sports", "Sports/NBA", "Sports/Formula One", "Sports/football"):
+        assert can_store(folder) is True
+        assert can_index(folder) is True
+        assert can_send_to_llm(folder) is True
+        assert can_use_tools(folder) is True
+        assert needs_scrubbing(folder) is False
+
+
+def test_agent_memories_can_go_to_llm_and_tools():
+    for folder in ("Agent", "Agent/Memories", "Agent/Memories/X/naval"):
         assert can_store(folder) is True
         assert can_index(folder) is True
         assert can_send_to_llm(folder) is True
@@ -47,15 +56,14 @@ def test_default_policy_is_private_local_only():
 def test_folder_policy_filters_chunks_before_llm():
     chunks = [
         {"path": "Sports/NBA/latest.md", "text": "public sports note"},
+        {"metadata": {"path": "Youtube/channels/moresidemen/latest-5.md"}, "text": "public youtube note"},
         {"path": "Books/private.md", "text": "private book note"},
-        {"metadata": {"path": "Youtube/private.md"}, "text": "private youtube note"},
     ]
 
     allowed, blocked = filter_chunks_for_llm(chunks)
 
-    assert [chunk["text"] for chunk in allowed] == ["public sports note"]
+    assert [chunk["text"] for chunk in allowed] == ["public sports note", "public youtube note"]
     assert [chunk["text"] for chunk in blocked] == [
         "private book note",
-        "private youtube note",
     ]
-    assert [chunk_folder(chunk) for chunk in blocked] == ["Books", "Youtube"]
+    assert [chunk_folder(chunk) for chunk in blocked] == ["Books"]

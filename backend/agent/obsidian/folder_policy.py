@@ -56,12 +56,13 @@ AGENT_ACCESSIBLE = _permissions(
     FolderPermission.STORED,
     FolderPermission.INDEXED,
     FolderPermission.SENT_TO_LLM,
+    FolderPermission.TOOL_ACCESSIBLE,
 )
 
 
 FOLDER_POLICIES: dict[str, FolderPolicy] = {
     "X": FolderPolicy("X", SPORTS_ACCESSIBLE, requires_scrubbing=False),
-    "Youtube": FolderPolicy("Youtube", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
+    "Youtube": FolderPolicy("Youtube", SPORTS_ACCESSIBLE, requires_scrubbing=False),
     "Books": FolderPolicy("Books", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "feedback": FolderPolicy("feedback", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "Sports": FolderPolicy("Sports", SPORTS_ACCESSIBLE, requires_scrubbing=False),

@@ -47,9 +47,9 @@
 │                        KNOWLEDGE LAYER                               │
 │                                                                      │
 │   Obsidian Vault (source of truth — all Markdown, your machine)      │
-│   ├── X/            (private — indexed only)                        │
-│   ├── youtube/      (private — indexed only)                        │
-│   ├── Books/        (public works — indexed + sent to LLM)          │
+│   ├── X/            (public — indexed + sent to LLM + tools)        │
+│   ├── Youtube/      (public — indexed + sent to LLM + tools)        │
+│   ├── Books/        (private — indexed only)                        │
 │   ├── feedback/     (private — indexed only)                        │
 │   ├── Sports/       (accessible — indexed + sent to LLM)            │
 │   └── Agent/        (agent writes — indexed + sent to LLM)          │

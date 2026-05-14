@@ -80,16 +80,16 @@ Before including any Obsidian chunk in the LLM prompt, check its folder against
 `agent/obsidian/folder_policy.py`.
 
 Folders and their permissions:
-- `X/` — INDEXED locally, NEVER sent to LLM raw
-- `youtube/` — INDEXED locally, NEVER sent to LLM raw
-- `Books/` — INDEXED locally, SENT to LLM (public published works)
+- `X/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
+- `Youtube/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
+- `Books/` — INDEXED locally, NEVER sent to LLM raw
 - `feedback/` — INDEXED locally, NEVER sent to LLM raw
 - `Sports/` — INDEXED locally, SENT to LLM
 - `Agent/` — INDEXED locally, SENT to LLM
 
-Private folder chunks (X, youtube, feedback) contribute to retrieval scoring
-but their content is NEVER injected into the LLM prompt. The LLM learns
-THAT a relevant note exists; it does not see WHAT the note contains.
+Private folder chunks (Books, feedback, and any default private folders) contribute
+to retrieval scoring but their content is NEVER injected into the LLM prompt.
+Public folders like X, Youtube, Sports, and Agent can be used as LLM context.
 
 ### What the External API Never Sees
 
@@ -98,7 +98,7 @@ The following must never appear in any payload sent to OpenRouter:
 - Email addresses
 - Physical addresses or precise locations
 - Financial account numbers or passwords
-- Raw content from private folders (X, youtube, feedback)
+- Raw content from private folders (Books, feedback, and default private folders)
 - File paths from the user's machine
 - The user's real handle or username from any platform
 
@@ -432,10 +432,12 @@ Agent/Saved/            ← user-saved responses (via Ctrl+S)
 The agent NEVER writes to or modifies:
 - `Books/` — user's curated book imports
 - `X/` — user's Twitter archive
-- `youtube/` — user's YouTube notes
+- `Youtube/` — user's YouTube transcript archive
 - `feedback/` — user's personal feedback folder
 - `Sports/` — user's sports notes
 - Any folder not under `Agent/`
+
+Exception: explicit ingestion and retention automation may manage public source folders (`X/`, `Youtube/`, and `Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
 
 ### Frontmatter Standard
 

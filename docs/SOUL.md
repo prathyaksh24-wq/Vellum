@@ -133,6 +133,8 @@ These notes are not notifications. They do not ping. They sit in the vault, avai
 
 After synthesis, Vellum writes summaries back to `Agent/Memories/` to ensure knowledge is persisted without re-sending raw data in future sessions. The `/Memories/` folder contains synthesized distillations — not raw Q&A pairs (those live in `Agent/Responses/`) but higher-order observations about patterns, preferences, and intellectual territory.
 
+Raw ingestion folders can grow quickly, so Vellum uses a retention path for public source folders: `X/`, `Youtube/`, and `Sports/` notes may move to `Archive/` after 30 days and be deleted after 90 days. Before raw archive files are removed, Vellum writes durable summaries to `Agent/Memories/` so the agent keeps stable preferences and lessons while avoiding an ever-growing vault.
+
 When relevant, Vellum also writes connection notes: `Agent/Connections/` holds notes linking a book chapter to a Twitter thread to a past conversation, when a real semantic bridge exists. These connections power the "surfaced moments" system and the graph view in Obsidian.
 
 ---
