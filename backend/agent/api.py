@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -24,10 +24,14 @@ from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
 from agent.telemetry.hooks import capture_from_invoke_result, capture_from_stream_event
 from agent.telemetry.usage_ledger import UsageLedger
+from agent.terminal.profiles import get_profile as get_terminal_profile
+from agent.terminal.profiles import list_profiles as list_terminal_profiles
+from agent.terminal.session import TerminalSessionManager
 from agent.tools.obsidian_write import store_qa_pair
 
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
+terminal_session_manager = TerminalSessionManager()
 
 
 class ChatRequest(BaseModel):
@@ -340,6 +344,157 @@ async def public_settings() -> dict[str, Any]:
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
     }
+
+
+_SETUP_STATE_PATH = Path("data/memory/setup_state.json")
+
+
+def _read_setup_state() -> dict[str, Any]:
+    if not _SETUP_STATE_PATH.exists():
+        return {}
+    try:
+        return json.loads(_SETUP_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_setup_state(payload: dict[str, Any]) -> None:
+    _SETUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SETUP_STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _setup_catalog() -> dict[str, Any]:
+    """Catalog of provider/MCP entries the wizard merges with its own list.
+       Mirrors agent/llm/providers.py and agent/mcp/client.py SERVER_RUNNERS."""
+    from agent.llm.providers import get_provider_registry
+
+    registry = get_provider_registry()
+    groups = [
+        {"key": g.key, "label": g.label, "default_id": g.default_id}
+        for g in registry.list_groups()
+    ]
+    models = [
+        {
+            "id": m.id,
+            "label": m.label,
+            "provider": m.provider,
+            "context": m.context,
+            "tier": m.tier,
+            "open_weights": m.open_weights,
+        }
+        for m in registry.list_models()
+    ]
+    settings = get_settings()
+    mcp_builtin = [
+        {
+            "id": "builtin.filesystem",
+            "label": "Filesystem",
+            "category": "Built-in",
+            "url": f"builtin://filesystem?root={settings.filesystem_mcp_path}",
+            "scope": str(settings.filesystem_mcp_path),
+            "enabled": True,
+        },
+        {
+            "id": "builtin.apify",
+            "label": "Apify",
+            "category": "Built-in",
+            "url": settings.apify_mcp_url,
+            "scope": "amazon + youtube scrapers",
+            "enabled": True,
+        },
+    ]
+    return {"llm_groups": groups, "llm_models": models, "mcp_builtin": mcp_builtin}
+
+
+@router.get("/setup/state")
+async def setup_state_get() -> dict[str, Any]:
+    """Return persisted wizard state (if any) plus the live backend catalog
+       the wizard should merge with its own static list."""
+    return {
+        "state": _read_setup_state(),
+        "catalog": _setup_catalog(),
+    }
+
+
+class SetupStateBody(BaseModel):
+    state: dict[str, Any]
+
+
+@router.post("/setup/state")
+async def setup_state_post(body: SetupStateBody) -> dict[str, Any]:
+    """Persist a snapshot of the wizard state. Called on every advance/blur."""
+    _write_setup_state(body.state)
+    return {"ok": True}
+
+
+@router.post("/setup/complete")
+async def setup_complete(body: SetupStateBody) -> dict[str, Any]:
+    """Finalize the wizard. Writes the snapshot to setup_state.json with a
+       completed_at marker. Provider keys are NOT written from here — the
+       wizard's key-input phase writes to ~/.vellum/.env directly via the
+       shell adapter when the real backend is mounted."""
+    from datetime import datetime, timezone
+
+    payload = dict(body.state)
+    payload["completed_at"] = datetime.now(timezone.utc).isoformat()
+    _write_setup_state(payload)
+    return {"ok": True, "completed_at": payload["completed_at"]}
+
+
+@router.get("/terminal/profiles")
+async def terminal_profiles() -> dict[str, list[dict[str, object]]]:
+    return {"profiles": [profile.to_public_dict() for profile in list_terminal_profiles()]}
+
+
+@router.websocket("/terminal/ws")
+async def terminal_ws(websocket: WebSocket) -> None:
+    await websocket.accept()
+    session = None
+    output_task: asyncio.Task[None] | None = None
+
+    async def pump_output() -> None:
+        assert session is not None
+        while True:
+            data = await session.read()
+            if data is None:
+                await websocket.send_json({"type": "exit", "code": 0})
+                break
+            await websocket.send_json({"type": "output", "data": data})
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+            msg_type = message.get("type")
+            if msg_type == "start":
+                profile_id = str(message.get("profile") or "powershell")
+                profile = get_terminal_profile(profile_id)
+                if profile is None:
+                    await websocket.send_json({"type": "error", "message": f"Unknown terminal profile: {profile_id}"})
+                    continue
+                if not profile.available:
+                    await websocket.send_json({"type": "error", "message": profile.reason or f"{profile.label} is unavailable."})
+                    continue
+                session = await terminal_session_manager.create(profile)
+                cols = int(message.get("cols") or 120)
+                rows = int(message.get("rows") or 32)
+                await session.resize(cols, rows)
+                await websocket.send_json({"type": "ready", "sessionId": session.id, "profile": profile.id})
+                output_task = asyncio.create_task(pump_output())
+            elif msg_type == "input" and session is not None:
+                await session.write(str(message.get("data") or ""))
+            elif msg_type == "resize" and session is not None:
+                await session.resize(int(message.get("cols") or 120), int(message.get("rows") or 32))
+            elif msg_type == "terminate":
+                break
+            else:
+                await websocket.send_json({"type": "error", "message": "Terminal session is not ready."})
+    except WebSocketDisconnect:
+        return
+    finally:
+        if output_task is not None:
+            output_task.cancel()
+        if session is not None:
+            await terminal_session_manager.terminate(session.id)
 
 
 app.include_router(router)
