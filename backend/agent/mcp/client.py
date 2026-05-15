@@ -7,7 +7,16 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from agent.config import get_settings
-from agent.mcp import apify_tools, filesystem_tools
+from agent.mcp import (
+    apify_tools,
+    context7_tools,
+    context_mode_tools,
+    filesystem_tools,
+    github_tools,
+    gitmcp_tools,
+    obsidian_tools,
+    playwright_tools,
+)
 
 
 ToolFn = Callable[[dict[str, Any]], Awaitable[str]]
@@ -30,6 +39,17 @@ SERVER_RUNNERS: dict[str, ToolFn] = {
     "filesystem": filesystem_tools.run_tool_async,
     "apify_amazon": apify_tools.run_tool_async,
     "apify": apify_tools.run_tool_async,
+    "github": github_tools.run_tool_async,
+    "obsidian": obsidian_tools.run_tool_async,
+    "obsidian_api": obsidian_tools.run_tool_async,
+    "context7": context7_tools.run_tool_async,
+    "library_docs": context7_tools.run_tool_async,
+    "gitmcp": gitmcp_tools.run_tool_async,
+    "repo_docs": gitmcp_tools.run_tool_async,
+    "context_mode": context_mode_tools.run_tool_async,
+    "ctx": context_mode_tools.run_tool_async,
+    "playwright": playwright_tools.run_tool_async,
+    "browser": playwright_tools.run_tool_async,
 }
 
 

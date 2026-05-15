@@ -125,6 +125,11 @@ agent = create_react_agent(
         search_amazon,     # Apify, always private
         read_file,         # Filesystem MCP, vault-restricted
         list_files,        # Filesystem MCP, vault-restricted
+        browser_action,    # Playwright MCP, isolated browser control
+        github_read,       # GitHub MCP, repository context
+        github_write,      # GitHub MCP, gated repository mutation
+        git_action,        # Local git status/log/pull/commit/push
+        obsidian_api,      # Obsidian Local REST API MCP
         create_note,       # Write to Agent/ only
         append_to_note,    # Write to Agent/ only
     ],

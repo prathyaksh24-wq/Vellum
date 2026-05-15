@@ -57,6 +57,27 @@ class Settings(BaseSettings):
     apify_api_token: str = Field(default="", alias="APIFY_API_TOKEN")
     apify_amazon_actor: str = Field(default="scrapeai/amazon-product-scraper", alias="APIFY_AMAZON_ACTOR")
     apify_youtube_actor: str = Field(default="majdijm/youtube-channel-scraper", alias="APIFY_YOUTUBE_ACTOR")
+    playwright_mcp_command: str = Field(default="npx", alias="PLAYWRIGHT_MCP_COMMAND")
+    playwright_mcp_args: str = Field(default="-y @playwright/mcp@latest --isolated", alias="PLAYWRIGHT_MCP_ARGS")
+    playwright_mcp_allow_mutations: bool = Field(default=False, alias="PLAYWRIGHT_MCP_ALLOW_MUTATIONS")
+    github_mcp_url: str = Field(default="https://api.githubcopilot.com/mcp/", alias="GITHUB_MCP_URL")
+    github_mcp_token: str = Field(default="", alias="GITHUB_MCP_TOKEN")
+    github_pat: str = Field(default="", alias="GITHUB_PAT")
+    github_mcp_allow_writes: bool = Field(default=False, alias="GITHUB_MCP_ALLOW_WRITES")
+    github_mcp_allow_destructive: bool = Field(default=False, alias="GITHUB_MCP_ALLOW_DESTRUCTIVE")
+    git_tool_allow_writes: bool = Field(default=False, alias="GIT_TOOL_ALLOW_WRITES")
+    obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
+    obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
+    obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")
+    obsidian_mcp_verify_ssl: bool = Field(default=False, alias="OBSIDIAN_MCP_VERIFY_SSL")
+    obsidian_mcp_allow_writes: bool = Field(default=False, alias="OBSIDIAN_MCP_ALLOW_WRITES")
+    obsidian_mcp_allow_destructive: bool = Field(default=False, alias="OBSIDIAN_MCP_ALLOW_DESTRUCTIVE")
+    obsidian_mcp_allow_commands: bool = Field(default=False, alias="OBSIDIAN_MCP_ALLOW_COMMANDS")
+    context7_mcp_url: str = Field(default="https://mcp.context7.com/mcp", alias="CONTEXT7_MCP_URL")
+    context7_api_key: str = Field(default="", alias="CONTEXT7_API_KEY")
+    gitmcp_mcp_url: str = Field(default="https://gitmcp.io/docs", alias="GITMCP_MCP_URL")
+    context_mode_mcp_command: str = Field(default="npx", alias="CONTEXT_MODE_MCP_COMMAND")
+    context_mode_mcp_args: str = Field(default="-y context-mode", alias="CONTEXT_MODE_MCP_ARGS")
     mcp_timeout_seconds: int = Field(default=300, alias="MCP_TIMEOUT_SECONDS")
 
     # Agent
@@ -110,6 +131,14 @@ class Settings(BaseSettings):
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
         if not self.apify_mcp_url.startswith(("https://", "http://")):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
+        if not self.github_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("GITHUB_MCP_URL must be an HTTP(S) URL.")
+        if not self.obsidian_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("OBSIDIAN_MCP_URL must be an HTTP(S) URL.")
+        if not self.context7_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("CONTEXT7_MCP_URL must be an HTTP(S) URL.")
+        if not self.gitmcp_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("GITMCP_MCP_URL must be an HTTP(S) URL.")
 
         return self
 

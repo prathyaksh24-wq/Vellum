@@ -16,6 +16,7 @@ ui-dist/
 .ui-runtime/
 .api-runtime/
 node_modules/
+.playwright-mcp/
 .DS_Store
 
 # Personal data — never commit

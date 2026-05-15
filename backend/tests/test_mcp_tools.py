@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent.mcp import apify_tools, filesystem_tools
+from agent.mcp import apify_tools, filesystem_tools, github_tools, obsidian_tools, playwright_tools
 from agent.mcp.client import McpToolRequest, run_tools_async
 
 
@@ -109,6 +109,321 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
     assert seen["sse_read_timeout"] == 300
 
 
+def test_playwright_navigate_calls_core_mcp_tool(monkeypatch):
+    fake_session = FakeSession(tools=["browser_navigate"], text='- heading "Example" [level=1]')
+    seen = {}
+
+    def fake_stdio_client(params):
+        seen["params"] = params
+        return AsyncPairContext()
+
+    monkeypatch.setattr(playwright_tools, "stdio_client", fake_stdio_client)
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}))
+
+    assert 'heading "Example"' in result
+    assert fake_session.calls[0] == ("browser_navigate", {"url": "https://example.com"})
+    assert seen["params"].command == "npx"
+    assert "@playwright/mcp@latest" in seen["params"].args
+    assert "--isolated" in seen["params"].args
+
+
+def test_playwright_blocks_mutating_actions_by_default(monkeypatch):
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: False)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "click", "ref": "e5"}))
+
+    assert "requires PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true" in result
+
+
+def test_playwright_click_when_mutations_are_allowed(monkeypatch):
+    fake_session = FakeSession(tools=["browser_click"], text="clicked")
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "click", "ref": "e5", "element": "Search"}))
+
+    assert result == "clicked"
+    assert fake_session.calls[0] == ("browser_click", {"ref": "e5", "element": "Search"})
+
+
+def test_github_search_repositories_calls_remote_mcp(monkeypatch):
+    fake_session = FakeSession(tools=["search_repositories"], text="repo result")
+    seen = {}
+
+    def fake_streamablehttp_client(url, headers=None, timeout=None, sse_read_timeout=None):
+        seen.update({"url": url, "headers": headers, "timeout": timeout, "sse_read_timeout": sse_read_timeout})
+        return AsyncStreamableHttpContext()
+
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "streamablehttp_client", fake_streamablehttp_client)
+    monkeypatch.setattr(github_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(github_tools.run_tool_async({"action": "search_repositories", "query": "vellum"}))
+
+    assert result == "repo result"
+    assert fake_session.calls[0] == ("search_repositories", {"query": "vellum"})
+    assert seen["url"] == "https://api.githubcopilot.com/mcp/"
+    assert seen["headers"]["Authorization"] == "Bearer ghp_test"
+
+
+def test_github_blocks_write_tools(monkeypatch):
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+
+    result = asyncio.run(github_tools.run_tool_async({"action": "create_or_update_file"}))
+
+    assert "requires GITHUB_MCP_ALLOW_WRITES=true" in result
+
+
+def test_github_create_repository_when_writes_allowed(monkeypatch):
+    fake_session = FakeSession(tools=["create_repository"], text="created")
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(github_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(
+        github_tools.run_tool_async(
+            {
+                "action": "create_repository",
+                "name": "vellum-test",
+                "description": "test repo",
+                "private": True,
+                "auto_init": True,
+            }
+        )
+    )
+
+    assert result == "created"
+    assert fake_session.calls[0] == (
+        "create_repository",
+        {"name": "vellum-test", "description": "test repo", "private": True, "autoInit": True},
+    )
+
+
+def test_github_delete_repository_requires_destructive_flag(monkeypatch):
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "_destructive_allowed", lambda: False)
+
+    result = asyncio.run(github_tools.run_tool_async({"action": "delete_repository", "owner": "me", "repo": "old"}))
+
+    assert "requires GITHUB_MCP_ALLOW_DESTRUCTIVE=true" in result
+
+
+def test_github_delete_repository_uses_rest_when_destructive_allowed(monkeypatch):
+    seen = {}
+
+    class FakeResponse:
+        status_code = 204
+        text = ""
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def delete(self, url, headers=None):
+            seen["url"] = url
+            seen["headers"] = headers
+            return FakeResponse()
+
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "_destructive_allowed", lambda: True)
+    monkeypatch.setattr(github_tools.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(github_tools.run_tool_async({"action": "delete_repository", "owner": "me", "repo": "old"}))
+
+    assert result == "GitHub repository deleted: me/old."
+    assert seen["url"] == "https://api.github.com/repos/me/old"
+    assert seen["headers"]["Authorization"] == "Bearer ghp_test"
+
+
+def test_github_requires_token(monkeypatch):
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "")
+
+    result = asyncio.run(github_tools.run_tool_async({"action": "search_repositories", "query": "vellum"}))
+
+    assert "GITHUB_MCP_TOKEN" in result
+
+
+def test_github_token_reads_pat_from_settings(monkeypatch):
+    monkeypatch.setattr(github_tools, "get_settings", lambda: SimpleNamespace(github_mcp_token="", github_pat="ghp_from_settings"))
+    monkeypatch.delenv("GITHUB_PAT", raising=False)
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    assert github_tools._github_token() == "ghp_from_settings"
+
+
+def test_obsidian_read_calls_local_mcp(monkeypatch):
+    fake_session = FakeSession(tools=["vault_read"], text="# Note")
+    seen = {}
+
+    def fake_streamablehttp_client(url, headers=None, timeout=None, sse_read_timeout=None, httpx_client_factory=None):
+        seen.update(
+            {
+                "url": url,
+                "headers": headers,
+                "timeout": timeout,
+                "sse_read_timeout": sse_read_timeout,
+                "httpx_client_factory": httpx_client_factory,
+            }
+        )
+        return AsyncStreamableHttpContext()
+
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools, "_use_stream_transport", lambda: True)
+    monkeypatch.setattr(obsidian_tools, "streamablehttp_client", fake_streamablehttp_client)
+    monkeypatch.setattr(obsidian_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(obsidian_tools.run_tool_async({"action": "read", "path": "Agent/Memories/test.md"}))
+
+    assert result == "# Note"
+    assert fake_session.calls[0] == ("vault_read", {"path": "Agent/Memories/test.md"})
+    assert seen["url"] == "https://127.0.0.1:27124/mcp/"
+    assert seen["headers"]["Authorization"] == "Bearer obsidian-key"
+    assert seen["httpx_client_factory"] is not None
+
+
+def test_obsidian_write_requires_write_flag(monkeypatch):
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools, "_writes_allowed", lambda: False)
+
+    result = asyncio.run(obsidian_tools.run_tool_async({"action": "write", "path": "x.md", "content": "hello"}))
+
+    assert "requires OBSIDIAN_MCP_ALLOW_WRITES=true" in result
+
+
+def test_obsidian_append_when_writes_allowed(monkeypatch):
+    fake_session = FakeSession(tools=["vault_append"], text="appended")
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(obsidian_tools, "_use_stream_transport", lambda: True)
+    monkeypatch.setattr(obsidian_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(obsidian_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(
+        obsidian_tools.run_tool_async(
+            {"action": "append", "path": "Agent/Memories/test.md", "content": "\nhello"}
+        )
+    )
+
+    assert result == "appended"
+    assert fake_session.calls[0] == ("vault_append", {"path": "Agent/Memories/test.md", "content": "\nhello"})
+
+
+def test_obsidian_delete_requires_destructive_flag(monkeypatch):
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(obsidian_tools, "_destructive_allowed", lambda: False)
+
+    result = asyncio.run(obsidian_tools.run_tool_async({"action": "delete", "path": "old.md"}))
+
+    assert "requires OBSIDIAN_MCP_ALLOW_DESTRUCTIVE=true" in result
+
+
+def test_obsidian_requires_api_key(monkeypatch):
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "")
+
+    result = asyncio.run(obsidian_tools.run_tool_async({"action": "list"}))
+
+    assert "OBSIDIAN_API_KEY" in result
+
+
+def test_obsidian_rest_list_fallback(monkeypatch):
+    seen = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"files": ["Agent/", "X/"]}
+
+        @property
+        def text(self):
+            return '{"files":["Agent/","X/"]}'
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            seen["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None, params=None):
+            seen["url"] = url
+            seen["headers"] = headers
+            seen["params"] = params
+            return FakeResponse()
+
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(obsidian_tools.run_rest_action_async({"action": "list"}))
+
+    assert "Agent/" in result
+    assert seen["url"] == "https://127.0.0.1:27124/vault/"
+    assert seen["headers"]["Authorization"] == "Bearer obsidian-key"
+    assert seen["client_kwargs"]["verify"] is False
+
+
+def test_obsidian_rest_append_reads_then_writes(monkeypatch):
+    calls = []
+
+    class FakeReadResponse:
+        status_code = 200
+        text = "old"
+
+    class FakeWriteResponse:
+        status_code = 204
+        text = ""
+
+    class FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url, headers=None, params=None):
+            calls.append(("get", url, None))
+            return FakeReadResponse()
+
+        async def put(self, url, headers=None, content=None):
+            calls.append(("put", url, content))
+            return FakeWriteResponse()
+
+    monkeypatch.setattr(obsidian_tools, "_obsidian_api_key", lambda: "obsidian-key")
+    monkeypatch.setattr(obsidian_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(obsidian_tools.httpx, "AsyncClient", FakeAsyncClient)
+
+    result = asyncio.run(
+        obsidian_tools.run_rest_action_async(
+            {"action": "append", "path": "Agent/test.md", "content": "\nnew"}
+        )
+    )
+
+    assert result == "Obsidian REST append completed: Agent/test.md."
+    assert calls == [
+        ("get", "https://127.0.0.1:27124/vault/Agent/test.md", None),
+        ("put", "https://127.0.0.1:27124/vault/Agent/test.md", "old\nnew"),
+    ]
+
+
 def test_multiple_mcp_servers_can_run_concurrently(monkeypatch):
     events = []
 
@@ -124,9 +439,21 @@ def test_multiple_mcp_servers_can_run_concurrently(monkeypatch):
         events.append("apify-end")
         return "apify-ok"
 
+    async def fake_browser(params):
+        return "browser-ok"
+
+    async def fake_github(params):
+        return "github-ok"
+
+    async def fake_obsidian(params):
+        return "obsidian-ok"
+
     monkeypatch.setattr("agent.mcp.client.SERVER_RUNNERS", {
         "filesystem": fake_filesystem,
         "apify_amazon": fake_apify,
+        "playwright": fake_browser,
+        "github": fake_github,
+        "obsidian": fake_obsidian,
     })
 
     results = asyncio.run(
@@ -134,9 +461,12 @@ def test_multiple_mcp_servers_can_run_concurrently(monkeypatch):
             [
                 McpToolRequest("filesystem", {"query": "show files"}),
                 McpToolRequest("apify_amazon", {"query": "amazon notebook price"}),
+                McpToolRequest("playwright", {"action": "snapshot"}),
+                McpToolRequest("github", {"action": "search_repositories", "query": "vellum"}),
+                McpToolRequest("obsidian", {"action": "list"}),
             ]
         )
     )
 
-    assert [item.result for item in results] == ["filesystem-ok", "apify-ok"]
+    assert [item.result for item in results] == ["filesystem-ok", "apify-ok", "browser-ok", "github-ok", "obsidian-ok"]
     assert events[:2] == ["filesystem-start", "apify-start"]

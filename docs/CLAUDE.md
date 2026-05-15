@@ -234,6 +234,41 @@ entire Obsidian vault into context.
   before the LLM sees any of it
 - Never used as a general web scraper without explicit user instruction
 
+**Playwright MCP** (`@playwright/mcp@latest --isolated`)
+- Used for: browser navigation and accessibility snapshots through `browser_action`
+- Default mode: navigation/snapshot/read-only browser inspection
+- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`) require
+  `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true`
+- Never used for: banking, purchases, password managers, account settings,
+  destructive operations, or sending messages without an explicit control layer
+
+**GitHub MCP** (`https://api.githubcopilot.com/mcp/`)
+- Used for: GitHub repository, code, issue, PR, commit, branch, tag,
+  release lookup through `github_read`, plus controlled repo/file mutation
+  through `github_write`
+- Requires `GITHUB_MCP_TOKEN` or `GITHUB_PAT`
+- Writes require `GITHUB_MCP_ALLOW_WRITES=true`
+- Destructive writes (`delete_repository`, `delete_file`) additionally require
+  `GITHUB_MCP_ALLOW_DESTRUCTIVE=true`
+- Local `pull`, `commit`, and `push` use `git_action` and require
+  `GIT_TOOL_ALLOW_WRITES=true`
+- Never used for: history rewrite, delete-style refs, or unrequested destructive
+  repository actions
+
+**Obsidian API/MCP** (`OBSIDIAN_MCP_URL`, default `https://127.0.0.1:27124/mcp/`)
+- Used for: Obsidian Local REST API access through `obsidian_api`
+- Requires `OBSIDIAN_API_KEY`
+- Read actions include vault list/read/search, document map, tags, active file,
+  periodic note path, and command listing
+- Writes require `OBSIDIAN_MCP_ALLOW_WRITES=true`
+- Deletes require `OBSIDIAN_MCP_ALLOW_DESTRUCTIVE=true`
+- Command execution requires `OBSIDIAN_MCP_ALLOW_COMMANDS=true`
+- Default SSL verification is off because the local plugin commonly uses a
+  self-signed certificate; enable `OBSIDIAN_MCP_VERIFY_SSL=true` after trusting it
+- Default transport is REST because the Local REST API plugin exposes REST on
+  `27123/27124`; set `OBSIDIAN_MCP_USE_STREAM=true` only when using a separate
+  streamable MCP bridge at `OBSIDIAN_MCP_URL`
+
 ### MCP Usage Rules
 
 1. MCP tool calls are logged in the audit log with tool name, call count, and latency.

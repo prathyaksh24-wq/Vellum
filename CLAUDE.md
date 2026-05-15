@@ -234,6 +234,85 @@ entire Obsidian vault into context.
   before the LLM sees any of it
 - Never used as a general web scraper without explicit user instruction
 
+**Playwright MCP** (`@playwright/mcp@latest --isolated`)
+- Used for: browser navigation and accessibility snapshots through `browser_action`
+- Default mode: navigation/snapshot/read-only browser inspection
+- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`) require
+  `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true`
+- Never used for: banking, purchases, password managers, account settings,
+  destructive operations, or sending messages without an explicit control layer
+
+**GitHub MCP** (`https://api.githubcopilot.com/mcp/`)
+- Used for: GitHub repository, code, issue, PR, commit, branch, tag,
+  release lookup through `github_read`, plus controlled repo/file mutation
+  through `github_write`
+- Requires `GITHUB_MCP_TOKEN` or `GITHUB_PAT`
+- Writes require `GITHUB_MCP_ALLOW_WRITES=true`
+- Destructive writes (`delete_repository`, `delete_file`) additionally require
+  `GITHUB_MCP_ALLOW_DESTRUCTIVE=true`
+- Local `pull`, `commit`, and `push` use `git_action` and require
+  `GIT_TOOL_ALLOW_WRITES=true`
+- Never used for: history rewrite, delete-style refs, or unrequested destructive
+  repository actions
+
+**Obsidian API/MCP** (`OBSIDIAN_MCP_URL`, default `https://127.0.0.1:27124/mcp/`)
+- Used for: Obsidian Local REST API access through `obsidian_api`
+- Requires `OBSIDIAN_API_KEY`
+- Read actions include vault list/read/search, document map, tags, active file,
+  periodic note path, and command listing
+- Writes require `OBSIDIAN_MCP_ALLOW_WRITES=true`
+- Deletes require `OBSIDIAN_MCP_ALLOW_DESTRUCTIVE=true`
+- Command execution requires `OBSIDIAN_MCP_ALLOW_COMMANDS=true`
+- Default SSL verification is off because the local plugin commonly uses a
+  self-signed certificate; enable `OBSIDIAN_MCP_VERIFY_SSL=true` after trusting it
+- Default transport is REST because the Local REST API plugin exposes REST on
+  `27123/27124`; set `OBSIDIAN_MCP_USE_STREAM=true` only when using a separate
+  streamable MCP bridge at `OBSIDIAN_MCP_URL`
+
+**Context7 MCP** (`CONTEXT7_MCP_URL`, default `https://mcp.context7.com/mcp`)
+- Used for: up-to-date software library documentation lookup through `library_docs`
+- Two-step workflow: `resolve-library-id` (name → Context7 ID) then
+  `get-library-docs` (ID + optional topic/tokens → focused docs)
+- Read-only — Context7 exposes no mutating tools
+- `CONTEXT7_API_KEY` is optional; when set it is sent as a bearer token for
+  higher rate limits, otherwise calls run anonymously
+- Never used for: anything other than library/framework documentation lookup;
+  output is public OSS docs and is not scrubbed
+
+**GitMCP** (`GITMCP_MCP_URL`, default `https://gitmcp.io/docs`)
+- Hosted, free, read-only — `idosal/git-mcp` turns any public GitHub repo's
+  documentation and code into MCP tools, accessed through `repo_docs`
+- Actions exposed: `match` (library name → owner/repo), `fetch_docs`,
+  `search_docs`, `search_code`, and `fetch_url` (single reference URL)
+- No authentication required
+- Use cases: arbitrary repo documentation and in-repo code search. Prefer
+  `library_docs` (Context7) for well-known libraries and `github_read` for
+  structured PR/issue/commit data
+- Never used for: anything beyond public-repo documentation/code lookup;
+  output is public OSS material and is not scrubbed
+
+**Context Mode** (`mksglu/context-mode`, stdio via `CONTEXT_MODE_MCP_COMMAND` /
+`CONTEXT_MODE_MCP_ARGS`, default `npx -y context-mode`)
+- Used for: sandboxed code execution and indexed retrieval through `context_mode`
+- Surfaced actions (subset of upstream's 11 tools):
+  - `execute` — run a script in one of 12 languages; only stdout enters context
+  - `index` — chunk markdown into a local FTS5/BM25 store
+  - `search` — BM25-ranked retrieval over previously indexed content
+  - `fetch_and_index` — fetch a URL, convert to markdown, index; 24h cache,
+    HTTP(S) only (cloud metadata + link-local IPs blocked by upstream)
+  - `stats`, `doctor` — operational diagnostics
+  - `purge` — wipe the local index; requires `confirm=true`
+- Requires Node.js ≥22.5 on PATH so `npx -y context-mode` resolves
+- Hook-based auto-routing (the upstream's headline feature) is NOT used —
+  Vellum's LangGraph loop has no hook framework, so `context_mode` is invoked
+  explicitly by the agent like any other tool
+- `ctx_fetch_and_index` output does NOT pass through Vellum's privacy gate;
+  summarize before quoting and never mix raw fetch_and_index content with
+  private-folder context in the same response
+- Never used for: bypassing the vault-first rule, indexing private-folder
+  content into Context Mode's separate FTS5 store, or running `purge`
+  without explicit user confirmation
+
 ### MCP Usage Rules
 
 1. MCP tool calls are logged in the audit log with tool name, call count, and latency.

@@ -1,0 +1,24 @@
+{
+  "id": "skill-gitmcp-mcp-v1",
+  "name": "GitMCP repo docs and code search",
+  "trigger": [
+    "gitmcp",
+    "git mcp",
+    "repo docs",
+    "repository documentation",
+    "llms.txt",
+    "readme",
+    "source code",
+    "github project",
+    "owner/repo",
+    "search code"
+  ],
+  "confidence_threshold": 0.35,
+  "instructions": "When the user asks for context on a specific public GitHub project (its documentation, README/llms.txt, or in-repo code), use repo_docs. Actions: action='match' with library=<name> to guess owner/repo from a free-form name; action='fetch_docs' with owner+repo to pull the repo's documentation; action='search_docs' with owner+repo+query for semantic doc search; action='search_code' with owner+repo+query (and optional page) to run GitHub code search inside that repo; action='fetch_url' with url=<reference> to follow a single link surfaced inside the docs. No authentication is required. Prefer library_docs (Context7) for well-known libraries with curated docs, github_read for structured PR/issue/commit/branch data, and repo_docs for arbitrary repo documentation and code search. Output is public OSS material and is not scrubbed.",
+  "citation_style": "Reference owner/repo, and where applicable the search query and matching file path.",
+  "output_format": "Concise prose with clear separation between fetched documentation, search hits, and code snippets quoted verbatim only when the user asks for code.",
+  "created": "2026-05-15",
+  "approved": "2026-05-15",
+  "use_count": 0,
+  "last_used": null
+}
