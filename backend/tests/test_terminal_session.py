@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent.terminal.profiles import TerminalProfile
-from agent.terminal.session import TerminalSession, TerminalSessionManager
+from agent.terminal.session import TerminalSession, TerminalSessionManager, WinPtyTerminalTransport
 
 
 class FakeTransport:
@@ -94,3 +94,24 @@ async def test_manager_creates_and_removes_sessions():
 
     assert session.id not in manager.sessions
     assert transport.closed is True
+
+
+@pytest.mark.asyncio
+async def test_winpty_resize_supports_setwinsize_api():
+    class FakePtyProcess:
+        def __init__(self):
+            self.calls = []
+
+        def isalive(self):
+            return True
+
+        def setwinsize(self, rows, cols):
+            self.calls.append((rows, cols))
+
+    transport = WinPtyTerminalTransport(make_profile())
+    fake = FakePtyProcess()
+    transport._process = fake
+
+    await transport.resize(100, 30)
+
+    assert fake.calls == [(30, 100)]

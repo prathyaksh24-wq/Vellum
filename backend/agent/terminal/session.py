@@ -123,7 +123,10 @@ class WinPtyTerminalTransport(TerminalTransport):
         self.cols = cols
         self.rows = rows
         if self._process is not None and self._process.isalive():
-            self._process.set_size(rows, cols)
+            if hasattr(self._process, "set_size"):
+                self._process.set_size(rows, cols)
+            else:
+                self._process.setwinsize(rows, cols)
 
     async def terminate(self) -> None:
         if self._process is not None and self._process.isalive():
