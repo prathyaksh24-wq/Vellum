@@ -9,7 +9,15 @@ const DEFAULT_PROFILES = [
   { id: "macos", label: "macOS SSH", available: false },
 ];
 
-function wsUrl() {
+function wsUrl(apiBase = "") {
+  if (apiBase) {
+    const url = new URL(apiBase, location.origin);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/api/terminal/ws";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  }
   const scheme = location.protocol === "https:" ? "wss:" : "ws:";
   return `${scheme}//${location.host}/api/terminal/ws`;
 }
@@ -17,7 +25,7 @@ function wsUrl() {
 export function createTerminalWorkspace(root, options = {}) {
   let TerminalClass = options.TerminalClass || null;
   let FitAddonClass = null;
-  const socketFactory = options.socketFactory || (() => new WebSocket(wsUrl()));
+  const socketFactory = options.socketFactory || (() => new WebSocket(wsUrl(options.apiBase || "")));
   const onOpenVellum = options.onOpenVellum || (() => {});
   const profiles = options.profiles || DEFAULT_PROFILES;
   const tabs = [];
