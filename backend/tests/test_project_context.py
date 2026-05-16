@@ -144,3 +144,27 @@ def test_build_cache_miss_when_file_changes(tmp_path: Path) -> None:
     second = ctx.build("thread1")
     assert "FIRST" not in second
     assert "SECOND" in second
+
+
+def test_tick_appends_log_line(tmp_path: Path) -> None:
+    proj = tmp_path / "Projects" / "fitness"
+    proj.mkdir(parents=True)
+    (proj / "vellum.md").write_text("CHARTER")
+    (proj / "log.md").write_text("")
+
+    ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
+    ctx._state.set_active_project("t1", "fitness")
+    ctx.tick("t1", "wrote a thing", turn_ref="t1-1")
+
+    log = (proj / "log.md").read_text()
+    assert "[session]" in log
+    assert "wrote a thing" in log
+    assert "turn=t1-1" in log
+    import re as _re
+    assert _re.search(r"\b\d{2}/\d{2}/\d{4} \d{2}:\d{2}\b", log)
+
+
+def test_tick_no_active_project_is_noop(tmp_path: Path) -> None:
+    ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
+    ctx.tick("t1", "anything")
+    assert not (tmp_path / "Projects").exists()

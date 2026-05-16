@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from threading import RLock
 
@@ -185,3 +186,27 @@ class ProjectContext:
             return ""
 
         return f"<PROTECTED>\n{scrubbed}\n</PROTECTED>"
+
+    @staticmethod
+    def _now_stamp() -> str:
+        return datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    def tick(
+        self,
+        thread_id: str,
+        turn_summary: str,
+        *,
+        turn_ref: str | None = None,
+        source: str = "session",
+    ) -> None:
+        slug = self._state.get_active_project(thread_id)
+        if not slug:
+            return
+        proj = self.vault_root / "Projects" / slug
+        if not (proj / "vellum.md").exists():
+            return
+
+        log_path = proj / "log.md"
+        line = f"- {self._now_stamp()} · [{source}] · {turn_summary} · turn={turn_ref or thread_id}\n"
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(line)
