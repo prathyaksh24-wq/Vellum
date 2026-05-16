@@ -292,3 +292,30 @@ class ProjectContext:
         new_sha = hashlib.sha256(pre_marker.rstrip().encode("utf-8")).hexdigest()
         full = f"{pre_marker}<!-- vellum-managed: {new_sha} -->\n"
         hot_path.write_text(full, encoding="utf-8")
+
+
+def build_fast_summarizer():
+    """Returns a Callable[[list[str]], str] that calls the fast model via OpenRouter
+    to compress recent activity into a <=200-token Hot snapshot.
+
+    Imported lazily so dev/test paths that do not have OPENROUTER_API_KEY still work."""
+    from agent.config import get_settings
+    from agent.graph.agent import build_llm
+
+    settings = get_settings()
+    llm = build_llm(settings.fast_model)
+
+    def _summarize(turn_summaries: list[str]) -> str:
+        if not turn_summaries:
+            return ""
+        joined = "\n".join(f"- {s}" for s in turn_summaries[-10:])
+        prompt = (
+            "Compress these recent activity notes from a project session into a "
+            "<=200 token 'Hot' snapshot using the exact 4-line shape: "
+            "Last touched / Open threads / Last decision / Next. "
+            "Be concrete. No preamble.\n\nNotes:\n" + joined
+        )
+        response = llm.invoke(prompt)
+        return getattr(response, "content", str(response))
+
+    return _summarize
