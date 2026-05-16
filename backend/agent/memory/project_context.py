@@ -3,6 +3,8 @@ single <PROTECTED> block prepended to the agent system prompt each turn."""
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 import logging
 from dataclasses import dataclass, field
@@ -59,6 +61,19 @@ def _budget_for(filename: str) -> int:
     return TOKEN_BUDGETS.get(filename, 1000)
 
 
+VELLUM_MANAGED_RE = re.compile(r"<!--\s*vellum-managed:\s*([0-9a-f]+)\s*-->", re.IGNORECASE)
+
+
+def _default_summarizer(turn_summaries: list[str]) -> str:
+    """Placeholder summarizer; real call to fast model wired up in Task 8.
+
+    Deterministic concatenation lets tests/CLI run without an LLM call."""
+    if not turn_summaries:
+        return ""
+    bullets = "\n".join(f"- {s}" for s in turn_summaries[-5:])
+    return f"**Recent activity:**\n{bullets}"
+
+
 def validate_slug(slug: str) -> None:
     if not SLUG_RE.match(slug or "") or _DOUBLE_HYPHEN.search(slug or "") or (slug or "").endswith("-"):
         raise InvalidSlug(
@@ -70,6 +85,7 @@ def validate_slug(slug: str) -> None:
 class ProjectContext:
     vault_root: Path
     sessions_db: Path = SESSIONS_DB
+    summarizer: object = None  # Callable[[list[str]], str]
 
     def __post_init__(self) -> None:
         self.vault_root = Path(self.vault_root)
@@ -77,6 +93,9 @@ class ProjectContext:
         self._state = ThreadStateStore(sessions_db=self.sessions_db)
         self._cache: dict = {}
         self._cache_lock = RLock()
+        self._recent_summaries: dict[str, list[str]] = {}
+        if self.summarizer is None:
+            self.summarizer = _default_summarizer
 
     # ---- file readers ----
 
@@ -206,7 +225,62 @@ class ProjectContext:
         if not (proj / "vellum.md").exists():
             return
 
-        log_path = proj / "log.md"
         line = f"- {self._now_stamp()} · [{source}] · {turn_summary} · turn={turn_ref or thread_id}\n"
-        with open(log_path, "a", encoding="utf-8") as fh:
+        with open(proj / "log.md", "a", encoding="utf-8") as fh:
             fh.write(line)
+
+        self._recent_summaries.setdefault(thread_id, []).append(turn_summary)
+
+        count = self._state.bump_turns(thread_id)
+        n = int(os.environ.get("HOT_REWRITE_EVERY_N_TURNS", "5"))
+        if count < n:
+            return
+
+        self._rewrite_hot(proj, thread_id)
+        self._state.reset_turns(thread_id)
+        self._recent_summaries[thread_id] = []
+
+    @staticmethod
+    def _extract_managed_body(content: str) -> tuple[str, str | None]:
+        m = VELLUM_MANAGED_RE.search(content)
+        if not m:
+            return content, None
+        body = content[: m.start()].rstrip()
+        return body, m.group(1)
+
+    def _rewrite_hot(self, proj: Path, thread_id: str) -> None:
+        hot_path = proj / "hot.md"
+        existing = self._read_file(hot_path)
+        body, recorded_sha = self._extract_managed_body(existing)
+        current_sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+        summarizer = self.summarizer or _default_summarizer
+        summaries = self._recent_summaries.get(thread_id, [])
+        # If in-memory summaries were lost across a process restart, fall back
+        # to the tail of log.md so the rewrite still has material to compress.
+        if not summaries:
+            try:
+                log_text = (proj / "log.md").read_text(encoding="utf-8")
+                tail = [ln for ln in log_text.splitlines() if ln.strip()][-5:]
+                summaries = [ln.split("·", 2)[2].strip() if "·" in ln else ln for ln in tail]
+            except OSError:
+                summaries = []
+        new_body = summarizer(summaries)
+
+        user_edited = (recorded_sha is None) or (recorded_sha != current_sha)
+
+        if user_edited and existing.strip():
+            stamp = self._now_stamp()
+            appended = (
+                f"{existing.rstrip()}\n\n## Hot (vellum proposed, {stamp})\n{new_body}\n"
+            )
+            hot_path.write_text(appended, encoding="utf-8")
+            return
+
+        new_sha = hashlib.sha256(new_body.encode("utf-8")).hexdigest()
+        stamp = self._now_stamp()
+        full = (
+            f"---\ntype: project-hot\nupdated: {stamp}\n---\n"
+            f"# Hot\n\n{new_body}\n\n<!-- vellum-managed: {new_sha} -->\n"
+        )
+        hot_path.write_text(full, encoding="utf-8")

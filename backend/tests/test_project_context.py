@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -168,3 +169,83 @@ def test_tick_no_active_project_is_noop(tmp_path: Path) -> None:
     ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
     ctx.tick("t1", "anything")
     assert not (tmp_path / "Projects").exists()
+
+
+def test_tick_rewrites_hot_after_N_turns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOT_REWRITE_EVERY_N_TURNS", "2")
+
+    proj = tmp_path / "Projects" / "fitness"
+    proj.mkdir(parents=True)
+    (proj / "vellum.md").write_text("CHARTER")
+    body = ""
+    sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    (proj / "hot.md").write_text(f"{body}\n<!-- vellum-managed: {sha} -->\n")
+    (proj / "log.md").write_text("")
+
+    captured: list[str] = []
+
+    def fake_summarizer(turn_summaries: list[str]) -> str:
+        captured.append(",".join(turn_summaries))
+        return "REWRITTEN BODY"
+
+    ctx = ProjectContext(
+        vault_root=tmp_path,
+        sessions_db=tmp_path / "s.db",
+        summarizer=fake_summarizer,
+    )
+    ctx._state.set_active_project("t1", "fitness")
+    ctx.tick("t1", "first turn")
+    ctx.tick("t1", "second turn")
+
+    hot = (proj / "hot.md").read_text()
+    assert "REWRITTEN BODY" in hot
+    assert "<!-- vellum-managed:" in hot
+    assert captured == ["first turn,second turn"]
+    assert ctx._state.get_turns_since_hot_rewrite("t1") == 0
+
+
+def test_tick_appends_proposal_when_user_edited(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOT_REWRITE_EVERY_N_TURNS", "1")
+
+    proj = tmp_path / "Projects" / "fitness"
+    proj.mkdir(parents=True)
+    (proj / "vellum.md").write_text("CHARTER")
+    user_body = "USER WROTE THIS"
+    wrong_sha = "0" * 64
+    (proj / "hot.md").write_text(f"{user_body}\n<!-- vellum-managed: {wrong_sha} -->\n")
+
+    def fake_summarizer(turn_summaries: list[str]) -> str:
+        return "VELLUM PROPOSAL"
+
+    ctx = ProjectContext(
+        vault_root=tmp_path,
+        sessions_db=tmp_path / "s.db",
+        summarizer=fake_summarizer,
+    )
+    ctx._state.set_active_project("t1", "fitness")
+    ctx.tick("t1", "turn one")
+
+    hot = (proj / "hot.md").read_text()
+    assert "USER WROTE THIS" in hot
+    assert "## Hot (vellum proposed" in hot
+    assert "VELLUM PROPOSAL" in hot
+
+
+def test_tick_appends_proposal_when_marker_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOT_REWRITE_EVERY_N_TURNS", "1")
+
+    proj = tmp_path / "Projects" / "fitness"
+    proj.mkdir(parents=True)
+    (proj / "vellum.md").write_text("CHARTER")
+    (proj / "hot.md").write_text("USER DELETED THE MANAGED COMMENT")
+
+    ctx = ProjectContext(
+        vault_root=tmp_path,
+        sessions_db=tmp_path / "s.db",
+        summarizer=lambda _xs: "PROPOSAL",
+    )
+    ctx._state.set_active_project("t1", "fitness")
+    ctx.tick("t1", "turn one")
+    hot = (proj / "hot.md").read_text()
+    assert "USER DELETED" in hot
+    assert "## Hot (vellum proposed" in hot
