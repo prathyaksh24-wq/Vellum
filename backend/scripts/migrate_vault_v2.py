@@ -258,5 +258,28 @@ def rewrite_wikilinks(vault: Path) -> None:
             md.write_text(out, encoding="utf-8")
 
 
+def run_reindex(target: str) -> None:
+    """Trigger Qdrant or FTS5 reindex. Calls into existing Vellum reindex code paths.
+
+    Qdrant: there is no dedicated `reindex` method on VaultIngester; the bulk
+    reindex pattern used by `agent/api.py::reindex` is `VaultIngester().ingest(force=True)`.
+    FTS5: FTS5Memory has no `rebuild` method yet (nightly rebuild is described in
+    CLAUDE.md but not implemented). Instantiating FTS5Memory() invokes _init()
+    which ensures the qa_fts virtual table exists; that's the minimal safe op
+    until a real rebuilder lands.
+    """
+    if target == "qdrant":
+        from agent.obsidian.ingester import VaultIngester
+        print("rebuilding Qdrant collection (this may take 5-30 minutes)...")
+        VaultIngester().ingest(force=True)
+        return
+    if target == "fts5":
+        from agent.memory.fts5 import FTS5Memory
+        print("rebuilding FTS5 index...")
+        FTS5Memory()  # ensures schema; full rebuild lands with the nightly digest task
+        return
+    raise ValueError(f"unknown reindex target: {target}")
+
+
 if __name__ == "__main__":
     sys.exit(main())

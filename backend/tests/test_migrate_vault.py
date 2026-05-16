@@ -91,3 +91,9 @@ def test_rewrite_leaves_non_moved_paths_alone() -> None:
     # Should NOT be wrapped under Library/
     assert "Library/Agent" not in out
     assert "Library/Meta" not in out
+
+
+def test_run_reindex_unknown():
+    from scripts.migrate_vault_v2 import run_reindex
+    with pytest.raises(ValueError):
+        run_reindex("unknown")
