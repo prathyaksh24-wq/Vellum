@@ -196,5 +196,67 @@ def _execute_plan(plan: list[Action]) -> None:
             run_reindex(action.args["target"])
 
 
+import re as _re
+
+WIKILINK_RE = _re.compile(r"(?P<embed>!?)\[\[(?P<target>[^\[\]\n]+?)\]\]")
+FENCED_CODE_RE = _re.compile(r"```.*?```", _re.DOTALL)
+INLINE_CODE_RE = _re.compile(r"`[^`\n]+`")
+
+MOVED_PREFIXES = REFERENCE_FOLDERS  # ("X", "Youtube", "Books", "Sports", "Claude code", "Codex", "feedback")
+
+
+def _rewrite_target(target: str) -> str:
+    """Rewrite a single link target. Handles `|alias` and `#heading` suffixes."""
+    main = target
+    alias = ""
+    if "|" in main:
+        main, alias = main.split("|", 1)
+        alias = "|" + alias
+    heading = ""
+    if "#" in main:
+        main, heading = main.split("#", 1)
+        heading = "#" + heading
+    main = main.strip()
+    for prefix in MOVED_PREFIXES:
+        if main == prefix or main.startswith(prefix + "/"):
+            main = "Library/" + main
+            break
+    return main + heading + alias
+
+
+def rewrite_text(text: str) -> str:
+    """Rewrite all moved-folder wikilinks; skip fenced and inline code regions."""
+    masks: list[str] = []
+
+    def _mask(m: _re.Match) -> str:
+        masks.append(m.group(0))
+        return f"\x00CODE{len(masks) - 1}\x00"
+
+    masked = FENCED_CODE_RE.sub(_mask, text)
+    masked = INLINE_CODE_RE.sub(_mask, masked)
+
+    def _rw(m: _re.Match) -> str:
+        return f"{m.group('embed')}[[{_rewrite_target(m.group('target'))}]]"
+
+    rewritten = WIKILINK_RE.sub(_rw, masked)
+
+    def _unmask(s: str) -> str:
+        return _re.sub(r"\x00CODE(\d+)\x00", lambda m: masks[int(m.group(1))], s)
+
+    return _unmask(rewritten)
+
+
+def rewrite_wikilinks(vault: Path) -> None:
+    """Walk vault/**/*.md and rewrite all moved-folder wikilinks in place."""
+    for md in vault.rglob("*.md"):
+        try:
+            text = md.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        out = rewrite_text(text)
+        if out != text:
+            md.write_text(out, encoding="utf-8")
+
+
 if __name__ == "__main__":
     sys.exit(main())
