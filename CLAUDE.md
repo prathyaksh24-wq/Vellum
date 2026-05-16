@@ -496,6 +496,11 @@ When the agent writes to the Obsidian vault, it follows these rules strictly.
 ### Allowed Write Locations
 
 ```
+Meta/                           ← READ-ONLY for agent; user-authored
+Projects/<slug>/vellum.md       ← READ-ONLY; user-authored
+Projects/<slug>/hot.md          ← Vellum may REWRITE (gated by active_project)
+Projects/<slug>/log.md          ← Vellum may APPEND (gated by active_project)
+Projects/<slug>/notes/          ← Vellum may WRITE (per project's Allowed Actions)
 Agent/Queries/          ← every user query (intake node)
 Agent/Responses/        ← every Q&A pair (store_response)
 Agent/Memories/         ← synthesized higher-order observations
@@ -510,12 +515,18 @@ Agent/Saved/            ← user-saved responses (via Ctrl+S)
 ### Forbidden Write Locations
 
 The agent NEVER writes to or modifies:
-- `Books/` — user's curated book imports
-- `X/` — user's Twitter archive
-- `Youtube/` — user's YouTube transcript archive
-- `feedback/` — user's personal feedback folder
-- `Sports/` — user's sports notes
-- Any folder not under `Agent/`
+- `Meta/` — user-authored identity layer (profile, goals, principles)
+- `Projects/<slug>/vellum.md` — user-authored project charter
+- `Library/` — reference material (X, Youtube, Books, Sports, Claude code, Codex, feedback)
+- Any project's files when that project is not the active project on the current thread (enforced by ProjectContext)
+- Any folder not listed under Allowed above
+
+### ProjectContext gating
+
+`agent/memory/project_context.py` enforces a stricter dynamic rule on top of folder_policy:
+- `hot.md` / `log.md` / `notes/` writes are only permitted to the **active project** for the
+  current thread (`sessions.thread_state.active_project`). Writes to any other project's
+  files are rejected even though folder_policy declares them writable in principle.
 
 Exception: explicit ingestion and retention automation may manage public source folders (`X/`, `Youtube/`, and `Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
 
