@@ -195,6 +195,12 @@ class ThreadStateStore:
             conn.close()
 
     def reset_turns(self, thread_id: str) -> None:
+        """Zero the counter for an existing thread row.
+
+        No-op when no row exists (since get_turns_since_hot_rewrite already
+        returns 0 in that case, the observable behavior is identical to a
+        reset). The intended caller — ProjectContext.tick — always bumps
+        before resetting, so the row will always exist by then."""
         with self._connect() as conn:
             conn.execute(
                 """
