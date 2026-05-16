@@ -13,10 +13,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from agent.cli.project_commands import (
+    CommandResult,
+    InvalidCommand,
+    handle_project_command,
+)
 from agent.config import get_settings
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
+from agent.memory.project_context import ProjectContext
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.privacy.classifier import DataClass, classify
@@ -32,6 +38,16 @@ from agent.tools.obsidian_write import store_qa_pair
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
 terminal_session_manager = TerminalSessionManager()
+
+_project_context_singleton: ProjectContext | None = None
+
+
+def _project_context() -> ProjectContext:
+    global _project_context_singleton
+    if _project_context_singleton is None:
+        s = get_settings()
+        _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
+    return _project_context_singleton
 
 
 class ChatRequest(BaseModel):
@@ -118,6 +134,18 @@ async def _run_agent(message: str, thread_id: str | None) -> ChatResponse:
         raise HTTPException(status_code=400, detail="message cannot be empty")
 
     active_thread_id = thread_id or get_settings().thread_id
+
+    if clean_message.startswith("/project"):
+        parts = clean_message.split()
+        args = parts[1:]
+        ctx = _project_context()
+        try:
+            result = handle_project_command(ctx, active_thread_id, args)
+            answer = result.message
+        except InvalidCommand as exc:
+            answer = f"⚠ {exc}"
+        return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
+
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": clean_message}]},
         config=_thread_config(active_thread_id),
@@ -158,6 +186,18 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default")
         session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
+        try:
+            from agent.memory.project_context import build_fast_summarizer
+            ctx = _project_context()
+            # Lazy-bind a real summarizer once per process (the default is a placeholder)
+            current = getattr(ctx.summarizer, "__name__", "")
+            if current == "_default_summarizer":
+                ctx.summarizer = build_fast_summarizer()
+            summary = (clean_query[:80] + "…") if len(clean_query) > 80 else clean_query
+            await asyncio.to_thread(ctx.tick, thread_id, summary)
+        except Exception:
+            # Never let project bookkeeping break the response
+            pass
     except Exception:
         return
 
@@ -254,6 +294,25 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
     active_thread_id = request.thread_id or get_settings().thread_id
+
+    if clean_message.startswith("/project"):
+        parts = clean_message.split()
+        args = parts[1:]
+        ctx = _project_context()
+        try:
+            result = handle_project_command(ctx, active_thread_id, args)
+            msg = result.message
+        except InvalidCommand as exc:
+            msg = f"⚠ {exc}"
+
+        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+
+        async def single_event():
+            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
+
+        return StreamingResponse(single_event(), media_type="text/event-stream")
 
     async def events():
         yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"

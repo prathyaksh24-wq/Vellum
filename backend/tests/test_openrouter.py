@@ -127,7 +127,9 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     assert compiled == "compiled-agent"
     assert captured["model"] == "llm"
     assert captured["checkpointer"] == "checkpointer"
-    assert captured["prompt"] == react_agent.VELLUM_SYSTEM_PROMPT
+    # Prompt is now a callable (vellum_prompt) that prepends ProjectContext IDENTITY
+    # to VELLUM_SYSTEM_PROMPT per turn. The static string still backs it.
+    assert captured["prompt"] is react_agent.vellum_prompt
     assert {tool.name for tool in captured["tools"]} >= {"search_my_notes", "web_search", "search_amazon"}
     assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
 

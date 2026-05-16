@@ -5,11 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
+from langchain_core.messages import SystemMessage
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import create_react_agent
 
 from agent.config import get_settings
+from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
 from agent.tools.apify import search_amazon
 from agent.tools.browser import browser_action
@@ -72,6 +74,43 @@ Rules:
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
 """
+
+_prompt_project_ctx: ProjectContext | None = None
+
+
+def _get_project_ctx() -> ProjectContext:
+    global _prompt_project_ctx
+    if _prompt_project_ctx is None:
+        s = get_settings()
+        _prompt_project_ctx = ProjectContext(vault_root=s.obsidian_vault_path)
+    return _prompt_project_ctx
+
+
+def vellum_prompt(state, config=None):
+    """Dynamic prompt: prepend per-thread IDENTITY block to VELLUM_SYSTEM_PROMPT.
+
+    LangGraph version compatibility: `create_react_agent` calls this with
+    `(state)` in older versions and `(state, config)` in 0.2+. The `config=None`
+    default tolerates either. If `config` isn't passed, we fall back to a
+    settings-default thread_id so identity still loads (Meta files at least)."""
+    thread_id = None
+    if config and isinstance(config, dict):
+        thread_id = config.get("configurable", {}).get("thread_id")
+    if not thread_id:
+        thread_id = get_settings().thread_id
+
+    identity = ""
+    if thread_id:
+        try:
+            identity = _get_project_ctx().build(thread_id)
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("identity load failed: %s", exc)
+            identity = ""
+
+    system_text = f"{identity}\n\n{VELLUM_SYSTEM_PROMPT}" if identity else VELLUM_SYSTEM_PROMPT
+    return [SystemMessage(content=system_text)] + list(state.get("messages", []))
+
 
 CHECKPOINT_DB = Path("data/memory/checkpoints.db")
 
@@ -169,7 +208,7 @@ def build_agent(model: str | None = None):
             append_to_note,
         ],
         checkpointer=build_checkpointer(),
-        prompt=VELLUM_SYSTEM_PROMPT,
+        prompt=vellum_prompt,
     )
 
 
@@ -195,7 +234,7 @@ async def build_async_agent(model: str | None = None):
             append_to_note,
         ],
         checkpointer=await build_async_checkpointer(),
-        prompt=VELLUM_SYSTEM_PROMPT,
+        prompt=vellum_prompt,
     )
 
 
