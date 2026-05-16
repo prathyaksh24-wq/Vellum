@@ -106,3 +106,101 @@ class SessionsReader:
                 conn.close()
         with self._connect_sessions() as conn:
             conn.execute("DELETE FROM thread_titles WHERE thread_id = ?", (thread_id,))
+
+
+class ThreadStateStore:
+    """Per-thread state: active project, hot.md rewrite counter.
+
+    Lives in the same sessions.db as thread_titles to share its lifecycle.
+    Kept in a separate table so the title schema stays simple.
+    """
+
+    def __init__(self, *, sessions_db: Path = SESSIONS_DB) -> None:
+        self.sessions_db = Path(sessions_db)
+        self._ensure_schema()
+
+    def _connect(self) -> sqlite3.Connection:
+        self.sessions_db.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(str(self.sessions_db))
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _ensure_schema(self) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS thread_state (
+                    thread_id TEXT PRIMARY KEY,
+                    active_project TEXT,
+                    turns_since_hot_rewrite INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+
+    def _row(self, thread_id: str) -> sqlite3.Row | None:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT * FROM thread_state WHERE thread_id = ?",
+                (thread_id,),
+            ).fetchone()
+
+    def get_active_project(self, thread_id: str) -> str | None:
+        row = self._row(thread_id)
+        return row["active_project"] if row else None
+
+    def set_active_project(self, thread_id: str, slug: str | None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO thread_state (thread_id, active_project, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    active_project = excluded.active_project,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, slug),
+            )
+
+    def get_turns_since_hot_rewrite(self, thread_id: str) -> int:
+        row = self._row(thread_id)
+        return int(row["turns_since_hot_rewrite"]) if row else 0
+
+    def bump_turns(self, thread_id: str) -> int:
+        """Increment counter atomically. Returns new value.
+
+        Uses BEGIN IMMEDIATE so the UPSERT + SELECT see the same DB snapshot,
+        preventing a race when two workers tick the same thread concurrently."""
+        conn = self._connect()
+        try:
+            conn.isolation_level = None
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                INSERT INTO thread_state (thread_id, turns_since_hot_rewrite, updated_at)
+                VALUES (?, 1, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    turns_since_hot_rewrite = turns_since_hot_rewrite + 1,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (thread_id,),
+            )
+            row = conn.execute(
+                "SELECT turns_since_hot_rewrite FROM thread_state WHERE thread_id = ?",
+                (thread_id,),
+            ).fetchone()
+            conn.execute("COMMIT")
+            return int(row["turns_since_hot_rewrite"])
+        finally:
+            conn.close()
+
+    def reset_turns(self, thread_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE thread_state SET turns_since_hot_rewrite = 0,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE thread_id = ?
+                """,
+                (thread_id,),
+            )
