@@ -111,7 +111,35 @@ class ProjectContext:
             parts.append(f"## hot.md\n{hot}")
         return "\n\n".join(parts)
 
+    def _cache_key(self, thread_id: str):
+        files: list[tuple[str, float]] = []
+        meta_root = self.vault_root / "Meta"
+        for name in ("profile.md", "goals.md", "principles.md"):
+            p = meta_root / name
+            files.append((str(p), p.stat().st_mtime if p.exists() else -1.0))
+        slug = self._state.get_active_project(thread_id)
+        if slug:
+            proj_root = self.vault_root / "Projects" / slug
+            for name in ("vellum.md", "hot.md"):
+                p = proj_root / name
+                files.append((str(p), p.stat().st_mtime if p.exists() else -1.0))
+        return (thread_id, frozenset(files))
+
     def build(self, thread_id: str) -> str:
+        key = self._cache_key(thread_id)
+        with self._cache_lock:
+            cached = self._cache.get(key)
+            if cached is not None:
+                return cached
+        result = self._build_uncached(thread_id)
+        with self._cache_lock:
+            if len(self._cache) >= 32:
+                # FIFO eviction (insertion-ordered dict)
+                self._cache.pop(next(iter(self._cache)))
+            self._cache[key] = result
+        return result
+
+    def _build_uncached(self, thread_id: str) -> str:
         """Return the IDENTITY block for this thread, ready to prepend to
         the system prompt. Empty string when Meta/ is absent."""
         meta_root = self.vault_root / "Meta"

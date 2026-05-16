@@ -116,3 +116,31 @@ def test_build_truncates_oversize_file(tmp_path: Path) -> None:
     ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
     block = ctx.build("thread1")
     assert "[truncated]" in block
+
+
+import time
+
+
+def test_build_cache_hit_when_unchanged(tmp_path: Path) -> None:
+    meta = tmp_path / "Meta"
+    meta.mkdir()
+    (meta / "profile.md").write_text("FIRST")
+    ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
+    first = ctx.build("thread1")
+    second = ctx.build("thread1")
+    assert first == second
+    assert len(ctx._cache) >= 1
+
+
+def test_build_cache_miss_when_file_changes(tmp_path: Path) -> None:
+    meta = tmp_path / "Meta"
+    meta.mkdir()
+    profile = meta / "profile.md"
+    profile.write_text("FIRST")
+    ctx = ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db")
+    first = ctx.build("thread1")
+    time.sleep(0.05)
+    profile.write_text("SECOND")
+    second = ctx.build("thread1")
+    assert "FIRST" not in second
+    assert "SECOND" in second
