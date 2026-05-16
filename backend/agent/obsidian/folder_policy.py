@@ -46,7 +46,18 @@ def _permissions(*items: FolderPermission) -> frozenset[FolderPermission]:
 
 
 PRIVATE_LOCAL_ONLY = _permissions(FolderPermission.STORED, FolderPermission.INDEXED)
-SPORTS_ACCESSIBLE = _permissions(
+META_PUBLIC = _permissions(
+    FolderPermission.STORED,
+    FolderPermission.INDEXED,
+    FolderPermission.SENT_TO_LLM,
+)
+PROJECT_PUBLIC = _permissions(
+    FolderPermission.STORED,
+    FolderPermission.INDEXED,
+    FolderPermission.SENT_TO_LLM,
+    FolderPermission.TOOL_ACCESSIBLE,
+)
+LIBRARY_PUBLIC = _permissions(
     FolderPermission.STORED,
     FolderPermission.INDEXED,
     FolderPermission.SENT_TO_LLM,
@@ -61,19 +72,34 @@ AGENT_ACCESSIBLE = _permissions(
 
 
 FOLDER_POLICIES: dict[str, FolderPolicy] = {
-    "X": FolderPolicy("X", SPORTS_ACCESSIBLE, requires_scrubbing=False),
-    "Youtube": FolderPolicy("Youtube", SPORTS_ACCESSIBLE, requires_scrubbing=False),
+    "Meta": FolderPolicy("Meta", META_PUBLIC, requires_scrubbing=True),
+    "Projects": FolderPolicy("Projects", PROJECT_PUBLIC, requires_scrubbing=True),
+    "Library": FolderPolicy("Library", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
+    "Library/X": FolderPolicy("Library/X", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Youtube": FolderPolicy("Library/Youtube", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Books": FolderPolicy("Library/Books", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
+    "Library/feedback": FolderPolicy("Library/feedback", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
+    "Library/Sports": FolderPolicy("Library/Sports", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Sports/NBA": FolderPolicy("Library/Sports/NBA", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Sports/Formula One": FolderPolicy("Library/Sports/Formula One", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Sports/Football": FolderPolicy("Library/Sports/Football", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Sports/Tennis": FolderPolicy("Library/Sports/Tennis", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Claude code": FolderPolicy("Library/Claude code", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Library/Codex": FolderPolicy("Library/Codex", LIBRARY_PUBLIC, requires_scrubbing=False),
+    # Backward-compat: pre-migration top-level paths map to the SAME policy
+    # as their post-migration Library/* siblings. Once migration has run these
+    # entries are harmless; remove in a follow-up cleanup PR.
+    "X": FolderPolicy("X", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Youtube": FolderPolicy("Youtube", LIBRARY_PUBLIC, requires_scrubbing=False),
     "Books": FolderPolicy("Books", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "feedback": FolderPolicy("feedback", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
-    "Sports": FolderPolicy("Sports", SPORTS_ACCESSIBLE, requires_scrubbing=False),
-    "Sports/NBA": FolderPolicy("Sports/NBA", SPORTS_ACCESSIBLE, requires_scrubbing=False),
-    "Sports/Formula One": FolderPolicy(
-        "Sports/Formula One",
-        SPORTS_ACCESSIBLE,
-        requires_scrubbing=False,
-    ),
-    "Sports/Football": FolderPolicy("Sports/Football", SPORTS_ACCESSIBLE, requires_scrubbing=False),
-    "Sports/Tennis": FolderPolicy("Sports/Tennis", SPORTS_ACCESSIBLE, requires_scrubbing=False),
+    "Sports": FolderPolicy("Sports", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Sports/NBA": FolderPolicy("Sports/NBA", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Sports/Formula One": FolderPolicy("Sports/Formula One", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Sports/Football": FolderPolicy("Sports/Football", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Sports/Tennis": FolderPolicy("Sports/Tennis", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Claude code": FolderPolicy("Claude code", LIBRARY_PUBLIC, requires_scrubbing=False),
+    "Codex": FolderPolicy("Codex", LIBRARY_PUBLIC, requires_scrubbing=False),
     "Agent": FolderPolicy("Agent", AGENT_ACCESSIBLE, requires_scrubbing=False),
 }
 
