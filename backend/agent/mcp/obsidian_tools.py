@@ -80,6 +80,12 @@ def _obsidian_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {_obsidian_api_key()}"}
 
 
+def _obsidian_markdown_headers() -> dict[str, str]:
+    headers = _obsidian_headers()
+    headers["Content-Type"] = "text/markdown"
+    return headers
+
+
 def _writes_allowed() -> bool:
     return get_settings().obsidian_mcp_allow_writes
 
@@ -222,7 +228,11 @@ async def run_rest_action_async(params: dict[str, Any]) -> str:
             return _format_rest_response(response) if response.status_code == 200 else _rest_error(response)
         if action in {"write", "vault_write"}:
             path = str(params.get("path") or "")
-            response = await client.put(_vault_url(path), headers=_obsidian_headers(), content=str(params.get("content") or ""))
+            response = await client.put(
+                _vault_url(path),
+                headers=_obsidian_markdown_headers(),
+                content=str(params.get("content") or ""),
+            )
             if response.status_code in {200, 204}:
                 return f"Obsidian REST write completed: {path}."
             return _rest_error(response)
@@ -232,13 +242,17 @@ async def run_rest_action_async(params: dict[str, Any]) -> str:
             if read_response.status_code not in {200, 404}:
                 return _rest_error(read_response)
             existing = "" if read_response.status_code == 404 else read_response.text
-            response = await client.put(_vault_url(path), headers=_obsidian_headers(), content=f"{existing}{params.get('content') or ''}")
+            response = await client.put(
+                _vault_url(path),
+                headers=_obsidian_markdown_headers(),
+                content=f"{existing}{params.get('content') or ''}",
+            )
             if response.status_code in {200, 204}:
                 return f"Obsidian REST append completed: {path}."
             return _rest_error(response)
         if action in {"patch", "vault_patch"}:
             path = str(params.get("path") or "")
-            headers = _obsidian_headers()
+            headers = _obsidian_markdown_headers()
             if params.get("operation"):
                 headers["Operation"] = str(params["operation"])
             if params.get("target_type"):

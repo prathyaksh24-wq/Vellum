@@ -61,7 +61,7 @@ def _tool_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
         library = str(params.get("library") or params.get("libraryName") or params.get("query") or "").strip()
         if not library:
             raise ValueError("GitMCP match requires a library name.")
-        return {"libraryName": library}
+        return {"library": library}
 
     if tool_name == "fetch_generic_url_content":
         url = str(params.get("url") or "").strip()

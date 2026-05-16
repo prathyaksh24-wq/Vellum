@@ -4,7 +4,7 @@ Context7 is a read-only documentation service. Two tools are exposed:
 
 - ``resolve-library-id`` — turn a free-form library name into the Context7
   library identifier the docs lookup expects.
-- ``get-library-docs`` — fetch focused, current documentation for a resolved
+- ``query-docs`` — fetch focused, current documentation for a resolved
   library, optionally narrowed by topic and capped by token count.
 
 The hosted endpoint works without an API key (rate-limited); when
@@ -28,9 +28,11 @@ ACTION_TO_TOOL = {
     "resolve": "resolve-library-id",
     "resolve_library_id": "resolve-library-id",
     "resolve-library-id": "resolve-library-id",
-    "docs": "get-library-docs",
-    "get_library_docs": "get-library-docs",
-    "get-library-docs": "get-library-docs",
+    "docs": "query-docs",
+    "query_docs": "query-docs",
+    "query-docs": "query-docs",
+    "get_library_docs": "query-docs",
+    "get-library-docs": "query-docs",
 }
 
 
@@ -68,7 +70,8 @@ def _tool_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
         library = str(params.get("library") or params.get("libraryName") or params.get("query") or "").strip()
         if not library:
             raise ValueError("Context7 resolve requires a library name.")
-        return {"libraryName": library}
+        query = str(params.get("query") or params.get("task") or f"Find documentation for {library}.").strip()
+        return {"libraryName": library, "query": query}
 
     library_id = str(
         params.get("library_id")
@@ -78,16 +81,8 @@ def _tool_params(tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
     ).strip()
     if not library_id:
         raise ValueError("Context7 docs requires a library_id from resolve-library-id.")
-    tool_params: dict[str, Any] = {"context7CompatibleLibraryID": library_id}
-    topic = str(params.get("topic") or "").strip()
-    if topic:
-        tool_params["topic"] = topic
-    tokens = params.get("tokens")
-    if tokens not in (None, "", 0):
-        try:
-            tool_params["tokens"] = int(tokens)
-        except (TypeError, ValueError):
-            pass
+    query = str(params.get("query") or params.get("topic") or "Get the relevant documentation.").strip()
+    tool_params: dict[str, Any] = {"libraryId": library_id, "query": query}
     return tool_params
 
 

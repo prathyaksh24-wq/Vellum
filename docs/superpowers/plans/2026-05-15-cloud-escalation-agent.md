@@ -518,4 +518,4 @@ git add backend\agent\tools\cloud_escalation.py backend\agent\graph\agent.py bac
 git commit -m "feat: add cloud escalation tool"
 ```
 
-Expected: commit succeeds without staging unrelated TUI or design files.
+Expected: commit succeeds without staging unrelated files.

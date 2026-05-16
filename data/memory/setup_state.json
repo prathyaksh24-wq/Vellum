@@ -1,0 +1,247 @@
+{
+  "mode": "first-run",
+  "flow": "quick",
+  "cursor": 3,
+  "history": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    1,
+    2,
+    3,
+    1,
+    2
+  ],
+  "hw": {
+    "ram_gb": 8,
+    "vram_gb": 1,
+    "free_disk_gb": 7,
+    "cpu_cores": 4,
+    "gpu_name": "Intel(R) HD Graphics 620",
+    "cpu_name": "Intel(R) Core(TM) i5-7200U CPU @ 2.50GHz \u00b7 2 physical \u00b7 4 logical"
+  },
+  "local_model": {
+    "id": "gemma-4:4b",
+    "size_gb": 2.7,
+    "context_k": 8,
+    "quant": "Q4_K_M",
+    "tps": 78,
+    "fit": "swap",
+    "status": "downloading",
+    "pct": 0.5
+  },
+  "cloud": {
+    "provider": "openrouter",
+    "key_ref": "~/.vellum/.env#OPENROUTER_API_KEY",
+    "key_tail": "5678"
+  },
+  "sovereignty_at": "2026-05-15T07:36:58.202232+00:00",
+  "learning": {
+    "conversations": true,
+    "files": true,
+    "terminal": false
+  },
+  "skills": [
+    {
+      "id": "writing.brainstorm",
+      "category": "Writing",
+      "label": "Brainstorm & draft",
+      "sub": "\u2014 help me think and start writing",
+      "enabled": true
+    },
+    {
+      "id": "writing.edit",
+      "category": "Writing",
+      "label": "Edit & copy",
+      "sub": "\u2014 line edits, tightening, voice",
+      "enabled": false
+    },
+    {
+      "id": "writing.letters",
+      "category": "Writing",
+      "label": "Letters & emails",
+      "sub": "\u2014 short replies, longer notes",
+      "enabled": false
+    },
+    {
+      "id": "code.review",
+      "category": "Coding",
+      "label": "Code review",
+      "sub": "\u2014 diff-aware review with suggestions",
+      "enabled": true
+    },
+    {
+      "id": "code.debug",
+      "category": "Coding",
+      "label": "Debug & trace",
+      "sub": "\u2014 follow stacks, propose fixes",
+      "enabled": true
+    },
+    {
+      "id": "code.refactor",
+      "category": "Coding",
+      "label": "Refactor & generate",
+      "sub": "\u2014 rewrites, scaffolds, test stubs",
+      "enabled": false
+    },
+    {
+      "id": "research.summarize",
+      "category": "Research",
+      "label": "Summarize",
+      "sub": "\u2014 condense pages, papers, threads",
+      "enabled": true
+    },
+    {
+      "id": "research.compare",
+      "category": "Research",
+      "label": "Compare sources",
+      "sub": "\u2014 show me where they disagree",
+      "enabled": false
+    },
+    {
+      "id": "research.factcheck",
+      "category": "Research",
+      "label": "Fact-check",
+      "sub": "\u2014 flag claims, cite or hedge",
+      "enabled": false
+    },
+    {
+      "id": "daily.calendar",
+      "category": "Daily",
+      "label": "Calendar nudges",
+      "sub": "\u2014 gentle reminders, prep notes",
+      "enabled": false
+    },
+    {
+      "id": "daily.reading",
+      "category": "Daily",
+      "label": "Reading queue",
+      "sub": "\u2014 things you saved",
+      "enabled": false
+    },
+    {
+      "id": "daily.summary",
+      "category": "Daily",
+      "label": "Daily summary",
+      "sub": "\u2014 one paragraph at end of day",
+      "enabled": false
+    }
+  ],
+  "mcp": [
+    {
+      "id": "builtin.filesystem",
+      "category": "Built-in",
+      "label": "Filesystem",
+      "sub": "\u2014 scoped to OBSIDIAN_VAULT_PATH \u00b7 read-only fetch",
+      "url": "builtin://filesystem",
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "builtin.apify",
+      "category": "Built-in",
+      "label": "Apify",
+      "sub": "\u2014 Amazon + YouTube scrapers \u00b7 output scrubbed before LLM",
+      "url": "https://mcp.apify.com/sse",
+      "enabled": true,
+      "builtin": true
+    },
+    {
+      "id": "p.notion",
+      "category": "Productivity",
+      "label": "Notion",
+      "sub": "\u2014 pages, databases (read+write)",
+      "url": "mcp://notion",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "p.linear",
+      "category": "Productivity",
+      "label": "Linear",
+      "sub": "\u2014 issues, projects",
+      "url": "mcp://linear",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "p.gcal",
+      "category": "Productivity",
+      "label": "Google Calendar",
+      "sub": "\u2014 next 7 days \u00b7 read-only",
+      "url": "mcp://gcal",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "d.github",
+      "category": "Dev tools",
+      "label": "GitHub",
+      "sub": "\u2014 repos, PRs, issues",
+      "url": "mcp://github",
+      "enabled": true,
+      "builtin": false
+    },
+    {
+      "id": "d.fs.work",
+      "category": "Dev tools",
+      "label": "Filesystem (~/work)",
+      "sub": "\u2014 second mount, scoped to ~/work/",
+      "url": "mcp://fs?root=~/work",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "d.shell",
+      "category": "Dev tools",
+      "label": "Shell",
+      "sub": "\u2014 run vetted commands \u00b7 confirmation required",
+      "url": "mcp://shell",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "x.notes",
+      "category": "Personal",
+      "label": "Apple Notes",
+      "sub": "\u2014 search + add notes",
+      "url": "mcp://apple-notes",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "x.pocket",
+      "category": "Personal",
+      "label": "Pocket",
+      "sub": "\u2014 saved articles",
+      "url": "mcp://pocket",
+      "enabled": false,
+      "builtin": false
+    },
+    {
+      "id": "x.spotify",
+      "category": "Personal",
+      "label": "Spotify",
+      "sub": "\u2014 now-playing + queue (read)",
+      "url": "mcp://spotify",
+      "enabled": false,
+      "builtin": false
+    }
+  ],
+  "personalize": {
+    "name": "",
+    "working_on": "",
+    "captured_at": "2026-05-15T07:37:02.102733+00:00"
+  },
+  "existing": {},
+  "skipped": {},
+  "completed_at": "2026-05-15T07:37:02.986809+00:00"
+}

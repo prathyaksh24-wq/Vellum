@@ -11,7 +11,6 @@ dependencies = [
   "duckduckgo-search>=6.3.0",
   "fastapi>=0.115.0",
   "uvicorn[standard]>=0.30.0",
-  "textual>=0.89.0",
   "langchain-openai>=0.1.22",
   "langchain-core>=0.3.0",
   "langgraph>=0.2.0",
@@ -21,7 +20,6 @@ dependencies = [
   "pydantic-settings>=2.6.0",
   "python-dotenv>=1.0.1",
   "qdrant-client>=1.12.0",
-  "questionary>=2.0.1",
   "rich>=13.7.1",
   "psutil>=6.0.0",
   "pywinpty>=2.0.13; platform_system == 'Windows'",
@@ -35,7 +33,6 @@ dependencies = [
 
 [project.scripts]
 personal-agent = "agent.cli:main"
-vellum = "agent.tui.cli:main"
 
 [project.optional-dependencies]
 dev = [
