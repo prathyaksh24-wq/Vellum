@@ -249,3 +249,37 @@ def test_tick_appends_proposal_when_marker_missing(tmp_path: Path, monkeypatch: 
     hot = (proj / "hot.md").read_text()
     assert "USER DELETED" in hot
     assert "## Hot (vellum proposed" in hot
+
+
+def test_tick_consecutive_rewrites_stay_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Second rewrite after a Vellum-written hot.md must not falsely append a proposal."""
+    monkeypatch.setenv("HOT_REWRITE_EVERY_N_TURNS", "1")
+
+    proj = tmp_path / "Projects" / "fitness"
+    proj.mkdir(parents=True)
+    (proj / "vellum.md").write_text("CHARTER")
+    body = ""
+    sha = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    (proj / "hot.md").write_text(f"{body}\n<!-- vellum-managed: {sha} -->\n")
+    (proj / "log.md").write_text("")
+
+    ctx = ProjectContext(
+        vault_root=tmp_path,
+        sessions_db=tmp_path / "s.db",
+        summarizer=lambda xs: f"SUMMARY {len(xs)}",
+    )
+    ctx._state.set_active_project("t1", "fitness")
+
+    # First tick triggers first rewrite. After this, hot.md should be a clean managed file.
+    ctx.tick("t1", "turn one")
+    hot_after_first = (proj / "hot.md").read_text()
+    assert "## Hot (vellum proposed" not in hot_after_first, "first rewrite should be fresh, not proposal"
+
+    # Second tick triggers second rewrite. It must ALSO be a clean rewrite - not a proposal append.
+    ctx.tick("t1", "turn two")
+    hot_after_second = (proj / "hot.md").read_text()
+    assert "## Hot (vellum proposed" not in hot_after_second, "second rewrite must not falsely append proposal"
+    # Body should reflect the latest summarization
+    assert "SUMMARY 1" in hot_after_second
+    # And there should be exactly one managed marker
+    assert hot_after_second.count("<!-- vellum-managed:") == 1

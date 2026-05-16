@@ -262,7 +262,10 @@ class ProjectContext:
             try:
                 log_text = (proj / "log.md").read_text(encoding="utf-8")
                 tail = [ln for ln in log_text.splitlines() if ln.strip()][-5:]
-                summaries = [ln.split("·", 2)[2].strip() if "·" in ln else ln for ln in tail]
+                summaries = []
+                for ln in tail:
+                    parts = ln.split("·", 2)
+                    summaries.append(parts[2].strip() if len(parts) >= 3 else ln)
             except OSError:
                 summaries = []
         new_body = summarizer(summaries)
@@ -277,10 +280,15 @@ class ProjectContext:
             hot_path.write_text(appended, encoding="utf-8")
             return
 
-        new_sha = hashlib.sha256(new_body.encode("utf-8")).hexdigest()
+        # Fresh full rewrite. The sha must hash exactly the same string that
+        # _extract_managed_body will return on the next read - i.e. everything
+        # before the marker, rstripped. Otherwise the second rewrite would
+        # falsely classify a Vellum-written file as user-edited.
         stamp = self._now_stamp()
-        full = (
+        pre_marker = (
             f"---\ntype: project-hot\nupdated: {stamp}\n---\n"
-            f"# Hot\n\n{new_body}\n\n<!-- vellum-managed: {new_sha} -->\n"
+            f"# Hot\n\n{new_body}\n\n"
         )
+        new_sha = hashlib.sha256(pre_marker.rstrip().encode("utf-8")).hexdigest()
+        full = f"{pre_marker}<!-- vellum-managed: {new_sha} -->\n"
         hot_path.write_text(full, encoding="utf-8")
