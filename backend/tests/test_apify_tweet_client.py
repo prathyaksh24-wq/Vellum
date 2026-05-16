@@ -42,6 +42,7 @@ def test_fetch_tweets_builds_expected_input_and_returns_items():
     assert run_input["end"] == "2026-05-01"
     assert run_input["maxItems"] == 100
     assert run_input["sort"] == "Latest"
+    assert actor.call.call_args.kwargs.get("max_items") == 100
     client.dataset.assert_called_once_with("ds-123")
     assert out == fake_items
 

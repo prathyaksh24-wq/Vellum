@@ -491,7 +491,7 @@ def tweet_from_apify_item(item: dict) -> Tweet | None:
     else:
         posted_utc = snowflake_datetime(status_id).isoformat()
 
-    x_url = item.get("url") or f"https://x.com/{HANDLE}/status/{status_id}"
+    x_url = item.get("url") or item.get("tweetUrl") or f"https://x.com/{HANDLE}/status/{status_id}"
 
     return Tweet(
         status_id=status_id,
