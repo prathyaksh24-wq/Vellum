@@ -293,10 +293,12 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         except InvalidCommand as exc:
             msg = f"⚠ {exc}"
 
+        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+
         async def single_event():
             yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-            yield f"event: token\ndata: {json.dumps({'token': msg})}\n\n"
-            yield "event: done\ndata: {}\n\n"
+            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
         return StreamingResponse(single_event(), media_type="text/event-stream")
 
