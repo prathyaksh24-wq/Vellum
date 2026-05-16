@@ -151,6 +151,91 @@
   @media (max-width: 880px) { .stage { grid-column: 1; } }
   .surface { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
   .surface.hidden { display: none; }
+  .input-zone.hidden { display: none; }
+  .terminal-mount {
+    flex: 1;
+    min-height: 0;
+    background: #050505;
+    color: #f4f4f4;
+    font-family: "JetBrains Mono", Consolas, monospace;
+    overflow: hidden;
+  }
+  .terminal-workspace {
+    height: 100%;
+    display: grid;
+    grid-template-rows: 38px 1fr 24px;
+    background: #050505;
+  }
+  .terminal-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 34px 180px;
+    align-items: stretch;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    background: #0d0d0d;
+  }
+  .terminal-tabs {
+    display: flex;
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .terminal-tab,
+  .terminal-new,
+  .terminal-shell-select {
+    background: transparent;
+    border: 0;
+    border-right: 1px solid rgba(255,255,255,0.12);
+    color: rgba(244,244,244,0.78);
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 12px;
+  }
+  .terminal-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 132px;
+    padding: 0 12px;
+    cursor: pointer;
+  }
+  .terminal-tab.active {
+    color: #ffffff;
+    background: rgba(255,255,255,0.06);
+    border-bottom: 1px solid var(--ember);
+  }
+  .terminal-tab-close {
+    margin-left: auto;
+    color: rgba(244,244,244,0.46);
+  }
+  .terminal-new {
+    cursor: pointer;
+    font-size: 18px;
+  }
+  .terminal-shell-select {
+    padding: 0 10px;
+    outline: none;
+  }
+  .terminal-stage {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .terminal-host {
+    height: 100%;
+    padding: 10px;
+  }
+  .terminal-status {
+    border-top: 1px solid rgba(255,255,255,0.12);
+    color: rgba(244,244,244,0.52);
+    font-family: "JetBrains Mono", Consolas, monospace;
+    font-size: 11px;
+    line-height: 24px;
+    padding: 0 10px;
+    background: #080808;
+  }
+  .terminal-vellum-frame {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #050505;
+  }
 
   .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 56px 0; position: relative; }
   .empty-status { font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--whisper); display: inline-flex; align-items: center; gap: 12px; margin-bottom: 48px; opacity: 0; animation: fadeIn 1400ms var(--ease) 200ms forwards; }
@@ -395,6 +480,13 @@
 
       <div class="rail-overlay" id="railOverlay"></div>
       <aside class="threads-rail" id="threadsRail">
+        <div class="threads-section">
+          <div class="threads-section-label">Workspace</div>
+          <div class="thread-item" id="terminalNav">
+            <span class="thread-num">&gt;_</span>
+            <span class="thread-title">Terminal</span>
+          </div>
+        </div>
         <div id="threadsGroups"></div>
         <div class="threads-new" id="newThreadBtn"><span class="threads-new-mark">+</span><span><em>begin again</em></span></div>
       </aside>
@@ -419,6 +511,10 @@
           </div>
           <div class="drawing-wrap"><div class="drawing-line" id="drawingLine"></div></div>
           <div class="new-mark" id="newMark">new<span></span></div>
+        </section>
+
+        <section class="surface hidden" id="terminalSurface">
+          <div id="terminalMount" class="terminal-mount"></div>
         </section>
 
         <div class="input-zone">
@@ -572,7 +668,10 @@
   const messagesScroll = $('messagesScroll');
   const emptySurface = $('emptySurface');
   const chatSurface = $('chatSurface');
+  const terminalSurface = $('terminalSurface');
+  const terminalMount = $('terminalMount');
   const drawingLine = $('drawingLine');
+  const inputZone = document.querySelector('.input-zone');
   const inputShell = $('inputShell');
   const chatInput = $('chatInput');
   const emberDot = $('emberDot');
@@ -594,6 +693,7 @@
   const railToggle = $('railToggle');
   const newMark = $('newMark');
   const newThreadBtn = $('newThreadBtn');
+  const terminalNav = $('terminalNav');
   const memoryList = $('memoryList');
   const memorySection = $('memorySection');
   const idleFragment = $('idleFragment');
@@ -603,6 +703,7 @@
   const sourcePopSource = $('sourcePopSource');
   const sourcePopBody = $('sourcePopBody');
   const shutdown = $('shutdown');
+  let terminalWorkspace = null;
 
   // ============= views =============
   function showLanding() { appView.classList.add('hidden'); landingView.classList.remove('hidden'); }
@@ -783,8 +884,45 @@
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
-  function showChat() { emptySurface.classList.add('hidden'); chatSurface.classList.remove('hidden'); }
-  function showEmpty() { chatSurface.classList.add('hidden'); emptySurface.classList.remove('hidden'); }
+  function showChat() {
+    emptySurface.classList.add('hidden');
+    terminalSurface.classList.add('hidden');
+    chatSurface.classList.remove('hidden');
+    inputZone.classList.remove('hidden');
+    terminalNav.classList.remove('active');
+  }
+  function showEmpty() {
+    chatSurface.classList.add('hidden');
+    terminalSurface.classList.add('hidden');
+    emptySurface.classList.remove('hidden');
+    inputZone.classList.remove('hidden');
+    terminalNav.classList.remove('active');
+  }
+  function showTerminal() {
+    emptySurface.classList.add('hidden');
+    chatSurface.classList.add('hidden');
+    terminalSurface.classList.remove('hidden');
+    inputZone.classList.add('hidden');
+    document.querySelectorAll('.thread-item').forEach(item => item.classList.remove('active'));
+    terminalNav.classList.add('active');
+    threadTitle.textContent = 'Terminal';
+    threadMeta.textContent = 'multi-shell';
+    if (!terminalWorkspace) {
+      import('./terminal/terminal-workspace.js').then(mod => {
+        terminalWorkspace = mod.createTerminalWorkspace(terminalMount, {
+          apiBase: API_BASE,
+          onOpenVellum: openVellumTerminalMode,
+        });
+        terminalWorkspace.mount();
+      }).catch(err => {
+        terminalMount.textContent = `terminal failed to load: ${err.message || err}`;
+      });
+    }
+  }
+  function openVellumTerminalMode() {
+    terminalWorkspace = null;
+    terminalMount.innerHTML = '<iframe class="terminal-vellum-frame" title="Vellum terminal UI" src="./terminal/vellum/index.html"></iframe>';
+  }
 
   function appendInlineFootnoteMarks(bodyEl, tools) {
     if (!tools || !tools.length) return;
@@ -1332,6 +1470,10 @@
   function closeRail() { threadsRail.classList.remove('open'); railOverlay.classList.remove('visible'); }
   railToggle.addEventListener('click', () => threadsRail.classList.contains('open') ? closeRail() : openRail());
   railOverlay.addEventListener('click', closeRail);
+  terminalNav.addEventListener('click', () => {
+    showTerminal();
+    closeRail();
+  });
 
   newThreadBtn.addEventListener('click', () => {
     newThread();

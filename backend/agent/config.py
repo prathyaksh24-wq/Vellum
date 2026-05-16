@@ -82,6 +82,8 @@ class Settings(BaseSettings):
 
     # Agent
     thread_id: str = Field(default="default", alias="THREAD_ID")
+    cloud_escalation_model: str = Field(default="google/gemini-2.5-pro", alias="CLOUD_ESCALATION_MODEL")
+    cloud_escalation_enabled: bool = Field(default=True, alias="CLOUD_ESCALATION_ENABLED")
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
     honcho_user_id: str = Field(default="default", alias="HONCHO_USER_ID")

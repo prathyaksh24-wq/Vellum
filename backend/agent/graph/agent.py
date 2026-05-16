@@ -13,6 +13,7 @@ from agent.config import get_settings
 from agent.llm.providers import get_provider_registry
 from agent.tools.apify import search_amazon
 from agent.tools.browser import browser_action
+from agent.tools.cloud_escalation import escalate_to_cloud
 from agent.tools.context_mode import context_mode
 from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
@@ -42,6 +43,7 @@ Tools:
 13. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
 14. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 15. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
+16. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
 
 Rules:
 - Always search the vault first.
@@ -62,6 +64,11 @@ Rules:
 - Use repo_docs when the user asks for context on a specific GitHub project (its docs or code search) and the vault does not cover it. Prefer library_docs for well-known libraries, github_read for structured PR/issue/commit data, and repo_docs for arbitrary repo documentation and code search.
 - Use context_mode action='execute' when a question can be answered by computing on data rather than pulling many files into context — write the script, let only stdout return. Use action='index'/'search' for ad-hoc local indices that should not pollute the main Qdrant/FTS5 vault stores. Treat action='fetch_and_index' output as external and unscrubbed: summarize before quoting, and never feed it raw into responses that mix with private folder content.
 - Never call context_mode action='purge' unless the user explicitly asks for it and passes confirm=true.
+- Use escalate_to_cloud when a public/code/docs task is too hard, tool calls fail repeatedly, you cannot form a reliable plan, or the user asks for a stronger/cloud model.
+- Public code, docs, public GitHub, and public web tasks may be escalated automatically.
+- Private vault notes, memories, personal files, personal preferences, and user history require explicit approval before cloud escalation.
+- Never send secrets, API keys, passwords, tokens, credentials, or .env content to escalate_to_cloud.
+- Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
 """
@@ -157,6 +164,7 @@ def build_agent(model: str | None = None):
             library_docs,
             repo_docs,
             context_mode,
+            escalate_to_cloud,
             create_note,
             append_to_note,
         ],
@@ -182,6 +190,7 @@ async def build_async_agent(model: str | None = None):
             library_docs,
             repo_docs,
             context_mode,
+            escalate_to_cloud,
             create_note,
             append_to_note,
         ],

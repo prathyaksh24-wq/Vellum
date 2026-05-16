@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent $ScriptDir
@@ -14,9 +14,9 @@ $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz"
 
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 if (Test-Path $VenvPython) {
-    & $VenvPython $Scraper --max-tweets 50 2>&1 | Out-File -FilePath $LogFile -Append -Encoding utf8
+    & $VenvPython $Scraper *>&1 | Out-File -FilePath $LogFile -Append -Encoding utf8
 } else {
-    & python $Scraper --max-tweets 50 2>&1 | Out-File -FilePath $LogFile -Append -Encoding utf8
+    & python $Scraper *>&1 | Out-File -FilePath $LogFile -Append -Encoding utf8
 }
 
 $exitCode = $LASTEXITCODE

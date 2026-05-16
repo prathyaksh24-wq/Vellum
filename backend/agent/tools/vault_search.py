@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 # Module-level capture of citations from the most recent search_my_notes call.
-# Process-local; read by the TUI on `on_tool_end` to render footnotes.
+# Process-local; available to API clients that render source footnotes.
 _LAST_CITATIONS: list[dict] = []
 
 
@@ -124,7 +124,7 @@ def search_my_notes(query: str) -> str:
         _LAST_CITATIONS.clear()
         return "Found relevant notes, but none are allowed to be surfaced directly by the folder policy."
 
-    # Capture citations for the TUI to render as footnotes.
+    # Capture citations for API clients to render as footnotes.
     _LAST_CITATIONS.clear()
     _LAST_CITATIONS.extend(
         {"n": index, "folder": chunk["folder"], "path": chunk["path"], "score": float(chunk["score"])}

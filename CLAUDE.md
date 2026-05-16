@@ -228,11 +228,12 @@ entire Obsidian vault into context.
   of a note it has already identified via vector retrieval
 - Never used for: bulk reading, directory traversal, writing outside `Agent/`
 
-**Apify MCP** (via `https://mcp.apify.com/sse`)
-- Used for: Amazon product scraper only
-- Output is ALWAYS stored locally first, THEN scrubbed, THEN summarized
-  before the LLM sees any of it
-- Never used as a general web scraper without explicit user instruction
+**Apify (REST API for scheduled ingestion + MCP for agent calls)**
+- REST API used by scheduled scrapers (Amazon, X tweet archive) with `APIFY_API_TOKEN`.
+- MCP (`https://mcp.apify.com/sse`) used for agent-driven scraping (Amazon product lookups).
+- Output is ALWAYS stored locally first, THEN scrubbed if YELLOW, THEN
+  summarized before the LLM sees any of it.
+- Never used as a general web scraper without explicit user instruction.
 
 **Playwright MCP** (`@playwright/mcp@latest --isolated`)
 - Used for: browser navigation and accessibility snapshots through `browser_action`

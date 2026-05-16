@@ -22,5 +22,7 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.obsidian_mcp_url == "https://127.0.0.1:27124/mcp/"
     assert settings.obsidian_mcp_use_stream is False
     assert settings.obsidian_mcp_verify_ssl is False
+    assert settings.cloud_escalation_model == "google/gemini-2.5-pro"
+    assert settings.cloud_escalation_enabled is True
     assert settings.qdrant_local_path is not None
     assert settings.qdrant_local_path.name == "qdrant-local"

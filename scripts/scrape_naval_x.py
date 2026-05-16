@@ -1,98 +1,27 @@
 #!/usr/bin/env python3
-"""Fetch @naval text tweets into the Obsidian vault without duplicates."""
-
+"""Poll Apify for naval's latest tweets and ingest aphorisms into the vault."""
 from __future__ import annotations
 
 import argparse
-import hashlib
+import importlib.util
 import json
 import os
-import re
 import sys
-import urllib.request
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from textwrap import shorten
-
 
 HANDLE = "naval"
-X_EPOCH_MS = 1288834974657
-SOURCE_PROFILE = "https://www.techtwitter.com/profiles/naval"
-SOURCE_API = "https://www.techtwitter.com/api/tweets/author"
-
-TOPIC_RULES: dict[str, tuple[str, ...]] = {
-    "ai-and-software": (
-        "ai",
-        "agent",
-        "coding",
-        "computer",
-        "model",
-        "software",
-        "vibe",
-    ),
-    "business-and-startups": (
-        "business",
-        "capital",
-        "career",
-        "company",
-        "founder",
-        "market",
-        "product",
-        "startup",
-    ),
-    "mind-and-attention": (
-        "attention",
-        "belief",
-        "brain",
-        "desire",
-        "ego",
-        "mind",
-        "peace",
-        "think",
-    ),
-    "wealth-and-incentives": (
-        "bitcoin",
-        "cost",
-        "crypto",
-        "incentive",
-        "money",
-        "price",
-        "wealth",
-    ),
-    "taste-and-creativity": (
-        "art",
-        "create",
-        "creativity",
-        "design",
-        "taste",
-        "write",
-    ),
-}
+DEFAULT_WINDOW_HOURS = 2
+DEFAULT_MAX_ITEMS = 200
 
 
-@dataclass(frozen=True)
-class Tweet:
-    status_id: str
-    posted_utc: str
-    text: str
-    x_url: str
-    mirror_url: str
-    source: str
-
-    @property
-    def text_hash(self) -> str:
-        return hashlib.sha256(self.text.encode("utf-8")).hexdigest()[:16]
-
-    @property
-    def topics(self) -> list[str]:
-        lowered = self.text.lower()
-        matches = [
-            topic
-            for topic, keywords in TOPIC_RULES.items()
-            if any(re.search(rf"\b{re.escape(keyword)}\b", lowered) for keyword in keywords)
-        ]
-        return matches or ["general"]
+def _load(name: str):
+    path = Path(__file__).parent / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_dotenv(path: Path) -> None:
@@ -112,490 +41,88 @@ def vault_path(project_root: Path) -> Path:
     return Path(configured) if configured else project_root / "Vault"
 
 
-def snowflake_datetime(status_id: str) -> datetime:
-    timestamp_ms = (int(status_id) >> 22) + X_EPOCH_MS
-    return datetime.fromtimestamp(timestamp_ms / 1000, timezone.utc)
-
-
-def status_id_from_url(url: str) -> str | None:
-    match = re.search(r"/status/(\d+)", url or "")
-    return match.group(1) if match else None
-
-
-def clean_text(text: str | None) -> str:
-    text = (text or "").strip()
-    text = re.sub(r"\r\n?", "\n", text)
-    return re.sub(r"\n{3,}", "\n\n", text)
-
-
-def is_original_text_tweet(raw: dict) -> bool:
-    text = clean_text(raw.get("tweet_text"))
-    if not text:
-        return False
-    if raw.get("author_handle") != HANDLE:
-        return False
-    if raw.get("content_type") and raw.get("content_type") != "tweet":
-        return False
-    if text.startswith("RT @"):
-        return False
-    return bool(status_id_from_url(raw.get("tweet_url", "")))
-
-
-def fetch_techtwitter(max_tweets: int, max_offsets: int) -> list[Tweet]:
-    headers = {
-        "Accept": "application/json",
-        "Referer": SOURCE_PROFILE,
-        "User-Agent": "Mozilla/5.0",
-    }
-    tweets: list[Tweet] = []
-    seen: set[str] = set()
-
-    for offset in range(0, max_offsets, 20):
-        url = f"{SOURCE_API}?handle={HANDLE}&limit=20&offset={offset}"
-        request = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(request, timeout=30) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-
-        batch = payload.get("tweets", [])
-        if not batch:
-            break
-
-        for raw in batch:
-            if not is_original_text_tweet(raw):
-                continue
-            status_id = status_id_from_url(raw.get("tweet_url", ""))
-            if not status_id or status_id in seen:
-                continue
-            seen.add(status_id)
-            tweets.append(
-                Tweet(
-                    status_id=status_id,
-                    posted_utc=snowflake_datetime(status_id).isoformat(),
-                    text=clean_text(raw.get("tweet_text")),
-                    x_url=f"https://x.com/{HANDLE}/status/{status_id}",
-                    mirror_url=raw.get("tweet_url") or SOURCE_PROFILE,
-                    source="TechTwitter public mirror",
-                )
-            )
-            if len(tweets) >= max_tweets:
-                return tweets
-
-    return tweets
-
-
-def slugify(text: str) -> str:
-    words = re.findall(r"[A-Za-z0-9]+", text.lower())[:8]
-    return "-".join(words) or "tweet"
-
-
-def yaml_quote(value: str) -> str:
-    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-
-def canonical_note_path(base: Path, tweet: Tweet) -> Path:
-    posted = datetime.fromisoformat(tweet.posted_utc)
-    filename = f"{posted:%Y-%m-%d}-{tweet.status_id}-{slugify(tweet.text)}.md"
-    return base / "tweets" / f"{posted:%Y}" / filename
-
-
-def read_existing_manifest(base: Path) -> dict[str, dict]:
-    manifest = base / "naval-tweets.json"
-    if manifest.exists():
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-            return {str(item["status_id"]): item for item in data if item.get("status_id")}
-        except json.JSONDecodeError:
-            return {}
-
-    legacy = base / "naval-50-tweets.json"
-    if legacy.exists():
-        try:
-            data = json.loads(legacy.read_text(encoding="utf-8"))
-            return {str(item["status_id"]): item for item in data if item.get("status_id")}
-        except json.JSONDecodeError:
-            return {}
-
-    return {}
-
-
-def existing_note_paths(base: Path) -> dict[str, list[Path]]:
-    paths: dict[str, list[Path]] = {}
-    for path in (base / "tweets").glob("**/*.md"):
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        match = re.search(r'^status_id:\s*"?(\d+)"?\s*$', text, re.MULTILINE)
-        if match:
-            paths.setdefault(match.group(1), []).append(path)
-    return paths
-
-
-def tweet_from_record(record: dict) -> Tweet | None:
+def read_state(state_file: Path) -> dict:
+    if not state_file.exists():
+        return {}
     try:
-        return Tweet(
-            status_id=str(record["status_id"]),
-            posted_utc=str(record["posted_utc"]),
-            text=str(record["text"]).strip(),
-            x_url=str(record.get("x_url") or f"https://x.com/{HANDLE}/status/{record['status_id']}"),
-            mirror_url=str(record.get("mirror_url") or SOURCE_PROFILE),
-            source=str(record.get("source") or "Existing vault record"),
-        )
-    except KeyError:
-        return None
+        return json.loads(state_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
 
 
-def note_markdown(tweet: Tweet, captured_utc: str) -> str:
-    posted = datetime.fromisoformat(tweet.posted_utc)
-    title = shorten(tweet.text.replace("\n", " "), width=80, placeholder="...")
-    topics_yaml = "\n".join(f"  - {topic}" for topic in tweet.topics)
-    tags_yaml = "\n".join(["  - x", f"  - {HANDLE}", "  - tweet", *[f"  - topic/{topic}" for topic in tweet.topics]])
-    return f"""---
-type: x_tweet
-author: {HANDLE}
-handle: {HANDLE}
-status_id: {yaml_quote(tweet.status_id)}
-posted_utc: {yaml_quote(tweet.posted_utc)}
-captured_utc: {yaml_quote(captured_utc)}
-source: {yaml_quote(tweet.source)}
-x_url: {yaml_quote(tweet.x_url)}
-mirror_url: {yaml_quote(tweet.mirror_url)}
-text_hash: {yaml_quote(tweet.text_hash)}
-topics:
-{topics_yaml}
-tags:
-{tags_yaml}
----
-
-# {posted:%Y-%m-%d} - {title}
-
-## Tweet
-
-{tweet.text}
-
-## Retrieval
-
-- Status ID: {tweet.status_id}
-- Topics: {", ".join(tweet.topics)}
-- X: {tweet.x_url}
-- Mirror: {tweet.mirror_url}
-"""
+def compute_window(state: dict, window_hours: int, now: datetime) -> tuple[datetime, datetime]:
+    """Lower bound: max(last_run - cushion, now - 14 days). Upper: now."""
+    cushion = timedelta(hours=window_hours)
+    last_run_iso = state.get("last_run_utc")
+    if last_run_iso:
+        try:
+            last_run = datetime.fromisoformat(last_run_iso)
+        except ValueError:
+            last_run = now - timedelta(days=1)
+    else:
+        last_run = now - timedelta(days=1)
+    start = max(last_run - cushion, now - timedelta(days=14))
+    return start, now
 
 
-def write_tweet_note(base: Path, tweet: Tweet, captured_utc: str) -> Path:
-    path = canonical_note_path(base, tweet)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(note_markdown(tweet, captured_utc), encoding="utf-8", newline="\n")
-    return path
-
-
-def normalize_existing_notes(base: Path, tweets_by_id: dict[str, Tweet], captured_utc: str) -> None:
-    paths_by_id = existing_note_paths(base)
-    for status_id, paths in paths_by_id.items():
-        tweet = tweets_by_id.get(status_id)
-        if not tweet:
-            continue
-        canonical = write_tweet_note(base, tweet, captured_utc)
-        for path in paths:
-            if path.resolve() != canonical.resolve() and path.exists():
-                path.unlink()
-
-    for directory in sorted((base / "tweets").glob("**/*"), reverse=True):
-        if directory.is_dir():
-            try:
-                directory.rmdir()
-            except OSError:
-                pass
-
-
-def record_for(tweet: Tweet, base: Path) -> dict:
-    note_path = canonical_note_path(base, tweet).relative_to(base.parent.parent).as_posix()
-    return {
-        "status_id": tweet.status_id,
-        "posted_utc": tweet.posted_utc,
-        "text": tweet.text,
-        "text_hash": tweet.text_hash,
-        "topics": tweet.topics,
-        "x_url": tweet.x_url,
-        "mirror_url": tweet.mirror_url,
-        "source": tweet.source,
-        "note_path": note_path,
-    }
-
-
-def wiki_link(note_path: str, label: str) -> str:
-    return f"[[{note_path}|{label}]]"
-
-
-def write_latest(base: Path, records: list[dict], captured_utc: str, limit: int) -> None:
-    lines = [
-        "---",
-        "type: x_latest",
-        f"author: {HANDLE}",
-        f"handle: {HANDLE}",
-        f"captured_utc: {yaml_quote(captured_utc)}",
-        f"tweet_count: {min(limit, len(records))}",
-        "tags:",
-        "  - x",
-        f"  - {HANDLE}",
-        "  - latest",
-        "---",
-        "",
-        f"# @{HANDLE} - Latest {min(limit, len(records))} Original Text Tweets",
-        "",
-    ]
-    for index, record in enumerate(records[:limit], 1):
-        posted = datetime.fromisoformat(record["posted_utc"])
-        title = shorten(record["text"].replace("\n", " "), width=92, placeholder="...")
-        lines.extend(
-            [
-                f"## {index:02d}. {posted:%Y-%m-%d}",
-                "",
-                record["text"],
-                "",
-                f"- Note: {wiki_link(record['note_path'], record['status_id'])}",
-                f"- X: {record['x_url']}",
-                "",
-            ]
-        )
-        if title:
-            lines[-4] = f"- Note: {wiki_link(record['note_path'], title)}"
-
-    (base / "latest-50.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
-
-
-def write_topic_indexes(base: Path, records: list[dict]) -> None:
-    topics_dir = base / "topics"
-    topics_dir.mkdir(parents=True, exist_ok=True)
-    by_topic: dict[str, list[dict]] = {}
-    for record in records:
-        for topic in record.get("topics", ["general"]):
-            by_topic.setdefault(topic, []).append(record)
-
-    for topic, topic_records in sorted(by_topic.items()):
-        lines = [
-            "---",
-            "type: x_topic_index",
-            f"author: {HANDLE}",
-            f"topic: {topic}",
-            f"tweet_count: {len(topic_records)}",
-            "tags:",
-            "  - x",
-            f"  - {HANDLE}",
-            f"  - topic/{topic}",
-            "---",
-            "",
-            f"# @{HANDLE} - {topic.replace('-', ' ').title()}",
-            "",
-        ]
-        for record in topic_records:
-            posted = datetime.fromisoformat(record["posted_utc"])
-            label = shorten(record["text"].replace("\n", " "), width=96, placeholder="...")
-            lines.append(f"- {posted:%Y-%m-%d}: {wiki_link(record['note_path'], label)}")
-        (topics_dir / f"{topic}.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-
-
-def write_year_indexes(base: Path, records: list[dict]) -> None:
-    years_dir = base / "years"
-    years_dir.mkdir(parents=True, exist_ok=True)
-    by_year: dict[str, list[dict]] = {}
-    for record in records:
-        year = datetime.fromisoformat(record["posted_utc"]).strftime("%Y")
-        by_year.setdefault(year, []).append(record)
-
-    for year, year_records in sorted(by_year.items(), reverse=True):
-        lines = [
-            "---",
-            "type: x_year_index",
-            f"author: {HANDLE}",
-            f"year: {year}",
-            f"tweet_count: {len(year_records)}",
-            "tags:",
-            "  - x",
-            f"  - {HANDLE}",
-            f"  - year/{year}",
-            "---",
-            "",
-            f"# @{HANDLE} - {year}",
-            "",
-        ]
-        for record in year_records:
-            posted = datetime.fromisoformat(record["posted_utc"])
-            label = shorten(record["text"].replace("\n", " "), width=96, placeholder="...")
-            lines.append(f"- {posted:%Y-%m-%d}: {wiki_link(record['note_path'], label)}")
-        (years_dir / f"{year}.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
-
-
-def write_agent_guide(base: Path, records: list[dict]) -> None:
-    topic_counts: dict[str, int] = {}
-    for record in records:
-        for topic in record.get("topics", ["general"]):
-            topic_counts[topic] = topic_counts.get(topic, 0) + 1
-    topic_lines = [f"- [[X/{HANDLE}/topics/{topic}|{topic}]]: {count}" for topic, count in sorted(topic_counts.items())]
-
-    lines = [
-        "---",
-        "type: x_agent_guide",
-        f"author: {HANDLE}",
-        f"tweet_count: {len(records)}",
-        "tags:",
-        "  - x",
-        f"  - {HANDLE}",
-        "  - agent-memory",
-        "---",
-        "",
-        f"# @{HANDLE} Agent Guide",
-        "",
-        "## Retrieval Contract",
-        "",
-        "- Use `naval-tweets.jsonl` for precise lookup by `status_id`, topic, date, or text search.",
-        "- Use `latest-50.md` when freshness matters.",
-        "- Use `topics/` when the user asks for patterns, tone, beliefs, or examples by theme.",
-        "- Individual tweet notes are canonical memory atoms; avoid duplicating tweet text elsewhere.",
-        "",
-        "## Growth Rules",
-        "",
-        "- De-dupe by `status_id`; never create a second note for the same tweet.",
-        "- Store canonical notes by posted year under `tweets/YYYY/`.",
-        "- Keep generated indexes link-only where possible so the vault remains readable as it grows.",
-        "- Preserve source URLs and timestamps; skip likes, comments, retweets, replies, and engagement metrics.",
-        "",
-        "## Tone Hints",
-        "",
-        "- Prefer compact, aphoristic wording when referencing this collection.",
-        "- Keep claims sharp and plain; avoid padded explanations unless the user asks for analysis.",
-        "- When helping proactively, look for recurring themes: attention, incentives, software, leverage, taste, and agency.",
-        "",
-        "## Topic Map",
-        "",
-        *topic_lines,
-        "",
-    ]
-    (base / "agent-guide.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
-
-
-def write_root_index(base: Path, records: list[dict], captured_utc: str) -> None:
-    years = sorted({datetime.fromisoformat(record["posted_utc"]).strftime("%Y") for record in records}, reverse=True)
-    topics = sorted({topic for record in records for topic in record.get("topics", ["general"])})
-    lines = [
-        "---",
-        "type: x_collection",
-        f"author: {HANDLE}",
-        f"handle: {HANDLE}",
-        f"captured_utc: {yaml_quote(captured_utc)}",
-        f"tweet_count: {len(records)}",
-        'criteria: "Original text tweets only; no retweets, replies, likes, comments, or engagement metrics."',
-        "tags:",
-        "  - x",
-        f"  - {HANDLE}",
-        "---",
-        "",
-        f"# @{HANDLE} X Archive",
-        "",
-        "## Start Here",
-        "",
-        "- [[X/naval/latest-50|Latest 50]]",
-        "- [[X/naval/agent-guide|Agent Guide]]",
-        "- `naval-tweets.jsonl` for structured retrieval",
-        "",
-        "## Topic Indexes",
-        "",
-        *[f"- [[X/{HANDLE}/topics/{topic}|{topic}]]" for topic in topics],
-        "",
-        "## Year Indexes",
-        "",
-        *[f"- [[X/{HANDLE}/years/{year}|{year}]]" for year in years],
-        "",
-        "## Sources",
-        "",
-        f"- {SOURCE_PROFILE}",
-        f"- {SOURCE_API}?handle={HANDLE}&limit=20&offset=0",
-        "",
-    ]
-    (base / "_index.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
-
-
-def write_manifests(base: Path, records: list[dict]) -> None:
-    (base / "naval-tweets.json").write_text(
-        json.dumps(records, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-    with (base / "naval-tweets.jsonl").open("w", encoding="utf-8", newline="\n") as handle:
-        for record in records:
-            handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def write_state(base: Path, fetched_count: int, added_count: int, total_count: int) -> None:
-    state_dir = base / ".state"
-    state_dir.mkdir(parents=True, exist_ok=True)
-    state = {
-        "last_run_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-        "handle": HANDLE,
-        "fetched_count": fetched_count,
-        "added_count": added_count,
-        "total_count": total_count,
-    }
-    (state_dir / "naval_x_scraper_state.json").write_text(
-        json.dumps(state, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
-
-
-def run(project_root: Path, max_tweets: int, dry_run: bool) -> int:
+def run(project_root: Path, dry_run: bool, max_items: int, window_hours: int) -> int:
     vault = vault_path(project_root)
     base = vault / "X" / HANDLE
-    base.mkdir(parents=True, exist_ok=True)
+    state_file = base / ".state" / "naval_x_scraper_state.json"
 
-    existing_records = read_existing_manifest(base)
-    fetched = fetch_techtwitter(max_tweets=max_tweets, max_offsets=240)
-    tweets_by_id: dict[str, Tweet] = {}
+    token = os.environ.get("APIFY_API_TOKEN")
+    if not token:
+        print("APIFY_API_TOKEN missing from environment", file=sys.stderr)
+        return 3
 
-    for status_id, record in existing_records.items():
-        tweet = tweet_from_record(record)
-        if tweet:
-            tweets_by_id[status_id] = tweet
+    state = read_state(state_file)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    start, end = compute_window(state, window_hours, now)
 
-    added = 0
-    for tweet in fetched:
-        if tweet.status_id not in tweets_by_id:
-            added += 1
-        tweets_by_id[tweet.status_id] = tweet
+    client = _load("apify_tweet_client")
+    ingest_mod = _load("naval_x_ingest")
 
-    tweets = sorted(tweets_by_id.values(), key=lambda tweet: tweet.posted_utc, reverse=True)
-    captured_utc = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    try:
+        items = client.fetch_tweets(
+            handle=HANDLE,
+            start=start,
+            end=end,
+            max_items=max_items,
+            token=token,
+        )
+    except Exception as exc:
+        print(f"Apify fetch failed: {exc}", file=sys.stderr)
+        return 2
 
     if dry_run:
-        print(json.dumps({"fetched": len(fetched), "new": added, "total": len(tweets)}, indent=2))
+        print(json.dumps({
+            "window_start": start.isoformat(),
+            "window_end": end.isoformat(),
+            "fetched": len(items),
+        }, indent=2))
         return 0
 
-    for tweet in tweets:
-        write_tweet_note(base, tweet, captured_utc)
-    normalize_existing_notes(base, tweets_by_id, captured_utc)
-
-    records = [record_for(tweet, base) for tweet in tweets]
-    write_manifests(base, records)
-    write_latest(base, records, captured_utc, max_tweets)
-    write_topic_indexes(base, records)
-    write_year_indexes(base, records)
-    write_agent_guide(base, records)
-    write_root_index(base, records, captured_utc)
-    write_state(base, fetched_count=len(fetched), added_count=added, total_count=len(records))
-
-    print(f"Fetched {len(fetched)} tweets, added {added}, total unique {len(records)}")
-    print(base)
+    result = ingest_mod.ingest(base=base, items=items)
+    print(
+        f"Fetched {result.fetched}, filtered {result.filtered}, "
+        f"added {result.added}, total {result.total}"
+    )
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--max-tweets", type=int, default=50)
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--project-root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--max-items", type=int, default=DEFAULT_MAX_ITEMS)
+    parser.add_argument("--window-hours", type=int, default=DEFAULT_WINDOW_HOURS)
+    parser.add_argument(
+        "--project-root", type=Path, default=Path(__file__).resolve().parents[1]
+    )
     args = parser.parse_args()
-
     try:
-        return run(args.project_root.resolve(), args.max_tweets, args.dry_run)
+        return run(args.project_root.resolve(), args.dry_run, args.max_items, args.window_hours)
     except Exception as exc:
-        print(f"naval scraper failed: {exc}", file=sys.stderr)
+        print(f"naval polling failed: {exc}", file=sys.stderr)
         return 1
 
 

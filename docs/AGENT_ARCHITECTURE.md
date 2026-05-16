@@ -11,8 +11,8 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          USER INTERFACES                            │
 │                                                                     │
-│   Web UI (Vellum.html)     TUI (agent/tui/app.py)      CLI         │
-│   Direction A design       Textual, same brand          Fallback    │
+│   Web UI (Vellum.html)     Web/API surfaces             CLI         │
+│   Direction A design       Backend endpoints            Fallback    │
 └────────────────────────────────┬────────────────────────────────────┘
                                  │
 ┌────────────────────────────────▼────────────────────────────────────┐
@@ -89,24 +89,13 @@
 - **Connects to:** FastAPI backend at `http://localhost:8000`
 - **State:** Threads, model selection, faculty toggles persist in FastAPI session
 
-### TUI
-- **File:** `agent/tui/app.py` (Textual application)
-- **Launch:** `python -m agent.tui` or `vellum` entry point
-- **Design:** Terminal-equivalent of the web UI — same brand register
-- **Connects to:** Same agent backend as web UI
-- **Shares:** Same SqliteSaver checkpoints, same vault, same Qdrant
 
 ### CLI (fallback)
 - **File:** `agent/cli.py` (Rich-based, simple)
 - **Launch:** `python -m agent.cli`
-- **Use when:** TUI is unavailable (limited terminal, SSH session without colors)
+- **Use when:** Direct terminal chat is needed without a UI shell.
 - **Connects to:** Same agent backend
 
-### Ledger Dashboard
-- **File:** `agent/tui/screens/ledger.py` (Textual screen)
-- **Launch:** `/usage` or `/ledger` in chat input, or `F2` key, or `vellum ledger`
-- **Design:** Dense, developer-facing, ember heatmaps (no red/yellow/green)
-- **Data source:** `data/memory/audit_log.jsonl` (local, read-only)
 
 ---
 
@@ -299,7 +288,7 @@ a note you wrote, a post you saved. The vault is yours. The agent reads from it.
 - `agent_queries` — all past user queries (for dedup and pattern detection)
 
 Qdrant is invisible in normal use. You never interact with it directly.
-The only surface: `/reindex` in the chat or TUI, which rebuilds it from scratch.
+The only surface: `/reindex` in chat/API surfaces, which rebuilds it from scratch.
 It is a cache, not a source of truth. Delete it any time — `/reindex` restores it.
 
 **Docker service:** `qdrant`
@@ -523,8 +512,6 @@ Response displayed to user
 | `agent/scheduler/digest.py` | Nightly digest job |
 | `agent/scheduler/reflection.py` | Weekly/monthly reflection jobs |
 | `agent/scheduler/skill_detector.py` | Skill signal detection job |
-| `agent/tui/app.py` | Textual TUI application |
-| `agent/tui/screens/ledger.py` | Usage dashboard screen |
 | `agent/cli.py` | Fallback CLI |
 | `scripts/import_book.py` | EPUB book importer |
 | `scripts/import_twitter_archive.py` | Twitter archive importer |
