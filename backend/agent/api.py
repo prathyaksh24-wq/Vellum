@@ -186,6 +186,18 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default")
         session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
+        try:
+            from agent.memory.project_context import build_fast_summarizer
+            ctx = _project_context()
+            # Lazy-bind a real summarizer once per process (the default is a placeholder)
+            current = getattr(ctx.summarizer, "__name__", "")
+            if current == "_default_summarizer":
+                ctx.summarizer = build_fast_summarizer()
+            summary = (clean_query[:80] + "…") if len(clean_query) > 80 else clean_query
+            await asyncio.to_thread(ctx.tick, thread_id, summary)
+        except Exception:
+            # Never let project bookkeeping break the response
+            pass
     except Exception:
         return
 
