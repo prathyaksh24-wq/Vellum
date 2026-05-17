@@ -238,34 +238,26 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default")
 
 
 def _qdrant_health() -> dict[str, Any]:
+    """Read Qdrant status WITHOUT opening a second client.
+
+    Local-mode Qdrant rejects a second QdrantClient on the same storage path;
+    opening one here would deadlock /api/health against the singleton already
+    held by the agent path. Reuse the singleton from agent.rag.store."""
     settings = get_settings()
-    client = None
+    if settings.qdrant_local_path is not None:
+        location = str(settings.qdrant_local_path)
+        mode = "local"
+    else:
+        location = f"{settings.qdrant_host}:{settings.qdrant_port}"
+        mode = "server"
     try:
-        from qdrant_client import QdrantClient
+        from agent.rag.store import get_vector_store
 
-        if settings.qdrant_local_path is not None:
-            settings.qdrant_local_path.mkdir(parents=True, exist_ok=True)
-            client = QdrantClient(path=str(settings.qdrant_local_path))
-            mode = "local"
-            location = str(settings.qdrant_local_path)
-        else:
-            client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port, timeout=2)
-            mode = "server"
-            location = f"{settings.qdrant_host}:{settings.qdrant_port}"
-
-        collections = [collection.name for collection in client.get_collections().collections]
+        store = get_vector_store()
+        collections = [c.name for c in store.client.get_collections().collections]
         return {"ok": True, "mode": mode, "location": location, "collections": collections}
     except Exception as exc:
-        location = (
-            str(settings.qdrant_local_path)
-            if settings.qdrant_local_path is not None
-            else f"{settings.qdrant_host}:{settings.qdrant_port}"
-        )
-        return {"ok": False, "mode": "local" if settings.qdrant_local_path is not None else "server", "location": location, "error": str(exc)}
-    finally:
-        close = getattr(client, "close", None)
-        if close is not None:
-            close()
+        return {"ok": False, "mode": mode, "location": location, "error": str(exc)}
 
 
 def _embedding_health() -> dict[str, Any]:
