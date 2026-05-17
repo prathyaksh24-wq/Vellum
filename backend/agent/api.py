@@ -53,6 +53,7 @@ def _project_context() -> ProjectContext:
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     thread_id: str | None = None
+    model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
 
 
 class ChatResponse(BaseModel):
@@ -63,6 +64,17 @@ class ChatResponse(BaseModel):
 
 class ReindexResponse(BaseModel):
     chunks: int
+
+
+class SetActiveModelRequest(BaseModel):
+    model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+
+
+class ActiveModelResponse(BaseModel):
+    id: str
+    label: str
+    provider: str
+    open_weights: bool
 
 
 @asynccontextmanager
@@ -128,7 +140,25 @@ def _tool_call_names(messages: list[Any]) -> list[str]:
     return names
 
 
-async def _run_agent(message: str, thread_id: str | None) -> ChatResponse:
+async def _ensure_model(model: str | None) -> str | None:
+    """If `model` is provided and differs from the current active model,
+    switch the registry and invalidate the cached agent so it rebuilds.
+    Returns the resolved model id (or None if no switch happened)."""
+    if not model:
+        return None
+    from agent.llm.providers import get_provider_registry
+
+    registry = get_provider_registry()
+    current_id = registry.current_model().id
+    if model == current_id:
+        return current_id
+    entry = registry.set_active(model)
+    if entry.id != current_id:
+        await agent.aclose()
+    return entry.id
+
+
+async def _run_agent(message: str, thread_id: str | None, model: str | None = None) -> ChatResponse:
     clean_message = message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
@@ -145,6 +175,11 @@ async def _run_agent(message: str, thread_id: str | None) -> ChatResponse:
         except InvalidCommand as exc:
             answer = f"⚠ {exc}"
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
+
+    try:
+        await _ensure_model(model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     result = await agent.ainvoke(
         {"messages": [{"role": "user", "content": clean_message}]},
@@ -270,7 +305,7 @@ async def status() -> dict[str, Any]:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    return await _run_agent(request.message, request.thread_id)
+    return await _run_agent(request.message, request.thread_id, request.model)
 
 
 def _chunk_text(chunk: Any) -> str:
@@ -313,6 +348,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
         return StreamingResponse(single_event(), media_type="text/event-stream")
+
+    try:
+        await _ensure_model(request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async def events():
         yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
@@ -383,6 +423,60 @@ class PrivacyClassifyRequest(BaseModel):
 async def privacy_classify(request: PrivacyClassifyRequest) -> dict[str, str]:
     data_class, reason = classify(request.text)
     return {"class": data_class.value, "reason": reason}
+
+
+@router.get("/models")
+async def list_models() -> dict[str, Any]:
+    """Catalog the frontend reads on load to populate the model picker."""
+    from agent.llm.providers import get_provider_registry
+
+    registry = get_provider_registry()
+    active = registry.current_model()
+    return {
+        "active": {
+            "id": active.id,
+            "label": active.label,
+            "provider": active.provider,
+            "open_weights": active.open_weights,
+        },
+        "groups": [
+            {"key": g.key, "label": g.label, "default_id": g.default_id}
+            for g in registry.list_groups()
+        ],
+        "models": [
+            {
+                "id": m.id,
+                "label": m.label,
+                "provider": m.provider,
+                "context": m.context,
+                "tier": m.tier,
+                "open_weights": m.open_weights,
+            }
+            for m in registry.list_models()
+        ],
+    }
+
+
+@router.post("/settings/active-model", response_model=ActiveModelResponse)
+async def set_active_model(request: SetActiveModelRequest) -> ActiveModelResponse:
+    """Switch the runtime active model and invalidate the cached LangGraph agent
+    so the next chat turn rebuilds with the new model."""
+    from agent.llm.providers import get_provider_registry
+
+    registry = get_provider_registry()
+    current_id = registry.current_model().id
+    try:
+        entry = registry.set_active(request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if entry.id != current_id:
+        await agent.aclose()  # force rebuild on next invoke
+    return ActiveModelResponse(
+        id=entry.id,
+        label=entry.label,
+        provider=entry.provider,
+        open_weights=entry.open_weights,
+    )
 
 
 @router.get("/settings")
