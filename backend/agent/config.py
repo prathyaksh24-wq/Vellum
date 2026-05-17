@@ -6,6 +6,19 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Vellum repo root: this file lives at <repo>/backend/agent/config.py,
+# so parents[2] is the repo root regardless of how Python was invoked.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _resolve_against_repo(p: Path) -> Path:
+    """Resolve a path. If absolute, normalize. If relative, anchor to REPO_ROOT."""
+    p = Path(p)
+    if p.is_absolute():
+        return p.resolve()
+    return (REPO_ROOT / p).resolve()
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -104,10 +117,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_paths_and_privacy(self) -> "Settings":
-        self.obsidian_vault_path = self.obsidian_vault_path.resolve()
-        self.filesystem_mcp_path = self.filesystem_mcp_path.resolve()
+        # Resolve relative paths against the REPO ROOT, not CWD. Local Qdrant
+        # uses the path as a unique storage key, so a CWD-dependent path
+        # produces split-brain databases (one when started from Vellum/,
+        # another from Vellum/backend/).
+        self.obsidian_vault_path = _resolve_against_repo(self.obsidian_vault_path)
+        self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.qdrant_local_path is not None:
-            self.qdrant_local_path = self.qdrant_local_path.resolve()
+            self.qdrant_local_path = _resolve_against_repo(self.qdrant_local_path)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
