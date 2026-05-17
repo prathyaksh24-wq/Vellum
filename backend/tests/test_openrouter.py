@@ -107,8 +107,17 @@ def test_langchain_openrouter_provider_policy_uses_extra_body():
 
     assert llm.extra_body["provider"]["data_collection"] == "deny"
     assert llm.extra_body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
+    assert llm.extra_body["provider"]["allow_fallbacks"] is True
     assert llm.extra_body["provider"]["zdr"] is True
     assert "provider" not in llm.model_kwargs
+
+
+def test_langchain_openrouter_agent_model_uses_configured_fallback():
+    wrapped = react_agent.build_llm_with_fallback("primary/test")
+
+    assert type(wrapped).__name__ == "RunnableWithFallbacks"
+    assert wrapped.runnable.model_name == "primary/test"
+    assert wrapped.fallbacks[0].model_name == react_agent.get_settings().fallback_model
 
 
 def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
@@ -118,7 +127,7 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
         captured.update(kwargs)
         return "compiled-agent"
 
-    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm_with_fallback", lambda model=None: "llm")
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 
@@ -144,7 +153,7 @@ def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
     async def fake_build_async_checkpointer():
         return "async-checkpointer"
 
-    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm_with_fallback", lambda model=None: "llm")
     monkeypatch.setattr(react_agent, "build_async_checkpointer", fake_build_async_checkpointer)
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 

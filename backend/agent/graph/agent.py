@@ -142,6 +142,7 @@ def build_llm(model: str | None = None):
     provider_config: dict = {
         "data_collection": "deny",
         "zdr": settings.zdr_only,
+        "allow_fallbacks": True,
     }
     # Only constrain provider order for open-weights models hosted by multiple
     # privacy-respecting upstreams. Vendor-hosted models (Anthropic, OpenAI,
@@ -163,6 +164,15 @@ def build_llm(model: str | None = None):
         },
         extra_body={"provider": provider_config},
     )
+
+
+def build_llm_with_fallback(model: str | None = None):
+    settings = get_settings()
+    primary = build_llm(model)
+    primary_model = model or get_provider_registry().current()[0].id
+    if primary_model == settings.fallback_model:
+        return primary
+    return primary.with_fallbacks([build_llm(settings.fallback_model)])
 
 
 def build_checkpointer() -> SqliteSaver:
@@ -188,7 +198,7 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
 
 def build_agent(model: str | None = None):
     return create_react_agent(
-        model=build_llm(model),
+        model=build_llm_with_fallback(model),
         tools=[
             search_my_notes,
             web_search,
@@ -214,7 +224,7 @@ def build_agent(model: str | None = None):
 
 async def build_async_agent(model: str | None = None):
     return create_react_agent(
-        model=build_llm(model),
+        model=build_llm_with_fallback(model),
         tools=[
             search_my_notes,
             web_search,
