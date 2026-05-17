@@ -20,8 +20,10 @@ def _resolve_against_repo(p: Path) -> Path:
 
 
 class Settings(BaseSettings):
+    # Anchor the .env file lookup to REPO_ROOT, not CWD. Otherwise starting
+    # uvicorn from backend/ silently fails to load OPENROUTER_API_KEY etc.
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(REPO_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
