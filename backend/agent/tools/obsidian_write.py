@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 from agent.config import get_settings
 from agent.obsidian.vault import ObsidianVault
 from agent.rag.embedder import Embedder
-from agent.rag.store import VectorStore
+from agent.rag.store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ def create_note(title: str, content: str, folder: str = "Agent/Saved") -> str:
     settings = get_settings()
     path = ObsidianVault(settings.obsidian_vault_path).create_note(folder=folder, title=title, content=content)
     try:
-        VectorStore().upsert(
+        get_vector_store().upsert(
             collection="obsidian_vault",
             text=content,
             embedding=Embedder().embed(content),
@@ -56,7 +56,7 @@ def store_qa_pair(query: str, answer: str, source: str = "agent") -> None:
     )
     try:
         combined = f"Q: {query}\nA: {answer}"
-        VectorStore().upsert(
+        get_vector_store().upsert(
             collection="obsidian_vault",
             text=combined,
             embedding=Embedder().embed(combined),

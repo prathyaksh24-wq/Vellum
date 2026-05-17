@@ -14,7 +14,7 @@ from agent.obsidian.folder_policy import FolderPermission, get_policy
 from agent.privacy.metadata_strip import safe_chunk_id, strip_obsidian_metadata
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.rag.embedder import Embedder
-from agent.rag.store import VectorStore
+from agent.rag.store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class VaultIngester:
         settings = get_settings()
         self.vault_root = Path(vault_root or settings.obsidian_vault_path).expanduser().resolve()
         self.embedder = embedder or Embedder()
-        self.store = store or VectorStore()
+        self.store = store or get_vector_store()
         self.scrubber = scrubber or PrivacyScrubber()
 
     def markdown_files(self) -> list[Path]:
