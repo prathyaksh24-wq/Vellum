@@ -457,6 +457,91 @@ async def list_models() -> dict[str, Any]:
     }
 
 
+@router.get("/mcp/health")
+async def mcp_health() -> dict[str, Any]:
+    """Per-MCP-server configuration + reachability hint.
+
+    Reports whether each server has its required env vars set. Does NOT
+    invoke any MCP tool — calling them has side effects and rate-limit
+    cost. To functionally probe a server, call its tool from a chat turn."""
+    settings = get_settings()
+    servers: list[dict[str, Any]] = []
+
+    def _entry(name: str, configured: bool, url_or_cmd: str, notes: str = "") -> dict[str, Any]:
+        return {"name": name, "configured": configured, "endpoint": url_or_cmd, "notes": notes}
+
+    servers.append(_entry(
+        "filesystem",
+        configured=settings.filesystem_mcp_path.exists(),
+        url_or_cmd=str(settings.filesystem_mcp_path),
+        notes="Restricted to vault path; reads only.",
+    ))
+    servers.append(_entry(
+        "apify",
+        configured=bool(settings.apify_api_token) and settings.apify_mcp_url.startswith("http"),
+        url_or_cmd=settings.apify_mcp_url,
+        notes="amazon + youtube scrapers; requires APIFY_API_TOKEN.",
+    ))
+    servers.append(_entry(
+        "playwright",
+        configured=bool(settings.playwright_mcp_command),
+        url_or_cmd=f"{settings.playwright_mcp_command} {settings.playwright_mcp_args}",
+        notes=f"Mutations allowed: {settings.playwright_mcp_allow_mutations}.",
+    ))
+    servers.append(_entry(
+        "github",
+        configured=bool(settings.github_mcp_token or settings.github_pat),
+        url_or_cmd=settings.github_mcp_url,
+        notes=f"Writes: {settings.github_mcp_allow_writes}, destructive: {settings.github_mcp_allow_destructive}.",
+    ))
+    servers.append(_entry(
+        "obsidian",
+        configured=bool(settings.obsidian_api_key),
+        url_or_cmd=settings.obsidian_mcp_url,
+        notes=f"Writes: {settings.obsidian_mcp_allow_writes}, deletes: {settings.obsidian_mcp_allow_destructive}, commands: {settings.obsidian_mcp_allow_commands}.",
+    ))
+    servers.append(_entry(
+        "context7",
+        configured=settings.context7_mcp_url.startswith("http"),
+        url_or_cmd=settings.context7_mcp_url,
+        notes="Library docs lookup; CONTEXT7_API_KEY optional (anonymous works).",
+    ))
+    servers.append(_entry(
+        "gitmcp",
+        configured=settings.gitmcp_mcp_url.startswith("http"),
+        url_or_cmd=settings.gitmcp_mcp_url,
+        notes="Public GitHub repo docs/code; no auth.",
+    ))
+    servers.append(_entry(
+        "context_mode",
+        configured=bool(settings.context_mode_mcp_command),
+        url_or_cmd=f"{settings.context_mode_mcp_command} {settings.context_mode_mcp_args}",
+        notes="Sandboxed code execution + indexed retrieval; requires Node >=22.5.",
+    ))
+
+    # Adjacent services Vellum depends on
+    qdrant = _qdrant_health()
+
+    honcho_reachable = False
+    try:
+        import urllib.request
+        req = urllib.request.Request(settings.honcho_base_url, method="HEAD")
+        with urllib.request.urlopen(req, timeout=1):
+            honcho_reachable = True
+    except Exception:
+        honcho_reachable = False
+
+    return {
+        "mcp_servers": servers,
+        "qdrant": qdrant,
+        "honcho": {
+            "base_url": settings.honcho_base_url,
+            "reachable": honcho_reachable,
+            "notes": "Self-hosted via Docker; if down, identity-memory layer is dead but chat still works.",
+        },
+    }
+
+
 @router.post("/settings/active-model", response_model=ActiveModelResponse)
 async def set_active_model(request: SetActiveModelRequest) -> ActiveModelResponse:
     """Switch the runtime active model and invalidate the cached LangGraph agent
