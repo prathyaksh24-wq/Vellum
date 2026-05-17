@@ -10,10 +10,10 @@ from agent.llm.providers import (
 )
 
 
-def test_catalog_has_all_six_provider_groups() -> None:
+def test_catalog_has_expected_provider_groups() -> None:
     registry = ProviderRegistry()
     groups = {group.key for group in registry.list_groups()}
-    assert groups == {"anthropic", "openai", "google", "xai", "deepseek", "meta"}
+    assert groups == {"google", "qwen", "minimax", "anthropic", "openai", "deepseek", "moonshot"}
 
 
 def test_each_group_has_at_least_one_model() -> None:
@@ -38,10 +38,11 @@ def test_resolve_exact_id_wins() -> None:
 
 def test_resolve_label_prefix_over_substring() -> None:
     registry = ProviderRegistry()
-    # "claude" is a prefix of "claude opus 4.7" and also a substring of "anthropic/claude-haiku-4.5"
-    entry = registry.resolve("claude")
+    # "Claude" is a prefix of "Claude Opus 4.7" / "Claude Sonnet 4.5" labels
+    # and a substring of the "anthropic/claude-*" ids — prefix should win.
+    entry = registry.resolve("Claude")
     assert entry is not None
-    assert entry.label.startswith("claude")
+    assert entry.label.startswith("Claude")
 
 
 def test_resolve_returns_none_for_unknown() -> None:
@@ -51,15 +52,15 @@ def test_resolve_returns_none_for_unknown() -> None:
 
 def test_set_active_by_known_id() -> None:
     registry = ProviderRegistry()
-    entry = registry.set_active("openai/gpt-4o")
-    assert entry.id == "openai/gpt-4o"
-    assert registry.current_model().id == "openai/gpt-4o"
+    entry = registry.set_active("openai/gpt-5.5")
+    assert entry.id == "openai/gpt-5.5"
+    assert registry.current_model().id == "openai/gpt-5.5"
 
 
 def test_set_active_by_label_via_resolve() -> None:
     registry = ProviderRegistry()
-    entry = registry.set_active("gpt-4o-mini")
-    assert entry.id == "openai/gpt-4o-mini"
+    entry = registry.set_active("DeepSeek V4 Flash")
+    assert entry.id == "deepseek/deepseek-v4-flash"
 
 
 def test_set_active_unknown_raises() -> None:
@@ -110,9 +111,14 @@ def test_find_group_returns_none_for_unknown() -> None:
 def test_open_weights_flag_is_set_per_entry() -> None:
     registry = ProviderRegistry()
     by_id = {entry.id: entry for entry in registry.list_models()}
+    # Closed-weights: anthropic, openai, deepseek-via-cloud, gemini, kimi
     assert by_id["anthropic/claude-opus-4.7"].open_weights is False
-    assert by_id["meta-llama/llama-3.3-70b-instruct"].open_weights is True
-    assert by_id["deepseek/deepseek-v4"].open_weights is True
+    assert by_id["openai/gpt-5.5"].open_weights is False
+    assert by_id["deepseek/deepseek-v4-pro"].open_weights is False
+    # Open-weights: gemma, qwen, minimax
+    assert by_id["google/gemma-4-31b-it"].open_weights is True
+    assert by_id["qwen/qwen3.5-35b-a3b"].open_weights is True
+    assert by_id["minimax/minimax-m2.7"].open_weights is True
 
 
 def test_provider_group_dataclass_is_frozen() -> None:

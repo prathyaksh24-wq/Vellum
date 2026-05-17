@@ -31,34 +31,34 @@ class ProviderGroup:
     default_id: str
 
 
+# All IDs below verified against https://openrouter.ai/api/v1/models on 16/05/2026.
+# Curated to the models the user listed; remove entries here to hide them from
+# the picker, add entries (with valid OpenRouter IDs) to expose new ones.
 _CATALOG: tuple[ModelEntry, ...] = (
-    # anthropic
-    ModelEntry("anthropic/claude-opus-4.7", "claude opus 4.7", "anthropic", 200_000, "flagship", False),
-    ModelEntry("anthropic/claude-haiku-4.5", "claude haiku 4.5", "anthropic", 200_000, "fast", False),
-    # openai
-    ModelEntry("openai/gpt-4o", "gpt-4o", "openai", 128_000, "flagship", False),
-    ModelEntry("openai/gpt-4o-mini", "gpt-4o-mini", "openai", 128_000, "fast", False),
-    # google
-    ModelEntry("google/gemini-2.5-pro", "gemini 2.5 pro", "google", 2_000_000, "flagship", False),
-    ModelEntry("google/gemma-4-31b-it", "gemma 4 31b", "google", 128_000, "fast", True),
-    # xai
-    ModelEntry("x-ai/grok-4", "grok 4", "xai", 256_000, "flagship", False),
-    ModelEntry("x-ai/grok-4-fast", "grok 4 fast", "xai", 256_000, "fast", False),
-    # deepseek
-    ModelEntry("deepseek/deepseek-v4", "deepseek v4", "deepseek", 128_000, "flagship", True),
-    ModelEntry("deepseek/deepseek-r1", "deepseek r1", "deepseek", 128_000, "fast", True),
-    # meta
-    ModelEntry("meta-llama/llama-3.3-70b-instruct", "llama 3.3 70b", "meta", 128_000, "flagship", True),
-    ModelEntry("meta-llama/llama-3.2-3b-instruct", "llama 3.2 3b", "meta", 128_000, "fast", True),
+    # ---- Local (open-weights, routed via OpenRouter for ZDR privacy) ----
+    ModelEntry("google/gemma-4-26b-a4b-it", "Gemma 4 26B A4B", "google", 262_144, "fast", True),
+    ModelEntry("google/gemma-4-31b-it", "Gemma 4 31B", "google", 262_144, "flagship", True),
+    ModelEntry("qwen/qwen3.5-35b-a3b", "Qwen 3.5 35B A3B", "qwen", 262_144, "flagship", True),
+    ModelEntry("minimax/minimax-m2.7", "MiniMax M2.7", "minimax", 204_800, "flagship", True),
+    # ---- Cloud (closed-weights, OpenRouter-routed) ----
+    ModelEntry("anthropic/claude-opus-4.7", "Claude Opus 4.7", "anthropic", 1_000_000, "flagship", False),
+    ModelEntry("anthropic/claude-opus-4.6", "Claude Opus 4.6", "anthropic", 1_000_000, "flagship", False),
+    ModelEntry("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5", "anthropic", 1_000_000, "flagship", False),
+    ModelEntry("openai/gpt-5.5", "GPT 5.5", "openai", 1_050_000, "flagship", False),
+    ModelEntry("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro", "deepseek", 1_048_576, "flagship", False),
+    ModelEntry("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash", "deepseek", 1_048_576, "fast", False),
+    ModelEntry("google/gemini-3-flash-preview", "Gemini 3 Flash (preview)", "google", 1_048_576, "fast", False),
+    ModelEntry("moonshotai/kimi-k2.6", "Kimi K2.6", "moonshot", 262_144, "flagship", False),
 )
 
 _GROUPS: tuple[ProviderGroup, ...] = (
-    ProviderGroup("anthropic", "anthropic", "anthropic/claude-opus-4.7"),
-    ProviderGroup("openai", "openai", "openai/gpt-4o"),
-    ProviderGroup("google", "google", "google/gemini-2.5-pro"),
-    ProviderGroup("xai", "xai", "x-ai/grok-4"),
-    ProviderGroup("deepseek", "deepseek", "deepseek/deepseek-v4"),
-    ProviderGroup("meta", "meta", "meta-llama/llama-3.3-70b-instruct"),
+    ProviderGroup("google", "Google", "google/gemma-4-31b-it"),
+    ProviderGroup("qwen", "Qwen", "qwen/qwen3.5-35b-a3b"),
+    ProviderGroup("minimax", "MiniMax", "minimax/minimax-m2.7"),
+    ProviderGroup("anthropic", "Anthropic", "anthropic/claude-opus-4.7"),
+    ProviderGroup("openai", "OpenAI", "openai/gpt-5.5"),
+    ProviderGroup("deepseek", "DeepSeek", "deepseek/deepseek-v4-pro"),
+    ProviderGroup("moonshot", "MoonshotAI", "moonshotai/kimi-k2.6"),
 )
 
 DEFAULT_TEMPERATURE = 0.3
