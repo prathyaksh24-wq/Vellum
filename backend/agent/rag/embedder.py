@@ -1,12 +1,42 @@
-"""Local BGE-M3 embedding wrapper."""
+"""Local BGE-M3 embedding wrapper.
+
+Use `get_embedder()` to share one Embedder across the agent, watcher,
+ingester, and tools. Each fresh Embedder() reloads the bge-m3 native model
+into memory; doing that per chat turn was the cause of the silent SIGSEGV
+crashes on Windows (native tokenizer/torch state accumulation)."""
 
 from __future__ import annotations
 
+import threading
 from functools import cached_property
 
 
 DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 VECTOR_SIZE = 1024
+
+_singleton: "Embedder | None" = None
+_singleton_lock = threading.Lock()
+
+
+def get_embedder() -> "Embedder":
+    """Return the process-wide Embedder, constructing on first call.
+
+    Loading bge-m3 weights is expensive (and on Windows + Python 3.14, doing
+    it repeatedly seems to destabilize native libs into SIGSEGV). Sharing one
+    instance avoids all of that."""
+    global _singleton
+    if _singleton is not None:
+        return _singleton
+    with _singleton_lock:
+        if _singleton is None:
+            _singleton = Embedder()
+    return _singleton
+
+
+def reset_embedder_for_tests() -> None:
+    global _singleton
+    with _singleton_lock:
+        _singleton = None
 
 
 class Embedder:

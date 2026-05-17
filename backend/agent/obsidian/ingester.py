@@ -13,7 +13,7 @@ from agent.config import get_settings
 from agent.obsidian.folder_policy import FolderPermission, get_policy
 from agent.privacy.metadata_strip import safe_chunk_id, strip_obsidian_metadata
 from agent.privacy.scrubber import PrivacyScrubber
-from agent.rag.embedder import Embedder
+from agent.rag.embedder import Embedder, get_embedder
 from agent.rag.store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ class VaultIngester:
     ):
         settings = get_settings()
         self.vault_root = Path(vault_root or settings.obsidian_vault_path).expanduser().resolve()
-        self.embedder = embedder or Embedder()
+        self.embedder = embedder or get_embedder()
         self.store = store or get_vector_store()
         self.scrubber = scrubber or PrivacyScrubber()
 

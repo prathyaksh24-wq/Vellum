@@ -14,7 +14,7 @@ from agent.obsidian.vault import ObsidianVault
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.metadata_strip import strip_obsidian_metadata
 from agent.privacy.scrubber import PrivacyScrubber
-from agent.rag.embedder import Embedder
+from agent.rag.embedder import get_embedder
 from agent.rag.store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -79,7 +79,7 @@ def search_my_notes(query: str) -> str:
         try:
             results = get_vector_store().search(
                 collection="obsidian_vault",
-                embedding=Embedder().embed(clean_query),
+                embedding=get_embedder().embed(clean_query),
                 top_k=12,
                 score_threshold=0.40,
             )
@@ -147,7 +147,7 @@ def _store_query(query: str) -> None:
     settings = _settings()
     if getattr(settings, "enable_query_vector_storage", False):
         try:
-            embedder = Embedder()
+            embedder = get_embedder()
             store = get_vector_store()
             embedding = embedder.embed(query)
             existing = store.search("agent_queries", embedding, top_k=1, score_threshold=0.92)
