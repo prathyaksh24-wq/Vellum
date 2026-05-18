@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+import asyncio
 
 from fastapi.testclient import TestClient
 import pytest
@@ -69,12 +70,22 @@ def test_reindex_endpoint_returns_chunk_count(monkeypatch):
             return 7
 
     monkeypatch.setattr(api, "VaultIngester", FakeIngester)
+    monkeypatch.setattr(api, "get_settings", lambda: SimpleNamespace(enable_vector_search=True))
 
     with TestClient(api.app) as client:
         response = client.post("/api/vault/reindex")
 
     assert response.status_code == 200
     assert response.json() == {"chunks": 7}
+
+
+def test_reindex_endpoint_rejects_when_vector_search_disabled(monkeypatch):
+    monkeypatch.setattr(api, "get_settings", lambda: SimpleNamespace(enable_vector_search=False))
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/vault/reindex")
+
+    assert response.status_code == 409
 
 
 def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
@@ -101,3 +112,66 @@ def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
         ("watcher_stop", None),
         ("scheduler_shutdown", False),
     ]
+
+
+def test_active_model_switch_waits_for_active_stream(monkeypatch):
+    async def run_case():
+        from agent.llm import providers as providers_mod
+
+        providers_mod.get_provider_registry.cache_clear()
+        api._agent_runtime_lock = asyncio.Lock()
+
+        class StreamingAgent:
+            def __init__(self):
+                self.started = asyncio.Event()
+                self.finish = asyncio.Event()
+                self.streaming = False
+                self.closed_while_streaming = False
+
+            async def astream_events(self, *args, **kwargs):
+                self.streaming = True
+                self.started.set()
+                yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="ok")}}
+                await self.finish.wait()
+                self.streaming = False
+
+            async def aclose(self):
+                if self.streaming:
+                    self.closed_while_streaming = True
+
+        streaming_agent = StreamingAgent()
+        monkeypatch.setattr(api, "agent", streaming_agent)
+        async def fake_background_learn(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+
+        response = await api.chat_stream(api.ChatRequest(
+            message="hello",
+            thread_id="stream-lock-test",
+            model="google/gemma-4-31b-it",
+        ))
+
+        async def consume_response():
+            async for _chunk in response.body_iterator:
+                pass
+
+        consume_task = asyncio.create_task(consume_response())
+        await asyncio.wait_for(streaming_agent.started.wait(), timeout=1)
+
+        switch_task = asyncio.create_task(api.set_active_model(
+            api.SetActiveModelRequest(model="deepseek/deepseek-v4-pro")
+        ))
+        await asyncio.sleep(0.05)
+
+        assert not switch_task.done()
+        assert streaming_agent.closed_while_streaming is False
+
+        streaming_agent.finish.set()
+        await asyncio.wait_for(consume_task, timeout=1)
+        await asyncio.wait_for(switch_task, timeout=1)
+
+        assert streaming_agent.closed_while_streaming is False
+        providers_mod.get_provider_registry.cache_clear()
+
+    asyncio.run(run_case())

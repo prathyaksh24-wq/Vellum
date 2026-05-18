@@ -17,7 +17,7 @@
     "watched channels"
   ],
   "confidence_threshold": 0.35,
-  "instructions": "When the user asks about watched creators, recurring entertainment preferences, channel tone, jokes, sports viewing habits, or creator-specific context, search the public Youtube folder before answering. Treat Youtube/channels/* video notes as canonical transcript memory and cite or reason from specific video notes when relevant. Current ingested scope is MoreSidemen only. Daily/frequent channels are KSI, Sidemen, MoreSidemen, Mat Armstrong, Beta Squad, Carwow, and NDL. NotYourAverageFlight is seasonal: prioritize it mainly during the NBA season, consider occasional NFL relevance, and down-rank it outside those seasons unless the user asks directly.",
+  "instructions": "When the user asks about watched creators, recurring entertainment preferences, channel tone, jokes, sports viewing habits, or creator-specific context, search the public Youtube folder before answering. Treat Youtube/channels/* video notes as canonical transcript memory and cite or reason from specific video notes when relevant. Current configured ingestion channels are MoreSidemen, KSI, Sidemen, Beta Squad, and Mat Armstrong. Daily/frequent channels are KSI, Sidemen, MoreSidemen, Mat Armstrong, Beta Squad, Carwow, and NDL. NotYourAverageFlight is seasonal: prioritize it mainly during the NBA season, consider occasional NFL relevance, and down-rank it outside those seasons unless the user asks directly.",
   "citation_style": "Use vault note names or channel/video titles when citing transcript evidence.",
   "output_format": "Direct prose with concise evidence from transcripts when useful.",
   "created": "2026-05-14",

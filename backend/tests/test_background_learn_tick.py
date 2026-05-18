@@ -1,12 +1,19 @@
-from pathlib import Path
-
-import pytest
+import asyncio
 
 from agent import api as api_mod
 
 
-@pytest.mark.asyncio
-async def test_background_learn_calls_tick(tmp_path, monkeypatch):
+def test_background_learn_calls_tick(tmp_path, monkeypatch):
+    async def run_case():
+        await api_mod._background_learn("user typed this", "agent said that", thread_id="t1")
+
+    _setup_background_learn_case(tmp_path, monkeypatch)
+    asyncio.run(run_case())
+    log = (tmp_path / "Projects" / "fitness" / "log.md").read_text()
+    assert "user typed this" in log
+
+
+def _setup_background_learn_case(tmp_path, monkeypatch):
     """Verify _background_learn appends to the active project's log.md."""
     # Set up an active project so tick has somewhere to write
     proj = tmp_path / "Projects" / "fitness"
@@ -44,7 +51,3 @@ async def test_background_learn_calls_tick(tmp_path, monkeypatch):
 
     monkeypatch.setattr(api_mod, "DataClass", FakeDataClass)
     monkeypatch.setattr(api_mod, "classify", lambda q: ("GREEN", ""))
-
-    await api_mod._background_learn("user typed this", "agent said that", thread_id="t1")
-    log = (proj / "log.md").read_text()
-    assert "user typed this" in log

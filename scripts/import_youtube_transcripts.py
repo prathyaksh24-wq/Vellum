@@ -52,7 +52,31 @@ CHANNELS: dict[str, ChannelConfig] = {
         name="MoreSidemen",
         handle="moresidemen",
         url="https://www.youtube.com/@MoreSidemen",
-    )
+    ),
+    "ksi": ChannelConfig(
+        key="ksi",
+        name="KSI",
+        handle="ksi",
+        url="https://www.youtube.com/@KSI",
+    ),
+    "sidemen": ChannelConfig(
+        key="sidemen",
+        name="Sidemen",
+        handle="sidemen",
+        url="https://www.youtube.com/@Sidemen",
+    ),
+    "betasquad": ChannelConfig(
+        key="betasquad",
+        name="Beta Squad",
+        handle="betasquad",
+        url="https://www.youtube.com/@BetaSquad",
+    ),
+    "matarmstrong": ChannelConfig(
+        key="matarmstrong",
+        name="Mat Armstrong",
+        handle="matarmstrong",
+        url="https://www.youtube.com/@MatArmstrongbmx",
+    ),
 }
 
 Fetcher = Callable[[ChannelConfig, int, str, str, str], list[dict[str, Any]]]
@@ -441,7 +465,7 @@ def write_agent_guide(base: Path, channel: ChannelConfig, records: list[dict[str
         "- Use these transcripts when the user asks about watched creators, recurring preferences, tone, jokes, group dynamics, or channel-specific context.",
         "- Treat individual video notes as canonical memory atoms.",
         "- Prefer direct transcript evidence over broad assumptions about the channel.",
-        "- Current ingestion scope is MoreSidemen only.",
+        f"- Current ingestion scope is {channel.name} when this channel is selected.",
         "",
         "## Channel Preference Context",
         "",
@@ -469,8 +493,8 @@ def write_channel_index(base: Path, channel: ChannelConfig, records: list[dict[s
         "",
         "## Start Here",
         "",
-        "- [[Youtube/channels/moresidemen/latest-5|Latest 5]]",
-        "- [[Youtube/channels/moresidemen/agent-guide|Agent Guide]]",
+        f"- [[Youtube/channels/{channel.key}/latest-5|Latest 5]]",
+        f"- [[Youtube/channels/{channel.key}/agent-guide|Agent Guide]]",
         f"- `{channel.key}-transcripts.jsonl` for structured lookup",
         "",
         "## Videos",
@@ -603,7 +627,7 @@ def run(
     write_latest(base, records, max_videos, captured_at)
     write_agent_guide(base, channel, records)
     write_channel_index(base, channel, records, captured_at)
-    write_root_index(youtube_root, [channel], captured_at)
+    write_root_index(youtube_root, list(CHANNELS.values()), captured_at)
     write_state(
         base,
         channel,

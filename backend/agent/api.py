@@ -38,6 +38,7 @@ from agent.tools.obsidian_write import store_qa_pair
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
 terminal_session_manager = TerminalSessionManager()
+_agent_runtime_lock = asyncio.Lock()
 
 _project_context_singleton: ProjectContext | None = None
 
@@ -176,15 +177,16 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
             answer = f"⚠ {exc}"
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
 
-    try:
-        await _ensure_model(model)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    async with _agent_runtime_lock:
+        try:
+            await _ensure_model(model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    result = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": clean_message}]},
-        config=_thread_config(active_thread_id),
-    )
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": clean_message}]},
+            config=_thread_config(active_thread_id),
+        )
     capture_from_invoke_result(
         ledger=_api_ledger,
         result=result,
@@ -341,53 +343,52 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
         return StreamingResponse(single_event(), media_type="text/event-stream")
 
-    try:
-        await _ensure_model(request.model)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     async def events():
-        yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-        answer_parts: list[str] = []
-        tool_names: list[str] = []
-        try:
-            stream = agent.astream_events(
-                {"messages": [{"role": "user", "content": clean_message}]},
-                config=_thread_config(active_thread_id),
-                version="v2",
-            )
-            async for event in stream:
-                kind = event.get("event")
-                if kind == "on_chat_model_stream":
-                    text = _chunk_text(event.get("data", {}).get("chunk"))
-                    if text:
-                        answer_parts.append(text)
-                        yield f"event: token\ndata: {json.dumps({'text': text})}\n\n"
-                elif kind == "on_tool_start":
-                    name = event.get("name") or ""
-                    if name:
-                        tool_names.append(str(name))
-                        yield f"event: tool\ndata: {json.dumps({'name': name})}\n\n"
-                capture_from_stream_event(
-                    ledger=_api_ledger,
-                    event=event,
-                    thread_id=active_thread_id,
-                    fallback_model=get_settings().primary_model,
-                    source="api",
+        async with _agent_runtime_lock:
+            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+            answer_parts: list[str] = []
+            tool_names: list[str] = []
+            try:
+                await _ensure_model(request.model)
+                stream = agent.astream_events(
+                    {"messages": [{"role": "user", "content": clean_message}]},
+                    config=_thread_config(active_thread_id),
+                    version="v2",
                 )
-            answer = "".join(answer_parts).strip() or "No response."
-            response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
-            if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
-            yield f"event: final\ndata: {response.model_dump_json()}\n\n"
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+                async for event in stream:
+                    kind = event.get("event")
+                    if kind == "on_chat_model_stream":
+                        text = _chunk_text(event.get("data", {}).get("chunk"))
+                        if text:
+                            answer_parts.append(text)
+                            yield f"event: token\ndata: {json.dumps({'text': text})}\n\n"
+                    elif kind == "on_tool_start":
+                        name = event.get("name") or ""
+                        if name:
+                            tool_names.append(str(name))
+                            yield f"event: tool\ndata: {json.dumps({'name': name})}\n\n"
+                    capture_from_stream_event(
+                        ledger=_api_ledger,
+                        event=event,
+                        thread_id=active_thread_id,
+                        fallback_model=get_settings().primary_model,
+                        source="api",
+                    )
+                answer = "".join(answer_parts).strip() or "No response."
+                response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
+                if answer and "blocked for privacy" not in answer.casefold():
+                    asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
+                yield f"event: final\ndata: {response.model_dump_json()}\n\n"
+            except Exception as exc:
+                yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @router.post("/vault/reindex", response_model=ReindexResponse)
 async def reindex() -> ReindexResponse:
+    if not get_settings().enable_vector_search:
+        raise HTTPException(status_code=409, detail="vector search is disabled")
     try:
         chunks = await asyncio.to_thread(VaultIngester().ingest, True)
     except Exception as exc:
@@ -540,14 +541,15 @@ async def set_active_model(request: SetActiveModelRequest) -> ActiveModelRespons
     so the next chat turn rebuilds with the new model."""
     from agent.llm.providers import get_provider_registry
 
-    registry = get_provider_registry()
-    current_id = registry.current_model().id
-    try:
-        entry = registry.set_active(request.model)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if entry.id != current_id:
-        await agent.aclose()  # force rebuild on next invoke
+    async with _agent_runtime_lock:
+        registry = get_provider_registry()
+        current_id = registry.current_model().id
+        try:
+            entry = registry.set_active(request.model)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if entry.id != current_id:
+            await agent.aclose()  # force rebuild on next invoke
     return ActiveModelResponse(
         id=entry.id,
         label=entry.label,

@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from agent.obsidian import watcher as watcher_mod
 from agent.obsidian.watcher import VaultWatcher, start_vault_watcher
 
 
@@ -84,10 +87,30 @@ def test_watcher_ignores_non_markdown_files(tmp_path):
     assert ingester.deleted == []
 
 
-def test_start_vault_watcher_starts_and_stops_provided_watcher(tmp_path):
+def test_watcher_handles_ingester_factory_failure(tmp_path):
+    note = tmp_path / "Agent" / "note.md"
+    note.parent.mkdir(parents=True)
+    note.write_text("note", encoding="utf-8")
+
+    def broken_factory():
+        raise RuntimeError("vector store unavailable")
+
+    watcher = VaultWatcher(
+        vault_root=tmp_path,
+        ingester_factory=broken_factory,
+        debounce_seconds=0,
+        observer=FakeObserver(),
+    )
+
+    watcher.handle_path(note, "upsert")
+
+
+def test_start_vault_watcher_starts_and_stops_provided_watcher(monkeypatch, tmp_path):
     observer = FakeObserver()
     watcher = VaultWatcher(vault_root=tmp_path, debounce_seconds=0, observer=observer)
+    settings = SimpleNamespace(enable_vault_watcher=True, enable_vector_search=True)
 
+    monkeypatch.setattr(watcher_mod, "get_settings", lambda: settings)
     started = start_vault_watcher(watcher)
     started.stop()
 
@@ -95,3 +118,14 @@ def test_start_vault_watcher_starts_and_stops_provided_watcher(tmp_path):
     assert observer.started is True
     assert observer.stopped is True
     assert observer.joined is True
+
+
+def test_start_vault_watcher_skips_when_vector_search_disabled(monkeypatch, tmp_path):
+    observer = FakeObserver()
+    watcher = VaultWatcher(vault_root=tmp_path, debounce_seconds=0, observer=observer)
+    settings = SimpleNamespace(enable_vault_watcher=True, enable_vector_search=False)
+
+    monkeypatch.setattr(watcher_mod, "get_settings", lambda: settings)
+
+    assert start_vault_watcher(watcher) is None
+    assert observer.started is False

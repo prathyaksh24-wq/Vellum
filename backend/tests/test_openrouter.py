@@ -120,6 +120,19 @@ def test_langchain_openrouter_agent_model_uses_configured_fallback():
     assert wrapped.fallbacks[0].model_name == react_agent.get_settings().fallback_model
 
 
+def test_vellum_prompt_includes_active_model_for_self_reporting():
+    from agent.llm import providers as providers_mod
+
+    providers_mod.get_provider_registry.cache_clear()
+    registry = providers_mod.get_provider_registry()
+    registry.set_active("deepseek/deepseek-v4-pro")
+
+    messages = react_agent.vellum_prompt({"messages": []}, {"configurable": {"thread_id": "prompt-model-test"}})
+
+    assert "Runtime selected model: deepseek/deepseek-v4-pro" in messages[0].content
+    providers_mod.get_provider_registry.cache_clear()
+
+
 def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     captured = {}
 
@@ -127,7 +140,7 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
         captured.update(kwargs)
         return "compiled-agent"
 
-    monkeypatch.setattr(react_agent, "build_llm_with_fallback", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 
@@ -143,6 +156,27 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
 
 
+def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monkeypatch):
+    captured = {}
+
+    def fake_create_react_agent(**kwargs):
+        captured.update(kwargs)
+        return "compiled-agent"
+
+    def fail_if_cross_model_fallback_is_used(model=None):
+        raise AssertionError("agent chat should not silently fall back to a different model")
+
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: f"llm:{model}")
+    monkeypatch.setattr(react_agent, "build_llm_with_fallback", fail_if_cross_model_fallback_is_used)
+    monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
+    monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
+
+    compiled = react_agent.build_agent("deepseek/deepseek-v4-pro")
+
+    assert compiled == "compiled-agent"
+    assert captured["model"] == "llm:deepseek/deepseek-v4-pro"
+
+
 def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
     captured = {}
 
@@ -153,7 +187,7 @@ def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
     async def fake_build_async_checkpointer():
         return "async-checkpointer"
 
-    monkeypatch.setattr(react_agent, "build_llm_with_fallback", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
     monkeypatch.setattr(react_agent, "build_async_checkpointer", fake_build_async_checkpointer)
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 

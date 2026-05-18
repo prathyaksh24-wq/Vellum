@@ -108,7 +108,14 @@ def vellum_prompt(state, config=None):
             logging.getLogger(__name__).warning("identity load failed: %s", exc)
             identity = ""
 
-    system_text = f"{identity}\n\n{VELLUM_SYSTEM_PROMPT}" if identity else VELLUM_SYSTEM_PROMPT
+    active_model = get_provider_registry().current_model()
+    runtime_text = (
+        f"Runtime selected model: {active_model.id} ({active_model.label}). "
+        "If asked which model is being used, answer with this runtime value; "
+        "do not infer from model weights or provider defaults."
+    )
+    system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
+    system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
 
 
@@ -198,7 +205,7 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
 
 def build_agent(model: str | None = None):
     return create_react_agent(
-        model=build_llm_with_fallback(model),
+        model=build_llm(model),
         tools=[
             search_my_notes,
             web_search,
@@ -224,7 +231,7 @@ def build_agent(model: str | None = None):
 
 async def build_async_agent(model: str | None = None):
     return create_react_agent(
-        model=build_llm_with_fallback(model),
+        model=build_llm(model),
         tools=[
             search_my_notes,
             web_search,

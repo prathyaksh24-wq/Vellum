@@ -18,6 +18,8 @@ def create_note(title: str, content: str, folder: str = "Agent/Saved") -> str:
     """Create a new note in the Obsidian vault."""
     settings = get_settings()
     path = ObsidianVault(settings.obsidian_vault_path).create_note(folder=folder, title=title, content=content)
+    if not settings.enable_vector_search:
+        return f"Note '{title}' saved to {path.relative_to(settings.obsidian_vault_path).as_posix()}"
     try:
         get_vector_store().upsert(
             collection="obsidian_vault",
@@ -54,6 +56,8 @@ def store_qa_pair(query: str, answer: str, source: str = "agent") -> None:
         title=title,
         content=content,
     )
+    if not settings.enable_vector_search:
+        return
     try:
         combined = f"Q: {query}\nA: {answer}"
         get_vector_store().upsert(
