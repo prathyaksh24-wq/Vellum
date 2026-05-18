@@ -108,7 +108,14 @@ def vellum_prompt(state, config=None):
             logging.getLogger(__name__).warning("identity load failed: %s", exc)
             identity = ""
 
-    system_text = f"{identity}\n\n{VELLUM_SYSTEM_PROMPT}" if identity else VELLUM_SYSTEM_PROMPT
+    active_model = get_provider_registry().current_model()
+    runtime_text = (
+        f"Runtime selected model: {active_model.id} ({active_model.label}). "
+        "If asked which model is being used, answer with this runtime value; "
+        "do not infer from model weights or provider defaults."
+    )
+    system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
+    system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
 
 
@@ -142,6 +149,7 @@ def build_llm(model: str | None = None):
     provider_config: dict = {
         "data_collection": "deny",
         "zdr": settings.zdr_only,
+        "allow_fallbacks": True,
     }
     # Only constrain provider order for open-weights models hosted by multiple
     # privacy-respecting upstreams. Vendor-hosted models (Anthropic, OpenAI,
@@ -163,6 +171,15 @@ def build_llm(model: str | None = None):
         },
         extra_body={"provider": provider_config},
     )
+
+
+def build_llm_with_fallback(model: str | None = None):
+    settings = get_settings()
+    primary = build_llm(model)
+    primary_model = model or get_provider_registry().current()[0].id
+    if primary_model == settings.fallback_model:
+        return primary
+    return primary.with_fallbacks([build_llm(settings.fallback_model)])
 
 
 def build_checkpointer() -> SqliteSaver:

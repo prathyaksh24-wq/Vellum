@@ -1,8 +1,13 @@
-"""Qdrant vector store wrapper."""
+"""Qdrant vector store wrapper.
+
+Local-mode Qdrant uses the storage path as a unique lock — only one
+QdrantClient per process per path is allowed. Use `get_vector_store()` to
+share a single VectorStore across the agent, watcher, ingester, and tools."""
 
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from typing import Any
 
@@ -12,6 +17,33 @@ from agent.rag.embedder import VECTOR_SIZE
 logger = logging.getLogger(__name__)
 
 DEFAULT_COLLECTIONS = ("obsidian_vault", "agent_queries")
+
+_singleton: "VectorStore | None" = None
+_singleton_lock = threading.Lock()
+
+
+def get_vector_store() -> "VectorStore":
+    """Return the process-wide VectorStore instance, constructing on first call.
+
+    All callers that don't have a specific reason to create their own must use
+    this. Local-mode Qdrant rejects a second client on the same storage path,
+    so a singleton prevents the watcher / chat / ingester from deadlocking
+    each other (which crashed flush threads pre-fix; see uvicorn.err.log).
+    """
+    global _singleton
+    if _singleton is not None:
+        return _singleton
+    with _singleton_lock:
+        if _singleton is None:
+            _singleton = VectorStore()
+    return _singleton
+
+
+def reset_vector_store_for_tests() -> None:
+    """Test-only: clear the singleton so each test gets a fresh instance."""
+    global _singleton
+    with _singleton_lock:
+        _singleton = None
 
 
 class VectorStore:

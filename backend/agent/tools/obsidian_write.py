@@ -7,8 +7,8 @@ from langchain_core.tools import tool
 
 from agent.config import get_settings
 from agent.obsidian.vault import ObsidianVault
-from agent.rag.embedder import Embedder
-from agent.rag.store import VectorStore
+from agent.rag.embedder import get_embedder
+from agent.rag.store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +18,13 @@ def create_note(title: str, content: str, folder: str = "Agent/Saved") -> str:
     """Create a new note in the Obsidian vault."""
     settings = get_settings()
     path = ObsidianVault(settings.obsidian_vault_path).create_note(folder=folder, title=title, content=content)
+    if not settings.enable_vector_search:
+        return f"Note '{title}' saved to {path.relative_to(settings.obsidian_vault_path).as_posix()}"
     try:
-        VectorStore().upsert(
+        get_vector_store().upsert(
             collection="obsidian_vault",
             text=content,
-            embedding=Embedder().embed(content),
+            embedding=get_embedder().embed(content),
             metadata={
                 "folder": folder,
                 "source_hash": title,
@@ -54,12 +56,14 @@ def store_qa_pair(query: str, answer: str, source: str = "agent") -> None:
         title=title,
         content=content,
     )
+    if not settings.enable_vector_search:
+        return
     try:
         combined = f"Q: {query}\nA: {answer}"
-        VectorStore().upsert(
+        get_vector_store().upsert(
             collection="obsidian_vault",
             text=combined,
-            embedding=Embedder().embed(combined),
+            embedding=get_embedder().embed(combined),
             metadata={
                 "folder": f"{settings.agent_notes_folder}/Responses",
                 "source": source,

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "bash scripts/start-ui.sh",
+    "start": "vite --host 127.0.0.1 --port 5173",
     "stop": "bash scripts/stop.sh",
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "vite build",

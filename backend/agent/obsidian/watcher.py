@@ -97,7 +97,13 @@ class VaultWatcher:
         if not pending:
             return
 
-        ingester = self.ingester_factory()
+        try:
+            ingester = self.ingester_factory()
+        except Exception as exc:
+            for path in pending:
+                logger.warning("[OBSIDIAN] Failed to process watcher event for %s: %s", path, exc)
+            return
+
         for path, action in pending.items():
             try:
                 if action == "delete" or not path.exists():
@@ -145,6 +151,9 @@ def start_vault_watcher(watcher: VaultWatcher | None = None) -> VaultWatcher | N
     settings = get_settings()
     if not settings.enable_vault_watcher:
         logger.info("[OBSIDIAN] Vault watcher disabled.")
+        return None
+    if not settings.enable_vector_search:
+        logger.info("[OBSIDIAN] Vault watcher disabled because vector search is disabled.")
         return None
 
     try:

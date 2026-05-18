@@ -14,8 +14,8 @@ from agent.obsidian.vault import ObsidianVault
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.metadata_strip import strip_obsidian_metadata
 from agent.privacy.scrubber import PrivacyScrubber
-from agent.rag.embedder import Embedder
-from agent.rag.store import VectorStore
+from agent.rag.embedder import get_embedder
+from agent.rag.store import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +34,32 @@ def _settings():
     return get_settings()
 
 
+_RERANKER_SINGLETON = None
+_RERANKER_LOCK = __import__("threading").Lock()
+
+
+def _get_reranker():
+    """Return a process-wide CrossEncoder, lazy-loaded on first call.
+
+    Same rationale as get_embedder(): constructing a fresh CrossEncoder per
+    query reloaded the cross-encoder weights every chat turn and contributed
+    to native-allocation failures (`memory allocation of N bytes failed`)."""
+    global _RERANKER_SINGLETON
+    if _RERANKER_SINGLETON is not None:
+        return _RERANKER_SINGLETON
+    with _RERANKER_LOCK:
+        if _RERANKER_SINGLETON is None:
+            from sentence_transformers import CrossEncoder
+            _RERANKER_SINGLETON = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return _RERANKER_SINGLETON
+
+
 def _rerank(clean_query: str, results: list[dict]) -> list[tuple[float, dict]]:
     if not getattr(_settings(), "enable_cross_encoder_rerank", False):
         return _lexical_rerank(clean_query, results)
 
     try:
-        from sentence_transformers import CrossEncoder
-
-        reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        reranker = _get_reranker()
         scores = reranker.predict([(clean_query, item["text"]) for item in results])
         return sorted(zip(scores, results), key=lambda item: item[0], reverse=True)
     except Exception as exc:
@@ -77,9 +95,9 @@ def search_my_notes(query: str) -> str:
     results: list[dict]
     if getattr(settings, "enable_vector_search", False):
         try:
-            results = VectorStore().search(
+            results = get_vector_store().search(
                 collection="obsidian_vault",
-                embedding=Embedder().embed(clean_query),
+                embedding=get_embedder().embed(clean_query),
                 top_k=12,
                 score_threshold=0.40,
             )
@@ -147,8 +165,8 @@ def _store_query(query: str) -> None:
     settings = _settings()
     if getattr(settings, "enable_query_vector_storage", False):
         try:
-            embedder = Embedder()
-            store = VectorStore()
+            embedder = get_embedder()
+            store = get_vector_store()
             embedding = embedder.embed(query)
             existing = store.search("agent_queries", embedding, top_k=1, score_threshold=0.92)
             if existing:

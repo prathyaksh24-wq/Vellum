@@ -107,8 +107,30 @@ def test_langchain_openrouter_provider_policy_uses_extra_body():
 
     assert llm.extra_body["provider"]["data_collection"] == "deny"
     assert llm.extra_body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
+    assert llm.extra_body["provider"]["allow_fallbacks"] is True
     assert llm.extra_body["provider"]["zdr"] is True
     assert "provider" not in llm.model_kwargs
+
+
+def test_langchain_openrouter_agent_model_uses_configured_fallback():
+    wrapped = react_agent.build_llm_with_fallback("primary/test")
+
+    assert type(wrapped).__name__ == "RunnableWithFallbacks"
+    assert wrapped.runnable.model_name == "primary/test"
+    assert wrapped.fallbacks[0].model_name == react_agent.get_settings().fallback_model
+
+
+def test_vellum_prompt_includes_active_model_for_self_reporting():
+    from agent.llm import providers as providers_mod
+
+    providers_mod.get_provider_registry.cache_clear()
+    registry = providers_mod.get_provider_registry()
+    registry.set_active("deepseek/deepseek-v4-pro")
+
+    messages = react_agent.vellum_prompt({"messages": []}, {"configurable": {"thread_id": "prompt-model-test"}})
+
+    assert "Runtime selected model: deepseek/deepseek-v4-pro" in messages[0].content
+    providers_mod.get_provider_registry.cache_clear()
 
 
 def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
@@ -132,6 +154,27 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     assert captured["prompt"] is react_agent.vellum_prompt
     assert {tool.name for tool in captured["tools"]} >= {"search_my_notes", "web_search", "search_amazon"}
     assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
+
+
+def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monkeypatch):
+    captured = {}
+
+    def fake_create_react_agent(**kwargs):
+        captured.update(kwargs)
+        return "compiled-agent"
+
+    def fail_if_cross_model_fallback_is_used(model=None):
+        raise AssertionError("agent chat should not silently fall back to a different model")
+
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: f"llm:{model}")
+    monkeypatch.setattr(react_agent, "build_llm_with_fallback", fail_if_cross_model_fallback_is_used)
+    monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
+    monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
+
+    compiled = react_agent.build_agent("deepseek/deepseek-v4-pro")
+
+    assert compiled == "compiled-agent"
+    assert captured["model"] == "llm:deepseek/deepseek-v4-pro"
 
 
 def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
