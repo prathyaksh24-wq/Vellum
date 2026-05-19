@@ -487,6 +487,20 @@ and do not send data to external services.
 - Rebuild `data/memory/fts5.db` using SQLite FTS5
 - Log: number of documents indexed, index size, rebuild duration
 
+### Sports Snapshots (NOT scheduled — curiosity-driven)
+- `Library/Sports/` snapshots are **not** on any cron or interval.
+- All fetching goes through SerpAPI via `scripts/import_sports_snapshots.py`.
+- The agent decides when to fetch via `agent/tools/sports_curiosity.py`: per-league
+  curiosity scores combine recency hunger, user-signal keywords from recent
+  `Agent/Queries/`, season weight, cross-feed signals from `Library/X/` and
+  `Library/Youtube/`, and a small stochastic kick. Eligibility is only checked
+  opportunistically while the agent is already running for another reason.
+- A SerpAPI budget guard in `Library/Sports/.state/snapshot_state.json` blocks
+  fetches once the daily or monthly cap is hit.
+- Self-calibration: `agent/scheduler/sports_calibration.py` piggybacks on the
+  nightly digest and gently raises/lowers per-league thresholds based on
+  fetch-usage signals recorded in `Agent/Memories/sports_*_fetch_*.md`.
+
 ---
 
 ## 5. Vault Write-Back Standards
@@ -528,7 +542,7 @@ The agent NEVER writes to or modifies:
   current thread (`sessions.thread_state.active_project`). Writes to any other project's
   files are rejected even though folder_policy declares them writable in principle.
 
-Exception: explicit ingestion and retention automation may manage public source folders (`X/`, `Youtube/`, and `Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
+Exception: explicit ingestion and retention automation may manage public source folders (`Library/X/`, `Library/Youtube/`, and `Library/Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
 
 Retention automation may also distill and delete old raw conversation logs: `Agent/Queries/` after 30 days and `Agent/Responses/` after 90 days. `Agent/Saved/`, `Agent/Memories/`, `Agent/Digests/`, `Agent/Reflections/`, and notes marked `pinned: true` or `retention: keep` are protected.
 

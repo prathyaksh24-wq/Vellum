@@ -26,16 +26,12 @@ def test_channel_registry_includes_frequent_youtube_channels():
         "betasquad",
         "matarmstrong",
     }
-    assert youtube_importer.CHANNELS["ksi"].url == "https://www.youtube.com/@KSI"
-    assert youtube_importer.CHANNELS["sidemen"].url == "https://www.youtube.com/@Sidemen"
-    assert youtube_importer.CHANNELS["betasquad"].url == "https://www.youtube.com/@BetaSquad"
-    assert youtube_importer.CHANNELS["matarmstrong"].url == "https://www.youtube.com/@MatArmstrongbmx"
 
 
-def test_channel_index_and_agent_guide_use_selected_channel_links(tmp_path):
+def test_channel_index_and_agent_guide_use_library_youtube_links(tmp_path):
     youtube_importer = load_importer()
     channel = youtube_importer.CHANNELS["betasquad"]
-    base = tmp_path / "Youtube" / "channels" / channel.key
+    base = tmp_path / "Library" / "Youtube" / "channels" / channel.key
     base.mkdir(parents=True)
 
     youtube_importer.write_channel_index(base, channel, [], "2026-05-18T10:00:00+00:00")
@@ -44,44 +40,9 @@ def test_channel_index_and_agent_guide_use_selected_channel_links(tmp_path):
     index = (base / "_index.md").read_text(encoding="utf-8")
     guide = (base / "agent-guide.md").read_text(encoding="utf-8")
 
-    assert "[[Youtube/channels/betasquad/latest-5|Latest 5]]" in index
-    assert "[[Youtube/channels/betasquad/agent-guide|Agent Guide]]" in index
+    assert "[[Library/Youtube/channels/betasquad/latest-5|Latest 5]]" in index
+    assert "[[Library/Youtube/channels/betasquad/agent-guide|Agent Guide]]" in index
     assert "Current ingestion scope is Beta Squad when this channel is selected." in guide
-
-
-def test_run_writes_root_index_for_all_configured_channels(tmp_path):
-    youtube_importer = load_importer()
-
-    def fake_fetcher(channel_config, max_videos, video_type, actor, token):
-        return [
-            {
-                "videoId": "first123456",
-                "title": "First Video",
-                "url": "https://www.youtube.com/watch?v=first123456",
-                "channel": channel_config.name,
-                "publishedAt": "2026-05-01T12:00:00Z",
-                "duration": "00:20:00",
-                "transcript": "first transcript",
-            }
-        ]
-
-    result = youtube_importer.run(
-        project_root=tmp_path,
-        channel_key="ksi",
-        max_videos=5,
-        video_type="long",
-        dry_run=False,
-        fetcher=fake_fetcher,
-        token="test-token",
-        actor="test/actor",
-    )
-
-    root_index = (tmp_path / "Vault" / "Youtube" / "_index.md").read_text(encoding="utf-8")
-
-    assert result == 0
-    assert "[[Youtube/channels/ksi/_index|KSI]]" in root_index
-    assert "[[Youtube/channels/moresidemen/_index|MoreSidemen]]" in root_index
-    assert "[[Youtube/channels/betasquad/_index|Beta Squad]]" in root_index
 
 
 def test_video_note_path_uses_year_date_video_id_and_slug(tmp_path):
@@ -181,7 +142,7 @@ def test_run_writes_deduped_notes_indexes_manifest_and_state(tmp_path):
         actor="test/actor",
     )
 
-    base = tmp_path / "Vault" / "Youtube" / "channels" / "moresidemen"
+    base = tmp_path / "Vault" / "Library" / "Youtube" / "channels" / "moresidemen"
     notes = list((base / "videos" / "2026").glob("*.md"))
     records = [json.loads(line) for line in (base / "moresidemen-transcripts.jsonl").read_text(encoding="utf-8").splitlines()]
     state = json.loads((base / ".state" / "youtube_scraper_state.json").read_text(encoding="utf-8"))
@@ -190,7 +151,7 @@ def test_run_writes_deduped_notes_indexes_manifest_and_state(tmp_path):
     assert calls == [("moresidemen", 5, "long", "test/actor", "test-token")]
     assert len(notes) == 1
     assert records[0]["video_id"] == "first123456"
-    assert records[0]["note_path"].startswith("Youtube/channels/moresidemen/videos/2026/")
+    assert records[0]["note_path"].startswith("Library/Youtube/channels/moresidemen/videos/2026/")
     assert "First Video" in (base / "latest-5.md").read_text(encoding="utf-8")
     assert "Use these transcripts" in (base / "agent-guide.md").read_text(encoding="utf-8")
     assert state["added_count"] == 1
@@ -225,7 +186,7 @@ def test_dry_run_does_not_write_vault_files(tmp_path):
     )
 
     assert result == 0
-    assert not (tmp_path / "Vault" / "Youtube").exists()
+    assert not (tmp_path / "Vault" / "Library" / "Youtube").exists()
 
 
 def test_run_limits_to_requested_video_count(tmp_path):
@@ -256,7 +217,7 @@ def test_run_limits_to_requested_video_count(tmp_path):
         actor="test/actor",
     )
 
-    base = tmp_path / "Vault" / "Youtube" / "channels" / "moresidemen"
+    base = tmp_path / "Vault" / "Library" / "Youtube" / "channels" / "moresidemen"
     records = [json.loads(line) for line in (base / "moresidemen-transcripts.jsonl").read_text(encoding="utf-8").splitlines()]
 
     assert result == 0

@@ -170,3 +170,34 @@ def test_unknown_profile_raises():
 def test_profiles_registry_lists_three():
     fp = _load()
     assert set(fp.PROFILES.keys()) == {"aphorism", "multiline_quote", "original_tweet"}
+
+
+# ---- cross-actor retweet/reply/quote detection ----
+
+def test_retweet_detected_via_retweeted_tweet_object():
+    """patient_discovery actor shape: presence of retweeted_tweet means RT."""
+    fp = _load()
+    item = _item(text="Some real wisdom here.", retweeted_tweet={"tweet_id": "999"})
+    assert fp.accepts("aphorism", item) is False
+
+def test_retweet_detected_via_text_rt_prefix():
+    """patient_discovery returns the embedded RT @ text on retweets."""
+    fp = _load()
+    item = _item(text="RT @someone: Worth reading.")
+    assert fp.accepts("aphorism", item) is False
+
+def test_reply_detected_via_in_reply_to_status_id():
+    fp = _load()
+    item = _item(text="A thoughtful reply.", in_reply_to_status_id="12345")
+    assert fp.accepts("aphorism", item) is False
+
+def test_quote_detected_via_quoted_tweet_object():
+    fp = _load()
+    item = _item(text="My take on this.", quoted_tweet={"tweet_id": "999"})
+    assert fp.accepts("aphorism", item) is False
+
+def test_quote_detected_via_is_quote_status_camelcase():
+    """xquik actor shape uses isQuoteStatus."""
+    fp = _load()
+    item = _item(text="My take here.", isQuoteStatus=True)
+    assert fp.accepts("aphorism", item) is False

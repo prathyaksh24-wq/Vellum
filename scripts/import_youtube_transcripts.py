@@ -493,8 +493,8 @@ def write_channel_index(base: Path, channel: ChannelConfig, records: list[dict[s
         "",
         "## Start Here",
         "",
-        f"- [[Youtube/channels/{channel.key}/latest-5|Latest 5]]",
-        f"- [[Youtube/channels/{channel.key}/agent-guide|Agent Guide]]",
+        f"- [[Library/Youtube/channels/{channel.key}/latest-5|Latest 5]]",
+        f"- [[Library/Youtube/channels/{channel.key}/agent-guide|Agent Guide]]",
         f"- `{channel.key}-transcripts.jsonl` for structured lookup",
         "",
         "## Videos",
@@ -521,7 +521,7 @@ def write_root_index(youtube_root: Path, channels: list[ChannelConfig], captured
         "",
     ]
     for channel in channels:
-        lines.append(f"- [[Youtube/channels/{channel.key}/_index|{channel.name}]]")
+        lines.append(f"- [[Library/Youtube/channels/{channel.key}/_index|{channel.name}]]")
     (youtube_root / "_index.md").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
 
@@ -609,7 +609,7 @@ def run(
         return 0
 
     vault = vault_path(project_root)
-    youtube_root = vault / "Youtube"
+    youtube_root = vault / "Library" / "Youtube"
     base = youtube_root / "channels" / channel.key
     base.mkdir(parents=True, exist_ok=True)
     captured_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
