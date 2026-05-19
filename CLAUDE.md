@@ -528,7 +528,7 @@ The agent NEVER writes to or modifies:
   current thread (`sessions.thread_state.active_project`). Writes to any other project's
   files are rejected even though folder_policy declares them writable in principle.
 
-Exception: explicit ingestion and retention automation may manage public source folders (`X/`, `Youtube/`, and `Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
+Exception: explicit ingestion and retention automation may manage public source folders (`Library/X/`, `Library/Youtube/`, and `Library/Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
 
 Retention automation may also distill and delete old raw conversation logs: `Agent/Queries/` after 30 days and `Agent/Responses/` after 90 days. `Agent/Saved/`, `Agent/Memories/`, `Agent/Digests/`, `Agent/Reflections/`, and notes marked `pinned: true` or `retention: keep` are protected.
 
