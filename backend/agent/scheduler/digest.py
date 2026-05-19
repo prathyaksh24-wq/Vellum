@@ -68,6 +68,16 @@ async def run_digest(
     )
 
     logger.info("[DIGEST] Digest written to Obsidian: %s", note_path)
+
+    # Sports curiosity self-calibration piggybacks on the nightly digest.
+    # No separate schedule — it only runs when the digest runs.
+    try:
+        from agent.scheduler.sports_calibration import run_safely as run_sports_calibration
+
+        run_sports_calibration(now=now if isinstance(now, datetime) else datetime.now())
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DIGEST] sports calibration step failed: %s", exc)
+
     return str(note_path)
 
 

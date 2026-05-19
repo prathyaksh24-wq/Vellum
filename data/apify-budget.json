@@ -1,0 +1,42 @@
+{
+  "2026-05": {
+    "runs": [
+      {
+        "cost_usd": 0.004,
+        "handle": "naval",
+        "ts": "2026-05-19T07:06:01+00:00"
+      },
+      {
+        "cost_usd": 0.004,
+        "handle": "NavalismHQ",
+        "ts": "2026-05-19T07:06:13+00:00"
+      },
+      {
+        "cost_usd": 0.004,
+        "handle": "rumilyrics",
+        "ts": "2026-05-19T07:06:25+00:00"
+      },
+      {
+        "cost_usd": 0.004,
+        "handle": "AlexHormozi",
+        "ts": "2026-05-19T07:06:37+00:00"
+      },
+      {
+        "cost_usd": 0.008,
+        "handle": "naval",
+        "ts": "2026-05-19T07:28:56+00:00"
+      },
+      {
+        "cost_usd": 0.008,
+        "handle": "NavalismHQ",
+        "ts": "2026-05-19T07:29:10+00:00"
+      },
+      {
+        "cost_usd": 0.008,
+        "handle": "rumilyrics",
+        "ts": "2026-05-19T07:29:22+00:00"
+      }
+    ],
+    "used_usd": 0.04
+  }
+}

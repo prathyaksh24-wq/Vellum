@@ -102,6 +102,7 @@ def tweet_from_apify_item(item: dict, *, handle_name: str, source_label: str = "
     status_id = (
         item.get("id")
         or item.get("tweetId")
+        or item.get("tweet_id")
         or status_id_from_url(item.get("url") or item.get("tweetUrl") or "")
     )
     if not status_id:
