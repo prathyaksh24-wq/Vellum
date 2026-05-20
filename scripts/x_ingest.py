@@ -1,7 +1,7 @@
 """Handle-agnostic X ingest core.
 
-Persists Apify items into Vault/Library/X/<handle>/ with per-handle filter
-profile and within/cross-handle text-hash dedup.
+Persists normalized X items into Vault/Library/X/<handle>/ with per-handle
+filter profile and within/cross-handle text-hash dedup.
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def wiki_link(note_path: str, label: str) -> str:
     return f"[[{note_path}|{label}]]"
 
 
-def tweet_from_apify_item(item: dict, *, handle_name: str, source_label: str = "Apify apidojo/tweet-scraper") -> Tweet | None:
+def tweet_from_x_item(item: dict, *, handle_name: str, source_label: str = "xAI X Search OAuth") -> Tweet | None:
     status_id = (
         item.get("id")
         or item.get("tweetId")
@@ -133,6 +133,11 @@ def tweet_from_apify_item(item: dict, *, handle_name: str, source_label: str = "
         mirror_url=x_url,
         source=source_label,
     )
+
+
+def tweet_from_apify_item(item: dict, *, handle_name: str, source_label: str = "xAI X Search OAuth") -> Tweet | None:
+    """Compatibility alias for older tests/scripts."""
+    return tweet_from_x_item(item, handle_name=handle_name, source_label=source_label)
 
 
 def canonical_note_path(base: Path, tweet: Tweet) -> Path:
@@ -455,7 +460,7 @@ def ingest(*, handle, vault_root: Path, items: list[dict]) -> IngestResult:
         if not fp.accepts(handle.filter_profile, item):
             filtered += 1
             continue
-        tweet = tweet_from_apify_item(item, handle_name=handle.name, source_label=handle.source_label)
+        tweet = tweet_from_x_item(item, handle_name=handle.name, source_label=handle.source_label)
         if not tweet:
             filtered += 1
             continue

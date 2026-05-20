@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-APIFY_SOURCE_LABEL = "Apify apidojo/tweet-scraper"
+XAI_SOURCE_LABEL = "xAI X Search OAuth"
 
 
 @dataclass(frozen=True)
@@ -16,12 +16,25 @@ class HandleConfig:
     source_label: str     # for tweet frontmatter
 
 
-HANDLES: list[HandleConfig] = [
-    HandleConfig(name="naval",       filter_profile="aphorism",        dedup_group="naval",   source_label=APIFY_SOURCE_LABEL),
-    HandleConfig(name="NavalismHQ",  filter_profile="aphorism",        dedup_group="naval",   source_label=APIFY_SOURCE_LABEL),
-    HandleConfig(name="rumilyrics",  filter_profile="multiline_quote", dedup_group="rumi",    source_label=APIFY_SOURCE_LABEL),
-    HandleConfig(name="AlexHormozi", filter_profile="original_tweet",  dedup_group="hormozi", source_label=APIFY_SOURCE_LABEL),
-]
+_KNOWN_HANDLES: dict[str, tuple[str, str]] = {
+    "naval": ("aphorism", "naval"),
+    "NavalismHQ": ("aphorism", "naval"),
+    "rumilyrics": ("multiline_quote", "rumi"),
+    "AlexHormozi": ("original_tweet", "hormozi"),
+}
+
+
+def _config_for_name(name: str) -> HandleConfig:
+    filter_profile, dedup_group = _KNOWN_HANDLES.get(name, ("original_tweet", name))
+    return HandleConfig(
+        name=name,
+        filter_profile=filter_profile,
+        dedup_group=dedup_group,
+        source_label=XAI_SOURCE_LABEL,
+    )
+
+
+HANDLES: list[HandleConfig] = [_config_for_name(name) for name in _KNOWN_HANDLES]
 
 
 def vault_base_for(handle: HandleConfig, vault_root: Path) -> Path:
@@ -35,8 +48,21 @@ def handles_in_dedup_group(group: str) -> list[HandleConfig]:
 
 
 def get_handle(name: str) -> HandleConfig:
-    """Lookup a handle by its name. Raises KeyError if not found."""
+    """Lookup a handle by its name, defaulting unknown handles to original tweets."""
     for h in HANDLES:
         if h.name == name:
             return h
-    raise KeyError(f"Unknown handle: {name}")
+    return _config_for_name(name)
+
+
+def handles_for_vault(vault_root: Path) -> list[HandleConfig]:
+    """Discover X handles from Vault/Library/X, falling back to the registry."""
+    x_root = vault_root / "Library" / "X"
+    if not x_root.exists():
+        return HANDLES
+    names = [
+        path.name
+        for path in sorted(x_root.iterdir(), key=lambda p: p.name.casefold())
+        if path.is_dir()
+    ]
+    return [_config_for_name(name) for name in names] or HANDLES

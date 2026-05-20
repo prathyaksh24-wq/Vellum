@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One-shot: backfill X aphorisms across configured handles."""
+"""One-shot: backfill X posts across X folders via direct xAI OAuth."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,8 @@ from pathlib import Path
 BACKFILL_MONTHS = 12
 MAX_ITEMS_PER_WINDOW = 1000
 INTER_REQUEST_SLEEP_SECS = 2
-BUDGET_LEDGER_PATH_REL = Path("data") / "apify-budget.json"
+WINDOW_DAYS = 7
+DEFAULT_XAI_TIMEOUT_SECS = 180
 
 
 def _load(name: str):
@@ -43,55 +44,53 @@ def vault_path(project_root: Path) -> Path:
     return Path(configured) if configured else project_root / "Vault"
 
 
-def month_windows(now: datetime, months: int) -> list[tuple[datetime, datetime]]:
+def day_windows(now: datetime, days: int, window_days: int = WINDOW_DAYS) -> list[tuple[datetime, datetime]]:
     windows = []
     end = now
-    for _ in range(months):
-        start = end - timedelta(days=30)
+    remaining = days
+    while remaining > 0:
+        span = min(window_days, remaining)
+        start = end - timedelta(days=span)
         windows.append((start, end))
         end = start
+        remaining -= span
     return list(reversed(windows))
 
 
-def run(project_root: Path, only_handle: str | None, months: int, max_per_window: int) -> int:
+def run(project_root: Path, only_handle: str | None, days: int, max_per_window: int, timeout_secs: int = DEFAULT_XAI_TIMEOUT_SECS) -> int:
     vault = vault_path(project_root)  # loads .env
-    token = os.environ.get("APIFY_API_TOKEN")
-    if not token:
-        print("APIFY_API_TOKEN missing from environment", file=sys.stderr)
-        return 3
+    oauth_file = project_root / "data" / "xai-oauth.json"
 
-    client = _load("apify_tweet_client")
+    client = _load("xai_x_search_client")
     ingest_mod = _load("x_ingest")
     hc = _load("handle_config")
-    budget_mod = _load("x_budget")
-    ledger = budget_mod.BudgetLedger(project_root / BUDGET_LEDGER_PATH_REL)
+    auth_error_type = getattr(client, "XAIAuthError", None)
 
-    handles = hc.HANDLES if only_handle is None else [hc.get_handle(only_handle)]
+    all_handles = hc.handles_for_vault(vault) if hasattr(hc, "handles_for_vault") else hc.HANDLES
+    handles = all_handles if only_handle is None else [hc.get_handle(only_handle)]
     now = datetime.now(timezone.utc).replace(microsecond=0)
-    windows = month_windows(now, months)
+    windows = day_windows(now, days)
+    failed_handles: list[str] = []
 
     for handle in handles:
         print(f"\n=== {handle.name} ===")
         for start, end in windows:
-            try:
-                ledger.pre_call_check()
-            except budget_mod.BudgetExhausted as exc:
-                print(f"BUDGET CAP REACHED: {exc}", file=sys.stderr)
-                ledger.announce()
-                return 5
             try:
                 items = client.fetch_tweets(
                     handle=handle.name,
                     start=start,
                     end=end,
                     max_items=max_per_window,
-                    token=token,
+                    oauth_file=oauth_file,
+                    timeout_secs=timeout_secs,
                 )
             except Exception as exc:
+                if auth_error_type and isinstance(exc, auth_error_type):
+                    print(f"[{handle.name}] xAI OAuth unavailable: {exc}", file=sys.stderr)
+                    return 3
                 print(f"[{handle.name}] {start.date()}..{end.date()} failed: {exc}", file=sys.stderr)
+                failed_handles.append(handle.name)
                 continue
-            estimated_cost = round(0.0004 * len(items), 6)
-            ledger.record(handle=handle.name, run_usd=estimated_cost)
             result = ingest_mod.ingest(handle=handle, vault_root=vault, items=items)
             print(
                 f"[{handle.name}] {start.date()}..{end.date()}: "
@@ -99,8 +98,7 @@ def run(project_root: Path, only_handle: str | None, months: int, max_per_window
             )
             time.sleep(INTER_REQUEST_SLEEP_SECS)
 
-    ledger.announce()
-    return 0
+    return 0 if not failed_handles else 2
 
 
 def main() -> int:
@@ -109,16 +107,19 @@ def main() -> int:
     g.add_argument("--all", action="store_true", help="Backfill all configured handles")
     g.add_argument("--handle", type=str, help="Single handle name")
     parser.add_argument("--months", type=int, default=BACKFILL_MONTHS)
+    parser.add_argument("--days", type=int, help="Backfill depth in days; overrides --months")
     parser.add_argument("--max-per-window", type=int, default=MAX_ITEMS_PER_WINDOW)
+    parser.add_argument("--timeout-secs", type=int, default=DEFAULT_XAI_TIMEOUT_SECS)
     parser.add_argument(
         "--project-root", type=Path, default=Path(__file__).resolve().parents[1]
     )
     args = parser.parse_args()
 
     only = args.handle if args.handle else None
+    days = args.days if args.days is not None else args.months * 30
 
     try:
-        return run(args.project_root.resolve(), only, args.months, args.max_per_window)
+        return run(args.project_root.resolve(), only, days, args.max_per_window, args.timeout_secs)
     except Exception as exc:
         print(f"backfill_x failed: {exc}", file=sys.stderr)
         return 1

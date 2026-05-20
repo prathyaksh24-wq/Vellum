@@ -1,6 +1,6 @@
 """Filter profiles for X tweet ingestion.
 
-Each profile is a pure boolean function over an Apify item dict.
+Each profile is a pure boolean function over a normalized X item dict.
 Register a profile in `PROFILES` and dispatch via `accepts(profile_name, item)`.
 """
 from __future__ import annotations

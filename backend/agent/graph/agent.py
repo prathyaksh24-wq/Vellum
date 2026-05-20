@@ -24,8 +24,10 @@ from agent.tools.library_docs import library_docs
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
+from agent.tools.sports_curiosity import fetch_sports_if_curious, should_fetch_sports
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
+from agent.tools.x import x_action
 
 VELLUM_SYSTEM_PROMPT = """You are Vellum, a self-learning personal archivist for one person.
 
@@ -46,6 +48,9 @@ Tools:
 14. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 15. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
 16. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
+17. should_fetch_sports - Compute the curiosity score for a sports league (NBA, Formula-One, Premier-League, Champions-League, Boxing, UFC, Ambient) without fetching. Returns score, threshold, budget, and would_fetch.
+18. fetch_sports_if_curious - Maybe fetch a SerpAPI snapshot for a sports league, gated by curiosity. Writes a snapshot under Library/Sports/<league>/snapshots/ and a decision memory under Agent/Memories/. Pass league="" to let the agent auto-pick. Use this when the user asks for live sports updates, stats, fixtures, standings, or news.
+19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 
 Rules:
 - Always search the vault first.
@@ -73,6 +78,8 @@ Rules:
 - Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
+- For live sports questions (NBA, F1, Premier League, Champions League, Boxing, UFC, or notable events in other sports), call fetch_sports_if_curious with the matching league. The curiosity gate decides whether to actually hit SerpAPI; if it declines, fall back to search_my_notes over Library/Sports/. Use the Ambient league for sports the user doesn't normally follow (tennis Sinner vs Alcaraz, La Liga El Clasico, etc).
+- Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 """
 
 _prompt_project_ctx: ProjectContext | None = None
@@ -223,6 +230,9 @@ def build_agent(model: str | None = None):
             escalate_to_cloud,
             create_note,
             append_to_note,
+            should_fetch_sports,
+            fetch_sports_if_curious,
+            x_action,
         ],
         checkpointer=build_checkpointer(),
         prompt=vellum_prompt,
@@ -249,6 +259,9 @@ async def build_async_agent(model: str | None = None):
             escalate_to_cloud,
             create_note,
             append_to_note,
+            should_fetch_sports,
+            fetch_sports_if_curious,
+            x_action,
         ],
         checkpointer=await build_async_checkpointer(),
         prompt=vellum_prompt,

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Poll Apify for configured X handles and ingest into the vault.
+"""Poll xAI X Search for X folders using direct xAI OAuth.
 
-Iterates HANDLES from handle_config, polling each in sequence.
-Fast-aborts if monthly budget is reached.
+Discovers handles from Vault/Library/X and polls each in sequence.
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from pathlib import Path
 
 DEFAULT_WINDOW_HOURS = 8       # 6h cadence + 2h cushion
 DEFAULT_MAX_ITEMS = 100
-BUDGET_LEDGER_PATH_REL = Path("data") / "apify-budget.json"
+DEFAULT_XAI_TIMEOUT_SECS = 180
 
 
 def _load(name: str):
@@ -70,35 +69,23 @@ def compute_window(state: dict, window_hours: int, now: datetime) -> tuple[datet
     return start, now
 
 
-def run(project_root: Path, dry_run: bool, max_items: int, window_hours: int) -> int:
+def run(project_root: Path, dry_run: bool, max_items: int, window_hours: int, timeout_secs: int = DEFAULT_XAI_TIMEOUT_SECS) -> int:
     vault = vault_path(project_root)  # loads .env as a side effect
-    token = os.environ.get("APIFY_API_TOKEN")
-    if not token:
-        print("APIFY_API_TOKEN missing from environment", file=sys.stderr)
-        return 3
+    oauth_file = project_root / "data" / "xai-oauth.json"
 
-    client = _load("apify_tweet_client")
+    client = _load("xai_x_search_client")
     ingest_mod = _load("x_ingest")
     hc = _load("handle_config")
-    budget_mod = _load("x_budget")
-
-    ledger = budget_mod.BudgetLedger(project_root / BUDGET_LEDGER_PATH_REL)
+    handles = hc.handles_for_vault(vault) if hasattr(hc, "handles_for_vault") else hc.HANDLES
+    auth_error_type = getattr(client, "XAIAuthError", None)
 
     overall_added = 0
     overall_filtered = 0
     overall_fetched = 0
     failed_handles: list[str] = []
 
-    for handle in hc.HANDLES:
-        try:
-            ledger.pre_call_check()
-        except budget_mod.BudgetExhausted as exc:
-            print(f"BUDGET CAP REACHED before {handle.name}: {exc}", file=sys.stderr)
-            ledger.announce()
-            return 5
-
+    for handle in handles:
         base = hc.vault_base_for(handle, vault)
-        base.mkdir(parents=True, exist_ok=True)
         state = read_state(base)
         now = datetime.now(timezone.utc).replace(microsecond=0)
         start, end = compute_window(state, window_hours, now)
@@ -111,21 +98,23 @@ def run(project_root: Path, dry_run: bool, max_items: int, window_hours: int) ->
             }, indent=2))
             continue
 
+        base.mkdir(parents=True, exist_ok=True)
         try:
             items = client.fetch_tweets(
                 handle=handle.name,
                 start=start,
                 end=end,
                 max_items=max_items,
-                token=token,
+                oauth_file=oauth_file,
+                timeout_secs=timeout_secs,
             )
         except Exception as exc:
-            print(f"[{handle.name}] Apify fetch failed: {exc}", file=sys.stderr)
+            if auth_error_type and isinstance(exc, auth_error_type):
+                print(f"[{handle.name}] xAI OAuth unavailable: {exc}", file=sys.stderr)
+                return 3
+            print(f"[{handle.name}] xAI X Search failed: {exc}", file=sys.stderr)
             failed_handles.append(handle.name)
             continue
-
-        estimated_cost = round(0.0004 * len(items), 6)
-        ledger.record(handle=handle.name, run_usd=estimated_cost)
 
         result = ingest_mod.ingest(handle=handle, vault_root=vault, items=items)
         overall_fetched += result.fetched
@@ -135,8 +124,6 @@ def run(project_root: Path, dry_run: bool, max_items: int, window_hours: int) ->
             f"[{handle.name}] fetched {result.fetched}, "
             f"filtered {result.filtered}, added {result.added}, total {result.total}"
         )
-
-    ledger.announce()
 
     print(
         f"\nDone. fetched={overall_fetched}, filtered={overall_filtered}, "
@@ -150,12 +137,15 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--max-items", type=int, default=DEFAULT_MAX_ITEMS)
     parser.add_argument("--window-hours", type=int, default=DEFAULT_WINDOW_HOURS)
+    parser.add_argument("--window-days", type=float, help="Alias for --window-hours, expressed in days")
+    parser.add_argument("--timeout-secs", type=int, default=DEFAULT_XAI_TIMEOUT_SECS)
     parser.add_argument(
         "--project-root", type=Path, default=Path(__file__).resolve().parents[1]
     )
     args = parser.parse_args()
+    window_hours = int(args.window_days * 24) if args.window_days is not None else args.window_hours
     try:
-        return run(args.project_root.resolve(), args.dry_run, args.max_items, args.window_hours)
+        return run(args.project_root.resolve(), args.dry_run, args.max_items, window_hours, args.timeout_secs)
     except Exception as exc:
         print(f"poll_x failed: {exc}", file=sys.stderr)
         return 1

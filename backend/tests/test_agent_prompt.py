@@ -3,6 +3,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage
 
 from agent.graph.agent import vellum_prompt
+from agent.graph import agent as agent_graph
 from agent.memory import project_context as pc
 
 
@@ -32,3 +33,24 @@ def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):
     config = {"configurable": {"thread_id": "t1"}}
     messages = vellum_prompt(state, config)
     assert all("<PROTECTED>" not in m.content for m in messages)
+
+
+def test_vellum_prompt_documents_x_action_safety_rules():
+    assert "x_action" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
+def test_agent_tool_list_includes_x_action(monkeypatch):
+    captured = {}
+
+    def fake_create_react_agent(**kwargs):
+        captured["tools"] = kwargs["tools"]
+        return object()
+
+    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
+
+    agent_graph.build_agent()
+
+    assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])

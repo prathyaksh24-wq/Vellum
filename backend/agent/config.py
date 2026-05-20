@@ -81,6 +81,8 @@ class Settings(BaseSettings):
     github_mcp_allow_writes: bool = Field(default=False, alias="GITHUB_MCP_ALLOW_WRITES")
     github_mcp_allow_destructive: bool = Field(default=False, alias="GITHUB_MCP_ALLOW_DESTRUCTIVE")
     git_tool_allow_writes: bool = Field(default=False, alias="GIT_TOOL_ALLOW_WRITES")
+    x_tool_allow_private_reads: bool = Field(default=False, alias="X_TOOL_ALLOW_PRIVATE_READS")
+    x_tool_allow_posts: bool = Field(default=False, alias="X_TOOL_ALLOW_POSTS")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")

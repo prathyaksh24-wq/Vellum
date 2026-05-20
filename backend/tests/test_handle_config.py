@@ -54,7 +54,7 @@ def test_vault_base_for_returns_library_path(tmp_path):
         name="naval",
         filter_profile="aphorism",
         dedup_group="naval",
-        source_label="Apify apidojo/tweet-scraper",
+        source_label="xAI X Search OAuth",
     )
     base = mod.vault_base_for(h, tmp_path)
     assert base == tmp_path / "Library" / "X" / "naval"
@@ -83,3 +83,22 @@ def test_handles_in_dedup_group_for_solo_handle():
     mod = _load()
     siblings = mod.handles_in_dedup_group("hormozi")
     assert [h.name for h in siblings] == ["AlexHormozi"]
+
+
+def test_handles_use_xai_source_label():
+    mod = _load()
+    assert {h.source_label for h in mod.HANDLES} == {"xAI X Search OAuth"}
+
+
+def test_handles_for_vault_discovers_x_folders(tmp_path):
+    mod = _load()
+    for name in ["AlexHormozi", "naval", "someNewHandle"]:
+        (tmp_path / "Library" / "X" / name).mkdir(parents=True)
+
+    handles = mod.handles_for_vault(tmp_path)
+    by_name = {h.name: h for h in handles}
+
+    assert list(by_name) == ["AlexHormozi", "naval", "someNewHandle"]
+    assert by_name["naval"].filter_profile == "aphorism"
+    assert by_name["someNewHandle"].filter_profile == "original_tweet"
+    assert by_name["someNewHandle"].dedup_group == "someNewHandle"

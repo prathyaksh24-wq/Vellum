@@ -229,11 +229,18 @@ entire Obsidian vault into context.
 - Never used for: bulk reading, directory traversal, writing outside `Agent/`
 
 **Apify (REST API for scheduled ingestion + MCP for agent calls)**
-- REST API used by scheduled scrapers (Amazon, X tweet archive) with `APIFY_API_TOKEN`.
+- REST API used by scheduled YouTube ingestion with `APIFY_API_TOKEN`.
 - MCP (`https://mcp.apify.com/sse`) used for agent-driven scraping (Amazon product lookups).
 - Output is ALWAYS stored locally first, THEN scrubbed if YELLOW, THEN
   summarized before the LLM sees any of it.
 - Never used as a general web scraper without explicit user instruction.
+
+**xAI OAuth X Search**
+- Scheduled X ingestion uses the xAI Responses API with the `x_search` tool.
+- Requires `XAI_OAUTH_ACCESS_TOKEN` or `data/xai-oauth.json`; no Hermes CLI
+  or `APIFY_API_TOKEN` is required for `Vault/Library/X/`.
+- Only cited X status URLs with clear extracted text may be written into
+  `Library/X/<handle>/`.
 
 **Playwright MCP** (`@playwright/mcp@latest --isolated`)
 - Used for: browser navigation and accessibility snapshots through `browser_action`
