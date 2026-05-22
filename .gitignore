@@ -12,6 +12,7 @@ data/x-api-oauth.json
 data/xai-oauth.json
 data/logs/
 data/embeddings/
+data/models/
 backend/data/
 backend/.test-data/
 ui-dist/

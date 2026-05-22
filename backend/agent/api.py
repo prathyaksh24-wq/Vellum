@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
+import re
+import time
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agent.cli.project_commands import (
@@ -34,6 +37,8 @@ from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
 from agent.tools.obsidian_write import store_qa_pair
+from agent.voice.stt import get_stt_engine
+from agent.voice.tts import get_tts_engine
 
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
@@ -61,6 +66,21 @@ class ChatResponse(BaseModel):
     answer: str
     thread_id: str
     tools: list[str] = Field(default_factory=list)
+
+
+class VoiceChatResponse(ChatResponse):
+    voice: bool = True
+
+
+class VoiceTranscribeResponse(BaseModel):
+    transcript: str
+    engine: str
+    model: str
+    duration_ms: int
+
+
+class VoiceSpeakRequest(BaseModel):
+    text: str = Field(min_length=1)
 
 
 class ReindexResponse(BaseModel):
@@ -204,7 +224,7 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
 
 
-async def _background_learn(query: str, answer: str, thread_id: str = "default") -> None:
+async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
     try:
         data_class, _reason = classify(query)
         if data_class == DataClass.RED:
@@ -212,7 +232,7 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default")
         scrubber = PrivacyScrubber()
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
-        await asyncio.to_thread(store_qa_pair, clean_query, clean_answer)
+        await asyncio.to_thread(store_qa_pair, clean_query, clean_answer, source)
         await asyncio.to_thread(_fts5_memory.add_qa_pair, query=clean_query, answer=clean_answer, thread_id=thread_id, source_paths=[])
         settings = get_settings()
         honcho = HonchoMemory(
@@ -317,6 +337,92 @@ def _chunk_text(chunk: Any) -> str:
     return str(content or "")
 
 
+def _sse(event: str, payload: dict[str, Any] | str) -> str:
+    data = payload if isinstance(payload, str) else json.dumps(payload)
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+def _sentence_chunks(text: str) -> tuple[list[str], str]:
+    parts: list[str] = []
+    start = 0
+    for match in re.finditer(r"(?<=[.!?])\s+", text):
+        chunk = text[start:match.end()].strip()
+        if chunk:
+            parts.append(chunk)
+        start = match.end()
+    return parts, text[start:]
+
+
+async def _stream_agent_turn(
+    *,
+    clean_message: str,
+    active_thread_id: str,
+    model: str | None,
+    source: str = "agent",
+    voice: bool = False,
+    synthesize_audio: bool = False,
+):
+    async with _agent_runtime_lock:
+        yield _sse("meta", {"thread_id": active_thread_id})
+        answer_parts: list[str] = []
+        tool_names: list[str] = []
+        tts_buffer = ""
+        try:
+            await _ensure_model(model)
+            stream = agent.astream_events(
+                {"messages": [{"role": "user", "content": clean_message}]},
+                config=_thread_config(active_thread_id),
+                version="v2",
+            )
+            async for event in stream:
+                kind = event.get("event")
+                if kind == "on_chat_model_stream":
+                    text = _chunk_text(event.get("data", {}).get("chunk"))
+                    if text:
+                        answer_parts.append(text)
+                        yield _sse("token", {"text": text})
+                        if synthesize_audio:
+                            tts_buffer += text
+                            chunks, tts_buffer = _sentence_chunks(tts_buffer)
+                            for chunk in chunks:
+                                async for audio_event in _synthesize_audio_event(chunk):
+                                    yield audio_event
+                elif kind == "on_tool_start":
+                    name = event.get("name") or ""
+                    if name:
+                        tool_names.append(str(name))
+                        yield _sse("tool", {"name": name})
+                capture_from_stream_event(
+                    ledger=_api_ledger,
+                    event=event,
+                    thread_id=active_thread_id,
+                    fallback_model=get_settings().primary_model,
+                    source="api",
+                )
+            answer = "".join(answer_parts).strip() or "No response."
+            if synthesize_audio and tts_buffer.strip() and answer != "No response.":
+                async for audio_event in _synthesize_audio_event(tts_buffer.strip()):
+                    yield audio_event
+            if voice:
+                response: ChatResponse = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
+            else:
+                response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
+            if answer and "blocked for privacy" not in answer.casefold():
+                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source))
+            yield _sse("final", response.model_dump_json())
+        except Exception as exc:
+            yield _sse("error", {"error": str(exc)})
+
+
+async def _synthesize_audio_event(text: str):
+    try:
+        wav = await asyncio.to_thread(get_tts_engine().synthesize_wav, text)
+    except Exception:
+        return
+    if wav:
+        yield _sse("audio", {"text": text, "wav_b64": base64.b64encode(wav).decode("ascii")})
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
@@ -343,46 +449,75 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
         return StreamingResponse(single_event(), media_type="text/event-stream")
 
+    return StreamingResponse(
+        _stream_agent_turn(
+            clean_message=clean_message,
+            active_thread_id=active_thread_id,
+            model=request.model,
+        ),
+        media_type="text/event-stream",
+    )
+
+
+async def _read_voice_transcript(audio: UploadFile) -> VoiceTranscribeResponse:
+    started = time.perf_counter()
+    audio_bytes = await audio.read()
+    try:
+        stt = get_stt_engine()
+        transcript = await asyncio.to_thread(stt.transcribe_wav, audio_bytes)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    transcript = " ".join((transcript or "").split())
+    if not transcript:
+        raise HTTPException(status_code=400, detail="No speech detected.")
+    return VoiceTranscribeResponse(
+        transcript=transcript,
+        engine=getattr(stt, "engine", "unknown"),
+        model=getattr(stt, "model", "unknown"),
+        duration_ms=max(0, int((time.perf_counter() - started) * 1000)),
+    )
+
+
+@router.post("/voice/transcribe", response_model=VoiceTranscribeResponse)
+async def voice_transcribe(audio: UploadFile = File(...)) -> VoiceTranscribeResponse:
+    return await _read_voice_transcript(audio)
+
+
+@router.post("/voice/turn")
+async def voice_turn(
+    audio: UploadFile = File(...),
+    thread_id: str | None = Form(default=None),
+    model: str | None = Form(default=None),
+) -> StreamingResponse:
+    result = await _read_voice_transcript(audio)
+    active_thread_id = thread_id or get_settings().thread_id
+
     async def events():
-        async with _agent_runtime_lock:
-            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
-            answer_parts: list[str] = []
-            tool_names: list[str] = []
-            try:
-                await _ensure_model(request.model)
-                stream = agent.astream_events(
-                    {"messages": [{"role": "user", "content": clean_message}]},
-                    config=_thread_config(active_thread_id),
-                    version="v2",
-                )
-                async for event in stream:
-                    kind = event.get("event")
-                    if kind == "on_chat_model_stream":
-                        text = _chunk_text(event.get("data", {}).get("chunk"))
-                        if text:
-                            answer_parts.append(text)
-                            yield f"event: token\ndata: {json.dumps({'text': text})}\n\n"
-                    elif kind == "on_tool_start":
-                        name = event.get("name") or ""
-                        if name:
-                            tool_names.append(str(name))
-                            yield f"event: tool\ndata: {json.dumps({'name': name})}\n\n"
-                    capture_from_stream_event(
-                        ledger=_api_ledger,
-                        event=event,
-                        thread_id=active_thread_id,
-                        fallback_model=get_settings().primary_model,
-                        source="api",
-                    )
-                answer = "".join(answer_parts).strip() or "No response."
-                response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
-                if answer and "blocked for privacy" not in answer.casefold():
-                    asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
-                yield f"event: final\ndata: {response.model_dump_json()}\n\n"
-            except Exception as exc:
-                yield f"event: error\ndata: {json.dumps({'error': str(exc)})}\n\n"
+        yield _sse("transcript", {"text": result.transcript, "engine": result.engine, "model": result.model})
+        async for item in _stream_agent_turn(
+            clean_message=result.transcript,
+            active_thread_id=active_thread_id,
+            model=model or None,
+            source="voice",
+            voice=True,
+            synthesize_audio=True,
+        ):
+            yield item
 
     return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@router.post("/voice/speak")
+async def voice_speak(request: VoiceSpeakRequest) -> Response:
+    try:
+        wav = await asyncio.to_thread(get_tts_engine().synthesize_wav, request.text)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(content=wav, media_type="audio/wav")
 
 
 @router.post("/vault/reindex", response_model=ReindexResponse)

@@ -111,8 +111,15 @@ class Settings(BaseSettings):
     enable_nightly_digest: bool = Field(default=True, alias="ENABLE_NIGHTLY_DIGEST")
     enable_vault_watcher: bool = Field(default=True, alias="ENABLE_VAULT_WATCHER")
     vault_watcher_debounce_seconds: float = Field(default=2.0, alias="VAULT_WATCHER_DEBOUNCE_SECONDS")
+    voice_enabled: bool = Field(default=True, alias="VOICE_ENABLED")
+    voice_stt_engine: str = Field(default="moonshine", alias="VOICE_STT_ENGINE")
+    voice_stt_model: str = Field(default="tiny", alias="VOICE_STT_MODEL")
+    voice_tts_engine: str = Field(default="kokoro", alias="VOICE_TTS_ENGINE")
+    voice_tts_voice: str = Field(default="af_heart", alias="VOICE_TTS_VOICE")
+    voice_tts_speed: float = Field(default=1.0, alias="VOICE_TTS_SPEED")
+    voice_model_dir: Path = Field(default=Path("data/models/voice"), alias="VOICE_MODEL_DIR")
 
-    @field_validator("obsidian_vault_path", "filesystem_mcp_path", "qdrant_local_path", mode="before")
+    @field_validator("obsidian_vault_path", "filesystem_mcp_path", "qdrant_local_path", "voice_model_dir", mode="before")
     @classmethod
     def expand_path(cls, value: str | Path | None) -> Path | None:
         if value in (None, ""):
@@ -129,6 +136,7 @@ class Settings(BaseSettings):
         self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.qdrant_local_path is not None:
             self.qdrant_local_path = _resolve_against_repo(self.qdrant_local_path)
+        self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
@@ -152,6 +160,12 @@ class Settings(BaseSettings):
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
+        if self.voice_stt_engine not in {"moonshine"}:
+            raise ValueError("VOICE_STT_ENGINE must be moonshine.")
+        if self.voice_tts_engine not in {"kokoro"}:
+            raise ValueError("VOICE_TTS_ENGINE must be kokoro.")
+        if self.voice_tts_speed <= 0:
+            raise ValueError("VOICE_TTS_SPEED must be greater than 0.")
         if not self.apify_mcp_url.startswith(("https://", "http://")):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.github_mcp_url.startswith(("https://", "http://")):
