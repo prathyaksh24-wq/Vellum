@@ -295,9 +295,28 @@
   .input-shell.streaming .input { opacity: 0.45; }
   .input-shell.streaming .stop-btn { display: inline-flex; pointer-events: auto; }
   .input-shell.streaming .ember-dot { display: none; }
+  .input-shell.voice-listening { border-color: rgba(217, 119, 70, 0.56); box-shadow: 0 0 0 1px rgba(217, 119, 70, 0.1); }
+  .input-shell.voice-listening .voice-btn { color: var(--ember); border-color: rgba(217, 119, 70, 0.62); }
+  .input-shell.voice-working .voice-btn { color: var(--soft-ember); border-color: rgba(217, 119, 70, 0.42); }
   .input-row { display: flex; align-items: center; gap: 14px; }
   .input { flex: 1; background: transparent; border: none; outline: none; color: var(--parchment); font-family: 'Fraunces', serif; font-weight: 300; font-size: 15.5px; line-height: 1.6; caret-color: var(--ember); }
   .input::placeholder { color: var(--whisper); font-style: italic; }
+  .voice-btn, .speak-btn {
+    border: 1px solid var(--line-2);
+    background: transparent;
+    color: var(--whisper);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: color 240ms ease, border-color 240ms ease, background 240ms ease, transform 240ms ease;
+  }
+  .voice-btn { width: 42px; height: 28px; border-radius: 999px; flex-shrink: 0; }
+  .voice-btn:hover, .speak-btn:hover { color: var(--muted); border-color: rgba(217, 119, 70, 0.38); background: rgba(217, 119, 70, 0.04); transform: translateY(-1px); }
+  .voice-btn:disabled, .speak-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .speak-btn { margin-top: 12px; padding: 4px 8px; border-radius: 999px; }
   .ember-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ember); opacity: 0; transition: opacity 900ms var(--ease); flex-shrink: 0; }
   .ember-dot.visible { opacity: 1; animation: breathe 5.5s ease-in-out infinite; }
   .stop-btn {
@@ -522,6 +541,7 @@
           <div class="input-shell" id="inputShell">
             <div class="input-row">
               <input class="input" id="chatInput" placeholder="Ask." autocomplete="off">
+              <button class="voice-btn" id="voiceBtn" type="button" aria-label="Speak to Vellum" title="Speak">mic</button>
               <div class="ember-dot" id="emberDot"></div>
               <button class="stop-btn" id="stopBtn" type="button" aria-label="Stop response">stop</button>
             </div>
@@ -532,7 +552,7 @@
               <a id="footModel">Model</a>
               <a id="footMemory">Memory</a>
             </div>
-            <div>Trained on you</div>
+            <div id="voiceStatus">Trained on you</div>
           </div>
         </div>
       </main>
@@ -674,6 +694,8 @@
   const inputZone = document.querySelector('.input-zone');
   const inputShell = $('inputShell');
   const chatInput = $('chatInput');
+  const voiceBtn = $('voiceBtn');
+  const voiceStatus = $('voiceStatus');
   const emberDot = $('emberDot');
   const stopBtn = $('stopBtn');
   const threadTitle = $('threadTitle');
@@ -962,9 +984,11 @@
       node.querySelector('.msg-body').textContent = msg.text || '';
     } else {
       const sourceLabel = msg.sourceLabel || 'vellum';
-      node.innerHTML = `<div class="msg-meta"><span class="msg-meta-dot"></span><span>${escapeHtml(sourceLabel)}</span></div><div class="msg-body"></div>`;
+      node.innerHTML = `<div class="msg-meta"><span class="msg-meta-dot"></span><span>${escapeHtml(sourceLabel)}</span></div><div class="msg-body"></div><button class="speak-btn" type="button">speak</button>`;
       const bodyEl = node.querySelector('.msg-body');
       bodyEl.textContent = msg.text || '';
+      node.dataset.speechText = msg.text || '';
+      node.querySelector('.speak-btn').addEventListener('click', () => speakText(node.dataset.speechText || msg.text || bodyEl.textContent || ''));
       if (msg.tools && msg.tools.length) {
         appendInlineFootnoteMarks(bodyEl, msg.tools);
         const fnList = footnotesFromTools(msg.tools);
@@ -1025,6 +1049,179 @@
 
   // ============= streaming =============
   let activeStreamAbort = null;
+  let mediaRecorder = null;
+  let voiceStream = null;
+  let voiceChunks = [];
+  let voiceHoldTimer = null;
+  let suppressVoiceClick = false;
+  let audioCtx = null;
+  let playbackChain = Promise.resolve();
+  const activeAudioSources = new Set();
+
+  function setVoiceState(mode, label = 'Trained on you') {
+    inputShell.classList.toggle('voice-listening', mode === 'listening');
+    inputShell.classList.toggle('voice-working', mode === 'transcribing' || mode === 'thinking' || mode === 'speaking');
+    voiceBtn.disabled = mode === 'transcribing' || mode === 'thinking';
+    voiceStatus.textContent = label;
+  }
+
+  function voiceAudioContext() {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+
+  function stopVoicePlayback() {
+    activeAudioSources.forEach(source => {
+      try { source.stop(); } catch {}
+    });
+    activeAudioSources.clear();
+    playbackChain = Promise.resolve();
+  }
+
+  async function playArrayBuffer(arrayBuffer) {
+    const ctx = voiceAudioContext();
+    if (ctx.state === 'suspended') await ctx.resume();
+    const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
+    playbackChain = playbackChain.then(() => new Promise(resolve => {
+      const source = ctx.createBufferSource();
+      source.buffer = decoded;
+      source.connect(ctx.destination);
+      activeAudioSources.add(source);
+      source.onended = () => { activeAudioSources.delete(source); resolve(); };
+      setVoiceState('speaking', 'Speaking');
+      source.start();
+    })).finally(() => {
+      if (!activeStreamAbort && activeAudioSources.size === 0) setVoiceState('idle');
+    });
+    return playbackChain;
+  }
+
+  async function playBase64Wav(wavB64) {
+    const raw = atob(wavB64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+    await playArrayBuffer(bytes.buffer);
+  }
+
+  async function speakText(text) {
+    const clean = (text || '').trim();
+    if (!clean) return;
+    try {
+      stopVoicePlayback();
+      setVoiceState('speaking', 'Speaking');
+      const res = await fetch(`${API_BASE}/api/voice/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: clean }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await playArrayBuffer(await res.arrayBuffer());
+    } catch (err) {
+      console.warn(`[voice speak failed] ${err && err.message ? err.message : err}`);
+      setVoiceState('idle');
+    }
+  }
+
+  function encodeWav(samples, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const write = (offset, value) => {
+      for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+    };
+    write(0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    write(8, 'WAVE');
+    write(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    write(36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return buffer;
+  }
+
+  function resampleTo16k(audioBuffer) {
+    const targetRate = 16000;
+    const input = audioBuffer.getChannelData(0);
+    const ratio = audioBuffer.sampleRate / targetRate;
+    const length = Math.max(1, Math.round(input.length / ratio));
+    const output = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      const at = i * ratio;
+      const left = Math.floor(at);
+      const right = Math.min(input.length - 1, left + 1);
+      const frac = at - left;
+      output[i] = input[left] * (1 - frac) + input[right] * frac;
+    }
+    return output;
+  }
+
+  async function normalizeVoiceBlob(blob) {
+    const ctx = voiceAudioContext();
+    const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    const samples = resampleTo16k(decoded);
+    return new Blob([encodeWav(samples, 16000)], { type: 'audio/wav' });
+  }
+
+  async function startVoiceRecording() {
+    if (activeStreamAbort || mediaRecorder) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      setVoiceState('idle', 'Voice unavailable');
+      return;
+    }
+    try {
+      stopVoicePlayback();
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceChunks = [];
+      mediaRecorder = new MediaRecorder(voiceStream);
+      mediaRecorder.addEventListener('dataavailable', event => {
+        if (event.data && event.data.size) voiceChunks.push(event.data);
+      });
+      mediaRecorder.addEventListener('stop', async () => {
+        const chunks = voiceChunks;
+        voiceChunks = [];
+        voiceStream?.getTracks().forEach(track => track.stop());
+        voiceStream = null;
+        mediaRecorder = null;
+        if (!chunks.length) { setVoiceState('idle'); return; }
+        setVoiceState('transcribing', 'Transcribing');
+        try {
+          const raw = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
+          const wav = await normalizeVoiceBlob(raw);
+          await sendVoice(wav);
+        } catch (err) {
+          setVoiceState('idle', 'Voice unreachable');
+          renderMessage({ role: 'agent', text: `couldn't hear that — ${(err && err.message ? err.message : 'unknown').toLowerCase()}`, sourceLabel: 'voice', error: true });
+        }
+      });
+      mediaRecorder.start();
+      setVoiceState('listening', 'Listening');
+    } catch (err) {
+      setVoiceState('idle', 'Mic blocked');
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+  }
+
+  function cancelActiveVoice() {
+    if (mediaRecorder) stopVoiceRecording();
+    if (activeStreamAbort) activeStreamAbort.abort();
+    stopVoicePlayback();
+    setVoiceState('idle');
+  }
 
   // ============= slash commands =============
   const HELP_TEXT = [
@@ -1156,6 +1353,149 @@
     renderMessage(msg);
   }
 
+  async function sendVoice(audioBlob) {
+    if (activeStreamAbort) return;
+    const t = ensureThread();
+    showChat();
+    activeStreamAbort = new AbortController();
+    inputShell.classList.add('streaming');
+    setVoiceState('thinking', 'Thinking');
+    drawingLine.classList.remove('active');
+    void drawingLine.offsetWidth;
+    drawingLine.classList.add('active');
+
+    let userRendered = false;
+    let agentMsgNode = null;
+    let bodyEl = null;
+    let collected = '';
+    let toolsUsed = [];
+
+    function ensureAgentNode() {
+      if (agentMsgNode) return;
+      agentMsgNode = renderMessage({ role: 'agent', text: '', sourceLabel: 'vellum' });
+      agentMsgNode.classList.add('streaming');
+      bodyEl = agentMsgNode.querySelector('.msg-body');
+    }
+
+    function renderTranscript(text) {
+      if (userRendered) return;
+      userRendered = true;
+      if ((!t.messages.length && !t.title) || t.title === 'untitled') t.title = text.slice(0, 60);
+      const userMsg = { role: 'user', text, ts: Date.now(), voice: true };
+      t.messages.push(userMsg);
+      t.updatedAt = Date.now();
+      renderMessage(userMsg);
+      saveState();
+      renderRail();
+      threadTitle.textContent = t.title;
+      threadMeta.textContent = metaFor(t);
+      ensureAgentNode();
+    }
+
+    function finalizeVoiceMessage(answer, tools) {
+      ensureAgentNode();
+      agentMsgNode.classList.remove('streaming');
+      const sourceLabel = sourceLabelFromTools(tools);
+      const metaSpan = agentMsgNode.querySelector('.msg-meta span:last-child');
+      if (metaSpan) metaSpan.textContent = sourceLabel;
+      appendInlineFootnoteMarks(bodyEl, tools);
+      const fnHtml = footnotesFromTools(tools);
+      if (fnHtml) {
+        const fnNode = document.createElement('div');
+        fnNode.className = 'footnotes';
+        fnNode.innerHTML = fnHtml;
+        agentMsgNode.appendChild(fnNode);
+        requestAnimationFrame(() => fnNode.classList.add('arrived'));
+      }
+      const agentMsg = { role: 'agent', text: answer, tools, sourceLabel, ts: Date.now(), voice: true };
+      agentMsgNode.dataset.speechText = answer || '';
+      t.messages.push(agentMsg);
+      t.updatedAt = Date.now();
+      saveState();
+      renderRail();
+      threadMeta.textContent = metaFor(t);
+      scrollToBottom();
+    }
+
+    function handleVoiceError(err) {
+      if (agentMsgNode) {
+        agentMsgNode.classList.remove('streaming');
+        agentMsgNode.classList.add('error');
+        bodyEl.textContent = `couldn't reach voice — ${(err && err.message ? err.message : 'unknown').toLowerCase()}`;
+      } else {
+        renderMessage({ role: 'agent', text: `couldn't reach voice — ${(err && err.message ? err.message : 'unknown').toLowerCase()}`, sourceLabel: 'voice', error: true });
+      }
+      brandStatus.classList.add('unreachable');
+    }
+
+    try {
+      const form = new FormData();
+      form.append('audio', audioBlob, 'speech.wav');
+      form.append('thread_id', t.id);
+      if (state.model) form.append('model', state.model);
+      const res = await fetch(`${API_BASE}/api/voice/turn`, {
+        method: 'POST',
+        body: form,
+        signal: activeStreamAbort.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+        for (const block of events) handleVoiceSseBlock(block);
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        if (agentMsgNode) {
+          agentMsgNode.classList.remove('streaming');
+          bodyEl.textContent = collected || '(stopped before reply)';
+        }
+      } else handleVoiceError(err);
+    } finally {
+      drawingLine.classList.remove('active');
+      activeStreamAbort = null;
+      inputShell.classList.remove('streaming');
+      if (activeAudioSources.size === 0) setVoiceState('idle');
+      chatInput.focus();
+    }
+
+    function handleVoiceSseBlock(block) {
+      const lines = block.split('\n');
+      let event = 'message';
+      let data = '';
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      }
+      if (!data) return;
+      let payload; try { payload = JSON.parse(data); } catch { return; }
+      if (event === 'transcript') {
+        renderTranscript(payload.text || '');
+      } else if (event === 'token') {
+        ensureAgentNode();
+        collected += payload.text || '';
+        bodyEl.textContent = collected;
+        scrollToBottom();
+      } else if (event === 'tool') {
+        if (payload.name) toolsUsed.push(payload.name);
+      } else if (event === 'audio') {
+        if (payload.wav_b64) playBase64Wav(payload.wav_b64);
+      } else if (event === 'final') {
+        if (payload.answer && !collected) { collected = payload.answer; if (bodyEl) bodyEl.textContent = collected; }
+        if (Array.isArray(payload.tools) && payload.tools.length) toolsUsed = payload.tools;
+        finalizeVoiceMessage(collected, toolsUsed);
+      } else if (event === 'error') {
+        handleVoiceError(new Error(payload.error || 'unknown error'));
+      }
+    }
+  }
+
   async function send(query) {
     const text = (query || '').trim();
     if (!text) return;
@@ -1265,6 +1605,7 @@
         requestAnimationFrame(() => fnNode.classList.add('arrived'));
       }
       const agentMsg = { role: 'agent', text: answer, tools, sourceLabel, ts: Date.now() };
+      agentMsgNode.dataset.speechText = answer || '';
       t.messages.push(agentMsg);
       t.updatedAt = Date.now();
       saveState();
@@ -1325,12 +1666,41 @@
   });
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(chatInput.value); }
-    if (e.key === 'Escape' && activeStreamAbort) { e.preventDefault(); activeStreamAbort.abort(); }
+    if (e.key === 'Escape' && (activeStreamAbort || mediaRecorder)) { e.preventDefault(); cancelActiveVoice(); }
     dismissIdleFragment();
     resetIdleTimer();
   });
   stopBtn.addEventListener('click', () => {
-    if (activeStreamAbort) activeStreamAbort.abort();
+    cancelActiveVoice();
+  });
+  voiceBtn.addEventListener('pointerdown', event => {
+    if (event.button !== 0) return;
+    voiceHoldTimer = setTimeout(() => {
+      suppressVoiceClick = true;
+      startVoiceRecording();
+    }, 240);
+  });
+  voiceBtn.addEventListener('pointerup', () => {
+    if (voiceHoldTimer) {
+      clearTimeout(voiceHoldTimer);
+      voiceHoldTimer = null;
+    }
+    if (suppressVoiceClick && mediaRecorder) stopVoiceRecording();
+  });
+  voiceBtn.addEventListener('pointerleave', () => {
+    if (voiceHoldTimer) {
+      clearTimeout(voiceHoldTimer);
+      voiceHoldTimer = null;
+    }
+    if (suppressVoiceClick && mediaRecorder) stopVoiceRecording();
+  });
+  voiceBtn.addEventListener('click', () => {
+    if (suppressVoiceClick) {
+      suppressVoiceClick = false;
+      return;
+    }
+    if (mediaRecorder) stopVoiceRecording();
+    else startVoiceRecording();
   });
   document.querySelectorAll('.empty-hint').forEach(h => h.addEventListener('click', () => send(h.dataset.prompt)));
 
