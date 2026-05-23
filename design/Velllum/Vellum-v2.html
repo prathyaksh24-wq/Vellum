@@ -267,7 +267,7 @@
   /* ============================================================ */
   /*  APP HEADER (chat + dashboard share)                          */
   /* ============================================================ */
-  .app { display: flex; flex-direction: column; min-height: 100vh; position: relative; }
+  .app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; position: relative; }
 
   .app-header {
     display: flex;
@@ -370,13 +370,23 @@
     display: flex;
     flex-direction: column;
     flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
   }
+  .view.active::-webkit-scrollbar { width: 8px; }
+  .view.active::-webkit-scrollbar-track { background: transparent; }
+  .view.active::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+  .view.active::-webkit-scrollbar-thumb:hover { background: var(--line-2); }
   .view.visible { opacity: 1; transform: translateY(0); filter: blur(0); }
 
   /* ============================================================ */
   /*  CHAT VIEW                                                    */
   /* ============================================================ */
   #view-chat.active { flex-direction: row; overflow: hidden; }
+  /* chat handles its own internal scrolling — keep the view itself non-scrolling */
+  #view-chat.active { overflow-y: hidden; }
 
   .chat-shell {
     display: flex;

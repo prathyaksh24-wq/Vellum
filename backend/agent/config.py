@@ -119,7 +119,22 @@ class Settings(BaseSettings):
     voice_tts_speed: float = Field(default=1.0, alias="VOICE_TTS_SPEED")
     voice_model_dir: Path = Field(default=Path("data/models/voice"), alias="VOICE_MODEL_DIR")
 
-    @field_validator("obsidian_vault_path", "filesystem_mcp_path", "qdrant_local_path", "voice_model_dir", mode="before")
+    # Computer use
+    computer_use_allow_desktop: bool = Field(default=False, alias="COMPUTER_USE_ALLOW_DESKTOP")
+    computer_use_screenshot_dir: Path = Field(
+        default=Path("data/computer-use/screenshots"),
+        alias="COMPUTER_USE_SCREENSHOT_DIR",
+    )
+    computer_use_activity_overlay: bool = Field(default=True, alias="COMPUTER_USE_ACTIVITY_OVERLAY")
+
+    @field_validator(
+        "obsidian_vault_path",
+        "filesystem_mcp_path",
+        "qdrant_local_path",
+        "voice_model_dir",
+        "computer_use_screenshot_dir",
+        mode="before",
+    )
     @classmethod
     def expand_path(cls, value: str | Path | None) -> Path | None:
         if value in (None, ""):
@@ -137,6 +152,7 @@ class Settings(BaseSettings):
         if self.qdrant_local_path is not None:
             self.qdrant_local_path = _resolve_against_repo(self.qdrant_local_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
+        self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")

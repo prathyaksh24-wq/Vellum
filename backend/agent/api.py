@@ -7,13 +7,13 @@ import base64
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
-import re
 import time
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from langchain_core.messages import ToolMessage
 from pydantic import BaseModel, Field
 
 from agent.cli.project_commands import (
@@ -60,6 +60,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     thread_id: str | None = None
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
+    voice: bool = False
 
 
 class ChatResponse(BaseModel):
@@ -161,6 +162,105 @@ def _tool_call_names(messages: list[Any]) -> list[str]:
     return names
 
 
+def _state_values(state: Any) -> dict[str, Any]:
+    if state is None:
+        return {}
+    if isinstance(state, dict):
+        values = state.get("values", state)
+    else:
+        values = getattr(state, "values", {}) or {}
+    return values if isinstance(values, dict) else {}
+
+
+def _message_tool_calls(message: Any) -> list[Any]:
+    if isinstance(message, dict):
+        tool_calls = message.get("tool_calls")
+        if tool_calls is None:
+            tool_calls = (message.get("additional_kwargs") or {}).get("tool_calls")
+    else:
+        tool_calls = getattr(message, "tool_calls", None)
+        if tool_calls is None:
+            tool_calls = (getattr(message, "additional_kwargs", None) or {}).get("tool_calls")
+    return list(tool_calls or [])
+
+
+def _tool_call_field(tool_call: Any, *names: str) -> Any:
+    if isinstance(tool_call, dict):
+        for name in names:
+            if name in tool_call:
+                return tool_call.get(name)
+        function = tool_call.get("function")
+        if isinstance(function, dict) and "name" in names:
+            return function.get("name")
+        return None
+    for name in names:
+        value = getattr(tool_call, name, None)
+        if value is not None:
+            return value
+    return None
+
+
+def _tool_message_id(message: Any) -> str:
+    if isinstance(message, dict):
+        return str(message.get("tool_call_id") or "")
+    return str(getattr(message, "tool_call_id", "") or "")
+
+
+def _pending_tool_calls(messages: list[Any]) -> list[dict[str, str]]:
+    pending: dict[str, dict[str, str]] = {}
+    for message in messages:
+        for tool_call in _message_tool_calls(message):
+            call_id = str(_tool_call_field(tool_call, "id", "tool_call_id") or "").strip()
+            if not call_id:
+                continue
+            name = str(_tool_call_field(tool_call, "name") or "unknown_tool").strip() or "unknown_tool"
+            pending[call_id] = {"id": call_id, "name": name}
+
+        tool_call_id = _tool_message_id(message)
+        if tool_call_id:
+            pending.pop(tool_call_id, None)
+    return list(pending.values())
+
+
+async def _repair_incomplete_tool_history(thread_id: str) -> int:
+    get_state = getattr(agent, "aget_state", None)
+    update_state = getattr(agent, "aupdate_state", None)
+    if get_state is None or update_state is None:
+        return 0
+
+    config = _thread_config(thread_id)
+    try:
+        state = await get_state(config)
+        messages = _state_values(state).get("messages") or []
+        pending = _pending_tool_calls(list(messages))
+        if not pending:
+            return 0
+
+        repairs = [
+            ToolMessage(
+                content=(
+                    f"Tool call '{item['name']}' did not complete because the previous "
+                    "agent turn was interrupted before a tool result was saved. "
+                    "Continue from the user's latest request."
+                ),
+                tool_call_id=item["id"],
+                name=item["name"],
+            )
+            for item in pending
+        ]
+        await update_state(config, {"messages": repairs})
+        return len(repairs)
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Failed to repair incomplete tool history for thread %s: %s",
+            thread_id,
+            exc,
+        )
+        return 0
+
+
 async def _ensure_model(model: str | None) -> str | None:
     """If `model` is provided and differs from the current active model,
     switch the registry and invalidate the cached agent so it rebuilds.
@@ -203,6 +303,7 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+        await _repair_incomplete_tool_history(active_thread_id)
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": clean_message}]},
             config=_thread_config(active_thread_id),
@@ -342,17 +443,6 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
-def _sentence_chunks(text: str) -> tuple[list[str], str]:
-    parts: list[str] = []
-    start = 0
-    for match in re.finditer(r"(?<=[.!?])\s+", text):
-        chunk = text[start:match.end()].strip()
-        if chunk:
-            parts.append(chunk)
-        start = match.end()
-    return parts, text[start:]
-
-
 async def _stream_agent_turn(
     *,
     clean_message: str,
@@ -366,9 +456,9 @@ async def _stream_agent_turn(
         yield _sse("meta", {"thread_id": active_thread_id})
         answer_parts: list[str] = []
         tool_names: list[str] = []
-        tts_buffer = ""
         try:
             await _ensure_model(model)
+            await _repair_incomplete_tool_history(active_thread_id)
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": clean_message}]},
                 config=_thread_config(active_thread_id),
@@ -381,12 +471,6 @@ async def _stream_agent_turn(
                     if text:
                         answer_parts.append(text)
                         yield _sse("token", {"text": text})
-                        if synthesize_audio:
-                            tts_buffer += text
-                            chunks, tts_buffer = _sentence_chunks(tts_buffer)
-                            for chunk in chunks:
-                                async for audio_event in _synthesize_audio_event(chunk):
-                                    yield audio_event
                 elif kind == "on_tool_start":
                     name = event.get("name") or ""
                     if name:
@@ -400,9 +484,6 @@ async def _stream_agent_turn(
                     source="api",
                 )
             answer = "".join(answer_parts).strip() or "No response."
-            if synthesize_audio and tts_buffer.strip() and answer != "No response.":
-                async for audio_event in _synthesize_audio_event(tts_buffer.strip()):
-                    yield audio_event
             if voice:
                 response: ChatResponse = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
             else:
@@ -410,7 +491,14 @@ async def _stream_agent_turn(
             if answer and "blocked for privacy" not in answer.casefold():
                 asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source))
             yield _sse("final", response.model_dump_json())
+            if synthesize_audio and answer != "No response.":
+                async for audio_event in _synthesize_audio_event(answer):
+                    yield audio_event
+        except asyncio.CancelledError:
+            await asyncio.shield(_repair_incomplete_tool_history(active_thread_id))
+            raise
         except Exception as exc:
+            await _repair_incomplete_tool_history(active_thread_id)
             yield _sse("error", {"error": str(exc)})
 
 
@@ -454,6 +542,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             clean_message=clean_message,
             active_thread_id=active_thread_id,
             model=request.model,
+            source="voice" if request.voice else "agent",
+            voice=request.voice,
         ),
         media_type="text/event-stream",
     )

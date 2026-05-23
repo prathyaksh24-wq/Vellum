@@ -1,7 +1,12 @@
+from pathlib import Path
+
 from agent.memory.fts5 import FTS5Memory, DB_PATH as FTS5_DB_PATH
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.resolved import ResolvedQuestionsCache, DB_PATH as RESOLVED_DB_PATH
 from agent.memory.skills import SkillStore
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_fts5_indexes_and_searches_qa_pairs(tmp_path):
@@ -60,6 +65,63 @@ def test_skill_store_loads_matching_active_skills(tmp_path):
 
     assert "## Active Skills" in block
     assert "Use concise footnotes." in block
+
+
+def test_skill_store_skips_negative_triggers(tmp_path):
+    active = tmp_path / ".skills" / "active"
+    active.mkdir(parents=True)
+    (active / "skill-debugging-v1.json").write_text(
+        """{
+  "id": "skill-debugging-v1",
+  "name": "Debugging",
+  "trigger": ["debug", "test failure", "failing test"],
+  "negative_trigger": ["write test", "write tests", "add tests"],
+  "confidence_threshold": 0.1,
+  "instructions": "Investigate before fixing."
+}""",
+        encoding="utf-8",
+    )
+
+    store = SkillStore(tmp_path / ".skills")
+
+    assert store.matching_skills("debug this failing test")
+    assert store.matching_skills("write test failure coverage for this module") == []
+
+
+def test_production_skill_store_includes_requested_capability_skills():
+    skills = {skill["id"]: skill for skill in SkillStore(REPO_ROOT / ".skills").load_active_skills()}
+
+    assert "skill-find-skills-v1" in skills
+    assert "skill-systematic-debugging-v1" in skills
+    assert "skill-skill-creator-v1" in skills
+
+
+def test_requested_capability_skills_match_realistic_prompts():
+    store = SkillStore(REPO_ROOT / ".skills")
+
+    cases = [
+        ("find a skill for playwright visual regression testing", "skill-find-skills-v1"),
+        ("my pytest run is failing with an assertion error, please debug it", "skill-systematic-debugging-v1"),
+        ("create a Vellum skill for writing changelog entries in my house style", "skill-skill-creator-v1"),
+    ]
+
+    for prompt, skill_id in cases:
+        matches = {skill["id"] for skill in store.matching_skills(prompt)}
+        assert skill_id in matches
+
+
+def test_requested_capability_skills_avoid_near_miss_prompts():
+    store = SkillStore(REPO_ROOT / ".skills")
+
+    cases = [
+        ("write pytest tests for the new checkout feature", "skill-systematic-debugging-v1"),
+        ("use the existing browser automation skill to inspect this page", "skill-find-skills-v1"),
+        ("use the current sports memory skill to answer this", "skill-skill-creator-v1"),
+    ]
+
+    for prompt, skill_id in cases:
+        matches = {skill["id"] for skill in store.matching_skills(prompt)}
+        assert skill_id not in matches
 
 
 def test_honcho_memory_is_local_noop_when_sdk_missing(monkeypatch):

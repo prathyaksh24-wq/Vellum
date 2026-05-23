@@ -93,7 +93,7 @@ def test_voice_transcribe_rejects_empty_transcript(monkeypatch):
     assert "No speech" in response.json()["detail"]
 
 
-def test_voice_turn_streams_transcript_text_audio_and_final(monkeypatch):
+def test_voice_turn_streams_transcript_text_final_then_audio(monkeypatch):
     learned = []
 
     async def fake_background_learn(query, answer, thread_id="default", source="agent"):
@@ -125,12 +125,13 @@ def test_voice_turn_streams_transcript_text_audio_and_final(monkeypatch):
     assert "token" in names
     assert "tool" in names
     assert "audio" in names
-    assert names[-1] == "final"
+    assert names.index("audio") > names.index("final")
     assert events[0][1]["text"] == "tell me about stillness"
     audio_payload = next(payload for event, payload in events if event == "audio")
     assert base64.b64decode(audio_payload["wav_b64"]) == b"RIFFfake-wave"
-    assert events[-1][1]["answer"] == "Hello there."
-    assert events[-1][1]["voice"] is True
+    final_payload = next(payload for event, payload in events if event == "final")
+    assert final_payload["answer"] == "Hello there."
+    assert final_payload["voice"] is True
     assert learned == [("tell me about stillness", "Hello there.", "voice-thread", "voice")]
 
 

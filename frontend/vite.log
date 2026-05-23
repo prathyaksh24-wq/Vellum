@@ -1,8 +1,19 @@
 
-> vellum-ui@1.0.0 dev
-> vite --host 127.0.0.1 --port 5173
+> vellum-ui@1.0.0 start
+> vite --host 127.0.0.1 --port 5173 --host 127.0.0.1
 
 
-  [32m[1mVITE[22m v7.3.2[39m  [2mready in [0m[1m870[22m[2m[0m ms[22m
+  VITE v7.3.2  ready in 3050 ms
 
-  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+  ➜  Local:   http://127.0.0.1:5173/
+5:46:11 PM [vite] (client) page reload ui/vellum-chat.html
+5:46:11 PM [vite] (client) page reload ui/vellum-chat.html
+5:46:25 PM [vite] (client) page reload ui/vellum-chat.html
+5:46:45 PM [vite] (client) page reload ui/vellum-chat.html
+5:46:58 PM [vite] (client) page reload ui/vellum-chat.html
+5:47:07 PM [vite] (client) page reload ui/vellum-chat.html
+5:47:20 PM [vite] (client) page reload ui/vellum-chat.html
+5:47:44 PM [vite] (client) page reload ui/vellum-chat.html
+5:48:32 PM [vite] (client) page reload ui/vellum-chat.html
+5:48:42 PM [vite] (client) page reload ui/vellum-chat.html
+5:51:25 PM [vite] (client) page reload ui/vellum-chat.html

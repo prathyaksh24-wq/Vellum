@@ -16,6 +16,9 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.playwright_mcp_command == "npx"
     assert "@playwright/mcp@latest" in settings.playwright_mcp_args
     assert isinstance(settings.playwright_mcp_allow_mutations, bool)
+    assert isinstance(settings.computer_use_allow_desktop, bool)
+    assert settings.computer_use_screenshot_dir.name == "screenshots"
+    assert settings.computer_use_activity_overlay is True
     assert settings.github_mcp_url == "https://api.githubcopilot.com/mcp/"
     assert isinstance(settings.github_pat, str)
     assert isinstance(settings.obsidian_api_key, str)

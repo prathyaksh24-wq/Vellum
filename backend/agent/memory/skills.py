@@ -34,6 +34,8 @@ class SkillStore:
             return []
         matches = []
         for skill in self.load_active_skills():
+            if _has_term_subset(query_terms, skill.get("negative_trigger", [])):
+                continue
             trigger_terms = set(_terms(" ".join(skill.get("trigger", []))))
             if not trigger_terms:
                 continue
@@ -54,3 +56,11 @@ class SkillStore:
 
 def _terms(text: str) -> list[str]:
     return [term.casefold() for term in re.findall(r"[A-Za-z0-9]+", text) if len(term) > 2]
+
+
+def _has_term_subset(query_terms: set[str], phrases: list[str]) -> bool:
+    for phrase in phrases:
+        phrase_terms = set(_terms(phrase))
+        if phrase_terms and phrase_terms <= query_terms:
+            return True
+    return False

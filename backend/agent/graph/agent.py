@@ -14,8 +14,21 @@ from agent.config import get_settings
 from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
 from agent.tools.apify import search_amazon
-from agent.tools.browser import browser_action
+from agent.tools.browser import (
+    browser_action,
+    browser_click,
+    browser_close,
+    browser_hover,
+    browser_navigate,
+    browser_press_key,
+    browser_select_option,
+    browser_snapshot,
+    browser_tabs,
+    browser_type,
+    browser_wait,
+)
 from agent.tools.cloud_escalation import escalate_to_cloud
+from agent.tools.computer_use import computer_use
 from agent.tools.context_mode import context_mode
 from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
@@ -39,18 +52,19 @@ Tools:
 5. list_files - List files in a vault directory.
 6. create_note - Create a new Obsidian note.
 7. append_to_note - Append to an existing Obsidian note.
-8. browser_action - Use Playwright MCP for browser navigation and snapshots. Click/type require explicit config.
-9. github_read - Read/search GitHub via GitHub MCP. Write actions are blocked.
-10. github_write - Create/update GitHub resources via GitHub MCP. Requires explicit env flags.
-11. git_action - Local git status/log/branch/pull/commit/push. Writes require explicit env flag.
-12. obsidian_api - Read/search/write Obsidian through Local REST API MCP. Writes require explicit env flags.
-13. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
-14. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
-15. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
-16. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-17. should_fetch_sports - Compute the curiosity score for a sports league (NBA, Formula-One, Premier-League, Champions-League, Boxing, UFC, Ambient) without fetching. Returns score, threshold, budget, and would_fetch.
-18. fetch_sports_if_curious - Maybe fetch a SerpAPI snapshot for a sports league, gated by curiosity. Writes a snapshot under Library/Sports/<league>/snapshots/ and a decision memory under Agent/Memories/. Pass league="" to let the agent auto-pick. Use this when the user asks for live sports updates, stats, fixtures, standings, or news.
-19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+8. computer_use - Full local computer use. mode='desktop' controls the OS screen/mouse/keyboard, opens installed apps with action='open_app', and opens a visible terminal with action='open_terminal' or action='run_terminal_command'. mode='browser' controls the persistent Playwright browser. Desktop input requires COMPUTER_USE_ALLOW_DESKTOP=true plus runtime permission grants.
+9. browser_navigate/browser_snapshot/browser_tabs/browser_click/browser_type/browser_press_key/browser_select_option/browser_hover/browser_wait/browser_close - Use one persistent Playwright MCP browser. Open/select tabs with browser_tabs instead of launching new browsers. Click/type require explicit config.
+10. github_read - Read/search GitHub via GitHub MCP. Write actions are blocked.
+11. github_write - Create/update GitHub resources via GitHub MCP. Requires explicit env flags.
+12. git_action - Local git status/log/branch/pull/commit/push. Writes require explicit env flag.
+13. obsidian_api - Read/search/write Obsidian through Local REST API MCP. Writes require explicit env flags.
+14. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
+15. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
+16. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
+17. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
+18. should_fetch_sports - Compute the curiosity score for a sports league (NBA, Formula-One, Premier-League, Champions-League, Boxing, UFC, Ambient) without fetching. Returns score, threshold, budget, and would_fetch.
+19. fetch_sports_if_curious - Maybe fetch a SerpAPI snapshot for a sports league, gated by curiosity. Writes a snapshot under Library/Sports/<league>/snapshots/ and a decision memory under Agent/Memories/. Pass league="" to let the agent auto-pick. Use this when the user asks for live sports updates, stats, fixtures, standings, or news.
+20. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 
 Rules:
 - Always search the vault first.
@@ -61,8 +75,13 @@ Rules:
 - Reference sources when relevant.
 - For private folder content, paraphrase and summarize rather than quoting raw text.
 - Treat Amazon/Apify results as private and summarize without exposing raw scraped data.
-- Use browser_action only when the user asks for browser automation or live page inspection. Prefer navigate + snapshot before any interaction.
-- Do not use browser_action for purchases, banking, password managers, account settings, or sending messages.
+- Use computer_use only when the user asks for computer/desktop/browser automation or live visual inspection. Prefer mode='browser' for websites and mode='desktop' only when OS-level control is required.
+- If a desktop action returns a permission-required message, ask the user plainly for that permission. Only after an explicit user grant, call computer_use(mode='desktop', action='grant_permission', permission='<permission>', confirm=True).
+- To open installed laptop apps, use computer_use(mode='desktop', action='open_app', app='<app name>') rather than typing into the current window.
+- For terminal work, use computer_use(mode='desktop', action='run_terminal_command', command='<command>') or action='open_terminal'. Do not type terminal commands into the current focused window unless a desktop screenshot confirms the terminal is focused.
+- Desktop computer_use input actions are powerful. Never use desktop mode for purchases, banking, password managers, account settings, sending messages, deleting files, or irreversible actions.
+- Use browser tools only when the user asks for browser automation or live page inspection. Prefer browser_navigate + browser_snapshot before any interaction. Use browser_tabs(action='new') for parallel browser tasks in the same browser instance, and browser_tabs(action='select') before operating on a different tab.
+- Do not use browser tools for purchases, banking, password managers, account settings, or sending messages.
 - Use github_read for GitHub read/search tasks.
 - Use github_write only when the user explicitly asks for GitHub-side repo creation or mutation and the relevant env flags allow it.
 - Use git_action for local git status, log, branch, pull, commit, and push. Never use it to rewrite history or delete refs.
@@ -219,6 +238,17 @@ def build_agent(model: str | None = None):
             search_amazon,
             read_file,
             list_files,
+            computer_use,
+            browser_navigate,
+            browser_snapshot,
+            browser_tabs,
+            browser_click,
+            browser_type,
+            browser_press_key,
+            browser_select_option,
+            browser_hover,
+            browser_wait,
+            browser_close,
             browser_action,
             github_read,
             github_write,
@@ -248,6 +278,17 @@ async def build_async_agent(model: str | None = None):
             search_amazon,
             read_file,
             list_files,
+            computer_use,
+            browser_navigate,
+            browser_snapshot,
+            browser_tabs,
+            browser_click,
+            browser_type,
+            browser_press_key,
+            browser_select_option,
+            browser_hover,
+            browser_wait,
+            browser_close,
             browser_action,
             github_read,
             github_write,
@@ -290,6 +331,12 @@ class LazyAgent:
         target = await self._aget()
         async for event in target.astream_events(*args, **kwargs):
             yield event
+
+    async def aget_state(self, *args, **kwargs):
+        return await (await self._aget()).aget_state(*args, **kwargs)
+
+    async def aupdate_state(self, *args, **kwargs):
+        return await (await self._aget()).aupdate_state(*args, **kwargs)
 
     def invoke(self, *args, **kwargs):
         return self._get().invoke(*args, **kwargs)

@@ -1,10 +1,18 @@
 import asyncio
+import concurrent.futures
 from types import SimpleNamespace
 
 import pytest
 
+from agent.tools import browser as browser_tools
 from agent.mcp import apify_tools, filesystem_tools, github_tools, obsidian_tools, playwright_tools
 from agent.mcp.client import McpToolRequest, run_tools_async
+
+
+@pytest.fixture(autouse=True)
+def close_playwright_client_after_test():
+    yield
+    asyncio.run(playwright_tools.shutdown_async())
 
 
 class AsyncPairContext:
@@ -146,7 +154,234 @@ def test_playwright_click_when_mutations_are_allowed(monkeypatch):
     result = asyncio.run(playwright_tools.run_tool_async({"action": "click", "ref": "e5", "element": "Search"}))
 
     assert result == "clicked"
-    assert fake_session.calls[0] == ("browser_click", {"ref": "e5", "element": "Search"})
+    assert fake_session.calls[0] == ("browser_click", {"target": "e5", "element": "Search"})
+
+
+def test_playwright_click_accepts_target_alias(monkeypatch):
+    fake_session = FakeSession(tools=["browser_click"], text="clicked")
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "click", "target": "button[name=Go]"}))
+
+    assert result == "clicked"
+    assert fake_session.calls[0] == ("browser_click", {"target": "button[name=Go]"})
+
+
+def test_playwright_screenshot_and_resize_map_to_mcp_tools(monkeypatch):
+    fake_session = FakeSession(tools=["browser_take_screenshot", "browser_resize"], text="ok")
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    screenshot = asyncio.run(
+        playwright_tools.run_tool_async(
+            {
+                "action": "screenshot",
+                "target": "main",
+                "filename": "main.png",
+                "full_page": True,
+            }
+        )
+    )
+    resize = asyncio.run(playwright_tools.run_tool_async({"action": "resize", "width": 1280, "height": 720}))
+
+    assert screenshot == "ok"
+    assert resize == "ok"
+    assert fake_session.calls == [
+        (
+            "browser_take_screenshot",
+            {"type": "png", "target": "main", "filename": "main.png", "fullPage": True},
+        ),
+        ("browser_resize", {"width": 1280, "height": 720}),
+    ]
+
+
+def test_playwright_drag_and_fill_form_when_mutations_allowed(monkeypatch):
+    fake_session = FakeSession(tools=["browser_drag", "browser_fill_form"], text="ok")
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    drag = asyncio.run(
+        playwright_tools.run_tool_async(
+            {
+                "action": "drag",
+                "start_target": "source",
+                "end_target": "dest",
+                "start_element": "Source",
+                "end_element": "Destination",
+            }
+        )
+    )
+    fill = asyncio.run(
+        playwright_tools.run_tool_async(
+            {
+                "action": "fill_form",
+                "fields": [
+                    {"target": "input[name=q]", "name": "Query", "type": "textbox", "value": "Vellum"}
+                ],
+            }
+        )
+    )
+
+    assert drag == "ok"
+    assert fill == "ok"
+    assert fake_session.calls == [
+        (
+            "browser_drag",
+            {
+                "startTarget": "source",
+                "endTarget": "dest",
+                "startElement": "Source",
+                "endElement": "Destination",
+            },
+        ),
+        (
+            "browser_fill_form",
+            {"fields": [{"target": "input[name=q]", "name": "Query", "type": "textbox", "value": "Vellum"}]},
+        ),
+    ]
+
+
+def test_playwright_reuses_one_mcp_session_across_browser_actions(monkeypatch):
+    fake_session = FakeSession(tools=["browser_navigate", "browser_snapshot"], text="ok")
+    starts = 0
+
+    class CountingAsyncPairContext:
+        async def __aenter__(self):
+            nonlocal starts
+            starts += 1
+            return "read", "write"
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: CountingAsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    try:
+        first = asyncio.run(playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}))
+        second = asyncio.run(playwright_tools.run_tool_async({"action": "snapshot"}))
+    finally:
+        shutdown = getattr(playwright_tools, "shutdown_async", None)
+        if shutdown is not None:
+            asyncio.run(shutdown())
+
+    assert first == "ok"
+    assert second == "ok"
+    assert starts == 1
+    assert fake_session.calls == [
+        ("browser_navigate", {"url": "https://example.com"}),
+        ("browser_snapshot", {}),
+    ]
+
+
+def test_playwright_client_recreates_asyncio_lock_per_event_loop():
+    client = playwright_tools._PlaywrightMcpClient()
+
+    async def lock_id():
+        return id(client._lock_for_current_loop())
+
+    first = asyncio.run(lock_id())
+    second = asyncio.run(lock_id())
+
+    assert first != second
+
+
+def test_playwright_worker_shutdown_after_transport_error(monkeypatch):
+    events = []
+
+    class FakeWorker:
+        def submit(self, coro):
+            coro.close()
+            future = concurrent.futures.Future()
+            future.set_exception(RuntimeError("asyncio event loop mismatch"))
+            return future
+
+        async def shutdown_async(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(playwright_tools, "_worker", FakeWorker())
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "snapshot"}))
+
+    assert "Playwright MCP failed" in result
+    assert events == ["shutdown"]
+
+
+def test_playwright_close_uses_short_timeout_and_resets_session(monkeypatch):
+    fake_session = FakeSession(tools=["browser_close"], text="closed")
+    closed = []
+
+    async def never_return(name, params):
+        await asyncio.Future()
+
+    async def fake_close():
+        closed.append("close")
+
+    fake_session.call_tool = never_return
+    monkeypatch.setattr(playwright_tools, "_mcp_action_timeout_seconds", lambda action: 0.01)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    client = playwright_tools._PlaywrightMcpClient()
+    monkeypatch.setattr(client, "close", fake_close)
+
+    result = asyncio.run(client.call({"action": "close"}))
+
+    assert "timed out" in result
+    assert closed == ["close"]
+
+
+def test_playwright_tabs_new_maps_to_browser_tabs(monkeypatch):
+    fake_session = FakeSession(tools=["browser_tabs"], text="tab opened")
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    try:
+        result = asyncio.run(
+            playwright_tools.run_tool_async(
+                {"action": "tabs", "tab_action": "new", "url": "https://example.com/docs"}
+            )
+        )
+    finally:
+        shutdown = getattr(playwright_tools, "shutdown_async", None)
+        if shutdown is not None:
+            asyncio.run(shutdown())
+
+    assert result == "tab opened"
+    assert fake_session.calls[0] == (
+        "browser_tabs",
+        {"action": "new", "url": "https://example.com/docs"},
+    )
+
+
+def test_browser_tabs_tool_calls_playwright_tabs(monkeypatch):
+    calls = []
+    monkeypatch.setattr(browser_tools, "playwright_run", lambda params: calls.append(params) or "tabs")
+
+    result = browser_tools.browser_tabs.invoke({"action": "new", "url": "https://example.com/docs"})
+
+    assert result == "tabs"
+    assert calls == [{"action": "tabs", "tab_action": "new", "index": "", "url": "https://example.com/docs"}]
+
+
+def test_browser_click_and_type_tools_call_playwright_actions(monkeypatch):
+    calls = []
+    monkeypatch.setattr(browser_tools, "playwright_run", lambda params: calls.append(params) or "ok")
+
+    click_result = browser_tools.browser_click.invoke({"ref": "e5", "element": "Search"})
+    type_result = browser_tools.browser_type.invoke(
+        {"ref": "e6", "element": "Search input", "text": "vellum", "submit": True}
+    )
+
+    assert click_result == "ok"
+    assert type_result == "ok"
+    assert calls == [
+        {"action": "click", "ref": "e5", "element": "Search"},
+        {"action": "type", "ref": "e6", "element": "Search input", "text": "vellum", "submit": True},
+    ]
 
 
 def test_github_search_repositories_calls_remote_mcp(monkeypatch):

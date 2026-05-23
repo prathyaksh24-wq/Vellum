@@ -298,6 +298,7 @@
   .input-shell.voice-listening { border-color: rgba(217, 119, 70, 0.56); box-shadow: 0 0 0 1px rgba(217, 119, 70, 0.1); }
   .input-shell.voice-listening .voice-btn { color: var(--ember); border-color: rgba(217, 119, 70, 0.62); }
   .input-shell.voice-working .voice-btn { color: var(--soft-ember); border-color: rgba(217, 119, 70, 0.42); }
+  .input-shell.voice-working .stop-btn { display: inline-flex; pointer-events: auto; }
   .input-row { display: flex; align-items: center; gap: 14px; }
   .input { flex: 1; background: transparent; border: none; outline: none; color: var(--parchment); font-family: 'Fraunces', serif; font-weight: 300; font-size: 15.5px; line-height: 1.6; caret-color: var(--ember); }
   .input::placeholder { color: var(--whisper); font-style: italic; }
@@ -1054,8 +1055,10 @@
   let voiceChunks = [];
   let voiceHoldTimer = null;
   let suppressVoiceClick = false;
+  let pendingVoiceDraft = false;
   let audioCtx = null;
   let playbackChain = Promise.resolve();
+  let speechPlaybackJobs = 0;
   const activeAudioSources = new Set();
 
   function setVoiceState(mode, label = 'Trained on you') {
@@ -1091,7 +1094,7 @@
       setVoiceState('speaking', 'Speaking');
       source.start();
     })).finally(() => {
-      if (!activeStreamAbort && activeAudioSources.size === 0) setVoiceState('idle');
+      if (!activeStreamAbort && activeAudioSources.size === 0 && speechPlaybackJobs === 0) setVoiceState('idle');
     });
     return playbackChain;
   }
@@ -1106,6 +1109,7 @@
   async function speakText(text) {
     const clean = (text || '').trim();
     if (!clean) return;
+    speechPlaybackJobs += 1;
     try {
       stopVoicePlayback();
       setVoiceState('speaking', 'Speaking');
@@ -1118,7 +1122,9 @@
       await playArrayBuffer(await res.arrayBuffer());
     } catch (err) {
       console.warn(`[voice speak failed] ${err && err.message ? err.message : err}`);
-      setVoiceState('idle');
+    } finally {
+      speechPlaybackJobs = Math.max(0, speechPlaybackJobs - 1);
+      if (!activeStreamAbort && activeAudioSources.size === 0) setVoiceState('idle');
     }
   }
 
@@ -1197,10 +1203,11 @@
         try {
           const raw = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
           const wav = await normalizeVoiceBlob(raw);
-          await sendVoice(wav);
+          await transcribeVoice(wav);
         } catch (err) {
-          setVoiceState('idle', 'Voice unreachable');
-          renderMessage({ role: 'agent', text: `couldn't hear that — ${(err && err.message ? err.message : 'unknown').toLowerCase()}`, sourceLabel: 'voice', error: true });
+          const detail = err && err.message ? err.message : 'unknown';
+          setVoiceState('idle', /no speech/i.test(detail) ? 'No speech' : 'Voice unreachable');
+          console.warn(`[voice transcribe failed] ${err && err.message ? err.message : err}`);
         }
       });
       mediaRecorder.start();
@@ -1353,6 +1360,34 @@
     renderMessage(msg);
   }
 
+  function insertVoiceTranscript(text) {
+    const clean = (text || '').trim();
+    if (!clean) return;
+    const current = chatInput.value.trim();
+    chatInput.value = current ? `${current} ${clean}` : clean;
+    pendingVoiceDraft = true;
+    chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+    chatInput.focus();
+    chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+    setVoiceState('idle', 'Ready to send');
+  }
+
+  async function transcribeVoice(audioBlob) {
+    const form = new FormData();
+    form.append('audio', audioBlob, 'speech.wav');
+    const res = await fetch(`${API_BASE}/api/voice/transcribe`, {
+      method: 'POST',
+      body: form,
+    });
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try { detail = (await res.json()).detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    const payload = await res.json();
+    insertVoiceTranscript(payload.transcript || '');
+  }
+
   async function sendVoice(audioBlob) {
     if (activeStreamAbort) return;
     const t = ensureThread();
@@ -1501,12 +1536,14 @@
     if (!text) return;
     if (text.startsWith('/')) return runCommand(text);
     if (activeStreamAbort) return; // single in-flight
+    const shouldSpeakResponse = pendingVoiceDraft;
+    pendingVoiceDraft = false;
     const t = ensureThread();
     if (!t.messages.length && !t.title || t.title === 'untitled') {
       t.title = text.slice(0, 60);
     }
     showChat();
-    const userMsg = { role: 'user', text, ts: Date.now() };
+    const userMsg = { role: 'user', text, ts: Date.now(), voice: shouldSpeakResponse };
     t.messages.push(userMsg);
     t.updatedAt = Date.now();
     renderMessage(userMsg);
@@ -1536,7 +1573,7 @@
       const res = await fetch(`${API_BASE}/api/chat/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, thread_id: t.id, model: state.model }),
+        body: JSON.stringify({ message: text, thread_id: t.id, model: state.model, voice: shouldSpeakResponse }),
         signal: activeStreamAbort.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -1604,7 +1641,7 @@
         agentMsgNode.appendChild(fnNode);
         requestAnimationFrame(() => fnNode.classList.add('arrived'));
       }
-      const agentMsg = { role: 'agent', text: answer, tools, sourceLabel, ts: Date.now() };
+      const agentMsg = { role: 'agent', text: answer, tools, sourceLabel, ts: Date.now(), voice: shouldSpeakResponse };
       agentMsgNode.dataset.speechText = answer || '';
       t.messages.push(agentMsg);
       t.updatedAt = Date.now();
@@ -1612,6 +1649,7 @@
       renderRail();
       threadMeta.textContent = metaFor(t);
       scrollToBottom();
+      if (shouldSpeakResponse) void speakText(answer);
     }
 
     function handleStreamError(err) {
@@ -1655,6 +1693,9 @@
     const has = value.trim().length > 0;
     emberDot.classList.toggle('visible', has);
     inputShell.classList.toggle('has-content', has);
+    if (!has) {
+      pendingVoiceDraft = false;
+    }
     inputShell.classList.remove('privacy-yellow', 'privacy-red');
     if (has) {
       const klass = classifyPrivacy(value);
@@ -1666,7 +1707,7 @@
   });
   chatInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(chatInput.value); }
-    if (e.key === 'Escape' && (activeStreamAbort || mediaRecorder)) { e.preventDefault(); cancelActiveVoice(); }
+    if (e.key === 'Escape' && (activeStreamAbort || mediaRecorder || activeAudioSources.size)) { e.preventDefault(); cancelActiveVoice(); }
     dismissIdleFragment();
     resetIdleTimer();
   });

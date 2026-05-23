@@ -2,6 +2,7 @@ from types import SimpleNamespace
 import asyncio
 
 from fastapi.testclient import TestClient
+from langchain_core.messages import ToolMessage
 import pytest
 
 from agent import api
@@ -61,6 +62,107 @@ def test_chat_endpoint_invokes_agent(monkeypatch):
     assert body["tools"] == ["search_my_notes"]
     assert fake_agent.calls[0][0]["messages"][0]["content"] == "hello"
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
+
+
+def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
+    class RepairingAgent:
+        def __init__(self):
+            self.events = []
+
+        async def aget_state(self, config):
+            self.events.append(("get_state", config["configurable"]["thread_id"]))
+            return SimpleNamespace(
+                values={
+                    "messages": [
+                        SimpleNamespace(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "name": "browser_tabs",
+                                    "args": {"action": "new", "url": "https://docs.google.com"},
+                                    "id": "call-browser-tabs",
+                                }
+                            ],
+                        )
+                    ]
+                }
+            )
+
+        async def aupdate_state(self, config, values):
+            self.events.append(("update_state", config["configurable"]["thread_id"], values))
+
+        async def ainvoke(self, payload, config=None):
+            self.events.append(("ainvoke", config["configurable"]["thread_id"]))
+            return {"messages": [SimpleNamespace(content="recovered", tool_calls=[])]}
+
+    fake_agent = RepairingAgent()
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or object())
+
+    response = asyncio.run(api._run_agent("continue", thread_id="frontend"))
+
+    assert response.answer == "recovered"
+    assert fake_agent.events[0] == ("get_state", "frontend")
+    assert fake_agent.events[1][0] == "update_state"
+    repaired_messages = fake_agent.events[1][2]["messages"]
+    assert len(repaired_messages) == 1
+    assert isinstance(repaired_messages[0], ToolMessage)
+    assert repaired_messages[0].tool_call_id == "call-browser-tabs"
+    assert "browser_tabs" in repaired_messages[0].content
+    assert fake_agent.events[2] == ("ainvoke", "frontend")
+
+
+def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
+    class FailingStreamAgent:
+        def __init__(self):
+            self.state_reads = 0
+            self.repairs = []
+
+        async def aget_state(self, config):
+            self.state_reads += 1
+            messages = []
+            if self.state_reads > 1:
+                messages = [
+                    SimpleNamespace(
+                        content="",
+                        tool_calls=[
+                            {
+                                "name": "browser_tabs",
+                                "args": {"action": "close", "index": "2"},
+                                "id": "call-close-tab",
+                            }
+                        ],
+                    )
+                ]
+            return SimpleNamespace(values={"messages": messages})
+
+        async def aupdate_state(self, config, values):
+            self.repairs.append(values)
+
+        async def astream_events(self, *args, **kwargs):
+            yield {"event": "on_tool_start", "name": "browser_tabs"}
+            raise RuntimeError("tool node failed")
+
+    fake_agent = FailingStreamAgent()
+    monkeypatch.setattr(api, "agent", fake_agent)
+
+    async def run_case():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="open tabs",
+            active_thread_id="frontend",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(run_case())
+
+    assert any("event: error" in chunk for chunk in chunks)
+    assert len(fake_agent.repairs) == 1
+    repaired_messages = fake_agent.repairs[0]["messages"]
+    assert isinstance(repaired_messages[0], ToolMessage)
+    assert repaired_messages[0].tool_call_id == "call-close-tab"
 
 
 def test_reindex_endpoint_returns_chunk_count(monkeypatch):
