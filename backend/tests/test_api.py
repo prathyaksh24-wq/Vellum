@@ -73,14 +73,19 @@ def test_cors_allows_local_vite_fallback_ports():
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
 
 
-def test_chat_endpoint_invokes_agent(monkeypatch):
+def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     fake_agent = FakeAgent()
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
 
     def fake_create_task(coro):
         coro.close()
         return object()
 
     monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
     monkeypatch.setattr(api.asyncio, "create_task", fake_create_task)
 
     with TestClient(api.app) as client:
@@ -204,51 +209,75 @@ def test_workspace_api_accepts_core_milestone_actions(monkeypatch):
     assert seen == [action["action"] for action in actions]
 
 
-def test_computer_use_desktop_demo_requires_enabled_mode(monkeypatch, tmp_path):
+def test_computer_use_session_start_and_stop(monkeypatch, tmp_path):
     runtime = ComputerUseRuntime(
         state_path=tmp_path / "mode.json",
         event_log_path=tmp_path / "events.jsonl",
     )
     monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    overlay_calls = []
 
+    class FakeOverlay:
+        def start(self):
+            overlay_calls.append("start")
+            return "overlay started"
+
+        def stop(self):
+            overlay_calls.append("stop")
+            return "overlay stopped"
+
+        def status(self):
+            return {"ready": overlay_calls[-1:] == ["start"]}
+
+    monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
+
+    with TestClient(api.app) as client:
+        started = client.post("/api/computer-use/session/start", json={"source": "test", "thread_id": "frontend"})
+        stopped = client.post("/api/computer-use/session/stop", json={"source": "test", "reason": "done"})
+
+    assert started.status_code == 200
+    assert started.json()["status"]["enabled"] is True
+    assert stopped.status_code == 200
+    assert stopped.json()["status"]["enabled"] is False
+    assert overlay_calls == ["start", "stop"]
+
+
+def test_computer_use_desktop_demo_endpoint_removed():
     with TestClient(api.app) as client:
         response = client.post("/api/computer-use/desktop/demo", json={"source": "test", "confirm": True})
 
-    assert response.status_code == 409
-    assert "Enable computer use" in response.json()["detail"]
+    assert response.status_code == 404
 
 
-def test_computer_use_desktop_demo_starts_background_task(monkeypatch, tmp_path):
+def test_computer_use_session_task_records_instruction(monkeypatch, tmp_path):
     runtime = ComputerUseRuntime(
         state_path=tmp_path / "mode.json",
         event_log_path=tmp_path / "events.jsonl",
     )
     runtime.enable(source="test")
     monkeypatch.setattr(api, "computer_use_runtime", runtime)
-    calls = []
 
-    def fake_to_thread(func, *args):
-        calls.append((func, args))
+    class FakeOverlay:
+        def start(self):
+            return "overlay started"
 
-        async def run():
-            return None
+        def stop(self):
+            return "overlay stopped"
 
-        return run()
+        def status(self):
+            return {"ready": True}
 
-    class FakeTask:
-        def __init__(self, coro):
-            self.coro = coro
-            coro.close()
-
-    monkeypatch.setattr(api.asyncio, "to_thread", fake_to_thread)
-    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: FakeTask(coro))
+    monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
     with TestClient(api.app) as client:
-        response = client.post("/api/computer-use/desktop/demo", json={"source": "test", "confirm": True})
+        response = client.post(
+            "/api/computer-use/session/task",
+            json={"source": "text", "thread_id": "frontend", "task": "open notepad"},
+        )
 
     assert response.status_code == 200
-    assert response.json()["message"] == "Visible desktop control test started."
-    assert calls == [(api._run_desktop_control_demo, ("test",))]
+    assert response.json()["result"]["status"] in {"queued", "done"}
+    assert runtime.recent_events()[-1]["kind"] == "task_finished"
 
 
 def test_computer_use_enable_starts_activity_overlay(monkeypatch, tmp_path):
@@ -258,14 +287,27 @@ def test_computer_use_enable_starts_activity_overlay(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(api, "computer_use_runtime", runtime)
     overlay_calls = []
-    monkeypatch.setattr(api.desktop_tools, "start_activity_overlay", lambda: overlay_calls.append("start") or "overlay started")
+
+    class FakeOverlay:
+        def start(self):
+            overlay_calls.append("start")
+            return "overlay started"
+
+        def stop(self):
+            overlay_calls.append("stop")
+            return "overlay stopped"
+
+        def status(self):
+            return {"ready": True}
+
+    monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
     with TestClient(api.app) as client:
         response = client.post("/api/computer-use/enable", json={"source": "test"})
 
     assert response.status_code == 200
     assert overlay_calls == ["start"]
-    assert runtime.recent_events()[-1]["kind"] == "activity_overlay"
+    assert runtime.recent_events()[-1]["kind"] == "session_started"
 
 
 def test_computer_use_disable_stops_activity_overlay(monkeypatch, tmp_path):
@@ -276,14 +318,27 @@ def test_computer_use_disable_stops_activity_overlay(monkeypatch, tmp_path):
     runtime.enable(source="test")
     monkeypatch.setattr(api, "computer_use_runtime", runtime)
     overlay_calls = []
-    monkeypatch.setattr(api.desktop_tools, "stop_activity_overlay", lambda: overlay_calls.append("stop") or "overlay stopped")
+
+    class FakeOverlay:
+        def start(self):
+            overlay_calls.append("start")
+            return "overlay started"
+
+        def stop(self):
+            overlay_calls.append("stop")
+            return "overlay stopped"
+
+        def status(self):
+            return {"ready": False}
+
+    monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
     with TestClient(api.app) as client:
         response = client.post("/api/computer-use/disable", json={"source": "test"})
 
     assert response.status_code == 200
     assert overlay_calls == ["stop"]
-    assert runtime.recent_events()[-1]["kind"] == "activity_overlay"
+    assert runtime.recent_events()[-1]["kind"] == "session_stopped"
 
 
 def test_chat_stream_intercepts_enable_computer_use_command(monkeypatch, tmp_path):
@@ -303,7 +358,18 @@ def test_chat_stream_intercepts_enable_computer_use_command(monkeypatch, tmp_pat
     monkeypatch.setattr(api, "agent", FailingAgent())
     monkeypatch.setattr(api, "computer_use_runtime", runtime)
     monkeypatch.setattr(api, "_background_learn", fake_background_learn)
-    monkeypatch.setattr(api.desktop_tools, "start_activity_overlay", lambda: "overlay started")
+
+    class FakeOverlay:
+        def start(self):
+            return "overlay started"
+
+        def stop(self):
+            return "overlay stopped"
+
+        def status(self):
+            return {"ready": True}
+
+    monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
     with TestClient(api.app) as client:
         with client.stream(

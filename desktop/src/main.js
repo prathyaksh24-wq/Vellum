@@ -3,7 +3,6 @@ import { invoke } from "@tauri-apps/api/core";
 const status = document.querySelector("#status");
 const openVellum = document.querySelector("#openVellum");
 const enableComputer = document.querySelector("#enableComputer");
-const testComputer = document.querySelector("#testComputer");
 const disableComputer = document.querySelector("#disableComputer");
 
 function withTimeout(promise, label, timeoutMs = 8000) {
@@ -28,6 +27,15 @@ async function postJson(path, body, timeoutMs = 8000) {
     throw new Error(payload.detail || payload.message || `request failed: ${response.status}`);
   }
   return payload;
+}
+
+async function setComputerOverlay(enabled) {
+  try {
+    await withTimeout(invoke("set_overlay", { enabled }), enabled ? "show overlay" : "hide overlay", 3000);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function runButton(button, label, action) {
@@ -66,20 +74,20 @@ openVellum.addEventListener("click", () => {
 
 enableComputer.addEventListener("click", async () => {
   await runButton(enableComputer, "enabling computer use", async () => {
-    return postJson("/api/computer-use/enable", { source: "tauri" });
-  });
-});
-
-testComputer.addEventListener("click", async () => {
-  await runButton(testComputer, "starting visible control test", async () => {
-    await postJson("/api/computer-use/enable", { source: "tauri", task: "visible desktop control test" });
-    return postJson("/api/computer-use/desktop/demo", { source: "tauri", confirm: true });
+    const overlayReady = await setComputerOverlay(true);
+    const result = await postJson("/api/computer-use/session/start", { source: "tauri" });
+    if (!overlayReady) {
+      result.message = `${result.message} Overlay warning: desktop glow did not confirm.`;
+    }
+    return result;
   });
 });
 
 disableComputer.addEventListener("click", async () => {
   await runButton(disableComputer, "disabling computer use", async () => {
-    return postJson("/api/computer-use/disable", { source: "tauri" });
+    const result = await postJson("/api/computer-use/session/stop", { source: "tauri" });
+    await setComputerOverlay(false);
+    return result;
   });
 });
 

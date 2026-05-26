@@ -21,6 +21,8 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
+from agent.computer_use.overlay import DesktopActivityOverlay
+from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import get_settings
@@ -38,7 +40,6 @@ from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
-from agent.tools import desktop as desktop_tools
 from agent.tools.obsidian_write import store_qa_pair
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
@@ -94,11 +95,6 @@ class ComputerUseModeRequest(BaseModel):
     reason: str | None = None
 
 
-class ComputerUseDemoRequest(BaseModel):
-    source: str = "ui"
-    confirm: bool = False
-
-
 class WorkspaceActionRequest(BaseModel):
     action: str = Field(min_length=1)
     url: str | None = None
@@ -111,12 +107,27 @@ class WorkspaceActionRequest(BaseModel):
     submit: bool | None = None
 
 
+class ComputerUseTaskRequest(BaseModel):
+    thread_id: str | None = None
+    source: str = "ui"
+    task: str = Field(min_length=1)
+
+
 class ReindexResponse(BaseModel):
     chunks: int
 
 
 class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+
+
+def _computer_use_overlay() -> DesktopActivityOverlay:
+    return DesktopActivityOverlay()
+
+
+def _computer_use_session(source: str = "ui") -> ComputerUseSession:
+    overlay = NoopOverlay() if source == "tauri" else _computer_use_overlay()
+    return ComputerUseSession(runtime=computer_use_runtime, overlay=overlay)
 
 
 class ActiveModelResponse(BaseModel):
@@ -501,6 +512,16 @@ async def _stream_agent_turn(
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
+            if computer_use_runtime.status().get("enabled") and not computer_use_runtime.status().get("paused"):
+                try:
+                    _computer_use_session(source).submit_task(clean_message, source=source, thread_id=active_thread_id)
+                except ComputerUseSessionError as exc:
+                    computer_use_runtime.record_event(
+                        "task_rejected",
+                        str(exc),
+                        tool="computer_use_session",
+                        data={"thread_id": active_thread_id, "source": source},
+                    )
             agent_message = _agent_message_for_runtime_mode(clean_message)
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": agent_message}]},
@@ -599,16 +620,16 @@ def _apply_computer_use_intent(
     task: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if intent == "enable":
-        status = computer_use_runtime.enable(source=source, thread_id=thread_id, task=task)
+        status = _computer_use_session(source).start(source=source, thread_id=thread_id, task=task)
         return "Computer use is on. I have control when you give me a task.", status
     if intent == "disable":
-        status = computer_use_runtime.disable(source=source)
+        status = _computer_use_session(source).stop(source=source)
         return "Computer use is off. I am back in default mode.", status
     if intent == "pause":
-        status = computer_use_runtime.pause(source=source)
+        status = _computer_use_session(source).pause(source=source)
         return "Computer use is paused.", status
     if intent == "resume":
-        status = computer_use_runtime.resume(source=source)
+        status = _computer_use_session(source).resume(source=source)
         return "Computer use is ready again.", status
     return "I could not change computer use mode.", computer_use_runtime.status()
 
@@ -655,67 +676,6 @@ def _workspace_action_payload(request: WorkspaceActionRequest) -> dict[str, Any]
     return {key: value for key, value in request.model_dump().items() if value is not None}
 
 
-def _desktop_demo_call(action: str, **params: Any) -> str:
-    payload = {"action": action, **params}
-    computer_use_runtime.record_event(
-        "desktop_demo_action_start",
-        f"Desktop demo {action} started.",
-        tool="computer_use_desktop",
-        data={"action": action},
-    )
-    result = desktop_tools.run_desktop_action(payload)
-    computer_use_runtime.record_event(
-        "desktop_demo_action",
-        result,
-        tool="computer_use_desktop",
-        data={"action": action, "result": result},
-    )
-    return result
-
-
-def _screen_center() -> tuple[int, int]:
-    result = desktop_tools.run_desktop_action({"action": "screen_size"})
-    try:
-        raw_size = result.rsplit(":", 1)[1].strip().rstrip(".")
-        width_text, height_text = raw_size.lower().split("x", 1)
-        width = int(width_text)
-        height = int(height_text)
-        return max(160, width // 2), max(120, height // 2)
-    except Exception:
-        return 640, 360
-
-
-def _run_desktop_control_demo(source: str) -> None:
-    computer_use_runtime.record_event(
-        "desktop_demo_started",
-        "Visible desktop control test started.",
-        tool="computer_use_desktop",
-        data={"source": source},
-    )
-    try:
-        _desktop_demo_call("grant_permission", permission="open_apps", confirm=True)
-        _desktop_demo_call("grant_permission", permission="desktop_control", confirm=True)
-        _desktop_demo_call("open_app", app="notepad")
-        time.sleep(1.2)
-        x, y = _screen_center()
-        _desktop_demo_call("move", x=x, y=y, duration=0.35)
-        _desktop_demo_call("click", x=x, y=y)
-        _desktop_demo_call("type", text="Vellum computer-use test is controlling this desktop.", interval=0.02)
-        _desktop_demo_call("press_key", key="enter")
-        _desktop_demo_call("type", text="You should be able to see typing, clicking, and scrolling.", interval=0.02)
-        _desktop_demo_call("press_key", key="enter")
-        _desktop_demo_call("type", text="Test complete.", interval=0.02)
-        _desktop_demo_call("scroll", amount=-3)
-        _desktop_demo_call("scroll", amount=3)
-    finally:
-        computer_use_runtime.record_event(
-            "desktop_demo_finished",
-            "Visible desktop control test finished.",
-            tool="computer_use_desktop",
-            data={"source": source},
-        )
-
-
 @router.post("/computer-use/workspace/action")
 async def computer_use_workspace_action(request: WorkspaceActionRequest) -> dict[str, Any]:
     params = _workspace_action_payload(request)
@@ -747,56 +707,71 @@ async def computer_use_workspace_action(request: WorkspaceActionRequest) -> dict
     }
 
 
-@router.post("/computer-use/enable")
-async def computer_use_enable(request: ComputerUseModeRequest) -> dict[str, Any]:
+@router.post("/computer-use/session/start")
+async def computer_use_session_start(request: ComputerUseModeRequest) -> dict[str, Any]:
     active_thread_id = request.thread_id or get_settings().thread_id
-    status = computer_use_runtime.enable(source=request.source, thread_id=active_thread_id, task=request.task)
-    overlay = desktop_tools.start_activity_overlay()
-    computer_use_runtime.record_event(
-        "activity_overlay",
-        overlay,
-        tool="computer_use_desktop",
-        data={"source": request.source},
-    )
+    try:
+        status = _computer_use_session(request.source).start(
+            source=request.source, thread_id=active_thread_id, task=request.task
+        )
+    except ComputerUseSessionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"status": status, "message": "Computer use is on. I have control when you give me a task."}
 
 
-@router.post("/computer-use/desktop/demo")
-async def computer_use_desktop_demo(request: ComputerUseDemoRequest) -> dict[str, Any]:
-    if not request.confirm:
-        raise HTTPException(status_code=400, detail="confirm=true is required to run the visible desktop control test.")
-    if not computer_use_runtime.is_enabled():
-        raise HTTPException(status_code=409, detail="Enable computer use before running the visible desktop control test.")
-    asyncio.create_task(asyncio.to_thread(_run_desktop_control_demo, request.source))
-    return {
-        "status": computer_use_runtime.status(),
-        "message": "Visible desktop control test started.",
-    }
+@router.post("/computer-use/session/stop")
+async def computer_use_session_stop(request: ComputerUseModeRequest) -> dict[str, Any]:
+    status = _computer_use_session(request.source).stop(source=request.source, reason=request.reason)
+    return {"status": status, "message": "Computer use is off. I am back in default mode."}
+
+
+@router.post("/computer-use/session/pause")
+async def computer_use_session_pause(request: ComputerUseModeRequest) -> dict[str, Any]:
+    status = _computer_use_session(request.source).pause(source=request.source)
+    return {"status": status, "message": "Computer use is paused."}
+
+
+@router.post("/computer-use/session/resume")
+async def computer_use_session_resume(request: ComputerUseModeRequest) -> dict[str, Any]:
+    status = _computer_use_session(request.source).resume(source=request.source)
+    return {"status": status, "message": "Computer use is ready again."}
+
+
+@router.post("/computer-use/session/task")
+async def computer_use_session_task(request: ComputerUseTaskRequest) -> dict[str, Any]:
+    active_thread_id = request.thread_id or get_settings().thread_id
+    try:
+        result = _computer_use_session(request.source).submit_task(
+            request.task, source=request.source, thread_id=active_thread_id
+        )
+    except ComputerUseSessionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"status": computer_use_runtime.status(), "result": result}
+
+
+@router.get("/computer-use/session/status")
+async def computer_use_session_status() -> dict[str, Any]:
+    return _computer_use_session().status()
+
+
+@router.post("/computer-use/enable")
+async def computer_use_enable(request: ComputerUseModeRequest) -> dict[str, Any]:
+    return await computer_use_session_start(request)
 
 
 @router.post("/computer-use/disable")
 async def computer_use_disable(request: ComputerUseModeRequest) -> dict[str, Any]:
-    overlay = desktop_tools.stop_activity_overlay()
-    status = computer_use_runtime.disable(source=request.source, reason=request.reason)
-    computer_use_runtime.record_event(
-        "activity_overlay",
-        overlay,
-        tool="computer_use_desktop",
-        data={"source": request.source, "reason": request.reason},
-    )
-    return {"status": status, "message": "Computer use is off. I am back in default mode."}
+    return await computer_use_session_stop(request)
 
 
 @router.post("/computer-use/pause")
 async def computer_use_pause(request: ComputerUseModeRequest) -> dict[str, Any]:
-    status = computer_use_runtime.pause(source=request.source)
-    return {"status": status, "message": "Computer use is paused."}
+    return await computer_use_session_pause(request)
 
 
 @router.post("/computer-use/resume")
 async def computer_use_resume(request: ComputerUseModeRequest) -> dict[str, Any]:
-    status = computer_use_runtime.resume(source=request.source)
-    return {"status": status, "message": "Computer use is ready again."}
+    return await computer_use_session_resume(request)
 
 
 @router.get("/computer-use/events")

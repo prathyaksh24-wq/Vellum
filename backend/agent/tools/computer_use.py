@@ -37,6 +37,7 @@ def _desktop_params(
     shell: str,
     app: str,
     target: str,
+    tab_action: str,
     permission: str,
     confirm: bool,
 ) -> dict[str, Any]:
@@ -52,7 +53,8 @@ def _desktop_params(
         params["amount"] = amount
     if action == "type":
         params["text"] = text
-        params["interval"] = interval
+        if interval:
+            params["interval"] = interval
     if action == "press_key":
         params["key"] = key
     if action == "hotkey":
@@ -62,8 +64,10 @@ def _desktop_params(
     if action in {"open_terminal", "run_terminal_command"}:
         _put(params, "command", command or text)
         _put(params, "shell", shell)
-    if action == "open_app":
+    if action in {"open_app", "close_app"}:
         _put(params, "app", app or target or text)
+    if action in {"switch_app", "switch_browser_tab"}:
+        _put(params, "direction", tab_action or target or text)
     if action == "grant_permission":
         _put(params, "permission", permission)
         params["confirm"] = confirm
@@ -211,6 +215,7 @@ def computer_use(
             shell=shell,
             app=app,
             target=target,
+            tab_action=tab_action,
             permission=permission,
             confirm=confirm,
         )

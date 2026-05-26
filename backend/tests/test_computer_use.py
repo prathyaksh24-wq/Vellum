@@ -54,6 +54,66 @@ class FakePyAutoGui:
         self.calls.append(("hotkey", keys))
 
 
+def test_desktop_type_uses_slightly_slower_default_interval(monkeypatch):
+    fake = FakePyAutoGui()
+    monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+
+    result = desktop_tools.run_desktop_action({"action": "type", "text": "KSI"})
+
+    assert result == "Desktop type completed."
+    assert fake.calls == [("write", "KSI", 0.025)]
+
+
+def test_desktop_close_window_uses_alt_f4(monkeypatch):
+    fake = FakePyAutoGui()
+    monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+
+    result = desktop_tools.run_desktop_action({"action": "close_window"})
+
+    assert result == "Desktop close window requested."
+    assert fake.calls == [("hotkey", ("alt", "f4"))]
+
+
+def test_desktop_switch_app_uses_alt_tab(monkeypatch):
+    fake = FakePyAutoGui()
+    monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+
+    result = desktop_tools.run_desktop_action({"action": "switch_app"})
+
+    assert result == "Desktop app switch requested: next."
+    assert fake.calls == [("hotkey", ("alt", "tab"))]
+
+
+def test_desktop_switch_browser_tab_uses_ctrl_tab(monkeypatch):
+    fake = FakePyAutoGui()
+    monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+
+    result = desktop_tools.run_desktop_action({"action": "switch_browser_tab", "direction": "previous"})
+
+    assert result == "Desktop browser tab switch requested: previous."
+    assert fake.calls == [("hotkey", ("ctrl", "shift", "tab"))]
+
+
+def test_desktop_close_app_invokes_taskkill(monkeypatch):
+    calls = []
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(desktop_tools.subprocess, "run", lambda args, **kwargs: calls.append((args, kwargs)))
+
+    result = desktop_tools.run_desktop_action({"action": "close_app", "app": "chrome"})
+
+    assert result == "Desktop app close requested: chrome.exe."
+    assert calls[0][0] == ["taskkill", "/IM", "chrome.exe"]
+
+
 def test_desktop_screenshot_saves_file(monkeypatch, tmp_path):
     fake = FakePyAutoGui()
     monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
@@ -143,7 +203,7 @@ def test_desktop_mutating_action_wraps_orange_activity_overlay(monkeypatch):
 
     assert result == "Desktop type completed."
     assert events == ["start", "stop"]
-    assert fake.calls == [("write", "codex", 0)]
+    assert fake.calls == [("write", "codex", 0.025)]
 
 
 def test_desktop_open_app_uses_visible_app_launcher_when_granted(monkeypatch):
@@ -262,6 +322,30 @@ def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
 
     assert result == "app-ok"
     assert calls == [{"action": "open_app", "app": "GitHub Desktop"}]
+
+
+def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):
+    calls = []
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "run_desktop_action",
+        lambda params: calls.append(params) or "desktop-ok",
+    )
+
+    close_result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "close_app", "target": "chrome"}
+    )
+    switch_result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "switch_browser_tab", "tab_action": "previous"}
+    )
+
+    assert close_result == "desktop-ok"
+    assert switch_result == "desktop-ok"
+    assert calls == [
+        {"action": "close_app", "app": "chrome"},
+        {"action": "switch_browser_tab", "direction": "previous"},
+    ]
 
 
 def test_computer_use_routes_browser(monkeypatch):

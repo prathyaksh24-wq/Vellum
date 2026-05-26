@@ -29,6 +29,11 @@ MUTATING_DESKTOP_ACTIONS = {
     "open_terminal",
     "run_terminal_command",
     "open_app",
+    "close_window",
+    "close_app",
+    "switch_app",
+    "switch_browser_tab",
+    "close_browser_tab",
 }
 
 CONTROL_PERMISSIONS = {
@@ -44,6 +49,11 @@ CONTROL_PERMISSIONS = {
     "open_terminal": "terminal",
     "run_terminal_command": "terminal",
     "open_app": "open_apps",
+    "close_window": "desktop_control",
+    "close_app": "open_apps",
+    "switch_app": "desktop_control",
+    "switch_browser_tab": "desktop_control",
+    "close_browser_tab": "desktop_control",
 }
 
 KNOWN_PERMISSIONS = {"desktop_control", "terminal", "open_apps"}
@@ -200,6 +210,22 @@ def _app(params: dict[str, Any]) -> str:
     return app
 
 
+def _direction(params: dict[str, Any], default: str = "next") -> str:
+    direction = str(params.get("direction") or params.get("tab_action") or default).strip().casefold()
+    aliases = {
+        "prev": "previous",
+        "back": "previous",
+        "backward": "previous",
+        "left": "previous",
+        "forward": "next",
+        "right": "next",
+    }
+    direction = aliases.get(direction, direction)
+    if direction not in {"next", "previous"}:
+        raise ValueError("Desktop switch direction must be next or previous.")
+    return direction
+
+
 def _shell(params: dict[str, Any]) -> str:
     shell = str(params.get("shell") or "powershell").strip().casefold()
     if shell not in {"powershell", "pwsh", "cmd"}:
@@ -261,6 +287,11 @@ def _app_alias(app: str) -> tuple[str, list[str]]:
         "command prompt": ("cmd.exe", ["/k"]),
         "cmd": ("cmd.exe", ["/k"]),
         "notepad": ("notepad.exe", []),
+        "chrome": ("chrome.exe", []),
+        "google chrome": ("chrome.exe", []),
+        "youtube": ("chrome.exe", []),
+        "edge": ("msedge.exe", []),
+        "microsoft edge": ("msedge.exe", []),
         "calculator": ("calc.exe", []),
         "calc": ("calc.exe", []),
         "settings": ("ms-settings:", []),
@@ -280,6 +311,30 @@ def _launch_app(app: str) -> None:
             _launch_app_via_start_menu(app)
             return
     subprocess.Popen([app])
+
+
+def _app_process_name(app: str) -> str:
+    executable, _args = _app_alias(app)
+    name = executable.replace("\\", "/").split("/")[-1]
+    if ":" in name:
+        name = app
+    if not name.casefold().endswith(".exe"):
+        name = f"{name}.exe"
+    return name
+
+
+def _close_app(app: str) -> str:
+    process_name = _app_process_name(app)
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/IM", process_name],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        return process_name
+    subprocess.run(["pkill", "-f", app], capture_output=True, text=True, timeout=8)
+    return app
 
 
 def _launch_app_via_start_menu(app: str) -> None:
@@ -424,6 +479,10 @@ def _perform_desktop_action(action: str, params: dict[str, Any]) -> str:
         app = _app(params)
         _launch_app(app)
         return f"Desktop app launch requested: {app}."
+    if action == "close_app":
+        app = _app(params)
+        process_name = _close_app(app)
+        return f"Desktop app close requested: {process_name}."
 
     pg = _pyautogui()
     if action == "screenshot":
@@ -464,7 +523,7 @@ def _perform_desktop_action(action: str, params: dict[str, Any]) -> str:
         text = str(params.get("text") or "")
         if not text:
             raise ValueError("Desktop type requires text.")
-        interval = _float_param(params, "interval", 0)
+        interval = _float_param(params, "interval", 0.025)
         pg.write(text, interval=interval)
         return "Desktop type completed."
     if action == "press_key":
@@ -477,6 +536,26 @@ def _perform_desktop_action(action: str, params: dict[str, Any]) -> str:
         keys = _keys(params)
         pg.hotkey(*keys)
         return f"Desktop hotkey completed: {'+'.join(keys)}."
+    if action == "close_window":
+        pg.hotkey("alt", "f4")
+        return "Desktop close window requested."
+    if action == "switch_app":
+        direction = _direction(params)
+        if direction == "previous":
+            pg.hotkey("alt", "shift", "tab")
+        else:
+            pg.hotkey("alt", "tab")
+        return f"Desktop app switch requested: {direction}."
+    if action == "switch_browser_tab":
+        direction = _direction(params)
+        if direction == "previous":
+            pg.hotkey("ctrl", "shift", "tab")
+        else:
+            pg.hotkey("ctrl", "tab")
+        return f"Desktop browser tab switch requested: {direction}."
+    if action == "close_browser_tab":
+        pg.hotkey("ctrl", "w")
+        return "Desktop browser tab close requested."
     return f"Unsupported desktop action: {action}."
 
 

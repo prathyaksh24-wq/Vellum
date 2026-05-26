@@ -1,4 +1,5 @@
 {
+  "desktop_control": true,
   "open_apps": true,
   "terminal": true
 }
