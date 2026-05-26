@@ -18,7 +18,11 @@ backend/.test-data/
 ui-dist/
 .ui-runtime/
 .api-runtime/
+.desktop-runtime/
 node_modules/
+desktop/dist/
+desktop/src-tauri/.cargo/config.toml
+desktop/src-tauri/target/
 .playwright-mcp/
 .DS_Store
 

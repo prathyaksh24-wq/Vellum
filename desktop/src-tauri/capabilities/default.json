@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default Vellum desktop capability set",
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:1420/*",
+      "http://localhost:1420/*",
+      "http://127.0.0.1:5173/*",
+      "http://localhost:5173/*"
+    ]
+  },
+  "windows": ["main", "overlay", "vellum"],
+  "permissions": ["core:default"]
+}

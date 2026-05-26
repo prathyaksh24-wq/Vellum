@@ -21,6 +21,8 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
+from agent.computer_use_runtime import computer_use_runtime
+from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import get_settings
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
@@ -36,6 +38,7 @@ from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
+from agent.tools import desktop as desktop_tools
 from agent.tools.obsidian_write import store_qa_pair
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
@@ -84,6 +87,30 @@ class VoiceSpeakRequest(BaseModel):
     text: str = Field(min_length=1)
 
 
+class ComputerUseModeRequest(BaseModel):
+    thread_id: str | None = None
+    source: str = "ui"
+    task: str | None = None
+    reason: str | None = None
+
+
+class ComputerUseDemoRequest(BaseModel):
+    source: str = "ui"
+    confirm: bool = False
+
+
+class WorkspaceActionRequest(BaseModel):
+    action: str = Field(min_length=1)
+    url: str | None = None
+    target: str | None = None
+    element: str | None = None
+    text: str | None = None
+    command: str | None = None
+    filename: str | None = None
+    amount: int | None = None
+    submit: bool | None = None
+
+
 class ReindexResponse(BaseModel):
     chunks: int
 
@@ -123,6 +150,7 @@ app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:4242", "http://127.0.0.1:4242", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -304,8 +332,9 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         await _repair_incomplete_tool_history(active_thread_id)
+        agent_message = _agent_message_for_runtime_mode(clean_message)
         result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": clean_message}]},
+            {"messages": [{"role": "user", "content": agent_message}]},
             config=_thread_config(active_thread_id),
         )
     capture_from_invoke_result(
@@ -443,6 +472,19 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+def _agent_message_for_runtime_mode(clean_message: str) -> str:
+    status = computer_use_runtime.status()
+    if not status.get("enabled") or status.get("paused"):
+        return clean_message
+    return (
+        "Computer use mode is enabled. Treat the user's message as a live "
+        "computer/browser automation instruction. Use computer_use or browser "
+        "tools when action is needed, narrate concise progress, and ask for a "
+        "missing runtime permission instead of pretending the action happened.\n\n"
+        f"User instruction: {clean_message}"
+    )
+
+
 async def _stream_agent_turn(
     *,
     clean_message: str,
@@ -459,8 +501,9 @@ async def _stream_agent_turn(
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
+            agent_message = _agent_message_for_runtime_mode(clean_message)
             stream = agent.astream_events(
-                {"messages": [{"role": "user", "content": clean_message}]},
+                {"messages": [{"role": "user", "content": agent_message}]},
                 config=_thread_config(active_thread_id),
                 version="v2",
             )
@@ -511,12 +554,282 @@ async def _synthesize_audio_event(text: str):
         yield _sse("audio", {"text": text, "wav_b64": base64.b64encode(wav).decode("ascii")})
 
 
+def _computer_use_mode_intent(text: str) -> str | None:
+    normalized = "".join(char if char.isalnum() else " " for char in text.casefold())
+    normalized = " ".join(normalized.split())
+    intents = {
+        "enable": {
+            "enable computer use",
+            "enable computer use mode",
+            "turn on computer use",
+            "turn computer use on",
+            "computer use on",
+            "start computer use",
+            "start computer use mode",
+        },
+        "disable": {
+            "disable computer use",
+            "disable computer use mode",
+            "turn off computer use",
+            "turn computer use off",
+            "computer use off",
+            "stop computer use",
+            "stop computer use mode",
+        },
+        "pause": {
+            "pause computer use",
+            "pause computer use mode",
+        },
+        "resume": {
+            "resume computer use",
+            "resume computer use mode",
+        },
+    }
+    for intent, phrases in intents.items():
+        if normalized in phrases:
+            return intent
+    return None
+
+
+def _apply_computer_use_intent(
+    intent: str,
+    *,
+    source: str,
+    thread_id: str,
+    task: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if intent == "enable":
+        status = computer_use_runtime.enable(source=source, thread_id=thread_id, task=task)
+        return "Computer use is on. I have control when you give me a task.", status
+    if intent == "disable":
+        status = computer_use_runtime.disable(source=source)
+        return "Computer use is off. I am back in default mode.", status
+    if intent == "pause":
+        status = computer_use_runtime.pause(source=source)
+        return "Computer use is paused.", status
+    if intent == "resume":
+        status = computer_use_runtime.resume(source=source)
+        return "Computer use is ready again.", status
+    return "I could not change computer use mode.", computer_use_runtime.status()
+
+
+async def _stream_computer_use_command(
+    *,
+    clean_message: str,
+    intent: str,
+    active_thread_id: str,
+    source: str,
+    voice: bool = False,
+    synthesize_audio: bool = False,
+):
+    answer, status = _apply_computer_use_intent(
+        intent,
+        source=source,
+        thread_id=active_thread_id,
+        task=None,
+    )
+    response: ChatResponse
+    if voice:
+        response = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
+    else:
+        response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
+    yield _sse("meta", {"thread_id": active_thread_id})
+    yield _sse("computer_use", {"intent": intent, "status": status})
+    yield _sse("token", {"text": answer})
+    yield _sse("final", response.model_dump_json())
+    if synthesize_audio:
+        async for audio_event in _synthesize_audio_event(answer):
+            yield audio_event
+    try:
+        await _background_learn(clean_message, answer, active_thread_id, source="computer_use")
+    except Exception:
+        pass
+
+
+@router.get("/computer-use/status")
+async def computer_use_status() -> dict[str, Any]:
+    return computer_use_runtime.status()
+
+
+def _workspace_action_payload(request: WorkspaceActionRequest) -> dict[str, Any]:
+    return {key: value for key, value in request.model_dump().items() if value is not None}
+
+
+def _desktop_demo_call(action: str, **params: Any) -> str:
+    payload = {"action": action, **params}
+    computer_use_runtime.record_event(
+        "desktop_demo_action_start",
+        f"Desktop demo {action} started.",
+        tool="computer_use_desktop",
+        data={"action": action},
+    )
+    result = desktop_tools.run_desktop_action(payload)
+    computer_use_runtime.record_event(
+        "desktop_demo_action",
+        result,
+        tool="computer_use_desktop",
+        data={"action": action, "result": result},
+    )
+    return result
+
+
+def _screen_center() -> tuple[int, int]:
+    result = desktop_tools.run_desktop_action({"action": "screen_size"})
+    try:
+        raw_size = result.rsplit(":", 1)[1].strip().rstrip(".")
+        width_text, height_text = raw_size.lower().split("x", 1)
+        width = int(width_text)
+        height = int(height_text)
+        return max(160, width // 2), max(120, height // 2)
+    except Exception:
+        return 640, 360
+
+
+def _run_desktop_control_demo(source: str) -> None:
+    computer_use_runtime.record_event(
+        "desktop_demo_started",
+        "Visible desktop control test started.",
+        tool="computer_use_desktop",
+        data={"source": source},
+    )
+    try:
+        _desktop_demo_call("grant_permission", permission="open_apps", confirm=True)
+        _desktop_demo_call("grant_permission", permission="desktop_control", confirm=True)
+        _desktop_demo_call("open_app", app="notepad")
+        time.sleep(1.2)
+        x, y = _screen_center()
+        _desktop_demo_call("move", x=x, y=y, duration=0.35)
+        _desktop_demo_call("click", x=x, y=y)
+        _desktop_demo_call("type", text="Vellum computer-use test is controlling this desktop.", interval=0.02)
+        _desktop_demo_call("press_key", key="enter")
+        _desktop_demo_call("type", text="You should be able to see typing, clicking, and scrolling.", interval=0.02)
+        _desktop_demo_call("press_key", key="enter")
+        _desktop_demo_call("type", text="Test complete.", interval=0.02)
+        _desktop_demo_call("scroll", amount=-3)
+        _desktop_demo_call("scroll", amount=3)
+    finally:
+        computer_use_runtime.record_event(
+            "desktop_demo_finished",
+            "Visible desktop control test finished.",
+            tool="computer_use_desktop",
+            data={"source": source},
+        )
+
+
+@router.post("/computer-use/workspace/action")
+async def computer_use_workspace_action(request: WorkspaceActionRequest) -> dict[str, Any]:
+    params = _workspace_action_payload(request)
+    try:
+        result = await asyncio.to_thread(workspace_worker.run, params)
+    except WorkspaceActionError as exc:
+        computer_use_runtime.record_event(
+            "workspace_error",
+            str(exc),
+            tool="computer_use_workspace",
+            data={"action": request.action},
+        )
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    computer_use_runtime.record_event(
+        "workspace_action",
+        result.message,
+        tool="computer_use_workspace",
+        data={
+            "action": result.action,
+            "status": result.status,
+            "result": result.data,
+        },
+    )
+    return {
+        "action": result.action,
+        "status": result.status,
+        "message": result.message,
+        "data": result.data,
+    }
+
+
+@router.post("/computer-use/enable")
+async def computer_use_enable(request: ComputerUseModeRequest) -> dict[str, Any]:
+    active_thread_id = request.thread_id or get_settings().thread_id
+    status = computer_use_runtime.enable(source=request.source, thread_id=active_thread_id, task=request.task)
+    overlay = desktop_tools.start_activity_overlay()
+    computer_use_runtime.record_event(
+        "activity_overlay",
+        overlay,
+        tool="computer_use_desktop",
+        data={"source": request.source},
+    )
+    return {"status": status, "message": "Computer use is on. I have control when you give me a task."}
+
+
+@router.post("/computer-use/desktop/demo")
+async def computer_use_desktop_demo(request: ComputerUseDemoRequest) -> dict[str, Any]:
+    if not request.confirm:
+        raise HTTPException(status_code=400, detail="confirm=true is required to run the visible desktop control test.")
+    if not computer_use_runtime.is_enabled():
+        raise HTTPException(status_code=409, detail="Enable computer use before running the visible desktop control test.")
+    asyncio.create_task(asyncio.to_thread(_run_desktop_control_demo, request.source))
+    return {
+        "status": computer_use_runtime.status(),
+        "message": "Visible desktop control test started.",
+    }
+
+
+@router.post("/computer-use/disable")
+async def computer_use_disable(request: ComputerUseModeRequest) -> dict[str, Any]:
+    overlay = desktop_tools.stop_activity_overlay()
+    status = computer_use_runtime.disable(source=request.source, reason=request.reason)
+    computer_use_runtime.record_event(
+        "activity_overlay",
+        overlay,
+        tool="computer_use_desktop",
+        data={"source": request.source, "reason": request.reason},
+    )
+    return {"status": status, "message": "Computer use is off. I am back in default mode."}
+
+
+@router.post("/computer-use/pause")
+async def computer_use_pause(request: ComputerUseModeRequest) -> dict[str, Any]:
+    status = computer_use_runtime.pause(source=request.source)
+    return {"status": status, "message": "Computer use is paused."}
+
+
+@router.post("/computer-use/resume")
+async def computer_use_resume(request: ComputerUseModeRequest) -> dict[str, Any]:
+    status = computer_use_runtime.resume(source=request.source)
+    return {"status": status, "message": "Computer use is ready again."}
+
+
+@router.get("/computer-use/events")
+async def computer_use_events() -> StreamingResponse:
+    async def events():
+        yield _sse(
+            "computer_use",
+            {"status": computer_use_runtime.status(), "recent": computer_use_runtime.recent_events()[-20:]},
+        )
+        async for event in computer_use_runtime.subscribe():
+            yield _sse("computer_use", {"event": event, "status": computer_use_runtime.status()})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
     active_thread_id = request.thread_id or get_settings().thread_id
+    computer_use_intent = _computer_use_mode_intent(clean_message)
+    if computer_use_intent:
+        return StreamingResponse(
+            _stream_computer_use_command(
+                clean_message=clean_message,
+                intent=computer_use_intent,
+                active_thread_id=active_thread_id,
+                source="voice" if request.voice else "text",
+                voice=request.voice,
+            ),
+            media_type="text/event-stream",
+        )
 
     if clean_message.startswith("/project"):
         parts = clean_message.split()
@@ -583,9 +896,21 @@ async def voice_turn(
 ) -> StreamingResponse:
     result = await _read_voice_transcript(audio)
     active_thread_id = thread_id or get_settings().thread_id
+    computer_use_intent = _computer_use_mode_intent(result.transcript)
 
     async def events():
         yield _sse("transcript", {"text": result.transcript, "engine": result.engine, "model": result.model})
+        if computer_use_intent:
+            async for item in _stream_computer_use_command(
+                clean_message=result.transcript,
+                intent=computer_use_intent,
+                active_thread_id=active_thread_id,
+                source="voice",
+                voice=True,
+                synthesize_audio=True,
+            ):
+                yield item
+            return
         async for item in _stream_agent_turn(
             clean_message=result.transcript,
             active_thread_id=active_thread_id,

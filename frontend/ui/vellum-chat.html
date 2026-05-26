@@ -108,9 +108,59 @@
   .header-tools { display: flex; align-items: stretch; }
   .h-tool { background: transparent; border: none; border-left: 1px solid var(--line); color: var(--whisper); font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 9.5px; letter-spacing: 0.20em; text-transform: uppercase; padding: 0 22px; cursor: pointer; display: flex; align-items: center; gap: 10px; transition: color 600ms var(--ease), background 600ms var(--ease); }
   .h-tool:hover { color: var(--muted); background: rgba(244,237,226,0.02); }
+  .h-tool.computer-use-active { color: var(--soft-ember); background: rgba(217,119,70,0.08); }
+  .h-tool.computer-use-active .h-tool-dot { box-shadow: 0 0 18px rgba(217,119,70,0.9); animation: computerPulse 1800ms ease-in-out infinite; }
   .h-tool-mono { font-family: 'Fraunces', serif; font-style: italic; font-weight: 300; font-size: 17px; color: var(--whisper); letter-spacing: 0; text-transform: none; line-height: 1; }
   .h-tool-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ember); flex-shrink: 0; }
   @media (max-width: 640px) { .h-tool { padding: 0 14px; } .h-tool .h-tool-label { display: none; } }
+
+  .computer-use-aura {
+    position: fixed; inset: 0; z-index: 92; pointer-events: none; opacity: 0;
+    transition: opacity 700ms var(--ease);
+  }
+  .computer-use-aura::before, .computer-use-aura::after {
+    content: ""; position: absolute; inset: 9px; border: 1px solid rgba(217,119,70,0.62);
+    box-shadow: inset 0 0 34px rgba(217,119,70,0.18), 0 0 42px rgba(217,119,70,0.22);
+  }
+  .computer-use-aura::after {
+    inset: 22px; border-color: rgba(241,178,122,0.26); filter: blur(1px);
+    animation: computerPulse 2400ms ease-in-out infinite;
+  }
+  body.computer-use-active .computer-use-aura { opacity: 1; }
+  @keyframes computerPulse {
+    0%, 100% { opacity: 0.62; }
+    50% { opacity: 1; }
+  }
+  .computer-use-feed {
+    position: fixed; right: 18px; bottom: 88px; width: min(340px, calc(100vw - 36px)); z-index: 120;
+    border: 1px solid rgba(217,119,70,0.26); background: rgba(19,19,22,0.82); backdrop-filter: blur(14px);
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+    transition: opacity 600ms var(--ease), transform 600ms var(--ease);
+  }
+  .computer-use-feed.visible { opacity: 1; transform: translateY(0); }
+  .computer-use-feed-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 11px 13px; border-bottom: 1px solid rgba(244,237,226,0.08);
+    font-family: 'DM Sans', sans-serif; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--whisper);
+  }
+  .computer-use-feed-state { color: var(--soft-ember); }
+  .computer-use-events { padding: 8px 13px 11px; display: grid; gap: 6px; }
+  .computer-use-event { font-size: 11px; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+  .computer-use-event-time { color: var(--whisper); margin-right: 8px; }
+  .computer-use-workspace {
+    border-top: 1px solid rgba(244,237,226,0.08);
+    padding: 9px 13px 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--whisper);
+  }
+  .computer-use-workspace strong {
+    color: var(--soft-ember);
+    font-weight: 500;
+  }
 
   .threads-rail { grid-column: 1; grid-row: 2; border-right: 1px solid var(--line); overflow-y: auto; padding: 28px 0 24px; background: rgba(15, 15, 18, 0.4); }
   @media (max-width: 880px) {
@@ -488,6 +538,10 @@
           <span class="header-thread-meta" id="threadMeta">a new beginning</span>
         </div>
         <div class="header-tools">
+          <button class="h-tool" id="computerUseBtn" type="button" aria-pressed="false" title="Computer use">
+            <span class="h-tool-dot"></span>
+            <span class="h-tool-label" id="computerUseLabel">Computer</span>
+          </button>
           <button class="h-tool" id="modelBtn">
             <span class="h-tool-dot"></span>
             <span class="h-tool-label" id="modelLabel">Gemma 4 · 31B</span>
@@ -562,6 +616,18 @@
 
 </div>
 
+<div class="computer-use-aura" id="computerUseAura"></div>
+<div class="computer-use-feed" id="computerUseFeed">
+  <div class="computer-use-feed-head">
+    <span>Computer use</span>
+    <span class="computer-use-feed-state" id="computerUseStateLabel">disabled</span>
+  </div>
+  <div class="computer-use-events" id="computerUseEvents"></div>
+  <div class="computer-use-workspace" id="computerUseWorkspace">
+    Workspace <strong>waiting</strong>
+  </div>
+</div>
+
 <div class="source-pop" id="sourcePop">
   <div class="source-pop-mark" id="sourcePopMark"><em>i.</em></div>
   <div class="source-pop-title" id="sourcePopTitle"></div>
@@ -604,13 +670,30 @@
   // Resolve the FastAPI origin: respect window.VELLUM_API_BASE if set,
   // otherwise prefer same-origin (when served directly by FastAPI) and
   // fall back to the default uvicorn port on the same hostname.
-  const API_BASE = (() => {
-    if (typeof window !== 'undefined' && typeof window.VELLUM_API_BASE === 'string') return window.VELLUM_API_BASE;
-    const host = window.location.hostname || '127.0.0.1';
-    const port = window.location.port;
+  function resolveApiBase(locationLike, override) {
+    if (typeof override === 'string' && override.trim()) return override.trim();
+    const protocol = locationLike?.protocol || 'http:';
+    const port = locationLike?.port || '';
     if (port === '' || port === '8000') return '';
-    return `${window.location.protocol}//${host}:8000`;
-  })();
+    if (protocol === 'http:' || protocol === 'https:') return 'http://127.0.0.1:8000';
+    return 'http://127.0.0.1:8000';
+  }
+  const API_BASE = resolveApiBase(
+    typeof window !== 'undefined' ? window.location : null,
+    typeof window !== 'undefined' ? window.VELLUM_API_BASE : null,
+  );
+  function apiOriginLabel() {
+    if (API_BASE) return API_BASE;
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    return 'same-origin';
+  }
+  function enrichFetchError(err) {
+    const message = err && err.message ? err.message : 'failed to fetch';
+    if (/failed to fetch|networkerror|load failed/i.test(message)) {
+      return new Error(`${message} (api: ${apiOriginLabel()})`);
+    }
+    return err;
+  }
   const STORAGE_KEY = 'vellum:state:v1';
   const ROMAN = ['i.','ii.','iii.','iv.','v.','vi.','vii.','viii.','ix.','x.','xi.','xii.'];
   const FACULTY_DEFINITIONS = [
@@ -621,9 +704,21 @@
   ];
   // MODELS is populated at startup from GET /api/models (see loadModels()).
   // Each entry: { id: 'openai/gpt-5.5', label: 'GPT 5.5', detail: 'openai · flagship' }
-  let MODELS = [
+  const DEFAULT_MODELS = [
     { id: 'google/gemma-4-31b-it', label: 'Gemma 4 31B', detail: 'google · flagship' },
+    { id: 'google/gemma-4-26b-a4b-it', label: 'Gemma 4 26B A4B', detail: 'google - fast - open' },
+    { id: 'qwen/qwen3.5-35b-a3b', label: 'Qwen 3.5 35B A3B', detail: 'qwen - flagship - open' },
+    { id: 'minimax/minimax-m2.7', label: 'MiniMax M2.7', detail: 'minimax - flagship - open' },
+    { id: 'anthropic/claude-opus-4.7', label: 'Claude Opus 4.7', detail: 'anthropic - flagship' },
+    { id: 'anthropic/claude-opus-4.6', label: 'Claude Opus 4.6', detail: 'anthropic - flagship' },
+    { id: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5', detail: 'anthropic - flagship' },
+    { id: 'openai/gpt-5.5', label: 'GPT 5.5', detail: 'openai - flagship' },
+    { id: 'deepseek/deepseek-v4-pro', label: 'DeepSeek V4 Pro', detail: 'deepseek - flagship' },
+    { id: 'deepseek/deepseek-v4-flash', label: 'DeepSeek V4 Flash', detail: 'deepseek - fast' },
+    { id: 'google/gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)', detail: 'google - fast' },
+    { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', detail: 'moonshot - flagship' },
   ];
+  let MODELS = [...DEFAULT_MODELS];
   const TOOL_TO_SOURCE = {
     search_my_notes:  { source: 'your notes',          label: 'from your library', title: 'From your notes',     body: 'Vellum read across your private vault for fragments matching the question.' },
     web_search:       { source: 'duckduckgo · web',    label: 'from the web',      title: 'From the web',         body: 'A privacy-gated lookup against DuckDuckGo. No identifiers leave your machine.' },
@@ -632,6 +727,7 @@
     list_files:       { source: 'your vault index',    label: 'from your library', title: 'Your vault index',     body: 'Vellum looked over the directory of your vault to find what was in scope.' },
     create_note:      { source: 'wrote to your vault', label: 'committed to your vault', title: 'Wrote to your vault', body: 'Vellum committed a new note to your vault. Yours to keep, edit, or delete.' },
     append_to_note:   { source: 'appended to your vault', label: 'committed to your vault', title: 'Appended to your vault', body: 'Vellum added to an existing note in your vault.' },
+    computer_use:     { source: 'your desktop',        label: 'computer use',      title: 'Computer use',        body: 'Vellum used the local desktop or browser automation tool while computer-use mode was active.' },
   };
   const PRIVACY_PATTERNS = {
     red: [
@@ -668,11 +764,19 @@
   function saveState() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
   }
+  function findModel(query) {
+    const normalized = String(query || '').trim().toLowerCase();
+    if (!normalized) return null;
+    return MODELS.find(m => m.id.toLowerCase() === normalized || m.label.toLowerCase() === normalized) || null;
+  }
+  function modelLabelFor(query) {
+    return (findModel(query) || {}).label || query || 'Gemma 4 31B';
+  }
   const persisted = loadState();
   const state = {
     threads: Array.isArray(persisted?.threads) ? persisted.threads : [],
     activeThreadId: persisted?.activeThreadId || null,
-    model: persisted?.model || MODELS[0].label,
+    model: persisted?.model || MODELS[0].id,
     facultyOverrides: persisted?.facultyOverrides && typeof persisted.facultyOverrides === 'object' ? persisted.facultyOverrides : {},
     facultyHealth: {},
     shownIdleFragments: Array.isArray(persisted?.shownIdleFragments) ? persisted.shownIdleFragments : [],
@@ -695,6 +799,12 @@
   const inputZone = document.querySelector('.input-zone');
   const inputShell = $('inputShell');
   const chatInput = $('chatInput');
+  const computerUseBtn = $('computerUseBtn');
+  const computerUseLabel = $('computerUseLabel');
+  const computerUseFeed = $('computerUseFeed');
+  const computerUseStateLabel = $('computerUseStateLabel');
+  const computerUseEvents = $('computerUseEvents');
+  const computerUseWorkspace = $('computerUseWorkspace');
   const voiceBtn = $('voiceBtn');
   const voiceStatus = $('voiceStatus');
   const emberDot = $('emberDot');
@@ -1060,12 +1170,140 @@
   let playbackChain = Promise.resolve();
   let speechPlaybackJobs = 0;
   const activeAudioSources = new Set();
+  const computerUseState = { enabled: false, paused: false, status: 'disabled' };
+  let computerUseRecent = [];
+  let computerUseSource = null;
+  let voiceMonitorCleanup = null;
 
   function setVoiceState(mode, label = 'Trained on you') {
     inputShell.classList.toggle('voice-listening', mode === 'listening');
     inputShell.classList.toggle('voice-working', mode === 'transcribing' || mode === 'thinking' || mode === 'speaking');
     voiceBtn.disabled = mode === 'transcribing' || mode === 'thinking';
-    voiceStatus.textContent = label;
+    voiceStatus.textContent = label === 'Trained on you' && computerUseState.enabled ? 'Computer use ready' : label;
+  }
+
+  function applyComputerUseStatus(status) {
+    if (!status || typeof status !== 'object') return;
+    computerUseState.enabled = !!status.enabled;
+    computerUseState.paused = !!status.paused;
+    computerUseState.status = status.status || (computerUseState.enabled ? 'ready' : 'disabled');
+    document.body.classList.toggle('computer-use-active', computerUseState.enabled && !computerUseState.paused);
+    computerUseBtn.classList.toggle('computer-use-active', computerUseState.enabled);
+    computerUseBtn.setAttribute('aria-pressed', computerUseState.enabled ? 'true' : 'false');
+    computerUseLabel.textContent = computerUseState.enabled ? (computerUseState.paused ? 'Paused' : 'Computer on') : 'Computer';
+    computerUseStateLabel.textContent = computerUseState.enabled
+      ? (computerUseState.paused ? 'paused' : 'ready')
+      : 'disabled';
+    computerUseFeed.classList.toggle('visible', computerUseState.enabled);
+    if (!activeStreamAbort && !mediaRecorder && activeAudioSources.size === 0) setVoiceState('idle');
+  }
+
+  function addComputerUseEvent(event) {
+    if (!event || typeof event !== 'object') return;
+    computerUseRecent.push(event);
+    if (computerUseRecent.length > 20) computerUseRecent = computerUseRecent.slice(-20);
+    renderComputerUseEvents();
+  }
+
+  function renderComputerUseEvents() {
+    computerUseEvents.innerHTML = '';
+    const events = computerUseRecent.slice(-5).reverse();
+    if (!events.length) {
+      const row = document.createElement('div');
+      row.className = 'computer-use-event';
+      row.textContent = computerUseState.enabled ? 'waiting for instructions' : 'no desktop actions yet';
+      computerUseEvents.appendChild(row);
+      return;
+    }
+    events.forEach(event => {
+      const row = document.createElement('div');
+      row.className = 'computer-use-event';
+      const time = document.createElement('span');
+      time.className = 'computer-use-event-time';
+      time.textContent = formatComputerUseTime(event.ts);
+      row.appendChild(time);
+      row.appendChild(document.createTextNode(event.message || event.kind || 'computer use event'));
+      computerUseEvents.appendChild(row);
+    });
+  }
+
+  function formatComputerUseTime(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function handleComputerUsePayload(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    if (payload.status) applyComputerUseStatus(payload.status);
+    if (Array.isArray(payload.recent)) {
+      computerUseRecent = payload.recent.slice(-20);
+      renderComputerUseEvents();
+    }
+    if (payload.event) {
+      if (payload.event.kind === 'workspace_action' && computerUseWorkspace) {
+        const action = payload.event.data?.action || 'active';
+        computerUseWorkspace.innerHTML = `Workspace <strong>${escapeHtml(action)}</strong>`;
+      }
+      addComputerUseEvent(payload.event);
+    }
+  }
+
+  async function loadComputerUseStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/computer-use/status`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      applyComputerUseStatus(await res.json());
+      renderComputerUseEvents();
+    } catch (err) {
+      console.warn(`[computer use status failed] ${err && err.message ? err.message : err}`);
+    }
+  }
+
+  function connectComputerUseEvents() {
+    if (computerUseSource || typeof EventSource === 'undefined') return;
+    computerUseSource = new EventSource(`${API_BASE}/api/computer-use/events`);
+    computerUseSource.addEventListener('computer_use', event => {
+      try { handleComputerUsePayload(JSON.parse(event.data)); } catch {}
+    });
+    computerUseSource.onerror = () => {};
+  }
+
+  async function toggleComputerUseMode() {
+    const endpoint = computerUseState.enabled ? 'disable' : 'enable';
+    computerUseBtn.disabled = true;
+    try {
+      const t = activeThread();
+      const res = await fetch(`${API_BASE}/api/computer-use/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'ui', thread_id: t ? t.id : state.activeThreadId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
+      if (payload.status) applyComputerUseStatus(payload.status);
+      if (payload.message) {
+        addComputerUseEvent({ ts: new Date().toISOString(), message: payload.message });
+        const spoken = speakText(payload.message);
+        if (endpoint === 'enable' && payload.status && payload.status.enabled) {
+          void spoken.finally(() => {
+            if (computerUseState.enabled && !computerUseState.paused && !mediaRecorder && !activeStreamAbort) {
+              startVoiceRecording();
+            }
+          });
+        } else {
+          void spoken;
+        }
+      }
+    } catch (err) {
+      addComputerUseEvent({
+        ts: new Date().toISOString(),
+        message: `computer use toggle failed: ${err && err.message ? err.message : 'unknown'}`,
+      });
+    } finally {
+      computerUseBtn.disabled = false;
+    }
   }
 
   function voiceAudioContext() {
@@ -1079,6 +1317,62 @@
     });
     activeAudioSources.clear();
     playbackChain = Promise.resolve();
+  }
+
+  function clearVoiceMonitor() {
+    if (!voiceMonitorCleanup) return;
+    try { voiceMonitorCleanup(); } catch {}
+    voiceMonitorCleanup = null;
+  }
+
+  function startComputerUseVoiceAutoStop(stream) {
+    clearVoiceMonitor();
+    if (!computerUseState.enabled || !stream) return;
+    const ctx = voiceAudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    const data = new Uint8Array(analyser.fftSize);
+    let source = null;
+    let frame = 0;
+    let heardSpeech = false;
+    const startedAt = performance.now();
+    let lastSpeechAt = startedAt;
+
+    try {
+      source = ctx.createMediaStreamSource(stream);
+      source.connect(analyser);
+    } catch (err) {
+      console.warn(`[voice monitor failed] ${err && err.message ? err.message : err}`);
+      return;
+    }
+
+    const stopIfReady = () => {
+      if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const centered = (data[i] - 128) / 128;
+        sum += centered * centered;
+      }
+      const rms = Math.sqrt(sum / data.length);
+      const now = performance.now();
+      if (rms > 0.025) {
+        heardSpeech = true;
+        lastSpeechAt = now;
+      }
+      if ((heardSpeech && now - lastSpeechAt > 1300) || now - startedAt > 30000) {
+        stopVoiceRecording();
+        return;
+      }
+      frame = requestAnimationFrame(stopIfReady);
+    };
+
+    voiceMonitorCleanup = () => {
+      if (frame) cancelAnimationFrame(frame);
+      try { source && source.disconnect(); } catch {}
+    };
+    void ctx.resume().catch(() => {});
+    frame = requestAnimationFrame(stopIfReady);
   }
 
   async function playArrayBuffer(arrayBuffer) {
@@ -1195,6 +1489,7 @@
       mediaRecorder.addEventListener('stop', async () => {
         const chunks = voiceChunks;
         voiceChunks = [];
+        clearVoiceMonitor();
         voiceStream?.getTracks().forEach(track => track.stop());
         voiceStream = null;
         mediaRecorder = null;
@@ -1203,7 +1498,7 @@
         try {
           const raw = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
           const wav = await normalizeVoiceBlob(raw);
-          await transcribeVoice(wav);
+          await (computerUseState.enabled ? sendVoice(wav) : transcribeVoice(wav));
         } catch (err) {
           const detail = err && err.message ? err.message : 'unknown';
           setVoiceState('idle', /no speech/i.test(detail) ? 'No speech' : 'Voice unreachable');
@@ -1211,8 +1506,10 @@
         }
       });
       mediaRecorder.start();
+      if (computerUseState.enabled) startComputerUseVoiceAutoStop(voiceStream);
       setVoiceState('listening', 'Listening');
     } catch (err) {
+      clearVoiceMonitor();
       setVoiceState('idle', 'Mic blocked');
     }
   }
@@ -1225,6 +1522,7 @@
 
   function cancelActiveVoice() {
     if (mediaRecorder) stopVoiceRecording();
+    clearVoiceMonitor();
     if (activeStreamAbort) activeStreamAbort.abort();
     stopVoicePlayback();
     setVoiceState('idle');
@@ -1491,7 +1789,7 @@
           agentMsgNode.classList.remove('streaming');
           bodyEl.textContent = collected || '(stopped before reply)';
         }
-      } else handleVoiceError(err);
+      } else handleVoiceError(enrichFetchError(err));
     } finally {
       drawingLine.classList.remove('active');
       activeStreamAbort = null;
@@ -1519,6 +1817,8 @@
         scrollToBottom();
       } else if (event === 'tool') {
         if (payload.name) toolsUsed.push(payload.name);
+      } else if (event === 'computer_use') {
+        handleComputerUsePayload(payload);
       } else if (event === 'audio') {
         if (payload.wav_b64) playBase64Wav(payload.wav_b64);
       } else if (event === 'final') {
@@ -1590,7 +1890,7 @@
       }
     } catch (err) {
       if (err && err.name === 'AbortError') handleStreamStopped(collected, toolsUsed);
-      else handleStreamError(err);
+      else handleStreamError(enrichFetchError(err));
     } finally {
       drawingLine.classList.remove('active');
       activeStreamAbort = null;
@@ -1618,6 +1918,8 @@
         scrollToBottom();
       } else if (event === 'tool') {
         if (payload.name) toolsUsed.push(payload.name);
+      } else if (event === 'computer_use') {
+        handleComputerUsePayload(payload);
       } else if (event === 'final') {
         if (payload.answer && !collected) { collected = payload.answer; bodyEl.textContent = collected; }
         if (Array.isArray(payload.tools) && payload.tools.length) toolsUsed = payload.tools;
@@ -1927,13 +2229,15 @@
       // If the active model on the server doesn't match our persisted state,
       // adopt the server's active. Otherwise keep what the user previously picked.
       const activeId = body.active && body.active.id;
-      const known = MODELS.find(m => m.id === state.model);
+      const known = findModel(state.model);
       if (!known && activeId) {
         state.model = activeId;
         saveState();
+      } else if (known && state.model !== known.id) {
+        state.model = known.id;
+        saveState();
       }
-      const labelFor = (MODELS.find(m => m.id === state.model) || MODELS[0] || {}).label || state.model;
-      modelLabel.textContent = labelFor;
+      modelLabel.textContent = modelLabelFor(state.model);
       renderModelList();
     } catch (e) {
       console.warn(`[loadModels errored] ${e}`);
@@ -1942,9 +2246,10 @@
 
   function renderModelList() {
     modelList.innerHTML = '';
+    const activeId = (findModel(state.model) || {}).id || state.model;
     MODELS.forEach((m, i) => {
       const row = document.createElement('div');
-      row.className = 'model-row' + (m.id === state.model ? ' active' : '');
+      row.className = 'model-row' + (m.id === activeId ? ' active' : '');
       row.dataset.model = m.id;
       row.innerHTML = `<div class="model-info"><span class="model-mark"><em>${romanFor(i)}</em></span><span class="model-name">${m.label}</span></div><span class="model-detail">${m.detail}</span>`;
       row.addEventListener('click', async () => {
@@ -2016,6 +2321,7 @@
   function closePanel() { panel.classList.remove('visible'); panelOverlay.classList.remove('visible'); }
   $('facultyBtn').addEventListener('click', () => openPanel('faculties'));
   $('modelBtn').addEventListener('click', () => openPanel('models'));
+  computerUseBtn.addEventListener('click', () => toggleComputerUseMode());
   $('footFaculty').addEventListener('click', () => openPanel('faculties'));
   $('footModel').addEventListener('click', () => openPanel('models'));
   $('footMemory').addEventListener('click', () => openPanel('memory'));
@@ -2063,12 +2369,14 @@
   // ============= boot =============
   // Best-effort initial label (an OpenRouter id or a previously-saved label).
   // loadModels() will overwrite with the prettier MODELS[].label once the catalog arrives.
-  modelLabel.textContent = state.model;
+  modelLabel.textContent = modelLabelFor(state.model);
   renderRail();
   renderModelList();
   renderFacultyList();
   renderActiveThread();
   refreshHealth();
+  loadComputerUseStatus();
+  connectComputerUseEvents();
   resetIdleTimer();
   // Pull the live catalog from the backend, replace MODELS, re-render.
   loadModels();

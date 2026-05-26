@@ -47,6 +47,7 @@ CONTROL_PERMISSIONS = {
 }
 
 KNOWN_PERMISSIONS = {"desktop_control", "terminal", "open_apps"}
+_persistent_overlay_process: subprocess.Popen | None = None
 
 
 def _pyautogui():
@@ -330,13 +331,7 @@ root.mainloop()
 """
 
 
-@contextmanager
-def _activity_overlay():
-    if not _activity_overlay_enabled():
-        yield
-        return
-
-    process: subprocess.Popen | None = None
+def _start_overlay_process() -> subprocess.Popen | None:
     try:
         kwargs: dict[str, Any] = {
             "stdin": subprocess.DEVNULL,
@@ -347,6 +342,47 @@ def _activity_overlay():
             kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         process = subprocess.Popen([sys.executable, "-c", _overlay_script()], **kwargs)
         time.sleep(0.12)
+        return process
+    except Exception:
+        return None
+
+
+def start_activity_overlay() -> str:
+    global _persistent_overlay_process
+    if not _activity_overlay_enabled():
+        return "Computer-use activity overlay is disabled."
+    if _persistent_overlay_process is not None and _persistent_overlay_process.poll() is None:
+        return "Computer-use activity overlay is already visible."
+    _persistent_overlay_process = _start_overlay_process()
+    if _persistent_overlay_process is None:
+        return "Computer-use activity overlay could not be started."
+    return "Computer-use activity overlay started."
+
+
+def stop_activity_overlay() -> str:
+    global _persistent_overlay_process
+    process = _persistent_overlay_process
+    _persistent_overlay_process = None
+    if process is None or process.poll() is not None:
+        return "Computer-use activity overlay is not running."
+    process.terminate()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        process.kill()
+    return "Computer-use activity overlay stopped."
+
+
+@contextmanager
+def _activity_overlay():
+    if not _activity_overlay_enabled():
+        yield
+        return
+
+    process: subprocess.Popen | None = None
+    try:
+        if _persistent_overlay_process is None or _persistent_overlay_process.poll() is not None:
+            process = _start_overlay_process()
     except Exception:
         process = None
     try:

@@ -1,11 +1,13 @@
 from types import SimpleNamespace
 import asyncio
+import json
 
 from fastapi.testclient import TestClient
 from langchain_core.messages import ToolMessage
 import pytest
 
 from agent import api
+from agent.computer_use_runtime import ComputerUseRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +29,21 @@ class FakeAgent:
         return None
 
 
+def _parse_sse(text):
+    events = []
+    for block in text.strip().split("\n\n"):
+        event = "message"
+        data = ""
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line[6:].strip()
+            elif line.startswith("data:"):
+                data += line[5:].strip()
+        if data:
+            events.append((event, json.loads(data)))
+    return events
+
+
 def test_health_endpoint_reports_service_and_qdrant(monkeypatch):
     monkeypatch.setattr(api, "_qdrant_health", lambda: {"ok": True, "collections": ["obsidian_vault"]})
     monkeypatch.setattr(api, "_embedding_health", lambda: {"ok": True, "provider": "sentence-transformers"})
@@ -40,6 +57,20 @@ def test_health_endpoint_reports_service_and_qdrant(monkeypatch):
     assert body["qdrant"]["ok"] is True
     assert body["embeddings"]["ok"] is True
     assert body["models"]["primary"]
+
+
+def test_cors_allows_local_vite_fallback_ports():
+    with TestClient(api.app) as client:
+        response = client.options(
+            "/api/computer-use/status",
+            headers={
+                "Origin": "http://127.0.0.1:5174",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
 
 
 def test_chat_endpoint_invokes_agent(monkeypatch):
@@ -62,6 +93,235 @@ def test_chat_endpoint_invokes_agent(monkeypatch):
     assert body["tools"] == ["search_my_notes"]
     assert fake_agent.calls[0][0]["messages"][0]["content"] == "hello"
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
+
+
+def test_computer_use_mode_endpoints_toggle_state(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+
+    with TestClient(api.app) as client:
+        enabled = client.post(
+            "/api/computer-use/enable",
+            json={"thread_id": "frontend", "source": "ui", "task": "find video stats"},
+        )
+        status = client.get("/api/computer-use/status")
+        disabled = client.post("/api/computer-use/disable", json={"source": "ui"})
+
+    assert enabled.status_code == 200
+    assert enabled.json()["status"]["enabled"] is True
+    assert enabled.json()["status"]["status"] == "ready"
+    assert status.json()["enabled"] is True
+    assert disabled.json()["status"]["enabled"] is False
+
+
+def test_computer_use_workspace_action_records_event(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    calls = []
+
+    class FakeWorker:
+        def run(self, params):
+            calls.append(params)
+            return api.WorkspaceActionResult(
+                action=params["action"],
+                status="ok",
+                message="workspace-ok",
+                data={"seen": True},
+            )
+
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api, "workspace_worker", FakeWorker())
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/computer-use/workspace/action",
+            json={"action": "browser.navigate", "url": "https://example.com"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert calls == [{"action": "browser.navigate", "url": "https://example.com"}]
+    assert body["status"] == "ok"
+    assert body["message"] == "workspace-ok"
+    assert body["data"] == {"seen": True}
+    events = runtime.recent_events()
+    assert events[-1]["kind"] == "workspace_action"
+    assert events[-1]["data"]["action"] == "browser.navigate"
+
+
+def test_computer_use_workspace_action_returns_400_for_invalid_action(monkeypatch):
+    class FakeWorker:
+        def run(self, params):
+            raise api.WorkspaceActionError("bad workspace action")
+
+    monkeypatch.setattr(api, "workspace_worker", FakeWorker())
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/computer-use/workspace/action", json={"action": "wat"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "bad workspace action"
+
+
+def test_workspace_api_accepts_core_milestone_actions(monkeypatch):
+    seen = []
+
+    class FakeResult:
+        def __init__(self, action):
+            self.action = action
+            self.status = "ok"
+            self.message = f"{action} ok"
+            self.data = {"action": action}
+
+    class FakeWorker:
+        def run(self, params):
+            seen.append(params["action"])
+            return FakeResult(params["action"])
+
+    monkeypatch.setattr(api, "workspace_worker", FakeWorker())
+    actions = [
+        {"action": "browser.open", "url": "https://example.com"},
+        {"action": "browser.navigate", "url": "https://example.com/docs"},
+        {"action": "input.click", "target": "button[name=Search]"},
+        {"action": "input.type", "target": "input[name=q]", "text": "vellum"},
+        {"action": "input.scroll", "amount": 1},
+        {"action": "terminal.run", "command": "echo hello"},
+        {"action": "screen.screenshot", "filename": "workspace.png"},
+    ]
+
+    with TestClient(api.app) as client:
+        responses = [
+            client.post("/api/computer-use/workspace/action", json=action)
+            for action in actions
+        ]
+
+    assert [response.status_code for response in responses] == [200] * len(actions)
+    assert seen == [action["action"] for action in actions]
+
+
+def test_computer_use_desktop_demo_requires_enabled_mode(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/computer-use/desktop/demo", json={"source": "test", "confirm": True})
+
+    assert response.status_code == 409
+    assert "Enable computer use" in response.json()["detail"]
+
+
+def test_computer_use_desktop_demo_starts_background_task(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    runtime.enable(source="test")
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    calls = []
+
+    def fake_to_thread(func, *args):
+        calls.append((func, args))
+
+        async def run():
+            return None
+
+        return run()
+
+    class FakeTask:
+        def __init__(self, coro):
+            self.coro = coro
+            coro.close()
+
+    monkeypatch.setattr(api.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: FakeTask(coro))
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/computer-use/desktop/demo", json={"source": "test", "confirm": True})
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Visible desktop control test started."
+    assert calls == [(api._run_desktop_control_demo, ("test",))]
+
+
+def test_computer_use_enable_starts_activity_overlay(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    overlay_calls = []
+    monkeypatch.setattr(api.desktop_tools, "start_activity_overlay", lambda: overlay_calls.append("start") or "overlay started")
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/computer-use/enable", json={"source": "test"})
+
+    assert response.status_code == 200
+    assert overlay_calls == ["start"]
+    assert runtime.recent_events()[-1]["kind"] == "activity_overlay"
+
+
+def test_computer_use_disable_stops_activity_overlay(monkeypatch, tmp_path):
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    runtime.enable(source="test")
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    overlay_calls = []
+    monkeypatch.setattr(api.desktop_tools, "stop_activity_overlay", lambda: overlay_calls.append("stop") or "overlay stopped")
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/computer-use/disable", json={"source": "test"})
+
+    assert response.status_code == 200
+    assert overlay_calls == ["stop"]
+    assert runtime.recent_events()[-1]["kind"] == "activity_overlay"
+
+
+def test_chat_stream_intercepts_enable_computer_use_command(monkeypatch, tmp_path):
+    class FailingAgent:
+        async def astream_events(self, *args, **kwargs):
+            raise AssertionError("computer use command should not call the agent")
+
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    learned = []
+
+    async def fake_background_learn(query, answer, thread_id="default", source="agent"):
+        learned.append((query, answer, thread_id, source))
+
+    monkeypatch.setattr(api, "agent", FailingAgent())
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+    monkeypatch.setattr(api.desktop_tools, "start_activity_overlay", lambda: "overlay started")
+
+    with TestClient(api.app) as client:
+        with client.stream(
+            "POST",
+            "/api/chat/stream",
+            json={"message": "enable computer use", "thread_id": "frontend"},
+        ) as response:
+            body = response.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    names = [event for event, _payload in events]
+    final_payload = next(payload for event, payload in events if event == "final")
+
+    assert response.status_code == 200
+    assert names[:3] == ["meta", "computer_use", "token"]
+    assert final_payload["answer"].startswith("Computer use is on")
+    assert runtime.status()["enabled"] is True
+    assert learned == [("enable computer use", final_payload["answer"], "frontend", "computer_use")]
 
 
 def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):

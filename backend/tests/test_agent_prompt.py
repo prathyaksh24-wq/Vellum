@@ -40,6 +40,11 @@ def test_vellum_prompt_documents_x_action_safety_rules():
     assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
+def test_agent_prompt_documents_workspace_mode():
+    assert "mode='workspace'" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
 def test_agent_tool_list_includes_x_action(monkeypatch):
     captured = {}
 

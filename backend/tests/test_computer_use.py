@@ -195,6 +195,7 @@ def test_computer_use_routes_desktop(monkeypatch):
 
 def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     calls = []
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -212,6 +213,17 @@ def test_computer_use_routes_desktop_terminal_command(monkeypatch):
 
     assert result == "terminal-ok"
     assert calls == [{"action": "run_terminal_command", "command": "claude", "shell": "powershell"}]
+
+
+def test_computer_use_blocks_desktop_mutation_when_mode_disabled(monkeypatch):
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "click", "x": 10, "y": 20}
+    )
+
+    assert "Computer use mode is disabled" in result
+    assert "enable computer use" in result
 
 
 def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
@@ -235,6 +247,23 @@ def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
     assert calls == [{"action": "grant_permission", "permission": "open_apps", "confirm": True}]
 
 
+def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
+    calls = []
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "run_desktop_action",
+        lambda params: calls.append(params) or "app-ok",
+    )
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "open_app", "target": "GitHub Desktop"}
+    )
+
+    assert result == "app-ok"
+    assert calls == [{"action": "open_app", "app": "GitHub Desktop"}]
+
+
 def test_computer_use_routes_browser(monkeypatch):
     calls = []
     monkeypatch.setattr(computer_use_tools, "playwright_run", lambda params: calls.append(params) or "browser-ok")
@@ -245,6 +274,30 @@ def test_computer_use_routes_browser(monkeypatch):
 
     assert result == "browser-ok"
     assert calls == [{"action": "click", "target": "button[name=Go]", "element": "Go"}]
+
+
+def test_computer_use_routes_workspace_actions(monkeypatch):
+    calls = []
+
+    class FakeResult:
+        action = "browser.navigate"
+        status = "ok"
+        message = "workspace-ok"
+        data = {"url": "https://example.com"}
+
+    class FakeWorker:
+        def run(self, params):
+            calls.append(params)
+            return FakeResult()
+
+    monkeypatch.setattr(computer_use_tools, "workspace_worker", FakeWorker())
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "workspace", "action": "browser.navigate", "url": "https://example.com"}
+    )
+
+    assert result == "workspace-ok"
+    assert calls == [{"action": "browser.navigate", "url": "https://example.com"}]
 
 
 def test_computer_use_rejects_invalid_form_json():

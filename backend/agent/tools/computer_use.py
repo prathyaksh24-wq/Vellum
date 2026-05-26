@@ -7,8 +7,12 @@ from typing import Any
 
 from langchain_core.tools import tool
 
+from agent.computer_use_runtime import computer_use_runtime
+from agent.computer_use_workspace import WorkspaceActionError, workspace_worker
 from agent.mcp.playwright_tools import run_tool as playwright_run
 from agent.tools import desktop as desktop_tools
+
+SAFE_DESKTOP_ACTIONS = {"permissions", "grant_permission", "screenshot", "position", "screen_size"}
 
 
 def _put(params: dict[str, Any], key: str, value: Any) -> None:
@@ -32,6 +36,7 @@ def _desktop_params(
     command: str,
     shell: str,
     app: str,
+    target: str,
     permission: str,
     confirm: bool,
 ) -> dict[str, Any]:
@@ -113,6 +118,32 @@ def _browser_params(
     return params
 
 
+def _workspace_params(
+    *,
+    action: str,
+    url: str,
+    target: str,
+    element: str,
+    text: str,
+    command: str,
+    filename: str,
+    amount: int,
+    submit: bool,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"action": action}
+    _put(params, "url", url)
+    _put(params, "target", target)
+    _put(params, "element", element)
+    _put(params, "text", text)
+    _put(params, "command", command or text)
+    _put(params, "filename", filename)
+    if amount:
+        params["amount"] = amount
+    if submit:
+        params["submit"] = True
+    return params
+
+
 @tool
 def computer_use(
     mode: str = "desktop",
@@ -140,6 +171,7 @@ def computer_use(
     app: str = "",
     permission: str = "",
     confirm: bool = False,
+    submit: bool = False,
     full_page: bool = False,
     level: str = "info",
     function: str = "",
@@ -149,39 +181,98 @@ def computer_use(
     start_element: str = "",
     end_element: str = "",
 ) -> str:
-    """Control the local desktop or persistent Playwright browser.
+    """Control the local desktop, visible workspace, or persistent browser.
 
-    Use mode='desktop' for OS-level screen/mouse/keyboard actions. Use
-    mode='browser' for Playwright MCP page automation. Desktop input actions
-    require COMPUTER_USE_ALLOW_DESKTOP=true. For terminals, prefer
-    action='run_terminal_command' with command='codex' or command='claude';
-    use action='open_app' to launch installed Windows apps by name. If a
-    desktop action returns a permission request, ask the user and only then
-    call action='grant_permission' with confirm=True.
+    Use mode='workspace' for visible computer-use tasks inside Vellum's
+    workspace: browser.open/browser.navigate, input.click/input.type,
+    input.scroll, terminal.run, and screen.screenshot. Use mode='desktop' for
+    OS-level host screen/mouse/keyboard actions. Use mode='browser' for direct
+    Playwright MCP page automation. Desktop input actions require
+    COMPUTER_USE_ALLOW_DESKTOP=true. If a desktop action returns a permission
+    request, ask the user and only then call action='grant_permission' with
+    confirm=True.
     """
 
     selected_mode = mode.strip().casefold()
     if selected_mode == "desktop":
-        return desktop_tools.run_desktop_action(
-            _desktop_params(
-                action=action,
-                x=x,
-                y=y,
-                text=text,
-                key=key,
-                keys=keys,
-                amount=amount,
-                button=button,
-                duration=duration,
-                interval=interval,
-                filename=filename,
-                command=command,
-                shell=shell,
-                app=app,
-                permission=permission,
-                confirm=confirm,
-            )
+        params = _desktop_params(
+            action=action,
+            x=x,
+            y=y,
+            text=text,
+            key=key,
+            keys=keys,
+            amount=amount,
+            button=button,
+            duration=duration,
+            interval=interval,
+            filename=filename,
+            command=command,
+            shell=shell,
+            app=app,
+            target=target,
+            permission=permission,
+            confirm=confirm,
         )
+        computer_use_runtime.record_event(
+            "tool_start",
+            f"computer_use desktop {action} started.",
+            tool="computer_use",
+            data={"mode": "desktop", "action": action, "params": _public_params(params)},
+        )
+        if action not in SAFE_DESKTOP_ACTIONS and not computer_use_runtime.is_enabled():
+            result = "Computer use mode is disabled. Ask the user to enable computer use before desktop control."
+            computer_use_runtime.record_event(
+                "tool_blocked",
+                result,
+                tool="computer_use",
+                data={"mode": "desktop", "action": action},
+            )
+            return result
+        result = desktop_tools.run_desktop_action(params)
+        computer_use_runtime.record_event(
+            "tool_result",
+            f"computer_use desktop {action} finished.",
+            tool="computer_use",
+            data={"mode": "desktop", "action": action, "result": result},
+        )
+        return result
+    if selected_mode == "workspace":
+        params = _workspace_params(
+            action=action,
+            url=url,
+            target=target or ref,
+            element=element,
+            text=text,
+            command=command,
+            filename=filename,
+            amount=amount,
+            submit=submit,
+        )
+        computer_use_runtime.record_event(
+            "tool_start",
+            f"computer_use workspace {action} started.",
+            tool="computer_use",
+            data={"mode": "workspace", "action": action, "params": _public_params(params)},
+        )
+        try:
+            workspace_result = workspace_worker.run(params)
+        except WorkspaceActionError as exc:
+            message = str(exc)
+            computer_use_runtime.record_event(
+                "tool_error",
+                message,
+                tool="computer_use",
+                data={"mode": "workspace", "action": action},
+            )
+            return message
+        computer_use_runtime.record_event(
+            "tool_result",
+            f"computer_use workspace {action} finished.",
+            tool="computer_use",
+            data={"mode": "workspace", "action": action, "result": workspace_result.data},
+        )
+        return workspace_result.message
     if selected_mode == "browser":
         params = _browser_params(
             action=action,
@@ -210,5 +301,26 @@ def computer_use(
                 json.loads(str(params["fields_json"]))
             except json.JSONDecodeError:
                 return "computer_use fields_json must be valid JSON."
-        return playwright_run(params)
-    return "computer_use mode must be desktop or browser."
+        computer_use_runtime.record_event(
+            "tool_start",
+            f"computer_use browser {action} started.",
+            tool="computer_use",
+            data={"mode": "browser", "action": action, "params": _public_params(params)},
+        )
+        result = playwright_run(params)
+        computer_use_runtime.record_event(
+            "tool_result",
+            f"computer_use browser {action} finished.",
+            tool="computer_use",
+            data={"mode": "browser", "action": action, "result": result},
+        )
+        return result
+    return "computer_use mode must be desktop, workspace, or browser."
+
+
+def _public_params(params: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(params)
+    for key in ("text", "command", "fields_json"):
+        if key in redacted and redacted[key]:
+            redacted[key] = "[redacted]"
+    return redacted

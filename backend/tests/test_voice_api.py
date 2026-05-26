@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from agent import api
+from agent.computer_use_runtime import ComputerUseRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -133,6 +134,87 @@ def test_voice_turn_streams_transcript_text_final_then_audio(monkeypatch):
     assert final_payload["answer"] == "Hello there."
     assert final_payload["voice"] is True
     assert learned == [("tell me about stillness", "Hello there.", "voice-thread", "voice")]
+
+
+def test_voice_turn_intercepts_computer_use_mode_command(monkeypatch, tmp_path):
+    class FailingAgent:
+        async def astream_events(self, *args, **kwargs):
+            raise AssertionError("computer use command should not call the agent")
+
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    learned = []
+
+    async def fake_background_learn(query, answer, thread_id="default", source="agent"):
+        learned.append((query, answer, thread_id, source))
+
+    monkeypatch.setattr(api, "agent", FailingAgent())
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api, "get_stt_engine", lambda: FakeStt("turn on computer use"), raising=False)
+    monkeypatch.setattr(api, "get_tts_engine", lambda: FakeTts(), raising=False)
+    monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+
+    with TestClient(api.app) as client:
+        with client.stream(
+            "POST",
+            "/api/voice/turn",
+            data={"thread_id": "voice-thread", "model": ""},
+            files={"audio": ("speech.wav", _wav_bytes(), "audio/wav")},
+        ) as response:
+            body = response.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    names = [event for event, _payload in events]
+    final_payload = next(payload for event, payload in events if event == "final")
+
+    assert response.status_code == 200
+    assert names[:4] == ["transcript", "meta", "computer_use", "token"]
+    assert "audio" in names
+    assert final_payload["answer"].startswith("Computer use is on")
+    assert final_payload["voice"] is True
+    assert runtime.status()["enabled"] is True
+    assert learned == [("turn on computer use", final_payload["answer"], "voice-thread", "computer_use")]
+
+
+def test_voice_turn_frames_followup_as_computer_use_task_when_mode_enabled(monkeypatch, tmp_path):
+    seen_inputs = []
+
+    class InspectingAgent:
+        async def astream_events(self, input_payload, *args, **kwargs):
+            seen_inputs.append(input_payload)
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="Opening terminal.")}}
+
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+    runtime.enable(source="test", thread_id="voice-thread")
+
+    monkeypatch.setattr(api, "agent", InspectingAgent())
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api, "get_stt_engine", lambda: FakeStt("open terminal"), raising=False)
+    monkeypatch.setattr(api, "get_tts_engine", lambda: FakeTts(), raising=False)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or object())
+
+    with TestClient(api.app) as client:
+        with client.stream(
+            "POST",
+            "/api/voice/turn",
+            data={"thread_id": "voice-thread", "model": ""},
+            files={"audio": ("speech.wav", _wav_bytes(), "audio/wav")},
+        ) as response:
+            body = response.read().decode("utf-8")
+
+    events = _parse_sse(body)
+    final_payload = next(payload for event, payload in events if event == "final")
+    user_content = seen_inputs[0]["messages"][0]["content"]
+
+    assert response.status_code == 200
+    assert "Computer use mode is enabled" in user_content
+    assert "open terminal" in user_content
+    assert final_payload["answer"] == "Opening terminal."
 
 
 def test_voice_turn_keeps_text_when_tts_fails(monkeypatch):
