@@ -126,6 +126,8 @@ class Settings(BaseSettings):
         alias="COMPUTER_USE_SCREENSHOT_DIR",
     )
     computer_use_activity_overlay: bool = Field(default=True, alias="COMPUTER_USE_ACTIVITY_OVERLAY")
+    computer_use_exclusive_control: bool = Field(default=True, alias="COMPUTER_USE_EXCLUSIVE_CONTROL")
+    computer_use_guard_watchdog_seconds: float = Field(default=20.0, alias="COMPUTER_USE_GUARD_WATCHDOG_SECONDS")
 
     @field_validator(
         "obsidian_vault_path",

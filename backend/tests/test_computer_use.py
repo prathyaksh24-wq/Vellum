@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -54,6 +55,18 @@ class FakePyAutoGui:
         self.calls.append(("hotkey", keys))
 
 
+class FakeLeaseGuard:
+    def __init__(self, *, active: bool = True) -> None:
+        self.active = active
+        self.heartbeats = 0
+
+    def heartbeat(self) -> None:
+        self.heartbeats += 1
+
+    def status(self) -> dict[str, object]:
+        return {"lease_active": self.active, "active": self.active}
+
+
 def test_desktop_type_uses_slightly_slower_default_interval(monkeypatch):
     fake = FakePyAutoGui()
     monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
@@ -92,14 +105,32 @@ def test_desktop_switch_app_uses_alt_tab(monkeypatch):
 
 def test_desktop_switch_browser_tab_uses_ctrl_tab(monkeypatch):
     fake = FakePyAutoGui()
+    focus_calls = []
     monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
     monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
     monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(desktop_tools, "_focus_browser_window", lambda: focus_calls.append("browser") or True)
 
     result = desktop_tools.run_desktop_action({"action": "switch_browser_tab", "direction": "previous"})
 
     assert result == "Desktop browser tab switch requested: previous."
+    assert focus_calls == ["browser"]
     assert fake.calls == [("hotkey", ("ctrl", "shift", "tab"))]
+
+
+def test_desktop_close_browser_tab_focuses_browser_before_ctrl_w(monkeypatch):
+    fake = FakePyAutoGui()
+    focus_calls = []
+    monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
+    monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(desktop_tools, "_focus_browser_window", lambda: focus_calls.append("browser") or True)
+
+    result = desktop_tools.run_desktop_action({"action": "close_browser_tab"})
+
+    assert result == "Desktop browser tab close requested."
+    assert focus_calls == ["browser"]
+    assert fake.calls == [("hotkey", ("ctrl", "w"))]
 
 
 def test_desktop_close_app_invokes_taskkill(monkeypatch):
@@ -218,6 +249,17 @@ def test_desktop_open_app_uses_visible_app_launcher_when_granted(monkeypatch):
     assert launched == ["Terminal"]
 
 
+@pytest.mark.skipif(os.name != "nt", reason="Windows app focus is Windows-specific")
+def test_launch_app_focuses_windows_app_after_shell_execute(monkeypatch):
+    calls = []
+    monkeypatch.setattr(desktop_tools, "_shell_execute", lambda executable, args: calls.append(("shell", executable, args)))
+    monkeypatch.setattr(desktop_tools, "_focus_app_window", lambda executable: calls.append(("focus", executable)))
+
+    desktop_tools._launch_app("chrome")
+
+    assert calls == [("shell", "chrome.exe", []), ("focus", "chrome.exe")]
+
+
 def test_desktop_open_app_requests_runtime_permission(monkeypatch):
     monkeypatch.setattr(desktop_tools, "_desktop_allowed", lambda: True)
     monkeypatch.setattr(desktop_tools, "_runtime_permission_granted", lambda permission: False)
@@ -255,7 +297,9 @@ def test_computer_use_routes_desktop(monkeypatch):
 
 def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     calls = []
+    guard = FakeLeaseGuard()
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -272,6 +316,7 @@ def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     )
 
     assert result == "terminal-ok"
+    assert guard.heartbeats == 1
     assert calls == [{"action": "run_terminal_command", "command": "claude", "shell": "powershell"}]
 
 
@@ -284,6 +329,24 @@ def test_computer_use_blocks_desktop_mutation_when_mode_disabled(monkeypatch):
 
     assert "Computer use mode is disabled" in result
     assert "enable computer use" in result
+
+
+def test_computer_use_blocks_desktop_mutation_when_exclusive_lease_missing(monkeypatch):
+    calls = []
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard(active=False))
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "run_desktop_action",
+        lambda params: calls.append(params) or "desktop-ok",
+    )
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "click", "x": 10, "y": 20}
+    )
+
+    assert "exclusive control is not active" in result
+    assert calls == []
 
 
 def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
@@ -309,7 +372,9 @@ def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
 
 def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
     calls = []
+    guard = FakeLeaseGuard()
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -321,12 +386,15 @@ def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
     )
 
     assert result == "app-ok"
+    assert guard.heartbeats == 1
     assert calls == [{"action": "open_app", "app": "GitHub Desktop"}]
 
 
 def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):
     calls = []
+    guard = FakeLeaseGuard()
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -342,6 +410,7 @@ def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):
 
     assert close_result == "desktop-ok"
     assert switch_result == "desktop-ok"
+    assert guard.heartbeats == 2
     assert calls == [
         {"action": "close_app", "app": "chrome"},
         {"action": "switch_browser_tab", "direction": "previous"},

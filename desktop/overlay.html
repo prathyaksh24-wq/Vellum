@@ -17,15 +17,70 @@
 
       .aura {
         position: fixed;
-        inset: 8px;
-        border: 1px solid rgba(217, 119, 70, 0.7);
+        inset: 0;
+      }
+
+      .aura::before,
+      .aura::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at var(--x, 18%) var(--y, 24%), rgba(255, 190, 118, 0.28), transparent 26%),
+          radial-gradient(circle at calc(100% - var(--x, 18%)) calc(100% - var(--y, 24%)), rgba(217, 119, 70, 0.22), transparent 30%);
         box-shadow:
-          inset 0 0 42px rgba(217, 119, 70, 0.22),
-          0 0 52px rgba(217, 119, 70, 0.26);
+          inset 0 0 42px rgba(255, 169, 96, 0.34),
+          inset 0 0 92px rgba(217, 119, 70, 0.20),
+          inset 0 0 160px rgba(217, 119, 70, 0.12);
+        filter: blur(18px);
+        animation: drift 6.5s ease-in-out infinite alternate;
+      }
+
+      .aura::after {
+        inset: 18px;
+        border: 1px solid rgba(255, 181, 112, 0.28);
+        border-radius: 34px;
+        filter: blur(8px);
+        opacity: 0.78;
+        animation-duration: 4.2s;
+        animation-direction: alternate-reverse;
+      }
+
+      @keyframes drift {
+        0% {
+          --x: 14%;
+          --y: 22%;
+          opacity: 0.62;
+          transform: scale(0.995);
+        }
+        50% {
+          --x: 54%;
+          --y: 18%;
+          opacity: 0.95;
+        }
+        100% {
+          --x: 82%;
+          --y: 72%;
+          opacity: 0.78;
+          transform: scale(1.006);
+        }
+      }
+
+      .kill-hint {
+        position: fixed;
+        right: 24px;
+        bottom: 20px;
+        color: rgba(255, 223, 196, 0.78);
+        font: 500 11px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        text-shadow: 0 0 18px rgba(217, 119, 70, 0.72);
       }
     </style>
   </head>
   <body>
     <div class="aura"></div>
+    <div class="kill-hint">Ctrl+Alt+Esc to stop</div>
   </body>
 </html>

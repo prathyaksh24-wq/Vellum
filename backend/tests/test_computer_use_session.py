@@ -40,6 +40,37 @@ class FakeRouter:
         }
 
 
+class FakeInputGuard:
+    def __init__(self, *, fail_acquire: bool = False) -> None:
+        self.fail_acquire = fail_acquire
+        self.calls: list[str] = []
+        self.on_interrupt = None
+        self.active = False
+
+    def acquire(self, *, session_id: str, on_interrupt):
+        self.calls.append(f"acquire:{session_id}")
+        if self.fail_acquire:
+            raise RuntimeError("input guard unavailable")
+        self.on_interrupt = on_interrupt
+        self.active = True
+        return "input guard acquired"
+
+    def release(self) -> str:
+        self.calls.append("release")
+        self.active = False
+        return "input guard released"
+
+    def heartbeat(self) -> None:
+        self.calls.append("heartbeat")
+
+    def status(self) -> dict[str, object]:
+        return {"ready": True, "active": self.active, "lease_active": self.active}
+
+    def interrupt(self) -> None:
+        assert self.on_interrupt is not None
+        self.on_interrupt("kill switch")
+
+
 def _runtime(tmp_path):
     return ComputerUseRuntime(
         state_path=tmp_path / "mode.json",
@@ -52,14 +83,17 @@ def test_session_start_sets_active_status_and_starts_overlay(tmp_path):
 
     overlay = FakeOverlay()
     runtime = _runtime(tmp_path)
-    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter())
+    guard = FakeInputGuard()
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
 
     status = session.start(source="ui", thread_id="frontend", task="open browser")
 
     assert overlay.calls == ["start"]
+    assert guard.calls[0].startswith("acquire:")
     assert status["enabled"] is True
     assert status["status"] == "ready"
     assert status["session_id"]
+    assert status["input_guard"]["lease_active"] is True
     assert runtime.recent_events()[-1]["kind"] == "session_started"
 
 
@@ -68,12 +102,14 @@ def test_session_stop_cancels_work_and_stops_overlay(tmp_path):
 
     overlay = FakeOverlay()
     runtime = _runtime(tmp_path)
-    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter())
+    guard = FakeInputGuard()
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
     session.start(source="ui", thread_id="frontend")
 
     status = session.stop(source="ui", reason="user")
 
     assert overlay.calls == ["start", "stop"]
+    assert guard.calls[-1] == "release"
     assert status["enabled"] is False
     assert status["status"] == "disabled"
     assert session.stop_requested is True
@@ -85,7 +121,7 @@ def test_session_submit_task_records_ordered_events(tmp_path):
 
     router = FakeRouter()
     runtime = _runtime(tmp_path)
-    session = ComputerUseSession(runtime=runtime, overlay=FakeOverlay(), router=router)
+    session = ComputerUseSession(runtime=runtime, overlay=FakeOverlay(), router=router, input_guard=FakeInputGuard())
     session.start(source="ui", thread_id="frontend")
 
     result = session.submit_task("open notepad", source="text", thread_id="frontend")
@@ -103,10 +139,54 @@ def test_session_start_failure_does_not_leave_mode_enabled(tmp_path):
     from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError
 
     runtime = _runtime(tmp_path)
-    session = ComputerUseSession(runtime=runtime, overlay=FakeOverlay(fail_start=True), router=FakeRouter())
+    session = ComputerUseSession(
+        runtime=runtime,
+        overlay=FakeOverlay(fail_start=True),
+        router=FakeRouter(),
+        input_guard=FakeInputGuard(),
+    )
 
     with pytest.raises(ComputerUseSessionError, match="overlay unavailable"):
         session.start(source="ui", thread_id="frontend")
 
     assert runtime.status()["enabled"] is False
     assert runtime.status()["status"] == "disabled"
+
+
+def test_session_guard_failure_stops_overlay_and_does_not_enable_mode(tmp_path):
+    from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError
+
+    overlay = FakeOverlay()
+    runtime = _runtime(tmp_path)
+    session = ComputerUseSession(
+        runtime=runtime,
+        overlay=overlay,
+        router=FakeRouter(),
+        input_guard=FakeInputGuard(fail_acquire=True),
+    )
+
+    with pytest.raises(ComputerUseSessionError, match="input guard unavailable"):
+        session.start(source="ui", thread_id="frontend")
+
+    assert overlay.calls == ["start", "stop"]
+    assert runtime.status()["enabled"] is False
+    assert runtime.status()["status"] == "disabled"
+
+
+def test_session_guard_interrupt_force_stops_computer_use(tmp_path):
+    from agent.computer_use.session import ComputerUseSession
+
+    overlay = FakeOverlay()
+    guard = FakeInputGuard()
+    runtime = _runtime(tmp_path)
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
+    session.start(source="ui", thread_id="frontend")
+
+    guard.interrupt()
+
+    status = runtime.status()
+    assert status["enabled"] is False
+    assert status["status"] == "disabled"
+    assert status["source"] == "input_guard"
+    assert overlay.calls == ["start", "stop"]
+    assert guard.calls[-1] == "release"

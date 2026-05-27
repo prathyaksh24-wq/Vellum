@@ -58,6 +58,21 @@ Specialist agents advise; Vellum decides. Specialists should not directly speak 
 
 ## Architecture
 
+### Codex Subagent Alignment
+
+OpenAI's Codex subagent model is a useful design reference, with one important distinction: Codex subagents are development-time spawned workers, while Vellum subagents are runtime specialist services inside the product. Vellum should borrow the operating principles, not blindly copy the storage format.
+
+Codex's documented pattern says subagents are useful when work can be split across specialized agents, often in parallel, and Codex then collects their results into one consolidated response. It also emphasizes that custom agents should be narrow, have clear instructions, and can use different model/tool/sandbox configurations depending on the task. Vellum should mirror this by keeping `SportsAgent`, `XAgent`, `YoutubeAgent`, `MemoryAgent`, and future `MCPAgent` focused and contract-bound.
+
+Adopted rules:
+
+- Vellum explicitly routes or delegates; specialists do not self-spawn recursively.
+- Specialist fan-out has a concurrency cap and a default depth of 1.
+- Specialists inherit parent safety/privacy policy unless explicitly narrowed.
+- Specialists can have narrower tool surfaces than Vellum.
+- Vellum waits for specialist results, checks freshness/confidence/safety, then returns one consolidated answer.
+- Runtime specialists use Vellum's Python contracts; optional `.codex/agents/*.toml` files can exist later for development-time Codex workflows, but they are not the runtime source of truth.
+
 ### Main Agent
 
 `VellumAgent` is the user-facing orchestrator.
@@ -131,6 +146,36 @@ User asks Vellum
 ```
 
 Routing should be explicit and inspectable in logs, but invisible in normal chat unless the user asks how an answer was produced.
+
+## Skill-Driven Routing
+
+Vellum should route to specialist subagents through its procedural skill layer. In practice, skills become the learned "when and how to delegate" layer, while specialist agents remain the execution layer.
+
+The current Vellum skill store already loads `.skills/active/*.json` and matches query triggers. Extend that shape with optional routing metadata:
+
+```json
+{
+  "id": "skill-route-sports-agent-v1",
+  "name": "Route sports questions to SportsAgent",
+  "trigger": ["sports", "NBA", "Formula One", "F1", "Arsenal", "Premier League", "Champions League"],
+  "negative_trigger": ["UFC", "boxing"],
+  "confidence_threshold": 0.5,
+  "route_to_agent": "SportsAgent",
+  "instructions": "For enabled sports questions, consult SportsAgent before answering. Vellum remains the final responder."
+}
+```
+
+Routing order:
+
+1. Load active skills.
+2. Check whether any matching skill has `route_to_agent`.
+3. If a routing skill matches, Vellum delegates to that specialist through the orchestrator.
+4. If no routing skill matches, use deterministic fallback routing.
+5. If no specialist matches, Vellum answers directly.
+
+This lets Vellum learn new delegation habits over time. For example, repeated sports conversations can promote a proposed sports-routing skill into `.skills/active/`; repeated X or Youtube workflows can do the same for `XAgent` and `YoutubeAgent`.
+
+The command `npx skills add https://github.com/obra/superpowers --skill subagent-driven-development` is useful for installing the Superpowers development skill in Codex-like environments. For Vellum runtime, the equivalent is not installing that exact development skill, but creating active Vellum skills that route to runtime subagents. Vellum can still record the Superpowers skill as the preferred development workflow for building and reviewing multi-agent changes.
 
 ## Specialist Response Contract
 

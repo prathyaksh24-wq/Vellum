@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
+from agent.computer_use.input_guard import computer_use_input_guard
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, workspace_worker
 from agent.mcp.playwright_tools import run_tool as playwright_run
@@ -234,6 +235,18 @@ def computer_use(
                 data={"mode": "desktop", "action": action},
             )
             return result
+        if action not in SAFE_DESKTOP_ACTIONS:
+            guard_status = computer_use_input_guard.status()
+            if not guard_status.get("lease_active", False):
+                result = "Computer use exclusive control is not active. Enable computer use again before desktop control."
+                computer_use_runtime.record_event(
+                    "tool_blocked",
+                    result,
+                    tool="computer_use",
+                    data={"mode": "desktop", "action": action, "input_guard": guard_status},
+                )
+                return result
+            computer_use_input_guard.heartbeat()
         result = desktop_tools.run_desktop_action(params)
         computer_use_runtime.record_event(
             "tool_result",

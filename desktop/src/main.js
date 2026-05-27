@@ -4,6 +4,7 @@ const status = document.querySelector("#status");
 const openVellum = document.querySelector("#openVellum");
 const enableComputer = document.querySelector("#enableComputer");
 const disableComputer = document.querySelector("#disableComputer");
+let computerUseEnabled = false;
 
 function withTimeout(promise, label, timeoutMs = 8000) {
   let timeoutId;
@@ -62,7 +63,18 @@ async function runButton(button, label, action) {
 async function refreshHealth() {
   try {
     const body = await invoke("backend_health");
-    status.textContent = body.ok ? "backend ready" : "backend unreachable";
+    if (computerUseEnabled) {
+      if (!body.ok) {
+        status.textContent = "backend unreachable";
+        return;
+      }
+      const session = await fetch("http://127.0.0.1:8000/api/computer-use/session/status").then((res) => res.json());
+      computerUseEnabled = !!session.enabled;
+      const guard = session.input_guard || {};
+      status.textContent = guard.lease_active ? "computer use ready · Ctrl+Alt+Esc to stop" : "computer use waiting";
+    } else {
+      status.textContent = body.ok ? "backend ready" : "backend unreachable";
+    }
   } catch {
     status.textContent = "backend unreachable";
   }
@@ -75,7 +87,14 @@ openVellum.addEventListener("click", () => {
 enableComputer.addEventListener("click", async () => {
   await runButton(enableComputer, "enabling computer use", async () => {
     const overlayReady = await setComputerOverlay(true);
-    const result = await postJson("/api/computer-use/session/start", { source: "tauri" });
+    let result;
+    try {
+      result = await postJson("/api/computer-use/session/start", { source: "tauri" });
+    } catch (err) {
+      await setComputerOverlay(false);
+      throw err;
+    }
+    computerUseEnabled = true;
     if (!overlayReady) {
       result.message = `${result.message} Overlay warning: desktop glow did not confirm.`;
     }
@@ -87,6 +106,7 @@ disableComputer.addEventListener("click", async () => {
   await runButton(disableComputer, "disabling computer use", async () => {
     const result = await postJson("/api/computer-use/session/stop", { source: "tauri" });
     await setComputerOverlay(false);
+    computerUseEnabled = false;
     return result;
   });
 });

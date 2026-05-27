@@ -45,6 +45,16 @@ def test_agent_prompt_documents_workspace_mode():
     assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
+def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():
+    assert "youtube.com/results?search_query=" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Do not stop after opening Chrome" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
+def test_agent_prompt_checks_permissions_before_asking_again():
+    assert "action='permissions'" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Do not ask again for a permission that is already true" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
 def test_agent_tool_list_includes_x_action(monkeypatch):
     captured = {}
 

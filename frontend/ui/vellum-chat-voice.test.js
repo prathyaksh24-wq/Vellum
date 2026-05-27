@@ -48,6 +48,20 @@ describe("vellum voice UI wiring", () => {
     expect(html).toContain("speakText(payload.message)");
   });
 
+  test("computer-use toggle uses session endpoints", () => {
+    expect(html).toContain("session/start");
+    expect(html).toContain("session/stop");
+  });
+
+  test("browser UI does not draw the laptop-wide aura inside the tab", () => {
+    expect(html).toContain(".computer-use-aura");
+    expect(html).toContain("display: none");
+  });
+
+  test("computer-use status polling keeps the exclusive-control heartbeat alive", () => {
+    expect(html).toContain("setInterval(loadComputerUseStatus, 5000)");
+  });
+
   test("computer-use mode listens after the spoken acknowledgement", () => {
     expect(html).toContain("startComputerUseVoiceAutoStop");
     expect(html).toContain("startVoiceRecording();");

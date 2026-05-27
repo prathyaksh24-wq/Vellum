@@ -1,16 +1,28 @@
 {
-  "disabled_at": "2026-05-26T07:21:13.015335+00:00",
+  "disabled_at": "2026-05-27T06:26:19.760544+00:00",
   "enabled": false,
   "enabled_at": "2026-05-24T03:57:15.671502+00:00",
+  "input_guard": {
+    "active": false,
+    "exclusive": true,
+    "heartbeat_age_seconds": 20.204094100015936,
+    "kill_switch": "Ctrl+Alt+Esc",
+    "kind": "windows-hook",
+    "last_interrupt": "input guard watchdog expired",
+    "lease_active": false,
+    "ready": true,
+    "session_id": "cbf067b909e8451993fccf80255d93de",
+    "watchdog_seconds": 20.0
+  },
   "overlay": {
     "controller": "backend",
     "ready": true
   },
   "paused": false,
   "session_id": "cbf067b909e8451993fccf80255d93de",
-  "source": "text",
+  "source": "input_guard",
   "status": "disabled",
   "task": null,
-  "thread_id": "afb2cbff-e79e-4cad-aa75-c63e22400896",
-  "updated_at": "2026-05-26T07:21:13.015335+00:00"
+  "thread_id": "70d7f62e-d3f6-4ae8-b994-d227993311d2",
+  "updated_at": "2026-05-27T06:26:19.760544+00:00"
 }

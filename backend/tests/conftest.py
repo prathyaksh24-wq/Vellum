@@ -11,6 +11,7 @@ os.environ.setdefault("OPENROUTER_API_KEY", "test-key")
 os.environ.setdefault("OBSIDIAN_VAULT_PATH", str(_VAULT.resolve()))
 os.environ.setdefault("FILESYSTEM_MCP_PATH", str(_VAULT.resolve()))
 os.environ.setdefault("COMPUTER_USE_SCREENSHOT_DIR", str((_ROOT / "computer-use" / "screenshots").resolve()))
+os.environ.setdefault("COMPUTER_USE_EXCLUSIVE_CONTROL", "false")
 
 
 @pytest.fixture(autouse=True, scope="session")

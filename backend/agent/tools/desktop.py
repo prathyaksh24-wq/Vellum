@@ -306,11 +306,110 @@ def _launch_app(app: str) -> None:
         executable, args = _app_alias(app)
         try:
             _shell_execute(executable, args)
+            _focus_app_window(executable)
             return
         except Exception:
             _launch_app_via_start_menu(app)
+            _focus_app_window(app)
             return
     subprocess.Popen([app])
+
+
+def _process_ids(process_name: str) -> list[int]:
+    try:
+        import psutil
+    except ImportError:
+        return []
+    normalized = process_name.casefold()
+    pids: list[int] = []
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            name = str(proc.info.get("name") or "").casefold()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if name == normalized:
+            pids.append(int(proc.info["pid"]))
+    return pids
+
+
+def _focus_app_window(app_or_executable: str, timeout: float = 4.0) -> bool:
+    if os.name != "nt":
+        return False
+    process_name = _app_process_name(app_or_executable)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _focus_window_for_process(process_name):
+            return True
+        time.sleep(0.2)
+    return False
+
+
+def _focus_window_for_process(process_name: str) -> bool:
+    pids = set(_process_ids(process_name))
+    if not pids:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return False
+
+    user32 = ctypes.windll.user32
+    hwnds: list[tuple[int, int]] = []
+
+    enum_windows_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+    @enum_windows_proc
+    def callback(hwnd, _lparam):
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if int(pid.value) in pids:
+            title_length = user32.GetWindowTextLengthW(hwnd)
+            if title_length > 0:
+                rect = wintypes.RECT()
+                if user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                    area = max(0, rect.right - rect.left) * max(0, rect.bottom - rect.top)
+                    hwnds.append((area, int(hwnd)))
+        return True
+
+    user32.EnumWindows(callback, 0)
+    if not hwnds:
+        return _app_activate_process(pids)
+    for _area, hwnd in sorted(hwnds, reverse=True):
+        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+        if user32.SetForegroundWindow(hwnd):
+            return True
+    return _app_activate_process(pids)
+
+
+def _app_activate_process(pids: set[int]) -> bool:
+    for pid in pids:
+        try:
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    f"$ws = New-Object -ComObject WScript.Shell; [bool]$ws.AppActivate({pid})",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+        except Exception:
+            continue
+        if result.returncode == 0 and "True" in result.stdout:
+            return True
+    return False
+
+
+def _focus_browser_window() -> bool:
+    for executable in ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe"):
+        if _focus_app_window(executable, timeout=0.8):
+            return True
+    return False
 
 
 def _app_process_name(app: str) -> str:
@@ -364,6 +463,7 @@ canvas = tk.Canvas(root, width=width, height=height, bg="black", highlightthickn
 canvas.pack(fill="both", expand=True)
 color = "#d97746"
 soft = "#f1b27a"
+gold = "#ffbf7a"
 
 try:
     hwnd = root.winfo_id()
@@ -375,10 +475,29 @@ except Exception:
 
 def draw(step=0):
     canvas.delete("glow")
-    pulse = step % 26
-    width_outer = 7 + min(pulse, 26 - pulse) // 3
-    canvas.create_rectangle(6, 6, width - 6, height - 6, outline=color, width=width_outer, tags="glow")
-    canvas.create_rectangle(18, 18, width - 18, height - 18, outline=soft, width=2, tags="glow")
+    pulse = step % 80
+    drift = int(14 * (1 + __import__("math").sin(step / 9)))
+    spread = int(10 * (1 + __import__("math").sin(step / 13)))
+    layers = [
+        (4 + drift, color, 12 + spread),
+        (18 + drift // 2, soft, 8),
+        (36 - drift // 3, gold, 4),
+        (58, soft, 2),
+    ]
+    for inset, outline, line_width in layers:
+        canvas.create_rectangle(
+            inset,
+            inset,
+            width - inset,
+            height - inset,
+            outline=outline,
+            width=max(1, line_width),
+            tags="glow",
+        )
+    orb_x = int(width * (0.18 + 0.64 * ((pulse % 40) / 39)))
+    orb_y = int(height * (0.18 + 0.20 * __import__("math").sin(step / 11)))
+    canvas.create_oval(orb_x - 90, orb_y - 90, orb_x + 90, orb_y + 90, outline=soft, width=3, tags="glow")
+    canvas.create_text(width - 24, height - 22, text="Ctrl+Alt+Esc to stop", anchor="se", fill=gold, font=("Segoe UI", 10, "bold"), tags="glow")
     root.after(80, draw, step + 1)
 
 draw()
@@ -547,6 +666,7 @@ def _perform_desktop_action(action: str, params: dict[str, Any]) -> str:
             pg.hotkey("alt", "tab")
         return f"Desktop app switch requested: {direction}."
     if action == "switch_browser_tab":
+        _focus_browser_window()
         direction = _direction(params)
         if direction == "previous":
             pg.hotkey("ctrl", "shift", "tab")
@@ -554,6 +674,7 @@ def _perform_desktop_action(action: str, params: dict[str, Any]) -> str:
             pg.hotkey("ctrl", "tab")
         return f"Desktop browser tab switch requested: {direction}."
     if action == "close_browser_tab":
+        _focus_browser_window()
         pg.hotkey("ctrl", "w")
         return "Desktop browser tab close requested."
     return f"Unsupported desktop action: {action}."
