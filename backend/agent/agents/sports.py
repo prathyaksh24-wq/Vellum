@@ -22,7 +22,7 @@ class SportsAgent:
         ("Formula-One", ("f1", "formula 1", "formula one", "grand prix", "monaco gp")),
         ("Champions-League", ("champions league", "ucl")),
         ("Premier-League", ("premier league", "arsenal", "epl")),
-        ("Ambient", ("sports", "score", "scores", "fixture", "fixtures", "injury", "injuries")),
+        ("Ambient", ("sports",)),
     )
 
     def __init__(self, vault_root: Path) -> None:
