@@ -3,7 +3,7 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
-from agent.agents import MemoryProposal, SpecialistResponse, SpecialistSource
+from agent.agents import MemoryProposal, SpecialistResponse, SpecialistSource, SportsAgent
 from agent.agents.base import (
     Freshness,
     MemoryScope,
@@ -74,3 +74,46 @@ def test_memory_proposal_structure_and_confidence_validation():
             evidence="Confidence must stay in range.",
             confidence=1.1,
         )
+
+
+def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
+    agent = SportsAgent(vault_root=tmp_path / "Vault")
+
+    assert agent.can_handle("What is happening with the NBA Finals?")
+    assert agent.can_handle("Give me Arsenal and Champions League news")
+    assert agent.can_handle("Any F1 race updates?")
+    assert agent.can_handle("UFC updates tonight?")
+    assert not agent.can_handle("What is on my calendar tomorrow?")
+
+
+def test_sports_agent_blocks_disabled_fight_queries(tmp_path):
+    agent = SportsAgent(vault_root=tmp_path / "Vault")
+
+    response = agent.answer("Any UFC fight card updates tonight?")
+
+    assert response.status == "blocked"
+    assert "disabled" in response.summary.lower()
+    assert response.agent == "SportsAgent"
+    assert response.confidence > 0.8
+
+
+def test_sports_agent_reads_latest_sports_note(tmp_path):
+    vault_root = tmp_path / "Vault"
+    latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"
+    latest.parent.mkdir(parents=True)
+    latest.write_text(
+        "---\n"
+        "captured_at: 2026-05-27T12:00:00Z\n"
+        "---\n\n"
+        "Knicks beat the Celtics behind a late fourth-quarter run.\n",
+        encoding="utf-8",
+    )
+    agent = SportsAgent(vault_root=vault_root)
+
+    response = agent.answer("NBA Finals update")
+
+    assert response.status == "answered"
+    assert "Knicks" in response.summary
+    assert response.sources[0].path_or_url == "Library/Sports/NBA/latest.md"
+    assert response.sources[0].captured_at == "2026-05-27T12:00:00Z"
+    assert response.memory_proposals[0].scope == "sports"
