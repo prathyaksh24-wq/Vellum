@@ -109,7 +109,7 @@ class SportsAgent:
 
     def _pick_league(self, lowered_query: str) -> str | None:
         for league, keywords in self._LEAGUE_KEYWORDS:
-            if any(keyword in lowered_query for keyword in keywords):
+            if any(self._has_phrase(lowered_query, keyword) for keyword in keywords):
                 return league
         return None
 

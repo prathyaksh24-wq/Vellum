@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import get_args
 
 import pytest
@@ -81,6 +82,7 @@ def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
 
     assert agent.can_handle("What is happening with the NBA Finals?")
     assert agent.can_handle("Give me Arsenal and Champions League news")
+    assert agent.can_handle("Arsenal Champions League")
     assert agent.can_handle("Any F1 race updates?")
     assert agent.can_handle("UFC updates tonight?")
     assert not agent.can_handle("What is on my calendar tomorrow?")
@@ -105,6 +107,12 @@ def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
     assert response.status != "blocked"
     assert response.status == "needs_fetch"
     assert not agent.can_handle("Summarize my calendar")
+
+
+def test_sports_agent_enabled_keywords_do_not_match_word_fragments():
+    agent = SportsAgent(vault_root=Path("unused"))
+
+    assert not agent.can_handle("How do I type an underscore in Python?")
 
 
 def test_sports_agent_treats_seeded_placeholder_latest_as_needing_fetch(tmp_path):
