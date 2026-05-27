@@ -387,6 +387,8 @@ def fetch_sports_if_curious(league: str = "", curiosity_reason: str = "") -> dic
     if not eligible:
         best = max(candidates, key=lambda c: c.get("score", 0.0)) if candidates else {"error": "no candidates"}
         memory_path = None
+        if best.get("reason") == "disabled":
+            return {"fetched": False, "decision": best, "memory_path": memory_path}
         if "error" not in best:
             memory_path = str(_write_fetch_memory(best, {}, best.get("reason", "below_threshold")))
         return {"fetched": False, "decision": best, "memory_path": memory_path}
