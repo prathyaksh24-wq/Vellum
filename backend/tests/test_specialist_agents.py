@@ -97,6 +97,30 @@ def test_sports_agent_blocks_disabled_fight_queries(tmp_path):
     assert response.confidence > 0.8
 
 
+def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
+    agent = SportsAgent(vault_root=tmp_path / "Vault")
+
+    response = agent.answer("Give me a summary of NBA Finals")
+
+    assert response.status != "blocked"
+    assert response.status == "needs_fetch"
+    assert not agent.can_handle("Summarize my calendar")
+
+
+def test_sports_agent_treats_seeded_placeholder_latest_as_needing_fetch(tmp_path):
+    vault_root = tmp_path / "Vault"
+    latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"
+    latest.parent.mkdir(parents=True)
+    latest.write_text("# NBA - Latest Snapshots\n\n_No snapshots yet._\n", encoding="utf-8")
+    agent = SportsAgent(vault_root=vault_root)
+
+    response = agent.answer("NBA Finals update")
+
+    assert response.status == "needs_fetch"
+    assert "placeholder" in response.analysis.lower()
+    assert response.sources == []
+
+
 def test_sports_agent_reads_latest_sports_note(tmp_path):
     vault_root = tmp_path / "Vault"
     latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"

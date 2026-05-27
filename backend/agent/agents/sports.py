@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from agent.agents.base import MemoryProposal, SpecialistResponse, SpecialistSource
@@ -63,6 +64,15 @@ class SportsAgent:
             )
 
         content = latest.read_text(encoding="utf-8")
+        if self._is_placeholder_snapshot(content):
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary=f"The local {league} latest.md snapshot is only a seeded placeholder.",
+                analysis="Placeholder/no-snapshot latest.md content cannot answer live sports questions; fetch a fresh snapshot first.",
+                confidence=0.25,
+            )
+
         summary = self._summarize(content)
         relative_path = latest.relative_to(self.vault_root).as_posix()
 
@@ -92,7 +102,10 @@ class SportsAgent:
         )
 
     def _has_disabled_keyword(self, lowered_query: str) -> bool:
-        return any(keyword in lowered_query for keyword in self._DISABLED_KEYWORDS)
+        return any(self._has_phrase(lowered_query, keyword) for keyword in self._DISABLED_KEYWORDS)
+
+    def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
+        return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
 
     def _pick_league(self, lowered_query: str) -> str | None:
         for league, keywords in self._LEAGUE_KEYWORDS:
@@ -106,6 +119,14 @@ class SportsAgent:
         if not lines:
             return "Latest sports snapshot is present but empty."
         return " ".join(lines)[:800]
+
+    def _is_placeholder_snapshot(self, content: str) -> bool:
+        body = self._strip_frontmatter(content)
+        lines = [line.strip() for line in body.splitlines() if line.strip()]
+        if not lines:
+            return True
+        normalized = " ".join(lines).lower()
+        return "no snapshots yet" in normalized
 
     def _strip_frontmatter(self, content: str) -> str:
         if not content.startswith("---"):
