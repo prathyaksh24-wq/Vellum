@@ -29,15 +29,20 @@ from agent.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-LEAGUES = (
+ENABLED_LEAGUES = (
     "NBA",
     "Formula-One",
     "Premier-League",
     "Champions-League",
-    "Boxing",
-    "UFC",
     "Ambient",
 )
+
+DISABLED_LEAGUES = (
+    "Boxing",
+    "UFC",
+)
+
+LEAGUES = ENABLED_LEAGUES
 
 
 # --------------------------------------------------------------------------- #
@@ -314,6 +319,8 @@ def _summarize_fetch(fetch_result: dict[str, Any]) -> str:
 
 
 def _gate(league: str) -> dict[str, Any]:
+    if league in DISABLED_LEAGUES:
+        return {"league": league, "would_fetch": False, "reason": "disabled"}
     if league not in LEAGUES:
         return {"error": f"unknown league {league!r}; choose from {list(LEAGUES)}"}
     curiosity = _read_json(_sports_root() / ".state" / "curiosity.json")
@@ -344,7 +351,7 @@ def should_fetch_sports(league: str) -> dict[str, Any]:
 
     Args:
         league: One of NBA, Formula-One, Premier-League, Champions-League,
-                Boxing, UFC, Ambient.
+                Ambient. Boxing and UFC return reason="disabled".
     """
     return _gate(league)
 

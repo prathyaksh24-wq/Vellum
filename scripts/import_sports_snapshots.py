@@ -26,15 +26,21 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 
-LEAGUES: tuple[str, ...] = (
+ENABLED_LEAGUES: tuple[str, ...] = (
     "NBA",
     "Formula-One",
     "Premier-League",
     "Champions-League",
-    "Boxing",
-    "UFC",
     "Ambient",
 )
+
+DISABLED_LEAGUES: tuple[str, ...] = (
+    "Boxing",
+    "UFC",
+)
+
+LEAGUES: tuple[str, ...] = ENABLED_LEAGUES
+ALL_KNOWN_LEAGUES: tuple[str, ...] = ENABLED_LEAGUES + DISABLED_LEAGUES
 
 QUERY_TEMPLATES: dict[str, dict[str, tuple[str, ...]]] = {
     "NBA": {
@@ -634,10 +640,13 @@ def run(
     client = client or SportsApiClient()
     serpapi_token = env_token(project_root, "SERPAPI_API_KEY") if serpapi_token is None else serpapi_token
     vault = vault_path(project_root)
-    targets = leagues or list(LEAGUES)
+    targets = leagues or list(ENABLED_LEAGUES)
 
     results: list[dict[str, Any]] = []
     for league in targets:
+        if league in DISABLED_LEAGUES:
+            results.append({"league": league, "skipped": True, "reason": "disabled"})
+            continue
         if league not in FETCHERS:
             results.append({"league": league, "skipped": True, "reason": "unknown league"})
             continue
@@ -671,7 +680,7 @@ def main() -> int:
     parser.add_argument(
         "--league",
         action="append",
-        choices=LEAGUES,
+        choices=ALL_KNOWN_LEAGUES,
         help="Restrict to one or more leagues (repeatable). Default: all.",
     )
     parser.add_argument(

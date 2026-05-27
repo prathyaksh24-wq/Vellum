@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from import_sports_snapshots import (
-    LEAGUES,
+    DISABLED_LEAGUES,
+    ENABLED_LEAGUES,
     QUERY_TEMPLATES,
     utc_now_iso,
     vault_path,
@@ -62,7 +63,7 @@ def seed_curiosity(vault: Path, force: bool) -> Path:
     if path.exists() and not force:
         return path
     leagues: dict[str, dict] = {}
-    for league in LEAGUES:
+    for league in ENABLED_LEAGUES:
         defaults = SEASON_DEFAULTS[league]
         leagues[league] = {
             "season_state": defaults["season_state"],
@@ -124,8 +125,15 @@ def root_index_md(vault: Path) -> str:
         "## Leagues",
         "",
     ]
-    for league in LEAGUES:
+    for league in ENABLED_LEAGUES:
         lines.append(f"- [[Library/Sports/{league}/_index|{league}]]")
+    lines += [
+        "",
+        "## Disabled",
+        "",
+    ]
+    for league in DISABLED_LEAGUES:
+        lines.append(f"- {league} (disabled unless explicitly re-enabled in a future build)")
     lines += [
         "",
         "## How fetching works",
@@ -323,7 +331,7 @@ def seed_folder_tree(vault: Path) -> list[Path]:
     written.append(write_and_return(base / "_index.md", root_index_md(vault)))
     written.append(write_and_return(base / "agent-guide.md", root_agent_guide_md()))
 
-    for league in LEAGUES:
+    for league in ENABLED_LEAGUES:
         league_path = base / league
         league_path.mkdir(exist_ok=True)
         if league == "Ambient":
