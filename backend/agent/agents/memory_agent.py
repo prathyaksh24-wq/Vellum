@@ -25,17 +25,7 @@ class MemoryAgent:
         return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS)
 
     def answer(self, query: str) -> SpecialistResponse:
-        return SpecialistResponse(
-            agent=self.name,
-            status="answered",
-            summary="MemoryAgent first slice does not mutate shared memory directly; it only prepares reviewable proposals.",
-            analysis="Shared memory updates remain parent-owned until proposal review and persistence are implemented.",
-            confidence=0.8,
-            memory_proposals=self.review_proposals(),
-        )
-
-    def review_proposals(self) -> list[MemoryProposal]:
-        return [
+        proposals = [
             MemoryProposal(
                 scope="memory",
                 claim="MemoryAgent should propose durable memories for review instead of mutating shared memory directly.",
@@ -43,6 +33,17 @@ class MemoryAgent:
                 confidence=0.75,
             )
         ]
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary="MemoryAgent first slice does not mutate shared memory directly; it only prepares reviewable proposals.",
+            analysis="Shared memory updates remain parent-owned until proposal review and persistence are implemented.",
+            confidence=0.8,
+            memory_proposals=self.review_proposals(proposals),
+        )
+
+    def review_proposals(self, proposals: list[MemoryProposal]) -> list[MemoryProposal]:
+        return [proposal for proposal in proposals if proposal.confidence >= 0.75]
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None

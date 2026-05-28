@@ -226,11 +226,30 @@ def test_memory_agent_stub_answers_without_mutating_shared_memory(tmp_path):
     agent = MemoryAgent(vault_root=tmp_path)
 
     response = agent.answer("Remember my sports analysis preference")
-    proposals = agent.review_proposals()
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
     assert response.status == "answered"
     assert "does not mutate shared memory directly" in response.summary
-    assert proposals
-    assert all(proposal.confidence >= 0.75 for proposal in proposals)
+    assert response.memory_proposals
+    assert all(proposal.confidence >= 0.75 for proposal in response.memory_proposals)
+
+
+def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
+    agent = MemoryAgent(vault_root=tmp_path)
+    low_confidence = MemoryProposal(
+        scope="memory",
+        claim="Weak preference signal.",
+        evidence="One vague mention.",
+        confidence=0.5,
+    )
+    high_confidence = MemoryProposal(
+        scope="memory",
+        claim="Stable preference signal.",
+        evidence="Repeated explicit preference.",
+        confidence=0.85,
+    )
+
+    proposals = agent.review_proposals([low_confidence, high_confidence])
+
+    assert proposals == [high_confidence]
