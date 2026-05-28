@@ -4,7 +4,16 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
-from agent.agents import MemoryProposal, SpecialistResponse, SpecialistSource, SportsAgent
+from agent.agents import (
+    MemoryAgent,
+    MemoryProposal,
+    SpecialistResponse,
+    SpecialistSource,
+    SpecialistRouter,
+    SportsAgent,
+    XAgent,
+    YoutubeAgent,
+)
 from agent.agents.base import (
     Freshness,
     MemoryScope,
@@ -159,3 +168,69 @@ def test_sports_agent_reads_latest_sports_note(tmp_path):
     assert response.sources[0].path_or_url == "Library/Sports/NBA/latest.md"
     assert response.sources[0].captured_at == "2026-05-27T12:00:00Z"
     assert response.memory_proposals[0].scope == "sports"
+
+
+def test_specialist_router_delegates_sports_queries(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    decision = router.route("Give me NBA updates")
+
+    assert decision.agent_name == "SportsAgent"
+    assert decision.should_delegate is True
+
+
+def test_specialist_router_keeps_general_queries_with_vellum(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    decision = router.route("Draft a polite email")
+
+    assert decision.agent_name == "VellumAgent"
+    assert decision.should_delegate is False
+
+
+def test_specialist_router_delegates_x_and_youtube_queries(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    x_decision = router.route("What did AlexHormozi post on X?")
+    youtube_decision = router.route("Summarize the latest YouTube videos")
+
+    assert x_decision.agent_name == "XAgent"
+    assert x_decision.should_delegate is True
+    assert youtube_decision.agent_name == "YoutubeAgent"
+    assert youtube_decision.should_delegate is True
+
+
+def test_x_agent_stub_defers_full_execution(tmp_path):
+    agent = XAgent(vault_root=tmp_path)
+
+    response = agent.answer("What did AlexHormozi post on X?")
+
+    assert agent.name == "XAgent"
+    assert agent.can_handle("latest-50 tweets from AlexHormozi")
+    assert response.status == "needs_fetch"
+    assert "full X specialist execution deferred" in response.summary
+
+
+def test_youtube_agent_stub_defers_full_execution(tmp_path):
+    agent = YoutubeAgent(vault_root=tmp_path)
+
+    response = agent.answer("Summarize the latest YouTube videos")
+
+    assert agent.name == "YoutubeAgent"
+    assert agent.can_handle("youtube channel transcript")
+    assert response.status == "needs_fetch"
+    assert "full YouTube specialist execution deferred" in response.summary
+
+
+def test_memory_agent_stub_answers_without_mutating_shared_memory(tmp_path):
+    agent = MemoryAgent(vault_root=tmp_path)
+
+    response = agent.answer("Remember my sports analysis preference")
+    proposals = agent.review_proposals()
+
+    assert agent.name == "MemoryAgent"
+    assert agent.can_handle("remember my preference")
+    assert response.status == "answered"
+    assert "does not mutate shared memory directly" in response.summary
+    assert proposals
+    assert all(proposal.confidence >= 0.75 for proposal in proposals)
