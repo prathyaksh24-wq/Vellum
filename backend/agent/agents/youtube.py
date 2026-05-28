@@ -9,14 +9,9 @@ from agent.agents.base import SpecialistResponse
 class YoutubeAgent:
     name = "YoutubeAgent"
 
-    _KEYWORDS = (
+    _SOURCE_KEYWORDS = (
         "youtube",
-        "video",
-        "videos",
-        "channel",
-        "channels",
-        "transcript",
-        "transcripts",
+        "yt",
     )
 
     def __init__(self, vault_root: Path) -> None:
@@ -24,7 +19,7 @@ class YoutubeAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS)
+        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS)
 
     def answer(self, query: str) -> SpecialistResponse:
         return SpecialistResponse(

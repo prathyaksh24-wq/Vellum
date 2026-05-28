@@ -10,11 +10,17 @@ class XAgent:
     name = "XAgent"
 
     _KEYWORDS = (
-        "x",
         "twitter",
         "tweet",
         "tweets",
         "latest-50",
+    )
+    _X_CONTEXT_PATTERNS = (
+        r"(?<!\w)post(?:s|ed|ing)?\s+on\s+x(?!\w)",
+        r"(?<!\w)x\s+account(?:s)?(?!\w)",
+        r"(?<!\w)x\s+feed(?:s)?(?!\w)",
+        r"(?<!\w)x\s+post(?:s)?(?!\w)",
+        r"(?<!\w)on\s+x(?!\w)",
     )
 
     def __init__(self, vault_root: Path) -> None:
@@ -22,7 +28,9 @@ class XAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS)
+        return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS) or any(
+            re.search(pattern, lowered) is not None for pattern in self._X_CONTEXT_PATTERNS
+        )
 
     def answer(self, query: str) -> SpecialistResponse:
         return SpecialistResponse(

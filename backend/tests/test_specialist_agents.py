@@ -200,6 +200,45 @@ def test_specialist_router_delegates_x_and_youtube_queries(tmp_path):
     assert youtube_decision.should_delegate is True
 
 
+def test_specialist_router_does_not_route_bare_math_or_chart_x(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    equation_decision = router.route("Solve for x in this equation")
+    axis_decision = router.route("How do I label the x-axis in matplotlib?")
+
+    assert equation_decision.agent_name == "VellumAgent"
+    assert equation_decision.should_delegate is False
+    assert axis_decision.agent_name == "VellumAgent"
+    assert axis_decision.should_delegate is False
+
+
+def test_specialist_router_does_not_route_generic_video_queries(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    file_decision = router.route("Can you summarize this video file?")
+    driver_decision = router.route("Fix my video driver issue on Windows")
+
+    assert file_decision.agent_name == "VellumAgent"
+    assert file_decision.should_delegate is False
+    assert driver_decision.agent_name == "VellumAgent"
+    assert driver_decision.should_delegate is False
+
+
+def test_specialist_router_prioritizes_explicit_source_intent_over_sports(tmp_path):
+    router = SpecialistRouter(vault_root=tmp_path)
+
+    x_decision = router.route("What did the NBA post on X?")
+    arsenal_youtube_decision = router.route("Summarize Arsenal highlights on YouTube")
+    nba_youtube_decision = router.route("Give me NBA YouTube videos")
+
+    assert x_decision.agent_name == "XAgent"
+    assert x_decision.should_delegate is True
+    assert arsenal_youtube_decision.agent_name == "YoutubeAgent"
+    assert arsenal_youtube_decision.should_delegate is True
+    assert nba_youtube_decision.agent_name == "YoutubeAgent"
+    assert nba_youtube_decision.should_delegate is True
+
+
 def test_x_agent_stub_defers_full_execution(tmp_path):
     agent = XAgent(vault_root=tmp_path)
 

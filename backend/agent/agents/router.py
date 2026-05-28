@@ -19,9 +19,9 @@ class SpecialistRouter:
     def __init__(self, vault_root: Path) -> None:
         self.vault_root = Path(vault_root)
         self._specialists = (
-            SportsAgent(vault_root=self.vault_root),
             XAgent(vault_root=self.vault_root),
             YoutubeAgent(vault_root=self.vault_root),
+            SportsAgent(vault_root=self.vault_root),
         )
 
     def route(self, query: str) -> RouteDecision:
