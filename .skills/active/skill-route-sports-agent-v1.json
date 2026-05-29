@@ -1,0 +1,29 @@
+{
+  "id": "skill-route-sports-agent-v1",
+  "name": "Route sports questions to SportsAgent",
+  "trigger": [
+    "sports",
+    "NBA",
+    "basketball",
+    "Formula One",
+    "Formula 1",
+    "F1",
+    "Arsenal",
+    "Premier League",
+    "Champions League",
+    "UCL"
+  ],
+  "negative_trigger": [
+    "UFC",
+    "boxing"
+  ],
+  "confidence_threshold": 0.25,
+  "route_to_agent": "SportsAgent",
+  "instructions": "For enabled sports questions, consult SportsAgent before answering. Vellum remains the final responder. UFC and boxing are disabled unless explicitly re-enabled in a future build.",
+  "citation_style": "source links or vault paths when available",
+  "output_format": "current status first, then key events, analysis, and freshness caveat",
+  "created": "2026-05-27",
+  "approved": "2026-05-27",
+  "use_count": 0,
+  "last_used": ""
+}
