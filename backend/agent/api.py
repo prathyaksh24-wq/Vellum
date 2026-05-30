@@ -67,10 +67,19 @@ class ChatRequest(BaseModel):
     voice: bool = False
 
 
+class Source(BaseModel):
+    url: str
+    title: str = ""
+    snippet: str = ""
+    domain: str = ""
+    fetched_at: str = ""
+
+
 class ChatResponse(BaseModel):
     answer: str
     thread_id: str
     tools: list[str] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
 
 
 class VoiceChatResponse(ChatResponse):
@@ -358,11 +367,12 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _message_content(messages[-1] if messages else None) or "No response."
     tools = _tool_call_names(messages)
+    sources = _sources_from_messages(messages)
 
     if answer and "blocked for privacy" not in answer.casefold():
         asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
 
-    return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
+    return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
 
 
 async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
@@ -483,6 +493,71 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+from agent.tools.web import extract_web_sources
+
+_ACTIVITY_LABELS = {
+    "web_search": "Searched the web",
+    "search_my_notes": "Searched your library",
+    "read_file": "Read a note",
+    "list_files": "Browsed your vault",
+    "create_note": "Wrote a note",
+    "append_to_note": "Updated a note",
+    "context_mode": "Fetched a page",
+    "x_action": "Searched X",
+    "search_amazon": "Checked Amazon",
+    "computer_use": "Used the desktop",
+}
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
+    label = _ACTIVITY_LABELS.get(name, f"Used {name}")
+    detail = ""
+    if isinstance(tool_input, dict):
+        for key in ("query", "q", "path", "url", "league", "action", "text"):
+            value = tool_input.get(key)
+            if value:
+                detail = str(value)
+                break
+    elif isinstance(tool_input, str):
+        detail = tool_input
+    return label, detail[:200]
+
+
+def _tool_output_text(output: Any) -> str:
+    if output is None:
+        return ""
+    if isinstance(output, str):
+        return output
+    content = getattr(output, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            str(part.get("text") if isinstance(part, dict) else part) for part in content
+        )
+    return str(output)
+
+
+def _sources_from_messages(messages: list) -> list[Source]:
+    seen: set[str] = set()
+    collected: list[Source] = []
+    for message in messages:
+        if getattr(message, "name", "") != "web_search":
+            continue
+        for record in extract_web_sources(_tool_output_text(message)):
+            if record["url"] in seen:
+                continue
+            seen.add(record["url"])
+            collected.append(Source(fetched_at=_now_iso(), **record))
+    return collected
+
+
 def _agent_message_for_runtime_mode(clean_message: str) -> str:
     status = computer_use_runtime.status()
     if not status.get("enabled") or status.get("paused"):
@@ -509,6 +584,8 @@ async def _stream_agent_turn(
         yield _sse("meta", {"thread_id": active_thread_id})
         answer_parts: list[str] = []
         tool_names: list[str] = []
+        sources: list[dict] = []
+        seen_urls: set[str] = set()
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
@@ -540,6 +617,18 @@ async def _stream_agent_turn(
                     if name:
                         tool_names.append(str(name))
                         yield _sse("tool", {"name": name})
+                        label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
+                        yield _sse("activity", {"label": label, "detail": detail})
+                elif kind == "on_tool_end":
+                    if (event.get("name") or "") == "web_search":
+                        output_text = _tool_output_text(event.get("data", {}).get("output"))
+                        for record in extract_web_sources(output_text):
+                            if record["url"] in seen_urls:
+                                continue
+                            seen_urls.add(record["url"])
+                            record = {**record, "fetched_at": _now_iso()}
+                            sources.append(record)
+                            yield _sse("source", record)
                 capture_from_stream_event(
                     ledger=_api_ledger,
                     event=event,
@@ -548,10 +637,11 @@ async def _stream_agent_turn(
                     source="api",
                 )
             answer = "".join(answer_parts).strip() or "No response."
+            source_models = [Source(**record) for record in sources]
             if voice:
-                response: ChatResponse = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
+                response: ChatResponse = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             else:
-                response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names)
+                response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
                 asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source))
             yield _sse("final", response.model_dump_json())

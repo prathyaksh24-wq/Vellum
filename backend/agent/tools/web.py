@@ -1,6 +1,7 @@
 """Privacy-gated DuckDuckGo web search tool."""
 
 import logging
+from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
@@ -8,6 +9,14 @@ from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 
 logger = logging.getLogger(__name__)
+
+WEB_RESULT_SEPARATOR = "\n\n---\n\n"
+_WEB_ERROR_PREFIXES = (
+    "Web search blocked",
+    "Web search is unavailable",
+    "Web search failed",
+    "No web results",
+)
 
 
 @tool
@@ -34,8 +43,38 @@ def web_search(query: str) -> str:
     if not results:
         return "No web results found."
 
-    return "\n\n---\n\n".join(
+    return WEB_RESULT_SEPARATOR.join(
         f"**{item.get('title', '')}**\n{item.get('body', '')}\n{item.get('href', '')}"
         for item in results
     )
+
+
+def extract_web_sources(tool_output: str) -> list[dict]:
+    """Reverse web_search's formatted output into structured source records.
+
+    Returns a list of {title, url, snippet, domain}. web_search owns the output
+    format, so this parser stays in lockstep with how that string is produced.
+    """
+    if not tool_output or tool_output.startswith(_WEB_ERROR_PREFIXES):
+        return []
+    sources: list[dict] = []
+    for block in tool_output.split(WEB_RESULT_SEPARATOR):
+        lines = [line for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+        url = ""
+        for line in reversed(lines):
+            stripped = line.strip()
+            if stripped.startswith(("http://", "https://")):
+                url = stripped
+                break
+        if not url:
+            continue
+        title = lines[0].strip().strip("*").strip()
+        snippet = " ".join(line.strip() for line in lines[1:] if line.strip() != url).strip()
+        domain = urlparse(url).netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        sources.append({"title": title or domain, "url": url, "snippet": snippet[:300], "domain": domain})
+    return sources
 
