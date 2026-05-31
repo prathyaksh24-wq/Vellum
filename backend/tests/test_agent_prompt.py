@@ -69,6 +69,8 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     agent_graph.build_agent()
 
     assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
 
 
 def test_prompt_describes_main_agent_as_router_with_specialists():
@@ -76,4 +78,4 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "SportsAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "YoutubeAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "UFC and boxing are disabled" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "on-demand public sports research" in agent_graph.VELLUM_SYSTEM_PROMPT

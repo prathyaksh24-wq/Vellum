@@ -67,6 +67,21 @@ describe("vellum voice UI wiring", () => {
     expect(html).toContain("startVoiceRecording();");
   });
 
+  test("computer-use mode preflights microphone before locking input", () => {
+    expect(html).toContain("ensureVoicePermission");
+    expect(html).toContain("await ensureVoicePermission();");
+    expect(html.indexOf("await ensureVoicePermission();")).toBeLessThan(html.indexOf("fetch(`${API_BASE}/api/computer-use/${endpoint}`"));
+  });
+
+  test("computer-use voice re-arms after each voice turn", () => {
+    expect(html).toContain("queueComputerUseListening");
+    expect(html).toContain("if (computerUseState.enabled && !computerUseState.paused) queueComputerUseListening();");
+  });
+
+  test("computer-use voice does not refocus the text input while laptop control is locked", () => {
+    expect(html).toContain("if (!computerUseState.enabled) chatInput.focus();");
+  });
+
   test("computer-use feed recognizes workspace actions", () => {
     expect(html).toContain("workspace_action");
     expect(html).toContain("Workspace");

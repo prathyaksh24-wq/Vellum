@@ -111,12 +111,6 @@ class Settings(BaseSettings):
     enable_nightly_digest: bool = Field(default=True, alias="ENABLE_NIGHTLY_DIGEST")
     enable_vault_watcher: bool = Field(default=True, alias="ENABLE_VAULT_WATCHER")
     vault_watcher_debounce_seconds: float = Field(default=2.0, alias="VAULT_WATCHER_DEBOUNCE_SECONDS")
-    enable_vellum_daemon: bool = Field(default=False, alias="ENABLE_VELLUM_DAEMON")
-    daemon_sports_interval_seconds: int = Field(default=1800, alias="DAEMON_SPORTS_INTERVAL_SECONDS")
-    daemon_sports_enabled_leagues: str = Field(
-        default="NBA,Formula-One,Premier-League,Champions-League,Ambient",
-        alias="DAEMON_SPORTS_ENABLED_LEAGUES",
-    )
     voice_enabled: bool = Field(default=True, alias="VOICE_ENABLED")
     voice_stt_engine: str = Field(default="moonshine", alias="VOICE_STT_ENGINE")
     voice_stt_model: str = Field(default="tiny", alias="VOICE_STT_MODEL")
@@ -184,8 +178,6 @@ class Settings(BaseSettings):
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
-        if self.daemon_sports_interval_seconds < 60:
-            raise ValueError("DAEMON_SPORTS_INTERVAL_SECONDS must be at least 60.")
         if self.voice_stt_engine not in {"moonshine"}:
             raise ValueError("VOICE_STT_ENGINE must be moonshine.")
         if self.voice_tts_engine not in {"kokoro"}:

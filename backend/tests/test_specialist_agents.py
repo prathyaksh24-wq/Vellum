@@ -4,6 +4,8 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
+from agent.agents.live_dispatcher import LiveAgentDispatcher
+from agent.master.state import MasterThreadStateStore
 from agent.agents import (
     MemoryAgent,
     MemoryProposal,
@@ -99,24 +101,35 @@ def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
     assert not agent.can_handle("What is on my calendar tomorrow?")
 
 
-def test_sports_agent_blocks_disabled_fight_queries(tmp_path):
-    agent = SportsAgent(vault_root=tmp_path / "Vault")
+def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_path):
+    vault_root = tmp_path / "Vault"
+    search_output = (
+        "**UFC 302 results and bonuses**\n"
+        "Makhachev retained his title and the co-main ended by decision.\n"
+        "https://www.espn.com/mma/story/ufc-302-results"
+    )
+    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
 
     response = agent.answer("Any UFC fight card updates tonight?")
 
-    assert response.status == "blocked"
-    assert "disabled" in response.summary.lower()
+    assert response.status == "answered"
+    assert "UFC 302" in response.summary
+    assert "[1]" in response.summary
     assert response.agent == "SportsAgent"
-    assert response.confidence > 0.8
+    assert response.sources[0].kind == "web"
+    assert response.sources[0].path_or_url == "https://www.espn.com/mma/story/ufc-302-results"
+    saved = list((vault_root / "Library" / "Sports" / "UFC").glob("*.md"))
+    assert saved
+    assert "UFC 302 results and bonuses" in saved[0].read_text(encoding="utf-8")
 
 
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
-    agent = SportsAgent(vault_root=tmp_path / "Vault")
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
 
     response = agent.answer("Give me a summary of NBA Finals")
 
     assert response.status != "blocked"
-    assert response.status == "needs_fetch"
+    assert response.status == "error"
     assert not agent.can_handle("Summarize my calendar")
 
 
@@ -134,21 +147,27 @@ def test_sports_agent_generic_terms_need_sports_context():
     assert not agent.can_handle("Can you improve my model score function?")
 
 
-def test_sports_agent_treats_seeded_placeholder_latest_as_needing_fetch(tmp_path):
+def test_sports_agent_ignores_seeded_placeholder_latest_and_uses_web(tmp_path):
     vault_root = tmp_path / "Vault"
     latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"
     latest.parent.mkdir(parents=True)
     latest.write_text("# NBA - Latest Snapshots\n\n_No snapshots yet._\n", encoding="utf-8")
-    agent = SportsAgent(vault_root=vault_root)
+    search_output = (
+        "**NBA Finals schedule update**\n"
+        "Game 1 tips off next week with injury reports expected before shootaround.\n"
+        "https://www.nba.com/news/finals-schedule"
+    )
+    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
 
     response = agent.answer("NBA Finals update")
 
-    assert response.status == "needs_fetch"
-    assert "placeholder" in response.analysis.lower()
-    assert response.sources == []
+    assert response.status == "answered"
+    assert "Finals schedule" in response.summary
+    assert "placeholder" not in response.analysis.lower()
+    assert response.sources[0].kind == "web"
 
 
-def test_sports_agent_reads_latest_sports_note(tmp_path):
+def test_sports_agent_prefers_web_over_stale_latest_sports_note(tmp_path):
     vault_root = tmp_path / "Vault"
     latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"
     latest.parent.mkdir(parents=True)
@@ -159,15 +178,63 @@ def test_sports_agent_reads_latest_sports_note(tmp_path):
         "Knicks beat the Celtics behind a late fourth-quarter run.\n",
         encoding="utf-8",
     )
-    agent = SportsAgent(vault_root=vault_root)
+    search_output = (
+        "**NBA Finals live injury report**\n"
+        "The latest report lists two starters questionable for Game 1.\n"
+        "https://www.nba.com/news/finals-injury-report"
+    )
+    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_output)
 
     response = agent.answer("NBA Finals update")
 
     assert response.status == "answered"
-    assert "Knicks" in response.summary
-    assert response.sources[0].path_or_url == "Library/Sports/NBA/latest.md"
-    assert response.sources[0].captured_at == "2026-05-27T12:00:00Z"
+    assert "injury report" in response.summary
+    assert "Knicks" not in response.summary
+    assert response.sources[0].path_or_url == "https://www.nba.com/news/finals-injury-report"
     assert response.memory_proposals[0].scope == "sports"
+
+
+def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_path):
+    search_output = (
+        "**Last F1 race result**\n"
+        "The last Grand Prix was won from pole after a late safety-car restart.\n"
+        "https://www.formula1.com/en/latest/article/race-report"
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("Who won the last F1 race?", thread_id="t1")
+
+    assert result is not None
+    assert result.agent_name == "SportsAgent"
+    assert result.handled is True
+    assert result.sources[0]["url"] == "https://www.formula1.com/en/latest/article/race-report"
+    handoffs = list((tmp_path / "Vault" / "Agent" / "Queries").glob("*.md"))
+    assert handoffs
+    assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
+
+
+def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(tmp_path):
+    search_output = (
+        "**NBA update**\n"
+        "A short live sports result.\n"
+        "https://www.nba.com/news/update"
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+    assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
+
+    result = dispatcher.maybe_handle("Now draft an email to Sam", thread_id="t1")
+
+    assert result is not None
+    assert result.agent_name == "SportsAgent"
+    assert "route this back to Vellum" in result.answer
 
 
 def test_specialist_router_delegates_sports_queries(tmp_path):

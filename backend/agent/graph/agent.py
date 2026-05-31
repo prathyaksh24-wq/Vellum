@@ -37,7 +37,6 @@ from agent.tools.library_docs import library_docs
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
-from agent.tools.sports_curiosity import fetch_sports_if_curious, should_fetch_sports
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
 from agent.tools.x import x_action
@@ -62,16 +61,13 @@ Tools:
 15. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 16. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
 17. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-18. should_fetch_sports - Compute the curiosity score for an enabled sports league (NBA, Formula-One, Premier-League, Champions-League, Ambient) without fetching. UFC and boxing are disabled unless explicitly re-enabled in a future build. Returns score, threshold, budget, and would_fetch.
-19. fetch_sports_if_curious - Maybe fetch a SerpAPI snapshot for an enabled sports league, gated by curiosity. Writes a snapshot under Library/Sports/<league>/snapshots/ and a decision memory under Agent/Memories/. Pass league="" to let the agent auto-pick. Use this when the user asks for live updates, stats, fixtures, standings, or news for enabled sports.
-20. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+18. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
 - Specialist agents advise; Vellum decides.
-- SportsAgent handles NBA, Formula One, Premier League, Champions League, and rare Ambient sports events.
+- SportsAgent handles on-demand public sports research, scores, news, injuries, standings, and analysis for any sport.
 - XAgent and YoutubeAgent are routed specialist surfaces; their first implementation may return contract-compatible stubs until full specialist loops are built.
-- UFC and boxing are disabled for sports ingestion and live-update routing.
 
 Rules:
 - Always search the vault first.
@@ -106,7 +102,7 @@ Rules:
 - Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
-- For live sports questions about NBA, Formula One, Premier League, Champions League, or notable Ambient events, route through the sports specialist path or call fetch_sports_if_curious with the matching enabled league. UFC and boxing are disabled unless the user explicitly asks to re-enable them in a future build. The curiosity gate decides whether to actually hit SerpAPI; if it declines, fall back to search_my_notes over Library/Sports/. Use the Ambient league for sports the user doesn't normally follow (tennis Sinner vs Alcaraz, La Liga El Clasico, etc).
+- For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and cite sources.
 - Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 """
 
@@ -269,8 +265,6 @@ def build_agent(model: str | None = None):
             escalate_to_cloud,
             create_note,
             append_to_note,
-            should_fetch_sports,
-            fetch_sports_if_curious,
             x_action,
         ],
         checkpointer=build_checkpointer(),
@@ -309,8 +303,6 @@ async def build_async_agent(model: str | None = None):
             escalate_to_cloud,
             create_note,
             append_to_note,
-            should_fetch_sports,
-            fetch_sports_if_curious,
             x_action,
         ],
         checkpointer=await build_async_checkpointer(),

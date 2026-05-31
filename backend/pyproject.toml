@@ -40,7 +40,6 @@ dependencies = [
 
 [project.scripts]
 personal-agent = "agent.cli:main"
-vellum-daemon = "agent.daemon.main:main"
 
 [project.optional-dependencies]
 dev = [

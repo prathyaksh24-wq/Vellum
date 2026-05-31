@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-SKILLS_PATH = Path(".skills")
+SKILLS_PATH = Path(__file__).resolve().parents[3] / ".skills"
 
 
 class SkillStore:

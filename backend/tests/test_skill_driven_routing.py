@@ -30,6 +30,13 @@ def test_skill_route_resolver_routes_matching_skill(tmp_path):
     assert route == SkillRoute(agent_name="SportsAgent", skill_id="skill-route-sports-agent-v1")
 
 
+def test_skill_store_default_root_is_repo_anchored():
+    store = SkillStore()
+
+    assert store.root.is_absolute()
+    assert store.root.name == ".skills"
+
+
 def test_skill_route_resolver_respects_negative_trigger(tmp_path):
     write_skill(
         tmp_path,

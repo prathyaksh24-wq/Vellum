@@ -26,6 +26,7 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import get_settings
+from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
@@ -48,6 +49,7 @@ _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
 terminal_session_manager = TerminalSessionManager()
 _agent_runtime_lock = asyncio.Lock()
+_live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
 
 _project_context_singleton: ProjectContext | None = None
 
@@ -345,6 +347,18 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
             answer = f"⚠ {exc}"
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
 
+    live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    if live_result is not None and live_result.handled:
+        response = ChatResponse(
+            answer=live_result.answer,
+            thread_id=active_thread_id,
+            tools=live_result.tools,
+            sources=[Source(**source) for source in live_result.sources],
+        )
+        if response.answer and "blocked for privacy" not in response.answer.casefold():
+            asyncio.create_task(_background_learn(clean_message, response.answer, active_thread_id))
+        return response
+
     async with _agent_runtime_lock:
         try:
             await _ensure_model(model)
@@ -580,6 +594,35 @@ async def _stream_agent_turn(
     voice: bool = False,
     synthesize_audio: bool = False,
 ):
+    live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    if live_result is not None and live_result.handled:
+        yield _sse("meta", {"thread_id": active_thread_id})
+        yield _sse("activity", {"label": f"Routed to {live_result.agent_name}", "detail": clean_message[:200]})
+        for tool_name in live_result.tools:
+            yield _sse("tool", {"name": tool_name})
+        for source_record in live_result.sources:
+            yield _sse("source", source_record)
+        if live_result.answer:
+            yield _sse("token", {"text": live_result.answer})
+        response = VoiceChatResponse(
+            answer=live_result.answer,
+            thread_id=active_thread_id,
+            tools=live_result.tools,
+            sources=[Source(**source) for source in live_result.sources],
+        ) if voice else ChatResponse(
+            answer=live_result.answer,
+            thread_id=active_thread_id,
+            tools=live_result.tools,
+            sources=[Source(**source) for source in live_result.sources],
+        )
+        if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
+            asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source))
+        yield _sse("final", response.model_dump_json())
+        if synthesize_audio and live_result.answer:
+            async for audio_event in _synthesize_audio_event(live_result.answer):
+                yield audio_event
+        return
+
     async with _agent_runtime_lock:
         yield _sse("meta", {"thread_id": active_thread_id})
         answer_parts: list[str] = []

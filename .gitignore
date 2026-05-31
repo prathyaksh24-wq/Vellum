@@ -19,7 +19,6 @@ ui-dist/
 .ui-runtime/
 .api-runtime/
 .desktop-runtime/
-.daemon-runtime/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml
@@ -30,4 +29,3 @@ desktop/src-tauri/target/
 # Personal data — never commit
 Vault/
 .obsidian/
-

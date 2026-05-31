@@ -137,6 +137,7 @@ class _FakeAgent:
 def _run_stream(monkeypatch):
     fake_agent = _FakeAgent()
     monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
 
     async def _async_noop(*args, **kwargs):
         return None
