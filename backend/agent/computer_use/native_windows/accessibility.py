@@ -22,13 +22,7 @@ def normalize_fake_tree(root: Any) -> dict[str, Any]:
             "name": str(getattr(node, "name", "") or ""),
             "bounds": bounds,
         }
-        elements.append(item)
-        indent = "  " * depth
-        name = f" name='{item['name']}'" if item["name"] else ""
-        lines.append(
-            f"{indent}[{index}] {item['role']}{name} "
-            f"bounds={bounds['x']},{bounds['y']},{bounds['width']}x{bounds['height']}"
-        )
+        _append_item(elements, lines, item, depth)
         for child in list(getattr(node, "children", []) or []):
             walk(child, depth + 1)
 
@@ -47,20 +41,24 @@ def get_accessibility_state(hwnd: int, *, include_text: bool = True) -> dict[str
     try:
         uia = comtypes.client.CreateObject("UIAutomationClient.CUIAutomation")
         element = uia.ElementFromHandle(hwnd)
+        walker = getattr(uia, "ControlViewWalker", None)
     except Exception as exc:
         return {"tree": "", "elements": [], "error": f"Windows accessibility failed: {exc}"}
-    return _normalize_uia_element(element)
+    return _normalize_uia_element(element, walker=walker)
 
 
 def element_center(state: dict[str, Any], element_index: int) -> tuple[int, int]:
     for element in state.get("elements", []):
         if int(element.get("index", -1)) == int(element_index):
-            bounds = element["bounds"]
-            return int(bounds["x"] + bounds["width"] / 2), int(bounds["y"] + bounds["height"] / 2)
+            try:
+                bounds = element["bounds"]
+                return int(bounds["x"] + bounds["width"] / 2), int(bounds["y"] + bounds["height"] / 2)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"Element index has invalid bounds: {element_index}") from exc
     raise ValueError(f"Element index not found: {element_index}")
 
 
-def _normalize_uia_element(root: Any) -> dict[str, Any]:
+def _normalize_uia_element(root: Any, *, walker: Any | None = None) -> dict[str, Any]:
     elements: list[dict[str, Any]] = []
     lines: list[str] = []
 
@@ -72,20 +70,42 @@ def _normalize_uia_element(root: Any) -> dict[str, Any]:
         role = _control_type_name(getattr(node, "CurrentControlType", 0))
         name = str(getattr(node, "CurrentName", "") or "")
         item = {"index": index, "role": role, "name": name, "bounds": bounds}
-        elements.append(item)
-        indent = "  " * depth
-        label = f" name='{name}'" if name else ""
-        lines.append(
-            f"{indent}[{index}] {role}{label} "
-            f"bounds={bounds['x']},{bounds['y']},{bounds['width']}x{bounds['height']}"
-        )
-        try:
-            node.GetCurrentPropertyValue
-        except Exception:
+        _append_item(elements, lines, item, depth)
+        if walker is None:
             return
+        for child in _uia_children(node, walker):
+            walk(child, depth + 1)
 
     walk(root, 0)
     return {"tree": "\n".join(lines), "elements": elements}
+
+
+def _append_item(
+    elements: list[dict[str, Any]],
+    lines: list[str],
+    item: dict[str, Any],
+    depth: int,
+) -> None:
+    elements.append(item)
+    bounds = item["bounds"]
+    indent = "  " * depth
+    name = f" name='{item['name']}'" if item["name"] else ""
+    lines.append(
+        f"{indent}[{item['index']}] {item['role']}{name} "
+        f"bounds={bounds['x']},{bounds['y']},{bounds['width']}x{bounds['height']}"
+    )
+
+
+def _uia_children(node: Any, walker: Any) -> list[Any]:
+    children: list[Any] = []
+    try:
+        child = walker.GetFirstChildElement(node)
+        while child is not None and len(children) < MAX_NODES:
+            children.append(child)
+            child = walker.GetNextSiblingElement(child)
+    except Exception:
+        return children
+    return children
 
 
 def _bounds_dict(bounds: tuple[int, int, int, int]) -> dict[str, int]:
