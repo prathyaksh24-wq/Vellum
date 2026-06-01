@@ -70,12 +70,7 @@ class WindowsNativeComputerDriver:
 
     def activate_window(self, window_id: str) -> OperatorResult:
         window = self.windowing.activate_window(window_id)
-        return OperatorResult(
-            "ok",
-            self.backend,
-            f"Activated window {window.id}.",
-            {"window": window.to_dict()},
-        )
+        return self._after_action(window.id, f"Activated window {window.id}.")
 
     def click(
         self,

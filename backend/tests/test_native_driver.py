@@ -87,3 +87,20 @@ def test_driver_click_element_activates_window_and_uses_element_center():
     assert windowing.activated == ["hwnd:1"]
     assert input_layer.calls[0][0:3] == ("click", 25, 40)
     assert result.observation is not None
+
+
+def test_driver_activate_window_returns_observation_after_activation():
+    windowing = FakeWindowing()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+    )
+
+    result = driver.activate_window("hwnd:1")
+
+    assert result.status == "ok"
+    assert windowing.activated == ["hwnd:1"]
+    assert result.observation["window"]["id"] == "hwnd:1"
+    assert result.observation["screenshot"]["path"] == "screen.png"
