@@ -78,7 +78,7 @@ def test_active_window_rejects_non_windows_before_accessing_user32(monkeypatch):
             raise AssertionError("user32 should not be accessed off Windows")
 
     monkeypatch.setattr(windowing, "_is_windows", lambda: False)
-    monkeypatch.setattr(ctypes, "windll", WindllTrap())
+    monkeypatch.setattr(ctypes, "windll", WindllTrap(), raising=False)
 
     with pytest.raises(RuntimeError, match="Native Windows computer use requires Windows."):
         windowing.active_window()
@@ -99,7 +99,7 @@ def test_activate_window_raises_when_set_foreground_window_fails(monkeypatch):
         user32 = FakeUser32()
 
     monkeypatch.setattr(windowing, "_is_windows", lambda: True)
-    monkeypatch.setattr(ctypes, "windll", FakeWindll())
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
 
     with pytest.raises(RuntimeError, match="Failed to activate window: hwnd:10"):
         windowing.activate_window("hwnd:10")
