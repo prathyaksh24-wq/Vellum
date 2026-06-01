@@ -9,20 +9,20 @@ class FakeDesktopDriver:
 
     def run_action(self, action: str, **params):
         self.calls.append((action, params))
-        return {"status": "ok", "message": f"desktop {action}", "data": params}
+        result = {"status": "ok", "backend": "windows_native", "message": f"desktop {action}", "data": params}
+        if action == "screenshot":
+            result["observation"] = {"window": {"id": "hwnd:1"}, "screenshot": {"path": "screen.png"}}
+        return result
 
 
 def test_router_sends_host_actions_to_desktop_driver():
     desktop = FakeDesktopDriver()
     router = ComputerUseActionRouter(desktop_driver=desktop, browser_runner=lambda params: "browser")
 
-    result = router.run_action({"type": "open_app", "app": "notepad"})
+    result = router.run_action({"type": "list_windows"})
 
     assert result["status"] == "ok"
-    assert desktop.calls == [
-        ("open_app", {"app": "notepad"}),
-        ("screenshot", {}),
-    ]
+    assert desktop.calls == [("list_windows", {})]
 
 
 def test_router_sends_browser_actions_to_playwright():
@@ -51,6 +51,7 @@ def test_router_records_screenshot_after_mutating_desktop_action():
         ("screenshot", {}),
     ]
     assert result["observation"]["message"] == "desktop screenshot"
+    assert result["observation"]["observation"]["screenshot"]["path"] == "screen.png"
 
 
 def test_router_run_instruction_queues_visible_task():
