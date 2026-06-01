@@ -86,6 +86,7 @@ def _desktop_params(
         "right_click",
         "drag",
         "observe",
+        "keypress",
         "press_key",
         "hotkey",
         "scroll",

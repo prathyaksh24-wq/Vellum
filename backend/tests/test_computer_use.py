@@ -393,6 +393,24 @@ def test_computer_use_routes_desktop_type_to_native_driver(monkeypatch):
     assert driver.calls == [("type", {"text": "KSI", "window_id": "hwnd:1"})]
 
 
+def test_computer_use_routes_desktop_keypress_target_to_native_window_id(monkeypatch):
+    driver = FakeDesktopDriver("pressed key")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "keypress", "target": "hwnd:1", "key": "enter"}
+    )
+
+    assert result == "pressed key"
+    assert guard.heartbeats == 1
+    assert driver.calls == [("keypress", {"key": "enter", "window_id": "hwnd:1"})]
+
+
 def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     calls = []
     guard = FakeLeaseGuard()
