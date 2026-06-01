@@ -26,7 +26,7 @@
 - Create `backend/agent/computer_use/native_windows/accessibility.py`: UI Automation tree extraction and normalized element indexes.
 - Create `backend/agent/computer_use/native_windows/capture.py`: native window screenshot capture saved to disk.
 - Create `backend/agent/computer_use/native_windows/input.py`: SendInput key/mouse construction and action helpers.
-- Create `backend/agent/computer_use/native_windows/overlay.py`: full-screen blue click-through overlay and Esc-to-exit callback.
+- Create `backend/agent/computer_use/native_windows/overlay.py`: transparent full-screen click-through overlay with blue edge glow, top status pill, and Esc-to-exit callback.
 - Create `backend/agent/computer_use/native_windows/driver.py`: `WindowsNativeComputerDriver` composing the native modules.
 - Modify `backend/agent/computer_use/windows_driver.py`: delegate to `WindowsNativeComputerDriver` instead of `agent.tools.desktop`.
 - Modify `backend/agent/computer_use/router.py`: accept native action names and backend provenance.
@@ -1352,7 +1352,7 @@ git push origin native-windows-computer-use
 
 ---
 
-### Task 7: Full-Screen Blue Overlay With Esc Exit
+### Task 7: Transparent Blue Edge-Glow Overlay With Esc Exit
 
 **Files:**
 - Create: `backend/agent/computer_use/native_windows/overlay.py`
@@ -1394,11 +1394,11 @@ Expected: `ComputerUseSession` has no `_handle_overlay_interrupt`.
 
 - [ ] **Step 3: Implement native overlay controller**
 
-Create `backend/agent/computer_use/native_windows/overlay.py` with a backend process that opens a borderless topmost blue overlay, uses click-through window styles, and exits on Esc. It should expose `start()`, `stop()`, and `status()` methods. Use the existing Tkinter process approach from `agent.tools.desktop` as the practical foundation, but move it into this native module and change the visual/copy to blue:
+Create `backend/agent/computer_use/native_windows/overlay.py` with a backend process that opens a borderless topmost transparent overlay, uses click-through window styles, and exits on Esc. It should expose `start()`, `stop()`, `status()`, and `set_interrupt_callback(callback)` methods. Use the existing Tkinter process approach from `agent.tools.desktop` as the practical foundation, but move it into this native module and change the visual/copy to a blue edge glow plus a small top-center status pill:
 
 ```python
-MESSAGE = "Computer use active - press Esc to exit"
-BACKGROUND = "#0b5fff"
+MESSAGE = "Vellum is using your computer  ·  Esc to cancel"
+ACCENT = "#0b5fff"
 ```
 
 The subprocess should write a small sentinel file or exit code when Esc is pressed so the parent can call the session interrupt callback.

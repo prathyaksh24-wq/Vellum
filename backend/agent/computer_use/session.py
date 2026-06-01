@@ -94,6 +94,9 @@ class ComputerUseSession:
         self.stop_requested = False
         session_id = self.session_id or uuid4().hex
         try:
+            set_interrupt_callback = getattr(self.overlay, "set_interrupt_callback", None)
+            if callable(set_interrupt_callback):
+                set_interrupt_callback(self._handle_overlay_interrupt)
             overlay_message = self.overlay.start()
             guard_message = self.input_guard.acquire(session_id=session_id, on_interrupt=self._handle_input_interrupt)
         except Exception as exc:
@@ -212,6 +215,12 @@ class ComputerUseSession:
         if not state.get("enabled"):
             return
         self.stop(source="input_guard", reason=reason)
+
+    def _handle_overlay_interrupt(self, reason: str) -> None:
+        state = self.runtime.status()
+        if not state.get("enabled"):
+            return
+        self.stop(source="overlay", reason=reason)
 
 
 computer_use_session = ComputerUseSession()
