@@ -18,6 +18,17 @@ class WindowsComputerDriver:
         return self.native_driver.health_check()
 
     def run_action(self, action: str, **params: Any) -> dict[str, Any]:
+        try:
+            return self._run_action(action, **params)
+        except Exception as exc:
+            return {
+                "status": "error",
+                "backend": self.native_driver.backend,
+                "message": str(exc),
+                "data": {"action": action, **params},
+            }
+
+    def _run_action(self, action: str, **params: Any) -> dict[str, Any]:
         clean_params = {
             key: value
             for key, value in params.items()
@@ -37,14 +48,16 @@ class WindowsComputerDriver:
             )
         if normalized == "activate_window":
             return self._to_dict(self.native_driver.activate_window(clean_params["window_id"]))
-        if normalized == "click":
-            return self._to_dict(self.native_driver.click(**clean_params))
+        if normalized in {"click", "double_click", "right_click"}:
+            return self._to_dict(
+                self.native_driver.click(**self._click_params(normalized, clean_params))
+            )
         if normalized in {"type", "type_text"}:
             return self._to_dict(self.native_driver.type_text(**self._type_params(clean_params)))
-        if normalized in {"press_key", "hotkey"}:
+        if normalized in {"press_key", "hotkey", "keypress"}:
             return self._to_dict(self.native_driver.press_key(**self._key_params(clean_params)))
         if normalized == "scroll":
-            return self._to_dict(self.native_driver.scroll(**clean_params))
+            return self._to_dict(self.native_driver.scroll(**self._scroll_params(clean_params)))
         if normalized == "drag":
             return self._to_dict(self.native_driver.drag(**clean_params))
 
@@ -54,6 +67,14 @@ class WindowsComputerDriver:
             "data": {"action": action, **params},
             "backend": self.native_driver.backend,
         }
+
+    def _click_params(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
+        click_params = dict(params)
+        if action == "double_click":
+            click_params.setdefault("click_count", 2)
+        elif action == "right_click":
+            click_params.setdefault("button", "right")
+        return click_params
 
     def _observe_params(self, action: str, params: dict[str, Any]) -> dict[str, Any]:
         observe_params = dict(params)
@@ -73,6 +94,12 @@ class WindowsComputerDriver:
             key = "+".join(str(part) for part in keys) if isinstance(keys, list) else str(keys)
             params = {**params, "key": key}
             params.pop("keys", None)
+        return params
+
+    def _scroll_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        if "scroll_y" not in params and "amount" in params:
+            params = {**params, "scroll_y": params["amount"]}
+            params.pop("amount", None)
         return params
 
     def _to_dict(self, result: OperatorResult | dict[str, Any]) -> dict[str, Any]:

@@ -62,7 +62,7 @@ class ComputerUseActionRouter:
         if action_type.startswith("browser_"):
             return self._run_browser_action(action_type, action)
         result = self._run_desktop_action(action_type, action)
-        if action_type in MUTATING_DESKTOP_ACTIONS:
+        if action_type in MUTATING_DESKTOP_ACTIONS and "observation" not in result:
             result["observation"] = self.desktop_driver.run_action("screenshot")
         return result
 
