@@ -40,7 +40,7 @@ class OperatorResult:
             "data": dict(self.data),
         }
         if self.observation is not None:
-            payload["observation"] = self.observation
+            payload["observation"] = dict(self.observation)
         return payload
 
 
