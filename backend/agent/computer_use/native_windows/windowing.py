@@ -6,6 +6,8 @@ from pathlib import Path
 
 from agent.computer_use.operator import ComputerWindow
 
+_configured_user32_ids: set[int] = set()
+
 
 def window_id(hwnd: int) -> str:
     return f"hwnd:{int(hwnd)}"
@@ -51,7 +53,7 @@ def normalize_window(
 def list_windows() -> list[ComputerWindow]:
     if not _is_windows():
         return []
-    user32 = ctypes.windll.user32
+    user32 = _user32()
     windows: list[ComputerWindow] = []
     enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -82,11 +84,12 @@ def get_window(value: str | int) -> ComputerWindow:
     hwnd = parse_window_id(value)
     if not _is_windows():
         raise RuntimeError("Native Windows computer use requires Windows.")
+    pid = _window_pid(hwnd)
     normalized = normalize_window(
         hwnd=hwnd,
         title=_window_text(hwnd),
-        pid=_window_pid(hwnd),
-        app=_process_name(_window_pid(hwnd)),
+        pid=pid,
+        app=_process_name(pid),
         bounds=_window_bounds(hwnd),
     )
     if normalized is None:
@@ -95,7 +98,9 @@ def get_window(value: str | int) -> ComputerWindow:
 
 
 def active_window() -> ComputerWindow:
-    hwnd = int(ctypes.windll.user32.GetForegroundWindow())
+    if not _is_windows():
+        raise RuntimeError("Native Windows computer use requires Windows.")
+    hwnd = int(_user32().GetForegroundWindow())
     return get_window(hwnd)
 
 
@@ -103,9 +108,12 @@ def activate_window(value: str | int) -> ComputerWindow:
     hwnd = parse_window_id(value)
     if not _is_windows():
         raise RuntimeError("Native Windows computer use requires Windows.")
-    user32 = ctypes.windll.user32
+    user32 = _user32()
     user32.ShowWindow(hwnd, 9)
-    user32.SetForegroundWindow(hwnd)
+    activated = bool(user32.SetForegroundWindow(hwnd))
+    foreground = int(user32.GetForegroundWindow())
+    if not activated or foreground != hwnd:
+        raise RuntimeError(f"Failed to activate window: {window_id(hwnd)}")
     return get_window(hwnd)
 
 
@@ -113,8 +121,57 @@ def _is_windows() -> bool:
     return hasattr(ctypes, "windll")
 
 
-def _window_text(hwnd: int) -> str:
+def _user32():
     user32 = ctypes.windll.user32
+    _configure_user32(user32)
+    return user32
+
+
+def _configure_user32(user32) -> None:
+    user32_id = id(user32)
+    if user32_id in _configured_user32_ids:
+        return
+    enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    _set_signature(user32, "EnumWindows", [enum_proc, wintypes.LPARAM], wintypes.BOOL)
+    _set_signature(user32, "GetForegroundWindow", [], wintypes.HWND)
+    _set_signature(user32, "GetWindowTextLengthW", [wintypes.HWND], ctypes.c_int)
+    _set_signature(
+        user32,
+        "GetWindowTextW",
+        [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int],
+        ctypes.c_int,
+    )
+    _set_signature(
+        user32,
+        "GetWindowThreadProcessId",
+        [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)],
+        wintypes.DWORD,
+    )
+    _set_signature(
+        user32,
+        "GetWindowRect",
+        [wintypes.HWND, ctypes.POINTER(wintypes.RECT)],
+        wintypes.BOOL,
+    )
+    _set_signature(user32, "ShowWindow", [wintypes.HWND, ctypes.c_int], wintypes.BOOL)
+    _set_signature(user32, "SetForegroundWindow", [wintypes.HWND], wintypes.BOOL)
+    _set_signature(user32, "IsWindowVisible", [wintypes.HWND], wintypes.BOOL)
+    _configured_user32_ids.add(user32_id)
+
+
+def _set_signature(user32, name: str, argtypes, restype) -> None:
+    function = getattr(user32, name, None)
+    if function is None:
+        return
+    try:
+        function.argtypes = argtypes
+        function.restype = restype
+    except AttributeError:
+        pass
+
+
+def _window_text(hwnd: int) -> str:
+    user32 = _user32()
     length = user32.GetWindowTextLengthW(hwnd)
     buffer = ctypes.create_unicode_buffer(length + 1)
     user32.GetWindowTextW(hwnd, buffer, length + 1)
@@ -123,13 +180,13 @@ def _window_text(hwnd: int) -> str:
 
 def _window_pid(hwnd: int) -> int:
     pid = wintypes.DWORD()
-    ctypes.windll.user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    _user32().GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return int(pid.value)
 
 
 def _window_bounds(hwnd: int) -> tuple[int, int, int, int]:
     rect = wintypes.RECT()
-    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
+    _user32().GetWindowRect(hwnd, ctypes.byref(rect))
     return int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)
 
 
