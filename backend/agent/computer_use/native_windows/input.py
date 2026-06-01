@@ -143,13 +143,14 @@ def click(
     sender: Sender | None = None,
 ) -> None:
     emit = sender or _send_event
+    normalized_button = _button(button)
     count = int(click_count)
     if count <= 0:
         raise ValueError("click_count must be positive.")
     emit({"kind": "move", "x": int(x), "y": int(y)})
     for _ in range(count):
-        emit({"kind": "mouse_down", "button": _button(button)})
-        emit({"kind": "mouse_up", "button": _button(button)})
+        emit({"kind": "mouse_down", "button": normalized_button})
+        emit({"kind": "mouse_up", "button": normalized_button})
 
 
 def type_text(text: str, *, sender: Sender | None = None) -> None:

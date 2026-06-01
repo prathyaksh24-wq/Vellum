@@ -77,6 +77,15 @@ def test_click_rejects_non_positive_click_count():
         native_input.click(10, 20, click_count=0, sender=lambda event: None)
 
 
+def test_click_rejects_invalid_button_before_emitting_move():
+    calls = []
+
+    with pytest.raises(ValueError, match="Unsupported mouse button"):
+        native_input.click(10, 20, button="bad", sender=lambda event: calls.append(event))
+
+    assert calls == []
+
+
 def test_type_text_requires_string():
     with pytest.raises(TypeError, match="string"):
         native_input.type_text(None, sender=lambda event: None)
