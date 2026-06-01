@@ -16,6 +16,14 @@ def test_pupil_registry_exposes_default_pupils(tmp_path):
     assert registry.get("SportsAgent").can_handle("NBA update")
 
 
+def test_pupil_registry_prioritizes_explicit_source_agents_over_sports(tmp_path):
+    registry = PupilRegistry.default(vault_root=tmp_path)
+
+    assert registry.match("What did the NBA post on X?").name == "XAgent"
+    assert registry.match("Give me NBA YouTube videos").name == "YoutubeAgent"
+    assert registry.match("NBA Finals injury report").name == "SportsAgent"
+
+
 def test_master_state_persists_active_agent_and_pending_reroute(tmp_path):
     store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
 

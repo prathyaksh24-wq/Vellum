@@ -37,6 +37,8 @@ class ToolRegistry:
         self._records: dict[str, CapabilityRecord] = {}
 
     def register(self, record: CapabilityRecord) -> None:
+        if record.name in self._records:
+            raise ValueError(f"{record.name} is already registered")
         self._records[record.name] = record
 
     def get(self, name: str) -> CapabilityRecord:
@@ -53,5 +55,6 @@ class ToolRegistry:
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
         if agent_name not in record.allowed_agents:
             raise ToolPermissionError(f"{agent_name} cannot use {record.name}")
-        if record.requires_confirmation and payload.get("confirm") is not True:
+        requires_confirmation = record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE
+        if requires_confirmation and payload.get("confirm") is not True:
             raise ToolPermissionError(f"{record.name} requires explicit confirmation")
