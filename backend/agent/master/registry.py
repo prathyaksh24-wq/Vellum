@@ -18,10 +18,10 @@ class PupilRegistry:
     def default(cls, vault_root: Path) -> "PupilRegistry":
         root = Path(vault_root)
         pupils: list[SpecialistAgent] = [
-            SportsAgent(vault_root=root),
             XAgent(vault_root=root),
             YoutubeAgent(vault_root=root),
             MemoryAgent(vault_root=root),
+            SportsAgent(vault_root=root),
         ]
         return cls({pupil.name: pupil for pupil in pupils})
 

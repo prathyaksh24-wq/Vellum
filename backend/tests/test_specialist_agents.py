@@ -237,6 +237,57 @@ def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(t
     assert "route this back to Vellum" in result.answer
 
 
+def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    x_result = dispatcher.maybe_handle("What did the NBA post on X?", thread_id="x-thread")
+    youtube_result = dispatcher.maybe_handle("Summarize Arsenal highlights on YouTube", thread_id="yt-thread")
+    memory_result = dispatcher.maybe_handle("Remember that I prefer concise sports analysis", thread_id="mem-thread")
+
+    assert x_result is not None
+    assert x_result.agent_name == "XAgent"
+    assert "full X specialist execution deferred" in x_result.answer
+    assert x_result.tools == ["x_agent"]
+
+    assert youtube_result is not None
+    assert youtube_result.agent_name == "YoutubeAgent"
+    assert "full YouTube specialist execution deferred" in youtube_result.answer
+    assert youtube_result.tools == ["youtube_agent"]
+
+    assert memory_result is not None
+    assert memory_result.agent_name == "MemoryAgent"
+    assert "does not mutate shared memory directly" in memory_result.answer
+    assert memory_result.tools == ["memory_agent"]
+
+
+def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_path):
+    search_output = (
+        "**NBA update**\n"
+        "A short live sports result.\n"
+        "https://www.nba.com/news/update"
+    )
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=state_store,
+    )
+
+    sports_result = dispatcher.maybe_handle("NBA update", thread_id="thread-1")
+    x_result = dispatcher.maybe_handle("What did Shams post on X?", thread_id="thread-1")
+    main_result = dispatcher.maybe_handle("Draft an email to Sam", thread_id="new-thread")
+
+    assert sports_result is not None
+    assert sports_result.agent_name == "SportsAgent"
+    assert x_result is not None
+    assert x_result.agent_name == "XAgent"
+    assert state_store.get("thread-1").active_agent == "XAgent"
+    assert main_result is None
+
+
 def test_specialist_router_delegates_sports_queries(tmp_path):
     router = SpecialistRouter(vault_root=tmp_path)
 
