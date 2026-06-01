@@ -78,6 +78,16 @@ def test_router_preserves_existing_mutating_action_observation_without_nesting()
     assert "observation" not in result["observation"]
 
 
+def test_router_passes_drag_target_and_pointer_context_to_desktop_driver():
+    desktop = FakeObservedDesktopDriver()
+    router = ComputerUseActionRouter(desktop_driver=desktop, browser_runner=lambda params: "browser")
+
+    result = router.run_action({"type": "drag", "x": 30, "y": 40, "current_x": 10, "current_y": 20})
+
+    assert result["status"] == "ok"
+    assert desktop.calls == [("drag", {"x": 30, "y": 40, "current_x": 10, "current_y": 20})]
+
+
 def test_router_run_instruction_queues_visible_task():
     desktop = FakeDesktopDriver()
     router = ComputerUseActionRouter(desktop_driver=desktop, browser_runner=lambda params: "browser")

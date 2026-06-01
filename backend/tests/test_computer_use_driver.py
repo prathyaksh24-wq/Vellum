@@ -35,6 +35,14 @@ class FakeNativeDriver:
         self.calls.append(("scroll", params))
         return OperatorResult("ok", self.backend, "scrolled", {"action": "scroll"})
 
+    def drag(self, **params):
+        self.calls.append(("drag", params))
+        required = {"from_x", "from_y", "to_x", "to_y"}
+        missing = sorted(required.difference(params))
+        if missing:
+            raise TypeError(f"drag missing required params: {', '.join(missing)}")
+        return OperatorResult("ok", self.backend, "dragged", {"action": "drag"})
+
 
 class RaisingNativeDriver:
     backend = "windows_native"
@@ -120,6 +128,44 @@ def test_windows_driver_scroll_amount_maps_to_scroll_y():
     result = driver.run_action("scroll", x=10, y=20, amount=-3)
 
     assert native_driver.calls == [("scroll", {"x": 10, "y": 20, "scroll_y": -3})]
+    assert result["status"] == "ok"
+
+
+def test_windows_driver_explicit_native_drag_coordinates_pass_through():
+    native_driver = FakeNativeDriver()
+    driver = WindowsComputerDriver(native_driver=native_driver)
+
+    result = driver.run_action("drag", from_x=1, from_y=2, to_x=10, to_y=20)
+
+    assert native_driver.calls == [("drag", {"from_x": 1, "from_y": 2, "to_x": 10, "to_y": 20})]
+    assert result["status"] == "ok"
+
+
+def test_windows_driver_legacy_drag_target_uses_current_pointer_context():
+    native_driver = FakeNativeDriver()
+    driver = WindowsComputerDriver(native_driver=native_driver)
+
+    result = driver.run_action(
+        "drag",
+        x=30,
+        y=40,
+        current_x=10,
+        current_y=20,
+        duration=0.2,
+        button="left",
+    )
+
+    assert native_driver.calls == [("drag", {"from_x": 10, "from_y": 20, "to_x": 30, "to_y": 40})]
+    assert result["status"] == "ok"
+
+
+def test_windows_driver_legacy_drag_target_without_pointer_context_is_mapped():
+    native_driver = FakeNativeDriver()
+    driver = WindowsComputerDriver(native_driver=native_driver)
+
+    result = driver.run_action("drag", x=30, y=40)
+
+    assert native_driver.calls == [("drag", {"from_x": 30, "from_y": 40, "to_x": 30, "to_y": 40})]
     assert result["status"] == "ok"
 
 

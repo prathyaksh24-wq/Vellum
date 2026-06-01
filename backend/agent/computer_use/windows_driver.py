@@ -59,7 +59,7 @@ class WindowsComputerDriver:
         if normalized == "scroll":
             return self._to_dict(self.native_driver.scroll(**self._scroll_params(clean_params)))
         if normalized == "drag":
-            return self._to_dict(self.native_driver.drag(**clean_params))
+            return self._to_dict(self.native_driver.drag(**self._drag_params(clean_params)))
 
         return {
             "status": "unsupported",
@@ -101,6 +101,40 @@ class WindowsComputerDriver:
             params = {**params, "scroll_y": params["amount"]}
             params.pop("amount", None)
         return params
+
+    def _drag_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        drag_params = {
+            key: params[key]
+            for key in ("window_id", "from_x", "from_y", "to_x", "to_y")
+            if key in params
+        }
+        if "x" in params and "y" in params:
+            drag_params.setdefault("to_x", params["x"])
+            drag_params.setdefault("to_y", params["y"])
+        if "from_x" not in drag_params and "to_x" in drag_params:
+            drag_params["from_x"] = self._first_present(
+                params,
+                ("current_x", "start_x", "prior_x", "previous_x"),
+                drag_params["to_x"],
+            )
+        if "from_y" not in drag_params and "to_y" in drag_params:
+            drag_params["from_y"] = self._first_present(
+                params,
+                ("current_y", "start_y", "prior_y", "previous_y"),
+                drag_params["to_y"],
+            )
+        return drag_params
+
+    def _first_present(
+        self,
+        params: dict[str, Any],
+        keys: tuple[str, ...],
+        default: Any,
+    ) -> Any:
+        for key in keys:
+            if key in params:
+                return params[key]
+        return default
 
     def _to_dict(self, result: OperatorResult | dict[str, Any]) -> dict[str, Any]:
         if isinstance(result, OperatorResult):
