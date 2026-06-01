@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import threading
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -79,6 +80,7 @@ class ComputerUseSession:
         current = self.runtime.status().get("session_id")
         self.session_id: str | None = str(current) if current else None
         self.stop_requested = False
+        self._lifecycle_lock = threading.RLock()
 
     def status(self) -> dict[str, Any]:
         state = self.runtime.status()
@@ -91,65 +93,80 @@ class ComputerUseSession:
         return state
 
     def start(self, *, source: str = "ui", thread_id: str | None = None, task: str | None = None) -> dict[str, Any]:
-        self.stop_requested = False
-        session_id = self.session_id or uuid4().hex
-        try:
-            overlay_message = self.overlay.start()
-            guard_message = self.input_guard.acquire(session_id=session_id, on_interrupt=self._handle_input_interrupt)
-        except Exception as exc:
+        with self._lifecycle_lock:
+            self.stop_requested = False
+            session_id = self.session_id or uuid4().hex
             try:
-                self.overlay.stop()
-            except Exception:
-                pass
-            self.runtime.record_event(
-                "session_start_failed",
-                f"Computer-use session failed to start: {exc}",
-                tool="computer_use_session",
-                data={"source": source, "thread_id": thread_id, "task": task},
-            )
-            raise ComputerUseSessionError(str(exc)) from exc
+                set_interrupt_callback = getattr(self.overlay, "set_interrupt_callback", None)
+                if callable(set_interrupt_callback):
+                    set_interrupt_callback(self._handle_overlay_interrupt)
+                overlay_message = self.overlay.start()
+                guard_message = self.input_guard.acquire(session_id=session_id, on_interrupt=self._handle_input_interrupt)
+            except Exception as exc:
+                try:
+                    self.overlay.stop()
+                except Exception:
+                    pass
+                self.runtime.record_event(
+                    "session_start_failed",
+                    f"Computer-use session failed to start: {exc}",
+                    tool="computer_use_session",
+                    data={"source": source, "thread_id": thread_id, "task": task},
+                )
+                raise ComputerUseSessionError(str(exc)) from exc
 
-        self.session_id = session_id
-        state = self.runtime.enable(source=source, thread_id=thread_id, task=task)
-        state.update({"session_id": session_id, "overlay": self.overlay.status(), "input_guard": self.input_guard.status()})
-        self.runtime._save_state(state)
-        self.runtime.record_event(
-            "session_started",
-            "Computer-use session started.",
-            tool="computer_use_session",
-            data={
-                "source": source,
-                "thread_id": thread_id,
-                "task": task,
-                "session_id": session_id,
-                "overlay": overlay_message,
-                "input_guard": guard_message,
-            },
-            state=state,
-        )
-        return state
+            self.session_id = session_id
+            state = self.runtime.enable(source=source, thread_id=thread_id, task=task)
+            state.update({"session_id": session_id, "overlay": self.overlay.status(), "input_guard": self.input_guard.status()})
+            self.runtime._save_state(state)
+            self.runtime.record_event(
+                "session_started",
+                "Computer-use session started.",
+                tool="computer_use_session",
+                data={
+                    "source": source,
+                    "thread_id": thread_id,
+                    "task": task,
+                    "session_id": session_id,
+                    "overlay": overlay_message,
+                    "input_guard": guard_message,
+                },
+                state=state,
+            )
+            return state
 
     def stop(self, *, source: str = "ui", reason: str | None = None) -> dict[str, Any]:
-        self.stop_requested = True
-        guard_message = self.input_guard.release()
-        overlay_message = self.overlay.stop()
-        state = self.runtime.disable(source=source, reason=reason)
-        state.update({"session_id": self.session_id, "overlay": self.overlay.status(), "input_guard": self.input_guard.status()})
-        self.runtime._save_state(state)
-        self.runtime.record_event(
-            "session_stopped",
-            "Computer-use session stopped.",
-            tool="computer_use_session",
-            data={
-                "source": source,
-                "reason": reason,
-                "session_id": self.session_id,
-                "overlay": overlay_message,
-                "input_guard": guard_message,
-            },
-            state=state,
-        )
-        return state
+        with self._lifecycle_lock:
+            self.stop_requested = True
+            state = self.runtime.status()
+            if not state.get("enabled"):
+                state.update(
+                    {
+                        "session_id": self.session_id,
+                        "overlay": self.overlay.status(),
+                        "input_guard": self.input_guard.status(),
+                    }
+                )
+                return state
+            guard_message = self.input_guard.release()
+            overlay_message = self.overlay.stop()
+            state = self.runtime.disable(source=source, reason=reason)
+            state.update({"session_id": self.session_id, "overlay": self.overlay.status(), "input_guard": self.input_guard.status()})
+            self.runtime._save_state(state)
+            self.runtime.record_event(
+                "session_stopped",
+                "Computer-use session stopped.",
+                tool="computer_use_session",
+                data={
+                    "source": source,
+                    "reason": reason,
+                    "session_id": self.session_id,
+                    "overlay": overlay_message,
+                    "input_guard": guard_message,
+                },
+                state=state,
+            )
+            return state
 
     def pause(self, *, source: str = "ui") -> dict[str, Any]:
         self.input_guard.release()
@@ -212,6 +229,12 @@ class ComputerUseSession:
         if not state.get("enabled"):
             return
         self.stop(source="input_guard", reason=reason)
+
+    def _handle_overlay_interrupt(self, reason: str) -> None:
+        state = self.runtime.status()
+        if not state.get("enabled"):
+            return
+        self.stop(source="overlay", reason=reason)
 
 
 computer_use_session = ComputerUseSession()

@@ -67,6 +67,46 @@ class FakeLeaseGuard:
         return {"lease_active": self.active, "active": self.active}
 
 
+class FakeDesktopDriver:
+    def __init__(self, message: str = "native-ok") -> None:
+        self.message = message
+        self.calls = []
+
+    def run_action(self, action, **params):
+        allowed_params = {
+            "amount",
+            "button",
+            "click_count",
+            "duration",
+            "element_index",
+            "filename",
+            "from_x",
+            "from_y",
+            "include_screenshot",
+            "interval",
+            "key",
+            "keys",
+            "scroll_y",
+            "shell",
+            "text",
+            "to_x",
+            "to_y",
+            "window_id",
+            "x",
+            "y",
+        }
+        unexpected = sorted(set(params).difference(allowed_params))
+        if unexpected:
+            raise TypeError(f"unexpected native params: {', '.join(unexpected)}")
+        self.calls.append((action, params))
+        return {
+            "status": "ok",
+            "backend": "windows_native",
+            "message": self.message,
+            "data": {"action": action, **params},
+        }
+
+
 def test_desktop_type_uses_slightly_slower_default_interval(monkeypatch):
     fake = FakePyAutoGui()
     monkeypatch.setattr(desktop_tools, "_pyautogui", lambda: fake)
@@ -295,6 +335,82 @@ def test_computer_use_routes_desktop(monkeypatch):
     assert calls == [{"action": "position"}]
 
 
+def test_computer_use_routes_desktop_observe_to_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("observed hwnd:1")
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "observe", "target": "hwnd:1"}
+    )
+
+    assert result == "observed hwnd:1"
+    assert driver.calls == [("observe", {"window_id": "hwnd:1"})]
+
+
+def test_computer_use_routes_desktop_list_windows_to_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("listed windows")
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", "action": "list_windows"})
+
+    assert result == "listed windows"
+    assert driver.calls == [("list_windows", {})]
+
+
+def test_computer_use_routes_desktop_click_element_index_to_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("clicked element")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "click", "target": "hwnd:1", "element_index": 2}
+    )
+
+    assert result == "clicked element"
+    assert guard.heartbeats == 1
+    assert driver.calls == [("click", {"window_id": "hwnd:1", "element_index": 2})]
+
+
+def test_computer_use_routes_desktop_type_to_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("typed text")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "type", "target": "hwnd:1", "text": "KSI"}
+    )
+
+    assert result == "typed text"
+    assert guard.heartbeats == 1
+    assert driver.calls == [("type", {"text": "KSI", "window_id": "hwnd:1"})]
+
+
+def test_computer_use_routes_desktop_keypress_target_to_native_window_id(monkeypatch):
+    driver = FakeDesktopDriver("pressed key")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "keypress", "target": "hwnd:1", "key": "enter"}
+    )
+
+    assert result == "pressed key"
+    assert guard.heartbeats == 1
+    assert driver.calls == [("keypress", {"key": "enter", "window_id": "hwnd:1"})]
+
+
 def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     calls = []
     guard = FakeLeaseGuard()
@@ -320,6 +436,150 @@ def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     assert calls == [{"action": "run_terminal_command", "command": "claude", "shell": "powershell"}]
 
 
+def test_computer_use_preserves_desktop_env_gate_before_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("clicked element")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: False)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "click", "target": "hwnd:1", "element_index": 2}
+    )
+
+    assert "requires COMPUTER_USE_ALLOW_DESKTOP=true" in result
+    assert driver.calls == []
+
+
+def test_computer_use_preserves_desktop_runtime_permission_before_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("clicked element")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "_runtime_permission_granted",
+        lambda permission: False,
+    )
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "click", "target": "hwnd:1", "element_index": 2}
+    )
+
+    assert "Computer use permission required: desktop_control" in result
+    assert driver.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "activate_window", "target": "hwnd:1"},
+        {"action": "keypress", "key": "enter"},
+        {"action": "type_text", "target": "hwnd:1", "text": "secret"},
+    ],
+)
+def test_computer_use_blocks_all_native_mutating_actions_when_mode_disabled(monkeypatch, payload):
+    driver = FakeDesktopDriver("native-ok")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", **payload})
+
+    assert "Computer use mode is disabled" in result
+    assert driver.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "activate_window", "target": "hwnd:1"},
+        {"action": "keypress", "key": "enter"},
+        {"action": "type_text", "target": "hwnd:1", "text": "secret"},
+    ],
+)
+def test_computer_use_blocks_all_native_mutating_actions_without_lease(monkeypatch, payload):
+    driver = FakeDesktopDriver("native-ok")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard(active=False))
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", **payload})
+
+    assert "exclusive control is not active" in result
+    assert driver.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "activate_window", "target": "hwnd:1"},
+        {"action": "keypress", "key": "enter"},
+        {"action": "type_text", "target": "hwnd:1", "text": "secret"},
+    ],
+)
+def test_computer_use_preserves_env_gate_for_all_native_mutating_actions(monkeypatch, payload):
+    driver = FakeDesktopDriver("native-ok")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard())
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: False)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", **payload})
+
+    assert "requires COMPUTER_USE_ALLOW_DESKTOP=true" in result
+    assert driver.calls == []
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "activate_window", "target": "hwnd:1"},
+        {"action": "keypress", "key": "enter"},
+        {"action": "type_text", "target": "hwnd:1", "text": "secret"},
+    ],
+)
+def test_computer_use_preserves_runtime_permission_for_all_native_mutating_actions(monkeypatch, payload):
+    driver = FakeDesktopDriver("native-ok")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard())
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: False)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", **payload})
+
+    assert "Computer use permission required: desktop_control" in result
+    assert driver.calls == []
+
+
+def test_computer_use_redacts_native_result_payloads_in_events(monkeypatch):
+    events = []
+    driver = FakeDesktopDriver("typed text")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+    monkeypatch.setattr(
+        computer_use_tools.computer_use_runtime,
+        "record_event",
+        lambda event_type, message, **kwargs: events.append((event_type, message, kwargs)),
+    )
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "type", "target": "hwnd:1", "text": "super secret"}
+    )
+
+    assert result == "typed text"
+    result_events = [event for event in events if event[0] == "tool_result"]
+    assert result_events
+    assert result_events[-1][2]["data"]["result"]["data"]["text"] == "[redacted]"
+
+
 def test_computer_use_blocks_desktop_mutation_when_mode_disabled(monkeypatch):
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
 
@@ -332,21 +592,17 @@ def test_computer_use_blocks_desktop_mutation_when_mode_disabled(monkeypatch):
 
 
 def test_computer_use_blocks_desktop_mutation_when_exclusive_lease_missing(monkeypatch):
-    calls = []
+    driver = FakeDesktopDriver("desktop-ok")
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
     monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard(active=False))
-    monkeypatch.setattr(
-        computer_use_tools.desktop_tools,
-        "run_desktop_action",
-        lambda params: calls.append(params) or "desktop-ok",
-    )
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
 
     result = computer_use_tools.computer_use.invoke(
         {"mode": "desktop", "action": "click", "x": 10, "y": 20}
     )
 
     assert "exclusive control is not active" in result
-    assert calls == []
+    assert driver.calls == []
 
 
 def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
@@ -368,6 +624,20 @@ def test_computer_use_routes_desktop_open_app_and_permission(monkeypatch):
 
     assert result == "app-ok"
     assert calls == [{"action": "grant_permission", "permission": "open_apps", "confirm": True}]
+
+
+def test_computer_use_routes_desktop_permissions_to_legacy_tool(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "run_desktop_action",
+        lambda params: calls.append(params) or "Computer use permissions: desktop_control=true.",
+    )
+
+    result = computer_use_tools.computer_use.invoke({"mode": "desktop", "action": "permissions"})
+
+    assert result == "Computer use permissions: desktop_control=true."
+    assert calls == [{"action": "permissions"}]
 
 
 def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):

@@ -45,6 +45,17 @@ def test_agent_prompt_documents_workspace_mode():
     assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
+def test_agent_prompt_documents_native_desktop_routing():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "list_windows" in prompt
+    assert "action='observe'" in prompt
+    assert "target window IDs" in prompt
+    assert "accessibility element indexes" in prompt
+    assert "blue edge-glow/status-pill Esc overlay" in prompt
+    assert "Legacy desktop compatibility actions remain available" in prompt
+
+
 def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():
     assert "youtube.com/results?search_query=" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "Do not stop after opening Chrome" in agent_graph.VELLUM_SYSTEM_PROMPT

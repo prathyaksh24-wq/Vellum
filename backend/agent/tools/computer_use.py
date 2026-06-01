@@ -8,17 +8,52 @@ from typing import Any
 from langchain_core.tools import tool
 
 from agent.computer_use.input_guard import computer_use_input_guard
+from agent.computer_use.windows_driver import WindowsComputerDriver
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, workspace_worker
 from agent.mcp.playwright_tools import run_tool as playwright_run
 from agent.tools import desktop as desktop_tools
 
-SAFE_DESKTOP_ACTIONS = {"permissions", "grant_permission", "screenshot", "position", "screen_size"}
+NATIVE_DESKTOP_ACTIONS = {
+    "activate_window",
+    "click",
+    "double_click",
+    "drag",
+    "hotkey",
+    "keypress",
+    "list_apps",
+    "list_windows",
+    "observe",
+    "press_key",
+    "right_click",
+    "scroll",
+    "type",
+    "type_text",
+}
+
+NATIVE_MUTATING_DESKTOP_ACTIONS = {
+    "activate_window",
+    "click",
+    "double_click",
+    "drag",
+    "keypress",
+    "press_key",
+    "right_click",
+    "scroll",
+    "type",
+    "type_text",
+}
+
+desktop_driver = WindowsComputerDriver()
 
 
 def _put(params: dict[str, Any], key: str, value: Any) -> None:
     if value not in (None, ""):
         params[key] = value
+
+
+def _desktop_action_name(action: str) -> str:
+    return str(action or "screenshot").strip().casefold().replace("-", "_")
 
 
 def _desktop_params(
@@ -38,25 +73,45 @@ def _desktop_params(
     shell: str,
     app: str,
     target: str,
+    element_index: int | None,
     tab_action: str,
     permission: str,
     confirm: bool,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"action": action}
+    if action in {
+        "activate_window",
+        "click",
+        "double_click",
+        "right_click",
+        "drag",
+        "observe",
+        "keypress",
+        "press_key",
+        "hotkey",
+        "scroll",
+        "screenshot",
+        "type",
+        "type_text",
+    }:
+        _put(params, "target", target)
+    if element_index is not None:
+        params["element_index"] = element_index
     if action in {"move", "click", "double_click", "right_click", "drag"}:
-        params["x"] = x
-        params["y"] = y
+        if element_index is None:
+            params["x"] = x
+            params["y"] = y
     if action in {"move", "drag"}:
         params["duration"] = duration
     if action in {"click", "drag"}:
         _put(params, "button", button)
     if action == "scroll":
         params["amount"] = amount
-    if action == "type":
+    if action in {"type", "type_text"}:
         params["text"] = text
         if interval:
             params["interval"] = interval
-    if action == "press_key":
+    if action in {"press_key", "keypress"}:
         params["key"] = key
     if action == "hotkey":
         params["keys"] = keys or key
@@ -149,6 +204,48 @@ def _workspace_params(
     return params
 
 
+def _native_desktop_params(params: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    driver_params = dict(params)
+    driver_action = str(driver_params.pop("action"))
+    target = driver_params.pop("target", "")
+    if target:
+        driver_params["window_id"] = target
+    if "amount" in driver_params:
+        driver_params["scroll_y"] = driver_params.pop("amount")
+    if "keys" in driver_params and "key" not in driver_params:
+        driver_params["key"] = driver_params.pop("keys")
+    return driver_action, driver_params
+
+
+def _is_mutating_desktop_action(action: str) -> bool:
+    return action in desktop_tools.MUTATING_DESKTOP_ACTIONS or action in NATIVE_MUTATING_DESKTOP_ACTIONS
+
+
+def _desktop_safety_block(action: str) -> str | None:
+    if _is_mutating_desktop_action(action) and not desktop_tools._desktop_allowed():
+        return f"Desktop action '{action}' requires COMPUTER_USE_ALLOW_DESKTOP=true."
+    required_permission = desktop_tools.CONTROL_PERMISSIONS.get(action)
+    if required_permission is None and action in NATIVE_MUTATING_DESKTOP_ACTIONS:
+        required_permission = "desktop_control"
+    if required_permission and not desktop_tools._runtime_permission_granted(required_permission):
+        return desktop_tools._permission_required(required_permission)
+    return None
+
+
+def _public_result(result: Any) -> Any:
+    if isinstance(result, dict):
+        redacted: dict[str, Any] = {}
+        for key, value in result.items():
+            if key in {"text", "command", "fields_json"} and value:
+                redacted[key] = "[redacted]"
+            else:
+                redacted[key] = _public_result(value)
+        return redacted
+    if isinstance(result, list):
+        return [_public_result(value) for value in result]
+    return result
+
+
 @tool
 def computer_use(
     mode: str = "desktop",
@@ -174,6 +271,7 @@ def computer_use(
     command: str = "",
     shell: str = "",
     app: str = "",
+    element_index: int | None = None,
     permission: str = "",
     confirm: bool = False,
     submit: bool = False,
@@ -200,8 +298,9 @@ def computer_use(
 
     selected_mode = mode.strip().casefold()
     if selected_mode == "desktop":
+        desktop_action = _desktop_action_name(action)
         params = _desktop_params(
-            action=action,
+            action=desktop_action,
             x=x,
             y=y,
             text=text,
@@ -216,26 +315,27 @@ def computer_use(
             shell=shell,
             app=app,
             target=target,
+            element_index=element_index,
             tab_action=tab_action,
             permission=permission,
             confirm=confirm,
         )
         computer_use_runtime.record_event(
             "tool_start",
-            f"computer_use desktop {action} started.",
+            f"computer_use desktop {desktop_action} started.",
             tool="computer_use",
-            data={"mode": "desktop", "action": action, "params": _public_params(params)},
+            data={"mode": "desktop", "action": desktop_action, "params": _public_params(params)},
         )
-        if action not in SAFE_DESKTOP_ACTIONS and not computer_use_runtime.is_enabled():
+        if _is_mutating_desktop_action(desktop_action) and not computer_use_runtime.is_enabled():
             result = "Computer use mode is disabled. Ask the user to enable computer use before desktop control."
             computer_use_runtime.record_event(
                 "tool_blocked",
                 result,
                 tool="computer_use",
-                data={"mode": "desktop", "action": action},
+                data={"mode": "desktop", "action": desktop_action},
             )
             return result
-        if action not in SAFE_DESKTOP_ACTIONS:
+        if _is_mutating_desktop_action(desktop_action):
             guard_status = computer_use_input_guard.status()
             if not guard_status.get("lease_active", False):
                 result = "Computer use exclusive control is not active. Enable computer use again before desktop control."
@@ -243,18 +343,39 @@ def computer_use(
                     "tool_blocked",
                     result,
                     tool="computer_use",
-                    data={"mode": "desktop", "action": action, "input_guard": guard_status},
+                    data={"mode": "desktop", "action": desktop_action, "input_guard": guard_status},
                 )
                 return result
             computer_use_input_guard.heartbeat()
-        result = desktop_tools.run_desktop_action(params)
+        if desktop_action not in NATIVE_DESKTOP_ACTIONS:
+            result = desktop_tools.run_desktop_action(params)
+            computer_use_runtime.record_event(
+                "tool_result",
+                f"computer_use desktop {desktop_action} finished.",
+                tool="computer_use",
+                data={"mode": "desktop", "action": desktop_action, "result": result},
+            )
+            return result
+        safety_result = _desktop_safety_block(desktop_action)
+        if safety_result:
+            computer_use_runtime.record_event(
+                "tool_blocked",
+                safety_result,
+                tool="computer_use",
+                data={"mode": "desktop", "action": desktop_action},
+            )
+            return safety_result
+        driver_action, driver_params = _native_desktop_params(params)
+        native_result = desktop_driver.run_action(driver_action, **driver_params)
         computer_use_runtime.record_event(
             "tool_result",
-            f"computer_use desktop {action} finished.",
+            f"computer_use desktop {desktop_action} finished.",
             tool="computer_use",
-            data={"mode": "desktop", "action": action, "result": result},
+            data={"mode": "desktop", "action": desktop_action, "result": _public_result(native_result)},
         )
-        return result
+        if isinstance(native_result, dict) and native_result.get("message"):
+            return str(native_result["message"])
+        return str(native_result)
     if selected_mode == "workspace":
         params = _workspace_params(
             action=action,

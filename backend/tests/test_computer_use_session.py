@@ -24,6 +24,15 @@ class FakeOverlay:
         return {"ready": "start" in self.calls and "stop" not in self.calls}
 
 
+class FakeInterruptOverlay(FakeOverlay):
+    def __init__(self) -> None:
+        super().__init__()
+        self.interrupt_callback = None
+
+    def set_interrupt_callback(self, callback) -> None:
+        self.interrupt_callback = callback
+
+
 class FakeRouter:
     def __init__(self) -> None:
         self.tasks: list[str] = []
@@ -116,6 +125,27 @@ def test_session_stop_cancels_work_and_stops_overlay(tmp_path):
     assert runtime.recent_events()[-1]["kind"] == "session_stopped"
 
 
+def test_session_stop_is_idempotent_and_records_single_stop_event(tmp_path):
+    from agent.computer_use.session import ComputerUseSession
+
+    overlay = FakeOverlay()
+    runtime = _runtime(tmp_path)
+    guard = FakeInputGuard()
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
+    session.start(source="ui", thread_id="frontend")
+
+    first = session.stop(source="overlay", reason="esc")
+    second = session.stop(source="input_guard", reason="kill switch")
+
+    assert first["enabled"] is False
+    assert second["enabled"] is False
+    assert overlay.calls == ["start", "stop"]
+    assert guard.calls.count("release") == 1
+    stop_events = [event for event in runtime.recent_events() if event["kind"] == "session_stopped"]
+    assert len(stop_events) == 1
+    assert stop_events[0]["data"]["source"] == "overlay"
+
+
 def test_session_submit_task_records_ordered_events(tmp_path):
     from agent.computer_use.session import ComputerUseSession
 
@@ -190,3 +220,52 @@ def test_session_guard_interrupt_force_stops_computer_use(tmp_path):
     assert status["source"] == "input_guard"
     assert overlay.calls == ["start", "stop"]
     assert guard.calls[-1] == "release"
+
+
+def test_session_overlay_esc_interrupt_stops_computer_use(tmp_path):
+    from agent.computer_use.session import ComputerUseSession
+
+    overlay = FakeInterruptOverlay()
+    guard = FakeInputGuard()
+    runtime = _runtime(tmp_path)
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
+    session.start(source="ui", thread_id="frontend")
+
+    assert overlay.interrupt_callback is not None
+    overlay.interrupt_callback("esc")
+
+    status = runtime.status()
+    assert status["enabled"] is False
+    assert status["status"] == "disabled"
+    assert status["source"] == "overlay"
+    assert overlay.calls == ["start", "stop"]
+
+
+def test_native_overlay_script_uses_transparent_glow_and_status_pill():
+    from agent.computer_use.native_windows import overlay
+
+    script = overlay._overlay_script()
+
+    assert overlay.OVERLAY_MESSAGE == "Vellum is using your computer  ·  Esc to cancel"
+    assert "TRANSPARENT_COLOR" in script
+    assert "root.attributes(\"-transparentcolor\", TRANSPARENT_COLOR)" in script
+    assert "root.configure(bg=TRANSPARENT_COLOR)" in script
+    assert "canvas = tk.Canvas" in script
+    assert "bg=TRANSPARENT_COLOR" in script
+    assert "create_rectangle" in script
+    assert "create_rounded_rect" in script
+    assert "root.after" in script
+    assert "Computer use active - press Esc to exit" not in script
+    assert "canvas.create_text(\n    width // 2,\n    height // 2" not in script
+
+
+def test_native_overlay_status_reports_transparent_glow_design():
+    from agent.computer_use.native_windows.overlay import NativeWindowsOverlayController
+
+    status = NativeWindowsOverlayController().status()
+
+    assert status["controller"] == "native_windows"
+    assert status["design"] == "transparent_edge_glow_status_pill"
+    assert status["transparent"] is True
+    assert status["click_through"] is True
+    assert "Vellum is using your computer" in status["message"]

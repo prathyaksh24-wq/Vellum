@@ -136,14 +136,15 @@ Input actions must activate/verify the target window first. If focus cannot be e
 
 ### Native Session Overlay
 
-When native computer use is active, Vellum should show a full-screen blue-tinted overlay across the laptop display, matching the clear takeover signal used by Codex Computer Use.
+When native computer use is active, Vellum should show a transparent full-screen overlay across the laptop display, matching the clear takeover signal used by Codex Computer Use without washing out the underlying screen.
 
 Responsibilities:
 
-- cover the whole screen with a visible blue overlay treatment
+- cover the whole screen with a click-through transparent overlay window
+- show a blue glowing edge/border treatment around the screen, not a full-screen blue tint
 - stay always-on-top while computer use is active
 - remain click-through so automation can still operate the underlying app
-- show a clear message such as `Computer use active - press Esc to exit`
+- show a small top-center blue status pill: `Vellum is using your computer  ·  Esc to cancel`
 - expose the active backend, current task, and latest action in small status text when useful
 - disappear immediately when computer use stops, pauses, errors, or is interrupted
 
@@ -241,7 +242,7 @@ Reuse and strengthen the existing Vellum safety shell:
 
 - computer-use mode must be enabled before mutating desktop actions
 - exclusive input guard must be active before mutating desktop actions
-- user-visible full-screen blue overlay remains active during native sessions
+- user-visible transparent overlay with blue edge glow and status pill remains active during native sessions
 - Esc stops native computer use from the overlay; the lower-level emergency kill switch remains available as backup
 - runtime permission grants remain required for desktop control, terminal, and app control
 - all actions are recorded in `data/computer-use/events.jsonl`
@@ -256,7 +257,7 @@ High-risk actions remain blocked or require explicit user confirmation. Vellum m
 1. Add the native driver module while keeping the existing public `computer_use` tool stable.
 2. Add native observation tests for window listing, accessibility normalization, and screenshot metadata using fakes.
 3. Route desktop `observe`, `list_windows`, `activate_window`, and `screenshot` through the native driver.
-4. Replace the current activity overlay with the native full-screen blue overlay and Esc-to-exit behavior.
+4. Replace the current activity overlay with the native transparent blue edge-glow overlay and Esc-to-exit behavior.
 5. Add SendInput action support and tests for click/type/key/scroll/drag parameter mapping.
 6. Route mutating desktop actions through the native driver.
 7. Remove `pyautogui` dependency and delete the old `agent.tools.desktop` implementation or turn it into a compatibility shim that delegates to native code.
@@ -288,7 +289,7 @@ Integration/manual tests on Windows:
 - switch between Brave/Chrome tabs using native input
 - capture a browser window screenshot
 - verify browser URL confidence behavior
-- verify full-screen blue overlay appears during native sessions
+- verify transparent blue edge-glow overlay appears during native sessions without tinting the whole screen
 - verify Esc exits computer use from the overlay
 - verify backup input-guard stop behavior
 
@@ -301,7 +302,7 @@ Vellum native computer use is ready when:
 - element-index clicks work in at least Notepad, Calculator, File Explorer, and Chromium browsers
 - typing never occurs unless the target window is activated or focus is verified
 - mutating actions are gated by Vellum's mode, permissions, and input guard
-- a full-screen blue overlay clearly marks native computer-use takeover and says Esc exits
+- a transparent full-screen overlay clearly marks native computer-use takeover with blue edge glow, a top status pill, and Esc exit copy
 - pressing Esc exits native computer use and removes the overlay
 - event logs show backend provenance and redacted parameters
 - `pyautogui` is removed from the production desktop path and dependencies
