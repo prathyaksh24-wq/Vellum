@@ -125,6 +125,27 @@ def test_session_stop_cancels_work_and_stops_overlay(tmp_path):
     assert runtime.recent_events()[-1]["kind"] == "session_stopped"
 
 
+def test_session_stop_is_idempotent_and_records_single_stop_event(tmp_path):
+    from agent.computer_use.session import ComputerUseSession
+
+    overlay = FakeOverlay()
+    runtime = _runtime(tmp_path)
+    guard = FakeInputGuard()
+    session = ComputerUseSession(runtime=runtime, overlay=overlay, router=FakeRouter(), input_guard=guard)
+    session.start(source="ui", thread_id="frontend")
+
+    first = session.stop(source="overlay", reason="esc")
+    second = session.stop(source="input_guard", reason="kill switch")
+
+    assert first["enabled"] is False
+    assert second["enabled"] is False
+    assert overlay.calls == ["start", "stop"]
+    assert guard.calls.count("release") == 1
+    stop_events = [event for event in runtime.recent_events() if event["kind"] == "session_stopped"]
+    assert len(stop_events) == 1
+    assert stop_events[0]["data"]["source"] == "overlay"
+
+
 def test_session_submit_task_records_ordered_events(tmp_path):
     from agent.computer_use.session import ComputerUseSession
 

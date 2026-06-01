@@ -21,6 +21,10 @@ OVERLAY_MESSAGE = "Vellum is using your computer  ·  Esc to cancel"
 OVERLAY_DESIGN = "transparent_edge_glow_status_pill"
 
 
+class OverlayStartError(RuntimeError):
+    """Raised when the native activity overlay cannot stay running."""
+
+
 def _activity_overlay_enabled() -> bool:
     return get_settings().computer_use_activity_overlay
 
@@ -179,6 +183,7 @@ class NativeWindowsOverlayController:
         self._interrupt_callback: Callable[[str], None] | None = None
         self._watcher: threading.Thread | None = None
         self._stop_watcher = threading.Event()
+        self._generation = 0
         self._lock = threading.RLock()
 
     def set_interrupt_callback(self, callback: Callable[[str], None]) -> None:
@@ -187,12 +192,23 @@ class NativeWindowsOverlayController:
     def start(self) -> str:
         if not _activity_overlay_enabled():
             return "Computer-use activity overlay is disabled."
+        previous_watcher: threading.Thread | None = None
+        with self._lock:
+            if self._process is not None and self._process.poll() is None:
+                return "Computer-use activity overlay is already visible."
+            previous_watcher = self._watcher
+            self._cleanup_sentinel()
+            self._stop_watcher.set()
+        if previous_watcher is not None and previous_watcher is not threading.current_thread():
+            previous_watcher.join(timeout=0.2)
         with self._lock:
             if self._process is not None and self._process.poll() is None:
                 return "Computer-use activity overlay is already visible."
             self._cleanup_sentinel()
-            self._stop_watcher.set()
             self._stop_watcher = threading.Event()
+            self._generation += 1
+            generation = self._generation
+            stop_event = self._stop_watcher
             sentinel = Path(tempfile.gettempdir()) / f"vellum-computer-use-overlay-{id(self)}.interrupt"
             try:
                 kwargs: dict[str, Any] = {
@@ -206,12 +222,24 @@ class NativeWindowsOverlayController:
             except Exception:
                 self._process = None
                 self._sentinel = None
-                return "Computer-use activity overlay could not be started."
+                raise OverlayStartError("Computer-use activity overlay could not be started.")
             self._process = process
             self._sentinel = sentinel
-            self._watcher = threading.Thread(target=self._watch_for_interrupt, daemon=True)
+            self._watcher = threading.Thread(
+                target=self._watch_for_interrupt,
+                args=(stop_event, process, sentinel, generation),
+                daemon=True,
+            )
             self._watcher.start()
         time.sleep(0.12)
+        if process.poll() is not None:
+            with self._lock:
+                if self._generation == generation:
+                    stop_event.set()
+                    self._process = None
+                    self._cleanup_sentinel()
+                    self._sentinel = None
+            raise OverlayStartError("Computer-use activity overlay could not be started.")
         return "Computer-use activity overlay started."
 
     def stop(self) -> str:
@@ -219,7 +247,9 @@ class NativeWindowsOverlayController:
             process = self._process
             self._process = None
             self._stop_watcher.set()
+            self._generation += 1
             self._cleanup_sentinel()
+            self._sentinel = None
         if process is None or process.poll() is not None:
             return "Computer-use activity overlay is not running."
         process.terminate()
@@ -247,18 +277,27 @@ class NativeWindowsOverlayController:
             "accent": OVERLAY_BLUE,
         }
 
-    def _watch_for_interrupt(self) -> None:
-        while not self._stop_watcher.is_set():
+    def _watch_for_interrupt(
+        self,
+        stop_event: threading.Event,
+        process: subprocess.Popen,
+        sentinel: Path,
+        generation: int,
+    ) -> None:
+        while not stop_event.is_set():
             with self._lock:
-                process = self._process
-                sentinel = self._sentinel
-            if sentinel is not None and sentinel.exists():
+                if generation != self._generation:
+                    return
+            if sentinel.exists():
                 reason = self._read_interrupt_reason(sentinel)
-                callback = self._interrupt_callback
+                with self._lock:
+                    if generation != self._generation:
+                        return
+                    callback = self._interrupt_callback
                 if callback is not None:
                     callback(reason)
                 return
-            if process is None or process.poll() is not None:
+            if process.poll() is not None:
                 return
             time.sleep(0.1)
 
