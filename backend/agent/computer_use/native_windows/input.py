@@ -143,15 +143,20 @@ def click(
     sender: Sender | None = None,
 ) -> None:
     emit = sender or _send_event
+    count = int(click_count)
+    if count <= 0:
+        raise ValueError("click_count must be positive.")
     emit({"kind": "move", "x": int(x), "y": int(y)})
-    for _ in range(max(1, int(click_count))):
+    for _ in range(count):
         emit({"kind": "mouse_down", "button": _button(button)})
         emit({"kind": "mouse_up", "button": _button(button)})
 
 
 def type_text(text: str, *, sender: Sender | None = None) -> None:
+    if not isinstance(text, str):
+        raise TypeError("type_text requires a string.")
     emit = sender or _send_event
-    for char in str(text):
+    for char in text:
         emit({"kind": "text", "text": char})
 
 
@@ -194,8 +199,10 @@ def drag(
     emit = sender or _send_event
     emit({"kind": "move", "x": int(from_x), "y": int(from_y)})
     emit({"kind": "mouse_down", "button": "left"})
-    emit({"kind": "move", "x": int(to_x), "y": int(to_y)})
-    emit({"kind": "mouse_up", "button": "left"})
+    try:
+        emit({"kind": "move", "x": int(to_x), "y": int(to_y)})
+    finally:
+        emit({"kind": "mouse_up", "button": "left"})
 
 
 def _button(button: str) -> str:
@@ -210,7 +217,7 @@ def _send_event(event: dict[str, Any]) -> None:
     if kind == "move":
         user32 = _user32()
         if not user32.SetCursorPos(int(event["x"]), int(event["y"])):
-            raise RuntimeError("SetCursorPos failed.")
+            raise RuntimeError(_last_error_message("SetCursorPos"))
     elif kind == "mouse_down":
         _send_mouse_event(_mouse_flag(event["button"], "down"))
     elif kind == "mouse_up":
@@ -223,24 +230,46 @@ def _send_event(event: dict[str, Any]) -> None:
         if scroll_x:
             _send_mouse_event(MOUSEEVENTF_HWHEEL, scroll_x * WHEEL_DELTA)
     elif kind == "text":
-        _send_text(str(event.get("text", "")))
+        _send_text(event["text"])
     elif kind == "key":
         _send_key(str(event["key"]))
     elif kind == "hotkey":
         keys = [str(key) for key in event["keys"]]
-        for key in keys:
-            _send_key_down(key)
-        for key in reversed(keys):
-            _send_key_up(key)
+        _send_hotkey(keys)
     else:
         raise ValueError(f"Unsupported input event kind: {kind}")
 
 
 def _send_text(text: str) -> None:
+    if not isinstance(text, str):
+        raise TypeError("text input requires a string.")
     for char in text:
         for code_unit in _utf16_code_units(char):
             _send_keyboard_input(0, code_unit, KEYEVENTF_UNICODE)
             _send_keyboard_input(0, code_unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)
+
+
+def _send_hotkey(keys: list[str]) -> None:
+    virtual_keys = [_virtual_key(key) for key in keys]
+    pressed: list[int] = []
+    had_press_error = False
+    try:
+        for vk in virtual_keys:
+            _send_keyboard_input(vk, 0, 0)
+            pressed.append(vk)
+    except BaseException:
+        had_press_error = True
+        raise
+    finally:
+        release_error: Exception | None = None
+        for vk in reversed(pressed):
+            try:
+                _send_keyboard_input(vk, 0, KEYEVENTF_KEYUP)
+            except Exception as exc:
+                if release_error is None:
+                    release_error = exc
+        if release_error is not None and not had_press_error:
+            raise release_error
 
 
 def _send_key(key: str) -> None:
@@ -307,7 +336,7 @@ def _send_mouse_input(flags: int, mouse_data: int = 0) -> None:
 def _send_input(input_record: INPUT) -> None:
     sent = _user32().SendInput(1, ctypes.byref(input_record), ctypes.sizeof(INPUT))
     if sent != 1:
-        raise RuntimeError("SendInput failed.")
+        raise RuntimeError(_last_error_message("SendInput"))
 
 
 def _utf16_code_units(char: str) -> list[int]:
@@ -332,3 +361,23 @@ def _configure_user32(user32) -> None:
     user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
     user32.SetCursorPos.restype = wintypes.BOOL
     _configured_user32_ids.add(user32_id)
+
+
+def _last_error_message(operation: str) -> str:
+    get_last_error = getattr(ctypes, "get_last_error", None)
+    code = int(get_last_error() or 0) if get_last_error is not None else 0
+    get_windows_error = getattr(ctypes, "GetLastError", None)
+    if not code and get_windows_error is not None:
+        code = int(get_windows_error() or 0)
+    if not code:
+        return f"{operation} failed."
+    format_error = getattr(ctypes, "FormatError", None)
+    if format_error is None:
+        return f"{operation} failed (last_error={code})."
+    try:
+        detail = str(format_error(code)).strip()
+    except Exception:
+        detail = ""
+    if detail:
+        return f"{operation} failed (last_error={code}: {detail})."
+    return f"{operation} failed (last_error={code})."
