@@ -8,12 +8,22 @@ from typing import Any
 from langchain_core.tools import tool
 
 from agent.computer_use.input_guard import computer_use_input_guard
+from agent.computer_use.windows_driver import WindowsComputerDriver
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, workspace_worker
 from agent.mcp.playwright_tools import run_tool as playwright_run
-from agent.tools import desktop as desktop_tools
 
-SAFE_DESKTOP_ACTIONS = {"permissions", "grant_permission", "screenshot", "position", "screen_size"}
+SAFE_DESKTOP_ACTIONS = {
+    "permissions",
+    "grant_permission",
+    "screenshot",
+    "position",
+    "screen_size",
+    "observe",
+    "list_windows",
+}
+
+desktop_driver = WindowsComputerDriver()
 
 
 def _put(params: dict[str, Any], key: str, value: Any) -> None:
@@ -38,14 +48,32 @@ def _desktop_params(
     shell: str,
     app: str,
     target: str,
+    element_index: int | None,
     tab_action: str,
     permission: str,
     confirm: bool,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"action": action}
+    if action in {
+        "activate_window",
+        "click",
+        "double_click",
+        "right_click",
+        "drag",
+        "observe",
+        "press_key",
+        "hotkey",
+        "scroll",
+        "screenshot",
+        "type",
+    }:
+        _put(params, "target", target)
+    if element_index is not None:
+        params["element_index"] = element_index
     if action in {"move", "click", "double_click", "right_click", "drag"}:
-        params["x"] = x
-        params["y"] = y
+        if element_index is None:
+            params["x"] = x
+            params["y"] = y
     if action in {"move", "drag"}:
         params["duration"] = duration
     if action in {"click", "drag"}:
@@ -174,6 +202,7 @@ def computer_use(
     command: str = "",
     shell: str = "",
     app: str = "",
+    element_index: int | None = None,
     permission: str = "",
     confirm: bool = False,
     submit: bool = False,
@@ -216,6 +245,7 @@ def computer_use(
             shell=shell,
             app=app,
             target=target,
+            element_index=element_index,
             tab_action=tab_action,
             permission=permission,
             confirm=confirm,
@@ -247,14 +277,18 @@ def computer_use(
                 )
                 return result
             computer_use_input_guard.heartbeat()
-        result = desktop_tools.run_desktop_action(params)
+        driver_params = dict(params)
+        driver_action = str(driver_params.pop("action"))
+        native_result = desktop_driver.run_action(driver_action, **driver_params)
         computer_use_runtime.record_event(
             "tool_result",
             f"computer_use desktop {action} finished.",
             tool="computer_use",
-            data={"mode": "desktop", "action": action, "result": result},
+            data={"mode": "desktop", "action": action, "result": native_result},
         )
-        return result
+        if isinstance(native_result, dict) and native_result.get("message"):
+            return str(native_result["message"])
+        return str(native_result)
     if selected_mode == "workspace":
         params = _workspace_params(
             action=action,
