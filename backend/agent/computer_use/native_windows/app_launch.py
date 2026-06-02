@@ -69,9 +69,14 @@ def wait_for_launched_window(
     list_windows: Callable[[], list[ComputerWindow]],
     timeout: float = 10.0,
     poll_interval: float = 0.25,
+    timeout_seconds: float | None = None,
+    poll_interval_seconds: float | None = None,
 ) -> ComputerWindow:
     terms = tuple(term.casefold() for term in match_terms)
-    deadline = time.monotonic() + timeout
+    timeout_value = timeout if timeout_seconds is None else timeout_seconds
+    poll_interval_value = poll_interval if poll_interval_seconds is None else poll_interval_seconds
+    poll_interval_value = max(0.01, poll_interval_value)
+    deadline = time.monotonic() + timeout_value
 
     while True:
         for window in list_windows():
@@ -81,7 +86,7 @@ def wait_for_launched_window(
 
         if time.monotonic() >= deadline:
             raise TimeoutError("Timed out waiting for launched app window.")
-        time.sleep(poll_interval)
+        time.sleep(poll_interval_value)
 
 
 def _is_explicit_exe_path(value: str) -> bool:

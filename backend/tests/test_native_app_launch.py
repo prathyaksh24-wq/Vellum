@@ -72,3 +72,19 @@ def test_wait_for_launched_window_times_out():
             timeout=0,
             poll_interval=0,
         )
+
+
+def test_wait_for_launched_window_clamps_zero_poll_interval(monkeypatch):
+    sleep_calls = []
+    windows = iter([[make_window(app="other.exe", title="Other")], [make_window()]])
+    monkeypatch.setattr(app_launch.time, "sleep", sleep_calls.append)
+
+    result = app_launch.wait_for_launched_window(
+        ("notepad",),
+        list_windows=lambda: next(windows),
+        timeout_seconds=0.02,
+        poll_interval_seconds=0,
+    )
+
+    assert result.app == "notepad.exe"
+    assert sleep_calls == [0.01]

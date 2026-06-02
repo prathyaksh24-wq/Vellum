@@ -1,3 +1,5 @@
+import pytest
+
 from agent.computer_use.native_windows.driver import WindowsNativeComputerDriver
 
 
@@ -31,6 +33,12 @@ class FakeWindowing:
     def activate_window(self, window_id):
         self.activated.append(window_id)
         return self.list_windows()[0]
+
+
+class ActivationFailingWindowing(FakeWindowing):
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        raise RuntimeError("foreground denied")
 
 
 class FakeAccessibility:
@@ -192,3 +200,19 @@ def test_driver_open_app_launches_and_returns_window_observation():
     assert result.message == "Opened app brave."
     assert result.observation["window"]["app"] == "brave.exe"
     assert result.observation["screenshot"]["path"] == "screen.png"
+
+
+def test_driver_open_app_raises_when_launched_window_activation_fails():
+    windowing = ActivationFailingWindowing(app="brave.exe", title="Brave Browser")
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+        app_launcher=FakeLauncher(),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to activate launched app window"):
+        driver.open_app("brave")
+
+    assert windowing.activated == ["hwnd:1"]

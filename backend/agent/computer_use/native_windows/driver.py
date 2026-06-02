@@ -79,8 +79,10 @@ class WindowsNativeComputerDriver:
         window = self.app_launcher.launch_app(app, list_windows=self.windowing.list_windows)
         try:
             window = self.windowing.activate_window(window.id)
-        except Exception:
-            window = self.windowing.get_window(window.id)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to activate launched app window: {window.id}; error={exc}"
+            ) from exc
         result = self.get_window_state(window.id)
         return OperatorResult(
             "ok",
