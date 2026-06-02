@@ -41,6 +41,56 @@ class ActivationFailingWindowing(FakeWindowing):
         raise RuntimeError("foreground denied")
 
 
+class RecoveringWindowing(FakeWindowing):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.get_calls = []
+
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        if len(self.activated) == 1:
+            raise RuntimeError("foreground denied")
+        return self.list_windows()[0]
+
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        return self.list_windows()[0]
+
+
+class AmbiguousRecoveryWindowing(RecoveringWindowing):
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        raise RuntimeError("stale hwnd")
+
+    def list_windows(self):
+        from agent.computer_use.operator import ComputerWindow
+
+        return [
+            ComputerWindow(
+                "hwnd:1",
+                1,
+                "brave.exe",
+                2,
+                "Brave Browser",
+                self.bounds,
+            ),
+            ComputerWindow(
+                "hwnd:2",
+                2,
+                "brave.exe",
+                3,
+                "Brave Browser",
+                self.bounds,
+            ),
+        ]
+
+
+class SecondActivationFailingWindowing(RecoveringWindowing):
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        raise RuntimeError(f"activation denied for {len(self.activated)}")
+
+
 class FakeAccessibility:
     def get_accessibility_state(self, hwnd, include_text=True):
         return {
@@ -129,6 +179,52 @@ def test_driver_click_translates_window_relative_coordinates_to_screen_coordinat
 
     assert result.status == "ok"
     assert input_layer.calls[0][0:3] == ("click", 310, 220)
+
+
+def test_driver_click_recovers_after_first_activation_failure():
+    windowing = RecoveringWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.click("hwnd:1", x=10, y=20)
+
+    assert result.status == "ok"
+    assert windowing.activated == ["hwnd:1", "hwnd:1"]
+    assert windowing.get_calls == ["hwnd:1"]
+    assert input_layer.calls[0][0:3] == ("click", 10, 20)
+
+
+def test_driver_click_reports_ambiguous_activation_recovery():
+    windowing = AmbiguousRecoveryWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="Activation recovery is ambiguous"):
+        driver.click("hwnd:1", x=10, y=20)
+
+
+def test_driver_click_reports_second_activation_failure_after_recovery():
+    windowing = SecondActivationFailingWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to activate window after recovery"):
+        driver.click("hwnd:1", x=10, y=20)
 
 
 def test_driver_scroll_defaults_to_target_window_center():
