@@ -186,15 +186,24 @@ class WindowsNativeComputerDriver:
             except Exception as exc:
                 recovery_error = exc
                 windows = self.windowing.list_windows()
-                if len(windows) != 1:
+                matching_windows = [window for window in windows if window.id == window_id]
+                if not matching_windows:
                     raise RuntimeError(
-                        "Activation recovery is ambiguous; "
+                        "Activation recovery could not verify target identity; "
                         f"window_id={window_id}; "
                         f"first_error={first_activation_error}; "
                         f"refresh_error={recovery_error}; "
                         f"candidate_count={len(windows)}"
                     ) from exc
-                window = windows[0]
+                if len(matching_windows) != 1:
+                    raise RuntimeError(
+                        "Activation recovery is ambiguous; "
+                        f"window_id={window_id}; "
+                        f"first_error={first_activation_error}; "
+                        f"refresh_error={recovery_error}; "
+                        f"matching_candidate_count={len(matching_windows)}"
+                    ) from exc
+                window = matching_windows[0]
 
             try:
                 return self.windowing.activate_window(window.id)
@@ -212,7 +221,7 @@ class WindowsNativeComputerDriver:
 
     def _after_action(self, window: str | ComputerWindow, message: str) -> OperatorResult:
         if isinstance(window, ComputerWindow):
-            observation = self._window_observation(window)
+            observation = self.get_window_state(window.id).observation
         else:
             observation = self.get_window_state(window).observation
         return OperatorResult("ok", self.backend, message, observation=observation)

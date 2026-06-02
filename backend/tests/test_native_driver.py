@@ -75,7 +75,7 @@ class AmbiguousRecoveryWindowing(RecoveringWindowing):
                 self.bounds,
             ),
             ComputerWindow(
-                "hwnd:2",
+                "hwnd:1",
                 2,
                 "brave.exe",
                 3,
@@ -89,6 +89,47 @@ class SecondActivationFailingWindowing(RecoveringWindowing):
     def activate_window(self, window_id):
         self.activated.append(window_id)
         raise RuntimeError(f"activation denied for {len(self.activated)}")
+
+
+class UnrelatedSingleWindowRecoveryWindowing(RecoveringWindowing):
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        raise RuntimeError("stale hwnd")
+
+    def list_windows(self):
+        from agent.computer_use.operator import ComputerWindow
+
+        return [
+            ComputerWindow(
+                "hwnd:2",
+                2,
+                "calc.exe",
+                3,
+                "Calculator",
+                self.bounds,
+            )
+        ]
+
+
+class FreshObservationRecoveringWindowing(RecoveringWindowing):
+    def __init__(self):
+        super().__init__(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
+        self.fresh_bounds = {"x": 500, "y": 400, "width": 120, "height": 90}
+
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        if len(self.get_calls) == 1:
+            return self.list_windows()[0]
+        from agent.computer_use.operator import ComputerWindow
+
+        return ComputerWindow(
+            "hwnd:1",
+            1,
+            "notepad.exe",
+            2,
+            "Fresh - Notepad",
+            self.fresh_bounds,
+        )
 
 
 class FakeAccessibility:
@@ -195,8 +236,41 @@ def test_driver_click_recovers_after_first_activation_failure():
 
     assert result.status == "ok"
     assert windowing.activated == ["hwnd:1", "hwnd:1"]
-    assert windowing.get_calls == ["hwnd:1"]
+    assert windowing.get_calls == ["hwnd:1", "hwnd:1"]
     assert input_layer.calls[0][0:3] == ("click", 10, 20)
+
+
+def test_driver_click_rejects_unrelated_single_window_activation_recovery():
+    windowing = UnrelatedSingleWindowRecoveryWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="could not verify target identity"):
+        driver.click("hwnd:1", x=10, y=20)
+
+    assert input_layer.calls == []
+
+
+def test_driver_click_uses_recovered_bounds_and_returns_fresh_observation():
+    windowing = FreshObservationRecoveringWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.click("hwnd:1", x=10, y=20)
+
+    assert input_layer.calls[0][0:3] == ("click", 310, 220)
+    assert result.observation["window"]["bounds"] == windowing.fresh_bounds
+    assert result.observation["window"]["title"] == "Fresh - Notepad"
 
 
 def test_driver_click_reports_ambiguous_activation_recovery():
