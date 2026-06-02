@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent.computer_use.native_windows import accessibility as default_accessibility
+from agent.computer_use.native_windows import app_launch as default_app_launch
 from agent.computer_use.native_windows import capture as default_capture
 from agent.computer_use.native_windows import input as default_input
 from agent.computer_use.native_windows import windowing as default_windowing
@@ -19,11 +20,13 @@ class WindowsNativeComputerDriver:
         accessibility=default_accessibility,
         capture=default_capture,
         input_layer=default_input,
+        app_launcher=default_app_launch,
     ) -> None:
         self.windowing = windowing
         self.accessibility = accessibility
         self.capture = capture
         self.input = input_layer
+        self.app_launcher = app_launcher
 
     def health_check(self) -> dict[str, Any]:
         try:
@@ -71,6 +74,20 @@ class WindowsNativeComputerDriver:
     def activate_window(self, window_id: str) -> OperatorResult:
         window = self.windowing.activate_window(window_id)
         return self._after_action(window.id, f"Activated window {window.id}.")
+
+    def open_app(self, app: str) -> OperatorResult:
+        window = self.app_launcher.launch_app(app, list_windows=self.windowing.list_windows)
+        try:
+            window = self.windowing.activate_window(window.id)
+        except Exception:
+            window = self.windowing.get_window(window.id)
+        result = self.get_window_state(window.id)
+        return OperatorResult(
+            "ok",
+            self.backend,
+            f"Opened app {app}.",
+            observation=result.observation,
+        )
 
     def click(
         self,

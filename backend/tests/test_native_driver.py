@@ -2,8 +2,10 @@ from agent.computer_use.native_windows.driver import WindowsNativeComputerDriver
 
 
 class FakeWindowing:
-    def __init__(self, bounds=None):
+    def __init__(self, bounds=None, app="notepad.exe", title="Untitled - Notepad"):
         self.activated = []
+        self.app = app
+        self.title = title
         self.bounds = bounds or {"x": 0, "y": 0, "width": 100, "height": 80}
 
     def list_windows(self):
@@ -13,9 +15,9 @@ class FakeWindowing:
             ComputerWindow(
                 "hwnd:1",
                 1,
-                "notepad.exe",
+                self.app,
                 2,
-                "Untitled - Notepad",
+                self.title,
                 self.bounds,
             )
         ]
@@ -59,6 +61,15 @@ class FakeInput:
 
     def drag(self, from_x, from_y, to_x, to_y):
         self.calls.append(("drag", from_x, from_y, to_x, to_y))
+
+
+class FakeLauncher:
+    def __init__(self):
+        self.calls = []
+
+    def launch_app(self, app, *, list_windows):
+        self.calls.append((app, list_windows))
+        return list_windows()[0]
 
 
 def test_driver_observe_returns_window_screenshot_and_accessibility():
@@ -158,4 +169,26 @@ def test_driver_activate_window_returns_observation_after_activation():
     assert result.status == "ok"
     assert windowing.activated == ["hwnd:1"]
     assert result.observation["window"]["id"] == "hwnd:1"
+    assert result.observation["screenshot"]["path"] == "screen.png"
+
+
+def test_driver_open_app_launches_and_returns_window_observation():
+    windowing = FakeWindowing(app="brave.exe", title="Brave Browser")
+    launcher = FakeLauncher()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+        app_launcher=launcher,
+    )
+
+    result = driver.open_app("brave")
+
+    assert launcher.calls == [("brave", windowing.list_windows)]
+    assert windowing.activated == ["hwnd:1"]
+    assert result.status == "ok"
+    assert result.backend == "windows_native"
+    assert result.message == "Opened app brave."
+    assert result.observation["window"]["app"] == "brave.exe"
     assert result.observation["screenshot"]["path"] == "screen.png"
