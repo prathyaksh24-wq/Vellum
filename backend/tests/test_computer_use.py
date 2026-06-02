@@ -138,6 +138,24 @@ def test_computer_use_routes_desktop_keypress_target_to_native_window_id(monkeyp
     assert driver.calls == [("keypress", {"key": "enter", "window_id": "hwnd:1"})]
 
 
+def test_computer_use_routes_desktop_scroll_coordinates_to_native_driver(monkeypatch):
+    driver = FakeDesktopDriver("scrolled")
+    guard = FakeLeaseGuard()
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_runtime_permission_granted", lambda permission: True)
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "scroll", "target": "hwnd:1", "x": 10, "y": 20, "amount": -3}
+    )
+
+    assert result == "scrolled"
+    assert guard.heartbeats == 1
+    assert driver.calls == [("scroll", {"window_id": "hwnd:1", "x": 10, "y": 20, "scroll_y": -3})]
+
+
 def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     guard = FakeLeaseGuard()
     monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)

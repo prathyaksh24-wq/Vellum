@@ -110,6 +110,9 @@ def _desktop_params(
         _put(params, "button", button)
     if action == "scroll":
         params["amount"] = amount
+        if x or y:
+            params["x"] = x
+            params["y"] = y
     if action in {"type", "type_text"}:
         params["text"] = text
         if interval:
