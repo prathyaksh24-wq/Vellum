@@ -2,8 +2,9 @@ from agent.computer_use.native_windows.driver import WindowsNativeComputerDriver
 
 
 class FakeWindowing:
-    def __init__(self):
+    def __init__(self, bounds=None):
         self.activated = []
+        self.bounds = bounds or {"x": 0, "y": 0, "width": 100, "height": 80}
 
     def list_windows(self):
         from agent.computer_use.operator import ComputerWindow
@@ -15,7 +16,7 @@ class FakeWindowing:
                 "notepad.exe",
                 2,
                 "Untitled - Notepad",
-                {"x": 0, "y": 0, "width": 100, "height": 80},
+                self.bounds,
             )
         ]
 
@@ -53,6 +54,12 @@ class FakeInput:
     def click(self, x, y, **kwargs):
         self.calls.append(("click", x, y, kwargs))
 
+    def scroll(self, x, y, **kwargs):
+        self.calls.append(("scroll", x, y, kwargs))
+
+    def drag(self, from_x, from_y, to_x, to_y):
+        self.calls.append(("drag", from_x, from_y, to_x, to_y))
+
 
 def test_driver_observe_returns_window_screenshot_and_accessibility():
     driver = WindowsNativeComputerDriver(
@@ -87,6 +94,54 @@ def test_driver_click_element_activates_window_and_uses_element_center():
     assert windowing.activated == ["hwnd:1"]
     assert input_layer.calls[0][0:3] == ("click", 25, 40)
     assert result.observation is not None
+
+
+def test_driver_click_translates_window_relative_coordinates_to_screen_coordinates():
+    windowing = FakeWindowing(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.click("hwnd:1", x=10, y=20)
+
+    assert result.status == "ok"
+    assert input_layer.calls[0][0:3] == ("click", 310, 220)
+
+
+def test_driver_scroll_defaults_to_target_window_center():
+    windowing = FakeWindowing(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.scroll("hwnd:1", scroll_y=-5)
+
+    assert result.status == "ok"
+    assert input_layer.calls[0] == ("scroll", 350, 240, {"scroll_x": 0, "scroll_y": -5})
+
+
+def test_driver_drag_translates_window_relative_coordinates_to_screen_coordinates():
+    windowing = FakeWindowing(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.drag("hwnd:1", from_x=1, from_y=2, to_x=10, to_y=20)
+
+    assert result.status == "ok"
+    assert input_layer.calls[0] == ("drag", 301, 202, 310, 220)
 
 
 def test_driver_activate_window_returns_observation_after_activation():

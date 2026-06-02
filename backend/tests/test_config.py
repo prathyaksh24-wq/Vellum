@@ -29,3 +29,13 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.cloud_escalation_enabled is True
     assert settings.qdrant_local_path is not None
     assert settings.qdrant_local_path.name == "qdrant-local"
+
+
+def test_auto_gui_removed_from_dependency_files():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    removed_dependency = "pyauto" + "gui"
+
+    assert removed_dependency not in (root / "requirements.txt").read_text(encoding="utf-8").casefold()
+    assert removed_dependency not in (root / "pyproject.toml").read_text(encoding="utf-8").casefold()

@@ -86,6 +86,8 @@ class WindowsNativeComputerDriver:
         if element_index is not None:
             state = self.accessibility.get_accessibility_state(window.hwnd, include_text=True)
             x, y = self.accessibility.element_center(state, element_index)
+        else:
+            x, y = self._to_screen_point(window, int(x), int(y)) if x is not None and y is not None else (x, y)
         if x is None or y is None:
             raise ValueError("click requires element_index or x/y coordinates.")
         self.input.click(int(x), int(y), button=button, click_count=click_count)
@@ -105,12 +107,16 @@ class WindowsNativeComputerDriver:
         self,
         window_id: str | None = None,
         *,
-        x: int = 0,
-        y: int = 0,
+        x: int | None = None,
+        y: int | None = None,
         scroll_x: int = 0,
         scroll_y: int = 0,
     ) -> OperatorResult:
         window = self._activate_or_resolve(window_id)
+        if x is None or y is None:
+            x, y = self._window_center(window)
+        else:
+            x, y = self._to_screen_point(window, int(x), int(y))
         self.input.scroll(int(x), int(y), scroll_x=scroll_x, scroll_y=scroll_y)
         return self._after_action(window.id, "Scroll complete.")
 
@@ -124,6 +130,8 @@ class WindowsNativeComputerDriver:
         to_y: int,
     ) -> OperatorResult:
         window = self._activate_or_resolve(window_id)
+        from_x, from_y = self._to_screen_point(window, from_x, from_y)
+        to_x, to_y = self._to_screen_point(window, to_x, to_y)
         self.input.drag(int(from_x), int(from_y), int(to_x), int(to_y))
         return self._after_action(window.id, "Drag complete.")
 
@@ -140,3 +148,19 @@ class WindowsNativeComputerDriver:
     def _after_action(self, window_id: str, message: str) -> OperatorResult:
         result = self.get_window_state(window_id)
         return OperatorResult("ok", self.backend, message, observation=result.observation)
+
+    def _window_origin(self, window: ComputerWindow) -> tuple[int, int]:
+        bounds = window.bounds
+        return int(bounds.get("x", 0)), int(bounds.get("y", 0))
+
+    def _window_center(self, window: ComputerWindow) -> tuple[int, int]:
+        bounds = window.bounds
+        origin_x, origin_y = self._window_origin(window)
+        return (
+            origin_x + int(bounds.get("width", 0)) // 2,
+            origin_y + int(bounds.get("height", 0)) // 2,
+        )
+
+    def _to_screen_point(self, window: ComputerWindow, x: int, y: int) -> tuple[int, int]:
+        origin_x, origin_y = self._window_origin(window)
+        return origin_x + int(x), origin_y + int(y)
