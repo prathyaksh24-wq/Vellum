@@ -353,6 +353,14 @@ def computer_use(
                 data={"mode": "desktop", "action": desktop_action, "result": permission_result},
             )
             return permission_result
+        if desktop_action not in NATIVE_DESKTOP_ACTIONS:
+            computer_use_runtime.record_event(
+                "tool_result",
+                f"computer_use desktop {desktop_action} finished.",
+                tool="computer_use",
+                data={"mode": "desktop", "action": desktop_action, "result": REMOVED_DESKTOP_ACTION_MESSAGE},
+            )
+            return REMOVED_DESKTOP_ACTION_MESSAGE
         if _is_mutating_desktop_action(desktop_action) and not computer_use_runtime.is_enabled():
             result = "Computer use mode is disabled. Ask the user to enable computer use before desktop control."
             computer_use_runtime.record_event(
@@ -374,14 +382,6 @@ def computer_use(
                 )
                 return result
             computer_use_input_guard.heartbeat()
-        if desktop_action not in NATIVE_DESKTOP_ACTIONS:
-            computer_use_runtime.record_event(
-                "tool_result",
-                f"computer_use desktop {desktop_action} finished.",
-                tool="computer_use",
-                data={"mode": "desktop", "action": desktop_action, "result": REMOVED_DESKTOP_ACTION_MESSAGE},
-            )
-            return REMOVED_DESKTOP_ACTION_MESSAGE
         safety_result = _desktop_safety_block(desktop_action)
         if safety_result:
             computer_use_runtime.record_event(

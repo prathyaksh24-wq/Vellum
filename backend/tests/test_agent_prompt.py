@@ -53,7 +53,9 @@ def test_agent_prompt_documents_native_desktop_routing():
     assert "target window IDs" in prompt
     assert "accessibility element indexes" in prompt
     assert "blue edge-glow/status-pill Esc overlay" in prompt
-    assert "Legacy desktop compatibility actions remain available" in prompt
+    assert "Installed-app, visible-terminal, and OS tab/window switching desktop actions were removed" in prompt
+    assert "action='open_app'" not in prompt
+    assert "action='run_terminal_command'" not in prompt
 
 
 def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():

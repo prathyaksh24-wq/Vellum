@@ -158,7 +158,7 @@ def test_computer_use_routes_desktop_terminal_command(monkeypatch):
     )
 
     assert "moved to the native Windows driver" in result
-    assert guard.heartbeats == 1
+    assert guard.heartbeats == 0
 
 
 def test_computer_use_preserves_desktop_env_gate_before_native_driver(monkeypatch):
@@ -365,9 +365,7 @@ def test_computer_use_routes_desktop_permissions_to_legacy_tool(monkeypatch):
 
 
 def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
-    guard = FakeLeaseGuard()
-    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
-    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -379,13 +377,10 @@ def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
     )
 
     assert "moved to the native Windows driver" in result
-    assert guard.heartbeats == 1
 
 
 def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):
-    guard = FakeLeaseGuard()
-    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
-    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", guard)
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
         "run_desktop_action",
@@ -401,7 +396,6 @@ def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):
 
     assert "moved to the native Windows driver" in close_result
     assert "moved to the native Windows driver" in switch_result
-    assert guard.heartbeats == 2
 
 
 def test_computer_use_routes_browser(monkeypatch):
