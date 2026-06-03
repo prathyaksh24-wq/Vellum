@@ -12,6 +12,11 @@ requires_winfunctype = pytest.mark.skipif(
     reason="ctypes.WINFUNCTYPE is Windows-only",
 )
 
+requires_64bit_lparam = pytest.mark.skipif(
+    ctypes.sizeof(input_guard.LPARAM) < 8,
+    reason="large LPARAM regression requires a pointer-sized LPARAM of at least 8 bytes",
+)
+
 
 @pytest.fixture(autouse=True)
 def reset_low_level_proc_cache():
@@ -79,6 +84,7 @@ def test_configure_hook_api_sets_full_pointer_safe_signatures():
     assert fake.UnhookWindowsHookEx.restype is input_guard.wintypes.BOOL
 
 
+@requires_64bit_lparam
 def test_call_next_hook_casts_large_lparam_as_pointer_sized_value():
     calls = []
 
