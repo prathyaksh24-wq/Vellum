@@ -7,6 +7,12 @@ import pytest
 from agent.computer_use import input_guard
 
 
+requires_winfunctype = pytest.mark.skipif(
+    not hasattr(ctypes, "WINFUNCTYPE"),
+    reason="ctypes.WINFUNCTYPE is Windows-only",
+)
+
+
 @pytest.fixture(autouse=True)
 def reset_low_level_proc_cache():
     input_guard.WindowsInputGuard._low_level_proc_type_cache = None
@@ -14,6 +20,7 @@ def reset_low_level_proc_cache():
     input_guard.WindowsInputGuard._low_level_proc_type_cache = None
 
 
+@requires_winfunctype
 def test_low_level_hook_proc_uses_pointer_sized_lresult():
     proc_type = input_guard.WindowsInputGuard._low_level_proc_type()
 
@@ -33,7 +40,7 @@ def test_low_level_hook_proc_type_is_cached_lazily(monkeypatch):
         calls.append(args)
         return FakeProcType
 
-    monkeypatch.setattr(input_guard.ctypes, "WINFUNCTYPE", fake_winfunctype)
+    monkeypatch.setattr(input_guard.ctypes, "WINFUNCTYPE", fake_winfunctype, raising=False)
 
     assert calls == []
 
@@ -45,6 +52,7 @@ def test_low_level_hook_proc_type_is_cached_lazily(monkeypatch):
     assert calls == [(input_guard.LRESULT, ctypes.c_int, input_guard.WPARAM, input_guard.LPARAM)]
 
 
+@requires_winfunctype
 def test_configure_hook_api_sets_full_pointer_safe_signatures():
     class FakeFunction:
         pass
