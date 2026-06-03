@@ -446,23 +446,18 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
 
 
 def _qdrant_health() -> dict[str, Any]:
-    """Read Qdrant status WITHOUT opening a second client.
+    """Read the embedded Chroma vector-store status WITHOUT opening a second client.
 
-    Local-mode Qdrant rejects a second QdrantClient on the same storage path;
-    opening one here would deadlock /api/health against the singleton already
-    held by the agent path. Reuse the singleton from agent.rag.store."""
+    Reuse the singleton from agent.rag.store so /health doesn't race the client
+    the agent path already holds on the same storage path."""
     settings = get_settings()
-    if settings.qdrant_local_path is not None:
-        location = str(settings.qdrant_local_path)
-        mode = "local"
-    else:
-        location = f"{settings.qdrant_host}:{settings.qdrant_port}"
-        mode = "server"
+    location = str(settings.chroma_path) if settings.chroma_path is not None else "(ephemeral)"
+    mode = "embedded-chroma"
     try:
         from agent.rag.store import get_vector_store
 
         store = get_vector_store()
-        collections = [c.name for c in store.client.get_collections().collections]
+        collections = store.collection_names()
         return {"ok": True, "mode": mode, "location": location, "collections": collections}
     except Exception as exc:
         return {"ok": False, "mode": mode, "location": location, "error": str(exc)}

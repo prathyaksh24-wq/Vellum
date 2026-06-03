@@ -1,11 +1,6 @@
+# Vector search runs embedded via ChromaDB (agent/rag/store.py) — no container.
+# Only Honcho's user-model store needs services.
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - ./data/embeddings/qdrant:/qdrant/storage
   honcho:
     image: plasticlabs/honcho:latest
     ports:

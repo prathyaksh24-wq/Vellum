@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     qdrant_local_path: Path | None = Field(default=Path("data/embeddings/qdrant-local"), alias="QDRANT_LOCAL_PATH")
     qdrant_host: str = Field(default="localhost", alias="QDRANT_HOST")
     qdrant_port: int = Field(default=6333, alias="QDRANT_PORT")
+    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
 
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")
@@ -133,6 +134,7 @@ class Settings(BaseSettings):
         "obsidian_vault_path",
         "filesystem_mcp_path",
         "qdrant_local_path",
+        "chroma_path",
         "voice_model_dir",
         "computer_use_screenshot_dir",
         mode="before",
@@ -153,6 +155,8 @@ class Settings(BaseSettings):
         self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.qdrant_local_path is not None:
             self.qdrant_local_path = _resolve_against_repo(self.qdrant_local_path)
+        if self.chroma_path is not None:
+            self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
 
