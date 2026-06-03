@@ -18,7 +18,6 @@ LRESULT = ctypes.c_ssize_t
 WPARAM = wintypes.WPARAM
 LPARAM = wintypes.LPARAM
 HHOOK = wintypes.HANDLE
-LOW_LEVEL_PROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, WPARAM, LPARAM)
 
 
 class InputGuard(Protocol):
@@ -78,6 +77,7 @@ class WindowsInputGuard:
     VK_MENU = 0x12
     LLKHF_INJECTED = 0x10
     LLMHF_INJECTED = 0x01
+    _low_level_proc_type_cache = None
 
     def __init__(self, *, watchdog_seconds: float = 300.0) -> None:
         self.watchdog_seconds = max(5.0, float(watchdog_seconds))
@@ -223,15 +223,18 @@ class WindowsInputGuard:
             return self._call_next_hook(user32, self._mouse_hook, n_code, w_param, l_param)
         return 1
 
-    @staticmethod
-    def _low_level_proc_type():
-        return LOW_LEVEL_PROC
+    @classmethod
+    def _low_level_proc_type(cls):
+        if cls._low_level_proc_type_cache is None:
+            cls._low_level_proc_type_cache = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, WPARAM, LPARAM)
+        return cls._low_level_proc_type_cache
 
     @staticmethod
     def _configure_hook_api(user32) -> None:
+        low_level_proc = WindowsInputGuard._low_level_proc_type()
         user32.CallNextHookEx.argtypes = [HHOOK, ctypes.c_int, WPARAM, LPARAM]
         user32.CallNextHookEx.restype = LRESULT
-        user32.SetWindowsHookExW.argtypes = [ctypes.c_int, LOW_LEVEL_PROC, wintypes.HINSTANCE, wintypes.DWORD]
+        user32.SetWindowsHookExW.argtypes = [ctypes.c_int, low_level_proc, wintypes.HINSTANCE, wintypes.DWORD]
         user32.SetWindowsHookExW.restype = HHOOK
         user32.UnhookWindowsHookEx.argtypes = [HHOOK]
         user32.UnhookWindowsHookEx.restype = wintypes.BOOL

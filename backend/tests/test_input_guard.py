@@ -2,17 +2,47 @@ from __future__ import annotations
 
 import ctypes
 
+import pytest
+
 from agent.computer_use import input_guard
+
+
+@pytest.fixture(autouse=True)
+def reset_low_level_proc_cache():
+    input_guard.WindowsInputGuard._low_level_proc_type_cache = None
+    yield
+    input_guard.WindowsInputGuard._low_level_proc_type_cache = None
 
 
 def test_low_level_hook_proc_uses_pointer_sized_lresult():
     proc_type = input_guard.WindowsInputGuard._low_level_proc_type()
 
-    assert proc_type is input_guard.LOW_LEVEL_PROC
     assert proc_type._restype_ is input_guard.LRESULT
     assert proc_type._argtypes_[0] is ctypes.c_int
     assert proc_type._argtypes_[1] is input_guard.WPARAM
     assert proc_type._argtypes_[2] is input_guard.LPARAM
+
+
+def test_low_level_hook_proc_type_is_cached_lazily(monkeypatch):
+    calls = []
+
+    class FakeProcType:
+        pass
+
+    def fake_winfunctype(*args):
+        calls.append(args)
+        return FakeProcType
+
+    monkeypatch.setattr(input_guard.ctypes, "WINFUNCTYPE", fake_winfunctype)
+
+    assert calls == []
+
+    first_type = input_guard.WindowsInputGuard._low_level_proc_type()
+    second_type = input_guard.WindowsInputGuard._low_level_proc_type()
+
+    assert first_type is FakeProcType
+    assert second_type is first_type
+    assert calls == [(input_guard.LRESULT, ctypes.c_int, input_guard.WPARAM, input_guard.LPARAM)]
 
 
 def test_configure_hook_api_sets_full_pointer_safe_signatures():
@@ -26,13 +56,14 @@ def test_configure_hook_api_sets_full_pointer_safe_signatures():
 
     fake = FakeUser32()
     input_guard.WindowsInputGuard._configure_hook_api(fake)
+    proc_type = input_guard.WindowsInputGuard._low_level_proc_type()
 
     assert fake.CallNextHookEx.restype is input_guard.LRESULT
     assert fake.CallNextHookEx.argtypes == [input_guard.HHOOK, ctypes.c_int, input_guard.WPARAM, input_guard.LPARAM]
     assert fake.SetWindowsHookExW.restype is input_guard.HHOOK
     assert fake.SetWindowsHookExW.argtypes == [
         ctypes.c_int,
-        input_guard.LOW_LEVEL_PROC,
+        proc_type,
         input_guard.wintypes.HINSTANCE,
         input_guard.wintypes.DWORD,
     ]
