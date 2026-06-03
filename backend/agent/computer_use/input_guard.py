@@ -18,6 +18,7 @@ LRESULT = ctypes.c_ssize_t
 WPARAM = wintypes.WPARAM
 LPARAM = wintypes.LPARAM
 HHOOK = wintypes.HANDLE
+LOW_LEVEL_PROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, WPARAM, LPARAM)
 
 
 class InputGuard(Protocol):
@@ -224,14 +225,16 @@ class WindowsInputGuard:
 
     @staticmethod
     def _low_level_proc_type():
-        return ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, WPARAM, LPARAM)
+        return LOW_LEVEL_PROC
 
     @staticmethod
     def _configure_hook_api(user32) -> None:
         user32.CallNextHookEx.argtypes = [HHOOK, ctypes.c_int, WPARAM, LPARAM]
         user32.CallNextHookEx.restype = LRESULT
+        user32.SetWindowsHookExW.argtypes = [ctypes.c_int, LOW_LEVEL_PROC, wintypes.HINSTANCE, wintypes.DWORD]
         user32.SetWindowsHookExW.restype = HHOOK
         user32.UnhookWindowsHookEx.argtypes = [HHOOK]
+        user32.UnhookWindowsHookEx.restype = wintypes.BOOL
 
     @staticmethod
     def _call_next_hook(user32, hook, n_code, w_param, l_param):
