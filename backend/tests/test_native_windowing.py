@@ -84,6 +84,21 @@ def test_active_window_rejects_non_windows_before_accessing_user32(monkeypatch):
         windowing.active_window()
 
 
+def test_active_window_raises_when_foreground_window_is_null(monkeypatch):
+    class FakeUser32:
+        def GetForegroundWindow(self):
+            return None
+
+    class FakeWindll:
+        user32 = FakeUser32()
+
+    monkeypatch.setattr(windowing, "_is_windows", lambda: True)
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
+
+    with pytest.raises(RuntimeError, match="No active foreground window"):
+        windowing.active_window()
+
+
 def test_activate_window_raises_when_set_foreground_window_fails(monkeypatch):
     class FakeUser32:
         def ShowWindow(self, hwnd, command):
@@ -94,6 +109,27 @@ def test_activate_window_raises_when_set_foreground_window_fails(monkeypatch):
 
         def GetForegroundWindow(self):
             return 20
+
+    class FakeWindll:
+        user32 = FakeUser32()
+
+    monkeypatch.setattr(windowing, "_is_windows", lambda: True)
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
+
+    with pytest.raises(RuntimeError, match="Failed to activate window: hwnd:10"):
+        windowing.activate_window("hwnd:10")
+
+
+def test_activate_window_raises_clear_error_when_foreground_window_is_null(monkeypatch):
+    class FakeUser32:
+        def ShowWindow(self, hwnd, command):
+            return 1
+
+        def SetForegroundWindow(self, hwnd):
+            return 1
+
+        def GetForegroundWindow(self):
+            return None
 
     class FakeWindll:
         user32 = FakeUser32()

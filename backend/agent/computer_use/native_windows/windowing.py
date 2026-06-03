@@ -24,6 +24,12 @@ def parse_window_id(value: str | int) -> int:
     return int(text)
 
 
+def _hwnd_int(value) -> int:
+    if value is None:
+        return 0
+    return int(value)
+
+
 def normalize_window(
     *,
     hwnd: int,
@@ -100,7 +106,9 @@ def get_window(value: str | int) -> ComputerWindow:
 def active_window() -> ComputerWindow:
     if not _is_windows():
         raise RuntimeError("Native Windows computer use requires Windows.")
-    hwnd = int(_user32().GetForegroundWindow())
+    hwnd = _hwnd_int(_user32().GetForegroundWindow())
+    if hwnd == 0:
+        raise RuntimeError("No active foreground window.")
     return get_window(hwnd)
 
 
@@ -111,7 +119,7 @@ def activate_window(value: str | int) -> ComputerWindow:
     user32 = _user32()
     user32.ShowWindow(hwnd, 9)
     activated = bool(user32.SetForegroundWindow(hwnd))
-    foreground = int(user32.GetForegroundWindow())
+    foreground = _hwnd_int(user32.GetForegroundWindow())
     if not activated or foreground != hwnd:
         raise RuntimeError(f"Failed to activate window: {window_id(hwnd)}")
     return get_window(hwnd)
