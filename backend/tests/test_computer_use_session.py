@@ -246,13 +246,17 @@ def test_native_overlay_script_uses_transparent_glow_and_status_pill():
 
     script = overlay._overlay_script()
 
-    assert overlay.OVERLAY_MESSAGE == "Vellum is using your computer  ·  Esc to cancel"
+    assert "Vellum is using your computer" in overlay.OVERLAY_MESSAGE
     assert "TRANSPARENT_COLOR" in script
     assert "root.attributes(\"-transparentcolor\", TRANSPARENT_COLOR)" in script
     assert "root.configure(bg=TRANSPARENT_COLOR)" in script
     assert "canvas = tk.Canvas" in script
     assert "bg=TRANSPARENT_COLOR" in script
-    assert "create_rectangle" in script
+    assert "ImageDraw" in script
+    assert "ImageTk.PhotoImage" in script
+    assert "EDGE_GLOW_DESIGN" in script
+    assert "pill_y1 = PILL_OFFSET_Y" in script or "pill_y1 = 32" in script
+    assert "for inset, color, line_width in" not in script
     assert "create_rounded_rect" in script
     assert "root.after" in script
     assert "Computer use active - press Esc to exit" not in script
