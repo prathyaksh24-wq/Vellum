@@ -269,7 +269,9 @@ def test_native_overlay_status_reports_transparent_glow_design():
     status = NativeWindowsOverlayController().status()
 
     assert status["controller"] == "native_windows"
-    assert status["design"] == "transparent_edge_glow_status_pill"
+    assert status["design"] == "smooth_single_edge_glow_status_pill"
     assert status["transparent"] is True
     assert status["click_through"] is True
+    assert status["pill_offset_y"] == 32
+    assert status["edge_glow_style"] == "smooth-single"
     assert "Vellum is using your computer" in status["message"]
