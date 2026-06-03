@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import time
 from ctypes import wintypes
 from pathlib import Path
 
@@ -118,11 +119,25 @@ def activate_window(value: str | int) -> ComputerWindow:
         raise RuntimeError("Native Windows computer use requires Windows.")
     user32 = _user32()
     user32.ShowWindow(hwnd, 9)
-    activated = bool(user32.SetForegroundWindow(hwnd))
-    foreground = _hwnd_int(user32.GetForegroundWindow())
-    if not activated or foreground != hwnd:
+    user32.SetForegroundWindow(hwnd)
+    if not _wait_for_foreground(user32, hwnd):
         raise RuntimeError(f"Failed to activate window: {window_id(hwnd)}")
     return get_window(hwnd)
+
+
+def _wait_for_foreground(
+    user32,
+    hwnd: int,
+    timeout_seconds: float = 1.0,
+    poll_interval_seconds: float = 0.05,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if _hwnd_int(user32.GetForegroundWindow()) == hwnd:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(poll_interval_seconds)
 
 
 def _is_windows() -> bool:

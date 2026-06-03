@@ -120,6 +120,76 @@ def test_activate_window_raises_when_set_foreground_window_fails(monkeypatch):
         windowing.activate_window("hwnd:10")
 
 
+def test_activate_window_waits_for_delayed_foreground(monkeypatch):
+    class FakeUser32:
+        def __init__(self):
+            self.foreground_results = [0, None, 10]
+
+        def ShowWindow(self, hwnd, command):
+            return 1
+
+        def SetForegroundWindow(self, hwnd):
+            return 1
+
+        def GetForegroundWindow(self):
+            return self.foreground_results.pop(0)
+
+    class FakeWindll:
+        user32 = FakeUser32()
+
+    sleep_calls = []
+    expected = ComputerWindow(
+        id="hwnd:10",
+        hwnd=10,
+        app="brave.exe",
+        pid=123,
+        title="YouTube",
+        bounds={"x": 0, "y": 0, "width": 800, "height": 600},
+    )
+    monkeypatch.setattr(windowing, "_is_windows", lambda: True)
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
+    monkeypatch.setattr(windowing.time, "sleep", sleep_calls.append)
+    monkeypatch.setattr(windowing, "get_window", lambda hwnd: expected)
+
+    assert windowing.activate_window("hwnd:10") is expected
+    assert sleep_calls == [0.05, 0.05]
+
+
+def test_activate_window_succeeds_when_set_foreground_false_but_foreground_eventually_matches(
+    monkeypatch,
+):
+    class FakeUser32:
+        def __init__(self):
+            self.foreground_results = [20, 10]
+
+        def ShowWindow(self, hwnd, command):
+            return 1
+
+        def SetForegroundWindow(self, hwnd):
+            return 0
+
+        def GetForegroundWindow(self):
+            return self.foreground_results.pop(0)
+
+    class FakeWindll:
+        user32 = FakeUser32()
+
+    expected = ComputerWindow(
+        id="hwnd:10",
+        hwnd=10,
+        app="brave.exe",
+        pid=123,
+        title="YouTube",
+        bounds={"x": 0, "y": 0, "width": 800, "height": 600},
+    )
+    monkeypatch.setattr(windowing, "_is_windows", lambda: True)
+    monkeypatch.setattr(ctypes, "windll", FakeWindll(), raising=False)
+    monkeypatch.setattr(windowing.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(windowing, "get_window", lambda hwnd: expected)
+
+    assert windowing.activate_window("hwnd:10") is expected
+
+
 def test_activate_window_raises_clear_error_when_foreground_window_is_null(monkeypatch):
     class FakeUser32:
         def ShowWindow(self, hwnd, command):
