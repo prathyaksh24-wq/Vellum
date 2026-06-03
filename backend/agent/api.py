@@ -67,6 +67,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = None
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
     voice: bool = False
+    store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
 
 
 class Source(BaseModel):
@@ -389,6 +390,26 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
 
 
+def _audit_memory_off(thread_id: str, source: str) -> None:
+    """Metadata-only breadcrumb when the user has memory turned off. No content is written."""
+    try:
+        from pathlib import Path
+        from datetime import datetime, timezone
+        audit = Path("data/memory/audit_log.jsonl")
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        with audit.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "thread_id": thread_id,
+                "source": source,
+                "event": "memory_disabled",
+                "memory_enabled": False,
+                "outcome": "not_stored",
+            }) + "\n")
+    except Exception:
+        pass
+
+
 async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
     try:
         data_class, _reason = classify(query)
@@ -593,6 +614,7 @@ async def _stream_agent_turn(
     source: str = "agent",
     voice: bool = False,
     synthesize_audio: bool = False,
+    store: bool = True,
 ):
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     if live_result is not None and live_result.handled:
@@ -616,7 +638,7 @@ async def _stream_agent_turn(
             sources=[Source(**source) for source in live_result.sources],
         )
         if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
-            asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source))
+            (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
         yield _sse("final", response.model_dump_json())
         if synthesize_audio and live_result.answer:
             async for audio_event in _synthesize_audio_event(live_result.answer):
@@ -686,7 +708,7 @@ async def _stream_agent_turn(
             else:
                 response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source))
+                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
             yield _sse("final", response.model_dump_json())
             if synthesize_audio and answer != "No response.":
                 async for audio_event in _synthesize_audio_event(answer):
@@ -965,6 +987,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             model=request.model,
             source="voice" if request.voice else "agent",
             voice=request.voice,
+            store=request.store,
         ),
         media_type="text/event-stream",
     )
