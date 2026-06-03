@@ -350,6 +350,29 @@ def test_driver_activate_window_returns_observation_after_activation():
     assert result.observation["screenshot"]["path"] == "screen.png"
 
 
+def test_driver_activate_window_recovers_after_first_activation_failure():
+    class ExplicitActivationRecoveringWindowing(RecoveringWindowing):
+        def get_window(self, window_id):
+            if len(self.activated) == 1:
+                self.get_calls.append(window_id)
+            return self.list_windows()[0]
+
+    windowing = ExplicitActivationRecoveringWindowing()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+    )
+
+    result = driver.activate_window("hwnd:1")
+
+    assert result.status == "ok"
+    assert windowing.activated == ["hwnd:1", "hwnd:1"]
+    assert windowing.get_calls == ["hwnd:1"]
+    assert result.observation["window"]["id"] == "hwnd:1"
+
+
 def test_driver_open_app_launches_and_returns_window_observation():
     windowing = FakeWindowing(app="brave.exe", title="Brave Browser")
     launcher = FakeLauncher()

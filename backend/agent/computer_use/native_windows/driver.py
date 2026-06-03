@@ -86,7 +86,7 @@ class WindowsNativeComputerDriver:
         return observation
 
     def activate_window(self, window_id: str) -> OperatorResult:
-        window = self.windowing.activate_window(window_id)
+        window = self._activate_or_resolve(window_id)
         return self._after_action(window.id, f"Activated window {window.id}.")
 
     def open_app(self, app: str) -> OperatorResult:
