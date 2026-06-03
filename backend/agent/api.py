@@ -429,6 +429,14 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
         session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
+        # Hermes-style: refresh the cached user model (Honcho dialectic) on a
+        # cadence so the next turn's prompt reflects a deeper understanding.
+        try:
+            from agent.memory.memory_context import refresh_user_model
+
+            await asyncio.to_thread(refresh_user_model, thread_id, honcho)
+        except Exception:
+            pass
         try:
             from agent.memory.project_context import build_fast_summarizer
             ctx = _project_context()

@@ -139,6 +139,19 @@ def vellum_prompt(state, config=None):
             logging.getLogger(__name__).warning("identity load failed: %s", exc)
             identity = ""
 
+    # Hermes-style memory context: SOUL.md personality + the evolving Honcho
+    # user model (cached; refreshed on a cadence in the background — no network
+    # call here). Empty on day one, richer as Honcho's representation deepens.
+    memory_block = ""
+    try:
+        from agent.memory.memory_context import build_memory_block
+
+        memory_block = build_memory_block(thread_id)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("memory context load failed: %s", exc)
+        memory_block = ""
+
     active_model = get_provider_registry().current_model()
     runtime_text = (
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
@@ -146,6 +159,8 @@ def vellum_prompt(state, config=None):
         "do not infer from model weights or provider defaults."
     )
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
+    if memory_block:
+        system_body = f"{memory_block}\n\n{system_body}"
     system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
 
