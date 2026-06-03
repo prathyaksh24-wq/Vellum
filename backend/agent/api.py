@@ -453,7 +453,7 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
         return
 
 
-def _qdrant_health() -> dict[str, Any]:
+def _vector_health() -> dict[str, Any]:
     """Read the embedded Chroma vector-store status WITHOUT opening a second client.
 
     Reuse the singleton from agent.rag.store so /health doesn't race the client
@@ -487,7 +487,7 @@ async def health() -> dict[str, Any]:
         "ok": True,
         "service": "personal-agent-api",
         "vault": {"path": str(settings.obsidian_vault_path), "exists": settings.obsidian_vault_path.exists()},
-        "qdrant": _qdrant_health(),
+        "vector": _vector_health(),
         "embeddings": _embedding_health(),
         "models": {
             "primary": settings.primary_model,
@@ -1197,7 +1197,7 @@ async def mcp_health() -> dict[str, Any]:
     ))
 
     # Adjacent services Vellum depends on
-    qdrant = _qdrant_health()
+    vector = _vector_health()
 
     honcho_reachable = False
     try:
@@ -1210,7 +1210,7 @@ async def mcp_health() -> dict[str, Any]:
 
     return {
         "mcp_servers": servers,
-        "qdrant": qdrant,
+        "vector": vector,
         "honcho": {
             "base_url": settings.honcho_base_url,
             "reachable": honcho_reachable,
@@ -1254,9 +1254,7 @@ async def public_settings() -> dict[str, Any]:
         "fallback_model": settings.fallback_model,
         "fast_model": settings.fast_model,
         "apify_mcp_url": settings.apify_mcp_url,
-        "qdrant_host": settings.qdrant_host,
-        "qdrant_port": settings.qdrant_port,
-        "qdrant_local_path": str(settings.qdrant_local_path) if settings.qdrant_local_path is not None else None,
+        "chroma_path": str(settings.chroma_path) if settings.chroma_path is not None else None,
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
     }

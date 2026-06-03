@@ -7,7 +7,7 @@ competing clients on the same storage path.
 
 The public interface (get_vector_store / VectorStore.upsert / search /
 delete_by_metadata / ensure_collections / collection_names) is unchanged from
-the previous Qdrant wrapper, so callers don't care which engine backs it.
+the previous vector wrapper, so callers don't care which engine backs it.
 We always pass our own embeddings (sentence-transformers, see embedder.py);
 Chroma's built-in embedding function is never used.
 """
@@ -82,7 +82,7 @@ class VectorStore:
     def _collection(self, name: str):
         coll = self._collections.get(name)
         if coll is None:
-            # cosine space mirrors the previous Qdrant Distance.COSINE setup.
+            # cosine space for similarity (mirrors the prior cosine setup).
             coll = self.client.get_or_create_collection(
                 name=name, metadata={"hnsw:space": "cosine"}
             )
