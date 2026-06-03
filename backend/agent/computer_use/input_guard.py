@@ -14,6 +14,10 @@ from agent.config import get_settings
 
 
 InterruptCallback = Callable[[str], None]
+LRESULT = ctypes.c_ssize_t
+WPARAM = wintypes.WPARAM
+LPARAM = wintypes.LPARAM
+HHOOK = wintypes.HANDLE
 
 
 class InputGuard(Protocol):
@@ -174,8 +178,9 @@ class WindowsInputGuard:
         try:
             user32 = ctypes.windll.user32
             kernel32 = ctypes.windll.kernel32
+            self._configure_hook_api(user32)
             self._thread_id = kernel32.GetCurrentThreadId()
-            low_level_proc = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM)
+            low_level_proc = self._low_level_proc_type()
             self._keyboard_proc = low_level_proc(self._keyboard_callback)
             self._mouse_proc = low_level_proc(self._mouse_callback)
             self._keyboard_hook = user32.SetWindowsHookExW(self.WH_KEYBOARD_LL, self._keyboard_proc, None, 0)
@@ -196,10 +201,10 @@ class WindowsInputGuard:
     def _keyboard_callback(self, n_code, w_param, l_param):
         user32 = ctypes.windll.user32
         if n_code < 0:
-            return user32.CallNextHookEx(self._keyboard_hook, n_code, w_param, l_param)
+            return self._call_next_hook(user32, self._keyboard_hook, n_code, w_param, l_param)
         event = ctypes.cast(l_param, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
         if event.flags & self.LLKHF_INJECTED:
-            return user32.CallNextHookEx(self._keyboard_hook, n_code, w_param, l_param)
+            return self._call_next_hook(user32, self._keyboard_hook, n_code, w_param, l_param)
         if int(w_param) in {self.WM_KEYDOWN, self.WM_SYSKEYDOWN} and event.vkCode == self.VK_ESCAPE:
             ctrl = user32.GetAsyncKeyState(self.VK_CONTROL) & 0x8000
             alt = user32.GetAsyncKeyState(self.VK_MENU) & 0x8000
@@ -211,11 +216,37 @@ class WindowsInputGuard:
     def _mouse_callback(self, n_code, w_param, l_param):
         user32 = ctypes.windll.user32
         if n_code < 0:
-            return user32.CallNextHookEx(self._mouse_hook, n_code, w_param, l_param)
+            return self._call_next_hook(user32, self._mouse_hook, n_code, w_param, l_param)
         event = ctypes.cast(l_param, ctypes.POINTER(MSLLHOOKSTRUCT)).contents
         if event.flags & self.LLMHF_INJECTED:
-            return user32.CallNextHookEx(self._mouse_hook, n_code, w_param, l_param)
+            return self._call_next_hook(user32, self._mouse_hook, n_code, w_param, l_param)
         return 1
+
+    @staticmethod
+    def _low_level_proc_type():
+        return ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, WPARAM, LPARAM)
+
+    @staticmethod
+    def _configure_hook_api(user32) -> None:
+        user32.CallNextHookEx.argtypes = [HHOOK, ctypes.c_int, WPARAM, LPARAM]
+        user32.CallNextHookEx.restype = LRESULT
+        user32.SetWindowsHookExW.restype = HHOOK
+        user32.UnhookWindowsHookEx.argtypes = [HHOOK]
+
+    @staticmethod
+    def _call_next_hook(user32, hook, n_code, w_param, l_param):
+        return user32.CallNextHookEx(
+            WindowsInputGuard._coerce_ctype(HHOOK, hook),
+            WindowsInputGuard._coerce_ctype(ctypes.c_int, n_code),
+            WindowsInputGuard._coerce_ctype(WPARAM, w_param),
+            WindowsInputGuard._coerce_ctype(LPARAM, l_param),
+        )
+
+    @staticmethod
+    def _coerce_ctype(ctype, value):
+        if isinstance(value, ctype):
+            return value
+        return ctype(value.value if hasattr(value, "value") else value)
 
     def _trigger_interrupt(self, reason: str) -> None:
         with self._lock:
