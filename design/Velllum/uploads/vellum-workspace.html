@@ -1275,9 +1275,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
         return { task, out };
       }));
       const bundle = results.map(r=> "## "+r.task.title+"\n"+r.out).join("\n\n");
+      const steerNote = steerRef.current[turnId] ? ("\n\nUser steer (apply this): "+steerRef.current[turnId]) : "";
       let fin="";
       try{
-        fin = await streamModel({ messages:[{role:"system", content:synthSys(userText)}, {role:"user", content:bundle}], model:selModel, signal:ctrl.signal,
+        fin = await streamModel({ messages:[{role:"system", content:synthSys(userText)}, {role:"user", content:bundle+steerNote}], model:selModel, signal:ctrl.signal,
           onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
       }catch(e){ fin = bundle; }
       setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:fin||bundle, streaming:false, thinking:false}:x));
@@ -1291,7 +1292,18 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     abortRef.current=null; setRunning(false);
   }
   function sendToChat(chatId, text, atts){
-    const t = (text||"").trim(); if((!t && (!atts || !atts.length)) || running) return;
+    const t = (text||"").trim();
+    if(running){
+      // mid-turn steer for an active coding turn (does NOT abort — the turn keeps running)
+      const pr = progressByChat[chatId]; const tid = pr && pr.turnId;
+      if(t && tid && activeMode==="coding" && (pr.status==="running"||pr.status==="planning")){
+        steerRef.current[tid] = t;
+        emitFrame(chatId, VPROTO.steer(chatId, tid, t));
+        setMsgsFor(chatId, m=> [...m, { id:nextId(), type:"system", label:"Steer: "+t, icon:"dot" }]);
+      }
+      return;
+    }
+    if(!t && (!atts || !atts.length)) return;
     const uid = nextId(), aid = nextId();
     const prevMsgs = chatMsgs[chatId] || [];
     const userMsg = { id:uid, type:"user", text:t, atts:atts };
