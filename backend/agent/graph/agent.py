@@ -95,7 +95,7 @@ Rules:
 - Use obsidian_api when the user explicitly asks to work through Obsidian's API/MCP layer. Prefer search/read before write. Do not delete files or execute Obsidian commands unless explicitly requested and env-gated.
 - Use library_docs only when the user asks about a specific software library or framework and the vault does not already cover it. Resolve before fetching docs; pass topic to keep results focused.
 - Use repo_docs when the user asks for context on a specific GitHub project (its docs or code search) and the vault does not cover it. Prefer library_docs for well-known libraries, github_read for structured PR/issue/commit data, and repo_docs for arbitrary repo documentation and code search.
-- Use context_mode action='execute' when a question can be answered by computing on data rather than pulling many files into context — write the script, let only stdout return. Use action='index'/'search' for ad-hoc local indices that should not pollute the main Qdrant/FTS5 vault stores. Treat action='fetch_and_index' output as external and unscrubbed: summarize before quoting, and never feed it raw into responses that mix with private folder content.
+- Use context_mode action='execute' when a question can be answered by computing on data rather than pulling many files into context — write the script, let only stdout return. Use action='index'/'search' for ad-hoc local indices that should not pollute the main Chroma/FTS5 vault stores. Treat action='fetch_and_index' output as external and unscrubbed: summarize before quoting, and never feed it raw into responses that mix with private folder content.
 - Never call context_mode action='purge' unless the user explicitly asks for it and passes confirm=true.
 - Use escalate_to_cloud when a public/code/docs task is too hard, tool calls fail repeatedly, you cannot form a reliable plan, or the user asks for a stronger/cloud model.
 - Public code, docs, public GitHub, and public web tasks may be escalated automatically.
@@ -141,6 +141,19 @@ def vellum_prompt(state, config=None):
             logging.getLogger(__name__).warning("identity load failed: %s", exc)
             identity = ""
 
+    # Hermes-style memory context: SOUL.md personality + the evolving Honcho
+    # user model (cached; refreshed on a cadence in the background — no network
+    # call here). Empty on day one, richer as Honcho's representation deepens.
+    memory_block = ""
+    try:
+        from agent.memory.memory_context import build_memory_block
+
+        memory_block = build_memory_block(thread_id)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("memory context load failed: %s", exc)
+        memory_block = ""
+
     active_model = get_provider_registry().current_model()
     runtime_text = (
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
@@ -148,6 +161,8 @@ def vellum_prompt(state, config=None):
         "do not infer from model weights or provider defaults."
     )
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
+    if memory_block:
+        system_body = f"{memory_block}\n\n{system_body}"
     system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
 

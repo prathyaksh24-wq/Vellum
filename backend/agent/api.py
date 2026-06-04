@@ -67,6 +67,7 @@ class ChatRequest(BaseModel):
     thread_id: str | None = None
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
     voice: bool = False
+    store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
 
 
 class Source(BaseModel):
@@ -389,6 +390,26 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
 
 
+def _audit_memory_off(thread_id: str, source: str) -> None:
+    """Metadata-only breadcrumb when the user has memory turned off. No content is written."""
+    try:
+        from pathlib import Path
+        from datetime import datetime, timezone
+        audit = Path("data/memory/audit_log.jsonl")
+        audit.parent.mkdir(parents=True, exist_ok=True)
+        with audit.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "thread_id": thread_id,
+                "source": source,
+                "event": "memory_disabled",
+                "memory_enabled": False,
+                "outcome": "not_stored",
+            }) + "\n")
+    except Exception:
+        pass
+
+
 async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
     try:
         data_class, _reason = classify(query)
@@ -408,6 +429,14 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
         session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
         await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
+        # Hermes-style: refresh the cached user model (Honcho dialectic) on a
+        # cadence so the next turn's prompt reflects a deeper understanding.
+        try:
+            from agent.memory.memory_context import refresh_user_model
+
+            await asyncio.to_thread(refresh_user_model, thread_id, honcho)
+        except Exception:
+            pass
         try:
             from agent.memory.project_context import build_fast_summarizer
             ctx = _project_context()
@@ -424,24 +453,19 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
         return
 
 
-def _qdrant_health() -> dict[str, Any]:
-    """Read Qdrant status WITHOUT opening a second client.
+def _vector_health() -> dict[str, Any]:
+    """Read the embedded Chroma vector-store status WITHOUT opening a second client.
 
-    Local-mode Qdrant rejects a second QdrantClient on the same storage path;
-    opening one here would deadlock /api/health against the singleton already
-    held by the agent path. Reuse the singleton from agent.rag.store."""
+    Reuse the singleton from agent.rag.store so /health doesn't race the client
+    the agent path already holds on the same storage path."""
     settings = get_settings()
-    if settings.qdrant_local_path is not None:
-        location = str(settings.qdrant_local_path)
-        mode = "local"
-    else:
-        location = f"{settings.qdrant_host}:{settings.qdrant_port}"
-        mode = "server"
+    location = str(settings.chroma_path) if settings.chroma_path is not None else "(ephemeral)"
+    mode = "embedded-chroma"
     try:
         from agent.rag.store import get_vector_store
 
         store = get_vector_store()
-        collections = [c.name for c in store.client.get_collections().collections]
+        collections = store.collection_names()
         return {"ok": True, "mode": mode, "location": location, "collections": collections}
     except Exception as exc:
         return {"ok": False, "mode": mode, "location": location, "error": str(exc)}
@@ -463,7 +487,7 @@ async def health() -> dict[str, Any]:
         "ok": True,
         "service": "personal-agent-api",
         "vault": {"path": str(settings.obsidian_vault_path), "exists": settings.obsidian_vault_path.exists()},
-        "qdrant": _qdrant_health(),
+        "vector": _vector_health(),
         "embeddings": _embedding_health(),
         "models": {
             "primary": settings.primary_model,
@@ -593,6 +617,7 @@ async def _stream_agent_turn(
     source: str = "agent",
     voice: bool = False,
     synthesize_audio: bool = False,
+    store: bool = True,
 ):
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     if live_result is not None and live_result.handled:
@@ -616,7 +641,7 @@ async def _stream_agent_turn(
             sources=[Source(**source) for source in live_result.sources],
         )
         if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
-            asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source))
+            (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
         yield _sse("final", response.model_dump_json())
         if synthesize_audio and live_result.answer:
             async for audio_event in _synthesize_audio_event(live_result.answer):
@@ -686,7 +711,7 @@ async def _stream_agent_turn(
             else:
                 response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source))
+                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
             yield _sse("final", response.model_dump_json())
             if synthesize_audio and answer != "No response.":
                 async for audio_event in _synthesize_audio_event(answer):
@@ -965,6 +990,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             model=request.model,
             source="voice" if request.voice else "agent",
             voice=request.voice,
+            store=request.store,
         ),
         media_type="text/event-stream",
     )
@@ -1171,7 +1197,7 @@ async def mcp_health() -> dict[str, Any]:
     ))
 
     # Adjacent services Vellum depends on
-    qdrant = _qdrant_health()
+    vector = _vector_health()
 
     honcho_reachable = False
     try:
@@ -1184,7 +1210,7 @@ async def mcp_health() -> dict[str, Any]:
 
     return {
         "mcp_servers": servers,
-        "qdrant": qdrant,
+        "vector": vector,
         "honcho": {
             "base_url": settings.honcho_base_url,
             "reachable": honcho_reachable,
@@ -1228,9 +1254,7 @@ async def public_settings() -> dict[str, Any]:
         "fallback_model": settings.fallback_model,
         "fast_model": settings.fast_model,
         "apify_mcp_url": settings.apify_mcp_url,
-        "qdrant_host": settings.qdrant_host,
-        "qdrant_port": settings.qdrant_port,
-        "qdrant_local_path": str(settings.qdrant_local_path) if settings.qdrant_local_path is not None else None,
+        "chroma_path": str(settings.chroma_path) if settings.chroma_path is not None else None,
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
     }

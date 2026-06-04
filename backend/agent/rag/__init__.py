@@ -1,2 +1,2 @@
-"""Local retrieval placeholders until the Qdrant phase."""
+"""Local retrieval (embedded ChromaDB vector store)."""
 

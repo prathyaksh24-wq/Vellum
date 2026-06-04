@@ -1,8 +1,16 @@
-"""Qdrant vector store wrapper.
+"""ChromaDB vector store wrapper.
 
-Local-mode Qdrant uses the storage path as a unique lock — only one
-QdrantClient per process per path is allowed. Use `get_vector_store()` to
-share a single VectorStore across the agent, watcher, ingester, and tools."""
+Embedded, on-disk Chroma (a `PersistentClient`) — no separate server or
+Docker container. One client per process per path is shared via
+`get_vector_store()` so the agent, watcher, ingester, and tools don't open
+competing clients on the same storage path.
+
+The public interface (get_vector_store / VectorStore.upsert / search /
+delete_by_metadata / ensure_collections / collection_names) is unchanged from
+the previous vector wrapper, so callers don't care which engine backs it.
+We always pass our own embeddings (sentence-transformers, see embedder.py);
+Chroma's built-in embedding function is never used.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +20,6 @@ import uuid
 from typing import Any
 
 from agent.config import get_settings
-from agent.rag.embedder import VECTOR_SIZE
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +30,10 @@ _singleton_lock = threading.Lock()
 
 
 def get_vector_store() -> "VectorStore":
-    """Return the process-wide VectorStore instance, constructing on first call.
+    """Return the process-wide VectorStore, constructing on first call.
 
-    All callers that don't have a specific reason to create their own must use
-    this. Local-mode Qdrant rejects a second client on the same storage path,
-    so a singleton prevents the watcher / chat / ingester from deadlocking
-    each other (which crashed flush threads pre-fix; see uvicorn.err.log).
-    """
+    Embedded Chroma keeps an exclusive lock on its storage path, so a singleton
+    prevents the watcher / chat / ingester from opening competing clients."""
     global _singleton
     if _singleton is not None:
         return _singleton
@@ -49,38 +53,51 @@ def reset_vector_store_for_tests() -> None:
 class VectorStore:
     def __init__(self, client: Any | None = None, *, ensure_collections: bool = True):
         self.client = client or self._create_client()
+        self._collections: dict[str, Any] = {}
         if ensure_collections:
             self.ensure_collections()
 
     def _create_client(self):
         try:
-            from qdrant_client import QdrantClient
+            import chromadb
+            from chromadb.config import Settings as ChromaSettings
         except ImportError as exc:
             raise RuntimeError(
-                "qdrant-client is required for vector storage. "
+                "chromadb is required for vector storage. "
                 "Install requirements.txt before using the RAG layer."
             ) from exc
 
         settings = get_settings()
-        if settings.qdrant_local_path is not None:
-            settings.qdrant_local_path.mkdir(parents=True, exist_ok=True)
-            logger.info("Using embedded local Qdrant at %s", settings.qdrant_local_path)
-            return QdrantClient(path=str(settings.qdrant_local_path))
+        path = settings.chroma_path
+        if path is not None:
+            path.mkdir(parents=True, exist_ok=True)
+            logger.info("Using embedded Chroma at %s", path)
+            return chromadb.PersistentClient(
+                path=str(path),
+                settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
+            )
+        logger.info("Using ephemeral (in-memory) Chroma")
+        return chromadb.EphemeralClient(settings=ChromaSettings(anonymized_telemetry=False))
 
-        return QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+    def _collection(self, name: str):
+        coll = self._collections.get(name)
+        if coll is None:
+            # cosine space for similarity (mirrors the prior cosine setup).
+            coll = self.client.get_or_create_collection(
+                name=name, metadata={"hnsw:space": "cosine"}
+            )
+            self._collections[name] = coll
+        return coll
 
     def ensure_collections(self, collection_names: tuple[str, ...] = DEFAULT_COLLECTIONS) -> None:
-        from qdrant_client.models import Distance, VectorParams
-
-        existing = {collection.name for collection in self.client.get_collections().collections}
         for name in collection_names:
-            if name in existing:
-                continue
-            self.client.create_collection(
-                collection_name=name,
-                vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
-            )
-            logger.info("Created Qdrant collection: %s", name)
+            self._collection(name)
+
+    def collection_names(self) -> list[str]:
+        try:
+            return [c.name for c in self.client.list_collections()]
+        except Exception:
+            return list(self._collections.keys())
 
     def upsert(
         self,
@@ -90,25 +107,24 @@ class VectorStore:
         metadata: dict,
         point_id: str | None = None,
     ) -> str:
-        from qdrant_client.models import PointStruct
-
         point_id = point_id or str(uuid.uuid4())
-        payload = {"text": text, **metadata}
-        point = PointStruct(id=point_id, vector=embedding, payload=payload)
-        self.client.upsert(collection_name=collection, points=[point])
+        # Chroma metadata values must be scalars (str/int/float/bool); drop the rest.
+        meta = {
+            k: v
+            for k, v in {"text": text, **(metadata or {})}.items()
+            if isinstance(v, (str, int, float, bool))
+        }
+        self._collection(collection).upsert(
+            ids=[point_id],
+            embeddings=[embedding],
+            documents=[text],
+            metadatas=[meta or {"text": text}],
+        )
         return point_id
 
     def delete_by_metadata(self, collection: str, key: str, value: Any) -> None:
-        """Delete all points in a collection matching one payload field."""
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-
-        self.client.delete(
-            collection_name=collection,
-            points_selector=Filter(
-                must=[FieldCondition(key=key, match=MatchValue(value=value))]
-            ),
-            wait=True,
-        )
+        """Delete all points in a collection matching one metadata field."""
+        self._collection(collection).delete(where={key: value})
 
     def search(
         self,
@@ -118,50 +134,31 @@ class VectorStore:
         score_threshold: float = 0.0,
         filters: dict[str, Any] | None = None,
     ) -> list[dict]:
-        query_filter = self._build_filter(filters)
-        results = self._query_points(
-            collection=collection,
-            embedding=embedding,
-            top_k=top_k,
-            score_threshold=score_threshold,
-            query_filter=query_filter,
+        result = self._collection(collection).query(
+            query_embeddings=[embedding],
+            n_results=max(1, top_k),
+            where=self._build_where(filters),
+            include=["documents", "metadatas", "distances"],
         )
-        return [self._normalize_result(item) for item in results]
+        docs = (result.get("documents") or [[]])[0]
+        metas = (result.get("metadatas") or [[]])[0]
+        dists = (result.get("distances") or [[]])[0]
+        out: list[dict] = []
+        for i in range(len(docs)):
+            distance = float(dists[i]) if i < len(dists) and dists[i] is not None else 1.0
+            score = 1.0 - distance  # cosine space: distance = 1 - similarity
+            if score < score_threshold:
+                continue
+            meta = dict(metas[i] or {}) if i < len(metas) else {}
+            text = str(meta.pop("text", docs[i] or ""))
+            out.append({"text": text, "score": score, "metadata": meta})
+        return out
 
-    def _query_points(self, *, collection: str, embedding: list[float], top_k: int, score_threshold: float, query_filter):
-        if hasattr(self.client, "query_points"):
-            response = self.client.query_points(
-                collection_name=collection,
-                query=embedding,
-                query_filter=query_filter,
-                limit=top_k,
-                score_threshold=score_threshold,
-            )
-            return getattr(response, "points", response)
-
-        return self.client.search(
-            collection_name=collection,
-            query_vector=embedding,
-            query_filter=query_filter,
-            limit=top_k,
-            score_threshold=score_threshold,
-        )
-
-    def _build_filter(self, filters: dict[str, Any] | None):
+    def _build_where(self, filters: dict[str, Any] | None):
         if not filters:
             return None
-
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-
-        conditions = [
-            FieldCondition(key=key, match=MatchValue(value=value))
-            for key, value in filters.items()
-        ]
-        return Filter(must=conditions)
-
-    def _normalize_result(self, item) -> dict:
-        payload = getattr(item, "payload", None) or {}
-        score = float(getattr(item, "score", 0.0) or 0.0)
-        metadata = dict(payload)
-        text = str(metadata.pop("text", ""))
-        return {"text": text, "score": score, "metadata": metadata}
+        items = list(filters.items())
+        if len(items) == 1:
+            key, value = items[0]
+            return {key: value}
+        return {"$and": [{key: value} for key, value in items]}

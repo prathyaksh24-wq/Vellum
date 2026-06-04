@@ -51,10 +51,8 @@ class Settings(BaseSettings):
     obsidian_vault_path: Path = Field(alias="OBSIDIAN_VAULT_PATH")
     agent_notes_folder: str = Field(default="Agent", alias="AGENT_NOTES_FOLDER")
 
-    # Qdrant
-    qdrant_local_path: Path | None = Field(default=Path("data/embeddings/qdrant-local"), alias="QDRANT_LOCAL_PATH")
-    qdrant_host: str = Field(default="localhost", alias="QDRANT_HOST")
-    qdrant_port: int = Field(default=6333, alias="QDRANT_PORT")
+    # Vector store (embedded ChromaDB)
+    chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
 
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")
@@ -132,7 +130,7 @@ class Settings(BaseSettings):
     @field_validator(
         "obsidian_vault_path",
         "filesystem_mcp_path",
-        "qdrant_local_path",
+        "chroma_path",
         "voice_model_dir",
         "computer_use_screenshot_dir",
         mode="before",
@@ -145,14 +143,14 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_paths_and_privacy(self) -> "Settings":
-        # Resolve relative paths against the REPO ROOT, not CWD. Local Qdrant
-        # uses the path as a unique storage key, so a CWD-dependent path
-        # produces split-brain databases (one when started from Vellum/,
-        # another from Vellum/backend/).
+        # Resolve relative paths against the REPO ROOT, not CWD. Embedded Chroma
+        # uses the path as its storage location, so a CWD-dependent path would
+        # produce split-brain databases (one when started from Vellum/, another
+        # from Vellum/backend/).
         self.obsidian_vault_path = _resolve_against_repo(self.obsidian_vault_path)
         self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
-        if self.qdrant_local_path is not None:
-            self.qdrant_local_path = _resolve_against_repo(self.qdrant_local_path)
+        if self.chroma_path is not None:
+            self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
 

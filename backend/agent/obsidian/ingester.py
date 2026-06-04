@@ -2,7 +2,7 @@
 Bulk ingest Obsidian vault content into the configured vector store.
 
 Phase 7 keeps the store/embedder abstraction lightweight. Phase 8 will replace
-those internals with BGE-M3 and Qdrant while preserving this policy-aware flow.
+those internals with BGE-M3 and embedded ChromaDB while preserving this policy-aware flow.
 """
 
 from pathlib import Path
