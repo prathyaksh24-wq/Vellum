@@ -472,11 +472,21 @@ def test_memory_agent_answers_through_memory_service(tmp_path):
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
-    assert agent.can_handle("build context for this thread")
+    assert agent.can_handle("build memory context for this thread")
+    assert not agent.can_handle("build context for this Python error")
     assert response.status == "answered"
     assert "reviewed proposal" in response.summary
     assert response.memory_proposals
     assert all(proposal.confidence >= 0.75 for proposal in response.memory_proposals)
+    assert response.memory_proposals[0].claim == "User's sports analysis preference."
+
+
+def test_memory_agent_proposes_user_specific_memory_claim(tmp_path):
+    agent = MemoryAgent(vault_root=tmp_path)
+
+    response = agent.answer("Remember that I prefer concise sports analysis")
+
+    assert response.memory_proposals[0].claim == "User prefers concise sports analysis."
 
 
 def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):

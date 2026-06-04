@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agent.config import REPO_ROOT
 from agent.agents.base import MemoryProposal, SpecialistResponse
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
@@ -17,33 +16,33 @@ class MemoryAgent:
         "remember",
         "preference",
         "preferences",
-        "context",
+    )
+    _CONTEXT_PATTERNS = (
+        r"(?<!\w)memory\s+context(?!\w)",
+        r"(?<!\w)context\s+pack(?!\w)",
+        r"(?<!\w)long[-\s]?term\s+context(?!\w)",
+        r"(?<!\w)remembered\s+context(?!\w)",
     )
 
     def __init__(self, vault_root: Path, memory_service: MemoryCapabilityService | None = None) -> None:
         self.vault_root = Path(vault_root)
         self.memory_service = memory_service or MemoryCapabilityService(
             vault_root=self.vault_root,
-            sessions_db=REPO_ROOT / "data" / "memory" / "sessions.db",
+            sessions_db=self.vault_root.parent / "data" / "memory" / "sessions.db",
         )
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS)
+        return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS) or any(
+            re.search(pattern, lowered) is not None for pattern in self._CONTEXT_PATTERNS
+        )
 
     def answer(self, query: str) -> SpecialistResponse:
         try:
             context_pack = self.memory_service.build_context_pack(
                 {"query": query, "thread_id": "default", "agent_name": self.name}
             )
-            proposals = [
-                MemoryProposal(
-                    scope="memory",
-                    claim="MemoryAgent should validate durable memories and provide context packs.",
-                    evidence=query,
-                    confidence=0.8,
-                )
-            ]
+            proposals = [self._proposal_for_query(query)]
             accepted = self.review_proposals(proposals)
         except Exception as exc:
             return SpecialistResponse(
@@ -80,6 +79,15 @@ class MemoryAgent:
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
 
+    def _proposal_for_query(self, query: str) -> MemoryProposal:
+        claim = _claim_from_query(query)
+        return MemoryProposal(
+            scope="memory",
+            claim=claim,
+            evidence=query,
+            confidence=0.8,
+        )
+
 
 def _summarize_card(card: object) -> str:
     if not isinstance(card, dict):
@@ -93,3 +101,23 @@ def _sanitize_error(exc: Exception) -> str:
     message = re.sub(r"\s+", " ", str(exc)).strip()
     message = re.sub(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", "[redacted-email]", message)
     return message[:200]
+
+
+def _claim_from_query(query: str) -> str:
+    cleaned = re.sub(r"\s+", " ", query).strip().strip("\"'")
+    patterns = (
+        r"(?i)^remember\s+that\s+(.+)$",
+        r"(?i)^remember\s+(.+)$",
+        r"(?i)^what\s+should\s+you\s+remember\s+about\s+(.+)$",
+    )
+    for pattern in patterns:
+        match = re.match(pattern, cleaned)
+        if match:
+            cleaned = match.group(1).strip()
+            break
+    cleaned = re.sub(r"(?i)^i\s+prefer\b", "User prefers", cleaned)
+    cleaned = re.sub(r"(?i)^i\s+like\b", "User likes", cleaned)
+    cleaned = re.sub(r"(?i)^my\s+", "User's ", cleaned)
+    if not re.match(r"(?i)^user\b", cleaned):
+        cleaned = f"User asked to remember: {cleaned}"
+    return cleaned.rstrip(".") + "."

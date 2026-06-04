@@ -26,6 +26,13 @@ def test_pupil_registry_prioritizes_explicit_source_agents_over_sports(tmp_path)
     assert registry.match("NBA Finals injury report").name == "SportsAgent"
 
 
+def test_pupil_registry_does_not_route_generic_context_to_memory(tmp_path):
+    registry = PupilRegistry.default(vault_root=tmp_path)
+
+    assert registry.match("Give me context on NBA Finals injury report").name == "SportsAgent"
+    assert registry.match("Can you give me context for this Python error?") is None
+
+
 def test_master_state_persists_active_agent_and_pending_reroute(tmp_path):
     store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
 
