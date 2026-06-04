@@ -1182,36 +1182,44 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     msgs.forEach(m=>{ if(m.type==="user"){ if(m.text) out.push({role:"user", content:m.text}); } else if(m.type==="assistant"){ if(m.text) out.push({role:"assistant", content:m.text}); } });
     return out;
   }
-  async function streamChat(chatId, aid, history, model){
+  /* Low-level provider stream. Returns the full text. Calls onDelta(chunk) per token.
+     Does NOT touch chat messages or progress — callers decide what to do with the text. */
+  async function streamModel({messages, model, signal, onDelta}){
     const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
     const key = (apiKeys[cfg.keyId]||"").trim();
+    if(!cfg.chatUrl) throw new Error("Provider has no chat endpoint in preview");
+    if(!key) throw new Error("Missing API key");
+    const headers = { "Authorization":"Bearer "+key, "Content-Type":"application/json" };
+    if(cfg.referer){ headers["HTTP-Referer"]="https://vellum.app"; headers["X-Title"]="Vellum"; }
+    const resp = await fetch(cfg.chatUrl, { method:"POST", signal, headers, body: JSON.stringify({ model, stream:true, messages }) });
+    if(!resp.ok || !resp.body){
+      let msg = "Request failed ("+resp.status+")";
+      try{ const j = await resp.json(); if(j && j.error && j.error.message) msg = j.error.message; }catch(e){}
+      throw new Error(msg);
+    }
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf="", acc="";
+    while(true){
+      const r = await reader.read(); if(r.done) break;
+      buf += dec.decode(r.value, {stream:true});
+      let idx;
+      while((idx = buf.indexOf("\n")) >= 0){
+        const line = buf.slice(0, idx).trim(); buf = buf.slice(idx+1);
+        if(!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if(data==="[DONE]") continue;
+        try{ const j = JSON.parse(data); const d = j.choices && j.choices[0] && j.choices[0].delta; const c = d && d.content; if(c){ acc += c; if(onDelta) onDelta(c); } }catch(e){}
+      }
+    }
+    return acc;
+  }
+  async function streamChat(chatId, aid, history, model){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
-      const headers = { "Authorization":"Bearer "+key, "Content-Type":"application/json" };
-      if(cfg.referer){ headers["HTTP-Referer"]="https://vellum.app"; headers["X-Title"]="Vellum"; }
-      const resp = await fetch(cfg.chatUrl, {
-        method:"POST", signal:ctrl.signal, headers,
-        body: JSON.stringify({ model, stream:true, messages: toORMessages(history) }),
+      const text = await streamModel({
+        messages: toORMessages(history), model, signal: ctrl.signal,
+        onDelta: (c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid ? {...x, text:(x.text||"")+c, thinking:false} : x)),
       });
-      if(!resp.ok || !resp.body){
-        let msg = "Request failed ("+resp.status+")";
-        try{ const j = await resp.json(); if(j && j.error && j.error.message) msg = j.error.message; }catch(e){}
-        setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+msg, thinking:false, streaming:false}:x)); abortRef.current=null; setRunning(false); return;
-      }
-      const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf="", acc="";
-      while(true){
-        const r = await reader.read(); if(r.done) break;
-        buf += dec.decode(r.value, {stream:true});
-        let idx;
-        while((idx = buf.indexOf("\n")) >= 0){
-          const line = buf.slice(0, idx).trim(); buf = buf.slice(idx+1);
-          if(!line.startsWith("data:")) continue;
-          const data = line.slice(5).trim();
-          if(data==="[DONE]") continue;
-          try{ const j = JSON.parse(data); const d = j.choices && j.choices[0] && j.choices[0].delta; const c = d && d.content; if(c){ acc += c; setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:acc, thinking:false}:x)); } }catch(e){}
-        }
-      }
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:acc||x.text, streaming:false, thinking:false}:x));
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
     }catch(e){
       if(e && e.name==="AbortError") setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
       else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Network error"), thinking:false, streaming:false}:x));
