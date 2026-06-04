@@ -5,7 +5,9 @@ import pytest
 from pydantic import ValidationError
 
 from agent.agents.live_dispatcher import LiveAgentDispatcher
+from agent.master.registry import PupilRegistry
 from agent.master.state import MasterThreadStateStore
+from agent.tools.capabilities.x_service import XCapabilityService
 from agent.agents import (
     MemoryAgent,
     MemoryProposal,
@@ -238,8 +240,27 @@ def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(t
 
 
 def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
+    x_service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [
+            {
+                "text": "NBA posted its Finals schedule.",
+                "url": "https://x.com/nba/status/1",
+                "author": {"username": "nba"},
+                "created_at": "2026-05-31T12:00:00Z",
+            }
+        ]
+    )
+    registry = PupilRegistry(
+        {
+            "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault"),
+            "MemoryAgent": MemoryAgent(vault_root=tmp_path / "Vault"),
+            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault"),
+        }
+    )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
+        registry=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -249,8 +270,8 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert x_result is not None
     assert x_result.agent_name == "XAgent"
-    assert "full X specialist execution deferred" in x_result.answer
-    assert x_result.tools == ["x_agent"]
+    assert "NBA posted its Finals schedule" in x_result.answer
+    assert x_result.tools == ["x_agent", "web_search"]
 
     assert youtube_result is not None
     assert youtube_result.agent_name == "YoutubeAgent"
@@ -270,9 +291,18 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
         "https://www.nba.com/news/update"
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    registry = PupilRegistry(
+        {
+            "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault"),
+            "MemoryAgent": MemoryAgent(vault_root=tmp_path / "Vault"),
+            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        }
+    )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        registry=registry,
         state_store=state_store,
     )
 
@@ -357,15 +387,37 @@ def test_specialist_router_prioritizes_explicit_source_intent_over_sports(tmp_pa
     assert nba_youtube_decision.should_delegate is True
 
 
-def test_x_agent_stub_defers_full_execution(tmp_path):
-    agent = XAgent(vault_root=tmp_path)
+def test_x_agent_searches_posts_through_capability_service(tmp_path):
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [
+            {
+                "text": "Naval posted about leverage.",
+                "url": "https://x.com/naval/status/1",
+                "author": {"username": "naval"},
+                "created_at": "2026-05-31T12:00:00Z",
+            }
+        ]
+    )
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer("What did Naval post on X?")
+
+    assert response.status == "answered"
+    assert "Naval posted about leverage" in response.summary
+    assert response.sources[0].kind == "web"
+    assert response.sources[0].path_or_url == "https://x.com/naval/status/1"
+
+
+def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
+    service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    agent = XAgent(vault_root=tmp_path, x_service=service)
 
     response = agent.answer("What did AlexHormozi post on X?")
 
     assert agent.name == "XAgent"
     assert agent.can_handle("latest-50 tweets from AlexHormozi")
     assert response.status == "needs_fetch"
-    assert "full X specialist execution deferred" in response.summary
+    assert response.summary == "XAgent did not find matching X posts."
 
 
 def test_youtube_agent_stub_defers_full_execution(tmp_path):
