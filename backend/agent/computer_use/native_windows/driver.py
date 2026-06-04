@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from agent.computer_use.native_windows import accessibility as default_accessibility
+from agent.computer_use.native_windows import app_launch as default_app_launch
 from agent.computer_use.native_windows import capture as default_capture
 from agent.computer_use.native_windows import input as default_input
 from agent.computer_use.native_windows import windowing as default_windowing
@@ -19,11 +20,13 @@ class WindowsNativeComputerDriver:
         accessibility=default_accessibility,
         capture=default_capture,
         input_layer=default_input,
+        app_launcher=default_app_launch,
     ) -> None:
         self.windowing = windowing
         self.accessibility = accessibility
         self.capture = capture
         self.input = input_layer
+        self.app_launcher = app_launcher
 
     def health_check(self) -> dict[str, Any]:
         try:
@@ -57,6 +60,20 @@ class WindowsNativeComputerDriver:
         include_text: bool = True,
     ) -> OperatorResult:
         window = self._resolve_window(window_id)
+        observation = self._window_observation(
+            window,
+            include_screenshot=include_screenshot,
+            include_text=include_text,
+        )
+        return OperatorResult("ok", self.backend, "Window state captured.", observation=observation)
+
+    def _window_observation(
+        self,
+        window: ComputerWindow,
+        *,
+        include_screenshot: bool = True,
+        include_text: bool = True,
+    ) -> dict[str, Any]:
         observation: dict[str, Any] = {
             "window": window.to_dict(),
             "accessibility": self.accessibility.get_accessibility_state(
@@ -66,11 +83,27 @@ class WindowsNativeComputerDriver:
         }
         if include_screenshot:
             observation["screenshot"] = self.capture.save_window_screenshot(window.hwnd)
-        return OperatorResult("ok", self.backend, "Window state captured.", observation=observation)
+        return observation
 
     def activate_window(self, window_id: str) -> OperatorResult:
-        window = self.windowing.activate_window(window_id)
+        window = self._activate_or_resolve(window_id)
         return self._after_action(window.id, f"Activated window {window.id}.")
+
+    def open_app(self, app: str) -> OperatorResult:
+        window = self.app_launcher.launch_app(app, list_windows=self.windowing.list_windows)
+        try:
+            window = self.windowing.activate_window(window.id)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to activate launched app window: {window.id}; error={exc}"
+            ) from exc
+        result = self.get_window_state(window.id)
+        return OperatorResult(
+            "ok",
+            self.backend,
+            f"Opened app {app}.",
+            observation=result.observation,
+        )
 
     def click(
         self,
@@ -91,17 +124,17 @@ class WindowsNativeComputerDriver:
         if x is None or y is None:
             raise ValueError("click requires element_index or x/y coordinates.")
         self.input.click(int(x), int(y), button=button, click_count=click_count)
-        return self._after_action(window.id, "Click complete.")
+        return self._after_action(window, "Click complete.")
 
     def type_text(self, text: str, window_id: str | None = None) -> OperatorResult:
         window = self._activate_or_resolve(window_id)
         self.input.type_text(text)
-        return self._after_action(window.id, "Text typed.")
+        return self._after_action(window, "Text typed.")
 
     def press_key(self, key: str, window_id: str | None = None) -> OperatorResult:
         window = self._activate_or_resolve(window_id)
         self.input.press_key(key)
-        return self._after_action(window.id, "Key pressed.")
+        return self._after_action(window, "Key pressed.")
 
     def scroll(
         self,
@@ -118,7 +151,7 @@ class WindowsNativeComputerDriver:
         else:
             x, y = self._to_screen_point(window, int(x), int(y))
         self.input.scroll(int(x), int(y), scroll_x=scroll_x, scroll_y=scroll_y)
-        return self._after_action(window.id, "Scroll complete.")
+        return self._after_action(window, "Scroll complete.")
 
     def drag(
         self,
@@ -133,7 +166,7 @@ class WindowsNativeComputerDriver:
         from_x, from_y = self._to_screen_point(window, from_x, from_y)
         to_x, to_y = self._to_screen_point(window, to_x, to_y)
         self.input.drag(int(from_x), int(from_y), int(to_x), int(to_y))
-        return self._after_action(window.id, "Drag complete.")
+        return self._after_action(window, "Drag complete.")
 
     def _resolve_window(self, window_id: str | None) -> ComputerWindow:
         if window_id:
@@ -141,13 +174,57 @@ class WindowsNativeComputerDriver:
         return self.windowing.active_window()
 
     def _activate_or_resolve(self, window_id: str | None) -> ComputerWindow:
-        if window_id:
-            return self.windowing.activate_window(window_id)
-        return self.windowing.active_window()
+        if not window_id:
+            return self.windowing.active_window()
 
-    def _after_action(self, window_id: str, message: str) -> OperatorResult:
-        result = self.get_window_state(window_id)
-        return OperatorResult("ok", self.backend, message, observation=result.observation)
+        try:
+            return self.windowing.activate_window(window_id)
+        except Exception as first_activation_error:
+            recovery_error: Exception | None = None
+            try:
+                window = self.windowing.get_window(window_id)
+            except Exception as exc:
+                recovery_error = exc
+                windows = self.windowing.list_windows()
+                matching_windows = [window for window in windows if window.id == window_id]
+                if not matching_windows:
+                    raise RuntimeError(
+                        "Activation recovery could not verify target identity; "
+                        f"window_id={window_id}; "
+                        f"first_error={first_activation_error}; "
+                        f"refresh_error={recovery_error}; "
+                        f"candidate_count={len(windows)}"
+                    ) from exc
+                if len(matching_windows) != 1:
+                    raise RuntimeError(
+                        "Activation recovery is ambiguous; "
+                        f"window_id={window_id}; "
+                        f"first_error={first_activation_error}; "
+                        f"refresh_error={recovery_error}; "
+                        f"matching_candidate_count={len(matching_windows)}"
+                    ) from exc
+                window = matching_windows[0]
+
+            try:
+                return self.windowing.activate_window(window.id)
+            except Exception as second_activation_error:
+                details = (
+                    "Failed to activate window after recovery; "
+                    f"window_id={window_id}; "
+                    f"recovered_window_id={window.id}; "
+                    f"first_error={first_activation_error}; "
+                    f"second_error={second_activation_error}"
+                )
+                if recovery_error is not None:
+                    details += f"; refresh_error={recovery_error}"
+                raise RuntimeError(details) from second_activation_error
+
+    def _after_action(self, window: str | ComputerWindow, message: str) -> OperatorResult:
+        if isinstance(window, ComputerWindow):
+            observation = self.get_window_state(window.id).observation
+        else:
+            observation = self.get_window_state(window).observation
+        return OperatorResult("ok", self.backend, message, observation=observation)
 
     def _window_origin(self, window: ComputerWindow) -> tuple[int, int]:
         bounds = window.bounds

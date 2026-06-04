@@ -13,12 +13,13 @@ from typing import Any, Callable
 from agent.config import get_settings
 
 
-OVERLAY_BLUE = "#0b5fff"
-OVERLAY_BLUE_DARK = "#073fb0"
-OVERLAY_BLUE_LIGHT = "#65a5ff"
+OVERLAY_BLUE = "#168cff"
+OVERLAY_BLUE_DARK = "#0757bd"
+OVERLAY_BLUE_LIGHT = "#8fd1ff"
 TRANSPARENT_COLOR = "#010203"
-OVERLAY_MESSAGE = "Vellum is using your computer  ·  Esc to cancel"
-OVERLAY_DESIGN = "transparent_edge_glow_status_pill"
+OVERLAY_MESSAGE = "Vellum is using your computer - Esc to cancel"
+OVERLAY_DESIGN = "smooth_single_edge_glow_status_pill"
+PILL_OFFSET_Y = 32
 
 
 class OverlayStartError(RuntimeError):
@@ -41,6 +42,8 @@ BLUE_DARK = {OVERLAY_BLUE_DARK!r}
 BLUE_LIGHT = {OVERLAY_BLUE_LIGHT!r}
 TRANSPARENT_COLOR = {TRANSPARENT_COLOR!r}
 MESSAGE = {OVERLAY_MESSAGE!r}
+EDGE_GLOW_DESIGN = {OVERLAY_DESIGN!r}
+PILL_OFFSET_Y = {PILL_OFFSET_Y!r}
 sentinel = Path(sys.argv[1])
 
 root = tk.Tk()
@@ -75,28 +78,57 @@ def create_rounded_rect(x1, y1, x2, y2, radius, **kwargs):
     ]
     return canvas.create_polygon(points, smooth=True, splinesteps=12, **kwargs)
 
-edge_items = []
-for inset, color, line_width in (
-    (1, BLUE_LIGHT, 3),
-    (5, BLUE, 4),
-    (11, BLUE_DARK, 5),
-    (20, BLUE, 2),
-):
-    edge_items.append(
-        canvas.create_rectangle(
-            inset,
-            inset,
-            width - inset,
-            height - inset,
-            outline=color,
-            width=line_width,
-        )
+def hex_to_rgba(value, alpha):
+    value = value.lstrip("#")
+    return (
+        int(value[0:2], 16),
+        int(value[2:4], 16),
+        int(value[4:6], 16),
+        alpha,
     )
+
+try:
+    from PIL import Image, ImageDraw, ImageFilter, ImageTk
+
+    glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soft_edge = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    edge_draw = ImageDraw.Draw(soft_edge)
+    edge_draw.rounded_rectangle(
+        (10, 10, width - 10, height - 10),
+        radius=30,
+        outline=hex_to_rgba(BLUE, 120),
+        width=16,
+    )
+    soft_edge = soft_edge.filter(ImageFilter.GaussianBlur(14))
+    glow.alpha_composite(soft_edge)
+
+    crisp_draw = ImageDraw.Draw(glow)
+    crisp_draw.rounded_rectangle(
+        (2, 2, width - 3, height - 3),
+        radius=24,
+        outline=hex_to_rgba(BLUE_LIGHT, 220),
+        width=2,
+    )
+    crisp_draw.rounded_rectangle(
+        (6, 6, width - 7, height - 7),
+        radius=22,
+        outline=hex_to_rgba(BLUE, 145),
+        width=1,
+    )
+
+    glow_image = ImageTk.PhotoImage(glow)
+    canvas.create_image(0, 0, image=glow_image, anchor="nw")
+    canvas._glow_image = glow_image
+except Exception:
+    canvas.create_line(1, 1, width - 1, 1, fill=BLUE_LIGHT, width=3)
+    canvas.create_line(width - 2, 1, width - 2, height - 1, fill=BLUE, width=3)
+    canvas.create_line(width - 1, height - 2, 1, height - 2, fill=BLUE_LIGHT, width=3)
+    canvas.create_line(1, height - 1, 1, 1, fill=BLUE, width=3)
 
 pill_width = max(420, min(620, width - 48))
 pill_height = 44
 pill_x1 = (width - pill_width) // 2
-pill_y1 = 16
+pill_y1 = PILL_OFFSET_Y
 pill_x2 = pill_x1 + pill_width
 pill_y2 = pill_y1 + pill_height
 pill_shadow = create_rounded_rect(
@@ -142,18 +174,9 @@ def interrupt(_event=None):
     root.destroy()
 
 def pulse(step=0):
-    colors = (
-        (BLUE_LIGHT, BLUE, BLUE_DARK, BLUE),
-        (BLUE, BLUE_LIGHT, BLUE, BLUE_DARK),
-        (BLUE_DARK, BLUE, BLUE_LIGHT, BLUE),
-        (BLUE, BLUE_DARK, BLUE, BLUE_LIGHT),
-    )
-    current = colors[step % len(colors)]
-    for item, color in zip(edge_items, current):
-        canvas.itemconfigure(item, outline=color)
     canvas.itemconfigure(pill_shadow, fill=BLUE_DARK)
     canvas.itemconfigure(pill, fill=BLUE if step % 2 == 0 else BLUE_DARK, outline=BLUE_LIGHT)
-    root.after(450, pulse, step + 1)
+    root.after(650, pulse, step + 1)
 
 root.bind("<Escape>", interrupt)
 root.bind_all("<Escape>", interrupt)
@@ -273,6 +296,8 @@ class NativeWindowsOverlayController:
             "click_through": True,
             "edge_glow": True,
             "status_pill": True,
+            "pill_offset_y": PILL_OFFSET_Y,
+            "edge_glow_style": "smooth-single",
             "transparent_color": TRANSPARENT_COLOR,
             "accent": OVERLAY_BLUE,
         }

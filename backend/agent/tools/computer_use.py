@@ -21,9 +21,11 @@ NATIVE_DESKTOP_ACTIONS = {
     "drag",
     "hotkey",
     "keypress",
+    "launch_app",
     "list_apps",
     "list_windows",
     "observe",
+    "open_app",
     "press_key",
     "right_click",
     "screenshot",
@@ -38,6 +40,8 @@ NATIVE_MUTATING_DESKTOP_ACTIONS = {
     "double_click",
     "drag",
     "keypress",
+    "launch_app",
+    "open_app",
     "press_key",
     "right_click",
     "scroll",
@@ -126,7 +130,7 @@ def _desktop_params(
     if action in {"open_terminal", "run_terminal_command"}:
         _put(params, "command", command or text)
         _put(params, "shell", shell)
-    if action in {"open_app", "close_app"}:
+    if action in {"open_app", "launch_app", "close_app"}:
         _put(params, "app", app or target or text)
     if action in {"switch_app", "switch_browser_tab"}:
         _put(params, "direction", tab_action or target or text)
@@ -231,6 +235,8 @@ def _desktop_safety_block(action: str) -> str | None:
     if _is_mutating_desktop_action(action) and not desktop_tools._desktop_allowed():
         return f"Desktop action '{action}' requires COMPUTER_USE_ALLOW_DESKTOP=true."
     required_permission = desktop_tools.CONTROL_PERMISSIONS.get(action)
+    if action == "launch_app":
+        required_permission = "open_apps"
     if required_permission is None and action in NATIVE_MUTATING_DESKTOP_ACTIONS:
         required_permission = "desktop_control"
     if required_permission and not desktop_tools._runtime_permission_granted(required_permission):

@@ -24,6 +24,7 @@ class FakeDesktopDriver:
     def run_action(self, action, **params):
         allowed_params = {
             "amount",
+            "app",
             "button",
             "click_count",
             "duration",
@@ -383,18 +384,43 @@ def test_computer_use_routes_desktop_permissions_to_legacy_tool(monkeypatch):
 
 
 def test_computer_use_routes_desktop_open_app_from_target(monkeypatch):
-    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: False)
+    driver = FakeDesktopDriver("Opened app brave.")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard())
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
     monkeypatch.setattr(
         computer_use_tools.desktop_tools,
-        "run_desktop_action",
-        lambda params: (_ for _ in ()).throw(AssertionError("legacy desktop runner should not be used")),
+        "_runtime_permission_granted",
+        lambda permission: permission == "open_apps",
     )
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
 
     result = computer_use_tools.computer_use.invoke(
-        {"mode": "desktop", "action": "open_app", "target": "GitHub Desktop"}
+        {"mode": "desktop", "action": "open_app", "target": "brave"}
     )
 
-    assert "moved to the native Windows driver" in result
+    assert result == "Opened app brave."
+    assert driver.calls == [("open_app", {"app": "brave"})]
+
+
+def test_computer_use_routes_desktop_launch_app_alias(monkeypatch):
+    driver = FakeDesktopDriver("Opened app brave.")
+    monkeypatch.setattr(computer_use_tools.computer_use_runtime, "is_enabled", lambda: True)
+    monkeypatch.setattr(computer_use_tools, "computer_use_input_guard", FakeLeaseGuard())
+    monkeypatch.setattr(computer_use_tools, "desktop_driver", driver)
+    monkeypatch.setattr(
+        computer_use_tools.desktop_tools,
+        "_runtime_permission_granted",
+        lambda permission: permission == "open_apps",
+    )
+    monkeypatch.setattr(computer_use_tools.desktop_tools, "_desktop_allowed", lambda: True)
+
+    result = computer_use_tools.computer_use.invoke(
+        {"mode": "desktop", "action": "launch_app", "app": "notepad"}
+    )
+
+    assert result == "Opened app brave."
+    assert driver.calls == [("launch_app", {"app": "notepad"})]
 
 
 def test_computer_use_routes_desktop_close_and_switch_actions(monkeypatch):

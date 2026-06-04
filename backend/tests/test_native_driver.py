@@ -1,9 +1,13 @@
+import pytest
+
 from agent.computer_use.native_windows.driver import WindowsNativeComputerDriver
 
 
 class FakeWindowing:
-    def __init__(self, bounds=None):
+    def __init__(self, bounds=None, app="notepad.exe", title="Untitled - Notepad"):
         self.activated = []
+        self.app = app
+        self.title = title
         self.bounds = bounds or {"x": 0, "y": 0, "width": 100, "height": 80}
 
     def list_windows(self):
@@ -13,9 +17,9 @@ class FakeWindowing:
             ComputerWindow(
                 "hwnd:1",
                 1,
-                "notepad.exe",
+                self.app,
                 2,
-                "Untitled - Notepad",
+                self.title,
                 self.bounds,
             )
         ]
@@ -29,6 +33,103 @@ class FakeWindowing:
     def activate_window(self, window_id):
         self.activated.append(window_id)
         return self.list_windows()[0]
+
+
+class ActivationFailingWindowing(FakeWindowing):
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        raise RuntimeError("foreground denied")
+
+
+class RecoveringWindowing(FakeWindowing):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.get_calls = []
+
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        if len(self.activated) == 1:
+            raise RuntimeError("foreground denied")
+        return self.list_windows()[0]
+
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        return self.list_windows()[0]
+
+
+class AmbiguousRecoveryWindowing(RecoveringWindowing):
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        raise RuntimeError("stale hwnd")
+
+    def list_windows(self):
+        from agent.computer_use.operator import ComputerWindow
+
+        return [
+            ComputerWindow(
+                "hwnd:1",
+                1,
+                "brave.exe",
+                2,
+                "Brave Browser",
+                self.bounds,
+            ),
+            ComputerWindow(
+                "hwnd:1",
+                2,
+                "brave.exe",
+                3,
+                "Brave Browser",
+                self.bounds,
+            ),
+        ]
+
+
+class SecondActivationFailingWindowing(RecoveringWindowing):
+    def activate_window(self, window_id):
+        self.activated.append(window_id)
+        raise RuntimeError(f"activation denied for {len(self.activated)}")
+
+
+class UnrelatedSingleWindowRecoveryWindowing(RecoveringWindowing):
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        raise RuntimeError("stale hwnd")
+
+    def list_windows(self):
+        from agent.computer_use.operator import ComputerWindow
+
+        return [
+            ComputerWindow(
+                "hwnd:2",
+                2,
+                "calc.exe",
+                3,
+                "Calculator",
+                self.bounds,
+            )
+        ]
+
+
+class FreshObservationRecoveringWindowing(RecoveringWindowing):
+    def __init__(self):
+        super().__init__(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
+        self.fresh_bounds = {"x": 500, "y": 400, "width": 120, "height": 90}
+
+    def get_window(self, window_id):
+        self.get_calls.append(window_id)
+        if len(self.get_calls) == 1:
+            return self.list_windows()[0]
+        from agent.computer_use.operator import ComputerWindow
+
+        return ComputerWindow(
+            "hwnd:1",
+            1,
+            "notepad.exe",
+            2,
+            "Fresh - Notepad",
+            self.fresh_bounds,
+        )
 
 
 class FakeAccessibility:
@@ -59,6 +160,15 @@ class FakeInput:
 
     def drag(self, from_x, from_y, to_x, to_y):
         self.calls.append(("drag", from_x, from_y, to_x, to_y))
+
+
+class FakeLauncher:
+    def __init__(self):
+        self.calls = []
+
+    def launch_app(self, app, *, list_windows):
+        self.calls.append((app, list_windows))
+        return list_windows()[0]
 
 
 def test_driver_observe_returns_window_screenshot_and_accessibility():
@@ -112,6 +222,85 @@ def test_driver_click_translates_window_relative_coordinates_to_screen_coordinat
     assert input_layer.calls[0][0:3] == ("click", 310, 220)
 
 
+def test_driver_click_recovers_after_first_activation_failure():
+    windowing = RecoveringWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.click("hwnd:1", x=10, y=20)
+
+    assert result.status == "ok"
+    assert windowing.activated == ["hwnd:1", "hwnd:1"]
+    assert windowing.get_calls == ["hwnd:1", "hwnd:1"]
+    assert input_layer.calls[0][0:3] == ("click", 10, 20)
+
+
+def test_driver_click_rejects_unrelated_single_window_activation_recovery():
+    windowing = UnrelatedSingleWindowRecoveryWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="could not verify target identity"):
+        driver.click("hwnd:1", x=10, y=20)
+
+    assert input_layer.calls == []
+
+
+def test_driver_click_uses_recovered_bounds_and_returns_fresh_observation():
+    windowing = FreshObservationRecoveringWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    result = driver.click("hwnd:1", x=10, y=20)
+
+    assert input_layer.calls[0][0:3] == ("click", 310, 220)
+    assert result.observation["window"]["bounds"] == windowing.fresh_bounds
+    assert result.observation["window"]["title"] == "Fresh - Notepad"
+
+
+def test_driver_click_reports_ambiguous_activation_recovery():
+    windowing = AmbiguousRecoveryWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="Activation recovery is ambiguous"):
+        driver.click("hwnd:1", x=10, y=20)
+
+
+def test_driver_click_reports_second_activation_failure_after_recovery():
+    windowing = SecondActivationFailingWindowing()
+    input_layer = FakeInput()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=input_layer,
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to activate window after recovery"):
+        driver.click("hwnd:1", x=10, y=20)
+
+
 def test_driver_scroll_defaults_to_target_window_center():
     windowing = FakeWindowing(bounds={"x": 300, "y": 200, "width": 100, "height": 80})
     input_layer = FakeInput()
@@ -159,3 +348,64 @@ def test_driver_activate_window_returns_observation_after_activation():
     assert windowing.activated == ["hwnd:1"]
     assert result.observation["window"]["id"] == "hwnd:1"
     assert result.observation["screenshot"]["path"] == "screen.png"
+
+
+def test_driver_activate_window_recovers_after_first_activation_failure():
+    class ExplicitActivationRecoveringWindowing(RecoveringWindowing):
+        def get_window(self, window_id):
+            if len(self.activated) == 1:
+                self.get_calls.append(window_id)
+            return self.list_windows()[0]
+
+    windowing = ExplicitActivationRecoveringWindowing()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+    )
+
+    result = driver.activate_window("hwnd:1")
+
+    assert result.status == "ok"
+    assert windowing.activated == ["hwnd:1", "hwnd:1"]
+    assert windowing.get_calls == ["hwnd:1"]
+    assert result.observation["window"]["id"] == "hwnd:1"
+
+
+def test_driver_open_app_launches_and_returns_window_observation():
+    windowing = FakeWindowing(app="brave.exe", title="Brave Browser")
+    launcher = FakeLauncher()
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+        app_launcher=launcher,
+    )
+
+    result = driver.open_app("brave")
+
+    assert launcher.calls == [("brave", windowing.list_windows)]
+    assert windowing.activated == ["hwnd:1"]
+    assert result.status == "ok"
+    assert result.backend == "windows_native"
+    assert result.message == "Opened app brave."
+    assert result.observation["window"]["app"] == "brave.exe"
+    assert result.observation["screenshot"]["path"] == "screen.png"
+
+
+def test_driver_open_app_raises_when_launched_window_activation_fails():
+    windowing = ActivationFailingWindowing(app="brave.exe", title="Brave Browser")
+    driver = WindowsNativeComputerDriver(
+        windowing=windowing,
+        accessibility=FakeAccessibility(),
+        capture=FakeCapture(),
+        input_layer=FakeInput(),
+        app_launcher=FakeLauncher(),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to activate launched app window"):
+        driver.open_app("brave")
+
+    assert windowing.activated == ["hwnd:1"]
