@@ -243,7 +243,7 @@ button{font-family:inherit}
 .learning-inline-body{font-size:12px;color:#666;line-height:1.5}
 
 /* Input */
-.input-wrap{padding:10px 14px 12px;flex-shrink:0;position:relative;z-index:5;transition:padding-right .18s ease}
+.input-wrap{padding:10px 14px 12px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
 .input-box{background:#121212;border:1px solid #1e1e1e;border-radius:13px;overflow:hidden;transition:border-color .15s}
 .input-box:focus-within{border-color:#2a2a2a}
 .input-ta{width:100%;background:transparent;border:none;outline:none;color:#d8d8d8;font-size:13.5px;font-family:'Geist',sans-serif;padding:12px 14px 6px;resize:none;line-height:1.55}
@@ -301,7 +301,7 @@ button{font-family:inherit}
 .sb-opt-l{display:flex;align-items:center;gap:9px}
 .sb-submenu{position:absolute;left:100%;top:-4px;margin-left:6px;min-width:190px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:9px;padding:4px;box-shadow:0 14px 44px rgba(0,0,0,.7);z-index:210}
 .resize-h{width:6px;flex-shrink:0;cursor:col-resize;position:relative;z-index:30;background:transparent}
-.model-drop{position:absolute;bottom:60px;z-index:50;display:flex;gap:3px}
+.model-drop{position:absolute;bottom:60px;z-index:320;display:flex;gap:3px}
 .drop-panel{background:#181818;border:1px solid #232323;border-radius:8px;overflow:hidden;min-width:158px;box-shadow:0 4px 24px rgba(0,0,0,.6)}
 .drop-lbl{font-size:10.5px;color:#484848;padding:7px 13px 2px;letter-spacing:.05em;text-transform:uppercase}
 .drop-item{display:flex;align-items:center;justify-content:space-between;padding:7px 13px;cursor:pointer;color:#888;font-size:12.5px}
@@ -320,7 +320,11 @@ button{font-family:inherit}
 .slash-sec{font-size:10px;color:#4a4a4a;padding:7px 11px 3px;letter-spacing:.06em;text-transform:uppercase}
 
 /* Progress floating card (inside chat) */
-.prog-float{position:absolute;top:50px;right:14px;bottom:14px;border:1px solid #1f1f22;border-radius:14px;background:#0f0f10;overflow-y:auto;z-index:6;box-shadow:0 18px 50px rgba(0,0,0,.5);animation:popIn .16s ease}
+.prog-float{position:absolute;top:54px;right:18px;bottom:18px;border:1px solid #2a2a2d;border-radius:14px;background:#101011;overflow-y:auto;z-index:8;box-shadow:0 18px 50px rgba(0,0,0,.5);animation:popIn .16s ease}
+.prog-empty-card{position:absolute;top:64px;right:24px;width:min(300px,calc(100% - 48px));border:1px solid #2a2a2d;border-radius:16px;background:#242424;padding:16px 18px;z-index:7;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.prog-empty-card .prog-sec{padding:0 0 16px;border-bottom:1px solid #3a3a3a;margin-bottom:16px}
+.prog-empty-card .prog-sec:last-child{padding-bottom:0;border-bottom:none;margin-bottom:0}
+.prog-empty-text{font-size:13px;color:#aaa;line-height:1.5}
 .prog-sec{padding:13px 14px;border-bottom:1px solid #191919}
 .prog-sec:last-child{border-bottom:none}
 .prog-title{font-size:11px;color:#555;font-weight:500;margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase}
@@ -409,13 +413,33 @@ button{font-family:inherit}
 .relationship-tree{margin:8px 12px;background:#101010;border:1px solid #1f1f1f;border-radius:9px;padding:10px 12px;font-family:'Geist Mono',monospace;font-size:11px;color:#555;line-height:1.65}
 .tree-root{color:#aaa;margin-bottom:2px}.tree-branch{color:#666}
 .compact-msgs{overflow:visible;display:block;padding-top:6px;flex:none}
-.terminal-card{margin:14px;background:#090909;border:1px solid #222;border-radius:10px;padding:12px 13px;font-family:'Geist Mono',monospace;font-size:12px;color:#aaa;line-height:1.9}
-.terminal-dim{color:#555}.terminal-prompt{color:#e35d2b}
+.terminal-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#070707}
+.terminal-toolbar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;flex-shrink:0}
+.terminal-shell{height:28px;background:#161618;border:1px solid #242427;border-radius:7px;color:#ccc;font-family:'Geist',sans-serif;font-size:12px;padding:0 8px;outline:none}
+.terminal-connect,.terminal-run{height:28px;border:1px solid #242427;background:#18181a;color:#cfcfcf;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer}
+.terminal-connect:hover,.terminal-run:hover{background:#222225;color:#fff}
+.terminal-output{min-height:0;overflow:auto;padding:12px 13px;font-family:'Geist Mono',monospace;font-size:12px;color:#bdbdbd;line-height:1.65;white-space:pre-wrap;background:#070707}
+.terminal-inputbar{display:flex;align-items:center;gap:8px;border-top:1px solid #191919;background:#0f0f0f;padding:9px 10px}
+.terminal-prompt{color:#e35d2b;font-family:'Geist Mono',monospace;font-size:12px;flex-shrink:0}
+.terminal-input{flex:1;min-width:0;background:#151517;border:1px solid #242427;border-radius:8px;color:#e6e6e6;height:32px;padding:0 10px;font-family:'Geist Mono',monospace;font-size:12px;outline:none}
+.terminal-statusline{font-family:'Geist Mono',monospace;font-size:11px;color:#555;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.terminal-dim{color:#555}
 .workspace-empty{margin:14px;background:#101010;border:1px dashed #262626;border-radius:10px;padding:18px;color:#555;font-size:12.5px;text-align:center;line-height:1.5}
 .browser-mini{margin:0;display:flex;flex-direction:column;height:100%}
 .bm-bar{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;color:#777}
 .bm-omni{flex:1;background:#161618;border:1px solid #232326;border-radius:14px;padding:5px 11px;color:#888;font-size:11.5px}
 .bm-stage{flex:1;display:flex;align-items:center;justify-content:center;color:#444;font-size:12.5px;text-align:center;padding:20px}
+.browser-tool{height:100%;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#0a0a0a}
+.browser-toolbar{display:grid;grid-template-columns:30px 30px 30px 1fr 32px;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;color:#777}
+.browser-nav,.browser-ext{width:30px;height:30px;border:none;background:transparent;color:#777;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.browser-nav:hover,.browser-ext:hover{background:#1a1a1c;color:#ccc}
+.browser-nav:disabled{color:#333;cursor:default;background:transparent}
+.browser-form{min-width:0}
+.browser-address{width:100%;height:30px;background:#161618;border:1px solid #232326;border-radius:15px;color:#ddd;font-family:'Geist Mono',monospace;font-size:12px;padding:0 12px;outline:none}
+.browser-frame-wrap{min-height:0;position:relative;background:#101010}
+.browser-frame{width:100%;height:100%;border:0;background:#fff}
+.browser-blank{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#555;font-size:12.5px;line-height:1.5;padding:24px;pointer-events:none}
+.browser-status{height:24px;line-height:24px;border-top:1px solid #191919;background:#0f0f0f;color:#555;font-family:'Geist Mono',monospace;font-size:11px;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .diff-block{background:#111;border:1px solid #1e1e1e;border-radius:8px;overflow:hidden;margin:8px 0}
 .diff-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #1e1e1e}
 .diff-title{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
@@ -749,7 +773,7 @@ function MsgText({msg}){
 function Toggle({on}){ return <div className={"toggle"+(on?" on":"")}/>; }
 const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
 
-function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-up changes", model="5.5", api, wrapStyle }){
+function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-up changes", model="5.5", api, wrapStyle, panelOpen=false }){
   const [text, setText] = useState("");
   const [openMenu, setOpenMenu] = useState(null);   // plus | model | access | null
   const [pluginsSub, setPluginsSub] = useState(false);
@@ -784,7 +808,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
   return (
     <div className="input-wrap" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
       {openMenu==="model" && (
-        <div className="model-drop fade-up" style={{right:14}}>
+        <div className="model-drop fade-up" style={{right: panelOpen?344:14}}>
           <div className="drop-panel"><div className="drop-lbl">Reasoning</div>{REASONING.map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}</div>
           <div className="drop-panel" style={{minWidth:236}}>
             <div className="drop-lbl" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>Model</span><span className="model-sync" onClick={()=>a.syncModels && a.syncModels()}>{a.syncing?"syncing…":"↻ Sync"}</span></div>
@@ -874,6 +898,7 @@ function ShellToggle({ shell, onShell }){
   return (
     <div className="chrome-toggle">
       <button className={shell==="browser"?"active":""} onClick={()=>onShell("browser")} title="Browser shell"><IcGlobe size={13}/></button>
+      <button className={shell==="terminal"?"active":""} onClick={()=>onShell("terminal")} title="Terminal shell"><IcTerminal size={13}/></button>
       <button className={shell==="desktop"?"active":""} onClick={()=>onShell("desktop")} title="Desktop app shell"><IcMonitor size={13}/></button>
     </div>
   );
@@ -924,8 +949,185 @@ function ChromeDesktop({ children, maximized, onMax, title, shell, onShell }){
     </div>
   );
 }
+function ChromeTerminal({ maximized, onMax, shell, onShell }){
+  return (
+    <div className="chrome chrome-browser">
+      <div className="bz-tabs">
+        <div className="bz-tab"><IcTerminal size={13}/><span className="bz-tab-title">C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe</span></div>
+        <button className="bz-newtab">+</button><div className="bz-tabsfill"/><WinControls maximized={maximized} onMax={onMax}/>
+      </div>
+      <div className="bz-toolbar">
+        <button className="bz-nav dim" title="Back"><IcChevL size={17}/></button>
+        <button className="bz-nav dim" title="Forward"><IcChevR size={17}/></button>
+        <div className="bz-omni"><IcTerminal size={13}/><span className="bz-url"><span className="bz-host">C:\Users\User\OneDrive\Desktop\Vellum</span></span></div>
+        <ShellToggle shell={shell} onShell={onShell}/>
+      </div>
+      <div className="window-body"><TerminalPane backendBase={"http://127.0.0.1:8000"}/></div>
+    </div>
+  );
+}
 
 /* ═══ Workspace ═══ */
+function normalizeBrowserUrl(value){
+  const raw = String(value || "").trim();
+  if(!raw) return "about:blank";
+  if(/^(about:|https?:\/\/|file:\/\/)/i.test(raw)) return raw;
+  if(/^[\w.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(raw)) return "https://" + raw;
+  return "https://www.google.com/search?igu=1&q=" + encodeURIComponent(raw);
+}
+function htmlEscape(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function browserFrameFor(url){
+  if(url === "about:blank") return {src:"about:blank", srcDoc:null};
+  let u=null; try{ u=new URL(url); }catch(e){}
+  const host = u ? u.hostname.replace(/^www\./,"") : "";
+  const q = u ? (u.searchParams.get("q") || "") : "";
+  if(host === "google.com" || (u && u.pathname.includes("/search"))){
+    const query = q || (host === "google.com" ? "" : url);
+    const results = query ? [
+      ["Google", "https://www.google.com", "Search the world's information, including webpages, images, videos and more."],
+      ["Google Maps", "https://maps.google.com", "Find local businesses, view maps and get driving directions."],
+      ["Google Cloud", "https://cloud.google.com", "Cloud products and AI infrastructure for building modern applications."],
+      ["Google Search Help", "https://support.google.com/websearch", "Learn how Google Search works and refine your results."]
+    ] : [];
+    const body = query
+      ? `<div class="tabs"><span class="on">All</span><span>Images</span><span>Videos</span><span>Forums</span></div>${results.map(r=>`<div class="res"><div class="res-url">${htmlEscape(r[1])}</div><h2>${htmlEscape(r[0])}</h2><p>${htmlEscape(r[2])}</p></div>`).join("")}`
+      : `<div class="home"><div class="logo"><span style="color:#4285f4">G</span><span style="color:#ea4335">o</span><span style="color:#fbbc05">o</span><span style="color:#4285f4">g</span><span style="color:#34a853">l</span><span style="color:#ea4335">e</span></div><div class="hint">Type a search in the Vellum browser bar.</div></div>`;
+    return {src:"about:blank", srcDoc:`<!doctype html><html><head><meta charset="utf-8"><style>
+      body{margin:0;background:#202124;color:#e8eaed;font:14px Arial,sans-serif} .top{height:58px;display:flex;align-items:center;padding:0 24px;border-bottom:1px solid #3c4043;gap:16px}
+      .brand{font-size:22px;font-weight:500}.search{height:40px;max-width:580px;flex:1;border-radius:22px;background:#303134;display:flex;align-items:center;padding:0 18px;color:#bdc1c6}
+      .tabs{display:flex;gap:24px;padding:14px 28px 8px;border-bottom:1px solid #3c4043;color:#bdc1c6}.tabs span{padding-bottom:8px}.tabs .on{color:#e8eaed;border-bottom:3px solid #8ab4f8}
+      .res{padding:18px 28px;border-bottom:1px solid #3c4043;max-width:760px}.res-url{font-size:12px;color:#bdc1c6;margin-bottom:6px}.res h2{margin:0 0 6px;color:#8ab4f8;font-size:20px;font-weight:400}.res p{margin:0;color:#bdc1c6;line-height:1.45}
+      .home{height:calc(100vh - 58px);display:flex;align-items:center;justify-content:center;flex-direction:column}.logo{font-size:64px;letter-spacing:-4px}.hint{color:#bdc1c6;margin-top:18px}
+    </style></head><body><div class="top"><div class="brand">Google</div><div class="search">${htmlEscape(query || "google.com")}</div></div>${body}</body></html>`};
+  }
+  return {src:url, srcDoc:null};
+}
+function wsUrlForBackend(base){
+  const clean = String(base || "http://127.0.0.1:8000").replace(/\/+$/,"");
+  return clean.replace(/^https:/i,"wss:").replace(/^http:/i,"ws:") + "/api/terminal/ws";
+}
+async function runWorkspaceAction(base, payload){
+  const clean = String(base || "http://127.0.0.1:8000").replace(/\/+$/,"");
+  const resp = await fetch(clean + "/api/computer-use/workspace/action", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  });
+  const body = await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error(body.detail || body.message || ("HTTP " + resp.status));
+  return body;
+}
+function BrowserPane({ backendBase }){
+  const [url,setUrl] = useState("about:blank");
+  const [draft,setDraft] = useState("");
+  const [history,setHistory] = useState(["about:blank"]);
+  const [idx,setIdx] = useState(0);
+  const [status,setStatus] = useState("ready");
+  function go(next, replace){
+    const normalized = normalizeBrowserUrl(next);
+    setUrl(normalized);
+    setDraft(normalized === "about:blank" ? "" : normalized);
+    setStatus(normalized === "about:blank" ? "blank" : ("loading " + normalized));
+    if(replace) setHistory(h=> h.map((x,i)=> i===idx ? normalized : x));
+    else { setHistory(h=> [...h.slice(0,idx+1), normalized]); setIdx(i=> i+1); }
+    if(normalized !== "about:blank"){
+      runWorkspaceAction(backendBase, {action:"browser.navigate", url:normalized})
+        .then(r=> setStatus(r.message || ("loaded " + normalized)))
+        .catch(e=> setStatus("local frame updated; browser bridge offline: " + (e.message || e)));
+    }
+  }
+  function submit(e){ e.preventDefault(); go(draft, false); }
+  function back(){ if(idx<=0) return; const next=history[idx-1]; setIdx(idx-1); setUrl(next); setDraft(next==="about:blank"?"":next); setStatus("history back"); }
+  function forward(){ if(idx>=history.length-1) return; const next=history[idx+1]; setIdx(idx+1); setUrl(next); setDraft(next==="about:blank"?"":next); setStatus("history forward"); }
+  function reload(){ setStatus("reloading " + url); setUrl("about:blank"); setTimeout(()=>setUrl(history[idx] || "about:blank"), 0); }
+  function openExternal(){ const target = url === "about:blank" ? normalizeBrowserUrl(draft) : url; if(target && target !== "about:blank") window.open(target, "_blank", "noopener,noreferrer"); }
+  const frame = browserFrameFor(url);
+  return (
+    <div className="browser-tool">
+      <div className="browser-toolbar">
+        <button className="browser-nav" title="Back" disabled={idx<=0} onClick={back}><IcChevL size={15}/></button>
+        <button className="browser-nav" title="Forward" disabled={idx>=history.length-1} onClick={forward}><IcChevR size={15}/></button>
+        <button className="browser-nav" title="Reload" onClick={reload}><IcRefresh size={13}/></button>
+        <form className="browser-form" onSubmit={submit}><input className="browser-address" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Search or enter URL"/></form>
+        <button className="browser-ext" title="Open externally" onClick={openExternal}><IcExpand size={13}/></button>
+      </div>
+      <div className="browser-frame-wrap">
+        {url !== "about:blank" && <iframe className="browser-frame" src={frame.src} srcDoc={frame.srcDoc || undefined} title="Vellum browser view"/>}
+        {url === "about:blank" && <div className="browser-blank">Enter a URL to open a page inside Vellum.<br/>Pages that block embedding can still be opened externally or driven through the browser bridge.</div>}
+      </div>
+      <div className="browser-status">{status}</div>
+    </div>
+  );
+}
+function TerminalPane({ backendBase }){
+  const [profile,setProfile] = useState("powershell");
+  const [status,setStatus] = useState("disconnected");
+  const [output,setOutput] = useState("");
+  const [cmd,setCmd] = useState("");
+  const socketRef = useRef(null);
+  const outRef = useRef(null);
+  function append(text){ setOutput(prev=> (prev + text).slice(-50000)); }
+  function connect(){
+    if(socketRef.current){ try{ socketRef.current.close(); }catch(e){} }
+    setStatus("connecting");
+    const ws = new WebSocket(wsUrlForBackend(backendBase));
+    socketRef.current = ws;
+    ws.onopen = ()=>{ ws.send(JSON.stringify({type:"start", profile, cols:120, rows:32})); setStatus(profile + " connecting"); };
+    ws.onmessage = (event)=>{
+      let msg; try{ msg = JSON.parse(event.data); }catch(e){ append(String(event.data)); return; }
+      if(msg.type==="ready") setStatus(profile + " ready");
+      else if(msg.type==="output") append(msg.data || "");
+      else if(msg.type==="error"){ append("\r\n" + (msg.message || "terminal error") + "\r\n"); setStatus("error"); }
+      else if(msg.type==="exit") setStatus("exited");
+    };
+    ws.onerror = ()=> setStatus("websocket error");
+    ws.onclose = ()=> setStatus(s=> s==="exited" ? s : "disconnected");
+  }
+  useEffect(()=>{ connect(); return ()=>{ if(socketRef.current){ try{ socketRef.current.close(); }catch(e){} } }; }, [profile, backendBase]);
+  useEffect(()=>{ if(outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight; }, [output]);
+  async function submit(e){
+    e.preventDefault();
+    const text = cmd.trim();
+    if(!text) return;
+    setCmd("");
+    const ws = socketRef.current;
+    if(ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify({type:"input", data:text + "\r"})); return; }
+    append("> " + text + "\r\n");
+    setStatus("running fallback command");
+    try{
+      const res = await runWorkspaceAction(backendBase, {action:"terminal.run", command:text});
+      const data = res.data || {};
+      if(data.stdout) append(data.stdout);
+      if(data.stderr) append(data.stderr);
+      append("\r\n[exit " + (data.returncode ?? "?") + "]\r\n");
+      setStatus(res.message || "command complete");
+    }catch(err){
+      append("terminal backend unavailable: " + (err.message || err) + "\r\n");
+      setStatus("offline");
+    }
+  }
+  return (
+    <div className="terminal-panel">
+      <div className="terminal-toolbar">
+        <select className="terminal-shell" value={profile} onChange={e=>setProfile(e.target.value)}>
+          <option value="powershell">PowerShell</option>
+          <option value="cmd">CMD</option>
+          <option value="pwsh">PowerShell Core</option>
+          <option value="wsl">WSL</option>
+        </select>
+        <button className="terminal-connect" onClick={connect}>Reconnect</button>
+        <span className="terminal-statusline">{status}</span>
+      </div>
+      <div className="terminal-output" ref={outRef}>{output || "Connecting to the Vellum terminal backend...\r\n"}</div>
+      <form className="terminal-inputbar" onSubmit={submit}>
+        <span className="terminal-prompt">&gt;</span>
+        <input className="terminal-input" value={cmd} onChange={e=>setCmd(e.target.value)} placeholder="Run a command"/>
+        <button className="terminal-run" type="submit">Run</button>
+      </form>
+    </div>
+  );
+}
+
 function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [sbPinned, setSbPinned]       = useState(false);   // toggle keeps it fixed-open
   const [sbHover, setSbHover]         = useState(false);   // edge-hover reveals it
@@ -1074,7 +1276,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
 
   useEffect(()=>{ // chat-only by default; a freshly-created chat auto-opens Progress
-    if(openProgRef.current === activeChat){ setShowProg(true); setShowSub(false); openProgRef.current = null; }
+    if(isLanding){ setShowProg(true); setShowSub(false); }
+    else if(openProgRef.current === activeChat){ setShowProg(true); setShowSub(false); openProgRef.current = null; }
     else { setShowProg(false); setShowSub(false); }
     setArchiveConfirm(null);
   }, [activeChat]);
@@ -1522,7 +1725,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <div className="prog-title" style={{marginBottom:4}}>Plan</div>
             {msg.plan.map(t=>{ const st=(byId[t.id]||{}).status||"pending"; return (
               <div key={t.id} className="task-row">
-                {st==="done"?<IcCheckCircle size={14}/>:st==="running"||st==="review"?<IcCircleRun size={14}/>:<IcCircle size={14}/>}
+                {st==="done"?<IcCheckCircle size={14}/>:st==="running"||st==="review"?<Spinner/>:<IcCircle size={14}/>}
                 <span className={"task-lbl"+(st==="done"?" done":"")}>{t.title}</span>
                 {(byId[t.id]&&byId[t.id].persona&&st==="running")&&<span className="sa-working" style={{marginLeft:6}}>{byId[t.id].persona.name}</span>}
               </div>
@@ -1745,6 +1948,12 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 </div>
               </div>
             </div>
+            {showProg && (
+              <div className="prog-empty-card">
+                <div className="prog-sec"><div className="prog-title">Outputs</div><div className="prog-empty-text">No artifacts yet</div></div>
+                <div className="prog-sec"><div className="prog-title">Sources</div><div className="prog-empty-text">No sources yet</div></div>
+              </div>
+            )}
           </Fragment>
         ) : (
           <Fragment>
@@ -1761,32 +1970,32 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 </div>
               </div>
 
-              <div className="msgs" ref={msgsRef} style={showProg?{paddingRight:312}:null}>
+              <div className="msgs" ref={msgsRef} style={showProg?{paddingRight:338}:null}>
                 {messages.map(renderMsg)}
               </div>
 
-              <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:312}:null}/>
+              <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
 
               {/* Progress floating card */}
               {showProg && (
-                <div className="prog-float" style={{width:290}}>
+                <div className="prog-float" style={{width:310}}>
+                  {prog.tasks.length>0 && (
                   <div className="prog-sec">
                     <div className="prog-title">Progress</div>
-                    <div className="prog-bar" style={{height:4,borderRadius:3,background:"#1c1c1c",overflow:"hidden",margin:"2px 0 10px"}}>
-                      <div style={{height:"100%",width:progPct+"%",background:"#e8932b",transition:"width .3s ease"}}/>
-                    </div>
-                    {prog.tasks.length===0 && <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No tasks yet</div>}
                     {prog.tasks.map(t=>(
                       <div key={t.id} className="task-row">
-                        {t.status==="done" ? <IcCheckCircle size={15}/> : t.status==="error" ? <IcCircle size={15}/> : t.status==="running"||t.status==="review" ? <IcCircleRun size={15}/> : <IcCircle size={15}/>}
+                        {t.status==="done" ? <IcCheckCircle size={15}/> : t.status==="running"||t.status==="review" ? <Spinner/> : <IcCircle size={15}/>}
                         <span className={"task-lbl"+(t.status==="done"?" done":"")}>{t.title}</span>
-                        {t.persona && t.status==="running" && <span className="sa-working" style={{marginLeft:6}}>{t.persona.name} is working</span>}
+                        {t.persona && (t.status==="running"||t.status==="review") && <span className="sa-working" style={{marginLeft:6}}>{t.persona.name} is working</span>}
                       </div>
                     ))}
                   </div>
+                  )}
                   <div className="prog-sec">
                     <div className="prog-title">Outputs</div>
-                    {OUTPUTS.map((o,i)=>(<div key={i} className="out-file"><IcFile size={13}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))}
+                    {(prog.outputs && prog.outputs.length>0)
+                      ? prog.outputs.map((o,i)=>(<div key={i} className="out-file"><IcFile size={13}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))
+                      : <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No artifacts yet</div>}
                   </div>
                   {tabs.some(t=>t.kind==="side") && (
                     <div className="prog-sec">
@@ -1811,7 +2020,12 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                     ))}
                   </div>
                   )}
-                  <div className="prog-sec"><div className="sources-row"><span>Sources</span><IcChevR size={13}/></div></div>
+                  <div className="prog-sec">
+                    <div className="prog-title">Sources</div>
+                    {(prog.sources && prog.sources.length>0)
+                      ? prog.sources.map((s,i)=>(<div key={i} className="out-file"><IcGlobe size={13}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.domain||s.title||s.url||"source"}</span></div>))
+                      : <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No sources yet</div>}
+                  </div>
                 </div>
               )}
           </Fragment>
@@ -1900,11 +2114,11 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {activeTabObj && activeTabObj.kind==="terminal" && (
                   <div className="workspace-body">
                     <div className="drawer-hdr"><div><div className="drawer-title"><IcTerminal size={15}/> Terminal</div><div className="drawer-sub">Command execution stays visible and reviewable.</div></div><span className="status-pill running">ready</span></div>
-                    <div className="terminal-card"><div><span className="terminal-prompt">$</span> npm test -- computer_use</div><div className="terminal-dim">✓ operator contract tests passed (3)</div><div><span className="terminal-prompt">$</span> git status --short</div><div className="terminal-dim">M backend/agent/computer_use/operator.py</div><div><span className="terminal-prompt">$</span> <span style={{color:"#ccc"}}>_</span></div></div>
+                    <TerminalPane backendBase={backendBase()}/>
                   </div>
                 )}
                 {activeTabObj && activeTabObj.kind==="browser" && (
-                  <div className="workspace-body"><div className="browser-mini"><div className="bm-bar"><IcChevL size={15}/><IcChevR size={15}/><IcRefresh size={13}/><div className="bm-omni">docs.vellum.ai/computer-use</div></div><div className="bm-stage">Browser view appears here for research, docs, app testing, and computer-use sessions.</div></div></div>
+                  <div className="workspace-body"><BrowserPane backendBase={backendBase()}/></div>
                 )}
                 {activeTabObj && activeTabObj.kind==="files" && (
                   <div className="workspace-body">
@@ -2082,7 +2296,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 function App(){
   const [shell, setShell] = useState("browser");
   const [maximized, setMaximized] = useState(false);
-  const switchShell = ()=> setShell(s=> s==="browser" ? "desktop" : "browser");
+  const switchShell = (next)=> setShell(s=> next || (s==="browser" ? "desktop" : "browser"));
   const toggleMax = ()=> setMaximized(m=>!m);
   const workspace = <VellumWorkspace shell={shell} onSwitchShell={switchShell} onToggleMax={toggleMax} maximized={maximized}/>;
   return (
@@ -2091,7 +2305,7 @@ function App(){
       <div className="bg-orb" style={{width:420,height:420,left:"6%",top:"12%",background:"radial-gradient(circle,#e35d2b,transparent 70%)"}}/>
       <div className="bg-orb" style={{width:380,height:380,right:"8%",bottom:"6%",background:"radial-gradient(circle,#5a4bd6,transparent 70%)",opacity:.25}}/>
       <div className={"window "+(maximized?"win-max":"win-float")}>
-        {shell==="browser"
+        {shell==="terminal" ? <ChromeTerminal maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}/> : shell==="browser"
           ? <ChromeBrowser maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}>{workspace}</ChromeBrowser>
           : <ChromeDesktop maximized={maximized} onMax={toggleMax} title="Find best non-veg meal — Vellum" shell={shell} onShell={setShell}>{workspace}</ChromeDesktop>}
       </div>
