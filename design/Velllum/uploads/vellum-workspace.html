@@ -1303,6 +1303,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const pn = (PROVIDERS.find(p=>p.id===activeProvider)||{}).name || activeProvider;
     if(!cfg.chatUrl){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:pn+" chats through the Vellum backend in the full app. In this browser preview, pick OpenRouter or OpenAI in Models & Compute.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
     else if(!key){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Add your "+pn+" key in Settings → Models & Compute to chat.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
+    else if(activeMode==="coding"){ runCodingTurn(chatId, aid, t, prevMsgs); }
     else { streamChat(chatId, aid, [...prevMsgs, userMsg], selModel); }
   }
   function onMainSend(text, atts){
