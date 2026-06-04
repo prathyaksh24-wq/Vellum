@@ -1235,6 +1235,61 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     let text=""; try{ text = await streamModel({messages, model:selModel, signal, onDelta:null}); }catch(e){ return {complex:false, reason:"", tasks:[]}; }
     return VPROTO.parsePlan(text);
   }
+  const REVIEW_ON = true; // reviewer gate toggle (spec §5)
+  function assignPersona(i){ const a = SUBAGENTS[i % SUBAGENTS.length]; return {name:a.name, sprite:a.sprite, color:a.color, role:a.role}; }
+  function workerSys(goal, task){ return "You are sub-agent \""+task.title+"\" working under Vellum's coding orchestrator. Overall goal: "+goal+". Do ONLY your task: \""+task.title+"\". Be concise and produce concrete output (code/text) for just this part. Do not restate the whole plan."; }
+  function reviewerSys(task){ return "You are a reviewer sub-agent. Briefly gate the work for task \""+task.title+"\": note in 1-2 lines whether it meets the task and any fix. Start with PASS or NEEDS-FIX."; }
+  function synthSys(goal){ return "You are Vellum. Combine the sub-agent outputs below into one coherent, final answer to the user's request: "+goal+". Integrate, deduplicate, and present cleanly. Do not mention sub-agents or the orchestration."; }
+  async function runCodingTurn(chatId, aid, userText, history){
+    const ctrl = new AbortController(); abortRef.current = ctrl;
+    const turnId = VPROTO.uuid();
+    emitFrame(chatId, VPROTO.turnStarted(chatId, turnId));
+    try{
+      const plan = await planTask(userText, history, ctrl.signal);
+      emitFrame(chatId, VPROTO.plan(turnId, plan.complex, plan.reason, plan.tasks));
+      if(!plan.complex){
+        const text = await streamModel({ messages: toORMessages([...history, {type:"user", text:userText}]), model:selModel, signal:ctrl.signal,
+          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
+        setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
+        emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
+        abortRef.current=null; setRunning(false); return;
+      }
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, turnId, plan:plan.tasks, thinking:false}:x));
+      const results = await Promise.all(plan.tasks.map(async (task, i)=>{
+        const tag = VPROTO.tag(turnId, VPROTO.uuid());
+        const persona = assignPersona(i);
+        emitFrame(chatId, VPROTO.subagentStarted(turnId, tag, persona, task));
+        let out="";
+        try{
+          out = await streamModel({ messages:[{role:"system", content:workerSys(userText, task)}, {role:"user", content:task.title + (steerRef.current[turnId]?("\n\nUser steer: "+steerRef.current[turnId]):"")}], model:selModel, signal:ctrl.signal,
+            onDelta:(c)=> emitFrame(chatId, VPROTO.agentDelta(tag, c)) });
+          if(REVIEW_ON){
+            const rv = await streamModel({ messages:[{role:"system", content:reviewerSys(task)}, {role:"user", content:out.slice(0,4000)}], model:selModel, signal:ctrl.signal,
+              onDelta:(c)=> emitFrame(chatId, VPROTO.reasoningDelta(tag, c)) });
+            void rv;
+          }
+          emitFrame(chatId, VPROTO.subagentCompleted(tag, "done", out));
+        }catch(e){
+          emitFrame(chatId, VPROTO.subagentCompleted(tag, "error", "⚠ "+((e&&e.message)||"failed")));
+        }
+        return { task, out };
+      }));
+      const bundle = results.map(r=> "## "+r.task.title+"\n"+r.out).join("\n\n");
+      let fin="";
+      try{
+        fin = await streamModel({ messages:[{role:"system", content:synthSys(userText)}, {role:"user", content:bundle}], model:selModel, signal:ctrl.signal,
+          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
+      }catch(e){ fin = bundle; }
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:fin||bundle, streaming:false, thinking:false}:x));
+      emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
+    }catch(e){
+      if(!(e && e.name==="AbortError")) setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Coding run failed"), thinking:false, streaming:false}:x));
+      else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
+      setProgFor(chatId, prog=> ({...prog, status:"error"}));
+    }
+    delete steerRef.current[turnId];
+    abortRef.current=null; setRunning(false);
+  }
   function sendToChat(chatId, text, atts){
     const t = (text||"").trim(); if((!t && (!atts || !atts.length)) || running) return;
     const uid = nextId(), aid = nextId();
