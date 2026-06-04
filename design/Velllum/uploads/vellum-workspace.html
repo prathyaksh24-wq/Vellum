@@ -979,6 +979,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [resizing, setResizing]       = useState(false);
   const [chatMsgs, setChatMsgs]       = useState({ "find-meal": MAIN_MSGS });
   const [running, setRunning]         = useState(false);
+  const [progressByChat, setProgressByChat] = useState({}); // chatId -> {status,turnId,reason,tasks:[],outputs:[],sources:[]}
+  const steerRef = useRef({}); // turnId -> pending steer text
   const [selFile, setSelFile]         = useState(null);
   const [newChats, setNewChats]       = useState([]);
   const [pinned, setPinned]           = useState([]);
@@ -1137,6 +1139,44 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
   /* streaming (per-chat) */
   function setMsgsFor(chatId, fn){ setChatMsgs(prev=> ({...prev, [chatId]: fn(prev[chatId]||[])})); }
+  function emptyProgress(){ return { status:"idle", turnId:null, reason:"", tasks:[], outputs:[], sources:[] }; }
+  function setProgFor(chatId, fn){ setProgressByChat(prev=> ({...prev, [chatId]: fn(prev[chatId]||emptyProgress())})); }
+  /* Pure reducer: fold one VPROTO frame into a progress object. */
+  function applyFrame(prog, f){
+    const p = {...prog, tasks:[...(prog.tasks||[])]};
+    const m = f.method, a = f.params||{};
+    if(m==="turn/started"){ return {...emptyProgress(), status:"planning", turnId:a.turnId}; }
+    if(m==="item/plan"){
+      if(!a.complex) return {...p, status:"done", reason:a.reason};
+      p.status = "running"; p.reason = a.reason;
+      p.tasks = (a.tasks||[]).map(t=>({ id:t.id, title:t.title, role:t.role, status:"pending", routingTag:null, persona:null, output:"" }));
+      return p;
+    }
+    if(m==="item/subagent/started"){
+      const i = p.tasks.findIndex(t=>t.id===a.task.id);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], status:"running", routingTag:a.routingTag, persona:a.persona};
+      return p;
+    }
+    if(m==="item/agentMessage/delta"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], output:(p.tasks[i].output||"")+a.text};
+      return p;
+    }
+    if(m==="item/reasoning/delta"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], review:(p.tasks[i].review||"")+a.text};
+      return p;
+    }
+    if(m==="item/subagent/completed"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], status:a.status, output:a.output!=null?a.output:p.tasks[i].output};
+      return p;
+    }
+    if(m==="turn/completed"){ return {...p, status:"done"}; }
+    return p;
+  }
+  /* Emit a frame: reduce it into this chat's progress. The sole UI data path. */
+  function emitFrame(chatId, frame){ setProgFor(chatId, prog=> applyFrame(prog, frame)); }
   function toORMessages(msgs){
     const out = [{role:"system", content:"You are Vellum — a calm, precise, personal AI assistant. Answer plainly and concisely."}];
     msgs.forEach(m=>{ if(m.type==="user"){ if(m.text) out.push({role:"user", content:m.text}); } else if(m.type==="assistant"){ if(m.text) out.push({role:"assistant", content:m.text}); } });
