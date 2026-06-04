@@ -977,7 +977,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [wsWidth, setWsWidth]         = useState(480);
   const [resizing, setResizing]       = useState(false);
-  const [chatMsgs, setChatMsgs]       = useState({ "find-meal": MAIN_MSGS });
+  const [chatMsgs, setChatMsgs]       = useState({}); // chats start empty; coding progress is live (see runCodingTurn)
   const [running, setRunning]         = useState(false);
   const [progressByChat, setProgressByChat] = useState({}); // chatId -> {status,turnId,reason,tasks:[],outputs:[],sources:[]}
   const steerRef = useRef({}); // turnId -> pending steer text
