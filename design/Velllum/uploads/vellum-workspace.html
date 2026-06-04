@@ -842,7 +842,6 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
       )}
       {slashOpen && list.length>0 && (
         <div className="slash-pop pop-in">
-          {list.some(x=>x.group==="cmd") && <div className="slash-sec">Commands</div>}
           {list.filter(x=>x.group==="cmd").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic">{c.ic}</span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span></div>); })}
           {list.some(x=>x.group==="skill") && <div className="slash-sec">Skills</div>}
           {list.filter(x=>x.group==="skill").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic"><IcSpark size={14}/></span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span><span className="slash-tag">Personal</span></div>); })}
@@ -1674,14 +1673,16 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   /* slash commands */
   const SLASH_CMDS = [
     { id:"code-review", name:"Code review", desc:"Review unstaged changes or compare against a branch", ic:<IcFork size={14}/> },
-    { id:"compact", name:"Compact", desc:"Compact this thread's context (75% full)", ic:<IcColumns size={14}/> },
+    { id:"compact", name:"Compact", desc:"Compact this thread's context (83% full)", ic:<IcColumns size={14}/> },
     { id:"fast", name:"Fast", desc:"1.5x speed, increased usage", ic:<IcSpark size={14}/> },
+    { id:"feedback", name:"Feedback", desc:"Send feedback about this chat", ic:<IcChat size={14}/> },
     { id:"goal", name:"Goal", desc:"Set a goal that Vellum keeps working towards", ic:<IcTarget size={14}/>, run:()=> setPursueGoal(true) },
     { id:"mcp", name:"MCP", desc:"Show MCP server status", ic:<IcPlugin size={14}/> },
-    { id:"memories", name:"Memories", desc:"Open the memory trace", ic:<IcBook size={14}/>, run:()=> addTab("memory") },
+    { id:"memories", name:"Memories", desc:"Generate on", ic:<IcBook size={14}/>, run:()=> addTab("memory") },
     { id:"model", name:"Model", desc:selModel, ic:<IcGauge size={14}/> },
     { id:"personality", name:"Personality", desc:"Choose how Vellum responds", ic:<IcUser size={14}/> },
-    { id:"plan", name:"Plan mode", desc:"Toggle plan mode", ic:<IcLayout size={14}/>, run:()=> setPlanMode(v=>!v) },
+    { id:"pet", name:"Pet", desc:"Wake or tuck away the desktop pet", ic:<IcSpark size={14}/> },
+    { id:"plan", name:"Plan mode", desc:"Turn plan mode on", ic:<IcLayout size={14}/>, run:()=> setPlanMode(v=>!v) },
     { id:"reasoning", name:"Reasoning", desc:selReasoning, ic:<IcGauge size={14}/> },
     { id:"side", name:"Side", desc:"Start a side conversation in an ephemeral fork", ic:<IcChat size={14}/>, run:()=> addTab("side") },
     { id:"status", name:"Status", desc:"Show chat id, context usage, and rate limits", ic:<IcGauge size={14}/> },
