@@ -1409,6 +1409,12 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     setTabs(prev=> [...prev, {id, kind:"agent", label:agent.name, icon:"sprite", agentId:agent.id}]);
     setActiveTab(id);
   }
+  function openTaskAgent(task){
+    setShowSub(true);
+    const id = "task-"+task.id;
+    setTabs(prev=> prev.find(t=>t.id===id) ? prev : [...prev, {id, kind:"taskagent", label:task.persona?task.persona.name:task.title, icon:"sprite", taskId:task.id, sprite:task.persona&&task.persona.sprite, color:task.persona&&task.persona.color}]);
+    setActiveTab(id);
+  }
   function closeTab(id, e){
     e && e.stopPropagation();
     setTabs(prev=>{
@@ -1490,6 +1496,9 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
   function openCtx(e){ e.preventDefault(); e.stopPropagation(); const r = rootRef.current.getBoundingClientRect(); setCtxMenu({ x: Math.min(e.clientX-r.left, r.width-236), y: Math.min(e.clientY-r.top, r.height-300) }); }
   const visibleTasks = tasksExpanded ? TASKS : TASKS.slice(0,6);
+  const prog = progressByChat[activeChat] || emptyProgress();
+  const progDone = prog.tasks.filter(t=> t.status==="done" || t.status==="error").length;
+  const progPct = prog.tasks.length ? Math.round((progDone/prog.tasks.length)*100) : 0;
 
   function renderMsg(msg){
     if(msg.type==="user") return <div key={msg.id} className="user-msg">{msg.atts && msg.atts.length>0 && <div className="att-row" style={{marginBottom:msg.text?6:0}}>{msg.atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span></div>))}</div>}{msg.text}</div>;
@@ -1736,9 +1745,17 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 <div className="prog-float" style={{width:290}}>
                   <div className="prog-sec">
                     <div className="prog-title">Progress</div>
-                    {visibleTasks.map(t=>(<div key={t.id} className="task-row">{t.done ? <IcCheckCircle size={15}/> : t.running ? <IcCircleRun size={15}/> : <IcCircle size={15}/>}<span className={"task-lbl"+(t.done?" done":"")}>{t.label}</span></div>))}
-                    {!tasksExpanded && TASKS.length>6 && <div className="show-more" onClick={()=>setTasksExpanded(true)}>Show {TASKS.length-6} more</div>}
-                    {tasksExpanded && <div className="show-more" onClick={()=>setTasksExpanded(false)}>Show less</div>}
+                    <div className="prog-bar" style={{height:4,borderRadius:3,background:"#1c1c1c",overflow:"hidden",margin:"2px 0 10px"}}>
+                      <div style={{height:"100%",width:progPct+"%",background:"#e8932b",transition:"width .3s ease"}}/>
+                    </div>
+                    {prog.tasks.length===0 && <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No tasks yet</div>}
+                    {prog.tasks.map(t=>(
+                      <div key={t.id} className="task-row">
+                        {t.status==="done" ? <IcCheckCircle size={15}/> : t.status==="error" ? <IcCircle size={15}/> : t.status==="running"||t.status==="review" ? <IcCircleRun size={15}/> : <IcCircle size={15}/>}
+                        <span className={"task-lbl"+(t.status==="done"?" done":"")}>{t.title}</span>
+                        {t.persona && t.status==="running" && <span className="sa-working" style={{marginLeft:6}}>{t.persona.name} is working</span>}
+                      </div>
+                    ))}
                   </div>
                   <div className="prog-sec">
                     <div className="prog-title">Outputs</div>
@@ -1754,17 +1771,19 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                       ))}
                     </div>
                   )}
+                  {prog.tasks.some(t=>t.persona) && (
                   <div className="prog-sec">
                     <div className="prog-title">Subagents</div>
-                    {SUBAGENTS.map(a=>(
-                      <div key={a.id} className="sa-row" onClick={()=>openSubagent(a)}>
-                        <PixelSprite name={a.sprite} color={a.color} px={2}/>
-                        <span className="sa-name">{a.name}</span>
-                        {a.status==="running" && <span className="sa-working">is working</span>}
-                        {a.status==="running" && <span className="sa-stat"><span className="sa-add">+{a.add}</span><span className="sa-rem">-{a.rem}</span></span>}
+                    {prog.tasks.filter(t=>t.persona).map(t=>(
+                      <div key={t.id} className="sa-row" onClick={()=>openTaskAgent(t)}>
+                        <PixelSprite name={t.persona.sprite} color={t.persona.color} px={2}/>
+                        <span className="sa-name">{t.persona.name}</span>
+                        {t.status==="running" && <span className="sa-working">is working</span>}
+                        {t.status==="done" && <span className="sa-working" style={{color:"#5a8f5a"}}>done</span>}
                       </div>
                     ))}
                   </div>
+                  )}
                   <div className="prog-sec"><div className="sources-row"><span>Sources</span><IcChevR size={13}/></div></div>
                 </div>
               )}
