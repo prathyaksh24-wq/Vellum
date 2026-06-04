@@ -420,6 +420,22 @@ def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     assert response.summary == "XAgent did not find matching X posts."
 
 
+def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
+    class FailingXService:
+        def search_posts(self, payload):
+            raise RuntimeError("network unavailable")
+
+    agent = XAgent(vault_root=tmp_path, x_service=FailingXService())
+
+    response = agent.answer("What did Naval post on X?")
+
+    assert response.agent == "XAgent"
+    assert response.status == "error"
+    assert response.confidence == 0.2
+    assert "could not fetch X posts" in response.summary
+    assert "network unavailable" in response.analysis
+
+
 def test_youtube_agent_stub_defers_full_execution(tmp_path):
     agent = YoutubeAgent(vault_root=tmp_path)
 

@@ -30,7 +30,16 @@ class XAgent:
         )
 
     def answer(self, query: str) -> SpecialistResponse:
-        result = self.x_service.search_posts({"query": query, "max_results": 5})
+        try:
+            result = self.x_service.search_posts({"query": query, "max_results": 5})
+        except Exception as exc:
+            return SpecialistResponse(
+                agent=self.name,
+                status="error",
+                summary="XAgent could not fetch X posts right now.",
+                analysis=f"X search failed: {self._sanitize_error(exc)}",
+                confidence=0.2,
+            )
         items = result.get("items", [])
         if not items:
             return SpecialistResponse(
@@ -67,3 +76,15 @@ class XAgent:
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
+
+    def _sanitize_error(self, exc: Exception) -> str:
+        message = str(exc).replace("\r", " ").replace("\n", " ").strip()
+        message = re.sub(
+            r"(?i)(api[_-]?key|access[_-]?token|authorization|bearer|client[_-]?secret|password)\s*[:=]\s*\S+",
+            r"\1=[redacted]",
+            message,
+        )
+        message = re.sub(r"\b[A-Za-z0-9_-]{32,}\b", "[redacted]", message)
+        if not message:
+            message = exc.__class__.__name__
+        return f"{exc.__class__.__name__}: {message}"[:160]
