@@ -275,7 +275,7 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert youtube_result is not None
     assert youtube_result.agent_name == "YoutubeAgent"
-    assert "full YouTube specialist execution deferred" in youtube_result.answer
+    assert "read-only YouTube backend is not configured" in youtube_result.answer
     assert youtube_result.tools == ["youtube_agent"]
 
     assert memory_result is not None
@@ -444,7 +444,24 @@ def test_youtube_agent_stub_defers_full_execution(tmp_path):
     assert agent.name == "YoutubeAgent"
     assert agent.can_handle("youtube channel transcript")
     assert response.status == "needs_fetch"
-    assert "full YouTube specialist execution deferred" in response.summary
+    assert "read-only YouTube backend is not configured" in response.summary
+
+
+def test_youtube_agent_returns_structured_response_when_service_fails(tmp_path):
+    class FailingYoutubeService:
+        def search_videos(self, payload):
+            raise RuntimeError("youtube API key leaked-user-token-123456789012345678901234567890")
+
+    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=FailingYoutubeService())
+
+    response = agent.answer("Summarize the latest YouTube videos")
+
+    assert response.agent == "YoutubeAgent"
+    assert response.status == "error"
+    assert response.summary == "YoutubeAgent could not fetch YouTube data right now."
+    assert response.confidence == 0.2
+    assert "YouTube search failed" in response.analysis
+    assert "leaked-user-token" not in response.analysis
 
 
 def test_memory_agent_builds_context_pack_and_reviews_memory(tmp_path):

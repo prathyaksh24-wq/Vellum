@@ -15,6 +15,7 @@ def test_pupil_registry_exposes_default_pupils(tmp_path):
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= set(registry.names())
     assert registry.get("SportsAgent").can_handle("NBA update")
     assert hasattr(registry.get("XAgent"), "x_service")
+    assert hasattr(registry.get("YoutubeAgent"), "youtube_service")
     assert hasattr(registry.get("MemoryAgent"), "memory_service")
 
 
