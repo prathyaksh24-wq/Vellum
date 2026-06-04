@@ -664,6 +664,39 @@ const GOOGLE_MODELS = [
   { id:"gemini-2.0-flash", label:"Gemini 2.0 Flash" },
   { id:"gemini-1.5-pro",   label:"Gemini 1.5 Pro" },
 ];
+/* ── Coding-mode streaming protocol (Codex-shaped, JSON-RPC 2.0 frames) ── */
+const VPROTO = {
+  uuid(){ try{ return crypto.randomUUID(); }catch(e){ return "id-"+Math.random().toString(36).slice(2); } },
+  tag(parent, sub){ return "agent:"+parent+":subagent:"+sub; },
+  masterTag(turnId){ return "agent:master:turn:"+turnId; },
+  frame(method, params){ return { jsonrpc:"2.0", method, params }; },
+  turnStarted(threadId, turnId){ return this.frame("turn/started", {threadId, turnId}); },
+  plan(turnId, complex, reason, tasks){ return this.frame("item/plan", {turnId, complex, reason, tasks}); },
+  subagentStarted(turnId, routingTag, persona, task){ return this.frame("item/subagent/started", {turnId, routingTag, persona, task}); },
+  agentDelta(routingTag, text){ return this.frame("item/agentMessage/delta", {routingTag, text}); },
+  reasoningDelta(routingTag, text){ return this.frame("item/reasoning/delta", {routingTag, text}); },
+  subagentCompleted(routingTag, status, output){ return this.frame("item/subagent/completed", {routingTag, status, output}); },
+  steer(threadId, turnId, text){ return this.frame("turn/steer", {threadId, turnId, text}); },
+  turnCompleted(turnId, finalItemId){ return this.frame("turn/completed", {turnId, finalItemId}); },
+  /* Tolerant parse of a planner reply. Returns {complex, reason, tasks:[{id,title,role}]}.
+     Falls back to {complex:false} on any failure so callers degrade to a single answer. */
+  parsePlan(text){
+    if(!text) return {complex:false, reason:"", tasks:[]};
+    let raw = String(text);
+    const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if(fence) raw = fence[1];
+    const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
+    if(s<0 || e<=s) return {complex:false, reason:"", tasks:[]};
+    let obj; try{ obj = JSON.parse(raw.slice(s, e+1)); }catch(err){ return {complex:false, reason:"", tasks:[]}; }
+    if(!obj || obj.complex!==true || !Array.isArray(obj.tasks) || !obj.tasks.length) return {complex:false, reason:(obj&&obj.reason)||"", tasks:[]};
+    const roles = {worker:1, reviewer:1, analyst:1};
+    const tasks = obj.tasks.slice(0,5).map((t,i)=>({
+      id: "t"+(i+1),
+      title: String((t&&t.title)||("Task "+(i+1))).slice(0,120),
+      role: roles[(t&&t.role)] ? t.role : "worker",
+    }));
+    return {complex:true, reason:String(obj.reason||"").slice(0,200), tasks};
+  },
+};
 const PROVIDER_CFG = {
   openrouter:{ chatUrl:"https://openrouter.ai/api/v1/chat/completions", listUrl:"https://openrouter.ai/api/v1/models", keyId:"openrouter", models:OR_MODELS_DEFAULT, default:"deepseek/deepseek-chat", referer:true },
   openai:    { chatUrl:"https://api.openai.com/v1/chat/completions",    listUrl:"https://api.openai.com/v1/models",    keyId:"openai",     models:OPENAI_MODELS,    default:"gpt-4o" },
