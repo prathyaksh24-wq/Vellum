@@ -81,12 +81,15 @@ class MemoryCapabilityService:
 
     def build_context_pack(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query", ""))
+        cards = self.search_cards({"query": query, "limit": 8})["cards"]
+        if not cards:
+            cards = self.search_cards({"query": "", "limit": 8})["cards"]
         return {
             "action": "memory.build_context_pack",
             "query": query,
             "thread_id": payload.get("thread_id"),
             "agent_name": payload.get("agent_name"),
-            "cards": self.search_cards({"query": query, "limit": 8})["cards"],
+            "cards": cards,
         }
 
     def search_cards(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -184,8 +187,6 @@ def _terms(text: str) -> set[str]:
         if len(term) <= 2:
             continue
         terms.add(term)
-        if len(term) > 3 and term.endswith("s"):
-            terms.add(term[:-1])
     return terms
 
 
