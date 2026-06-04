@@ -33,6 +33,7 @@ ACTION_TO_TOOL = {
 }
 
 WRITE_ACTION_TO_TOOL = {
+    "create_issue": "create_issue",
     "create_repository": "create_repository",
     "create_branch": "create_branch",
     "create_or_update_file": "create_or_update_file",
@@ -60,6 +61,8 @@ PARAM_KEYS = {
     "until",
     "author",
     "state",
+    "title",
+    "body",
     "name",
     "organization",
     "description",
@@ -109,6 +112,7 @@ def _action_name(params: dict[str, Any]) -> str:
 
 def _tool_params(params: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(params)
+    action = _action_name(normalized)
     if "pull_number" in normalized:
         normalized["pullNumber"] = normalized.pop("pull_number")
     if "issue_number" in normalized:
@@ -117,6 +121,10 @@ def _tool_params(params: dict[str, Any]) -> dict[str, Any]:
         normalized["perPage"] = normalized.pop("per_page")
     if "auto_init" in normalized:
         normalized["autoInit"] = normalized.pop("auto_init")
+    if action == "create_issue" and "body" not in normalized and "description" in normalized:
+        normalized["body"] = normalized.pop("description")
+    if action == "create_issue":
+        normalized.pop("description", None)
     return {
         key: value
         for key, value in normalized.items()

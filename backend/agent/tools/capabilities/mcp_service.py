@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 from collections.abc import Callable
 from typing import Any
 
@@ -97,7 +99,9 @@ class McpCapabilityService:
         return self._call("context7", params, "context7.fetch_docs")
 
     def context_mode_fetch_and_index(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self._call("context_mode", dict(payload), "context_mode.fetch_and_index")
+        params = dict(payload)
+        params["action"] = "fetch_and_index"
+        return self._call("context_mode", params, "context_mode.fetch_and_index")
 
     def github_read_issue(self, payload: dict[str, Any]) -> dict[str, Any]:
         params = dict(payload)
@@ -122,5 +126,12 @@ class McpCapabilityService:
     def _default_runner(server: str, params: dict[str, Any]) -> str:
         from agent.mcp.client import run_tools
 
-        result = run_tools([{"server": server, "params": params}])[0]
+        request = [{"server": server, "params": params}]
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            result = run_tools(request)[0]
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(run_tools, request).result()[0]
         return result.result
