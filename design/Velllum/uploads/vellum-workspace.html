@@ -1425,7 +1425,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     });
   }
   function tabIcon(t){
-    if(t.icon==="sprite"){ const a = agentById(t.agentId); return a ? <PixelSprite name={a.sprite} color={a.color} px={2}/> : <IcUser size={12}/>; }
+    if(t.icon==="sprite"){ if(t.sprite){ return <PixelSprite name={t.sprite} color={t.color} px={2}/>; } const a = agentById(t.agentId); return a ? <PixelSprite name={a.sprite} color={a.color} px={2}/> : <IcUser size={12}/>; }
     if(t.icon==="term") return <IcTerminal size={12}/>;
     if(t.icon==="globe") return <IcGlobe size={12}/>;
     if(t.icon==="mem") return <span>❖</span>;
@@ -1838,6 +1838,18 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                   </div></div>
                 ); })()}
 
+                {activeTabObj && activeTabObj.kind==="taskagent" && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const t = (pr.tasks||[]).find(x=>x.id===activeTabObj.taskId) || {title:activeTabObj.label, status:"pending", output:""}; return (
+                  <div className="workspace-body">
+                    <div className="drawer-hdr">
+                      <div><div className="drawer-title">{t.persona && <PixelSprite name={t.persona.sprite} color={t.persona.color} px={3}/>} {t.persona?t.persona.name:t.title}</div><div className="drawer-sub">{t.title}</div></div>
+                      <span className={"status-pill "+(t.status==="done"?"complete":t.status==="error"?"closed":"running")}>{t.status}</span>
+                    </div>
+                    <div className="msgs compact-msgs" style={{padding:"10px 12px"}}>
+                      <div className="msg-text" style={{whiteSpace:"pre-wrap"}}>{t.output || (t.status==="running"?"…":"No output yet")}</div>
+                      {t.review && <div className="msg-text" style={{whiteSpace:"pre-wrap",marginTop:10,color:"#a78bfa"}}>Review: {t.review}</div>}
+                    </div>
+                  </div>
+                ); })()}
                 {activeTabObj && activeTabObj.kind==="agent" && (()=>{ const a = agentById(activeTabObj.agentId) || SUBAGENTS[0]; return (
                   <div className="workspace-body">
                     <div className="drawer-hdr">
