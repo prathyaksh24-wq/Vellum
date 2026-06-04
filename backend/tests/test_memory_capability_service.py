@@ -53,3 +53,58 @@ def test_memory_service_create_card_writes_durable_memory(tmp_path):
     path = vault / result["path"]
     assert path.exists()
     assert "User prefers concise answers." in path.read_text(encoding="utf-8")
+
+
+def test_memory_service_create_card_sanitizes_traversal_scope(tmp_path):
+    vault = tmp_path / "Vault"
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+
+    result = service.create_card(
+        {
+            "scope": "../../../Outside",
+            "title": "Traversal",
+            "summary": "Should stay in memories.",
+        }
+    )
+
+    memory_root = (vault / "Agent" / "Memories").resolve()
+    path = (vault / result["path"]).resolve()
+    assert path.is_relative_to(memory_root)
+    assert ".." not in result["path"].split("/")
+    assert path.exists()
+
+
+def test_memory_service_create_card_does_not_overwrite_rapid_duplicates(tmp_path):
+    vault = tmp_path / "Vault"
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+
+    first = service.create_card({"scope": "shared", "title": "Duplicate", "summary": "First"})
+    second = service.create_card({"scope": "shared", "title": "Duplicate", "summary": "Second"})
+
+    first_path = vault / first["path"]
+    second_path = vault / second["path"]
+    assert first_path != second_path
+    assert first_path.exists()
+    assert second_path.exists()
+    assert "First" in first_path.read_text(encoding="utf-8")
+    assert "Second" in second_path.read_text(encoding="utf-8")
+
+
+def test_memory_service_create_card_writes_safe_frontmatter(tmp_path):
+    vault = tmp_path / "Vault"
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+
+    result = service.create_card(
+        {
+            "scope": 'shared"\nattacker: true',
+            "title": "Injected\nattacker: true",
+            "summary": "Summary",
+            "visible_to": ['VellumAgent"\nattacker: true', "MemoryAgent"],
+        }
+    )
+
+    text = (vault / result["path"]).read_text(encoding="utf-8")
+    frontmatter = text.split("---", 2)[1]
+    assert 'scope: "shared-attacker-true"' in frontmatter
+    assert 'visible_to: ["VellumAgent\\"\\nattacker: true", "MemoryAgent"]' in frontmatter
+    assert "\nattacker: true\n" not in frontmatter

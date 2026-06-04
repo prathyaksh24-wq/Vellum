@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -137,25 +138,29 @@ class MemoryCapabilityService:
         return {"action": "memory.detect_conflicts", "conflicts": conflicts}
 
     def create_card(self, payload: dict[str, Any]) -> dict[str, str]:
-        scope = str(payload.get("scope") or "shared").strip() or "shared"
+        raw_scope = str(payload.get("scope") or "shared").strip() or "shared"
+        scope_parts = _scope_path_parts(raw_scope)
+        scope = "/".join(part.lower() for part in scope_parts)
         title = str(payload.get("title") or payload.get("claim") or "Memory").strip() or "Memory"
         summary = str(payload.get("summary") or payload.get("claim") or "").strip()
         evidence = str(payload.get("evidence") or "").strip()
-        visible_to = payload.get("visible_to") or []
+        visible_to = _normalize_visible_to(payload.get("visible_to"))
         now = datetime.now(timezone.utc)
         created = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        stamp = now.strftime("%Y%m%d-%H%M%S")
-        directory = self.vault_root / "Agent" / "Memories" / scope.title()
+        stamp = now.strftime("%Y%m%d-%H%M%S-%f")
+        memory_root = (self.vault_root / "Agent" / "Memories").resolve()
+        directory = memory_root.joinpath(*(_scope_folder_name(part) for part in scope_parts)).resolve()
+        if not directory.is_relative_to(memory_root):
+            raise ValueError("Memory scope resolved outside the memories vault")
         directory.mkdir(parents=True, exist_ok=True)
-        path = directory / f"{stamp}-{_slug(title)}.md"
 
         text = "\n".join(
             [
                 "---",
                 "type: memory",
-                f"scope: {scope}",
-                f"created: {created}",
-                f"visible_to: {_format_visible_to(visible_to)}",
+                f"scope: {_yaml_json(scope)}",
+                f"created: {_yaml_json(created)}",
+                f"visible_to: {_yaml_json(visible_to)}",
                 "---",
                 "",
                 f"# {title}",
@@ -168,8 +173,8 @@ class MemoryCapabilityService:
                 "",
             ]
         )
-        path.write_text(text, encoding="utf-8", newline="\n")
-        return {"action": "memory.create_card", "path": path.relative_to(self.vault_root).as_posix()}
+        path = _write_new_card(directory, stamp, _slug(title), text)
+        return {"action": "memory.create_card", "path": path.relative_to(self.vault_root.resolve()).as_posix()}
 
     def propose_card(self, payload: dict[str, Any]) -> dict[str, Any]:
         proposal = MemoryProposal(
@@ -241,12 +246,48 @@ def _positive_int(value: Any) -> int | None:
     return max(0, parsed)
 
 
-def _format_visible_to(value: Any) -> str:
-    if not isinstance(value, list):
-        return "[]"
-    return "[" + ", ".join(str(item) for item in value) + "]"
-
-
 def _slug(text: str) -> str:
     slug = "-".join(re.findall(r"[A-Za-z0-9]+", text.lower()))
     return slug or "memory"
+
+
+def _scope_path_parts(scope: str) -> list[str]:
+    parts = []
+    for raw_part in re.split(r"[\\/]+", scope):
+        stripped = raw_part.strip()
+        if stripped in {"", ".", ".."}:
+            continue
+        part = _slug(stripped)
+        if part not in {".", ".."}:
+            parts.append(part)
+    return parts or ["shared"]
+
+
+def _scope_folder_name(part: str) -> str:
+    if part == "shared":
+        return "Shared"
+    return part.title()
+
+
+def _normalize_visible_to(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
+
+
+def _yaml_json(value: str | list[str]) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _write_new_card(directory: Path, stamp: str, slug: str, text: str) -> Path:
+    counter = 1
+    while True:
+        suffix = "" if counter == 1 else f"-{counter}"
+        path = directory / f"{stamp}-{slug}{suffix}.md"
+        try:
+            with path.open("x", encoding="utf-8", newline="\n") as handle:
+                handle.write(text)
+            return path
+        except FileExistsError:
+            pass
+        counter += 1
