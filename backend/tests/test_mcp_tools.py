@@ -438,6 +438,33 @@ def test_github_create_repository_when_writes_allowed(monkeypatch):
     )
 
 
+def test_github_create_issue_when_writes_allowed(monkeypatch):
+    fake_session = FakeSession(tools=["create_issue"], text="created")
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(github_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(
+        github_tools.run_tool_async(
+            {
+                "action": "create_issue",
+                "owner": "me",
+                "repo": "vellum",
+                "title": "Bug",
+                "description": "Details",
+                "confirm": True,
+            }
+        )
+    )
+
+    assert result == "created"
+    assert fake_session.calls[0] == (
+        "create_issue",
+        {"owner": "me", "repo": "vellum", "title": "Bug", "body": "Details"},
+    )
+
+
 def test_github_delete_repository_requires_destructive_flag(monkeypatch):
     monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
     monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
