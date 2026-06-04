@@ -280,7 +280,7 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert memory_result is not None
     assert memory_result.agent_name == "MemoryAgent"
-    assert "does not mutate shared memory directly" in memory_result.answer
+    assert "reviewed proposal" in memory_result.answer
     assert memory_result.tools == ["memory_agent"]
 
 
@@ -447,15 +447,34 @@ def test_youtube_agent_stub_defers_full_execution(tmp_path):
     assert "full YouTube specialist execution deferred" in response.summary
 
 
-def test_memory_agent_stub_answers_without_mutating_shared_memory(tmp_path):
+def test_memory_agent_builds_context_pack_and_reviews_memory(tmp_path):
+    from agent.agents.memory_agent import MemoryAgent
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    vault = tmp_path / "Vault"
+    card_dir = vault / "Agent" / "Memories" / "Shared"
+    card_dir.mkdir(parents=True)
+    (card_dir / "style.md").write_text("User prefers concise answers.", encoding="utf-8")
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(vault_root=vault, memory_service=service)
+
+    response = agent.answer("What should you remember about my answer style?")
+
+    assert response.status == "answered"
+    assert "concise answers" in response.summary
+    assert response.memory_proposals
+
+
+def test_memory_agent_answers_through_memory_service(tmp_path):
     agent = MemoryAgent(vault_root=tmp_path)
 
     response = agent.answer("Remember my sports analysis preference")
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
+    assert agent.can_handle("build context for this thread")
     assert response.status == "answered"
-    assert "does not mutate shared memory directly" in response.summary
+    assert "reviewed proposal" in response.summary
     assert response.memory_proposals
     assert all(proposal.confidence >= 0.75 for proposal in response.memory_proposals)
 
@@ -478,3 +497,19 @@ def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
     proposals = agent.review_proposals([low_confidence, high_confidence])
 
     assert proposals == [high_confidence]
+
+
+def test_memory_agent_returns_error_when_memory_service_fails(tmp_path):
+    class FailingMemoryService:
+        def build_context_pack(self, payload):
+            raise RuntimeError("sessions database locked with user@example.com")
+
+    agent = MemoryAgent(vault_root=tmp_path, memory_service=FailingMemoryService())
+
+    response = agent.answer("Remember my preference")
+
+    assert response.status == "error"
+    assert response.summary == "MemoryAgent could not build memory context right now."
+    assert response.confidence == 0.2
+    assert "sessions database locked" in response.analysis
+    assert "user@example.com" not in response.analysis

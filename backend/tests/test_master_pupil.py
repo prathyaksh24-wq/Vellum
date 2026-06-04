@@ -15,6 +15,7 @@ def test_pupil_registry_exposes_default_pupils(tmp_path):
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= set(registry.names())
     assert registry.get("SportsAgent").can_handle("NBA update")
     assert hasattr(registry.get("XAgent"), "x_service")
+    assert hasattr(registry.get("MemoryAgent"), "memory_service")
 
 
 def test_pupil_registry_prioritizes_explicit_source_agents_over_sports(tmp_path):
