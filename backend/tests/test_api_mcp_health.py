@@ -10,11 +10,10 @@ from agent import api as api_mod
 
 @pytest.fixture
 def client(monkeypatch):
-    # Stub honcho probe to avoid a 1s timeout in tests
-    def _fake_qdrant():
-        return {"ok": True, "mode": "local", "location": "/tmp/qdrant", "collections": []}
+    def _fake_vector():
+        return {"ok": True, "mode": "embedded-chroma", "location": "/tmp/chroma", "collections": []}
 
-    monkeypatch.setattr(api_mod, "_qdrant_health", _fake_qdrant)
+    monkeypatch.setattr(api_mod, "_vector_health", _fake_vector)
     return TestClient(api_mod.app)
 
 
@@ -41,7 +40,7 @@ def test_mcp_health_each_server_has_required_keys(client: TestClient) -> None:
 
 def test_mcp_health_includes_adjacent_services(client: TestClient) -> None:
     body = client.get("/api/mcp/health").json()
-    assert "qdrant" in body
+    assert "vector" in body
     assert "honcho" in body
     assert "reachable" in body["honcho"]
     assert "base_url" in body["honcho"]
