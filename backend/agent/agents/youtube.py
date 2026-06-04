@@ -54,6 +54,8 @@ class YoutubeAgent:
         )
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
+        if phrase == "yt":
+            return re.search(r"(?<![A-Za-z0-9-])yt(?![A-Za-z0-9-])", lowered_query) is not None
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
 
     def _sanitize_error(self, exc: Exception) -> str:

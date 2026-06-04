@@ -447,6 +447,12 @@ def test_youtube_agent_stub_defers_full_execution(tmp_path):
     assert "read-only YouTube backend is not configured" in response.summary
 
 
+def test_youtube_agent_does_not_match_yt_hyphenated_tool_names(tmp_path):
+    agent = YoutubeAgent(vault_root=tmp_path)
+
+    assert not agent.can_handle("how do I fix yt-dlp on windows")
+
+
 def test_youtube_agent_returns_structured_response_when_service_fails(tmp_path):
     class FailingYoutubeService:
         def search_videos(self, payload):
