@@ -1275,7 +1275,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
 
   useEffect(()=>{ // chat-only by default; a freshly-created chat auto-opens Progress
-    if(isLanding){ setShowProg(true); setShowSub(false); }
+    if(isLanding){ setShowProg(false); setShowSub(false); }
     else if(openProgRef.current === activeChat){ setShowProg(true); setShowSub(false); openProgRef.current = null; }
     else { setShowProg(false); setShowSub(false); }
     setArchiveConfirm(null);
@@ -1949,12 +1949,6 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 </div>
               </div>
             </div>
-            {showProg && (
-              <div className="prog-empty-card">
-                <div className="prog-sec"><div className="prog-title">Outputs</div><div className="prog-empty-text">No artifacts yet</div></div>
-                <div className="prog-sec"><div className="prog-title">Sources</div><div className="prog-empty-text">No sources yet</div></div>
-              </div>
-            )}
           </Fragment>
         ) : (
           <Fragment>
