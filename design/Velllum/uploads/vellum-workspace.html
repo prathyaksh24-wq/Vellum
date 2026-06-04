@@ -1504,7 +1504,22 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(msg.type==="user") return <div key={msg.id} className="user-msg">{msg.atts && msg.atts.length>0 && <div className="att-row" style={{marginBottom:msg.text?6:0}}>{msg.atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span></div>))}</div>}{msg.text}</div>;
     if(msg.type==="assistant"){
       if(msg.thinking) return <div key={msg.id} className="working-line"><span className="glow-text">Vellum is working</span><span className="tdot"/><span className="tdot"/><span className="tdot"/></div>;
-      return <div key={msg.id} className="msg-wrap">{msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}{!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}</div>;
+      return <div key={msg.id} className="msg-wrap">
+        {msg.plan && msg.plan.length>0 && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const byId={}; (pr.tasks||[]).forEach(t=>byId[t.id]=t); return (
+          <div className="plan-block" style={{border:"1px solid #1e1e1e",borderRadius:10,padding:"8px 10px",margin:"4px 0 10px",background:"#121212"}}>
+            <div className="prog-title" style={{marginBottom:4}}>Plan</div>
+            {msg.plan.map(t=>{ const st=(byId[t.id]||{}).status||"pending"; return (
+              <div key={t.id} className="task-row">
+                {st==="done"?<IcCheckCircle size={14}/>:st==="running"||st==="review"?<IcCircleRun size={14}/>:<IcCircle size={14}/>}
+                <span className={"task-lbl"+(st==="done"?" done":"")}>{t.title}</span>
+                {(byId[t.id]&&byId[t.id].persona&&st==="running")&&<span className="sa-working" style={{marginLeft:6}}>{byId[t.id].persona.name}</span>}
+              </div>
+            ); })}
+          </div>
+        ); })()}
+        {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
+      </div>;
     }
     if(msg.type==="system") return <div key={msg.id} className="sys-line">{msg.icon==="cmd" ? <Fragment><span style={{fontSize:12,color:"#3a3a3a"}}>⬡</span><span className="sys-cmd">{msg.label}</span></Fragment> : <Fragment><div className="sys-dot"/><span>{msg.label}</span></Fragment>}</div>;
     if(msg.type==="learning") return <div key={msg.id} className="learning-inline"><div className="learning-inline-kicker">Learning event</div><div className="learning-inline-title">{msg.title}</div><div className="learning-inline-body">{msg.body}</div></div>;
