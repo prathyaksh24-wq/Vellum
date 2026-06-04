@@ -1226,6 +1226,15 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     }
     abortRef.current = null; setRunning(false);
   }
+  /* ── Coding-mode orchestration (planner → parallel subagents → reviewer → synthesis) ── */
+  const PLANNER_SYS = "You are Vellum's coding orchestrator. Decide if the user's request needs to be split into multiple independent sub-tasks for parallel sub-agents. "
+    + "Reply with ONLY a JSON object, no prose. Schema: {\"complex\": boolean, \"reason\": string, \"tasks\": [{\"title\": string, \"role\": \"worker\"|\"reviewer\"|\"analyst\"}]}. "
+    + "Set complex=false for simple asks (a question, a one-file edit, a rename). Set complex=true only for genuinely multi-step builds; then list 2-5 concrete tasks. Keep titles under 8 words.";
+  async function planTask(userText, history, signal){
+    const messages = [{role:"system", content:PLANNER_SYS}].concat(toORMessages(history).slice(1)).concat([{role:"user", content:userText}]);
+    let text=""; try{ text = await streamModel({messages, model:selModel, signal, onDelta:null}); }catch(e){ return {complex:false, reason:"", tasks:[]}; }
+    return VPROTO.parsePlan(text);
+  }
   function sendToChat(chatId, text, atts){
     const t = (text||"").trim(); if((!t && (!atts || !atts.length)) || running) return;
     const uid = nextId(), aid = nextId();
