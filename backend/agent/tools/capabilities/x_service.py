@@ -3,9 +3,10 @@ from __future__ import annotations
 import importlib.util
 import sys
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from agent.config import REPO_ROOT
+from agent.config import REPO_ROOT, get_settings
 from agent.tools.registry import (
     CapabilityAccess,
     CapabilityRecord,
@@ -33,11 +34,11 @@ class XCapabilityService:
         self,
         search_posts_backend: SearchPostsBackend | None = None,
         post_backend: PostBackend | None = None,
-        allow_posts: bool = False,
+        allow_posts: bool | None = None,
     ) -> None:
         self.search_posts_backend = search_posts_backend or self._default_search_posts
         self.post_backend = post_backend or self._default_post
-        self.allow_posts = allow_posts
+        self.allow_posts = get_settings().x_tool_allow_posts if allow_posts is None else allow_posts
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -107,7 +108,13 @@ class XCapabilityService:
     @staticmethod
     def _default_search_posts(query: str, max_results: int) -> list[dict[str, Any]]:
         client = _load_script("xai_x_search_client")
-        return client.search_x(query=query, max_items=max_results)
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        return client.search_x(
+            query=query,
+            start=now - timedelta(days=7),
+            end=now,
+            max_items=max_results,
+        )
 
     @staticmethod
     def _default_post(text: str) -> dict[str, Any]:
