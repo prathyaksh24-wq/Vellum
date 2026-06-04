@@ -1423,7 +1423,7 @@ Run:
 python -m pytest tests/test_x_tool.py tests/test_x_drivers.py tests/test_x_api_client.py tests/test_xai_x_search_client.py tests/test_memory.py tests/test_project_context.py tests/test_memory_sessions.py -q --basetemp .pytest-tmp
 ```
 
-Expected: all selected tests pass. If `qdrant_client` is still missing in this local interpreter, do not include `tests/test_rag.py` in this command; note the missing dependency in the final report.
+Expected: all selected tests pass. Vellum now uses embedded ChromaDB for vector storage; do not add Qdrant dependencies or Qdrant-only verification.
 
 - [ ] **Step 3: Run frontend chat/source test**
 
