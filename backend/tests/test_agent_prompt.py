@@ -53,12 +53,22 @@ def test_agent_prompt_documents_native_desktop_routing():
     assert "target window IDs" in prompt
     assert "accessibility element indexes" in prompt
     assert "blue edge-glow/status-pill Esc overlay" in prompt
-    assert "Legacy desktop compatibility actions remain available" in prompt
+    assert "action='open_app'" in prompt
+    assert "action='launch_app'" in prompt
+    assert "Installed-app, visible-terminal, and OS tab/window switching desktop actions were removed" not in prompt
 
 
 def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():
     assert "youtube.com/results?search_query=" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "Do not stop after opening Chrome" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
+def test_agent_prompt_documents_computer_use_routing_policy():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "computer_use_route" in prompt
+    assert "browser first, workspace second, desktop last" in prompt
+    assert "CUA driver and cloud VM control are coming soon" in prompt
 
 
 def test_agent_prompt_checks_permissions_before_asking_again():
@@ -80,8 +90,30 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     agent_graph.build_agent()
 
     assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
+
+
+def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
+    captured = {}
+
+    def fake_create_react_agent(**kwargs):
+        captured["tools"] = kwargs["tools"]
+        return object()
+
+    async def fake_checkpointer():
+        return object()
+
+    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_async_checkpointer", fake_checkpointer)
+
+    import asyncio
+
+    asyncio.run(agent_graph.build_async_agent())
+
+    assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
 
 
 def test_prompt_describes_main_agent_as_router_with_specialists():

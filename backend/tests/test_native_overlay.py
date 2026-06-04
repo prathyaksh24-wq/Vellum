@@ -109,3 +109,15 @@ def test_native_overlay_stale_watcher_does_not_fire_after_restart(tmp_path):
     controller._watch_for_interrupt(stale_stop_event, stale_process, Path(stale_sentinel), stale_generation)
 
     assert callbacks == []
+
+
+def test_native_overlay_status_reports_smooth_single_edge_glow_design():
+    from agent.computer_use.native_windows.overlay import NativeWindowsOverlayController
+
+    status = NativeWindowsOverlayController().status()
+
+    assert status["design"] == "smooth_single_edge_glow_status_pill"
+    assert status["edge_glow"] is True
+    assert status["status_pill"] is True
+    assert status["pill_offset_y"] == 32
+    assert status["edge_glow_style"] == "smooth-single"

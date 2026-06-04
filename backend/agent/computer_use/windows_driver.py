@@ -48,6 +48,8 @@ class WindowsComputerDriver:
             )
         if normalized == "activate_window":
             return self._to_dict(self.native_driver.activate_window(clean_params["window_id"]))
+        if normalized in {"open_app", "launch_app"}:
+            return self._to_dict(self.native_driver.open_app(**self._open_app_params(clean_params)))
         if normalized in {"click", "double_click", "right_click"}:
             return self._to_dict(
                 self.native_driver.click(**self._click_params(normalized, clean_params))
@@ -81,6 +83,12 @@ class WindowsComputerDriver:
         if action == "screenshot":
             observe_params["include_screenshot"] = True
         return observe_params
+
+    def _open_app_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        if "app" not in params and "target" in params:
+            params = {**params, "app": params["target"]}
+            params.pop("target", None)
+        return params
 
     def _type_params(self, params: dict[str, Any]) -> dict[str, Any]:
         if "text" not in params and "value" in params:

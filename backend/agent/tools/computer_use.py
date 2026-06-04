@@ -21,11 +21,14 @@ NATIVE_DESKTOP_ACTIONS = {
     "drag",
     "hotkey",
     "keypress",
+    "launch_app",
     "list_apps",
     "list_windows",
     "observe",
+    "open_app",
     "press_key",
     "right_click",
+    "screenshot",
     "scroll",
     "type",
     "type_text",
@@ -37,6 +40,8 @@ NATIVE_MUTATING_DESKTOP_ACTIONS = {
     "double_click",
     "drag",
     "keypress",
+    "launch_app",
+    "open_app",
     "press_key",
     "right_click",
     "scroll",
@@ -45,6 +50,8 @@ NATIVE_MUTATING_DESKTOP_ACTIONS = {
 }
 
 desktop_driver = WindowsComputerDriver()
+
+REMOVED_DESKTOP_ACTION_MESSAGE = desktop_tools.NATIVE_DRIVER_MESSAGE
 
 
 def _put(params: dict[str, Any], key: str, value: Any) -> None:
@@ -107,6 +114,9 @@ def _desktop_params(
         _put(params, "button", button)
     if action == "scroll":
         params["amount"] = amount
+        if x or y:
+            params["x"] = x
+            params["y"] = y
     if action in {"type", "type_text"}:
         params["text"] = text
         if interval:
@@ -120,7 +130,7 @@ def _desktop_params(
     if action in {"open_terminal", "run_terminal_command"}:
         _put(params, "command", command or text)
         _put(params, "shell", shell)
-    if action in {"open_app", "close_app"}:
+    if action in {"open_app", "launch_app", "close_app"}:
         _put(params, "app", app or target or text)
     if action in {"switch_app", "switch_browser_tab"}:
         _put(params, "direction", tab_action or target or text)
@@ -225,11 +235,28 @@ def _desktop_safety_block(action: str) -> str | None:
     if _is_mutating_desktop_action(action) and not desktop_tools._desktop_allowed():
         return f"Desktop action '{action}' requires COMPUTER_USE_ALLOW_DESKTOP=true."
     required_permission = desktop_tools.CONTROL_PERMISSIONS.get(action)
+    if action == "launch_app":
+        required_permission = "open_apps"
     if required_permission is None and action in NATIVE_MUTATING_DESKTOP_ACTIONS:
         required_permission = "desktop_control"
     if required_permission and not desktop_tools._runtime_permission_granted(required_permission):
         return desktop_tools._permission_required(required_permission)
     return None
+
+
+def _desktop_permission_result(action: str, params: dict[str, Any]) -> str | None:
+    if action == "permissions":
+        return desktop_tools._permission_status()
+    if action != "grant_permission":
+        return None
+    try:
+        permission = desktop_tools._permission_param(params)
+    except ValueError as exc:
+        return str(exc)
+    if not desktop_tools._confirm_param(params):
+        return desktop_tools._permission_required(permission)
+    desktop_tools._grant_runtime_permission(permission)
+    return f"Computer use permission granted: {permission}."
 
 
 def _public_result(result: Any) -> Any:
@@ -326,6 +353,23 @@ def computer_use(
             tool="computer_use",
             data={"mode": "desktop", "action": desktop_action, "params": _public_params(params)},
         )
+        permission_result = _desktop_permission_result(desktop_action, params)
+        if permission_result is not None:
+            computer_use_runtime.record_event(
+                "tool_result",
+                f"computer_use desktop {desktop_action} finished.",
+                tool="computer_use",
+                data={"mode": "desktop", "action": desktop_action, "result": permission_result},
+            )
+            return permission_result
+        if desktop_action not in NATIVE_DESKTOP_ACTIONS:
+            computer_use_runtime.record_event(
+                "tool_result",
+                f"computer_use desktop {desktop_action} finished.",
+                tool="computer_use",
+                data={"mode": "desktop", "action": desktop_action, "result": REMOVED_DESKTOP_ACTION_MESSAGE},
+            )
+            return REMOVED_DESKTOP_ACTION_MESSAGE
         if _is_mutating_desktop_action(desktop_action) and not computer_use_runtime.is_enabled():
             result = "Computer use mode is disabled. Ask the user to enable computer use before desktop control."
             computer_use_runtime.record_event(
@@ -347,15 +391,6 @@ def computer_use(
                 )
                 return result
             computer_use_input_guard.heartbeat()
-        if desktop_action not in NATIVE_DESKTOP_ACTIONS:
-            result = desktop_tools.run_desktop_action(params)
-            computer_use_runtime.record_event(
-                "tool_result",
-                f"computer_use desktop {desktop_action} finished.",
-                tool="computer_use",
-                data={"mode": "desktop", "action": desktop_action, "result": result},
-            )
-            return result
         safety_result = _desktop_safety_block(desktop_action)
         if safety_result:
             computer_use_runtime.record_event(

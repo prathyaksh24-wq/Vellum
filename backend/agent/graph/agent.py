@@ -29,6 +29,7 @@ from agent.tools.browser import (
 )
 from agent.tools.cloud_escalation import escalate_to_cloud
 from agent.tools.computer_use import computer_use
+from agent.tools.computer_use_route import computer_use_route
 from agent.tools.context_mode import context_mode
 from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
@@ -51,17 +52,18 @@ Tools:
 5. list_files - List files in a vault directory.
 6. create_note - Create a new Obsidian note.
 7. append_to_note - Append to an existing Obsidian note.
-8. computer_use - Full local computer use. mode='workspace' controls Vellum's visible workspace for browser, click, type, scroll, terminal commands, and screenshots. mode='desktop' controls the host OS screen/mouse/keyboard. Native desktop actions include action='list_windows', action='observe' with target window IDs like target='hwnd:123', and accessibility clicks with accessibility element indexes via element_index. Legacy desktop compatibility actions remain available for installed-app and visible-terminal workflows: action='open_app'/'close_app', action='close_window', action='switch_app', action='switch_browser_tab', action='close_browser_tab', action='open_terminal', and action='run_terminal_command'. Native desktop mode shows a blue edge-glow/status-pill Esc overlay while control is active. mode='browser' controls the persistent Playwright browser. Desktop input requires COMPUTER_USE_ALLOW_DESKTOP=true plus runtime permission grants.
-9. browser_navigate/browser_snapshot/browser_tabs/browser_click/browser_type/browser_press_key/browser_select_option/browser_hover/browser_wait/browser_close - Use one persistent Playwright MCP browser. Open/select tabs with browser_tabs instead of launching new browsers. Click/type require explicit config.
-10. github_read - Read/search GitHub via GitHub MCP. Write actions are blocked.
-11. github_write - Create/update GitHub resources via GitHub MCP. Requires explicit env flags.
-12. git_action - Local git status/log/branch/pull/commit/push. Writes require explicit env flag.
-13. obsidian_api - Read/search/write Obsidian through Local REST API MCP. Writes require explicit env flags.
-14. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
-15. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
-16. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
-17. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-18. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+8. computer_use - Full local computer use. mode='workspace' controls Vellum's visible workspace for browser, click, type, scroll, terminal commands, and screenshots. mode='desktop' controls the host OS screen/mouse/keyboard. Native desktop actions include action='open_app', action='launch_app', action='list_windows', action='observe' with target window IDs like target='hwnd:123', action='activate_window', action='click', action='type', action='keypress', action='scroll', action='drag', and accessibility clicks with accessibility element indexes via element_index. Native desktop mode shows a blue edge-glow/status-pill Esc overlay while control is active. mode='browser' controls the persistent Playwright browser. Desktop input requires COMPUTER_USE_ALLOW_DESKTOP=true plus runtime permission grants.
+9. computer_use_route - Non-mutating routing advice for computer-use requests. Use it when the correct surface is ambiguous; it returns browser, workspace, desktop, or coming_soon plus recommended first actions.
+10. browser_navigate/browser_snapshot/browser_tabs/browser_click/browser_type/browser_press_key/browser_select_option/browser_hover/browser_wait/browser_close - Use one persistent Playwright MCP browser. Open/select tabs with browser_tabs instead of launching new browsers. Click/type require explicit config.
+11. github_read - Read/search GitHub via GitHub MCP. Write actions are blocked.
+12. github_write - Create/update GitHub resources via GitHub MCP. Requires explicit env flags.
+13. git_action - Local git status/log/branch/pull/commit/push. Writes require explicit env flag.
+14. obsidian_api - Read/search/write Obsidian through Local REST API MCP. Writes require explicit env flags.
+15. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
+16. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
+17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
+18. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
+19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -78,12 +80,12 @@ Rules:
 - Reference sources when relevant.
 - For private folder content, paraphrase and summarize rather than quoting raw text.
 - Treat Amazon/Apify results as private and summarize without exposing raw scraped data.
-- Use computer_use only when the user asks for computer/desktop/browser automation or live visual inspection. In computer-use mode, treat the task as an observe-act loop: inspect with screenshot/snapshot first, perform one small action, then inspect again before claiming success. Prefer computer_use(mode='workspace', ...) for browser/terminal workspace tasks, mode='browser' for direct browser-only automation, and mode='desktop' only when explicit host-laptop app control is required. For native desktop work, use action='list_windows' to find target window IDs, action='observe' with target='hwnd:<id>' to inspect a specific window, and element_index for accessibility-targeted clicks when the observation provides indexes.
+- Use computer_use only when the user asks for computer/desktop/browser automation or live visual inspection. In computer-use mode, treat the task as an observe-act loop: inspect with screenshot/snapshot first, perform one small action, then inspect again before claiming success. For ambiguous automation requests, call computer_use_route first and follow this priority: browser first, workspace second, desktop last. Prefer mode='browser' or browser_* tools for website tasks, computer_use(mode='workspace', ...) for terminal/workspace tasks, and computer_use(mode='desktop', ...) only when explicit host-laptop app control is required. For native desktop work, use action='open_app' or action='launch_app' for installed host apps, action='list_windows' to find target window IDs, action='observe' with target='hwnd:<id>' to inspect a specific window, and element_index for accessibility-targeted clicks when the observation provides indexes.
 - If a desktop action returns a permission-required message, first check persisted grants with computer_use(mode='desktop', action='permissions'). Do not ask again for a permission that is already true. If it is false, ask the user plainly for that permission. Only after an explicit user grant, call computer_use(mode='desktop', action='grant_permission', permission='<permission>', confirm=True).
-- To open installed laptop apps, use computer_use(mode='desktop', action='open_app', app='<app name>') rather than typing into the current window.
-- To close installed laptop apps, use computer_use(mode='desktop', action='close_app', app='<app name>') or action='close_window' for the focused window. To switch windows, use action='switch_app' with tab_action='next' or 'previous'. To switch browser tabs in the focused browser, use action='switch_browser_tab' with tab_action='next' or 'previous'.
+- CUA driver and cloud VM control are coming soon. If computer_use_route returns mode='coming_soon', say that this mode is not active yet and use browser/workspace/native desktop only if the user asks for an available local fallback.
+- Desktop mode launches installed apps through action='open_app' or action='launch_app'. Use workspace/browser tools where possible for web and terminal tasks; use native desktop only for host app/window work.
 - For website tasks like "open Chrome, open YouTube, search KSI", prefer browser automation: use mode='browser' or browser_navigate to go directly to the target URL, then browser_snapshot/browser_type/browser_press_key. For YouTube searches, navigate directly to https://www.youtube.com/results?search_query=<query> when possible. Do not stop after opening Chrome; continue with navigation/search and verify with a snapshot.
-- For terminal work, use computer_use(mode='desktop', action='run_terminal_command', command='<command>') or action='open_terminal'. Do not type terminal commands into the current focused window unless a desktop screenshot confirms the terminal is focused; if the terminal did not open or focus cannot be verified, report that clearly and retry through open_terminal.
+- For terminal work, use computer_use(mode='workspace', action='terminal.run', command='<command>') for Vellum's visible workspace terminal. Do not type terminal commands into the current focused desktop window unless a desktop screenshot confirms the terminal is focused; if focus cannot be verified, report that clearly.
 - Desktop computer_use input actions are powerful. Never use desktop mode for purchases, banking, password managers, account settings, sending messages, deleting files, or irreversible actions.
 - Use browser tools only when the user asks for browser automation or live page inspection. Prefer browser_navigate + browser_snapshot before any interaction. Use browser_tabs(action='new') for parallel browser tasks in the same browser instance, and browser_tabs(action='select') before operating on a different tab.
 - Do not use browser tools for purchases, banking, password managers, account settings, or sending messages.
@@ -258,6 +260,7 @@ def build_agent(model: str | None = None):
             search_amazon,
             read_file,
             list_files,
+            computer_use_route,
             computer_use,
             browser_navigate,
             browser_snapshot,
@@ -296,6 +299,7 @@ async def build_async_agent(model: str | None = None):
             search_amazon,
             read_file,
             list_files,
+            computer_use_route,
             computer_use,
             browser_navigate,
             browser_snapshot,

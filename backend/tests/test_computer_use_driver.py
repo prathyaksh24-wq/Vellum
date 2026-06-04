@@ -27,6 +27,16 @@ class FakeNativeDriver:
         self.calls.append(("get_window_state", params))
         return OperatorResult("ok", self.backend, "observed", observation={"window": {"id": "hwnd:1"}})
 
+    def open_app(self, **params):
+        self.calls.append(("open_app", params))
+        return OperatorResult(
+            "ok",
+            self.backend,
+            "opened",
+            {"action": "open_app"},
+            {"window": {"id": "hwnd:99"}},
+        )
+
     def press_key(self, **params):
         self.calls.append(("press_key", params))
         return OperatorResult("ok", self.backend, "pressed", {"action": "press_key"})
@@ -177,17 +187,28 @@ def test_windows_driver_health_check_delegates_to_native_driver():
     assert result == {"ok": True, "backend": "windows_native", "message": "ready"}
 
 
-def test_windows_driver_reports_unsupported_native_actions():
-    driver = WindowsComputerDriver(native_driver=FakeNativeDriver())
+def test_windows_driver_open_app_maps_to_native_driver():
+    native_driver = FakeNativeDriver()
+    driver = WindowsComputerDriver(native_driver=native_driver)
 
     result = driver.run_action("open_app", app="notepad")
 
-    assert result == {
-        "status": "unsupported",
-        "message": "Unsupported native desktop action: open_app",
-        "data": {"action": "open_app", "app": "notepad"},
-        "backend": "windows_native",
-    }
+    assert native_driver.calls == [("open_app", {"app": "notepad"})]
+    assert result["status"] == "ok"
+    assert result["message"] == "opened"
+    assert result["observation"] == {"window": {"id": "hwnd:99"}}
+
+
+def test_windows_driver_launch_app_maps_to_native_open_app():
+    native_driver = FakeNativeDriver()
+    driver = WindowsComputerDriver(native_driver=native_driver)
+
+    result = driver.run_action("launch_app", target="brave")
+
+    assert native_driver.calls == [("open_app", {"app": "brave"})]
+    assert result["status"] == "ok"
+    assert result["message"] == "opened"
+    assert result["observation"] == {"window": {"id": "hwnd:99"}}
 
 
 def test_windows_driver_returns_structured_error_for_missing_activate_window_id():
