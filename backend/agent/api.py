@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 import json
 from pathlib import Path
 import time
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -531,6 +533,133 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+def _stream_id(prefix: str) -> str:
+    return f"{prefix}_{uuid4().hex}"
+
+
+def _stream_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _response_event(
+    event_type: str,
+    *,
+    response_id: str,
+    thread_id: str,
+    **payload: Any,
+) -> str:
+    body = {
+        "type": event_type,
+        "response_id": response_id,
+        "thread_id": thread_id,
+        "created_at": _stream_now(),
+        **payload,
+    }
+    return _sse(event_type, body)
+
+
+def _response_created(*, response_id: str, thread_id: str) -> str:
+    return _response_event(
+        "response.created",
+        response_id=response_id,
+        thread_id=thread_id,
+        response={"id": response_id, "status": "in_progress", "output": []},
+    )
+
+
+def _response_in_progress(*, response_id: str, thread_id: str) -> str:
+    return _response_event(
+        "response.in_progress",
+        response_id=response_id,
+        thread_id=thread_id,
+        response={"id": response_id, "status": "in_progress"},
+    )
+
+
+def _response_output_item_added(
+    *,
+    response_id: str,
+    thread_id: str,
+    item: dict[str, Any],
+    output_index: int = 0,
+) -> str:
+    return _response_event(
+        "response.output_item.added",
+        response_id=response_id,
+        thread_id=thread_id,
+        output_index=output_index,
+        item=item,
+    )
+
+
+def _response_output_text_delta(
+    *,
+    response_id: str,
+    thread_id: str,
+    item_id: str,
+    delta: str,
+    output_index: int = 0,
+    content_index: int = 0,
+) -> str:
+    return _response_event(
+        "response.output_text.delta",
+        response_id=response_id,
+        thread_id=thread_id,
+        item_id=item_id,
+        output_index=output_index,
+        content_index=content_index,
+        delta=delta,
+    )
+
+
+def _response_output_item_done(
+    *,
+    response_id: str,
+    thread_id: str,
+    item: dict[str, Any],
+    output_index: int = 0,
+) -> str:
+    return _response_event(
+        "response.output_item.done",
+        response_id=response_id,
+        thread_id=thread_id,
+        output_index=output_index,
+        item={**item, "status": "completed"},
+    )
+
+
+def _response_completed(
+    *,
+    response_id: str,
+    thread_id: str,
+    answer: str,
+    tools: list[str],
+    sources: list[dict[str, Any]],
+) -> str:
+    return _response_event(
+        "response.completed",
+        response_id=response_id,
+        thread_id=thread_id,
+        response={
+            "id": response_id,
+            "status": "completed",
+            "thread_id": thread_id,
+            "output_text": answer,
+            "tools": tools,
+            "sources": sources,
+        },
+    )
+
+
+def _response_error(*, response_id: str, thread_id: str, message: str) -> str:
+    return _response_event(
+        "error",
+        response_id=response_id,
+        thread_id=thread_id,
+        error={"message": message},
+    )
+
+
 from agent.tools.web import extract_web_sources
 
 _ACTIVITY_LABELS = {
@@ -619,15 +748,64 @@ async def _stream_agent_turn(
     synthesize_audio: bool = False,
     store: bool = True,
 ):
+    response_id = _stream_id("resp")
+    message_item_id = _stream_id("msg")
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     if live_result is not None and live_result.handled:
+        yield _response_created(response_id=response_id, thread_id=active_thread_id)
+        yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
         yield _sse("meta", {"thread_id": active_thread_id})
+        subagent_item = {
+            "id": _stream_id("item"),
+            "type": "subagent_call",
+            "name": live_result.agent_name,
+            "status": "in_progress",
+            "label": f"Routed to {live_result.agent_name}",
+            "detail": clean_message[:200],
+        }
+        yield _response_output_item_added(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            item=subagent_item,
+        )
         yield _sse("activity", {"label": f"Routed to {live_result.agent_name}", "detail": clean_message[:200]})
         for tool_name in live_result.tools:
+            tool_item = {
+                "id": _stream_id("item"),
+                "type": "tool_call",
+                "name": tool_name,
+                "status": "in_progress",
+                "label": f"Used {tool_name}",
+                "detail": "",
+            }
+            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=tool_item)
+            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=tool_item)
             yield _sse("tool", {"name": tool_name})
         for source_record in live_result.sources:
+            source_item = {
+                "id": _stream_id("item"),
+                "type": "source",
+                "status": "completed",
+                "source": source_record,
+            }
+            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
+            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _sse("source", source_record)
         if live_result.answer:
+            message_item = {
+                "id": message_item_id,
+                "type": "message",
+                "role": "assistant",
+                "status": "in_progress",
+            }
+            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=message_item)
+            yield _response_output_text_delta(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                item_id=message_item_id,
+                delta=live_result.answer,
+            )
+            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=message_item)
             yield _sse("token", {"text": live_result.answer})
         response = VoiceChatResponse(
             answer=live_result.answer,
@@ -643,6 +821,14 @@ async def _stream_agent_turn(
         if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
             (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
         yield _sse("final", response.model_dump_json())
+        yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=subagent_item)
+        yield _response_completed(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            answer=live_result.answer,
+            tools=live_result.tools,
+            sources=live_result.sources,
+        )
         if synthesize_audio and live_result.answer:
             async for audio_event in _synthesize_audio_event(live_result.answer):
                 yield audio_event
