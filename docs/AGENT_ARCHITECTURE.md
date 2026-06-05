@@ -83,6 +83,29 @@
 
 ## 1. Interfaces
 
+### Default Vellum Streaming Contract
+
+The active frontend surface is `design/Velllum/uploads/vellum-workspace.html`.
+The retired `frontend/ui/vellum-chat.html` is not a target for new stream work.
+
+Default Vellum reasoning mode consumes `POST /chat/stream` as
+`text/event-stream`. The stream emits OpenAI Responses-style semantic events:
+
+- `response.created`
+- `response.in_progress`
+- `response.output_item.added`
+- `response.output_text.delta`
+- `response.output_item.done`
+- `response.completed`
+- `error`
+
+During migration the backend also emits the older compatibility events `meta`,
+`activity`, `tool`, `source`, `token`, and `final`. New UI code should prefer
+Responses-style events and treat legacy events as fallback only.
+
+Coding mode is separate: its Codex-style JSON-RPC/event-bus protocol is scoped
+to the Coding assistant mode and is not the default Vellum reasoning stream.
+
 ### Web UI
 - **File:** `Vellum.html` (standalone, no build step required)
 - **Design:** Direction A — Pure Stillness (see `DESIGN.md`)
