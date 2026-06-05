@@ -178,6 +178,13 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     events = _parse_sse(chunks)
     names = [name for name, _ in events]
 
+    assert "response.created" in names
+    assert "response.in_progress" in names
+    assert "response.output_item.added" in names
+    assert "response.output_text.delta" in names
+    assert "response.output_item.done" in names
+    assert "response.completed" in names
+
     # No error event leaked.
     assert "error" not in names, f"unexpected error event in {names}"
 
@@ -211,3 +218,11 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(final_by_url) == {URL_A, URL_B}
     assert final_by_url[URL_A]["domain"] == "formula1.com"
     assert final_by_url[URL_B]["domain"] == "skysports.com"
+
+    response_final = json.loads(next(data for name, data in events if name == "response.completed"))
+    assert response_final["response"]["output_text"] == "Verstappen won the last race."
+    assert response_final["response"]["sources"][0]["domain"] in {"formula1.com", "skysports.com"}
+
+    response_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
+    assert any(item["type"] == "tool_call" and item["name"] == "web_search" for item in response_items)
+    assert any(item["type"] == "source" and item["source"]["domain"] == "formula1.com" for item in response_items)
