@@ -96,3 +96,68 @@ def test_stream_agent_turn_emits_sports_dispatch_activity_and_sources(monkeypatc
     assert source_payload["domain"] == "formula1.com"
     final = json.loads(next(data for name, data in events if name == "final"))
     assert final["answer"] == "Live sports answer"
+
+
+def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="SportsAgent",
+                answer="Live sports answer",
+                tools=["sports_agent", "web_search"],
+                sources=[
+                    {
+                        "url": "https://www.formula1.com/en/latest/article/race-report",
+                        "title": "Race report",
+                        "snippet": "Winner and podium",
+                        "domain": "formula1.com",
+                    }
+                ],
+            )
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="Who won the last F1 race?",
+            active_thread_id="thread-1",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    names = [name for name, _ in events]
+
+    assert "response.created" in names
+    assert "response.in_progress" in names
+    assert "response.output_item.added" in names
+    assert "response.output_text.delta" in names
+    assert "response.completed" in names
+
+    created = json.loads(next(data for name, data in events if name == "response.created"))
+    assert created["type"] == "response.created"
+    assert created["thread_id"] == "thread-1"
+    assert created["response"]["status"] == "in_progress"
+
+    added = [json.loads(data) for name, data in events if name == "response.output_item.added"]
+    assert any(p["item"]["type"] == "subagent_call" and p["item"]["name"] == "SportsAgent" for p in added)
+    assert any(p["item"]["type"] == "tool_call" and p["item"]["name"] == "web_search" for p in added)
+
+    delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
+    assert delta["type"] == "response.output_text.delta"
+    assert delta["delta"] == "Live sports answer"
+
+    completed = json.loads(next(data for name, data in events if name == "response.completed"))
+    assert completed["type"] == "response.completed"
+    assert completed["response"]["status"] == "completed"
+    assert completed["response"]["output_text"] == "Live sports answer"
+    assert completed["response"]["tools"] == ["sports_agent", "web_search"]
+    assert completed["response"]["sources"][0]["domain"] == "formula1.com"
