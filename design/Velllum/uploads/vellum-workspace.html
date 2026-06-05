@@ -1593,12 +1593,35 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   async function loadMemory(){
     try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
   }
+  function normalizeResponseStreamEvent(ev, payload){
+    if(!payload) return null;
+    if(ev && ev.indexOf("response.")===0) return {type:ev, payload};
+    if(ev==="error") return {type:"error", payload};
+    return null;
+  }
+  function responseItemActivity(item){
+    if(!item) return null;
+    if(item.type==="subagent_call") return {label:item.label||("Routed to "+(item.name||"subagent")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="tool_call") return {label:item.label||("Used "+(item.name||"tool")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="reasoning") return {label:item.label||"Thinking", detail:item.detail||"", itemId:item.id, status:item.status};
+    return null;
+  }
+  function mergeSourceList(list, source){
+    if(!source || !source.url) return list || [];
+    const arr = list ? list.slice() : [];
+    if(!arr.some(s=>s.url===source.url)) arr.push(source);
+    return arr;
+  }
   async function streamBackend(chatId, aid, message){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
       const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
       if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
       const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
+      let semanticSeen = false;
+      let tools = [];
+      let sources = [];
+      let activity = [];
       while(true){
         const r=await reader.read(); if(r.done) break;
         buf+=dec.decode(r.value,{stream:true});
@@ -1609,9 +1632,41 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           block.split("\n").forEach(line=>{ if(line.indexOf("event:")===0) ev=line.slice(6).trim(); else if(line.indexOf("data:")===0) data+=line.slice(5).trim(); });
           if(!data) continue;
           try{ const j=JSON.parse(data);
+            const sem = normalizeResponseStreamEvent(ev, j);
+            if(sem){
+              semanticSeen = true;
+              if(sem.type==="response.created" || sem.type==="response.in_progress"){
+                if(j.thread_id) threadRef.current[chatId]=j.thread_id;
+              } else if(sem.type==="response.output_item.added"){
+                const item = j.item || {};
+                if(item.type==="source" && item.source){
+                  sources = mergeSourceList(sources, item.source);
+                  setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,sources:sources.slice(),thinking:false}:x));
+                } else {
+                  const act = responseItemActivity(item);
+                  if(act){
+                    activity = activity.concat([act]);
+                    if(item.name && item.type==="tool_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    if(item.name && item.type==="subagent_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),tools:tools.slice(),thinking:false}:x));
+                  }
+                }
+              } else if(sem.type==="response.output_text.delta"){
+                if(j.delta){ acc+=j.delta; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); }
+              } else if(sem.type==="response.completed"){
+                const r = j.response || {};
+                if(r.thread_id) threadRef.current[chatId]=r.thread_id;
+                const fin = acc || r.output_text || "";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:r.sources||sources,tools:r.tools||tools,activity:activity,thinking:false,streaming:false}:x));
+              } else if(sem.type==="error"){
+                const msg = (j.error && (j.error.message || j.error)) || "Backend error";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"Warning: "+msg,thinking:false,streaming:false}:x));
+              }
+              continue;
+            }
             if(ev==="meta"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; }
-            else if(ev==="token"){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
-            else if(ev==="final"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; const fin=acc||j.answer||""; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:j.sources||[],tools:j.tools||[],thinking:false,streaming:false}:x)); }
+            else if(ev==="token" && !semanticSeen){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
+            else if(ev==="final" && !semanticSeen){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; const fin=acc||j.answer||""; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:j.sources||[],tools:j.tools||[],thinking:false,streaming:false}:x)); }
           }catch(e){}
         }
       }
@@ -1758,6 +1813,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           </div>
         ); })()}
         {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {msg.activity && msg.activity.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.activity.slice(0,4).map((a,i)=><span key={i} className="att-chip"><Spinner/><span className="att-name">{a.label}</span></span>)}</div>}
         {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
       </div>;
     }
