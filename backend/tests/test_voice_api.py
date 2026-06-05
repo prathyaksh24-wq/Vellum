@@ -122,11 +122,13 @@ def test_voice_turn_streams_transcript_text_final_then_audio(monkeypatch):
     assert response.status_code == 200
     events = _parse_sse(body)
     names = [event for event, _payload in events]
-    assert names[:2] == ["transcript", "meta"]
+    assert names[0] == "transcript"
+    assert names.index("response.created") < names.index("meta")
     assert "token" in names
     assert "tool" in names
     assert "audio" in names
     assert names.index("audio") > names.index("final")
+    assert names.index("response.completed") > names.index("final")
     assert events[0][1]["text"] == "tell me about stillness"
     audio_payload = next(payload for event, payload in events if event == "audio")
     assert base64.b64decode(audio_payload["wav_b64"]) == b"RIFFfake-wave"
@@ -235,8 +237,9 @@ def test_voice_turn_keeps_text_when_tts_fails(monkeypatch):
     events = _parse_sse(body)
     names = [event for event, _payload in events]
     assert "audio" not in names
-    assert events[-1][0] == "final"
-    assert events[-1][1]["answer"] == "Hello there."
+    final_payload = next(payload for event, payload in events if event == "final")
+    assert final_payload["answer"] == "Hello there."
+    assert events[-1][0] == "response.completed"
 
 
 def test_voice_speak_returns_wav_for_replay(monkeypatch):
