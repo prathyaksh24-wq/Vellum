@@ -69,6 +69,9 @@ button{font-family:inherit}
 .bz-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#e35d2b,#7a4cf0);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0}
 .chrome-desktop .ws-titlebar{display:flex;align-items:center;height:36px;background:#0a0a0b;padding-left:10px;border-bottom:1px solid #161618;position:relative}
 .wt-appmark{width:15px;height:15px;border-radius:4px;background:radial-gradient(circle at 35% 30%,#f6a25f,#e35d2b);margin-right:9px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.wt-navbtns{display:flex;align-items:center;gap:1px;margin-right:8px;-webkit-app-region:no-drag}
+.wt-navbtn{display:flex;align-items:center;justify-content:center;width:26px;height:24px;border-radius:6px;background:transparent;border:none;color:#7a7a7a;cursor:pointer;transition:background .12s,color .12s}
+.wt-navbtn:hover{background:#1c1c1e;color:#cfcfcf}
 .wt-menu{display:flex;align-items:center;gap:2px;margin-left:4px}
 .wt-mi{padding:3px 9px;border-radius:5px;color:#aaa;font-size:12.5px;cursor:default;transition:background .12s,color .12s}
 .wt-mi:hover{background:#1c1c1f;color:#eee}
@@ -190,6 +193,8 @@ button{font-family:inherit}
 
 /* Main */
 .main{flex:1;display:flex;overflow:hidden;min-width:0;transition:margin-left .18s cubic-bezier(.4,0,.2,1)}
+.main.desk-inset{border-top-left-radius:22px;border-top:1px solid #202022;border-left:1px solid #202022}
+.main.desk-inset .chat-pane{border-top-left-radius:22px}
 .proj-picker{position:absolute;top:34px;left:24px;min-width:248px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:11px;padding:4px;box-shadow:0 16px 50px rgba(0,0,0,.75);z-index:300}
 .pp-search{display:flex;align-items:center;gap:8px;padding:7px 10px 9px;color:#666;border-bottom:1px solid #232326;margin-bottom:4px}
 .pp-search input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12.5px;font-family:'Geist',sans-serif}
@@ -532,6 +537,7 @@ const IcSend     = ({size=16}) => <I size={size} d="M22 2L11 13M22 2l-7 20-4-9-9
 const IcStop     = ({size=16}) => <I size={size} fill="currentColor" stroke="none"><rect x="5" y="5" width="14" height="14" rx="2"/></I>;
 const IcSidebar  = ({size=16}) => <I size={size} d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 3v18"/>;
 const IcLayout   = ({size=16}) => <I size={size} d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM3 9h18"/>;
+const IcTasks    = ({size=16}) => <I size={size}><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></I>;
 const IcColumns  = ({size=16}) => <I size={size} d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM15 3v18"/>;
 const IcPin      = ({size=16}) => <I size={size} d="M12 2l2.5 5.5L21 9l-5 4.5 1.5 6.5L12 17l-5.5 3 1.5-6.5L3 9l6.5-1.5L12 2z"/>;
 const IcEdit     = ({size=16}) => <I size={size} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
@@ -940,6 +946,11 @@ function ChromeDesktop({ children, maximized, onMax, title, shell, onShell }){
     <div className="chrome chrome-desktop">
       <div className="ws-titlebar drag-region">
         <span className="wt-appmark"/>
+        <div className="wt-navbtns">
+          <button className="wt-navbtn" title="Toggle sidebar" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"sidebar"}))}><IcSidebar size={15}/></button>
+          <button className="wt-navbtn" title="Back" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"navback"}))}><IcChevL size={16}/></button>
+          <button className="wt-navbtn" title="Forward" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"navfwd"}))}><IcChevR size={16}/></button>
+        </div>
         <MenuBar/>
         <div className="wt-title">{title}</div>
         <div className="wt-right"><ShellToggle shell={shell} onShell={onShell}/><WinControls maximized={maximized} onMax={onMax}/></div>
@@ -1317,10 +1328,23 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       else if(act==="browser") addTab("browser");
       else if(act==="files") addTab("files");
       else if(act==="side") addSideChat();
+      else if(act==="navback") navBack();
+      else if(act==="navfwd") navFwd();
     };
     window.addEventListener("vellum-menu", h);
     return ()=> window.removeEventListener("vellum-menu", h);
   },[onToggleMax]);
+
+  /* lightweight chat back/forward history (desktop titlebar nav) */
+  const navRef = useRef({stack:[], idx:-1, suppress:false});
+  useEffect(()=>{
+    const n = navRef.current;
+    if(n.suppress){ n.suppress=false; return; }
+    n.stack = n.stack.slice(0, n.idx+1);
+    if(n.stack[n.idx] !== activeChat){ n.stack.push(activeChat); n.idx = n.stack.length-1; }
+  }, [activeChat]);
+  function navBack(){ const n=navRef.current; if(n.idx>0){ n.idx--; n.suppress=true; setActiveChat(n.stack[n.idx]); } }
+  function navFwd(){ const n=navRef.current; if(n.idx<n.stack.length-1){ n.idx++; n.suppress=true; setActiveChat(n.stack[n.idx]); } }
 
   useEffect(()=>{
     const h = (e)=>{
@@ -1569,12 +1593,35 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   async function loadMemory(){
     try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
   }
+  function normalizeResponseStreamEvent(ev, payload){
+    if(!payload) return null;
+    if(ev && ev.indexOf("response.")===0) return {type:ev, payload};
+    if(ev==="error") return {type:"error", payload};
+    return null;
+  }
+  function responseItemActivity(item){
+    if(!item) return null;
+    if(item.type==="subagent_call") return {label:item.label||("Routed to "+(item.name||"subagent")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="tool_call") return {label:item.label||("Used "+(item.name||"tool")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="reasoning") return {label:item.label||"Thinking", detail:item.detail||"", itemId:item.id, status:item.status};
+    return null;
+  }
+  function mergeSourceList(list, source){
+    if(!source || !source.url) return list || [];
+    const arr = list ? list.slice() : [];
+    if(!arr.some(s=>s.url===source.url)) arr.push(source);
+    return arr;
+  }
   async function streamBackend(chatId, aid, message){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
       const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
       if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
       const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
+      let semanticSeen = false;
+      let tools = [];
+      let sources = [];
+      let activity = [];
       while(true){
         const r=await reader.read(); if(r.done) break;
         buf+=dec.decode(r.value,{stream:true});
@@ -1585,9 +1632,41 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           block.split("\n").forEach(line=>{ if(line.indexOf("event:")===0) ev=line.slice(6).trim(); else if(line.indexOf("data:")===0) data+=line.slice(5).trim(); });
           if(!data) continue;
           try{ const j=JSON.parse(data);
+            const sem = normalizeResponseStreamEvent(ev, j);
+            if(sem){
+              semanticSeen = true;
+              if(sem.type==="response.created" || sem.type==="response.in_progress"){
+                if(j.thread_id) threadRef.current[chatId]=j.thread_id;
+              } else if(sem.type==="response.output_item.added"){
+                const item = j.item || {};
+                if(item.type==="source" && item.source){
+                  sources = mergeSourceList(sources, item.source);
+                  setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,sources:sources.slice(),thinking:false}:x));
+                } else {
+                  const act = responseItemActivity(item);
+                  if(act){
+                    activity = activity.concat([act]);
+                    if(item.name && item.type==="tool_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    if(item.name && item.type==="subagent_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),tools:tools.slice(),thinking:false}:x));
+                  }
+                }
+              } else if(sem.type==="response.output_text.delta"){
+                if(j.delta){ acc+=j.delta; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); }
+              } else if(sem.type==="response.completed"){
+                const r = j.response || {};
+                if(r.thread_id) threadRef.current[chatId]=r.thread_id;
+                const fin = acc || r.output_text || "";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:r.sources||sources,tools:r.tools||tools,activity:activity,thinking:false,streaming:false}:x));
+              } else if(sem.type==="error"){
+                const msg = (j.error && (j.error.message || j.error)) || "Backend error";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"Warning: "+msg,thinking:false,streaming:false}:x));
+              }
+              continue;
+            }
             if(ev==="meta"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; }
-            else if(ev==="token"){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
-            else if(ev==="final"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; const fin=acc||j.answer||""; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:j.sources||[],tools:j.tools||[],thinking:false,streaming:false}:x)); }
+            else if(ev==="token" && !semanticSeen){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
+            else if(ev==="final" && !semanticSeen){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; const fin=acc||j.answer||""; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:j.sources||[],tools:j.tools||[],thinking:false,streaming:false}:x)); }
           }catch(e){}
         }
       }
@@ -1734,6 +1813,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           </div>
         ); })()}
         {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {msg.activity && msg.activity.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.activity.slice(0,4).map((a,i)=><span key={i} className="att-chip"><Spinner/><span className="att-name">{a.label}</span></span>)}</div>}
         {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
       </div>;
     }
@@ -1915,13 +1995,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       </div>
 
       {/* Main */}
-      <div className="main" style={sbPinned?{marginLeft:272}:undefined}>
+      <div className={"main"+(shell==="desktop"&&sbPinned?" desk-inset":"")} style={sbPinned?{marginLeft:272}:undefined}>
         <div className="chat-pane">
         {isLanding ? (
           <Fragment>
             <div className="topbar">
-              <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>setSbPinned(v=>!v)} title="Pin sidebar"><IcSidebar size={16}/></button>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><div className="gh-btn"><IcGitHub size={15}/><IcChevD size={12}/></div><button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
+              <div/>
+              <div style={{display:"flex",alignItems:"center",gap:6}}><div className="gh-btn"><IcGitHub size={15}/><IcChevD size={12}/></div><button className={"icon-btn"+(showSub?" on":"")} title="Toggle side panel" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
             </div>
             <div className="landing">
               <div><div className="landing-title">{apObj ? ("What should we build in "+apObj.name+"?") : "What should we work on?"}</div></div>
@@ -1960,7 +2040,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 </div>
                 <div className="tb-right">
                   <div className="mode-switch compact">{MODES.map(m=>(<button key={m.id} className={"mode-chip"+(activeMode===m.id?" active":"")} onClick={()=>setActiveMode(m.id)}>{m.label}</button>))}</div>
-                  <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcLayout size={15}/></button>
+                  <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcTasks size={15}/></button>
                   <button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={15}/></button>
                 </div>
               </div>

@@ -185,6 +185,25 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert "response.output_item.done" in names
     assert "response.completed" in names
 
+    response_created = json.loads(next(data for name, data in events if name == "response.created"))
+    assert response_created["type"] == "response.created"
+    assert response_created["thread_id"] == "t-test"
+    assert response_created["response"]["status"] == "in_progress"
+
+    response_in_progress = json.loads(next(data for name, data in events if name == "response.in_progress"))
+    assert response_in_progress["type"] == "response.in_progress"
+    assert response_in_progress["thread_id"] == "t-test"
+    assert response_in_progress["response"]["status"] == "in_progress"
+
+    response_delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
+    assert response_delta["type"] == "response.output_text.delta"
+    assert response_delta["delta"] == "Verstappen won the last race."
+
+    response_done_items = [
+        json.loads(data)["item"] for name, data in events if name == "response.output_item.done"
+    ]
+    assert any(item["status"] == "completed" for item in response_done_items)
+
     # No error event leaked.
     assert "error" not in names, f"unexpected error event in {names}"
 
@@ -221,8 +240,16 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
 
     response_final = json.loads(next(data for name, data in events if name == "response.completed"))
     assert response_final["response"]["output_text"] == "Verstappen won the last race."
-    assert response_final["response"]["sources"][0]["domain"] in {"formula1.com", "skysports.com"}
+    response_sources = response_final["response"]["sources"]
+    response_by_url = {s["url"]: s for s in response_sources}
+    assert set(response_by_url) == {URL_A, URL_B}
+    assert response_by_url[URL_A]["domain"] == "formula1.com"
+    assert response_by_url[URL_B]["domain"] == "skysports.com"
 
     response_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
     assert any(item["type"] == "tool_call" and item["name"] == "web_search" for item in response_items)
-    assert any(item["type"] == "source" and item["source"]["domain"] == "formula1.com" for item in response_items)
+    response_source_items = [item for item in response_items if item["type"] == "source"]
+    response_source_by_url = {item["source"]["url"]: item["source"] for item in response_source_items}
+    assert set(response_source_by_url) == {URL_A, URL_B}
+    assert response_source_by_url[URL_A]["domain"] == "formula1.com"
+    assert response_source_by_url[URL_B]["domain"] == "skysports.com"
