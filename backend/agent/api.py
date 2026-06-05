@@ -835,11 +835,21 @@ async def _stream_agent_turn(
         return
 
     async with _agent_runtime_lock:
+        yield _response_created(response_id=response_id, thread_id=active_thread_id)
+        yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
         yield _sse("meta", {"thread_id": active_thread_id})
         answer_parts: list[str] = []
         tool_names: list[str] = []
         sources: list[dict] = []
         seen_urls: set[str] = set()
+        active_tool_items: dict[str, dict[str, Any]] = {}
+        message_item = {
+            "id": message_item_id,
+            "type": "message",
+            "role": "assistant",
+            "status": "in_progress",
+        }
+        message_item_started = False
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
@@ -865,13 +875,40 @@ async def _stream_agent_turn(
                     text = _chunk_text(event.get("data", {}).get("chunk"))
                     if text:
                         answer_parts.append(text)
+                        if not message_item_started:
+                            yield _response_output_item_added(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                item=message_item,
+                            )
+                            message_item_started = True
+                        yield _response_output_text_delta(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            item_id=message_item_id,
+                            delta=text,
+                        )
                         yield _sse("token", {"text": text})
                 elif kind == "on_tool_start":
                     name = event.get("name") or ""
                     if name:
                         tool_names.append(str(name))
-                        yield _sse("tool", {"name": name})
                         label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
+                        item = {
+                            "id": _stream_id("item"),
+                            "type": "tool_call",
+                            "name": str(name),
+                            "status": "in_progress",
+                            "label": label,
+                            "detail": detail,
+                        }
+                        active_tool_items[str(name)] = item
+                        yield _response_output_item_added(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            item=item,
+                        )
+                        yield _sse("tool", {"name": name})
                         yield _sse("activity", {"label": label, "detail": detail})
                 elif kind == "on_tool_end":
                     if (event.get("name") or "") == "web_search":
@@ -882,7 +919,22 @@ async def _stream_agent_turn(
                             seen_urls.add(record["url"])
                             record = {**record, "fetched_at": _now_iso()}
                             sources.append(record)
+                            source_item = {
+                                "id": _stream_id("item"),
+                                "type": "source",
+                                "status": "completed",
+                                "source": record,
+                            }
+                            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
+                            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _sse("source", record)
+                    done_item = active_tool_items.pop(str(event.get("name") or ""), None)
+                    if done_item:
+                        yield _response_output_item_done(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            item=done_item,
+                        )
                 capture_from_stream_event(
                     ledger=_api_ledger,
                     event=event,
@@ -899,6 +951,19 @@ async def _stream_agent_turn(
             if answer and "blocked for privacy" not in answer.casefold():
                 (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
             yield _sse("final", response.model_dump_json())
+            if message_item_started:
+                yield _response_output_item_done(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    item=message_item,
+                )
+            yield _response_completed(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                answer=answer,
+                tools=tool_names,
+                sources=sources,
+            )
             if synthesize_audio and answer != "No response.":
                 async for audio_event in _synthesize_audio_event(answer):
                     yield audio_event
@@ -907,6 +972,7 @@ async def _stream_agent_turn(
             raise
         except Exception as exc:
             await _repair_incomplete_tool_history(active_thread_id)
+            yield _response_error(response_id=response_id, thread_id=active_thread_id, message=str(exc))
             yield _sse("error", {"error": str(exc)})
 
 
