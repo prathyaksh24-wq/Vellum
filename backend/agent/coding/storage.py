@@ -121,6 +121,12 @@ class CodingSessionStore:
             row = conn.execute("SELECT * FROM coding_sessions WHERE id = ?", (session_id,)).fetchone()
         return self._session_from_row(row) if row else None
 
+    def delete_session(self, session_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM coding_events WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM coding_turns WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM coding_sessions WHERE id = ?", (session_id,))
+
     def list_sessions(self) -> list[CodingSession]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM coding_sessions ORDER BY updated_at DESC, rowid DESC").fetchall()
@@ -172,6 +178,16 @@ class CodingSessionStore:
 
     def complete_turn(self, turn_id: str, final_response: str = "", error: str = "") -> CodingTurn:
         status = "error" if error else "completed"
+        return self.finish_turn(turn_id, status=status, final_response=final_response, error=error)
+
+    def finish_turn(
+        self,
+        turn_id: str,
+        *,
+        status: str,
+        final_response: str = "",
+        error: str = "",
+    ) -> CodingTurn:
         completed_at = utc_now()
         with self._connect() as conn:
             conn.execute(
@@ -186,6 +202,31 @@ class CodingSessionStore:
         if row is None:
             raise KeyError(turn_id)
         return self._turn_from_row(row)
+
+    def get_turn(self, turn_id: str) -> CodingTurn | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM coding_turns WHERE id = ?", (turn_id,)).fetchone()
+        return self._turn_from_row(row) if row else None
+
+    def get_running_turn(self, session_id: str) -> CodingTurn | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM coding_turns
+                WHERE session_id = ? AND status = 'running'
+                ORDER BY started_at DESC, rowid DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._turn_from_row(row) if row else None
+
+    def list_running_turns(self) -> list[CodingTurn]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM coding_turns WHERE status = 'running' ORDER BY started_at ASC, rowid ASC"
+            ).fetchall()
+        return [self._turn_from_row(row) for row in rows]
 
     def record_event(
         self,
