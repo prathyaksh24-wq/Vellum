@@ -1,8 +1,6 @@
 import sys
 from types import ModuleType, SimpleNamespace
 
-from qdrant_client import QdrantClient
-
 from agent.rag.embedder import Embedder, VECTOR_SIZE
 from agent.rag.store import VectorStore
 from agent.tools import vault_search
@@ -29,6 +27,51 @@ class FakeSentenceTransformer:
         return SimpleNamespace(tolist=lambda: [float(len(text))])
 
 
+class FakeChromaCollection:
+    def __init__(self, name: str):
+        self.name = name
+        self.documents: list[str] = []
+        self.metadatas: list[dict] = []
+        self.embeddings: list[list[float]] = []
+        self.ids: list[str] = []
+
+    def upsert(self, ids, embeddings, documents, metadatas):
+        self.ids.extend(ids)
+        self.embeddings.extend(embeddings)
+        self.documents.extend(documents)
+        self.metadatas.extend(metadatas)
+
+    def query(self, query_embeddings, n_results, where=None, include=None):
+        rows = []
+        for document, metadata, embedding in zip(self.documents, self.metadatas, self.embeddings):
+            if where and any(metadata.get(key) != value for key, value in where.items()):
+                continue
+            distance = 0.0 if embedding == query_embeddings[0] else 1.0
+            rows.append((distance, document, metadata))
+        rows.sort(key=lambda row: row[0])
+        rows = rows[:n_results]
+        return {
+            "documents": [[row[1] for row in rows]],
+            "metadatas": [[row[2] for row in rows]],
+            "distances": [[row[0] for row in rows]],
+        }
+
+
+class FakeChromaClient:
+    def __init__(self, path=None, settings=None):
+        self.path = path
+        self.settings = settings
+        self.collections: dict[str, FakeChromaCollection] = {}
+
+    def get_or_create_collection(self, name, metadata=None):
+        if name not in self.collections:
+            self.collections[name] = FakeChromaCollection(name)
+        return self.collections[name]
+
+    def list_collections(self):
+        return list(self.collections.values())
+
+
 def test_embedder_lazy_loads_sentence_transformer(monkeypatch):
     fake_module = ModuleType("sentence_transformers")
     fake_module.SentenceTransformer = FakeSentenceTransformer
@@ -42,7 +85,7 @@ def test_embedder_lazy_loads_sentence_transformer(monkeypatch):
 
 
 def test_vector_store_creates_collections_and_searches_in_memory():
-    client = QdrantClient(":memory:")
+    client = FakeChromaClient()
     store = VectorStore(client=client)
     vector = [0.0] * VECTOR_SIZE
     vector[0] = 1.0
@@ -61,21 +104,23 @@ def test_vector_store_creates_collections_and_searches_in_memory():
     assert results[0]["score"] > 0
 
 
-def test_vector_store_uses_local_qdrant_path(monkeypatch, tmp_path):
+def test_vector_store_uses_embedded_chroma_path(monkeypatch, tmp_path):
     class FakeSettings:
-        qdrant_local_path = tmp_path / "qdrant-local"
-        qdrant_host = "localhost"
-        qdrant_port = 6333
+        chroma_path = tmp_path / "chroma"
 
+    fake_chromadb = ModuleType("chromadb")
+    fake_chromadb.PersistentClient = FakeChromaClient
+    fake_chromadb.EphemeralClient = FakeChromaClient
+    fake_config = ModuleType("chromadb.config")
+    fake_config.Settings = lambda **kwargs: SimpleNamespace(**kwargs)
+    monkeypatch.setitem(sys.modules, "chromadb", fake_chromadb)
+    monkeypatch.setitem(sys.modules, "chromadb.config", fake_config)
     monkeypatch.setattr("agent.rag.store.get_settings", lambda: FakeSettings())
 
     store = VectorStore()
 
-    assert FakeSettings.qdrant_local_path.exists()
-    assert {"obsidian_vault", "agent_queries"} <= {
-        collection.name for collection in store.client.get_collections().collections
-    }
-    store.client.close()
+    assert FakeSettings.chroma_path.exists()
+    assert {"obsidian_vault", "agent_queries"} <= set(store.collection_names())
 
 
 def test_vault_search_uses_vector_backend_and_filters_private_chunks(monkeypatch):
@@ -98,8 +143,8 @@ def test_vault_search_uses_vector_backend_and_filters_private_chunks(monkeypatch
                 },
             ]
 
-    monkeypatch.setattr(vault_search, "Embedder", FakeEmbedder)
-    monkeypatch.setattr(vault_search, "VectorStore", FakeStore)
+    monkeypatch.setattr(vault_search, "get_embedder", lambda: FakeEmbedder())
+    monkeypatch.setattr(vault_search, "get_vector_store", lambda: FakeStore())
     monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
     monkeypatch.setattr(
@@ -136,7 +181,7 @@ def test_vault_search_falls_back_to_vault_when_vector_backend_unavailable(monkey
                 }
             ]
 
-    monkeypatch.setattr(vault_search, "Embedder", BrokenEmbedder)
+    monkeypatch.setattr(vault_search, "get_embedder", lambda: BrokenEmbedder())
     monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
     monkeypatch.setattr(vault_search, "_settings", lambda: type("Settings", (FakeSettings,), {"enable_vector_search": True})())
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
@@ -172,7 +217,7 @@ def test_vault_search_default_path_does_not_require_vector_backend(monkeypatch):
             ]
 
     monkeypatch.setattr(vault_search, "_settings", lambda: FakeSettings())
-    monkeypatch.setattr(vault_search, "Embedder", ExplodingEmbedder)
+    monkeypatch.setattr(vault_search, "get_embedder", lambda: ExplodingEmbedder())
     monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
     monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
 

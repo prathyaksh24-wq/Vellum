@@ -44,8 +44,8 @@ def _parse_sse(text):
     return events
 
 
-def test_health_endpoint_reports_service_and_qdrant(monkeypatch):
-    monkeypatch.setattr(api, "_qdrant_health", lambda: {"ok": True, "collections": ["obsidian_vault"]})
+def test_health_endpoint_reports_service_and_vector(monkeypatch):
+    monkeypatch.setattr(api, "_vector_health", lambda: {"ok": True, "collections": ["obsidian_vault"]})
     monkeypatch.setattr(api, "_embedding_health", lambda: {"ok": True, "provider": "sentence-transformers"})
 
     with TestClient(api.app) as client:
@@ -54,7 +54,7 @@ def test_health_endpoint_reports_service_and_qdrant(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["service"] == "personal-agent-api"
-    assert body["qdrant"]["ok"] is True
+    assert body["vector"]["ok"] is True
     assert body["embeddings"]["ok"] is True
     assert body["models"]["primary"]
 

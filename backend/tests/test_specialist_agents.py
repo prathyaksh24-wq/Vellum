@@ -275,12 +275,12 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert youtube_result is not None
     assert youtube_result.agent_name == "YoutubeAgent"
-    assert "full YouTube specialist execution deferred" in youtube_result.answer
+    assert "read-only YouTube backend is not configured" in youtube_result.answer
     assert youtube_result.tools == ["youtube_agent"]
 
     assert memory_result is not None
     assert memory_result.agent_name == "MemoryAgent"
-    assert "does not mutate shared memory directly" in memory_result.answer
+    assert "reviewed proposal" in memory_result.answer
     assert memory_result.tools == ["memory_agent"]
 
 
@@ -444,20 +444,72 @@ def test_youtube_agent_stub_defers_full_execution(tmp_path):
     assert agent.name == "YoutubeAgent"
     assert agent.can_handle("youtube channel transcript")
     assert response.status == "needs_fetch"
-    assert "full YouTube specialist execution deferred" in response.summary
+    assert "read-only YouTube backend is not configured" in response.summary
 
 
-def test_memory_agent_stub_answers_without_mutating_shared_memory(tmp_path):
+def test_youtube_agent_does_not_match_yt_hyphenated_tool_names(tmp_path):
+    agent = YoutubeAgent(vault_root=tmp_path)
+
+    assert not agent.can_handle("how do I fix yt-dlp on windows")
+
+
+def test_youtube_agent_returns_structured_response_when_service_fails(tmp_path):
+    class FailingYoutubeService:
+        def search_videos(self, payload):
+            raise RuntimeError("youtube API key leaked-user-token-123456789012345678901234567890")
+
+    agent = YoutubeAgent(vault_root=tmp_path, youtube_service=FailingYoutubeService())
+
+    response = agent.answer("Summarize the latest YouTube videos")
+
+    assert response.agent == "YoutubeAgent"
+    assert response.status == "error"
+    assert response.summary == "YoutubeAgent could not fetch YouTube data right now."
+    assert response.confidence == 0.2
+    assert "YouTube search failed" in response.analysis
+    assert "leaked-user-token" not in response.analysis
+
+
+def test_memory_agent_builds_context_pack_and_reviews_memory(tmp_path):
+    from agent.agents.memory_agent import MemoryAgent
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    vault = tmp_path / "Vault"
+    card_dir = vault / "Agent" / "Memories" / "Shared"
+    card_dir.mkdir(parents=True)
+    (card_dir / "style.md").write_text("User prefers concise answers.", encoding="utf-8")
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(vault_root=vault, memory_service=service)
+
+    response = agent.answer("What should you remember about my answer style?")
+
+    assert response.status == "answered"
+    assert "concise answers" in response.summary
+    assert response.memory_proposals
+
+
+def test_memory_agent_answers_through_memory_service(tmp_path):
     agent = MemoryAgent(vault_root=tmp_path)
 
     response = agent.answer("Remember my sports analysis preference")
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
+    assert agent.can_handle("build memory context for this thread")
+    assert not agent.can_handle("build context for this Python error")
     assert response.status == "answered"
-    assert "does not mutate shared memory directly" in response.summary
+    assert "reviewed proposal" in response.summary
     assert response.memory_proposals
     assert all(proposal.confidence >= 0.75 for proposal in response.memory_proposals)
+    assert response.memory_proposals[0].claim == "User's sports analysis preference."
+
+
+def test_memory_agent_proposes_user_specific_memory_claim(tmp_path):
+    agent = MemoryAgent(vault_root=tmp_path)
+
+    response = agent.answer("Remember that I prefer concise sports analysis")
+
+    assert response.memory_proposals[0].claim == "User prefers concise sports analysis."
 
 
 def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
@@ -478,3 +530,19 @@ def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
     proposals = agent.review_proposals([low_confidence, high_confidence])
 
     assert proposals == [high_confidence]
+
+
+def test_memory_agent_returns_error_when_memory_service_fails(tmp_path):
+    class FailingMemoryService:
+        def build_context_pack(self, payload):
+            raise RuntimeError("sessions database locked with user@example.com")
+
+    agent = MemoryAgent(vault_root=tmp_path, memory_service=FailingMemoryService())
+
+    response = agent.answer("Remember my preference")
+
+    assert response.status == "error"
+    assert response.summary == "MemoryAgent could not build memory context right now."
+    assert response.confidence == 0.2
+    assert "sessions database locked" in response.analysis
+    assert "user@example.com" not in response.analysis

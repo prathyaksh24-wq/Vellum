@@ -1,8 +1,8 @@
 """Verify get_vector_store() returns a single shared VectorStore.
 
-Local-mode Qdrant rejects a second client on the same storage path. Before
-this fix the watcher (via VaultIngester(), which called VectorStore()
-directly) would race with the chat path's client and crash flush threads."""
+Embedded Chroma keeps an exclusive lock on its storage path. The watcher and
+chat path must share one process-wide client instead of opening competing
+clients for the same local database."""
 
 from __future__ import annotations
 

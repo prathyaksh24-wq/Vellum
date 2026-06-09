@@ -1,6 +1,6 @@
 """Verify relative paths in Settings resolve to the same absolute path
-regardless of the process CWD. Local Qdrant is keyed by storage path —
-a CWD-dependent path produces split-brain DBs."""
+regardless of the process CWD. Embedded Chroma is keyed by storage path,
+so a CWD-dependent path produces split-brain DBs."""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ def test_resolve_against_repo_absolute_stays_absolute(tmp_path: Path) -> None:
 
 
 def test_resolve_against_repo_relative_anchors_to_repo() -> None:
-    out = _resolve_against_repo(Path("data/embeddings/qdrant-local"))
-    assert out == (REPO_ROOT / "data/embeddings/qdrant-local").resolve()
+    out = _resolve_against_repo(Path("data/embeddings/chroma"))
+    assert out == (REPO_ROOT / "data/embeddings/chroma").resolve()
 
 
 def test_resolve_against_repo_is_cwd_independent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Same relative path resolves to the same absolute path from any CWD."""
-    p = Path("data/embeddings/qdrant-local")
+    p = Path("data/embeddings/chroma")
 
     monkeypatch.chdir(REPO_ROOT)
     from_root = _resolve_against_repo(p)
