@@ -188,6 +188,17 @@
 - [ ] Icon default 17; font-size bumps (body/sidebar/composer/replies/menus); padding adjustments.
 - [ ] New smoke: + menu attach-from-recents card + remove; tiny-png upload → thumb → lightbox open/Esc; GitHub Finish Setup → chip appears; Airtable toggle on/off chip. Full suite green. Commit + push. Screenshot + memory.
 
+## Addendum H tasks (10/06/2026, ninth pass — spec Addendum H)
+
+### Task 26: Whole-sidebar scroll
+- [ ] Move nav rows into `.sb-scroll` (header + profile pinned). Smoke: `.sb-scroll .sb-row` "New chat" exists. Commit + push (with Task 27/28).
+
+### Task 27: Slash menu
+- [ ] `SLASH_ITEMS` (files/run + thinking/image/web/study dim); `SlashMenu` (compact, `.slash-menu`+`.down`, no backdrop, label-filter on text after `/`); Composer: `slashDismissed` state (Esc dismisses, text change resets); file item → picker + clear text; dim items dismiss.
+
+### Task 28: App-chip rework
+- [ ] Replace per-app chips: 1 on → `⊗ Name ⌄` (⊗ = toggle off; click → picker/GitHub panel); >1 → `{n} apps ⌄` → `AppsPicker` (✓ rows toggle off; GitHub row › → `GitHubPanel` with repo search/empty state/dim config rows). Compile + full smoke (update apps check; add slash + scroll asserts). Commit + push. Screenshot + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.

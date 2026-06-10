@@ -380,6 +380,35 @@ fake runs); consistency ✓ (glass menus, sw switches reused from Settings feeds
 testability ✓ (smoke: row-toggle flows, + menu attach from recents, png thumb → lightbox,
 GitHub Finish Setup → chip, Airtable toggle).
 
+## Addendum H (10/06/2026, ninth pass) — whole-sidebar scroll, slash menu, app-chip rework
+
+### H1. Whole-sidebar scroll (reverses part of G/F behavior per user)
+The nav rows move INSIDE the scroll container: everything between the wordmark header and
+the pinned profile row scrolls as one. Header + profile stay fixed.
+
+### H2. "/" slash command
+Typing `/` in an empty composer opens a compact popup (no backdrop; filters as you type
+after the slash): **Add photos & files** (file picker, clears the slash) · **Thinking** ·
+**Create image** · **Web search** · **Study and learn** (dim preview hints; clicking
+dismisses). Esc dismisses without clearing the text; popup drops **down** on landing /
+project page, **up** in threads (same `drop` rule as other composer menus).
+
+### H3. Enabled apps → one chip + picker + GitHub repo panel
+Enabled apps no longer render as side-by-side chips:
+- exactly one enabled → `⊗ {Name} ⌄` chip (⊗ click disconnects; chip click opens the
+  picker — or the GitHub repo panel if it's GitHub);
+- two or more → `{n} apps ⌄` chip → **AppsPicker**: rows of enabled apps, non-GitHub rows
+  carry ✓ and click-to-deselect (turns the app off); the GitHub row carries › and opens the
+  **GitHub repo panel**: "Search repositories…" input, "No repositories found" (preview),
+  divider, "Configure Repositories ↗" (dim), "Not indexed or not seeing a repository?
+  Learn more" footer (dim).
+The "Apps ⌄" directory chip (toggles / Connect / Finish Setup) is unchanged.
+
+Audit deltas: intent ✓ (matches all three screenshots incl. the ⊗ GitHub chip and the
+3-apps chip); honesty ✓ (repo search always empty + dim config rows); testability ✓
+(smoke: nav row inside .sb-scroll; slash open/filter/Esc; n-apps chip collapse, ✓
+deselect, repo panel).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default
