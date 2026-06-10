@@ -214,6 +214,33 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
 .crow-rel{position:relative}
 .mode-menu{position:absolute;right:44px;bottom:42px;z-index:30;background:var(--modal);border:1px solid var(--line2);border-radius:10px;padding:5px;min-width:130px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
+/* plus menu */
+.plus-menu{position:absolute;left:0;bottom:46px;z-index:50;width:236px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.plus-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--txt);font-size:13.5px;cursor:pointer;position:relative}
+.plus-item:hover{background:var(--hover);color:var(--txt2)}
+.plus-item .sb-ic{color:var(--dim);display:flex}
+.plus-item.dim{color:var(--dim)}
+.plus-item .p-arr{margin-left:auto;color:var(--dim2);display:flex}
+.plus-div{height:1px;background:var(--line);margin:5px 6px}
+.plus-sub{position:absolute;left:calc(100% - 4px);top:-6px;z-index:60;width:256px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.sub-head{font-size:11px;color:var(--dim2);padding:8px 11px 4px;text-transform:uppercase;letter-spacing:.05em}
+.recent-row{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:9px;cursor:pointer}
+.recent-row:hover{background:var(--hover)}
+.recent-row .r-name{font-size:13px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent-row .r-date{font-size:11px;color:var(--dim)}
+/* attachments */
+.att-card{display:flex;align-items:center;gap:10px;background:var(--hover);border:1px solid var(--line2);border-radius:13px;padding:8px 12px;position:relative;max-width:250px}
+.att-card .att-ic{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ember),var(--accent2));color:#06281e;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.att-card .a-name{font-size:12.5px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.att-card .a-kind{font-size:11px;color:var(--dim)}
+.att-x{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;background:var(--txt2);color:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;padding:0}
+.att-img{position:relative;width:56px;height:56px;border-radius:11px;border:1px solid var(--line2);cursor:zoom-in;flex-shrink:0}
+.att-img img{width:100%;height:100%;object-fit:cover;display:block;border-radius:10px}
+.msg-att-img{width:130px;height:96px;border-radius:12px;overflow:hidden;border:1px solid var(--line2);cursor:zoom-in}
+.msg-att-img img{width:100%;height:100%;object-fit:cover;display:block}
+/* lightbox */
+.lightbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
+.lightbox img{max-width:82vw;max-height:82vh;border-radius:14px;box-shadow:0 30px 100px rgba(0,0,0,.6)}
 /* model picker (ported from vellum-workspace.html) */
 .model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
 .model-pill:hover{background:var(--hover);color:var(--txt)}
@@ -350,7 +377,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .led-v{font-family:var(--font-m);letter-spacing:-.01em}
 .mem-stats{font-family:var(--font-m);font-size:11px}
 .ph-anim{font-style:normal}
-.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
 .modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}}
@@ -407,6 +434,7 @@ const IcGrid = (p)=> <I {...p}><rect x="4" y="4" width="7" height="7" rx="1.5"/>
 const IcList = (p)=> <I {...p}><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></I>;
 const IcFilter = (p)=> <I {...p} d="M4 7h16 M7 12h10 M10 17h4"/>;
 const IcChevD = (p)=> <I {...p} d="M6 9l6 6 6-6"/>;
+const IcChevR = (p)=> <I {...p} d="M9 6l6 6-6 6"/>;
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
@@ -758,9 +786,59 @@ const MODELS = [
 const DEFAULT_MODEL = 'deepseek/deepseek-chat';
 const modelLabel = id => { const m = MODELS.find(x => x.id === id); return m ? m.label : id; };
 
-const Composer = ({text, setText, model, setModel, onSend, busy, ph}) => {
+const PlusMenu = ({library, projects, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onClose}) => {
+  const [sub, setSub] = useState(null);
+  return (
+    <React.Fragment>
+      <div className="backdrop" onClick={onClose}/>
+      <div className="plus-menu">
+        <div className="plus-item" onMouseEnter={() => setSub(null)} onClick={onAttachFile}>
+          <span className="sb-ic"><IcUpload size={16}/></span>Add photos &amp; files
+        </div>
+        <div className="plus-item" onMouseEnter={() => setSub('recent')}>
+          <span className="sb-ic"><IcNote size={16}/></span>Recent files<span className="p-arr"><IcChevR size={13}/></span>
+          {sub === 'recent' && (
+            <div className="plus-sub" onClick={e => e.stopPropagation()}>
+              <div className="plus-item" onClick={onOpenLibrary}><span className="sb-ic"><IcLibrary size={16}/></span>Add from library</div>
+              <div className="sub-head">Recents</div>
+              {library.slice(0, 3).map(it => (
+                <div key={it.id} className="recent-row" onClick={() => onAttachRecent(it)}>
+                  <KindIcon kind={it.kind}/>
+                  <div style={{minWidth: 0}}>
+                    <div className="r-name">{it.name}</div>
+                    <div className="r-date">{it.modified}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="plus-div"/>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcImage size={16}/></span>Create image</div>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcSparkle size={16}/></span>Deep research</div>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcGlobe size={16}/></span>Web search</div>
+        <div className="plus-div"/>
+        <div className="plus-item" onMouseEnter={() => setSub('projects')}>
+          <span className="sb-ic"><IcFolder size={16}/></span>Projects<span className="p-arr"><IcChevR size={13}/></span>
+          {sub === 'projects' && (
+            <div className="plus-sub" onClick={e => e.stopPropagation()}>
+              {projects.map(p => (
+                <div key={p.id} className="plus-item" onClick={() => onOpenProject(p.id)}>
+                  <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, projects, onOpenLibrary, onOpenProject, onViewImage}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
@@ -783,21 +861,40 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph}) => {
       <div className="cpill">
         {attach.length > 0 && (
           <div className="attach-strip">
-            {attach.map((a, i) => (
-              <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}
-                <span className="ax" onClick={() => setAttach(at => at.filter((_, j) => j !== i))}><I d="M6 6l12 12M18 6L6 18" size={11}/></span>
+            {attach.map((a, i) => a.url ? (
+              <span key={i} className="att-img" onClick={() => onViewImage && onViewImage(a.url)}>
+                <img src={a.url} alt={a.name}/>
+                <button className="att-x" onClick={e => { e.stopPropagation(); setAttach(at => at.filter((_, j) => j !== i)); }}><I d="M6 6l12 12M18 6L6 18" size={10}/></button>
+              </span>
+            ) : (
+              <span key={i} className="att-card">
+                <span className="att-ic"><IcFile size={16}/></span>
+                <span style={{minWidth: 0}}>
+                  <span className="a-name" style={{display: 'block'}}>{a.name}</span>
+                  <span className="a-kind">File</span>
+                </span>
+                <button className="att-x" onClick={() => setAttach(at => at.filter((_, j) => j !== i))}><I d="M6 6l12 12M18 6L6 18" size={10}/></button>
               </span>
             ))}
           </div>
         )}
         <div className="crow crow-rel">
-          <input ref={fileRef} type="file" style={{display: 'none'}}
+          <input ref={fileRef} type="file" multiple style={{display: 'none'}}
             onChange={e => {
-              const f = e.target.files && e.target.files[0];
-              if (f) setAttach(at => [...at, {name: f.name, size: fmtSize(f.size)}]);
+              const files = [...(e.target.files || [])];
+              if (files.length) setAttach(at => [...at, ...files.map(f => ({
+                name: f.name, size: fmtSize(f.size), kind: kindOf(f.name),
+                url: f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : null, fresh: true,
+              }))]);
               e.target.value = '';
             }}/>
-          <button className="cbtn" title="Attach — files land in your Library" onClick={() => fileRef.current.click()}><IcPlus/></button>
+          <button className="cbtn" title="Add" onClick={() => setPlusOpen(true)}><IcPlus/></button>
+          {plusOpen && <PlusMenu library={library || []} projects={projects || []}
+            onAttachFile={() => { setPlusOpen(false); fileRef.current.click(); }}
+            onAttachRecent={it => { setPlusOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+            onOpenLibrary={() => { setPlusOpen(false); onOpenLibrary && onOpenLibrary(); }}
+            onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
+            onClose={() => setPlusOpen(false)}/>}
           <div className="ta-wrap">
             <textarea ref={taRef} rows={1} value={text}
               onChange={e => setText(e.target.value)}
@@ -863,7 +960,7 @@ const Timeline = ({userMsgs}) => {
   );
 };
 
-const ChatView = ({chat, project, model, setModel, onSend, onRegen}) => {
+const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -875,7 +972,7 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen}) => {
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
         <div className="land-greet">Ready when you are.</div>
-        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
         <div className="chips">
           <button className="chip" onClick={() => setText('Write or edit ')}><span className="sb-ic"><IcPenLine size={13}/></span>Write or edit</button>
           <button className="chip" onClick={() => setText('Look something up: ')}><span className="sb-ic"><IcGlobe size={13}/></span>Look something up</button>
@@ -894,7 +991,9 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen}) => {
             <div key={m.id} id={'m-' + m.id} className="bubble-wrap">
               {m.attachments && m.attachments.length > 0 && (
                 <div className="attach-strip">
-                  {m.attachments.map((a, i) => <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
+                  {m.attachments.map((a, i) => a.url
+                    ? <span key={i} className="msg-att-img" onClick={() => onViewImage && onViewImage(a.url)}><img src={a.url} alt={a.name}/></span>
+                    : <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
                 </div>
               )}
               <div className="bubble">{m.text}</div>
@@ -909,7 +1008,7 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen}) => {
         </div>
       </div>
       <div className="composer-dock">
-        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
       </div>
     </React.Fragment>
   );
@@ -1094,7 +1193,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 );
 
 /* ─── project page ─── */
-const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource}) => {
+const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
   const fileRef = useRef(null);
@@ -1109,7 +1208,7 @@ const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAdd
         </div>
         <div className="proj-comp">
           <Composer text={text} setText={setText} model={model} setModel={setModel}
-            onSend={onSend} busy={false} ph={'New chat in ' + project.name}/>
+            onSend={onSend} busy={false} ph={'New chat in ' + project.name} onViewImage={onViewImage} {...composerExtras}/>
         </div>
         <div className="tab-row">
           {['Chats', 'Sources'].map(t => (
@@ -1516,6 +1615,7 @@ const App = () => {
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [secOpen, setSecOpen] = useState({projects: true, recents: true});
+  const [viewer, setViewer] = useState(null);
   const [expandedProj, setExpandedProj] = useState({});
   const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));
   const toggleProj = id => setExpandedProj(e => ({...e, [id]: !e[id]}));
@@ -1529,7 +1629,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1628,9 +1728,10 @@ const App = () => {
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
-    if (attach && attach.length) {
+    const freshAttach = (attach || []).filter(a => a.fresh);
+    if (freshAttach.length) {
       setLibrary(lib => [
-        ...attach.map(a => ({id: uid(), name: a.name, kind: kindOf(a.name), size: a.size, modified: 'Today'})),
+        ...freshAttach.map(a => ({id: uid(), name: a.name, kind: a.kind || kindOf(a.name), size: a.size, modified: 'Today'})),
         ...lib,
       ]);
     }
@@ -1706,13 +1807,17 @@ const App = () => {
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 onOpenProject={openProject}/>}
           <div className="main">
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}/>}
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}
+              onViewImage={setViewer}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
               model={selModel} setModel={setSelModel}
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
-              onAddSource={f => addSource(activeProject.id, f)}/>}
+              onAddSource={f => addSource(activeProject.id, f)}
+              onViewImage={setViewer}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
@@ -1735,6 +1840,7 @@ const App = () => {
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onClose={() => setSettingsOpen(false)}/>}
+        {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
           onClose={() => setEditProfileOpen(false)}/>}
