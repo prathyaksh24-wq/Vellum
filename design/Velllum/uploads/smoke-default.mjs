@@ -32,7 +32,7 @@ await page.goto(url);
 await page.waitForSelector(".landing", { timeout: 20000 });
 
 await check("landing: greeting + composer + chips", async () => {
-  if (await page.locator(".land-greet").textContent() !== "What are you reading.") throw new Error("greeting wrong");
+  if (await page.locator(".land-greet").textContent() !== "Ready when you are.") throw new Error("greeting wrong");
   await page.locator(".cpill textarea").waitFor();
   if (await page.locator(".chip").count() !== 3) throw new Error("chips != 3");
 });
@@ -77,7 +77,7 @@ await check("regenerate re-streams a different variant", async () => {
   if (before === after) throw new Error("same text after regenerate");
 });
 
-await check("dark streaming: ember glow shimmer", async () => {
+await check("dark streaming: accent glow shimmer", async () => {
   await page.locator(".cpill textarea").fill("and what about patience");
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => {
