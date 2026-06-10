@@ -66,6 +66,37 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .chat-dots:hover{color:var(--txt2);background:var(--active)}
 .rename-input{flex:1;background:var(--input);border:1px solid var(--line2);border-radius:5px;color:var(--txt2);font:inherit;font-size:12.5px;padding:2px 6px;outline:none;min-width:0}
 .sb-empty{padding:8px 9px;color:var(--dim2);font-size:12px;font-style:italic}
+.chat-row.nested{margin-left:22px}
+.crumb{display:flex;align-items:center;gap:8px;padding:10px 18px;font-size:12.5px;color:var(--dim);border-bottom:1px solid var(--line);flex-shrink:0}
+/* project page */
+.proj-head{display:flex;align-items:center;gap:12px;margin-top:6px}
+.proj-head .sb-ic{color:var(--dim);display:flex}
+.proj-name{font-size:24px;color:var(--txt2);letter-spacing:-.02em}
+.proj-mem{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:12px;padding:2px 9px}
+.proj-comp{display:flex;justify-content:center;margin:20px 0 24px}
+.src-card{border:1.5px dashed var(--line2);border-radius:14px;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.src-icons{display:flex;gap:6px;margin-bottom:8px}
+.src-icons .kind-ic{width:34px;height:34px}
+.src-title{font-size:15px;color:var(--txt2);font-weight:500}
+.src-sub{font-size:12.5px;color:var(--dim);max-width:400px;line-height:1.5}
+.src-row{display:flex;align-items:center;gap:11px;padding:9px 10px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt2)}
+.src-row .lt-dim{margin-left:auto}
+.proj-chat-row{display:flex;align-items:center;gap:11px;padding:11px 10px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt2);cursor:pointer;border-radius:8px}
+.proj-chat-row:hover{background:var(--hover)}
+.proj-empty{padding:60px 20px;text-align:center}
+.proj-empty .pe-t{font-size:14.5px;color:var(--txt2);margin-bottom:5px}
+.proj-empty .pe-s{font-size:12.5px;color:var(--dim)}
+/* create project modal */
+.hintcard{display:flex;gap:10px;align-items:flex-start;background:var(--hover);border-radius:10px;padding:11px 13px;font-size:12px;color:var(--dim);line-height:1.5;margin-bottom:16px}
+.hintcard .sb-ic{color:var(--dim);display:flex;margin-top:1px}
+.gear-pop{position:absolute;right:14px;top:50px;z-index:70;background:var(--modal);border:1px solid var(--line2);border-radius:12px;padding:6px;width:268px;box-shadow:0 14px 50px rgba(0,0,0,.45)}
+.gp-head{font-size:12px;color:var(--dim);padding:7px 10px 2px}
+.gp-note{font-size:11px;color:var(--dim2);padding:0 10px 6px}
+.gp-item{padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;gap:8px;align-items:flex-start}
+.gp-item:hover{background:var(--hover)}
+.gp-item b{font-size:12.5px;color:var(--txt2);font-weight:500;display:block;margin-bottom:1px}
+.gp-item p{font-size:11.5px;color:var(--dim);line-height:1.45}
+.btn.primary:disabled{background:var(--line2);border-color:var(--line2);color:var(--dim);cursor:not-allowed;filter:none}
 /* profile row */
 .profile-row{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:9px;cursor:pointer;margin-top:6px;border-top:1px solid var(--line);border-radius:0;padding-top:11px}
 .profile-row:hover{background:var(--hover)}
@@ -287,7 +318,7 @@ const IcFile = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 
 const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4A8.5 8.5 0 1 1 21 11.5z"/>;
 
 const visibleChats = cs => {
-  const v = cs.filter(c => !c.archived);
+  const v = cs.filter(c => !c.archived && !c.projectId);
   return [...v.filter(c => c.pinned), ...v.filter(c => !c.pinned)];
 };
 
@@ -296,11 +327,11 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 const SEED_CHATS = [
-  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, messages: [] },
-  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, messages: [] },
-  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, messages: [] },
-  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, messages: [] },
-  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, messages: [] },
+  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, projectId: null, messages: [] },
+  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, projectId: null, messages: [] },
+  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, projectId: null, messages: [] },
+  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, projectId: null, messages: [] },
+  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, projectId: null, messages: [] },
 ];
 
 const SEED_LIBRARY = [
@@ -315,9 +346,9 @@ const SEED_LIBRARY = [
 ];
 
 const SEED_PROJECTS = [
-  { id: 'p1', name: 'Vellum Desktop',         notes: 12, updated: 'Monday' },
-  { id: 'p2', name: 'Reading — Meditations',  notes: 7,  updated: '04/06' },
-  { id: 'p3', name: 'Sports daemon',          notes: 4,  updated: '28/05' },
+  { id: 'p1', name: 'Vellum Desktop',         updated: 'Monday', memory: 'default',      sources: [] },
+  { id: 'p2', name: 'Reading — Meditations',  updated: '04/06',  memory: 'project-only', sources: [] },
+  { id: 'p3', name: 'Sports daemon',          updated: '28/05',  memory: 'default',      sources: [] },
 ];
 
 const PROFILE_DEFAULT = {
@@ -326,12 +357,12 @@ const PROFILE_DEFAULT = {
 };
 
 /* ─── sidebar ─── */
-const ChatRow = ({chat, active, renaming, onOpen, onMenu, onRename}) => {
+const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => {
   const [draft, setDraft] = useState(chat.title);
   useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
   if (renaming) {
     return (
-      <div className="chat-row active">
+      <div className={'chat-row active' + (nested ? ' nested' : '')}>
         <input className="rename-input" autoFocus value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') onRename(draft); if (e.key === 'Escape') onRename(null); }}
@@ -340,7 +371,7 @@ const ChatRow = ({chat, active, renaming, onOpen, onMenu, onRename}) => {
     );
   }
   return (
-    <div className={'chat-row' + (active ? ' active' : '')} onClick={onOpen}>
+    <div className={'chat-row' + (active ? ' active' : '') + (nested ? ' nested' : '')} onClick={onOpen}>
       {chat.pinned && <span className="chat-pin"><IcPin size={12}/></span>}
       <span className="chat-title">{chat.title}</span>
       <button className="chat-dots" title="Options"
@@ -373,7 +404,7 @@ const ProjectRow = ({proj, renaming, onMenu, onOpen, onRename}) => {
   );
 };
 
-const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingId, profile, onCollapse, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename}) => {
+const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingId, profile, onCollapse, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
   const sorted = visibleChats(chats);
   return (
     <div className="sidebar">
@@ -387,10 +418,19 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
       <div className={'sb-sec'} style={{cursor: 'pointer'}} onClick={() => onNav('projects')}>Projects</div>
       <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
       {projects.map(p => (
-        <ProjectRow key={p.id} proj={p} renaming={projRenamingId === p.id}
-          onOpen={() => onNav('projects')}
-          onMenu={e => onProjectMenu(p.id, e)}
-          onRename={t => onProjectRename(p.id, t)}/>
+        <React.Fragment key={p.id}>
+          <ProjectRow proj={p} renaming={projRenamingId === p.id}
+            onOpen={() => onOpenProject(p.id)}
+            onMenu={e => onProjectMenu(p.id, e)}
+            onRename={t => onProjectRename(p.id, t)}/>
+          {chats.filter(c => c.projectId === p.id && !c.archived).map(c => (
+            <ChatRow key={c.id} chat={c} nested active={view === 'chat' && c.id === activeChatId}
+              renaming={renamingId === c.id}
+              onOpen={() => onOpenChat(c.id)}
+              onMenu={e => onChatMenu(c.id, e)}
+              onRename={t => onRename(c.id, t)}/>
+          ))}
+        </React.Fragment>
       ))}
       <div className="sb-sec">Recents</div>
       <div className="sb-list">
@@ -425,7 +465,7 @@ const RailFly = ({btn, children}) => {
   );
 };
 
-const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onNewProject, onProjectMenu}) => {
+const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onNewProject, onProjectMenu, onOpenProject}) => {
   const recents = visibleChats(chats).slice(0, 10);
   return (
     <div className="rail">
@@ -449,7 +489,7 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
           <span className="chat-title">New project</span>
         </div>
         {projects.map(p => (
-          <div key={p.id} className="chat-row" onClick={() => onNav('projects')}>
+          <div key={p.id} className="chat-row" onClick={() => onOpenProject(p.id)}>
             <span className="chat-pin"><IcFolder size={13}/></span>
             <span className="chat-title">{p.name}</span>
             <button className="chat-dots" title="Project settings"
@@ -519,17 +559,17 @@ const ModeMenu = ({mode, onPick, onClose}) => (
 
 const PLACEHOLDERS = ['ask.', 'what are you reading.', 'write, or edit.', 'search your library.', 'sit with a question.'];
 
-const Composer = ({text, setText, mode, setMode, onSend, busy}) => {
+const Composer = ({text, setText, mode, setMode, onSend, busy, ph}) => {
   const [attach, setAttach] = useState([]);
   const [modeOpen, setModeOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
   useEffect(() => {
-    if (text) return;
+    if (text || ph) return;
     const t = setInterval(() => setPhIdx(i => (i + 1) % PLACEHOLDERS.length), 3000);
     return () => clearInterval(t);
-  }, [text]);
+  }, [text, ph]);
   useEffect(() => {
     const ta = taRef.current;
     if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }
@@ -563,7 +603,9 @@ const Composer = ({text, setText, mode, setMode, onSend, busy}) => {
             <textarea ref={taRef} rows={1} value={text}
               onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
-            {!text && <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>}
+            {!text && (ph
+              ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
+              : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
           </div>
           <button className="mode-chip" onClick={() => setModeOpen(true)}>{mode}<IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
@@ -622,7 +664,7 @@ const Timeline = ({userMsgs}) => {
   );
 };
 
-const ChatView = ({chat, onSend, onRegen}) => {
+const ChatView = ({chat, project, onSend, onRegen}) => {
   const [text, setText] = useState('');
   const [mode, setMode] = useState('Extended');
   const endRef = useRef(null);
@@ -646,6 +688,7 @@ const ChatView = ({chat, onSend, onRegen}) => {
   }
   return (
     <React.Fragment>
+      {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
       <Timeline userMsgs={msgs.filter(m => m.role === 'user')}/>
       <div className="msgs">
         <div className="msgs-inner">
@@ -829,52 +872,120 @@ const LibraryView = ({library, setLibrary}) => {
 };
 
 /* ─── projects ─── */
-const ProjectsView = ({projects, setProjects}) => {
-  const [renamingId, setRenamingId] = useState(null);
-  const [draft, setDraft] = useState('');
-  const addProject = () => {
-    const id = uid();
-    setProjects(ps => [{id, name: 'Untitled project', notes: 0, updated: 'Today'}, ...ps]);
-    setRenamingId(id); setDraft('Untitled project');
-  };
-  const commit = id => {
-    if (draft.trim()) setProjects(ps => ps.map(p => p.id === id ? {...p, name: draft.trim()} : p));
-    setRenamingId(null);
-  };
+const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
+  <div className="page">
+    <div className="page-inner">
+      <div className="page-head">
+        <div className="page-title">Projects</div>
+        <button className="new-btn" onClick={onNewProject}><IcFolderPlus size={14}/>New project</button>
+      </div>
+      <div className="pgrid">
+        {projects.map(p => {
+          const n = chats.filter(c => c.projectId === p.id && !c.archived).length;
+          return (
+            <div key={p.id} className="pcard" onClick={() => onOpenProject(p.id)}>
+              <span className="sb-ic"><IcFolder size={18}/></span>
+              <h3>{p.name}</h3>
+              <p>{n} {n === 1 ? 'chat' : 'chats'} · {p.updated}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </div>
+);
+
+/* ─── project page ─── */
+const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState('Extended');
+  const [tab, setTab] = useState('Chats');
+  const fileRef = useRef(null);
+  const mine = chats.filter(c => c.projectId === project.id && !c.archived);
   return (
     <div className="page">
-      <div className="page-inner">
-        <div className="page-head">
-          <div className="page-title">Projects</div>
-          <button className="new-btn" onClick={addProject}><IcFolderPlus size={14}/>New project</button>
+      <div className="page-inner" style={{maxWidth: 760}}>
+        <div className="proj-head">
+          <span className="sb-ic"><IcFolder size={20}/></span>
+          <span className="proj-name">{project.name}</span>
+          {project.memory === 'project-only' && <span className="proj-mem">project-only memory</span>}
         </div>
-        <div className="pgrid">
-          {projects.map(p => (
-            <div key={p.id} className="pcard" title="Project pages are not in this preview">
-              <span className="sb-ic"><IcFolder size={18}/></span>
-              {renamingId === p.id
-                ? <input className="rename-input" autoFocus value={draft}
-                    onChange={e => setDraft(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') commit(p.id); if (e.key === 'Escape') setRenamingId(null); }}
-                    onBlur={() => commit(p.id)}/>
-                : <h3>{p.name}</h3>}
-              <p>{p.notes} {p.notes === 1 ? 'note' : 'notes'} · {p.updated}</p>
-            </div>
+        <div className="proj-comp">
+          <Composer text={text} setText={setText} mode={mode} setMode={setMode}
+            onSend={onSend} busy={false} ph={'New chat in ' + project.name}/>
+        </div>
+        <div className="tab-row">
+          {['Chats', 'Sources'].map(t => (
+            <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
           ))}
+          <div className="tab-spacer"/>
+          <button className="mode-chip" title="Sorting is not in this preview">Newest<IcChevD size={12}/></button>
+          <button className="mode-chip" title="Filtering is not in this preview">All<IcChevD size={12}/></button>
         </div>
+        {tab === 'Chats' ? (
+          mine.length === 0 ? (
+            <div className="proj-empty">
+              <div className="pe-t">No chats yet</div>
+              <div className="pe-s">Chats in {project.name} will live here.</div>
+            </div>
+          ) : (
+            <div>
+              {mine.map(c => (
+                <div key={c.id} className="proj-chat-row" onClick={() => onOpenChat(c.id)}>
+                  <span className="sb-ic"><IcChat size={14}/></span>{c.title}
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          <React.Fragment>
+            <input ref={fileRef} type="file" style={{display: 'none'}}
+              onChange={e => { const f = e.target.files && e.target.files[0]; if (f) onAddSource(f); e.target.value = ''; }}/>
+            {project.sources.length === 0 ? (
+              <div className="src-card">
+                <div className="src-icons">
+                  <div className="kind-ic code"><IcUpload size={16}/></div>
+                  <div className="kind-ic image"><IcImage size={16}/></div>
+                  <div className="kind-ic note"><IcFile size={16}/></div>
+                </div>
+                <div className="src-title">Give Vellum more context</div>
+                <div className="src-sub">Upload sources to give Vellum deeper context about your project. They are filed in your Library too.</div>
+                <button className="new-btn" style={{marginTop: 10}} onClick={() => fileRef.current.click()}>Add sources</button>
+              </div>
+            ) : (
+              <div>
+                {project.sources.map(s => (
+                  <div key={s.id} className="src-row">
+                    <KindIcon kind={s.kind}/>
+                    <span>{s.name}</span>
+                    <span className="lt-dim">{s.modified} · {s.size}</span>
+                  </div>
+                ))}
+                <div style={{marginTop: 14}}>
+                  <button className="new-btn" onClick={() => fileRef.current.click()}>Add sources</button>
+                </div>
+              </div>
+            )}
+          </React.Fragment>
+        )}
       </div>
     </div>
   );
 };
 
 /* ─── context menu (chat row) ─── */
-const ChatMenu = ({chat, pos, onAction, onClose}) => (
+const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   <React.Fragment>
     <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 230)}}>
+    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}}>
       <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
       <div className="ctx-hint">sharing is not in this preview</div>
       <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+      {projectName && (
+        <div className="ctx-item" onClick={() => onAction('removeproj')}>
+          <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
+        </div>
+      )}
       <div className="ctx-div"/>
       <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
       <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
@@ -882,6 +993,53 @@ const ChatMenu = ({chat, pos, onAction, onClose}) => (
     </div>
   </React.Fragment>
 );
+
+/* ─── create project modal ─── */
+const CreateProjectModal = ({onCreate, onClose}) => {
+  const [name, setName] = useState('');
+  const [mem, setMem] = useState('default');
+  const [gear, setGear] = useState(false);
+  const create = () => { if (name.trim()) onCreate({name: name.trim(), memory: mem}); };
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="modal" style={{width: 480}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 4, marginBottom: 18}}>
+          <div className="m-title" style={{marginBottom: 0, flex: 1}}>Create project</div>
+          <button className="tbtn" title="Project memory" onClick={() => setGear(g => !g)}><IcSettings size={15}/></button>
+          <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={15}/></button>
+        </div>
+        {gear && (
+          <div className="gear-pop">
+            <div className="gp-head">Memory</div>
+            <div className="gp-note">Note that this setting can't be changed later.</div>
+            <div className="gp-item" onClick={() => { setMem('default'); setGear(false); }}>
+              <div style={{flex: 1}}><b>Default</b><p>Project can access memories from outside chats, and vice versa.</p></div>
+              {mem === 'default' && <span className="ctx-check"><IcCheck size={14}/></span>}
+            </div>
+            <div className="gp-item" onClick={() => { setMem('project-only'); setGear(false); }}>
+              <div style={{flex: 1}}><b>Project-only</b><p>Project can only access its own memories. Its memories are hidden from outside chats.</p></div>
+              {mem === 'project-only' && <span className="ctx-check"><IcCheck size={14}/></span>}
+            </div>
+          </div>
+        )}
+        <div className="m-field">
+          <label>Project name</label>
+          <input placeholder="Copenhagen Trip" autoFocus value={name}
+            onChange={e => setName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') create(); }}/>
+        </div>
+        <div className="hintcard">
+          <span className="sb-ic"><IcSparkle size={14}/></span>
+          Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.
+        </div>
+        <div className="m-actions">
+          <button className="btn primary" disabled={!name.trim()} onClick={create}>Create project</button>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
 
 /* ─── profile ─── */
 const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
@@ -962,6 +1120,8 @@ const App = () => {
   const [sidebar, setSidebar] = useState('open');
   const [view, setView] = useState('chat');
   const [activeChatId, setActiveChatId] = useState(null);
+  const [activeProjectId, setActiveProjectId] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [chats, setChats] = useState(SEED_CHATS);
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState(SEED_PROJECTS);
@@ -974,7 +1134,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -992,6 +1152,7 @@ const App = () => {
       if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
       if (action === 'archive') return cs.map(c => c.id === id ? {...c, archived: true} : c);
       if (action === 'delete') return cs.filter(c => c.id !== id);
+      if (action === 'removeproj') return cs.map(c => c.id === id ? {...c, projectId: null} : c);
       return cs;
     });
     if ((action === 'archive' || action === 'delete') && activeChatId === id) setActiveChatId(null);
@@ -1002,16 +1163,28 @@ const App = () => {
     if (title && title.trim()) setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
   };
 
-  const newProject = () => {
+  const newProject = () => { setMenu(null); setCreateOpen(true); };
+  const openProject = id => { setActiveProjectId(id); setView('project'); setMenu(null); };
+  const createProject = ({name, memory}) => {
     const id = uid();
-    setProjects(ps => [{id, name: 'Untitled project', notes: 0, updated: 'Today'}, ...ps]);
-    if (sidebar === 'open') setProjRenamingId(id);
+    setProjects(ps => [{id, name, updated: 'Today', memory, sources: []}, ...ps]);
+    setCreateOpen(false);
+    openProject(id);
   };
   const projectMenuAction = (id, action) => {
     setMenu(null);
     if (action === 'share') return;
     if (action === 'rename') { setProjRenamingId(id); setSidebar('open'); return; }
-    if (action === 'delete') setProjects(ps => ps.filter(p => p.id !== id));
+    if (action === 'delete') {
+      setProjects(ps => ps.filter(p => p.id !== id));
+      setChats(cs => cs.map(c => c.projectId === id ? {...c, projectId: null} : c));
+      if (activeProjectId === id && view === 'project') setView('projects');
+    }
+  };
+  const addSource = (projId, file) => {
+    const item = {id: uid(), name: file.name, kind: kindOf(file.name), size: fmtSize(file.size), modified: 'Today'};
+    setProjects(ps => ps.map(p => p.id === projId ? {...p, sources: [item, ...p.sources], updated: 'Today'} : p));
+    setLibrary(lib => [{...item, id: uid()}, ...lib]);
   };
   const renameProject = (id, name) => {
     setProjRenamingId(null);
@@ -1039,8 +1212,8 @@ const App = () => {
     timers.current[msgId] = setTimeout(tick, 400);
   };
 
-  const sendMessage = (text, attach) => {
-    let chatId = activeChatId;
+  const sendMessage = (text, attach, opts = {}) => {
+    let chatId = opts.forceNew ? null : activeChatId;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
@@ -1053,12 +1226,17 @@ const App = () => {
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
-      setChats(cs => [{id: chatId, title, pinned: false, archived: false, messages: [userMsg, aMsg]}, ...cs]);
+      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, messages: [userMsg, aMsg]}, ...cs]);
       setActiveChatId(chatId);
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
     }
     streamReply(chatId, aMsg.id, reply);
+  };
+
+  const sendInProject = projId => (text, attach) => {
+    sendMessage(text, attach, {forceNew: true, projectId: projId});
+    setView('chat');
   };
 
   const regenerate = (msgId) => {
@@ -1075,6 +1253,10 @@ const App = () => {
   };
 
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
+  const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
+  const activeChat = chats.find(c => c.id === activeChatId) || null;
+  const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
+  const activeProject = projects.find(p => p.id === activeProjectId) || null;
 
   return (
     <div className="stage">
@@ -1103,19 +1285,25 @@ const App = () => {
                 onRename={renameChat} onProfile={openProfileMenu}
                 onNewProject={newProject}
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
-                onProjectRename={renameProject}/>
+                onProjectRename={renameProject} onOpenProject={openProject}/>
             : <Rail view={view} profile={profile} chats={chats} projects={projects}
                 onExpand={() => setSidebar('open')} onNewChat={newChat}
                 onSearch={() => setSearchOpen(true)} onNav={nav} onProfile={openProfileMenu}
                 onOpenChat={openChat} onNewProject={newProject}
-                onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}/>}
+                onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
+                onOpenProject={openProject}/>}
           <div className="main">
-            {view === 'chat' && <ChatView chat={chats.find(c => c.id === activeChatId) || null} onSend={sendMessage} onRegen={regenerate}/>}
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} onSend={sendMessage} onRegen={regenerate}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
-            {view === 'projects' && <ProjectsView projects={projects} setProjects={setProjects}/>}
+            {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
+            {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
+              onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
+              onAddSource={f => addSource(activeProject.id, f)}/>}
+            {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
           </div>
         </div>
-        {menuChat && <ChatMenu chat={menuChat} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
+        {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
+        {createOpen && <CreateProjectModal onCreate={createProject} onClose={() => setCreateOpen(false)}/>}
         {menu && menu.type === 'project' && <ProjectMenu pos={menu} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {searchOpen && <SearchOverlay chats={chats}
           onNewChat={() => { setSearchOpen(false); newChat(); }}
