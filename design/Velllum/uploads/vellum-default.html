@@ -241,6 +241,16 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 /* lightbox */
 .lightbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
 .lightbox img{max-width:82vw;max-height:82vh;border-radius:14px;box-shadow:0 30px 100px rgba(0,0,0,.6)}
+/* apps / connectors */
+.app-chip{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:14px;background:none;border:1px solid var(--line2);color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer;flex-shrink:0}
+.app-chip:hover{background:var(--hover);color:var(--txt2)}
+.app-chip .sb-ic{display:flex;color:var(--txt)}
+.apps-drop{position:absolute;left:40px;bottom:46px;z-index:50;width:246px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.app-row{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:9px}
+.app-row:hover{background:var(--hover)}
+.app-row .a-nm{flex:1;font-size:13.5px;color:var(--txt2)}
+.app-act{font-size:12px;color:var(--dim);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px 4px}
+.app-act:hover{color:var(--ember)}
 /* model picker (ported from vellum-workspace.html) */
 .model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
 .model-pill:hover{background:var(--hover);color:var(--txt)}
@@ -377,7 +387,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .led-v{font-family:var(--font-m);letter-spacing:-.01em}
 .mem-stats{font-family:var(--font-m);font-size:11px}
 .ph-anim{font-style:normal}
-.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
 .modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}}
@@ -435,6 +445,44 @@ const IcList = (p)=> <I {...p}><circle cx="4.5" cy="6" r="1.3" fill="currentColo
 const IcFilter = (p)=> <I {...p} d="M4 7h16 M7 12h10 M10 17h4"/>;
 const IcChevD = (p)=> <I {...p} d="M6 9l6 6 6-6"/>;
 const IcChevR = (p)=> <I {...p} d="M9 6l6 6-6 6"/>;
+const IcGitHub = (p)=> <I {...p} d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5a5.4 5.4 0 0 0-1.5-3.7 5 5 0 0 0-.1-3.7s-1.2-.3-3.9 1.4a13.4 13.4 0 0 0-7 0C4.8 1.3 3.6 1.6 3.6 1.6a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 2 9c0 3.5 3 5.5 6 5.5a4.8 4.8 0 0 0-1 3.5v4 M7 18c-3 1-4-1-5-2"/>;
+const IcAirtable = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="6.5" rx="1.5"/></I>;
+const IcLinear = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l4 4 M9.5 8.5l6 6"/></I>;
+const IcBox = (p)=> <I {...p} d="M21 8l-9-5-9 5v8l9 5 9-5V8z M3 8l9 5 9-5 M12 13v8"/>;
+const IcDropbox = (p)=> <I {...p} d="M7 3l5 3.5L7 10 2 6.5 7 3z M17 3l5 3.5L17 10l-5-3.5L17 3z M7 10l5 3.5L7 17l-5-3.5L7 10z M17 10l5 3.5L17 17l-5-3.5 5-3.5z M8.5 18.5l3.5 2.5 3.5-2.5"/>;
+const IcGmail = (p)=> <I {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></I>;
+const APP_ICONS = { airtable: IcAirtable, github: IcGitHub, linear: IcLinear, box: IcBox, dropbox: IcDropbox, gmail: IcGmail };
+
+const SEED_APPS = [
+  { id: 'airtable', name: 'Airtable', state: 'off' },
+  { id: 'github',   name: 'GitHub',   state: 'setup' },
+  { id: 'linear',   name: 'Linear',   state: 'off' },
+  { id: 'box',      name: 'Box',      state: 'connect' },
+  { id: 'dropbox',  name: 'Dropbox',  state: 'connect' },
+  { id: 'gmail',    name: 'Gmail',    state: 'connect' },
+];
+
+const AppsDrop = ({apps, onToggle, onConnect, onClose}) => (
+  <React.Fragment>
+    <div className="backdrop" onClick={onClose}/>
+    <div className="apps-drop">
+      {apps.map(a => {
+        const Ic = APP_ICONS[a.id] || IcGrid;
+        return (
+          <div className="app-row" key={a.id}>
+            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+            <span className="a-nm">{a.name}</span>
+            {(a.state === 'on' || a.state === 'off')
+              ? <div className={'sw' + (a.state === 'on' ? ' on' : '')} role="switch" aria-checked={a.state === 'on'} onClick={() => onToggle(a.id)}/>
+              : <button className="app-act" onClick={() => onConnect(a.id)}>{a.state === 'setup' ? 'Finish Setup' : 'Connect'}</button>}
+          </div>
+        );
+      })}
+      <div className="plus-div"/>
+      <div className="plus-item dim" title="Not in this preview"><span className="sb-ic"><IcGrid size={15}/></span>Connect more</div>
+    </div>
+  </React.Fragment>
+);
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
@@ -835,10 +883,11 @@ const PlusMenu = ({library, projects, onAttachFile, onAttachRecent, onOpenLibrar
   );
 };
 
-const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, projects, onOpenLibrary, onOpenProject, onViewImage}) => {
+const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, onToggleApp, onConnectApp}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
@@ -895,6 +944,16 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, pr
             onOpenLibrary={() => { setPlusOpen(false); onOpenLibrary && onOpenLibrary(); }}
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
+          {apps && (
+            <React.Fragment>
+              <button className="app-chip" title="Apps" onClick={() => setAppsOpen(true)}><span className="sb-ic"><IcGrid size={14}/></span>Apps<IcChevD size={11}/></button>
+              {apps.filter(a => a.state === 'on').map(a => {
+                const Ic = APP_ICONS[a.id] || IcGrid;
+                return <button key={a.id} className="app-chip" title={a.name + ' — connected (preview)'} onClick={() => setAppsOpen(true)}><span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/></button>;
+              })}
+              {appsOpen && <AppsDrop apps={apps} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
+            </React.Fragment>
+          )}
           <div className="ta-wrap">
             <textarea ref={taRef} rows={1} value={text}
               onChange={e => setText(e.target.value)}
@@ -1614,6 +1673,9 @@ const App = () => {
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
+  const [apps, setApps] = useState(SEED_APPS);
+  const toggleApp = id => setApps(as => as.map(a => a.id === id ? {...a, state: a.state === 'on' ? 'off' : 'on'} : a));
+  const connectApp = id => setApps(as => as.map(a => a.id === id ? {...a, state: 'on'} : a));
   const [secOpen, setSecOpen] = useState({projects: true, recents: true});
   const [viewer, setViewer] = useState(null);
   const [expandedProj, setExpandedProj] = useState({});
@@ -1809,7 +1871,7 @@ const App = () => {
           <div className="main">
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, onToggleApp: toggleApp, onConnectApp: connectApp}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -1817,7 +1879,7 @@ const App = () => {
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
               onAddSource={f => addSource(activeProject.id, f)}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, onToggleApp: toggleApp, onConnectApp: connectApp}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
