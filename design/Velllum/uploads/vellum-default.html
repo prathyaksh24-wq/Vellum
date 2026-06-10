@@ -268,6 +268,128 @@ const IcPenLine = (p)=> <I {...p} d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-
 const IcGlobe = (p)=> <I {...p} d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20 M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>;
 const IcFile = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/>;
 
+/* ─── data ─── */
+const uid = () => Math.random().toString(36).slice(2, 10);
+const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+const SEED_CHATS = [
+  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, messages: [] },
+  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, messages: [] },
+  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, messages: [] },
+  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, messages: [] },
+  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, messages: [] },
+];
+
+const SEED_LIBRARY = [
+  { id: 'l1', name: 'vellum-workspace-upgraded.html', kind: 'code',  size: '197 KB',  modified: 'Monday' },
+  { id: 'l2', name: 'vellum-workspace.html',          kind: 'code',  size: '184 KB',  modified: 'Monday' },
+  { id: 'l3', name: 'Corrected_Bank_Guarantee_Request.pdf', kind: 'pdf', size: '2.42 KB', modified: '03/06' },
+  { id: 'l4', name: 'Bank_Instrument_Request_Letter.pdf',   kind: 'pdf', size: '295 KB',  modified: '03/06' },
+  { id: 'l5', name: 'vellum_ui_patch.diff',           kind: 'diff',  size: '44.8 KB', modified: '02/06' },
+  { id: 'l6', name: 'vellum_preview.png',             kind: 'image', size: '137 KB',  modified: '02/06' },
+  { id: 'l7', name: 'reading list — winter',          kind: 'note',  size: '1.1 KB',  modified: '28/05' },
+  { id: 'l8', name: 'on stillness',                   kind: 'note',  size: '0.8 KB',  modified: '21/05' },
+];
+
+const SEED_PROJECTS = [
+  { id: 'p1', name: 'Vellum Desktop',         notes: 12, updated: 'Monday' },
+  { id: 'p2', name: 'Reading — Meditations',  notes: 7,  updated: '04/06' },
+  { id: 'p3', name: 'Sports daemon',          notes: 4,  updated: '28/05' },
+];
+
+const PROFILE_DEFAULT = {
+  displayName: 'Pratyakksh', username: 'pratyakksh',
+  email: 'openslides.ai@gmail.com', plan: 'Private',
+};
+
+/* ─── sidebar ─── */
+const ChatRow = ({chat, active, renaming, onOpen, onMenu, onRename}) => {
+  const [draft, setDraft] = useState(chat.title);
+  useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
+  if (renaming) {
+    return (
+      <div className="chat-row active">
+        <input className="rename-input" autoFocus value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onRename(draft); if (e.key === 'Escape') onRename(null); }}
+          onBlur={() => onRename(draft)}/>
+      </div>
+    );
+  }
+  return (
+    <div className={'chat-row' + (active ? ' active' : '')} onClick={onOpen}>
+      {chat.pinned && <span className="chat-pin"><IcPin size={12}/></span>}
+      <span className="chat-title">{chat.title}</span>
+      <button className="chat-dots" title="Options"
+        onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
+    </div>
+  );
+};
+
+const Sidebar = ({chats, activeChatId, view, renamingId, profile, onCollapse, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile}) => {
+  const visible = chats.filter(c => !c.archived);
+  const sorted = [...visible.filter(c => c.pinned), ...visible.filter(c => !c.pinned)];
+  return (
+    <div className="sidebar">
+      <div className="sb-head">
+        <span className="wordmark"><em>v</em>ellum</span>
+        <button className="tbtn" title="Collapse sidebar" onClick={onCollapse}><IcPanel/></button>
+      </div>
+      <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
+      <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats</button>
+      <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library</button>
+      <button className={'sb-row' + (view === 'projects' ? ' active' : '')} onClick={() => onNav('projects')}><span className="sb-ic"><IcFolder/></span>Projects</button>
+      <div className="sb-sec">Recents</div>
+      <div className="sb-list">
+        {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
+        {sorted.map(c => (
+          <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
+            renaming={renamingId === c.id}
+            onOpen={() => onOpenChat(c.id)}
+            onMenu={e => onChatMenu(c.id, e)}
+            onRename={t => onRename(c.id, t)}/>
+        ))}
+      </div>
+      <div className="profile-row" onClick={onProfile}>
+        <div className="avatar">{initials(profile.displayName)}</div>
+        <div className="p-meta">
+          <div className="p-name">{profile.displayName}</div>
+          <div className="p-plan">{profile.plan}</div>
+        </div>
+        <span className="p-edit"><IcPenLine size={14}/></span>
+      </div>
+    </div>
+  );
+};
+
+const Rail = ({view, profile, onExpand, onNewChat, onSearch, onNav, onProfile}) => (
+  <div className="rail">
+    <div className="rail-logo" title="Expand sidebar" onClick={onExpand}><div className="rail-dot"/></div>
+    <button className="rail-btn" title="New chat" onClick={onNewChat}><IcPencilSq size={17}/></button>
+    <button className="rail-btn" title="Search chats" onClick={onSearch}><IcSearch size={17}/></button>
+    <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
+    <button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>
+    <div className="rail-grow"/>
+    <div className="avatar" style={{cursor: 'pointer'}} title={profile.displayName} onClick={onProfile}>{initials(profile.displayName)}</div>
+  </div>
+);
+
+/* ─── context menu (chat row) ─── */
+const ChatMenu = ({chat, pos, onAction, onClose}) => (
+  <React.Fragment>
+    <div className="backdrop" onClick={onClose}/>
+    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 230)}}>
+      <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
+      <div className="ctx-hint">sharing is not in this preview</div>
+      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+      <div className="ctx-div"/>
+      <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
+      <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
+      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+    </div>
+  </React.Fragment>
+);
+
 /* ─── app ─── */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -277,6 +399,55 @@ const App = () => {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem('vellum-theme', theme); } catch {}
   }, [theme]);
+
+  const [sidebar, setSidebar] = useState('open');
+  const [view, setView] = useState('chat');
+  const [activeChatId, setActiveChatId] = useState(null);
+  const [chats, setChats] = useState(SEED_CHATS);
+  const [library, setLibrary] = useState(SEED_LIBRARY);
+  const [projects, setProjects] = useState(SEED_PROJECTS);
+  const [profile, setProfile] = useState(PROFILE_DEFAULT);
+  const [menu, setMenu] = useState(null);          // {type:'chat'|'profile'|..., id?, x, y}
+  const [renamingId, setRenamingId] = useState(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); };
+  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); };
+  const nav = v => { setView(v); setMenu(null); };
+
+  const chatMenuAction = (id, action) => {
+    setMenu(null);
+    if (action === 'rename') { setRenamingId(id); return; }
+    if (action === 'share') return;
+    setChats(cs => {
+      if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
+      if (action === 'archive') return cs.map(c => c.id === id ? {...c, archived: true} : c);
+      if (action === 'delete') return cs.filter(c => c.id !== id);
+      return cs;
+    });
+    if ((action === 'archive' || action === 'delete') && activeChatId === id) setActiveChatId(null);
+  };
+
+  const renameChat = (id, title) => {
+    setRenamingId(null);
+    if (title && title.trim()) setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
+  };
+
+  const openProfileMenu = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenu({type: 'profile', x: r.left, y: r.top});
+  };
+
+  const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
 
   return (
     <div className="stage">
@@ -296,9 +467,19 @@ const App = () => {
           </div>
         </div>
         <div className="body">
-          <div className="sidebar"/>
-          <div className="main"><div className="placeholder">default mode goes here</div></div>
+          {sidebar === 'open'
+            ? <Sidebar chats={chats} activeChatId={activeChatId} view={view} renamingId={renamingId} profile={profile}
+                onCollapse={() => setSidebar('rail')} onNewChat={newChat} onSearch={() => setSearchOpen(true)}
+                onNav={nav} onOpenChat={openChat}
+                onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
+                onRename={renameChat} onProfile={openProfileMenu}/>
+            : <Rail view={view} profile={profile} onExpand={() => setSidebar('open')} onNewChat={newChat}
+                onSearch={() => setSearchOpen(true)} onNav={nav} onProfile={openProfileMenu}/>}
+          <div className="main">
+            <div className="placeholder">default mode goes here</div>
+          </div>
         </div>
+        {menuChat && <ChatMenu chat={menuChat} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
       </div>
     </div>
   );
