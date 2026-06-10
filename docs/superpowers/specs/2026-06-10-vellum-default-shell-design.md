@@ -168,6 +168,88 @@ shell with `vellum-coding.html` inside the Tauri desktop app.
 
 ---
 
+## Addendum B (10/06/2026, second pass) — timeline, rail flyouts, live composer
+
+User additions after reviewing the shipped shell, with ChatGPT references:
+
+### B1. Conversation timeline ("the bars")
+Inside a thread, a vertical stack of small bars sits at the middle-right edge of the chat
+area — one bar per **user** message (bar width varies with message length). Hovering the
+strip opens a popup listing every user prompt from the first to the present (truncated,
+scrollable). Clicking a row smooth-scrolls to that message. Shown when the thread has ≥ 2
+user messages. Purpose: re-orient in a long-running chat the user returns to daily.
+
+### B2. Collapsed-rail flyouts + sidebar Projects section
+- **Rail**: a chats icon shows, on hover, a "Recents" flyout with the **last 10** chats
+  (pinned-first order, click opens). The projects icon shows, on hover, a Projects flyout
+  (New project + project rows with `⋯` settings).
+- **Expanded sidebar**: per the screenshot, a **Projects** section sits between nav and
+  Recents: header (click → Projects page), `New project` row, project rows. Hover `⋯` →
+  **Share project** (dim, not in preview) · **Rename project** (inline) · **Delete project**
+  (red). The standalone "Projects" nav row is replaced by this section.
+
+### B3. Dynamic composer placeholder
+The static "ask." placeholder becomes a rotating, animated overlay (only when the input is
+empty): phrases cycle every ~3s with a fade-up animation. Vellum register, lowercase:
+`ask.` · `what are you reading.` · `write, or edit.` · `search your library.` ·
+`sit with a question.`
+
+### B4. Generation glow
+While a reply streams: **dark mode** → the existing shimmer gains a soft ember glow
+(drop-shadow on the gradient text). **Light mode** → no shimmer/glow at all; plain text
+streams in normally.
+
+Audit (same 9 lenses, deltas only): intent ✓ (mirrors all four asks + screenshots);
+YAGNI ✓ (timeline only for user messages; flyouts hover-only; no virtualization);
+brand ✓ (placeholder phrases + glow use ember, lowercase register); consistency ✓
+(reuses ctx-menu/popover/rename patterns); honesty ✓ (Share project dim-hinted);
+testability ✓ (smoke checks added for each).
+
+## Addendum C (10/06/2026, third pass) — project viewing
+
+ChatGPT-style projects, per the user's screenshots:
+
+### C1. Data model
+`chats[].projectId` (null = loose chat in Recents). `projects[]` gains
+`memory: 'default'|'project-only'` and `sources: [{id,name,kind,size,modified}]`.
+Recents (sidebar list, rail flyout, search "recents") exclude project chats.
+
+### C2. Create-project modal
+"New project" (sidebar row, rail flyout, Projects-page button) opens a modal: title
+"Create project", gear icon → **Memory** popover ("Note that this setting can't be changed
+later." · **Default** — project can access memories from outside chats, and vice versa ·
+**Project-only** — its memories are hidden from outside chats; ✓ on the selected), × close,
+**Project name** input (placeholder "Copenhagen Trip"), hint card ("Projects keep chats,
+files, and custom instructions in one place. Use them for ongoing work, or just to keep
+things tidy."), **Create project** button (disabled until named). Creating opens the
+project page. Inline-rename creation is replaced by this modal.
+
+### C3. Project page (`view:'project'` + `activeProjectId`)
+Header: folder glyph + project name (+ dim memory label when project-only). Below: composer
+with static placeholder **"New chat in {name}"** — sending creates a chat **inside the
+project** and opens it. Tabs **Chats / Sources**; right side "Newest ⌄" / "All ⌄" chips
+(dim, not in preview).
+- **Chats tab**: rows of the project's chats (click opens); empty state "No chats yet" /
+  "Chats in {name} will live here."
+- **Sources tab**: dashed empty-state card — glyph cluster, "Give Vellum more context",
+  "Upload sources to give Vellum deeper context about your project." (no Slack/Drive —
+  preview is local-only, Vellum register), **Add sources** button → file picker; added
+  sources list as rows (kind icon, name, size) and also land in the Library.
+
+### C4. Sidebar nesting + chat menu
+Project chats render indented under their project row (active highlight as usual).
+The chat `⋯` menu for a project chat gains **Remove from {project}** (moves the chat to
+Recents). Opening a project chat shows a breadcrumb strip (folder glyph + project name)
+at the top of the chat view. Deleting a project moves its chats to Recents (no silent
+chat loss in a preview) — its sources stay in the Library. Project grid cards show live
+chat counts and open the project page.
+
+Audit deltas: intent ✓ (all 8 screenshots mapped; "user can create a new chat inside the
+project" is C3's composer); YAGNI ✓ (no Slack/Drive connectors, no custom instructions —
+dim/absent, honest); consistency ✓ (modal/popover/menu/rename patterns reused); honesty ✓
+(memory setting stored and displayed but marked preview-only by the shell title);
+testability ✓ (smoke: modal create, in-project chat, nesting, remove-from, sources add).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default

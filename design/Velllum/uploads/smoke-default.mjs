@@ -3,6 +3,11 @@
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+const srcFile = join(tmpdir(), "vellum-smoke-source.txt");
+writeFileSync(srcFile, "a quiet source");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const npmRoot = execSync("npm root -g").toString().trim();
@@ -32,10 +37,12 @@ await check("landing: greeting + composer + chips", async () => {
   if (await page.locator(".chip").count() !== 3) throw new Error("chips != 3");
 });
 
-await check("sidebar: nav rows + recents + profile", async () => {
-  for (const label of ["New chat", "Search chats", "Library", "Projects"])
+await check("sidebar: nav rows + projects section + recents + profile", async () => {
+  for (const label of ["New chat", "Search chats", "Library", "New project"])
     if (!(await page.locator(".sb-row", { hasText: label }).count())) throw new Error("missing " + label);
-  if (await page.locator(".chat-row").count() < 5) throw new Error("recents missing");
+  for (const sec of ["Projects", "Recents"])
+    if (!(await page.locator(".sb-sec", { hasText: sec }).count())) throw new Error("missing section " + sec);
+  if (await page.locator(".chat-row").count() < 8) throw new Error("project/recent rows missing");
   await page.locator(".profile-row .p-name").waitFor();
 });
 
@@ -70,11 +77,110 @@ await check("regenerate re-streams a different variant", async () => {
   if (before === after) throw new Error("same text after regenerate");
 });
 
+await check("dark streaming: ember glow shimmer", async () => {
+  await page.locator(".cpill textarea").fill("and what about patience");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    if (!el || !el.classList.contains("shimmer")) return false;
+    const cs = getComputedStyle(el);
+    return cs.filter.includes("drop-shadow") && cs.webkitTextFillColor === "rgba(0, 0, 0, 0)";
+  }, { timeout: 5000 });
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    return el && !el.classList.contains("shimmer") && el.textContent.length > 40;
+  }, { timeout: 15000 });
+});
+
+await check("timeline: bars + history popup + jump", async () => {
+  await page.locator(".timeline").waitFor();
+  if (await page.locator(".tl-bar").count() !== 2) throw new Error("expected 2 bars");
+  await page.locator(".timeline").hover();
+  await page.locator(".tl-pop").waitFor();
+  if (await page.locator(".tl-row").count() !== 2) throw new Error("expected 2 history rows");
+  await page.locator(".tl-row").first().click();
+  await page.locator(".bubble").first().waitFor();
+  await page.mouse.move(400, 300);
+});
+
 await check("collapse → rail → expand", async () => {
   await page.locator(".tbtn[title='Collapse sidebar']").click();
   await page.locator(".rail").waitFor();
   await page.locator(".rail-logo").click();
   await page.locator(".sidebar").waitFor();
+});
+
+await check("rail flyouts: last-10 recents + projects settings", async () => {
+  await page.locator(".tbtn[title='Collapse sidebar']").click();
+  await page.locator(".rail").waitFor();
+  await page.locator(".rail-btn[title='Chats']").hover();
+  await page.locator(".flyout .fly-head", { hasText: "Recents" }).waitFor();
+  const rows = await page.locator(".flyout .chat-row").count();
+  if (rows < 5 || rows > 10) throw new Error("recents flyout rows: " + rows);
+  await page.locator(".rail-btn[title='Projects']").hover();
+  await page.locator(".flyout .chat-row", { hasText: "New project" }).waitFor();
+  await page.locator(".flyout .chat-row", { hasText: "Vellum Desktop" }).waitFor();
+  await page.locator(".rail-logo").click();
+  await page.locator(".sidebar").waitFor();
+});
+
+await check("create project via modal (project-only memory)", async () => {
+  await page.locator(".sb-row", { hasText: "New project" }).click();
+  await page.locator(".modal .m-title", { hasText: "Create project" }).waitFor();
+  if (!(await page.locator(".btn.primary:disabled").count())) throw new Error("Create should be disabled when unnamed");
+  await page.locator(".tbtn[title='Project memory']").click();
+  await page.locator(".gp-item", { hasText: "Project-only" }).click();
+  await page.locator(".m-field input").fill("Smoke project");
+  await page.locator(".btn.primary", { hasText: "Create project" }).click();
+  await page.locator(".proj-name", { hasText: "Smoke project" }).waitFor();
+  await page.locator(".proj-mem", { hasText: "project-only memory" }).waitFor();
+});
+
+await check("new chat inside project + breadcrumb + nesting", async () => {
+  await page.locator(".cpill textarea").fill("plan the smoke run");
+  await page.keyboard.press("Enter");
+  await page.locator(".crumb", { hasText: "Smoke project" }).waitFor();
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    return el && !el.classList.contains("shimmer") && el.textContent.length > 40;
+  }, { timeout: 15000 });
+  await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).waitFor();
+  if (await page.locator(".chat-row", { hasText: "plan the smoke run" }).count() !== 1)
+    throw new Error("project chat leaked into Recents");
+});
+
+await check("project page lists its chats + sources upload", async () => {
+  await page.locator(".chat-row", { hasText: "Smoke project" }).first().click();
+  await page.locator(".proj-chat-row", { hasText: "plan the smoke run" }).waitFor();
+  await page.locator(".tab", { hasText: "Sources" }).click();
+  await page.locator(".src-title", { hasText: "Give Vellum more context" }).waitFor();
+  await page.locator(".page input[type=file]").last().setInputFiles(srcFile);
+  await page.locator(".src-row", { hasText: "vellum-smoke-source.txt" }).waitFor();
+});
+
+await check("remove from project → moves to Recents", async () => {
+  const row = page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).first();
+  await row.hover();
+  await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Remove from Smoke project" }).click();
+  if (await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).count()) throw new Error("still nested");
+  await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
+});
+
+await check("rename + delete project via menu", async () => {
+  const row = page.locator(".chat-row", { hasText: "Smoke project" }).first();
+  await row.hover();
+  await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Rename project" }).click();
+  await page.locator(".sidebar .rename-input").fill("Smoke renamed");
+  await page.keyboard.press("Enter");
+  const renamed = page.locator(".chat-row", { hasText: "Smoke renamed" }).first();
+  await renamed.waitFor();
+  await renamed.hover();
+  await renamed.locator(".chat-dots").click();
+  await page.locator(".ctx-item.danger", { hasText: "Delete project" }).click();
+  if (await page.locator(".chat-row", { hasText: "Smoke renamed" }).count()) throw new Error("project still present");
+  await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
 });
 
 await check("search overlay filters and opens", async () => {
@@ -134,13 +240,12 @@ await check("library: tabs + search + grid/list + note", async () => {
   await page.locator(".ltr", { hasText: "a quiet note" }).waitFor();
 });
 
-await check("projects: cards + new project", async () => {
-  await page.locator(".sb-row", { hasText: "Projects" }).click();
+await check("projects grid: cards open project page", async () => {
+  await page.locator(".sb-sec", { hasText: "Projects" }).click();
   if (await page.locator(".pcard").count() < 3) throw new Error("seed cards missing");
-  await page.locator(".new-btn", { hasText: "New project" }).click();
-  await page.locator(".rename-input").fill("Default shell");
-  await page.keyboard.press("Enter");
-  await page.locator(".pcard h3", { hasText: "Default shell" }).waitFor();
+  await page.locator(".pcard", { hasText: "Vellum Desktop" }).click();
+  await page.locator(".proj-name", { hasText: "Vellum Desktop" }).waitFor();
+  await page.locator(".proj-empty .pe-t", { hasText: "No chats yet" }).waitFor();
 });
 
 await check("profile popover → edit profile → save updates sidebar", async () => {
@@ -161,6 +266,32 @@ await check("theme toggle → light + persists", async () => {
   await page.reload();
   await page.waitForSelector(".landing, .msgs, .page", { timeout: 20000 });
   if (await page.evaluate(() => document.documentElement.getAttribute("data-theme")) !== "light") throw new Error("did not persist");
+});
+
+await check("light streaming: plain text, no shimmer fill", async () => {
+  // after reload above we are in light mode on the landing
+  await page.locator(".cpill textarea").fill("a quiet thought for the morning");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    if (!el || !el.classList.contains("shimmer")) return false;
+    const cs = getComputedStyle(el);
+    return cs.webkitTextFillColor !== "rgba(0, 0, 0, 0)" && !cs.filter.includes("drop-shadow");
+  }, { timeout: 5000 });
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    return el && !el.classList.contains("shimmer") && el.textContent.length > 40;
+  }, { timeout: 15000 });
+});
+
+await check("animated placeholder rotates", async () => {
+  await page.locator(".sb-row", { hasText: "New chat" }).click();
+  await page.locator(".ph-anim").waitFor();
+  const first = await page.locator(".ph-anim").textContent();
+  await page.waitForFunction(prev => {
+    const el = document.querySelector(".ph-anim");
+    return el && el.textContent !== prev;
+  }, first, { timeout: 6000 });
 });
 
 if (errors.length) { failed++; console.log("FAIL  console clean — " + errors.join(" | ")); }
