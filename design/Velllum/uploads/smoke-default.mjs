@@ -3,6 +3,11 @@
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+
+const srcFile = join(tmpdir(), "vellum-smoke-source.txt");
+writeFileSync(srcFile, "a quiet source");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const npmRoot = execSync("npm root -g").toString().trim();
@@ -119,16 +124,63 @@ await check("rail flyouts: last-10 recents + projects settings", async () => {
   await page.locator(".sidebar").waitFor();
 });
 
-await check("sidebar project: new + rename + delete", async () => {
+await check("create project via modal (project-only memory)", async () => {
   await page.locator(".sb-row", { hasText: "New project" }).click();
-  await page.locator(".sidebar .rename-input").fill("Smoke project");
+  await page.locator(".modal .m-title", { hasText: "Create project" }).waitFor();
+  if (!(await page.locator(".btn.primary:disabled").count())) throw new Error("Create should be disabled when unnamed");
+  await page.locator(".tbtn[title='Project memory']").click();
+  await page.locator(".gp-item", { hasText: "Project-only" }).click();
+  await page.locator(".m-field input").fill("Smoke project");
+  await page.locator(".btn.primary", { hasText: "Create project" }).click();
+  await page.locator(".proj-name", { hasText: "Smoke project" }).waitFor();
+  await page.locator(".proj-mem", { hasText: "project-only memory" }).waitFor();
+});
+
+await check("new chat inside project + breadcrumb + nesting", async () => {
+  await page.locator(".cpill textarea").fill("plan the smoke run");
   await page.keyboard.press("Enter");
-  const row = page.locator(".chat-row", { hasText: "Smoke project" }).first();
-  await row.waitFor();
+  await page.locator(".crumb", { hasText: "Smoke project" }).waitFor();
+  await page.waitForFunction(() => {
+    const el = [...document.querySelectorAll(".areply")].pop();
+    return el && !el.classList.contains("shimmer") && el.textContent.length > 40;
+  }, { timeout: 15000 });
+  await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).waitFor();
+  if (await page.locator(".chat-row", { hasText: "plan the smoke run" }).count() !== 1)
+    throw new Error("project chat leaked into Recents");
+});
+
+await check("project page lists its chats + sources upload", async () => {
+  await page.locator(".chat-row", { hasText: "Smoke project" }).first().click();
+  await page.locator(".proj-chat-row", { hasText: "plan the smoke run" }).waitFor();
+  await page.locator(".tab", { hasText: "Sources" }).click();
+  await page.locator(".src-title", { hasText: "Give Vellum more context" }).waitFor();
+  await page.locator(".page input[type=file]").last().setInputFiles(srcFile);
+  await page.locator(".src-row", { hasText: "vellum-smoke-source.txt" }).waitFor();
+});
+
+await check("remove from project → moves to Recents", async () => {
+  const row = page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).first();
   await row.hover();
   await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Remove from Smoke project" }).click();
+  if (await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).count()) throw new Error("still nested");
+  await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
+});
+
+await check("rename + delete project via menu", async () => {
+  const row = page.locator(".chat-row", { hasText: "Smoke project" }).first();
+  await row.hover();
+  await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Rename project" }).click();
+  await page.locator(".sidebar .rename-input").fill("Smoke renamed");
+  await page.keyboard.press("Enter");
+  const renamed = page.locator(".chat-row", { hasText: "Smoke renamed" }).first();
+  await renamed.waitFor();
+  await renamed.hover();
+  await renamed.locator(".chat-dots").click();
   await page.locator(".ctx-item.danger", { hasText: "Delete project" }).click();
-  if (await page.locator(".chat-row", { hasText: "Smoke project" }).count()) throw new Error("project still present");
+  if (await page.locator(".chat-row", { hasText: "Smoke renamed" }).count()) throw new Error("project still present");
+  await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
 });
 
 await check("search overlay filters and opens", async () => {
@@ -188,13 +240,12 @@ await check("library: tabs + search + grid/list + note", async () => {
   await page.locator(".ltr", { hasText: "a quiet note" }).waitFor();
 });
 
-await check("projects: cards + new project", async () => {
+await check("projects grid: cards open project page", async () => {
   await page.locator(".sb-sec", { hasText: "Projects" }).click();
   if (await page.locator(".pcard").count() < 3) throw new Error("seed cards missing");
-  await page.locator(".new-btn", { hasText: "New project" }).click();
-  await page.locator(".rename-input").fill("Default shell");
-  await page.keyboard.press("Enter");
-  await page.locator(".pcard h3", { hasText: "Default shell" }).waitFor();
+  await page.locator(".pcard", { hasText: "Vellum Desktop" }).click();
+  await page.locator(".proj-name", { hasText: "Vellum Desktop" }).waitFor();
+  await page.locator(".proj-empty .pe-t", { hasText: "No chats yet" }).waitFor();
 });
 
 await check("profile popover → edit profile → save updates sidebar", async () => {
