@@ -87,19 +87,38 @@ await check("image attach → thumbnail → lightbox", async () => {
   if (await page.locator(".att-img").count()) throw new Error("image attachment not removed");
 });
 
-await check("apps: Finish Setup + toggle surface chips", async () => {
-  await page.locator(".app-chip", { hasText: "Apps" }).click();
+await check("apps: single chip, n-apps picker, deselect, repo panel", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
   await page.locator(".apps-drop").waitFor();
   await page.locator(".app-act", { hasText: "Finish Setup" }).click();
-  await page.locator(".app-chip", { hasText: "GitHub" }).waitFor();
+  await page.locator(".app-chip[title='GitHub']").waitFor();
   await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
-  await page.locator(".app-chip", { hasText: "Airtable" }).waitFor();
-  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
-  if (await page.locator(".app-chip", { hasText: "Airtable" }).count()) throw new Error("Airtable chip not removed");
+  await page.locator(".app-chip[title='Selected apps']", { hasText: "2 apps" }).waitFor();
   await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='Selected apps']").click();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).click();   // ✓ row → deselect
+  await page.locator(".app-chip[title='GitHub']").waitFor();
+  await page.locator(".apps-drop .app-row", { hasText: "GitHub" }).click();     // › row → repo panel
+  await page.locator("input[placeholder='Search repositories…']").waitFor();
+  await page.locator(".s-none", { hasText: "No repositories found" }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='GitHub'] .sb-ic[title='Disconnect']").click();
+  if (await page.locator(".app-chip[title='GitHub']").count()) throw new Error("GitHub chip not removed by ⊗");
+});
+
+await check("slash command menu: open, filter, dismiss", async () => {
+  const ta = page.locator(".cpill textarea");
+  await ta.fill("/");
+  await page.locator(".slash-menu .plus-item", { hasText: "Add photos & files" }).waitFor();
+  await ta.fill("/web");
+  if (await page.locator(".slash-menu .plus-item").count() !== 1) throw new Error("slash filter wrong");
+  await page.keyboard.press("Escape");
+  if (await page.locator(".slash-menu").count()) throw new Error("Esc did not dismiss slash menu");
+  await ta.fill("");
 });
 
 await check("sidebar: nav rows + projects section + recents + profile", async () => {
+  if (!(await page.locator(".sb-scroll .sb-row", { hasText: "New chat" }).count())) throw new Error("nav rows not inside the scroll container");
   for (const label of ["New chat", "Search chats", "Library", "New project"])
     if (!(await page.locator(".sb-row", { hasText: label }).count())) throw new Error("missing " + label);
   for (const sec of ["Projects", "Recents"])

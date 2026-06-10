@@ -245,6 +245,9 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .cpill > .ta-wrap{width:100%;padding:2px 8px 0}
 .cspace{flex:1}
 .plus-menu.down,.apps-drop.down,.model-drop.down{bottom:auto;top:46px}
+/* slash menu */
+.slash-menu{position:absolute;left:34px;bottom:46px;z-index:50;width:218px;border:1px solid var(--line2);border-radius:14px;padding:5px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.slash-menu.down{bottom:auto;top:46px}
 /* add-from-library modal */
 .libpick{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:70;width:560px;max-width:92vw;border:1px solid var(--line2);border-radius:16px;padding:18px 0 8px;background:var(--modal);box-shadow:0 24px 80px rgba(0,0,0,.5)}
 .lp-head{display:flex;align-items:center;padding:0 18px 10px}
@@ -406,7 +409,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .led-v{font-family:var(--font-m);letter-spacing:-.01em}
 .mem-stats{font-family:var(--font-m);font-size:11px}
 .ph-anim{font-style:normal}
-.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop,.libpick{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop,.libpick,.slash-menu{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
 .modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}}
@@ -509,6 +512,48 @@ const SEED_APPS = [
   { id: 'dropbox',  name: 'Dropbox',  state: 'connect' },
   { id: 'gmail',    name: 'Gmail',    state: 'connect' },
 ];
+
+const IcXCircle = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></I>;
+
+const AppsPicker = ({apps, drop, onToggle, onGitHub, onClose}) => (
+  <React.Fragment>
+    <div className="backdrop" onClick={onClose}/>
+    <div className={'apps-drop' + (drop === 'down' ? ' down' : '')}>
+      {apps.map(a => {
+        const Ic = APP_ICONS[a.id] || IcGrid;
+        return a.id === 'github' ? (
+          <div key={a.id} className="app-row" style={{cursor: 'pointer'}} onClick={onGitHub}>
+            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+            <span className="a-nm">GitHub</span>
+            <span className="p-arr"><IcChevR size={13}/></span>
+          </div>
+        ) : (
+          <div key={a.id} className="app-row" style={{cursor: 'pointer'}} title="Click to deselect" onClick={() => onToggle(a.id)}>
+            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+            <span className="a-nm">{a.name}</span>
+            <span className="drop-check"><IcCheck size={14}/></span>
+          </div>
+        );
+      })}
+    </div>
+  </React.Fragment>
+);
+
+const GitHubPanel = ({drop, onClose}) => {
+  const [q, setQ] = useState('');
+  return (
+    <React.Fragment>
+      <div className="backdrop" onClick={onClose}/>
+      <div className={'apps-drop' + (drop === 'down' ? ' down' : '')} style={{width: 290}}>
+        <input className="model-search" autoFocus placeholder="Search repositories…" value={q} onChange={e => setQ(e.target.value)}/>
+        <div className="s-none" style={{textAlign: 'left', padding: '8px 13px'}}>No repositories found</div>
+        <div className="plus-div"/>
+        <div className="plus-item dim" title="Not in this preview">Configure Repositories<span className="p-arr"><IcShare size={13}/></span></div>
+        <div className="ctx-hint">Not indexed or not seeing a repository? Learn more</div>
+      </div>
+    </React.Fragment>
+  );
+};
 
 const AppsDrop = ({apps, drop, onToggle, onConnect, onClose}) => (
   <React.Fragment>
@@ -685,15 +730,15 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
         <span className="wordmark"><em>v</em>ellum</span>
         <button className="tbtn" title="Collapse sidebar" onClick={onCollapse}><IcPanel/></button>
       </div>
-      <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
-      <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats</button>
-      <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library</button>
-      <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
-      <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
-      <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
-      <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
-      <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
       <div className="sb-scroll">
+        <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
+        <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats</button>
+        <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library</button>
+        <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
+        <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+        <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
+        <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
+        <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
         <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
           Projects
           <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
@@ -932,6 +977,33 @@ const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpen
   );
 };
 
+const SLASH_ITEMS = [
+  { k: 'files', label: 'Add photos & files', ic: IcUpload, run: 'file' },
+  { k: 'think', label: 'Thinking',          ic: IcSparkle, dim: true },
+  { k: 'image', label: 'Create image',      ic: IcImage,   dim: true },
+  { k: 'web',   label: 'Web search',        ic: IcGlobe,   dim: true },
+  { k: 'study', label: 'Study and learn',   ic: IcLibrary, dim: true },
+];
+
+const SlashMenu = ({q, drop, onFile, onDismiss}) => {
+  const hits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(q));
+  if (!hits.length) return null;
+  return (
+    <div className={'slash-menu' + (drop === 'down' ? ' down' : '')}>
+      {hits.map(it => {
+        const Ic = it.ic;
+        return (
+          <div key={it.k} className={'plus-item' + (it.dim ? ' dim' : '')}
+            title={it.dim ? 'Not in this preview' : undefined}
+            onClick={() => { if (it.run === 'file') onFile(); else onDismiss(); }}>
+            <span className="sb-ic"><Ic size={16}/></span>{it.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 const LibPickModal = ({library, onPick, onClose}) => {
   const [q, setQ] = useState('');
   const hits = library.filter(it => it.name.toLowerCase().includes(q.toLowerCase()));
@@ -967,14 +1039,24 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up'
   const [plusOpen, setPlusOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
   const [libOpen, setLibOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [ghOpen, setGhOpen] = useState(false);
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); } };
+    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); setPickOpen(false); setGhOpen(false); setSlashDismissed(true); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  const prevSlash = useRef(false);
+  useEffect(() => {
+    const isSlash = text.startsWith('/');
+    if (!isSlash || !prevSlash.current) setSlashDismissed(false);
+    prevSlash.current = isSlash;
+  }, [text]);
+  const slashOpen = text.startsWith('/') && !slashDismissed;
   useEffect(() => {
     if (text || ph) return;
     const t = setInterval(() => setPhIdx(i => (i + 1) % PLACEHOLDERS.length), 3000);
@@ -1036,16 +1118,37 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up'
             onOpenLibrary={() => { setPlusOpen(false); setLibOpen(true); }}
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
-          {apps && (
-            <React.Fragment>
-              <button className="app-chip" title="Apps" onClick={() => setAppsOpen(true)}><span className="sb-ic"><IcGrid size={14}/></span>Apps<IcChevD size={11}/></button>
-              {apps.filter(a => a.state === 'on').map(a => {
-                const Ic = APP_ICONS[a.id] || IcGrid;
-                return <button key={a.id} className="app-chip" title={a.name + ' — connected (preview)'} onClick={() => setAppsOpen(true)}><span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/></button>;
-              })}
-              {appsOpen && <AppsDrop apps={apps} drop={drop} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
-            </React.Fragment>
-          )}
+          {apps && (() => {
+            const onApps = apps.filter(a => a.state === 'on');
+            return (
+              <React.Fragment>
+                <button className="app-chip" title="Apps" onClick={() => setAppsOpen(true)}><span className="sb-ic"><IcGrid size={14}/></span>Apps<IcChevD size={11}/></button>
+                {onApps.length === 1 && (() => {
+                  const a = onApps[0];
+                  const Ic = APP_ICONS[a.id] || IcGrid;
+                  return (
+                    <button className="app-chip" title={a.name}
+                      onClick={() => a.id === 'github' ? setGhOpen(true) : setPickOpen(true)}>
+                      <span className="sb-ic" title="Disconnect" onClick={e => { e.stopPropagation(); onToggleApp(a.id); }}><IcXCircle size={14}/></span>
+                      <span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/>
+                    </button>
+                  );
+                })()}
+                {onApps.length > 1 && (
+                  <button className="app-chip" title="Selected apps" onClick={() => setPickOpen(true)}>
+                    <span className="sb-ic"><IcGrid size={14}/></span>{onApps.length} apps<IcChevD size={11}/>
+                  </button>
+                )}
+                {appsOpen && <AppsDrop apps={apps} drop={drop} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
+                {pickOpen && onApps.length > 0 && <AppsPicker apps={onApps} drop={drop} onToggle={onToggleApp}
+                  onGitHub={() => { setPickOpen(false); setGhOpen(true); }} onClose={() => setPickOpen(false)}/>}
+                {ghOpen && <GitHubPanel drop={drop} onClose={() => setGhOpen(false)}/>}
+              </React.Fragment>
+            );
+          })()}
+          {slashOpen && <SlashMenu q={text.slice(1).toLowerCase()} drop={drop}
+            onFile={() => { setText(''); fileRef.current.click(); }}
+            onDismiss={() => setSlashDismissed(true)}/>}
           <div className="cspace"/>
           <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model)}</span><IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
