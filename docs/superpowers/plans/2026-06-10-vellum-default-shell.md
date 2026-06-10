@@ -94,6 +94,26 @@
 - [ ] New checks: timeline bars + popup rows + jump (2-message thread); rail recents flyout (≤10 rows, opens chat); sidebar Projects section (new/rename/delete project); animated placeholder present + rotates within 5s; light-mode streaming text visible (computed text fill not transparent).
 - [ ] Run full suite → all PASS. Commit + push.
 
+## Addendum C tasks (10/06/2026, third pass — spec Addendum C)
+
+### Task 11: Project model + Create-project modal + sidebar nesting + menus
+**Files:** Modify `vellum-default.html`.
+- [ ] `chats[].projectId` (null default); `projects[]` gain `memory:'default'`, `sources:[]`. `visibleChats` excludes `projectId` chats (Recents/rail/search untouched by project chats).
+- [ ] `CreateProjectModal`: name input ("Copenhagen Trip" placeholder), gear → memory popover (Default ✓ / Project-only, "can't be changed later" note), hint card, Create disabled until named → `createProject({name, memory})` → opens project page. All "New project" entry points open this modal.
+- [ ] Sidebar: project chats render indented (`.chat-row.nested`) under their project row; `ChatMenu` gains `Remove from {project}` for project chats (`action:'removeproj'` → `projectId=null`). Project row click → `openProject(id)`; grid cards too; delete project moves its chats to Recents.
+- [ ] Verify compile. Commit + push.
+
+### Task 12: Project page + in-project chat + breadcrumb + sources
+**Files:** Modify `vellum-default.html`.
+- [ ] `view:'project'` + `activeProjectId`. `ProjectPage`: folder+name header (dim "project-only memory" label when set), Composer with static `ph="New chat in {name}"` → `sendMessage(text, attach, projectId)` then open the new chat; tabs Chats/Sources + dim "Newest ⌄"/"All ⌄" chips; Chats tab rows/empty state; Sources tab dashed card ("Give Vellum more context" + Add sources file picker) and source rows; sources also append to Library.
+- [ ] `ChatView` breadcrumb strip (folder glyph + project name) when the open chat has a `projectId`; ProjectsView cards show live chat counts and open the page.
+- [ ] Verify compile. Commit + push.
+
+### Task 13: Smoke coverage for projects
+**Files:** Modify `smoke-default.mjs`.
+- [ ] New checks: Create-project modal (name + Project-only memory) → project page opens; "New chat in" composer creates nested chat (sidebar indent, breadcrumb, absent from Recents); Remove from project moves chat to Recents; Sources tab Add sources via `setInputFiles` → row + Library entry; delete project keeps its chats in Recents. Update older checks that assumed inline-rename project creation.
+- [ ] Full suite green. Commit + push.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.
