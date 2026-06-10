@@ -240,6 +240,69 @@ await check("library: tabs + search + grid/list + note", async () => {
   await page.locator(".ltr", { hasText: "a quiet note" }).waitFor();
 });
 
+await check("coding row present, wired to workspace", async () => {
+  const row = page.locator(".sb-row", { hasText: "Coding" });
+  await row.waitFor();
+  const title = await row.getAttribute("title");
+  if (!title || !title.includes("workspace")) throw new Error("coding row not labeled for workspace");
+});
+
+await check("ledger view renders", async () => {
+  await page.locator(".sb-row", { hasText: "Ledger" }).click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
+  await page.locator(".quiet-foot", { hasText: "Filed locally. Nothing sent." }).waitFor();
+  if (await page.locator(".led-row").count() !== 3) throw new Error("model breakdown rows wrong");
+});
+
+await check("skills: approve → Active, retire → Retired", async () => {
+  await page.locator(".sb-row", { hasText: "Skills" }).click();
+  await page.locator(".tab", { hasText: "Proposed (2)" }).waitFor();
+  await page.locator(".skill-card", { hasText: "Book summary" }).locator("button", { hasText: "Approve" }).click();
+  await page.locator(".tab", { hasText: "Proposed (1)" }).waitFor();
+  await page.locator(".tab", { hasText: "Active (3)" }).click();
+  const card = page.locator(".skill-card", { hasText: "Book summary" });
+  await card.waitFor();
+  await card.locator("button", { hasText: "Retire" }).click();
+  await page.locator(".tab", { hasText: "Retired (2)" }).waitFor();
+});
+
+await check("memory: forget removes a fact", async () => {
+  await page.locator(".sb-row", { hasText: "Memory" }).click();
+  if (await page.locator(".mem-row").count() !== 5) throw new Error("expected 5 facts");
+  await page.locator(".mem-row .chat-dots").first().click();
+  if (await page.locator(".mem-row").count() !== 4) throw new Error("forget did not remove");
+});
+
+await check("archive: restore round-trip", async () => {
+  const row = page.locator(".chat-row", { hasText: "Cult UI Components" }).first();
+  await row.hover();
+  await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Archive" }).click();
+  await page.locator(".sb-row", { hasText: "Archive" }).click();
+  await page.locator(".arc-row", { hasText: "Cult UI Components" }).waitFor();
+  await page.locator(".arc-row button", { hasText: "Restore" }).click();
+  if (await page.locator(".arc-row").count()) throw new Error("archive not emptied");
+  await page.locator(".chat-row", { hasText: "Cult UI Components" }).first().waitFor();
+});
+
+await check("settings modal: feeds toggle + computer use", async () => {
+  await page.locator(".profile-row").click();
+  await page.locator(".pop-row", { hasText: "Settings" }).click();
+  await page.locator(".set-modal").waitFor();
+  await page.locator(".set-item", { hasText: "Feeds" }).click();
+  const sw = page.locator(".sw").first();
+  if (!(await sw.getAttribute("class")).includes("on")) throw new Error("X feed should start on");
+  await sw.click();
+  if ((await sw.getAttribute("class")).includes("on")) throw new Error("toggle did not turn off");
+  await page.locator(".set-item", { hasText: "Computer use" }).click();
+  await page.locator(".set-body .btn.primary", { hasText: "Enable" }).click();
+  await page.locator(".cu-pill.on", { hasText: "active" }).waitFor();
+  await page.locator(".set-body .btn", { hasText: "Stand down" }).click();
+  await page.locator(".cu-pill", { hasText: "standing down" }).waitFor();
+  await page.keyboard.press("Escape");
+  if (await page.locator(".set-modal").count()) throw new Error("Esc did not close settings");
+});
+
 await check("projects grid: cards open project page", async () => {
   await page.locator(".sb-sec", { hasText: "Projects" }).click();
   if (await page.locator(".pcard").count() < 3) throw new Error("seed cards missing");
