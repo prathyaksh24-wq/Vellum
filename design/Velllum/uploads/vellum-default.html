@@ -204,6 +204,20 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
 .crow-rel{position:relative}
 .mode-menu{position:absolute;right:44px;bottom:42px;z-index:30;background:var(--modal);border:1px solid var(--line2);border-radius:10px;padding:5px;min-width:130px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
+/* model picker (ported from vellum-workspace.html) */
+.model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
+.model-pill:hover{background:var(--hover);color:var(--txt)}
+.model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-drop{position:absolute;right:44px;bottom:44px;z-index:30;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
+.drop-lbl{font-size:10.5px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.model-sync{color:var(--ember);cursor:pointer;text-transform:none;letter-spacing:0}
+.model-search{width:calc(100% - 18px);margin:2px 9px 4px;background:var(--input);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--txt2);font:inherit;font-size:12px;outline:none}
+.model-search::placeholder{color:var(--dim2)}
+.model-list{max-height:240px;overflow-y:auto}
+.drop-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 13px;cursor:pointer;color:var(--txt);font-size:12.5px}
+.drop-item:hover{background:var(--hover);color:var(--txt2)}
+.drop-check{color:var(--ember);display:flex}
+.drop-item.manage{border-top:1px solid var(--line);color:var(--ember);margin-top:3px}
 /* thread */
 .msgs{flex:1;overflow-y:auto;padding:26px 24px 10px;display:flex;flex-direction:column;align-items:center}
 .msgs-inner{width:100%;max-width:680px;display:flex;flex-direction:column;gap:18px}
@@ -326,7 +340,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .led-v{font-family:var(--font-m);letter-spacing:-.01em}
 .mem-stats{font-family:var(--font-m);font-size:11px}
 .ph-anim{font-style:normal}
-.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
 .modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}}
@@ -670,24 +684,48 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
-const ModeMenu = ({mode, onPick, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="mode-menu">
-      {['Extended', 'Instant'].map(m => (
-        <div key={m} className="ctx-item" onClick={() => onPick(m)}>
-          {m}{m === mode && <span className="ctx-check"><IcCheck size={13}/></span>}
+const ModelDrop = ({model, onPick, onClose}) => {
+  const [q, setQ] = useState('');
+  const hits = MODELS.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <React.Fragment>
+      <div className="backdrop" onClick={onClose}/>
+      <div className="model-drop">
+        <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">↻ Sync</span></div>
+        <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)}/>
+        <div className="model-list">
+          {hits.map(m => (
+            <div key={m.id} className="drop-item" onClick={() => onPick(m.id)}>
+              <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.label}</span>
+              {model === m.id && <span className="drop-check"><IcCheck size={13}/></span>}
+            </div>
+          ))}
+          {hits.length === 0 && <div className="s-none">No matches.</div>}
         </div>
-      ))}
-    </div>
-  </React.Fragment>
-);
+        <div className="drop-item manage" title="Key management is not in this preview"><span>Manage models &amp; keys…</span></div>
+      </div>
+    </React.Fragment>
+  );
+};
 
 const PLACEHOLDERS = ['Ask anything…', 'Search your library…', 'Draft something new…', 'Think out loud…', 'Plan the week…'];
 
-const Composer = ({text, setText, mode, setMode, onSend, busy, ph}) => {
+/* models — curated list ported from vellum-workspace.html */
+const MODELS = [
+  { id: 'deepseek/deepseek-chat',         label: 'DeepSeek V4 Pro' },
+  { id: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V4 Flash' },
+  { id: 'minimax/minimax-01',             label: 'MiniMax' },
+  { id: 'google/gemma-3-27b-it',          label: 'Gemma 31B' },
+  { id: 'claude-3-7-sonnet-latest',       label: 'Claude 3.7 Sonnet' },
+  { id: 'gpt-4.1',                        label: 'GPT-4.1' },
+  { id: 'gemini-2.0-flash',               label: 'Gemini 2.0 Flash' },
+];
+const DEFAULT_MODEL = 'deepseek/deepseek-chat';
+const modelLabel = id => { const m = MODELS.find(x => x.id === id); return m ? m.label : id; };
+
+const Composer = ({text, setText, model, setModel, onSend, busy, ph}) => {
   const [attach, setAttach] = useState([]);
-  const [modeOpen, setModeOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
@@ -733,11 +771,11 @@ const Composer = ({text, setText, mode, setMode, onSend, busy, ph}) => {
               ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
               : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
           </div>
-          <button className="mode-chip" onClick={() => setModeOpen(true)}>{mode}<IcChevD size={12}/></button>
+          <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model)}</span><IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
           <button className="csend" disabled={busy || !text.trim()} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
             onClick={send}>{text.trim() ? <IcSend size={15}/> : <IcVoice size={15}/>}</button>
-          {modeOpen && <ModeMenu mode={mode} onPick={m => { setMode(m); setModeOpen(false); }} onClose={() => setModeOpen(false)}/>}
+          {modelOpen && <ModelDrop model={model} onPick={m => { setModel(m); setModelOpen(false); }} onClose={() => setModelOpen(false)}/>}
         </div>
       </div>
     </div>
@@ -790,9 +828,8 @@ const Timeline = ({userMsgs}) => {
   );
 };
 
-const ChatView = ({chat, project, onSend, onRegen}) => {
+const ChatView = ({chat, project, model, setModel, onSend, onRegen}) => {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState('Extended');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
   const busy = msgs.some(m => m.streaming);
@@ -803,7 +840,7 @@ const ChatView = ({chat, project, onSend, onRegen}) => {
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
         <div className="land-greet">Ready when you are.</div>
-        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy}/>
         <div className="chips">
           <button className="chip" onClick={() => setText('Write or edit ')}><span className="sb-ic"><IcPenLine size={13}/></span>Write or edit</button>
           <button className="chip" onClick={() => setText('Look something up: ')}><span className="sb-ic"><IcGlobe size={13}/></span>Look something up</button>
@@ -837,7 +874,7 @@ const ChatView = ({chat, project, onSend, onRegen}) => {
         </div>
       </div>
       <div className="composer-dock">
-        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy}/>
       </div>
     </React.Fragment>
   );
@@ -1022,9 +1059,8 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 );
 
 /* ─── project page ─── */
-const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
+const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource}) => {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState('Extended');
   const [tab, setTab] = useState('Chats');
   const fileRef = useRef(null);
   const mine = chats.filter(c => c.projectId === project.id && !c.archived);
@@ -1037,7 +1073,7 @@ const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
           {project.memory === 'project-only' && <span className="proj-mem">project-only memory</span>}
         </div>
         <div className="proj-comp">
-          <Composer text={text} setText={setText} mode={mode} setMode={setMode}
+          <Composer text={text} setText={setText} model={model} setModel={setModel}
             onSend={onSend} busy={false} ph={'New chat in ' + project.name}/>
         </div>
         <div className="tab-row">
@@ -1443,6 +1479,7 @@ const App = () => {
   const [skills, setSkills] = useState(SEED_SKILLS);
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
+  const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [cuEnabled, setCuEnabled] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
@@ -1627,10 +1664,11 @@ const App = () => {
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 onOpenProject={openProject}/>}
           <div className="main">
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} onSend={sendMessage} onRegen={regenerate}/>}
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
+              model={selModel} setModel={setSelModel}
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
               onAddSource={f => addSource(activeProject.id, f)}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
