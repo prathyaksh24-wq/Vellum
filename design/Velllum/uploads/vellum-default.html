@@ -114,6 +114,8 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .csend{width:34px;height:34px;border-radius:50%;border:none;background:var(--ember);color:var(--onember);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .csend:hover{filter:brightness(1.08)}
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
+.crow-rel{position:relative}
+.mode-menu{position:absolute;right:44px;bottom:42px;z-index:30;background:var(--modal);border:1px solid var(--line2);border-radius:10px;padding:5px;min-width:130px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
 /* thread */
 .msgs{flex:1;overflow-y:auto;padding:26px 24px 10px;display:flex;flex-direction:column;align-items:center}
 .msgs-inner{width:100%;max-width:680px;display:flex;flex-direction:column;gap:18px}
@@ -374,6 +376,165 @@ const Rail = ({view, profile, onExpand, onNewChat, onSearch, onNav, onProfile}) 
   </div>
 );
 
+/* ─── chat ─── */
+const KIND_BY_EXT = { png:'image', jpg:'image', jpeg:'image', gif:'image', webp:'image', svg:'image',
+  pdf:'pdf', diff:'diff', patch:'diff', html:'code', js:'code', jsx:'code', ts:'code', py:'code', css:'code', json:'code', mjs:'code' };
+const kindOf = (name) => KIND_BY_EXT[(name.split('.').pop() || '').toLowerCase()] || 'note';
+const fmtSize = (b) => b >= 1048576 ? (b/1048576).toFixed(1) + ' MB' : (b/1024).toFixed(b < 10240 ? 2 : 1) + ' KB';
+
+const REPLY_BUCKETS = [
+  { test: /read|book|library|novel|author|essay/i, variants: [
+    'Your library has a few threads on this. "{q}" sits close to what you marked in Meditations — the passages on attention. Start there, then the winter reading list.',
+    'Two notes in your library touch this. The nearer one is filed under on stillness. Read it once more before adding anything new.',
+  ]},
+  { test: /code|build|bug|app|feature|deploy|ship/i, variants: [
+    'Building belongs in the coding room — that preview has the full bench. Briefly: "{q}" is one slice, not three. Cut it to the part that ships today.',
+    'The coding mode handles this better. For now: name the smallest change that makes "{q}" true, and do only that.',
+  ]},
+  { test: /./, variants: [
+    'On "{q}" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.',
+    '"{q}" has two halves: the part you can act on this week, and the part that is weather. Keep the first. File the second.',
+  ]},
+];
+const vellumReply = (text, exclude) => {
+  const q = text.trim().replace(/\s+/g, ' ').slice(0, 60);
+  const bucket = REPLY_BUCKETS.find(b => b.test.test(text));
+  const pool = bucket.variants.filter(v => v.replace('{q}', q) !== exclude);
+  const pick = pool[0] || bucket.variants[0];
+  return pick.replace('{q}', q);
+};
+
+const ModeMenu = ({mode, onPick, onClose}) => (
+  <React.Fragment>
+    <div className="backdrop" onClick={onClose}/>
+    <div className="mode-menu">
+      {['Extended', 'Instant'].map(m => (
+        <div key={m} className="ctx-item" onClick={() => onPick(m)}>
+          {m}{m === mode && <span className="ctx-check"><IcCheck size={13}/></span>}
+        </div>
+      ))}
+    </div>
+  </React.Fragment>
+);
+
+const Composer = ({text, setText, mode, setMode, onSend, busy}) => {
+  const [attach, setAttach] = useState([]);
+  const [modeOpen, setModeOpen] = useState(false);
+  const fileRef = useRef(null);
+  const taRef = useRef(null);
+  useEffect(() => {
+    const ta = taRef.current;
+    if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }
+  }, [text]);
+  const send = () => {
+    if (!text.trim() || busy) return;
+    onSend(text.trim(), attach);
+    setText(''); setAttach([]);
+  };
+  return (
+    <div className="composer-wrap">
+      <div className="cpill">
+        {attach.length > 0 && (
+          <div className="attach-strip">
+            {attach.map((a, i) => (
+              <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}
+                <span className="ax" onClick={() => setAttach(at => at.filter((_, j) => j !== i))}><I d="M6 6l12 12M18 6L6 18" size={11}/></span>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="crow crow-rel">
+          <input ref={fileRef} type="file" style={{display: 'none'}}
+            onChange={e => {
+              const f = e.target.files && e.target.files[0];
+              if (f) setAttach(at => [...at, {name: f.name, size: fmtSize(f.size)}]);
+              e.target.value = '';
+            }}/>
+          <button className="cbtn" title="Attach — files land in your Library" onClick={() => fileRef.current.click()}><IcPlus/></button>
+          <textarea ref={taRef} rows={1} placeholder="ask." value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
+          <button className="mode-chip" onClick={() => setModeOpen(true)}>{mode}<IcChevD size={12}/></button>
+          <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
+          <button className="csend" disabled={busy || (!text.trim() && true)} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
+            onClick={send}>{text.trim() ? <IcSend size={15}/> : <IcVoice size={15}/>}</button>
+          {modeOpen && <ModeMenu mode={mode} onPick={m => { setMode(m); setModeOpen(false); }} onClose={() => setModeOpen(false)}/>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const MsgActions = ({msg, onRegen}) => {
+  const [copied, setCopied] = useState(false);
+  const [vote, setVote] = useState(null);
+  const copy = () => {
+    try { navigator.clipboard.writeText(msg.text); } catch {}
+    setCopied(true); setTimeout(() => setCopied(false), 1200);
+  };
+  return (
+    <div className="act-row">
+      <button className="act-btn" title="Copy" onClick={copy}><IcCopy size={14}/></button>
+      {copied && <span className="copied">copied</span>}
+      <button className={'act-btn' + (vote === 'up' ? ' on' : '')} title="Good" onClick={() => setVote(v => v === 'up' ? null : 'up')}><IcThumbUp size={14}/></button>
+      <button className={'act-btn' + (vote === 'down' ? ' on' : '')} title="Not right" onClick={() => setVote(v => v === 'down' ? null : 'down')}><IcThumbDown size={14}/></button>
+      <button className="act-btn" title="Share — not in this preview"><IcShare size={14}/></button>
+      <button className="act-btn" title="Regenerate" onClick={onRegen}><IcRefresh size={14}/></button>
+    </div>
+  );
+};
+
+const ChatView = ({chat, onSend, onRegen}) => {
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState('Extended');
+  const endRef = useRef(null);
+  const msgs = chat ? chat.messages : [];
+  const busy = msgs.some(m => m.streaming);
+  useEffect(() => { if (endRef.current) endRef.current.scrollIntoView({behavior: 'smooth'}); }, [msgs.map(m => m.text).join('|')]);
+
+  if (msgs.length === 0) {
+    return (
+      <div className="landing">
+        <div className="land-mark"><em>v</em>ellum</div>
+        <div className="land-greet">What are you reading.</div>
+        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+        <div className="chips">
+          <button className="chip" onClick={() => setText('Write or edit ')}><span className="sb-ic"><IcPenLine size={13}/></span>Write or edit</button>
+          <button className="chip" onClick={() => setText('Look something up: ')}><span className="sb-ic"><IcGlobe size={13}/></span>Look something up</button>
+          <button className="chip" onClick={() => setText('From my library, ')}><span className="sb-ic"><IcLibrary size={13}/></span>From your library</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <React.Fragment>
+      <div className="msgs">
+        <div className="msgs-inner">
+          {msgs.map(m => m.role === 'user' ? (
+            <div key={m.id} className="bubble-wrap">
+              {m.attachments && m.attachments.length > 0 && (
+                <div className="attach-strip">
+                  {m.attachments.map((a, i) => <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
+                </div>
+              )}
+              <div className="bubble">{m.text}</div>
+            </div>
+          ) : (
+            <div key={m.id}>
+              <div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '…'}</div>
+              {!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}
+            </div>
+          ))}
+          <div ref={endRef}/>
+        </div>
+      </div>
+      <div className="composer-dock">
+        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+      </div>
+    </React.Fragment>
+  );
+};
+
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, pos, onAction, onClose}) => (
   <React.Fragment>
@@ -447,6 +608,57 @@ const App = () => {
     setMenu({type: 'profile', x: r.left, y: r.top});
   };
 
+  const timers = useRef({});
+  useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
+
+  const streamReply = (chatId, msgId, full) => {
+    let i = 0;
+    const tick = () => {
+      i += 3;
+      const done = i >= full.length;
+      setChats(cs => cs.map(c => c.id === chatId
+        ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done} : m)}
+        : c));
+      if (!done) timers.current[msgId] = setTimeout(tick, 22);
+    };
+    timers.current[msgId] = setTimeout(tick, 400);
+  };
+
+  const sendMessage = (text, attach) => {
+    let chatId = activeChatId;
+    const userMsg = {id: uid(), role: 'user', text, attachments: attach};
+    const reply = vellumReply(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
+    if (attach && attach.length) {
+      setLibrary(lib => [
+        ...attach.map(a => ({id: uid(), name: a.name, kind: kindOf(a.name), size: a.size, modified: 'Today'})),
+        ...lib,
+      ]);
+    }
+    if (!chatId) {
+      chatId = uid();
+      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
+      setChats(cs => [{id: chatId, title, pinned: false, archived: false, messages: [userMsg, aMsg]}, ...cs]);
+      setActiveChatId(chatId);
+    } else {
+      setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
+    }
+    streamReply(chatId, aMsg.id, reply);
+  };
+
+  const regenerate = (msgId) => {
+    const chat = chats.find(c => c.id === activeChatId);
+    if (!chat) return;
+    const idx = chat.messages.findIndex(m => m.id === msgId);
+    const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
+    const old = chat.messages[idx];
+    const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
+    setChats(cs => cs.map(c => c.id === chat.id
+      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true} : m)}
+      : c));
+    streamReply(chat.id, msgId, reply);
+  };
+
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
 
   return (
@@ -476,7 +688,9 @@ const App = () => {
             : <Rail view={view} profile={profile} onExpand={() => setSidebar('open')} onNewChat={newChat}
                 onSearch={() => setSearchOpen(true)} onNav={nav} onProfile={openProfileMenu}/>}
           <div className="main">
-            <div className="placeholder">default mode goes here</div>
+            {view === 'chat' && <ChatView chat={chats.find(c => c.id === activeChatId) || null} onSend={sendMessage} onRegen={regenerate}/>}
+            {view === 'library' && <div className="placeholder">library goes here</div>}
+            {view === 'projects' && <div className="placeholder">projects go here</div>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
