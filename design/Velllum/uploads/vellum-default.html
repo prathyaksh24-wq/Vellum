@@ -129,6 +129,14 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .act-btn:hover{background:var(--hover);color:var(--txt2)}
 .act-btn.on{color:var(--ember)}
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
+/* conversation timeline */
+.timeline{position:absolute;right:6px;top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:flex-end;padding:10px 8px}
+.tl-bar{height:2.5px;border-radius:2px;background:var(--dim2);transition:background .15s}
+.timeline:hover .tl-bar{background:var(--dim)}
+.tl-pop{position:absolute;right:28px;top:50%;transform:translateY(-50%);width:270px;max-height:320px;overflow-y:auto;background:var(--modal);border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.tl-head{font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:5px 10px 3px}
+.tl-row{padding:7px 10px;border-radius:7px;font-size:12.5px;color:var(--txt);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tl-row:hover{background:var(--hover)}
 /* popovers + overlays */
 .backdrop{position:fixed;inset:0;z-index:40}
 .backdrop.dim{background:rgba(0,0,0,.45)}
@@ -485,6 +493,33 @@ const MsgActions = ({msg, onRegen}) => {
   );
 };
 
+const Timeline = ({userMsgs}) => {
+  const [open, setOpen] = useState(false);
+  if (userMsgs.length < 2) return null;
+  const jump = id => {
+    const el = document.getElementById('m-' + id);
+    if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  };
+  return (
+    <div className="timeline" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {userMsgs.map(m => (
+        <div key={m.id} className="tl-bar" style={{width: Math.min(22, 8 + Math.floor(m.text.length / 12))}}
+          onClick={() => jump(m.id)}/>
+      ))}
+      {open && (
+        <div className="tl-pop">
+          <div className="tl-head">From the beginning</div>
+          {userMsgs.map(m => (
+            <div key={m.id} className="tl-row" onClick={() => jump(m.id)}>
+              {m.text.length > 44 ? m.text.slice(0, 44).trimEnd() + '…' : m.text}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ChatView = ({chat, onSend, onRegen}) => {
   const [text, setText] = useState('');
   const [mode, setMode] = useState('Extended');
@@ -509,10 +544,11 @@ const ChatView = ({chat, onSend, onRegen}) => {
   }
   return (
     <React.Fragment>
+      <Timeline userMsgs={msgs.filter(m => m.role === 'user')}/>
       <div className="msgs">
         <div className="msgs-inner">
           {msgs.map(m => m.role === 'user' ? (
-            <div key={m.id} className="bubble-wrap">
+            <div key={m.id} id={'m-' + m.id} className="bubble-wrap">
               {m.attachments && m.attachments.length > 0 && (
                 <div className="attach-strip">
                   {m.attachments.map((a, i) => <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
