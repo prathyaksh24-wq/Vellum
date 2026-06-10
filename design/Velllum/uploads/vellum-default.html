@@ -535,6 +535,160 @@ const ChatView = ({chat, onSend, onRegen}) => {
   );
 };
 
+/* ─── search overlay ─── */
+const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
+  const [q, setQ] = useState('');
+  const hits = chats.filter(c => !c.archived && c.title.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="search-card">
+        <input className="search-input" autoFocus placeholder="Search chats…" value={q}
+          onChange={e => setQ(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter' && hits.length) onOpenChat(hits[0].id); }}/>
+        <div className="s-list">
+          <div className="s-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq size={14}/></span>New chat</div>
+          {hits.map(c => (
+            <div key={c.id} className="s-row" onClick={() => onOpenChat(c.id)}>
+              <span className="sb-ic"><IcSearch size={14}/></span>{c.title}
+            </div>
+          ))}
+          {hits.length === 0 && <div className="s-none">Nothing by that name.</div>}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+/* ─── library ─── */
+const KIND_ICONS = {
+  image: IcImage, pdf: IcPdf, code: IcCode, diff: IcDiffFile, note: IcNote,
+};
+const KindIcon = ({kind}) => {
+  const Ic = KIND_ICONS[kind] || IcFile;
+  return <div className={'kind-ic ' + kind}><Ic size={15}/></div>;
+};
+
+const LibItemMenu = ({pos, onAction, onClose}) => (
+  <React.Fragment>
+    <div className="backdrop" onClick={onClose}/>
+    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 110)}}>
+      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+    </div>
+  </React.Fragment>
+);
+
+const LibraryView = ({library, setLibrary}) => {
+  const [q, setQ] = useState('');
+  const [tab, setTab] = useState('All');
+  const [mode, setMode] = useState('list');
+  const [newOpen, setNewOpen] = useState(false);
+  const [itemMenu, setItemMenu] = useState(null);   // {id, x, y}
+  const [renamingId, setRenamingId] = useState(null);
+  const [draft, setDraft] = useState('');
+  const fileRef = useRef(null);
+
+  const items = library.filter(it => {
+    if (tab === 'Images' && it.kind !== 'image') return false;
+    if (tab === 'Files' && it.kind === 'image') return false;
+    return it.name.toLowerCase().includes(q.toLowerCase());
+  });
+
+  const addUpload = f => {
+    setLibrary(lib => [{id: uid(), name: f.name, kind: kindOf(f.name), size: fmtSize(f.size), modified: 'Today'}, ...lib]);
+  };
+  const addNote = () => {
+    const id = uid();
+    setLibrary(lib => [{id, name: 'untitled note', kind: 'note', size: '0 KB', modified: 'Today'}, ...lib]);
+    setMode('list'); setTab('All'); setRenamingId(id); setDraft('untitled note');
+  };
+  const commitRename = id => {
+    if (draft.trim()) setLibrary(lib => lib.map(it => it.id === id ? {...it, name: draft.trim()} : it));
+    setRenamingId(null);
+  };
+  const menuAction = (id, action) => {
+    setItemMenu(null);
+    if (action === 'delete') setLibrary(lib => lib.filter(it => it.id !== id));
+    if (action === 'rename') {
+      const it = library.find(x => x.id === id);
+      setRenamingId(id); setDraft(it ? it.name : '');
+      setMode('list');
+    }
+  };
+
+  return (
+    <div className="page">
+      <div className="page-inner">
+        <div className="page-head">
+          <div className="page-title">Library</div>
+          <div className="lib-search">
+            <span className="sb-ic"><IcSearch size={13}/></span>
+            <input placeholder="Search library" value={q} onChange={e => setQ(e.target.value)}/>
+          </div>
+          <div style={{position: 'relative'}}>
+            <input ref={fileRef} type="file" style={{display: 'none'}}
+              onChange={e => { const f = e.target.files && e.target.files[0]; if (f) addUpload(f); e.target.value = ''; }}/>
+            <button className="new-btn" onClick={() => setNewOpen(true)}>New<IcChevD size={12}/></button>
+            {newOpen && (
+              <React.Fragment>
+                <div className="backdrop" onClick={() => setNewOpen(false)}/>
+                <div className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}}>
+                  <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
+                  <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
+                </div>
+              </React.Fragment>
+            )}
+          </div>
+        </div>
+        <div className="tab-row">
+          {['All', 'Images', 'Files'].map(t => (
+            <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
+          ))}
+          <div className="tab-spacer"/>
+          <button className="icon-tgl" title="Filter — not in this preview"><IcFilter size={15}/></button>
+          <button className={'icon-tgl' + (mode === 'grid' ? ' on' : '')} title="Grid view" onClick={() => setMode('grid')}><IcGrid size={15}/></button>
+          <button className={'icon-tgl' + (mode === 'list' ? ' on' : '')} title="List view" onClick={() => setMode('list')}><IcList size={15}/></button>
+        </div>
+        {mode === 'list' ? (
+          <div className="ltable">
+            <div className="lth"><span>Name</span><span>Modified ↓</span><span>Size</span><span/></div>
+            {items.map(it => (
+              <div key={it.id} className="ltr">
+                <div className="lt-name">
+                  <KindIcon kind={it.kind}/>
+                  {renamingId === it.id
+                    ? <input className="rename-input" autoFocus value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') commitRename(it.id); if (e.key === 'Escape') setRenamingId(null); }}
+                        onBlur={() => commitRename(it.id)}/>
+                    : <span>{it.name}</span>}
+                </div>
+                <span className="lt-dim">{it.modified}</span>
+                <span className="lt-dim">{it.size}</span>
+                <button className="chat-dots" title="Options" onClick={e => setItemMenu({id: it.id, x: e.clientX, y: e.clientY})}><IcDots size={14}/></button>
+              </div>
+            ))}
+            {items.length === 0 && <div className="s-none">Nothing here.</div>}
+          </div>
+        ) : (
+          <div className="lgrid">
+            {items.map(it => (
+              <div key={it.id} className="ltile">
+                <KindIcon kind={it.kind}/>
+                <div className="t-name">{it.name}</div>
+                <div className="t-mod">{it.modified} · {it.size}</div>
+              </div>
+            ))}
+            {items.length === 0 && <div className="s-none">Nothing here.</div>}
+          </div>
+        )}
+        {itemMenu && <LibItemMenu pos={itemMenu} onAction={a => menuAction(itemMenu.id, a)} onClose={() => setItemMenu(null)}/>}
+      </div>
+    </div>
+  );
+};
+
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, pos, onAction, onClose}) => (
   <React.Fragment>
@@ -689,11 +843,15 @@ const App = () => {
                 onSearch={() => setSearchOpen(true)} onNav={nav} onProfile={openProfileMenu}/>}
           <div className="main">
             {view === 'chat' && <ChatView chat={chats.find(c => c.id === activeChatId) || null} onSend={sendMessage} onRegen={regenerate}/>}
-            {view === 'library' && <div className="placeholder">library goes here</div>}
+            {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <div className="placeholder">projects go here</div>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
+        {searchOpen && <SearchOverlay chats={chats}
+          onNewChat={() => { setSearchOpen(false); newChat(); }}
+          onOpenChat={id => { setSearchOpen(false); openChat(id); }}
+          onClose={() => setSearchOpen(false)}/>}
       </div>
     </div>
   );
