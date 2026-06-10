@@ -56,7 +56,7 @@ await check("+ menu: attach from recent files", async () => {
   await page.locator(".plus-sub .recent-row").first().waitFor();
   const firstName = await page.locator(".plus-sub .recent-row .r-name").first().textContent();
   await page.locator(".plus-sub .recent-row").first().click();
-  await page.locator(".backdrop").click().catch(() => {});
+  await page.keyboard.press("Escape");
   const card = page.locator(".att-card", { hasText: firstName.slice(0, 12) });
   await card.waitFor();
   await card.locator(".att-x").click();
@@ -106,15 +106,42 @@ await check("apps: single chip, n-apps picker, deselect, repo panel", async () =
   if (await page.locator(".app-chip[title='GitHub']").count()) throw new Error("GitHub chip not removed by ⊗");
 });
 
-await check("slash command menu: open, filter, dismiss", async () => {
+await check("slash command menu: actions + connectors + projects, filter, dismiss", async () => {
   const ta = page.locator(".cpill textarea");
   await ta.fill("/");
   await page.locator(".slash-menu .plus-item", { hasText: "Add photos & files" }).waitFor();
+  await page.locator(".slash-menu .plus-item", { hasText: "Airtable" }).waitFor();
+  await page.locator(".slash-menu .plus-item", { hasText: "Projects" }).waitFor();
   await ta.fill("/web");
   if (await page.locator(".slash-menu .plus-item").count() !== 1) throw new Error("slash filter wrong");
   await page.keyboard.press("Escape");
   if (await page.locator(".slash-menu").count()) throw new Error("Esc did not dismiss slash menu");
   await ta.fill("");
+});
+
+await check("one-click menu switching (no backdrop lag)", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
+  await page.locator(".apps-drop").waitFor();
+  await page.locator(".cbtn[title='Add']").click();          // single click while apps menu open
+  await page.locator(".plus-menu").waitFor({ timeout: 2000 });
+  await page.keyboard.press("Escape");
+});
+
+await check("per-chat app selection isolation", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
+  await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='Airtable']").waitFor();
+  await page.locator(".cpill textarea").fill("app isolation check");
+  await page.keyboard.press("Enter");
+  await page.locator(".chat-row", { hasText: "app isolation check" }).first().waitFor();
+  if (!(await page.locator(".app-chip[title='Airtable']").count())) throw new Error("selection did not transfer to new chat");
+  await page.locator(".chat-row", { hasText: "Self-Perception" }).first().click();
+  if (await page.locator(".app-chip[title='Airtable']").count()) throw new Error("selection leaked into another chat");
+  await page.locator(".chat-row", { hasText: "app isolation check" }).first().click();
+  await page.locator(".app-chip[title='Airtable']").waitFor();
+  await page.locator(".app-chip[title='Airtable'] .sb-ic[title='Disconnect']").click();
+  await page.locator(".sb-row", { hasText: "New chat" }).click();
 });
 
 await check("sidebar: nav rows + projects section + recents + profile", async () => {
@@ -267,14 +294,14 @@ await check("remove from project → moves to Recents", async () => {
 await check("rename + delete project via menu", async () => {
   const row = page.locator(".chat-row", { hasText: "Smoke project" }).first();
   await row.hover();
-  await row.locator(".chat-dots").click();
+  await row.locator(".chat-dots[title='Project settings']").click();
   await page.locator(".ctx-item", { hasText: "Rename project" }).click();
   await page.locator(".sidebar .rename-input").fill("Smoke renamed");
   await page.keyboard.press("Enter");
   const renamed = page.locator(".chat-row", { hasText: "Smoke renamed" }).first();
   await renamed.waitFor();
   await renamed.hover();
-  await renamed.locator(".chat-dots").click();
+  await renamed.locator(".chat-dots[title='Project settings']").click();
   await page.locator(".ctx-item.danger", { hasText: "Delete project" }).click();
   if (await page.locator(".chat-row", { hasText: "Smoke renamed" }).count()) throw new Error("project still present");
   await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
@@ -422,6 +449,17 @@ await check("projects header collapses section like recents", async () => {
   if (await page.locator(".sb-row", { hasText: "New project" }).count()) throw new Error("section still open");
   await page.locator(".sb-sec", { hasText: "Projects" }).click();
   await page.locator(".sb-row", { hasText: "New project" }).waitFor();
+});
+
+await check("back/forward navigation", async () => {
+  await page.locator(".sb-row", { hasText: "Library" }).click();
+  await page.locator(".page-title", { hasText: "Library" }).waitFor();
+  await page.locator(".sb-row", { hasText: "Ledger" }).click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
+  await page.locator(".tbtn[title='Back']").click();
+  await page.locator(".page-title", { hasText: "Library" }).waitFor();
+  await page.locator(".tbtn[title='Forward']").click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
 });
 
 await check("profile popover → edit profile → save updates sidebar", async () => {

@@ -205,7 +205,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .cbtn:hover{background:var(--hover);color:var(--txt2)}
 .cpill textarea{width:100%;background:transparent;border:none;outline:none;color:var(--txt2);font:inherit;font-size:14px;resize:none;min-height:24px;max-height:160px;padding:6px 2px;line-height:1.5;display:block}
 .ta-wrap{flex:1;position:relative;min-width:0}
-.ph-anim{position:absolute;left:2px;top:6px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none;animation:phIn .55s ease}
+.ph-anim{position:absolute;left:10px;top:8px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none;animation:phIn .55s ease}
 @keyframes phIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 .mode-chip{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;padding:5px 8px;border-radius:14px;background:none;border:none;font-family:inherit;flex-shrink:0}
 .mode-chip:hover{background:var(--hover);color:var(--txt)}
@@ -505,9 +505,9 @@ const IcGmail = (p)=> <I {...p}><rect x="3" y="5" width="18" height="14" rx="2"/
 const APP_ICONS = { airtable: IcAirtable, github: IcGitHub, linear: IcLinear, box: IcBox, dropbox: IcDropbox, gmail: IcGmail };
 
 const SEED_APPS = [
-  { id: 'airtable', name: 'Airtable', state: 'off' },
+  { id: 'airtable', name: 'Airtable', state: 'ready' },
   { id: 'github',   name: 'GitHub',   state: 'setup' },
-  { id: 'linear',   name: 'Linear',   state: 'off' },
+  { id: 'linear',   name: 'Linear',   state: 'ready' },
   { id: 'box',      name: 'Box',      state: 'connect' },
   { id: 'dropbox',  name: 'Dropbox',  state: 'connect' },
   { id: 'gmail',    name: 'Gmail',    state: 'connect' },
@@ -516,65 +516,57 @@ const SEED_APPS = [
 const IcXCircle = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></I>;
 
 const AppsPicker = ({apps, drop, onToggle, onGitHub, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className={'apps-drop' + (drop === 'down' ? ' down' : '')}>
-      {apps.map(a => {
-        const Ic = APP_ICONS[a.id] || IcGrid;
-        return a.id === 'github' ? (
-          <div key={a.id} className="app-row" style={{cursor: 'pointer'}} onClick={onGitHub}>
-            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
-            <span className="a-nm">GitHub</span>
-            <span className="p-arr"><IcChevR size={13}/></span>
-          </div>
-        ) : (
-          <div key={a.id} className="app-row" style={{cursor: 'pointer'}} title="Click to deselect" onClick={() => onToggle(a.id)}>
-            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
-            <span className="a-nm">{a.name}</span>
-            <span className="drop-check"><IcCheck size={14}/></span>
-          </div>
-        );
-      })}
-    </div>
-  </React.Fragment>
+  <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+    {apps.map(a => {
+      const Ic = APP_ICONS[a.id] || IcGrid;
+      return a.id === 'github' ? (
+        <div key={a.id} className="app-row" style={{cursor: 'pointer'}} onClick={onGitHub}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">GitHub</span>
+          <span className="p-arr"><IcChevR size={13}/></span>
+        </div>
+      ) : (
+        <div key={a.id} className="app-row" style={{cursor: 'pointer'}} title="Click to deselect" onClick={() => onToggle(a.id)}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">{a.name}</span>
+          <span className="drop-check"><IcCheck size={14}/></span>
+        </div>
+      );
+    })}
+  </Popover>
 );
 
 const GitHubPanel = ({drop, onClose}) => {
   const [q, setQ] = useState('');
   return (
-    <React.Fragment>
-      <div className="backdrop" onClick={onClose}/>
-      <div className={'apps-drop' + (drop === 'down' ? ' down' : '')} style={{width: 290}}>
-        <input className="model-search" autoFocus placeholder="Search repositories…" value={q} onChange={e => setQ(e.target.value)}/>
-        <div className="s-none" style={{textAlign: 'left', padding: '8px 13px'}}>No repositories found</div>
-        <div className="plus-div"/>
-        <div className="plus-item dim" title="Not in this preview">Configure Repositories<span className="p-arr"><IcShare size={13}/></span></div>
-        <div className="ctx-hint">Not indexed or not seeing a repository? Learn more</div>
-      </div>
-    </React.Fragment>
+    <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} style={{width: 290}} onClose={onClose}>
+      <input className="model-search" autoFocus placeholder="Search repositories…" value={q} onChange={e => setQ(e.target.value)}/>
+      <div className="s-none" style={{textAlign: 'left', padding: '8px 13px'}}>No repositories found</div>
+      <div className="plus-div"/>
+      <div className="plus-item dim" title="Not in this preview">Configure Repositories<span className="p-arr"><IcShare size={13}/></span></div>
+      <div className="ctx-hint">Not indexed or not seeing a repository? Learn more</div>
+    </Popover>
   );
 };
 
-const AppsDrop = ({apps, drop, onToggle, onConnect, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className={'apps-drop' + (drop === 'down' ? ' down' : '')}>
-      {apps.map(a => {
-        const Ic = APP_ICONS[a.id] || IcGrid;
-        return (
-          <div className="app-row" key={a.id}>
-            <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
-            <span className="a-nm">{a.name}</span>
-            {(a.state === 'on' || a.state === 'off')
-              ? <div className={'sw' + (a.state === 'on' ? ' on' : '')} role="switch" aria-checked={a.state === 'on'} onClick={() => onToggle(a.id)}/>
-              : <button className="app-act" onClick={() => onConnect(a.id)}>{a.state === 'setup' ? 'Finish Setup' : 'Connect'}</button>}
-          </div>
-        );
-      })}
-      <div className="plus-div"/>
-      <div className="plus-item dim" title="Not in this preview"><span className="sb-ic"><IcGrid size={15}/></span>Connect more</div>
-    </div>
-  </React.Fragment>
+const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
+  <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+    {apps.map(a => {
+      const Ic = APP_ICONS[a.id] || IcGrid;
+      const on = sel.includes(a.id);
+      return (
+        <div className="app-row" key={a.id}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">{a.name}</span>
+          {a.state === 'ready'
+            ? <div className={'sw' + (on ? ' on' : '')} role="switch" aria-checked={on} onClick={() => onToggle(a.id)}/>
+            : <button className="app-act" onClick={() => onConnect(a.id)}>{a.state === 'setup' ? 'Finish Setup' : 'Connect'}</button>}
+        </div>
+      );
+    })}
+    <div className="plus-div"/>
+    <div className="plus-item dim" title="Not in this preview"><span className="sb-ic"><IcGrid size={15}/></span>Connect more</div>
+  </Popover>
 );
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
@@ -595,6 +587,20 @@ const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4
 const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
 const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
 const IcBrain = (p)=> <I {...p}><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M6.4 8.1l3.5 2.4 M17.6 8.1l-3.5 2.4 M6.4 15.9l3.5-2.4 M17.6 15.9l-3.5-2.4"/></I>;
+
+/* closes on a document-level outside mousedown — no click-eating backdrop,
+   so one click both dismisses the open menu and lands on the next target */
+const Popover = ({className, style, onClose, children}) => {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) closeRef.current(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  return <div ref={ref} className={className} style={style}>{children}</div>;
+};
 
 const visibleChats = cs => {
   const v = cs.filter(c => !c.archived && !c.projectId);
@@ -716,6 +722,8 @@ const ProjectRow = ({proj, renaming, open, onToggle, onMenu, onOpen, onRename}) 
     <div className="chat-row" onClick={() => { onToggle(); onOpen(); }}>
       <FolderIcon open={open}/>
       <span className="chat-title">{proj.name}</span>
+      <button className="chat-dots" title="New chat in this project"
+        onClick={e => { e.stopPropagation(); onOpen(); }}><IcPencilSq size={14}/></button>
       <button className="chat-dots" title="Project settings"
         onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
     </div>
@@ -850,15 +858,12 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
 
 /* ─── project menu ─── */
 const ProjectMenu = ({pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}}>
-      <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
-      <div className="ctx-hint">sharing is not in this preview</div>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete project</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
+    <div className="ctx-hint">sharing is not in this preview</div>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete project</div>
+  </Popover>
 );
 
 /* ─── chat ─── */
@@ -893,23 +898,20 @@ const ModelDrop = ({model, drop, onPick, onClose}) => {
   const [q, setQ] = useState('');
   const hits = MODELS.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
   return (
-    <React.Fragment>
-      <div className="backdrop" onClick={onClose}/>
-      <div className={'model-drop' + (drop === 'down' ? ' down' : '')}>
-        <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">↻ Sync</span></div>
-        <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)}/>
-        <div className="model-list">
-          {hits.map(m => (
-            <div key={m.id} className="drop-item" onClick={() => onPick(m.id)}>
-              <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.label}</span>
-              {model === m.id && <span className="drop-check"><IcCheck size={13}/></span>}
-            </div>
-          ))}
-          {hits.length === 0 && <div className="s-none">No matches.</div>}
-        </div>
-        <div className="drop-item manage" title="Key management is not in this preview"><span>Manage models &amp; keys…</span></div>
+    <Popover className={'model-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+      <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">↻ Sync</span></div>
+      <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)}/>
+      <div className="model-list">
+        {hits.map(m => (
+          <div key={m.id} className="drop-item" onClick={() => onPick(m.id)}>
+            <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.label}</span>
+            {model === m.id && <span className="drop-check"><IcCheck size={13}/></span>}
+          </div>
+        ))}
+        {hits.length === 0 && <div className="s-none">No matches.</div>}
       </div>
-    </React.Fragment>
+      <div className="drop-item manage" title="Key management is not in this preview"><span>Manage models &amp; keys…</span></div>
+    </Popover>
   );
 };
 
@@ -931,9 +933,7 @@ const modelLabel = id => { const m = MODELS.find(x => x.id === id); return m ? m
 const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onClose}) => {
   const [sub, setSub] = useState(null);
   return (
-    <React.Fragment>
-      <div className="backdrop" onClick={onClose}/>
-      <div className={'plus-menu' + (drop === 'down' ? ' down' : '')}>
+    <Popover className={'plus-menu' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
         <div className="plus-item" onMouseEnter={() => setSub(null)} onClick={onAttachFile}>
           <span className="sb-ic"><IcUpload size={16}/></span>Add photos &amp; files
         </div>
@@ -972,8 +972,7 @@ const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpen
             </div>
           )}
         </div>
-      </div>
-    </React.Fragment>
+    </Popover>
   );
 };
 
@@ -985,9 +984,12 @@ const SLASH_ITEMS = [
   { k: 'study', label: 'Study and learn',   ic: IcLibrary, dim: true },
 ];
 
-const SlashMenu = ({q, drop, onFile, onDismiss}) => {
+const SlashMenu = ({q, drop, apps, appSel, projects, onFile, onApp, onProject, onDismiss}) => {
+  const [sub, setSub] = useState(false);
   const hits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(q));
-  if (!hits.length) return null;
+  const appHits = (apps || []).filter(a => a.name.toLowerCase().includes(q));
+  const projHit = !q || 'projects'.includes(q);
+  if (!hits.length && !appHits.length && !projHit) return null;
   return (
     <div className={'slash-menu' + (drop === 'down' ? ' down' : '')}>
       {hits.map(it => {
@@ -995,11 +997,40 @@ const SlashMenu = ({q, drop, onFile, onDismiss}) => {
         return (
           <div key={it.k} className={'plus-item' + (it.dim ? ' dim' : '')}
             title={it.dim ? 'Not in this preview' : undefined}
+            onMouseEnter={() => setSub(false)}
             onClick={() => { if (it.run === 'file') onFile(); else onDismiss(); }}>
             <span className="sb-ic"><Ic size={16}/></span>{it.label}
           </div>
         );
       })}
+      {appHits.length > 0 && <div className="plus-div"/>}
+      {appHits.map(a => {
+        const Ic = APP_ICONS[a.id] || IcGrid;
+        return (
+          <div key={a.id} className="plus-item" onMouseEnter={() => setSub(false)} onClick={() => onApp(a.id)}>
+            <span className="sb-ic"><Ic size={16}/></span>{a.name}
+            {(appSel || []).includes(a.id) && <span className="ctx-check"><IcCheck size={13}/></span>}
+          </div>
+        );
+      })}
+      {projHit && (projects || []).length > 0 && (
+        <React.Fragment>
+          <div className="plus-div"/>
+          <div className="plus-item" onMouseEnter={() => setSub(true)}>
+            <span className="sb-ic"><IcFolder size={16}/></span>Projects
+            <span className="p-arr">{projects.length}&nbsp;<IcChevR size={13}/></span>
+            {sub && (
+              <div className="plus-sub">
+                {projects.map(p => (
+                  <div key={p.id} className="plus-item" onClick={() => onProject(p.id)}>
+                    <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </React.Fragment>
+      )}
     </div>
   );
 };
@@ -1033,7 +1064,7 @@ const LibPickModal = ({library, onPick, onClose}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, onToggleApp, onConnectApp}) => {
+const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, appSel = [], onToggleSel, onConnectApp}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
@@ -1119,7 +1150,7 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up'
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
           {apps && (() => {
-            const onApps = apps.filter(a => a.state === 'on');
+            const onApps = apps.filter(a => appSel.includes(a.id));
             return (
               <React.Fragment>
                 <button className="app-chip" title="Apps" onClick={() => setAppsOpen(true)}><span className="sb-ic"><IcGrid size={14}/></span>Apps<IcChevD size={11}/></button>
@@ -1129,7 +1160,7 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up'
                   return (
                     <button className="app-chip" title={a.name}
                       onClick={() => a.id === 'github' ? setGhOpen(true) : setPickOpen(true)}>
-                      <span className="sb-ic" title="Disconnect" onClick={e => { e.stopPropagation(); onToggleApp(a.id); }}><IcXCircle size={14}/></span>
+                      <span className="sb-ic" title="Disconnect" onClick={e => { e.stopPropagation(); onToggleSel(a.id); }}><IcXCircle size={14}/></span>
                       <span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/>
                     </button>
                   );
@@ -1139,15 +1170,22 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up'
                     <span className="sb-ic"><IcGrid size={14}/></span>{onApps.length} apps<IcChevD size={11}/>
                   </button>
                 )}
-                {appsOpen && <AppsDrop apps={apps} drop={drop} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
-                {pickOpen && onApps.length > 0 && <AppsPicker apps={onApps} drop={drop} onToggle={onToggleApp}
+                {appsOpen && <AppsDrop apps={apps} sel={appSel} drop={drop} onToggle={onToggleSel} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
+                {pickOpen && onApps.length > 0 && <AppsPicker apps={onApps} drop={drop} onToggle={onToggleSel}
                   onGitHub={() => { setPickOpen(false); setGhOpen(true); }} onClose={() => setPickOpen(false)}/>}
                 {ghOpen && <GitHubPanel drop={drop} onClose={() => setGhOpen(false)}/>}
               </React.Fragment>
             );
           })()}
           {slashOpen && <SlashMenu q={text.slice(1).toLowerCase()} drop={drop}
+            apps={apps} appSel={appSel} projects={projects}
             onFile={() => { setText(''); fileRef.current.click(); }}
+            onApp={id => {
+              const a = (apps || []).find(x => x.id === id);
+              if (a && a.state === 'ready') onToggleSel(id); else if (onConnectApp) onConnectApp(id);
+              setText('');
+            }}
+            onProject={id => { setText(''); onOpenProject && onOpenProject(id); }}
             onDismiss={() => setSlashDismissed(true)}/>}
           <div className="cspace"/>
           <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model)}</span><IcChevD size={12}/></button>
@@ -1299,13 +1337,10 @@ const KindIcon = ({kind}) => {
 };
 
 const LibItemMenu = ({pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 110)}}>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 110)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+  </Popover>
 );
 
 const LibraryView = ({library, setLibrary}) => {
@@ -1360,13 +1395,10 @@ const LibraryView = ({library, setLibrary}) => {
               onChange={e => { const f = e.target.files && e.target.files[0]; if (f) addUpload(f); e.target.value = ''; }}/>
             <button className="new-btn" onClick={() => setNewOpen(true)}>New<IcChevD size={12}/></button>
             {newOpen && (
-              <React.Fragment>
-                <div className="backdrop" onClick={() => setNewOpen(false)}/>
-                <div className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}}>
-                  <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
-                  <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
-                </div>
-              </React.Fragment>
+              <Popover className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}} onClose={() => setNewOpen(false)}>
+                <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
+                <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
+              </Popover>
             )}
           </div>
         </div>
@@ -1623,23 +1655,20 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
 
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}}>
-      <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
-      <div className="ctx-hint">sharing is not in this preview</div>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
-      {projectName && (
-        <div className="ctx-item" onClick={() => onAction('removeproj')}>
-          <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
-        </div>
-      )}
-      <div className="ctx-div"/>
-      <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
-      <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
+    <div className="ctx-hint">sharing is not in this preview</div>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+    {projectName && (
+      <div className="ctx-item" onClick={() => onAction('removeproj')}>
+        <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
+      </div>
+    )}
+    <div className="ctx-div"/>
+    <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
+    <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+  </Popover>
 );
 
 /* ─── create project modal ─── */
@@ -1697,9 +1726,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onClose}) => {
     </div>
   );
   return (
-    <React.Fragment>
-      <div className="backdrop" onClick={onClose}/>
-      <div className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}}>
+    <Popover className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}} onClose={onClose}>
         <div className="pop-email">{profile.email}</div>
         <div className="pop-row">
           <div className="avatar">{initials(profile.displayName)}</div>
@@ -1720,8 +1747,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onClose}) => {
         <Row icon={<IcHelp size={15}/>} label="Help" hint/>
         <Row icon={<IcLogout size={15}/>} label="Log out" hint/>
         <div className="ctx-hint">dim rows are not in this preview</div>
-      </div>
-    </React.Fragment>
+    </Popover>
   );
 };
 
@@ -1875,8 +1901,31 @@ const App = () => {
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [apps, setApps] = useState(SEED_APPS);
-  const toggleApp = id => setApps(as => as.map(a => a.id === id ? {...a, state: a.state === 'on' ? 'off' : 'on'} : a));
-  const connectApp = id => setApps(as => as.map(a => a.id === id ? {...a, state: 'on'} : a));
+  const [draftApps, setDraftApps] = useState([]);
+  const [navTick, setNavTick] = useState(0);
+  const hist = useRef({stack: [{view: 'chat', chat: null, proj: null}], idx: 0, silent: false});
+  useEffect(() => {
+    const h = hist.current;
+    if (h.silent) { h.silent = false; return; }
+    const s = {view, chat: activeChatId, proj: activeProjectId};
+    const cur = h.stack[h.idx];
+    if (cur && cur.view === s.view && cur.chat === s.chat && cur.proj === s.proj) return;
+    h.stack = h.stack.slice(0, h.idx + 1);
+    h.stack.push(s);
+    h.idx++;
+    setNavTick(t => t + 1);
+  }, [view, activeChatId, activeProjectId]);
+  const navGo = dir => {
+    const h = hist.current;
+    const ni = h.idx + dir;
+    if (ni < 0 || ni >= h.stack.length) return;
+    h.idx = ni; h.silent = true;
+    const s = h.stack[ni];
+    setView(s.view); setActiveChatId(s.chat); setActiveProjectId(s.proj);
+    setNavTick(t => t + 1);
+  };
+  const canBack = hist.current.idx > 0;
+  const canFwd = hist.current.idx < hist.current.stack.length - 1;
   const [secOpen, setSecOpen] = useState({projects: true, recents: true});
   const [viewer, setViewer] = useState(null);
   const [expandedProj, setExpandedProj] = useState({});
@@ -2008,7 +2057,8 @@ const App = () => {
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
-      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', messages: [userMsg, aMsg]}, ...cs]);
+      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]}, ...cs]);
+      setDraftApps([]);
       setActiveChatId(chatId);
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
@@ -2038,6 +2088,25 @@ const App = () => {
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
   const activeChat = chats.find(c => c.id === activeChatId) || null;
+
+  // per-chat app selection — landing/new-chat and project composers draw on a draft pool
+  const selTargetIsChat = view === 'chat' && !!activeChat;
+  const currentSel = selTargetIsChat ? (activeChat.appIds || []) : draftApps;
+  const toggleSel = id => {
+    if (selTargetIsChat) {
+      setChats(cs => cs.map(c => {
+        if (c.id !== activeChat.id) return c;
+        const cur = c.appIds || [];
+        return {...c, appIds: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]};
+      }));
+    } else {
+      setDraftApps(cur => cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+    }
+  };
+  const connectApp = id => {
+    setApps(as => as.map(a => a.id === id ? {...a, state: 'ready'} : a));
+    if (!currentSel.includes(id)) toggleSel(id);
+  };
   const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
 
@@ -2046,6 +2115,10 @@ const App = () => {
       <div className="win">
         <div className="titlebar">
           <div className="appmark"/>
+          <button className="tbtn" title="Back" disabled={!canBack} onClick={() => navGo(-1)}
+            style={{opacity: canBack ? 1 : .35, marginRight: 1}}><I d="M15 18l-6-6 6-6" size={15}/></button>
+          <button className="tbtn" title="Forward" disabled={!canFwd} onClick={() => navGo(1)}
+            style={{opacity: canFwd ? 1 : .35, marginRight: 6}}><I d="M9 6l6 6-6 6" size={15}/></button>
           <div className="menu"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>
           <div className="tb-title">vellum — preview</div>
           <div className="tb-right">
@@ -2079,7 +2152,7 @@ const App = () => {
           <div className="main">
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, onToggleApp: toggleApp, onConnectApp: connectApp}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -2088,7 +2161,7 @@ const App = () => {
               onAddSource={f => addSource(activeProject.id, f)}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, onToggleApp: toggleApp, onConnectApp: connectApp}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
