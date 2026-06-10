@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 
 const srcFile = join(tmpdir(), "vellum-smoke-source.txt");
 writeFileSync(srcFile, "a quiet source");
+const pngFile = join(tmpdir(), "vellum-smoke-image.png");
+writeFileSync(pngFile, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const npmRoot = execSync("npm root -g").toString().trim();
@@ -44,6 +46,43 @@ await check("model picker: search + select updates pill", async () => {
   await page.locator(".model-search").fill("claude");
   await page.locator(".drop-item", { hasText: "Claude 3.7 Sonnet" }).click();
   if ((await page.locator(".model-num").first().textContent()) !== "Claude 3.7 Sonnet") throw new Error("pill not updated");
+});
+
+await check("+ menu: attach from recent files", async () => {
+  await page.locator(".cbtn[title='Add']").click();
+  await page.locator(".plus-item", { hasText: "Add photos & files" }).waitFor();
+  await page.locator(".plus-item", { hasText: "Recent files" }).hover();
+  await page.locator(".plus-sub .recent-row").first().waitFor();
+  const firstName = await page.locator(".plus-sub .recent-row .r-name").first().textContent();
+  await page.locator(".plus-sub .recent-row").first().click();
+  await page.locator(".backdrop").click().catch(() => {});
+  const card = page.locator(".att-card", { hasText: firstName.slice(0, 12) });
+  await card.waitFor();
+  await card.locator(".att-x").click();
+  if (await page.locator(".att-card").count()) throw new Error("attachment card not removed");
+});
+
+await check("image attach → thumbnail → lightbox", async () => {
+  await page.locator(".cpill input[type=file]").setInputFiles(pngFile);
+  await page.locator(".att-img").waitFor();
+  await page.locator(".att-img").click();
+  await page.locator(".lightbox img").waitFor();
+  await page.keyboard.press("Escape");
+  if (await page.locator(".lightbox").count()) throw new Error("lightbox did not close");
+  await page.locator(".att-img .att-x").click();
+  if (await page.locator(".att-img").count()) throw new Error("image attachment not removed");
+});
+
+await check("apps: Finish Setup + toggle surface chips", async () => {
+  await page.locator(".app-chip", { hasText: "Apps" }).click();
+  await page.locator(".apps-drop").waitFor();
+  await page.locator(".app-act", { hasText: "Finish Setup" }).click();
+  await page.locator(".app-chip", { hasText: "GitHub" }).waitFor();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
+  await page.locator(".app-chip", { hasText: "Airtable" }).waitFor();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
+  if (await page.locator(".app-chip", { hasText: "Airtable" }).count()) throw new Error("Airtable chip not removed");
+  await page.keyboard.press("Escape");
 });
 
 await check("sidebar: nav rows + projects section + recents + profile", async () => {
