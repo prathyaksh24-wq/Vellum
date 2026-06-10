@@ -137,6 +137,20 @@
 - [ ] Checks: Coding row present with workspace title (no navigation); Ledger renders footer line; Skills approve → Active count up; Memory forget → fact count down; archive chat → Archive view → Restore → back in Recents; Settings modal via profile (tabs, X-feed toggle, Computer use enable → active pill).
 - [ ] Full suite green. Commit + push.
 
+## Addendum E tasks (10/06/2026, fifth pass — spec Addendum E)
+
+### Task 17: Token + font overhaul
+**Files:** Modify `vellum-default.html`.
+- [ ] Google Fonts `<link>` (Bricolage Grotesque 500–700, Schibsted Grotesk 400–600, Spline Sans Mono 400–500); `--font-d`/`--font-m` vars; body → Schibsted Grotesk.
+- [ ] Replace `:root` + `[data-theme=light]` token blocks (ink-blue darks, mint/cyan accent, coral danger, `--glass`, `--glow`, `--onaccent`); `replace_all` `var(--ember)`→`var(--accent)`, `var(--onember)`→`var(--onaccent)`; regrade hardcoded ember colors (appmark, rail-dot, shimmer glow, cu-pill, send/primary gradients, avatar gradients).
+- [ ] Compile gate. Commit + push.
+
+### Task 18: Glass, motion, typography scale, copy
+**Files:** Modify `vellum-default.html`, `smoke-default.mjs`.
+- [ ] Glass override block (ctx-menu/pop/search-card/flyout/tl-pop/gear-pop/mode-menu/modal/set-modal → `--glass` + blur + `popIn` entrance); composer focus ring; `.main` mint atmosphere radial.
+- [ ] Display type on wordmark/landing/page/project/modal/section titles; mono on ledger values + mem-stats; greeting → "Ready when you are." (gradient land-mark, no italics); PLACEHOLDERS → modern copy.
+- [ ] Smoke: update greeting assertion (+ glow check label); full suite green. Commit + push. Screenshots + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.

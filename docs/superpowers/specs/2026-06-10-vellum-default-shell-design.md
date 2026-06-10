@@ -289,6 +289,32 @@ patterns; modal reuses modal/backdrop); honesty ✓ (preview notes on feeds + co
 testability ✓ (smoke: each view renders, approve/retire, forget, archive→restore,
 settings tabs + toggles).
 
+## Addendum E (10/06/2026, fifth pass) — modern visual system ("crisp ink & mint")
+
+User direction: drop the BRAND.md/TUI register entirely for the UI ("waste files") — fresh,
+modern colors, modern fonts and typography. New system:
+
+- **Type**: Bricolage Grotesque (display: wordmark, landing, page/section titles),
+  Schibsted Grotesk (UI/body), Spline Sans Mono (numbers: ledger values, stats). Loaded via
+  Google Fonts `<link>` (file already assumes CDN for React). No Inter/Roboto/Space Grotesk.
+- **Color**: deep blue-charcoal darks (`#0c0f13` family) instead of gray-black; electric
+  **mint `#2de0a7` → cyan `#19b9e8`** gradient accent (send button, app mark, avatars,
+  primary buttons, wordmark/landing gradient text); coral `#ff6b5e` for danger. Light theme:
+  porcelain `#f7f9fa` with deepened mint `#0aa881`. Token rename `--ember`→`--accent`
+  (+`--accent2`, `--glow`, `--glass`, `--onaccent`); every component keeps reading vars.
+- **Surfaces**: popovers/menus/modals/flyouts become glass — translucent `--glass` +
+  `backdrop-filter: blur` + a shared `popIn` (fade/rise/scale .18s) entrance.
+- **Details**: composer focus ring in accent; subtle mint atmosphere radial in `.main`;
+  streaming shimmer/glow re-tinted to mint (dark glows, light stays plain — smoke contract
+  unchanged); landing greeting becomes "Ready when you are." with gradient wordmark;
+  placeholder copy modernized ("Ask anything…", "Think out loud…", …); italics dropped from
+  greeting/placeholder.
+
+Audit deltas: intent ✓ (modern fonts/colors/typography, old register fully replaced);
+consistency ✓ (vars only — themes stay symmetrical); testability ✓ (smoke greeting
+assertion updated; glow/fill computed-style contracts preserved); YAGNI ✓ (no texture
+overlays, no layout rework).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default
