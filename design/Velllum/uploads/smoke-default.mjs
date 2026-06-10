@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 
 const srcFile = join(tmpdir(), "vellum-smoke-source.txt");
 writeFileSync(srcFile, "a quiet source");
+const pngFile = join(tmpdir(), "vellum-smoke-image.png");
+writeFileSync(pngFile, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const npmRoot = execSync("npm root -g").toString().trim();
@@ -32,12 +34,118 @@ await page.goto(url);
 await page.waitForSelector(".landing", { timeout: 20000 });
 
 await check("landing: greeting + composer + chips", async () => {
-  if (await page.locator(".land-greet").textContent() !== "What are you reading.") throw new Error("greeting wrong");
+  if (await page.locator(".land-greet").textContent() !== "Ready when you are.") throw new Error("greeting wrong");
   await page.locator(".cpill textarea").waitFor();
   if (await page.locator(".chip").count() !== 3) throw new Error("chips != 3");
 });
 
+await check("model picker: search + select updates pill", async () => {
+  if ((await page.locator(".model-num").first().textContent()) !== "DeepSeek V4 Pro") throw new Error("default model wrong");
+  await page.locator(".model-pill").click();
+  await page.locator(".model-drop").waitFor();
+  await page.locator(".model-search").fill("claude");
+  await page.locator(".drop-item", { hasText: "Claude 3.7 Sonnet" }).click();
+  if ((await page.locator(".model-num").first().textContent()) !== "Claude 3.7 Sonnet") throw new Error("pill not updated");
+});
+
+await check("+ menu: attach from recent files", async () => {
+  await page.locator(".cbtn[title='Add']").click();
+  await page.locator(".plus-item", { hasText: "Add photos & files" }).waitFor();
+  if (!(await page.locator(".plus-menu").getAttribute("class")).includes("down")) throw new Error("menu should drop down on landing");
+  await page.locator(".plus-item", { hasText: "Recent files" }).hover();
+  await page.locator(".plus-sub .recent-row").first().waitFor();
+  const firstName = await page.locator(".plus-sub .recent-row .r-name").first().textContent();
+  await page.locator(".plus-sub .recent-row").first().click();
+  await page.keyboard.press("Escape");
+  const card = page.locator(".att-card", { hasText: firstName.slice(0, 12) });
+  await card.waitFor();
+  await card.locator(".att-x").click();
+  if (await page.locator(".att-card").count()) throw new Error("attachment card not removed");
+});
+
+await check("add-from-library modal: search + attach", async () => {
+  await page.locator(".cbtn[title='Add']").click();
+  await page.locator(".plus-item", { hasText: "Recent files" }).hover();
+  await page.locator(".plus-sub .plus-item", { hasText: "Add from library" }).click();
+  await page.locator(".libpick .lp-head", { hasText: "Add from library" }).waitFor();
+  await page.locator(".lp-search").fill("stillness");
+  await page.locator(".libpick .recent-row", { hasText: "on stillness" }).click();
+  const card = page.locator(".att-card", { hasText: "on stillness" });
+  await card.waitFor();
+  if (await page.locator(".libpick").count()) throw new Error("modal did not close after pick");
+  await card.locator(".att-x").click();
+});
+
+await check("image attach → thumbnail → lightbox", async () => {
+  await page.locator(".cpill input[type=file]").setInputFiles(pngFile);
+  await page.locator(".att-img").waitFor();
+  await page.locator(".att-img").click();
+  await page.locator(".lightbox img").waitFor();
+  await page.keyboard.press("Escape");
+  if (await page.locator(".lightbox").count()) throw new Error("lightbox did not close");
+  await page.locator(".att-img .att-x").click();
+  if (await page.locator(".att-img").count()) throw new Error("image attachment not removed");
+});
+
+await check("apps: single chip, n-apps picker, deselect, repo panel", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
+  await page.locator(".apps-drop").waitFor();
+  await page.locator(".app-act", { hasText: "Finish Setup" }).click();
+  await page.locator(".app-chip[title='GitHub']").waitFor();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
+  await page.locator(".app-chip[title='Selected apps']", { hasText: "2 apps" }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='Selected apps']").click();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).click();   // ✓ row → deselect
+  await page.locator(".app-chip[title='GitHub']").waitFor();
+  await page.locator(".apps-drop .app-row", { hasText: "GitHub" }).click();     // › row → repo panel
+  await page.locator("input[placeholder='Search repositories…']").waitFor();
+  await page.locator(".s-none", { hasText: "No repositories found" }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='GitHub'] .sb-ic[title='Disconnect']").click();
+  if (await page.locator(".app-chip[title='GitHub']").count()) throw new Error("GitHub chip not removed by ⊗");
+});
+
+await check("slash command menu: actions + connectors + projects, filter, dismiss", async () => {
+  const ta = page.locator(".cpill textarea");
+  await ta.fill("/");
+  await page.locator(".slash-menu .plus-item", { hasText: "Add photos & files" }).waitFor();
+  await page.locator(".slash-menu .plus-item", { hasText: "Airtable" }).waitFor();
+  await page.locator(".slash-menu .plus-item", { hasText: "Projects" }).waitFor();
+  await ta.fill("/web");
+  if (await page.locator(".slash-menu .plus-item").count() !== 1) throw new Error("slash filter wrong");
+  await page.keyboard.press("Escape");
+  if (await page.locator(".slash-menu").count()) throw new Error("Esc did not dismiss slash menu");
+  await ta.fill("");
+});
+
+await check("one-click menu switching (no backdrop lag)", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
+  await page.locator(".apps-drop").waitFor();
+  await page.locator(".cbtn[title='Add']").click();          // single click while apps menu open
+  await page.locator(".plus-menu").waitFor({ timeout: 2000 });
+  await page.keyboard.press("Escape");
+});
+
+await check("per-chat app selection isolation", async () => {
+  await page.locator(".app-chip[title='Apps']").click();
+  await page.locator(".apps-drop .app-row", { hasText: "Airtable" }).locator(".sw").click();
+  await page.keyboard.press("Escape");
+  await page.locator(".app-chip[title='Airtable']").waitFor();
+  await page.locator(".cpill textarea").fill("app isolation check");
+  await page.keyboard.press("Enter");
+  await page.locator(".chat-row", { hasText: "app isolation check" }).first().waitFor();
+  if (!(await page.locator(".app-chip[title='Airtable']").count())) throw new Error("selection did not transfer to new chat");
+  await page.locator(".chat-row", { hasText: "Self-Perception" }).first().click();
+  if (await page.locator(".app-chip[title='Airtable']").count()) throw new Error("selection leaked into another chat");
+  await page.locator(".chat-row", { hasText: "app isolation check" }).first().click();
+  await page.locator(".app-chip[title='Airtable']").waitFor();
+  await page.locator(".app-chip[title='Airtable'] .sb-ic[title='Disconnect']").click();
+  await page.locator(".sb-row", { hasText: "New chat" }).click();
+});
+
 await check("sidebar: nav rows + projects section + recents + profile", async () => {
+  if (!(await page.locator(".sb-scroll .sb-row", { hasText: "New chat" }).count())) throw new Error("nav rows not inside the scroll container");
   for (const label of ["New chat", "Search chats", "Library", "New project"])
     if (!(await page.locator(".sb-row", { hasText: label }).count())) throw new Error("missing " + label);
   for (const sec of ["Projects", "Recents"])
@@ -77,7 +185,7 @@ await check("regenerate re-streams a different variant", async () => {
   if (before === after) throw new Error("same text after regenerate");
 });
 
-await check("dark streaming: ember glow shimmer", async () => {
+await check("dark streaming: accent glow shimmer", async () => {
   await page.locator(".cpill textarea").fill("and what about patience");
   await page.keyboard.press("Enter");
   await page.waitForFunction(() => {
@@ -103,10 +211,10 @@ await check("timeline: bars + history popup + jump", async () => {
   await page.mouse.move(400, 300);
 });
 
-await check("collapse → rail → expand", async () => {
+await check("collapse → rail → expand via panel button", async () => {
   await page.locator(".tbtn[title='Collapse sidebar']").click();
   await page.locator(".rail").waitFor();
-  await page.locator(".rail-logo").click();
+  await page.locator(".rail-btn[title='Expand sidebar']").click();
   await page.locator(".sidebar").waitFor();
 });
 
@@ -149,9 +257,24 @@ await check("new chat inside project + breadcrumb + nesting", async () => {
     throw new Error("project chat leaked into Recents");
 });
 
+await check("folder icon toggles nested chats with animation state", async () => {
+  const fold = page.locator(".chat-row", { hasText: "Smoke project" }).first().locator(".fold");
+  if (!(await fold.getAttribute("class")).includes("on")) throw new Error("folder should be open after in-project chat");
+  await fold.click();
+  if (await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).count()) throw new Error("nested chat still visible after close");
+  await fold.click();
+  await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).waitFor();
+});
+
 await check("project page lists its chats + sources upload", async () => {
   await page.locator(".chat-row", { hasText: "Smoke project" }).first().click();
-  await page.locator(".proj-chat-row", { hasText: "plan the smoke run" }).waitFor();
+  const row = page.locator(".proj-chat-row", { hasText: "plan the smoke run" });
+  await row.waitFor();
+  if (!(await row.locator(".pcr-date").textContent())) throw new Error("date missing on project chat row");
+  await row.hover();
+  await row.locator(".pcr-dots").click();
+  await page.locator(".ctx-item", { hasText: "Remove from Smoke project" }).waitFor();
+  await page.keyboard.press("Escape");
   await page.locator(".tab", { hasText: "Sources" }).click();
   await page.locator(".src-title", { hasText: "Give Vellum more context" }).waitFor();
   await page.locator(".page input[type=file]").last().setInputFiles(srcFile);
@@ -159,6 +282,7 @@ await check("project page lists its chats + sources upload", async () => {
 });
 
 await check("remove from project → moves to Recents", async () => {
+  await page.locator(".chat-row", { hasText: "Smoke project" }).first().click(); // re-expand folder (row click toggles)
   const row = page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).first();
   await row.hover();
   await row.locator(".chat-dots").click();
@@ -170,14 +294,14 @@ await check("remove from project → moves to Recents", async () => {
 await check("rename + delete project via menu", async () => {
   const row = page.locator(".chat-row", { hasText: "Smoke project" }).first();
   await row.hover();
-  await row.locator(".chat-dots").click();
+  await row.locator(".chat-dots[title='Project settings']").click();
   await page.locator(".ctx-item", { hasText: "Rename project" }).click();
   await page.locator(".sidebar .rename-input").fill("Smoke renamed");
   await page.keyboard.press("Enter");
   const renamed = page.locator(".chat-row", { hasText: "Smoke renamed" }).first();
   await renamed.waitFor();
   await renamed.hover();
-  await renamed.locator(".chat-dots").click();
+  await renamed.locator(".chat-dots[title='Project settings']").click();
   await page.locator(".ctx-item.danger", { hasText: "Delete project" }).click();
   if (await page.locator(".chat-row", { hasText: "Smoke renamed" }).count()) throw new Error("project still present");
   await page.locator(".chat-row", { hasText: "plan the smoke run" }).first().waitFor();
@@ -220,6 +344,13 @@ await check("recents menu: delete removes", async () => {
   if (await page.locator(".chat-row", { hasText: "Streaming notes" }).count()) throw new Error("still present");
 });
 
+await check("recents section collapses and expands", async () => {
+  await page.locator(".sb-sec", { hasText: "Recents" }).click();
+  if (await page.locator(".chat-row", { hasText: "Self-Perception" }).count()) throw new Error("recents still visible after collapse");
+  await page.locator(".sb-sec", { hasText: "Recents" }).click();
+  await page.locator(".chat-row", { hasText: "Self-Perception" }).first().waitFor();
+});
+
 await check("library: tabs + search + grid/list + note", async () => {
   await page.locator(".sb-row", { hasText: "Library" }).click();
   await page.locator(".page-title", { hasText: "Library" }).waitFor();
@@ -240,12 +371,95 @@ await check("library: tabs + search + grid/list + note", async () => {
   await page.locator(".ltr", { hasText: "a quiet note" }).waitFor();
 });
 
-await check("projects grid: cards open project page", async () => {
-  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+await check("coding row present, wired to workspace", async () => {
+  const row = page.locator(".sb-row", { hasText: "Coding" });
+  await row.waitFor();
+  const title = await row.getAttribute("title");
+  if (!title || !title.includes("workspace")) throw new Error("coding row not labeled for workspace");
+});
+
+await check("ledger view renders", async () => {
+  await page.locator(".sb-row", { hasText: "Ledger" }).click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
+  await page.locator(".quiet-foot", { hasText: "Filed locally. Nothing sent." }).waitFor();
+  if (await page.locator(".led-row").count() !== 3) throw new Error("model breakdown rows wrong");
+});
+
+await check("skills: approve → Active, retire → Retired", async () => {
+  await page.locator(".sb-row", { hasText: "Skills" }).click();
+  await page.locator(".tab", { hasText: "Proposed (2)" }).waitFor();
+  await page.locator(".skill-card", { hasText: "Book summary" }).locator("button", { hasText: "Approve" }).click();
+  await page.locator(".tab", { hasText: "Proposed (1)" }).waitFor();
+  await page.locator(".tab", { hasText: "Active (3)" }).click();
+  const card = page.locator(".skill-card", { hasText: "Book summary" });
+  await card.waitFor();
+  await card.locator("button", { hasText: "Retire" }).click();
+  await page.locator(".tab", { hasText: "Retired (2)" }).waitFor();
+});
+
+await check("memory: forget removes a fact", async () => {
+  await page.locator(".sb-row", { hasText: "Memory" }).click();
+  if (await page.locator(".mem-row").count() !== 5) throw new Error("expected 5 facts");
+  await page.locator(".mem-row .chat-dots").first().click();
+  if (await page.locator(".mem-row").count() !== 4) throw new Error("forget did not remove");
+});
+
+await check("archive: restore round-trip", async () => {
+  const row = page.locator(".chat-row", { hasText: "Cult UI Components" }).first();
+  await row.hover();
+  await row.locator(".chat-dots").click();
+  await page.locator(".ctx-item", { hasText: "Archive" }).click();
+  await page.locator(".sb-row", { hasText: "Archive" }).click();
+  await page.locator(".arc-row", { hasText: "Cult UI Components" }).waitFor();
+  await page.locator(".arc-row button", { hasText: "Restore" }).click();
+  if (await page.locator(".arc-row").count()) throw new Error("archive not emptied");
+  await page.locator(".chat-row", { hasText: "Cult UI Components" }).first().waitFor();
+});
+
+await check("settings modal: feeds toggle + computer use", async () => {
+  await page.locator(".profile-row").click();
+  await page.locator(".pop-row", { hasText: "Settings" }).click();
+  await page.locator(".set-modal").waitFor();
+  await page.locator(".set-item", { hasText: "Feeds" }).click();
+  const sw = page.locator(".sw").first();
+  if (!(await sw.getAttribute("class")).includes("on")) throw new Error("X feed should start on");
+  await sw.click();
+  if ((await sw.getAttribute("class")).includes("on")) throw new Error("toggle did not turn off");
+  await page.locator(".set-item", { hasText: "Computer use" }).click();
+  await page.locator(".set-body .btn.primary", { hasText: "Enable" }).click();
+  await page.locator(".cu-pill.on", { hasText: "active" }).waitFor();
+  await page.locator(".set-body .btn", { hasText: "Stand down" }).click();
+  await page.locator(".cu-pill", { hasText: "standing down" }).waitFor();
+  await page.keyboard.press("Escape");
+  if (await page.locator(".set-modal").count()) throw new Error("Esc did not close settings");
+});
+
+await check("projects grid (via rail): cards open project page", async () => {
+  await page.locator(".tbtn[title='Collapse sidebar']").click();
+  await page.locator(".rail-btn[title='Projects']").click();
+  await page.locator(".rail-logo").click();
   if (await page.locator(".pcard").count() < 3) throw new Error("seed cards missing");
   await page.locator(".pcard", { hasText: "Vellum Desktop" }).click();
   await page.locator(".proj-name", { hasText: "Vellum Desktop" }).waitFor();
   await page.locator(".proj-empty .pe-t", { hasText: "No chats yet" }).waitFor();
+});
+
+await check("projects header collapses section like recents", async () => {
+  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+  if (await page.locator(".sb-row", { hasText: "New project" }).count()) throw new Error("section still open");
+  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+  await page.locator(".sb-row", { hasText: "New project" }).waitFor();
+});
+
+await check("back/forward navigation", async () => {
+  await page.locator(".sb-row", { hasText: "Library" }).click();
+  await page.locator(".page-title", { hasText: "Library" }).waitFor();
+  await page.locator(".sb-row", { hasText: "Ledger" }).click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
+  await page.locator(".tbtn[title='Back']").click();
+  await page.locator(".page-title", { hasText: "Library" }).waitFor();
+  await page.locator(".tbtn[title='Forward']").click();
+  await page.locator(".page-title", { hasText: "Ledger" }).waitFor();
 });
 
 await check("profile popover → edit profile → save updates sidebar", async () => {

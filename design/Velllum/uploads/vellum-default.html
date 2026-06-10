@@ -7,32 +7,41 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;1,400&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0d0d0d;--panel:#0c0c0d;--tb:#0a0a0b;--line:#1c1c1e;--line2:#242427;
-  --txt:#d7d7d7;--txt2:#e6e6e6;--dim:#6a6a6a;--dim2:#4a4a4a;--ember:#e35d2b;
-  --hover:#151516;--active:#19191b;--bubble:#19191b;--modal:#121214;--input:#111113;
-  --stage:radial-gradient(1200px 600px at 70% -10%,#1a120e,#000 60%);
-  --winborder:#202022;--shadow:0 40px 120px rgba(0,0,0,.6);--scroll:#222;
-  --onember:#fff;--danger:#d0604a;
+  --bg:#0c0f13;--panel:#0a0d10;--tb:#090c0f;--line:#1b2026;--line2:#262d35;
+  --txt:#cfd6dd;--txt2:#eef2f6;--dim:#6f7b87;--dim2:#49525c;
+  --ember:#2de0a7;--accent2:#19b9e8;--glow:rgba(45,224,167,.45);
+  --hover:#141920;--active:#1a212a;--bubble:#171d25;--modal:#10151b;--input:#11161d;
+  --glass:rgba(16,21,27,.85);
+  --stage:radial-gradient(1100px 620px at 75% -12%,#0e2a23,#04070a 62%);
+  --winborder:#1d242c;--shadow:0 40px 120px rgba(0,0,0,.65);--scroll:#222a33;
+  --onember:#04231a;--danger:#ff6b5e;
+  --font-d:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --font-m:"Spline Sans Mono",ui-monospace,Consolas,monospace;
 }
 [data-theme="light"]{
-  --bg:#f7f5f0;--panel:#efece4;--tb:#ece8de;--line:#ddd8cc;--line2:#cfc9bb;
-  --txt:#3a372f;--txt2:#26241f;--dim:#8a857a;--dim2:#b0aa9c;--ember:#d14f1f;
-  --hover:#e9e5da;--active:#e2ddd0;--bubble:#e9e5da;--modal:#fbf9f4;--input:#fbf9f4;
-  --stage:radial-gradient(1200px 600px at 70% -10%,#e8ddcf,#cfc6b6 60%);
-  --winborder:#c8c2b2;--shadow:0 40px 120px rgba(90,80,60,.35);--scroll:#cfc9bb;
-  --onember:#fff;--danger:#b4452f;
+  --bg:#f7f9fa;--panel:#f0f3f5;--tb:#eceff2;--line:#dde3e8;--line2:#cbd3da;
+  --txt:#3a424b;--txt2:#14181d;--dim:#8a939c;--dim2:#b6bec6;
+  --ember:#0aa881;--accent2:#0f8fbd;--glow:rgba(10,168,129,.35);
+  --hover:#e7ebee;--active:#dfe5e9;--bubble:#e9edf0;--modal:#ffffff;--input:#ffffff;
+  --glass:rgba(255,255,255,.88);
+  --stage:radial-gradient(1100px 620px at 75% -12%,#d4efe4,#dde4e9 62%);
+  --winborder:#c9d1d8;--shadow:0 40px 120px rgba(40,60,70,.25);--scroll:#cbd3da;
+  --onember:#ffffff;--danger:#d6473a;
 }
 html,body{height:100%}
-body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-size:13.5px;-webkit-font-smoothing:antialiased;overflow:hidden}
+body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;font-size:13.5px;-webkit-font-smoothing:antialiased;overflow:hidden}
 #root{height:100vh}
 .stage{height:100vh;padding:18px;background:var(--stage)}
 .win{height:100%;display:flex;flex-direction:column;background:var(--bg);border:1px solid var(--winborder);border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
 /* titlebar */
 .titlebar{position:relative;display:flex;align-items:center;height:38px;background:var(--tb);border-bottom:1px solid var(--line);padding-left:12px;flex-shrink:0}
-.appmark{width:15px;height:15px;border-radius:4px;background:radial-gradient(circle at 35% 30%,#f6a25f,#e35d2b);margin-right:10px}
+.appmark{width:15px;height:15px;border-radius:4px;background:linear-gradient(135deg,var(--ember),var(--accent2));margin-right:10px}
 .menu{display:flex;gap:2px;font-size:12.5px;color:var(--dim)}
 .menu span{padding:3px 8px;border-radius:5px;cursor:default}
 .menu span:hover{background:var(--hover);color:var(--txt)}
@@ -45,7 +54,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 /* body */
 .body{flex:1;display:flex;min-height:0}
 /* sidebar — expanded */
-.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px}
+.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px;overflow:hidden}
 .sb-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 10px}
 .wordmark{font-size:16px;color:var(--txt2);letter-spacing:-.01em}
 .wordmark em{color:var(--ember);font-style:italic}
@@ -54,8 +63,18 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .sb-row.active{background:var(--active);color:var(--txt2)}
 .sb-row .sb-ic{color:var(--dim);flex-shrink:0;display:flex}
 .sb-row.active .sb-ic{color:var(--txt)}
-.sb-sec{font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
-.sb-list{flex:1;overflow-y:auto;min-height:0}
+.sb-sec{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sec-chev{display:flex;color:var(--dim2);background:none;border:none;cursor:pointer;padding:2px;border-radius:4px;transition:transform .2s,color .15s}
+.sec-chev:hover{color:var(--txt)}
+.sec-chev.closed{transform:rotate(-90deg)}
+.sb-scroll{flex:1;overflow-y:auto;min-height:0}
+.sb-list{}
+.fold{position:relative;width:16px;height:16px;flex-shrink:0;cursor:pointer}
+.fold>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transition:opacity .18s,transform .25s;color:var(--dim)}
+.fold:hover>span{color:var(--ember)}
+.fold .f-open{opacity:0;transform:rotate(-8deg) scale(.85)}
+.fold.on .f-open{opacity:1;transform:none}
+.fold.on .f-closed{opacity:0;transform:rotate(8deg) scale(.85)}
 .chat-row{position:relative;display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:7px;color:var(--txt);font-size:12.5px;cursor:pointer}
 .chat-row:hover{background:var(--hover)}
 .chat-row.active{background:var(--active);color:var(--txt2)}
@@ -97,10 +116,53 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .gp-item b{font-size:12.5px;color:var(--txt2);font-weight:500;display:block;margin-bottom:1px}
 .gp-item p{font-size:11.5px;color:var(--dim);line-height:1.45}
 .btn.primary:disabled{background:var(--line2);border-color:var(--line2);color:var(--dim);cursor:not-allowed;filter:none}
+/* ledger */
+.led-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.led-card{border:1px solid var(--line);border-radius:13px;padding:16px}
+.led-k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+.led-v{font-size:21px;color:var(--txt2);letter-spacing:-.02em}
+.led-v small{font-size:12.5px;color:var(--dim);margin-left:7px}
+.led-row{display:flex;align-items:baseline;gap:10px;padding:7px 2px;font-size:13px;color:var(--txt)}
+.led-row .rn{color:var(--dim2);font-style:italic;width:22px}
+.led-row .lv{margin-left:auto;color:var(--dim);font-size:12.5px}
+.quiet-foot{margin-top:22px;font-size:12px;color:var(--dim2);font-style:italic}
+/* skills */
+.skill-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
+.skill-card .sk-meta{flex:1;min-width:0}
+.skill-card h4{font-size:13.5px;color:var(--txt2);font-weight:500;margin-bottom:3px}
+.skill-card p{font-size:12px;color:var(--dim)}
+.skill-card .trig{color:var(--ember)}
+/* memory */
+.mem-row{display:flex;align-items:center;gap:11px;padding:10px 6px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt)}
+.mem-cat{font-size:10.5px;color:var(--dim);border:1px solid var(--line2);border-radius:10px;padding:1px 8px;flex-shrink:0;text-transform:lowercase}
+.mem-row .chat-dots{display:flex;margin-left:auto}
+.mem-stats{font-size:12px;color:var(--dim);margin:14px 2px 0}
+/* archive */
+.arc-row{display:flex;align-items:center;gap:11px;padding:10px 8px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt2)}
+.arc-row .arc-act{margin-left:auto;display:flex;gap:7px}
+/* settings modal */
+.set-modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:660px;max-width:94vw;height:440px;background:var(--modal);border:1px solid var(--line2);border-radius:16px;box-shadow:0 30px 100px rgba(0,0,0,.55);display:flex;overflow:hidden}
+.set-nav{width:170px;border-right:1px solid var(--line);padding:14px 8px;flex-shrink:0}
+.set-nav .sn-title{font-size:14px;color:var(--txt2);font-weight:500;padding:2px 10px 12px}
+.set-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;color:var(--txt);font-size:12.5px;cursor:pointer}
+.set-item:hover{background:var(--hover)}
+.set-item.on{background:var(--active);color:var(--txt2)}
+.set-body{flex:1;padding:20px 22px;overflow-y:auto;min-width:0}
+.set-h{font-size:14px;color:var(--txt2);font-weight:500;margin-bottom:14px}
+.set-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt)}
+.set-row .sr-sub{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
+.set-row .sr-end{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.set-note{font-size:11.5px;color:var(--dim2);font-style:italic;margin-top:14px}
+.sw{width:34px;height:19px;border-radius:11px;background:var(--line2);position:relative;cursor:pointer;transition:background .15s;flex-shrink:0}
+.sw::after{content:"";position:absolute;left:2.5px;top:2.5px;width:14px;height:14px;border-radius:50%;background:var(--bg);transition:left .15s}
+.sw.on{background:var(--ember)}
+.sw.on::after{left:17.5px}
+.cu-pill{font-size:11.5px;border:1px solid var(--line2);border-radius:14px;padding:3px 11px;color:var(--dim)}
+.cu-pill.on{border-color:var(--ember);color:var(--ember);background:color-mix(in srgb,var(--ember) 9%,transparent)}
 /* profile row */
 .profile-row{display:flex;align-items:center;gap:9px;padding:8px 9px;border-radius:9px;cursor:pointer;margin-top:6px;border-top:1px solid var(--line);border-radius:0;padding-top:11px}
 .profile-row:hover{background:var(--hover)}
-.avatar{width:28px;height:28px;border-radius:50%;background:#3d4a5c;color:#e8edf4;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;letter-spacing:.02em}
+.avatar{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--ember),var(--accent2));color:#06281e;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;letter-spacing:.02em}
 .p-meta{flex:1;min-width:0}
 .p-name{font-size:12.5px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .p-plan{font-size:11px;color:var(--dim)}
@@ -109,7 +171,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .rail{width:52px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:10px 0 12px;gap:2px}
 .rail-logo{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-bottom:8px}
 .rail-logo:hover{background:var(--hover)}
-.rail-dot{width:15px;height:15px;border-radius:4px;background:radial-gradient(circle at 35% 30%,#f6a25f,#e35d2b)}
+.rail-dot{width:15px;height:15px;border-radius:4px;background:linear-gradient(135deg,var(--ember),var(--accent2))}
 .rail-btn{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dim);cursor:pointer;background:none;border:none}
 .rail-btn:hover{background:var(--hover);color:var(--txt2)}
 .rail-btn.active{background:var(--active);color:var(--txt2)}
@@ -133,7 +195,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .composer-wrap{width:100%;max-width:680px;flex-shrink:0}
 .composer-dock{padding:0 24px 18px;display:flex;justify-content:center;flex-shrink:0}
 .cpill{background:var(--input);border:1px solid var(--line2);border-radius:24px;padding:8px 10px 8px 8px;display:flex;flex-direction:column;gap:6px;box-shadow:0 4px 24px rgba(0,0,0,.12)}
-.cpill:focus-within{border-color:var(--dim2)}
+.cpill:focus-within{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 14%,transparent)}
 .attach-strip{display:flex;gap:6px;flex-wrap:wrap;padding:2px 4px 0}
 .attach-chip{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt);border:1px solid var(--line2);background:var(--hover);border-radius:8px;padding:3px 8px}
 .attach-chip .ax{cursor:pointer;color:var(--dim)}
@@ -143,7 +205,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .cbtn:hover{background:var(--hover);color:var(--txt2)}
 .cpill textarea{width:100%;background:transparent;border:none;outline:none;color:var(--txt2);font:inherit;font-size:14px;resize:none;min-height:24px;max-height:160px;padding:6px 2px;line-height:1.5;display:block}
 .ta-wrap{flex:1;position:relative;min-width:0}
-.ph-anim{position:absolute;left:2px;top:6px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none;animation:phIn .55s ease}
+.ph-anim{position:absolute;left:10px;top:8px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none;animation:phIn .55s ease}
 @keyframes phIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
 .mode-chip{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;padding:5px 8px;border-radius:14px;background:none;border:none;font-family:inherit;flex-shrink:0}
 .mode-chip:hover{background:var(--hover);color:var(--txt)}
@@ -152,13 +214,86 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
 .crow-rel{position:relative}
 .mode-menu{position:absolute;right:44px;bottom:42px;z-index:30;background:var(--modal);border:1px solid var(--line2);border-radius:10px;padding:5px;min-width:130px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
+/* plus menu */
+.plus-menu{position:absolute;left:0;bottom:46px;z-index:50;width:236px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.plus-item{display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:9px;color:var(--txt);font-size:13.5px;cursor:pointer;position:relative}
+.plus-item:hover{background:var(--hover);color:var(--txt2)}
+.plus-item .sb-ic{color:var(--dim);display:flex}
+.plus-item.dim{color:var(--dim)}
+.plus-item .p-arr{margin-left:auto;color:var(--dim2);display:flex}
+.plus-div{height:1px;background:var(--line);margin:5px 6px}
+.plus-sub{position:absolute;left:calc(100% - 4px);top:-6px;z-index:60;width:256px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.sub-head{font-size:11px;color:var(--dim2);padding:8px 11px 4px;text-transform:uppercase;letter-spacing:.05em}
+.recent-row{display:flex;align-items:center;gap:10px;padding:8px 11px;border-radius:9px;cursor:pointer}
+.recent-row:hover{background:var(--hover)}
+.recent-row .r-name{font-size:13px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent-row .r-date{font-size:11px;color:var(--dim)}
+/* attachments */
+.att-card{display:flex;align-items:center;gap:10px;background:var(--hover);border:1px solid var(--line2);border-radius:13px;padding:8px 12px;position:relative;max-width:250px}
+.att-card .att-ic{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ember),var(--accent2));color:#06281e;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.att-card .a-name{font-size:12.5px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.att-card .a-kind{font-size:11px;color:var(--dim)}
+.att-x{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;background:var(--txt2);color:var(--bg);display:flex;align-items:center;justify-content:center;cursor:pointer;border:none;padding:0}
+.att-img{position:relative;width:56px;height:56px;border-radius:11px;border:1px solid var(--line2);cursor:zoom-in;flex-shrink:0}
+.att-img img{width:100%;height:100%;object-fit:cover;display:block;border-radius:10px}
+.msg-att-img{width:130px;height:96px;border-radius:12px;overflow:hidden;border:1px solid var(--line2);cursor:zoom-in}
+.msg-att-img img{width:100%;height:100%;object-fit:cover;display:block}
+/* lightbox */
+.lightbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
+.lightbox img{max-width:82vw;max-height:82vh;border-radius:14px;box-shadow:0 30px 100px rgba(0,0,0,.6)}
+/* two-row composer */
+.cpill > .ta-wrap{width:100%;padding:2px 8px 0}
+.cspace{flex:1}
+.plus-menu.down,.apps-drop.down,.model-drop.down{bottom:auto;top:46px}
+/* slash menu */
+.slash-menu{position:absolute;left:34px;bottom:46px;z-index:50;width:218px;border:1px solid var(--line2);border-radius:14px;padding:5px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.slash-menu.down{bottom:auto;top:46px}
+/* add-from-library modal */
+.libpick{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:70;width:560px;max-width:92vw;border:1px solid var(--line2);border-radius:16px;padding:18px 0 8px;background:var(--modal);box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.lp-head{display:flex;align-items:center;padding:0 18px 10px}
+.lp-head span{flex:1;font-family:var(--font-d);font-weight:600;font-size:16.5px;color:var(--txt2)}
+.lp-search{width:calc(100% - 36px);margin:0 18px 6px;background:transparent;border:none;border-bottom:1px solid var(--line);padding:8px 0;font:inherit;font-size:14px;color:var(--txt2);outline:none}
+.lp-search::placeholder{color:var(--dim)}
+.lp-list{max-height:340px;overflow-y:auto;padding:8px 10px}
+/* project chat rows */
+.pcr-main{flex:1;min-width:0}
+.pcr-title{font-size:13.5px;color:var(--txt2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcr-snip{font-size:12px;color:var(--dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcr-date{font-size:12px;color:var(--dim);flex-shrink:0}
+.proj-chat-row:hover .pcr-date{display:none}
+.pcr-dots{display:none}
+.proj-chat-row:hover .pcr-dots{display:flex}
+/* apps / connectors */
+.app-chip{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:14px;background:none;border:1px solid var(--line2);color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer;flex-shrink:0}
+.app-chip:hover{background:var(--hover);color:var(--txt2)}
+.app-chip .sb-ic{display:flex;color:var(--txt)}
+.apps-drop{position:absolute;left:40px;bottom:46px;z-index:50;width:246px;border:1px solid var(--line2);border-radius:14px;padding:6px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+.app-row{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:9px}
+.app-row:hover{background:var(--hover)}
+.app-row .a-nm{flex:1;font-size:13.5px;color:var(--txt2)}
+.app-act{font-size:12px;color:var(--dim);cursor:pointer;background:none;border:none;font-family:inherit;padding:2px 4px}
+.app-act:hover{color:var(--ember)}
+/* model picker (ported from vellum-workspace.html) */
+.model-pill{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;flex-shrink:0}
+.model-pill:hover{background:var(--hover);color:var(--txt)}
+.model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-drop{position:absolute;right:44px;bottom:44px;z-index:50;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
+.drop-lbl{font-size:10.5px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.model-sync{color:var(--ember);cursor:pointer;text-transform:none;letter-spacing:0}
+.model-search{width:calc(100% - 18px);margin:2px 9px 4px;background:var(--input);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--txt2);font:inherit;font-size:12px;outline:none}
+.model-search::placeholder{color:var(--dim2)}
+.model-list{max-height:240px;overflow-y:auto}
+.drop-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 13px;cursor:pointer;color:var(--txt);font-size:12.5px}
+.drop-item:hover{background:var(--hover);color:var(--txt2)}
+.drop-check{color:var(--ember);display:flex}
+.drop-item.manage{border-top:1px solid var(--line);color:var(--ember);margin-top:3px}
 /* thread */
 .msgs{flex:1;overflow-y:auto;padding:26px 24px 10px;display:flex;flex-direction:column;align-items:center}
 .msgs-inner{width:100%;max-width:680px;display:flex;flex-direction:column;gap:18px}
 .bubble-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .bubble{max-width:78%;background:var(--bubble);border-radius:16px;padding:9px 14px;font-size:13.5px;color:var(--txt2);white-space:pre-wrap;line-height:1.55}
 .areply{font-size:14px;line-height:1.7;color:var(--txt);white-space:pre-wrap}
-.shimmer{background:linear-gradient(90deg,var(--dim) 0%,var(--txt2) 18%,var(--ember) 38%,var(--txt2) 58%,var(--dim) 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2.4s linear infinite;filter:drop-shadow(0 0 7px rgba(227,93,43,.42))}
+.shimmer{background:linear-gradient(90deg,var(--dim) 0%,var(--txt2) 18%,var(--ember) 38%,var(--txt2) 58%,var(--dim) 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2.4s linear infinite;filter:drop-shadow(0 0 8px var(--glow))}
 @keyframes sh{to{background-position:-240% center}}
 [data-theme="light"] .shimmer{background:none;-webkit-background-clip:initial;background-clip:initial;color:var(--txt);-webkit-text-fill-color:var(--txt);animation:none;filter:none}
 .act-row{display:flex;gap:2px;margin-top:2px}
@@ -251,7 +386,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:440px;max-width:92vw;background:var(--modal);border:1px solid var(--line2);border-radius:16px;padding:24px;box-shadow:0 30px 100px rgba(0,0,0,.55)}
 .m-title{font-size:16px;color:var(--txt2);font-weight:500;margin-bottom:20px}
 .m-avatar-wrap{display:flex;justify-content:center;margin-bottom:22px}
-.m-avatar{position:relative;width:96px;height:96px;border-radius:50%;background:#3d4a5c;color:#e8edf4;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;border:2px solid var(--line2)}
+.m-avatar{position:relative;width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,var(--ember),var(--accent2));color:#06281e;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:600;font-family:var(--font-d);border:2px solid var(--line2)}
 .m-cam{position:absolute;right:-2px;bottom:2px;width:28px;height:28px;border-radius:50%;background:var(--active);border:1px solid var(--line2);color:var(--txt);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .m-field{border:1px solid var(--line2);border-radius:10px;padding:8px 12px;margin-bottom:12px}
 .m-field label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
@@ -260,8 +395,60 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .m-actions{display:flex;justify-content:flex-end;gap:9px}
 .btn{padding:8px 18px;border-radius:18px;border:1px solid var(--line2);background:none;color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer}
 .btn:hover{background:var(--hover)}
+.btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:var(--onember)}
 .btn.primary:hover{filter:brightness(1.08)}
+/* ── modern visual system (addendum E) ── */
+.wordmark{font-family:var(--font-d);font-weight:600;font-size:17px}
+.wordmark em{font-style:normal}
+.land-mark{font-family:var(--font-d);font-weight:700;font-size:42px;letter-spacing:-.04em;background:linear-gradient(100deg,var(--txt2) 25%,var(--ember) 62%,var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.land-mark em{color:inherit;font-style:normal}
+.land-greet{font-family:var(--font-d);font-style:normal;font-weight:500;font-size:22px;color:var(--txt2)}
+.page-title,.proj-name,.m-title,.sn-title,.src-title,.pe-t{font-family:var(--font-d);font-weight:600;letter-spacing:-.02em}
+.set-h{font-family:var(--font-d);font-weight:600}
+.led-v{font-family:var(--font-m);letter-spacing:-.01em}
+.mem-stats{font-family:var(--font-m);font-size:11px}
+.ph-anim{font-style:normal}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop,.libpick,.slash-menu{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
+@keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}}
+.main{background:radial-gradient(820px 460px at 82% -18%,color-mix(in srgb,var(--ember) 7%,transparent),transparent 65%),var(--bg)}
+.csend{background:linear-gradient(135deg,var(--ember),var(--accent2))}
+.csend:disabled{background:var(--line2)}
+.btn.primary{background:linear-gradient(135deg,var(--ember),var(--accent2));border-color:transparent}
+.btn.primary:disabled{background:var(--line2)}
+.sb-row,.chat-row,.rail-btn,.tab,.act-btn,.cbtn,.tbtn,.icon-tgl,.set-item,.pop-row,.ctx-item{transition:background .15s,color .15s}
+::selection{background:color-mix(in srgb,var(--ember) 30%,transparent)}
+/* sizing pass (addendum G) */
+body{font-size:14px}
+.wordmark{font-size:18px}
+.menu{font-size:13px}
+.sb-row{font-size:14px;padding:8px 10px}
+.chat-row{font-size:13.5px;padding:7px 10px}
+.sb-sec{font-size:11px}
+.p-name{font-size:13px}
+.p-plan{font-size:11.5px}
+.cpill textarea{font-size:15px}
+.ph-anim{font-size:15px}
+.chip{font-size:13.5px;padding:8px 17px}
+.areply{font-size:15px}
+.bubble{font-size:14.5px}
+.ctx-item{font-size:13.5px;padding:8px 11px}
+.pop-row{font-size:13.5px}
+.s-row{font-size:13.5px}
+.tab{font-size:13.5px;padding:7px 15px}
+.lt-name{font-size:13.5px}
+.drop-item{font-size:13px}
+.plus-item{font-size:14px}
+.app-chip{font-size:13px}
+.recent-row .r-name{font-size:13.5px}
+.set-item{font-size:13.5px}
+.set-row{font-size:13.5px}
+.proj-chat-row{font-size:13.5px}
+.led-row{font-size:13.5px}
+.mem-row{font-size:13.5px}
+.arc-row{font-size:13.5px}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
 </style>
 </head>
@@ -271,7 +458,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 const {useState, useRef, useEffect} = React;
 
 /* ─── icons ─── */
-const I = ({d, size=16, sw=1.5, children}) => (
+const I = ({d, size=17, sw=1.5, children}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d?<path d={d}/>:children}</svg>
 );
 const IcPencilSq = (p)=> <I {...p} d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5 M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
@@ -279,6 +466,14 @@ const IcSearch = (p)=> <I {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l
 const IcLibrary = (p)=> <I {...p} d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20 M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z M9 6h6"/>;
 const IcFolder = (p)=> <I {...p} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>;
 const IcFolderPlus = (p)=> <I {...p} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z M12 11v4 M10 13h4"/>;
+const IcFolderOpen = (p)=> <I {...p}><path d="M3.5 18V6a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v1.2"/><path d="M2.8 19l2.3-6.3a2 2 0 0 1 1.9-1.3h14.5l-2.5 6.9a2 2 0 0 1-1.9 1.3H3.9a1.1 1.1 0 0 1-1.1-1.4z"/></I>;
+
+const FolderIcon = ({open, onToggle}) => (
+  <span className={'fold' + (open ? ' on' : '')} title={open ? 'Close folder' : 'Open folder'} onClick={onToggle}>
+    <span className="f-closed"><IcFolder size={14}/></span>
+    <span className="f-open"><IcFolderOpen size={14}/></span>
+  </span>
+);
 const IcPanel = (p)=> <I {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9.5 4v16"/></I>;
 const IcDots = (p)=> <I {...p} sw={0}><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></I>;
 const IcPin = (p)=> <I {...p} d="M12 17v5 M9 4h6l1 7 2.5 2.5H5.5L8 11l1-7z"/>;
@@ -300,6 +495,79 @@ const IcGrid = (p)=> <I {...p}><rect x="4" y="4" width="7" height="7" rx="1.5"/>
 const IcList = (p)=> <I {...p}><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></I>;
 const IcFilter = (p)=> <I {...p} d="M4 7h16 M7 12h10 M10 17h4"/>;
 const IcChevD = (p)=> <I {...p} d="M6 9l6 6 6-6"/>;
+const IcChevR = (p)=> <I {...p} d="M9 6l6 6-6 6"/>;
+const IcGitHub = (p)=> <I {...p} d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5a5.4 5.4 0 0 0-1.5-3.7 5 5 0 0 0-.1-3.7s-1.2-.3-3.9 1.4a13.4 13.4 0 0 0-7 0C4.8 1.3 3.6 1.6 3.6 1.6a5 5 0 0 0-.1 3.7A5.4 5.4 0 0 0 2 9c0 3.5 3 5.5 6 5.5a4.8 4.8 0 0 0-1 3.5v4 M7 18c-3 1-4-1-5-2"/>;
+const IcAirtable = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="6.5" rx="1.5"/></I>;
+const IcLinear = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M7.5 12.5l4 4 M9.5 8.5l6 6"/></I>;
+const IcBox = (p)=> <I {...p} d="M21 8l-9-5-9 5v8l9 5 9-5V8z M3 8l9 5 9-5 M12 13v8"/>;
+const IcDropbox = (p)=> <I {...p} d="M7 3l5 3.5L7 10 2 6.5 7 3z M17 3l5 3.5L17 10l-5-3.5L17 3z M7 10l5 3.5L7 17l-5-3.5L7 10z M17 10l5 3.5L17 17l-5-3.5 5-3.5z M8.5 18.5l3.5 2.5 3.5-2.5"/>;
+const IcGmail = (p)=> <I {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></I>;
+const APP_ICONS = { airtable: IcAirtable, github: IcGitHub, linear: IcLinear, box: IcBox, dropbox: IcDropbox, gmail: IcGmail };
+
+const SEED_APPS = [
+  { id: 'airtable', name: 'Airtable', state: 'ready' },
+  { id: 'github',   name: 'GitHub',   state: 'setup' },
+  { id: 'linear',   name: 'Linear',   state: 'ready' },
+  { id: 'box',      name: 'Box',      state: 'connect' },
+  { id: 'dropbox',  name: 'Dropbox',  state: 'connect' },
+  { id: 'gmail',    name: 'Gmail',    state: 'connect' },
+];
+
+const IcXCircle = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></I>;
+
+const AppsPicker = ({apps, drop, onToggle, onGitHub, onClose}) => (
+  <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+    {apps.map(a => {
+      const Ic = APP_ICONS[a.id] || IcGrid;
+      return a.id === 'github' ? (
+        <div key={a.id} className="app-row" style={{cursor: 'pointer'}} onClick={onGitHub}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">GitHub</span>
+          <span className="p-arr"><IcChevR size={13}/></span>
+        </div>
+      ) : (
+        <div key={a.id} className="app-row" style={{cursor: 'pointer'}} title="Click to deselect" onClick={() => onToggle(a.id)}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">{a.name}</span>
+          <span className="drop-check"><IcCheck size={14}/></span>
+        </div>
+      );
+    })}
+  </Popover>
+);
+
+const GitHubPanel = ({drop, onClose}) => {
+  const [q, setQ] = useState('');
+  return (
+    <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} style={{width: 290}} onClose={onClose}>
+      <input className="model-search" autoFocus placeholder="Search repositories…" value={q} onChange={e => setQ(e.target.value)}/>
+      <div className="s-none" style={{textAlign: 'left', padding: '8px 13px'}}>No repositories found</div>
+      <div className="plus-div"/>
+      <div className="plus-item dim" title="Not in this preview">Configure Repositories<span className="p-arr"><IcShare size={13}/></span></div>
+      <div className="ctx-hint">Not indexed or not seeing a repository? Learn more</div>
+    </Popover>
+  );
+};
+
+const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
+  <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+    {apps.map(a => {
+      const Ic = APP_ICONS[a.id] || IcGrid;
+      const on = sel.includes(a.id);
+      return (
+        <div className="app-row" key={a.id}>
+          <span className="sb-ic" style={{color: 'var(--txt)'}}><Ic size={16}/></span>
+          <span className="a-nm">{a.name}</span>
+          {a.state === 'ready'
+            ? <div className={'sw' + (on ? ' on' : '')} role="switch" aria-checked={on} onClick={() => onToggle(a.id)}/>
+            : <button className="app-act" onClick={() => onConnect(a.id)}>{a.state === 'setup' ? 'Finish Setup' : 'Connect'}</button>}
+        </div>
+      );
+    })}
+    <div className="plus-div"/>
+    <div className="plus-item dim" title="Not in this preview"><span className="sb-ic"><IcGrid size={15}/></span>Connect more</div>
+  </Popover>
+);
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
@@ -316,6 +584,23 @@ const IcPenLine = (p)=> <I {...p} d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-
 const IcGlobe = (p)=> <I {...p} d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20 M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>;
 const IcFile = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6"/>;
 const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4A8.5 8.5 0 1 1 21 11.5z"/>;
+const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
+const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
+const IcBrain = (p)=> <I {...p}><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M6.4 8.1l3.5 2.4 M17.6 8.1l-3.5 2.4 M6.4 15.9l3.5-2.4 M17.6 15.9l-3.5-2.4"/></I>;
+
+/* closes on a document-level outside mousedown — no click-eating backdrop,
+   so one click both dismisses the open menu and lands on the next target */
+const Popover = ({className, style, onClose, children}) => {
+  const ref = useRef(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) closeRef.current(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+  return <div ref={ref} className={className} style={style}>{children}</div>;
+};
 
 const visibleChats = cs => {
   const v = cs.filter(c => !c.archived && !c.projectId);
@@ -327,11 +612,11 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 const SEED_CHATS = [
-  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, projectId: null, messages: [] },
-  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, projectId: null, messages: [] },
+  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, projectId: null, created: '09/06', messages: [] },
+  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, projectId: null, created: '09/06', messages: [] },
+  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, projectId: null, created: '08/06', messages: [] },
+  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, projectId: null, created: '07/06', messages: [] },
+  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, projectId: null, created: '05/06', messages: [] },
 ];
 
 const SEED_LIBRARY = [
@@ -355,6 +640,45 @@ const PROFILE_DEFAULT = {
   displayName: 'Pratyakksh', username: 'pratyakksh',
   email: 'openslides.ai@gmail.com', plan: 'Private',
 };
+
+const SEED_SKILLS = {
+  proposed: [
+    { id: 's1', name: 'Book summary in my voice', trigger: 'summarize · book · what does X say', note: 'Drafted from 4 similar asks this month.' },
+    { id: 's2', name: 'Sports snapshot brief', trigger: 'score · fixture · standings', note: 'Drafted from your match-day questions.' },
+  ],
+  active: [
+    { id: 's3', name: 'Citations as roman footnotes', trigger: 'cite · footnote', uses: 14, last: '01/06' },
+    { id: 's4', name: 'Short answers after 22:00', trigger: 'late-night register', uses: 9, last: '08/06' },
+  ],
+  retired: [
+    { id: 's5', name: 'Daily news digest', trigger: 'news · today', uses: 3, last: '12/05' },
+  ],
+};
+
+const SEED_MEMORY = [
+  { id: 'm1', cat: 'reading',  text: 'Reads slowly, returns to ideas. Currently circling Meditations, book four.' },
+  { id: 'm2', cat: 'taste',    text: 'Prefers plain answers. No exclamation marks, no celebration.' },
+  { id: 'm3', cat: 'habits',   text: 'Works late; asks the heaviest questions after ten.' },
+  { id: 'm4', cat: 'projects', text: 'Building the Vellum desktop shell; coding belongs to the workspace.' },
+  { id: 'm5', cat: 'people',   text: 'A small circle that matters; the rest is weather.' },
+];
+
+const SEED_REFLECTIONS = [
+  { id: 'r1', kind: 'monthly provocation', date: '01/06', text: 'You keep filing notes on stillness while planning three projects at once. Which is the real one.' },
+  { id: 'r2', kind: 'weekly reflection',   date: '08/06', text: 'The week leaned on Meditations and the sports daemon. Reading slowed when building sped up.' },
+  { id: 'r3', kind: 'nightly digest',      date: '09/06', text: 'Three threads on the desktop shell. One on patience. The patience one was shorter.' },
+];
+
+const SEED_SAVED = [
+  { id: 'v1', date: '04/06', text: 'On attention — what you give it to, you become. Filed from a late thread.' },
+  { id: 'v2', date: '28/05', text: 'The sports daemon plan, condensed to five lines.' },
+];
+
+const SEED_FEEDS = [
+  { id: 'f1', name: 'X',       sub: 'Quotes from your handles · last filed 09/06', on: true },
+  { id: 'f2', name: 'YouTube', sub: 'Transcripts from subscriptions · last filed 08/06', on: true },
+  { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots · last filed 07/06', on: false },
+];
 
 /* ─── sidebar ─── */
 const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => {
@@ -380,13 +704,13 @@ const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => 
   );
 };
 
-const ProjectRow = ({proj, renaming, onMenu, onOpen, onRename}) => {
+const ProjectRow = ({proj, renaming, open, onToggle, onMenu, onOpen, onRename}) => {
   const [draft, setDraft] = useState(proj.name);
   useEffect(() => { if (renaming) setDraft(proj.name); }, [renaming]);
   if (renaming) {
     return (
       <div className="chat-row active">
-        <span className="chat-pin"><IcFolder size={13}/></span>
+        <FolderIcon open={open}/>
         <input className="rename-input" autoFocus value={draft}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') onRename(draft); if (e.key === 'Escape') onRename(null); }}
@@ -395,16 +719,18 @@ const ProjectRow = ({proj, renaming, onMenu, onOpen, onRename}) => {
     );
   }
   return (
-    <div className="chat-row" onClick={onOpen}>
-      <span className="chat-pin"><IcFolder size={13}/></span>
+    <div className="chat-row" onClick={() => { onToggle(); onOpen(); }}>
+      <FolderIcon open={open}/>
       <span className="chat-title">{proj.name}</span>
+      <button className="chat-dots" title="New chat in this project"
+        onClick={e => { e.stopPropagation(); onOpen(); }}><IcPencilSq size={14}/></button>
       <button className="chat-dots" title="Project settings"
         onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
     </div>
   );
 };
 
-const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingId, profile, onCollapse, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
+const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onCollapse, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
   const sorted = visibleChats(chats);
   return (
     <div className="sidebar">
@@ -412,36 +738,58 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
         <span className="wordmark"><em>v</em>ellum</span>
         <button className="tbtn" title="Collapse sidebar" onClick={onCollapse}><IcPanel/></button>
       </div>
-      <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
-      <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats</button>
-      <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library</button>
-      <div className={'sb-sec'} style={{cursor: 'pointer'}} onClick={() => onNav('projects')}>Projects</div>
-      <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
-      {projects.map(p => (
-        <React.Fragment key={p.id}>
-          <ProjectRow proj={p} renaming={projRenamingId === p.id}
-            onOpen={() => onOpenProject(p.id)}
-            onMenu={e => onProjectMenu(p.id, e)}
-            onRename={t => onProjectRename(p.id, t)}/>
-          {chats.filter(c => c.projectId === p.id && !c.archived).map(c => (
-            <ChatRow key={c.id} chat={c} nested active={view === 'chat' && c.id === activeChatId}
-              renaming={renamingId === c.id}
-              onOpen={() => onOpenChat(c.id)}
-              onMenu={e => onChatMenu(c.id, e)}
-              onRename={t => onRename(c.id, t)}/>
-          ))}
-        </React.Fragment>
-      ))}
-      <div className="sb-sec">Recents</div>
-      <div className="sb-list">
-        {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
-        {sorted.map(c => (
-          <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
-            renaming={renamingId === c.id}
-            onOpen={() => onOpenChat(c.id)}
-            onMenu={e => onChatMenu(c.id, e)}
-            onRename={t => onRename(c.id, t)}/>
-        ))}
+      <div className="sb-scroll">
+        <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
+        <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats</button>
+        <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library</button>
+        <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
+        <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+        <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
+        <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
+        <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
+        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
+          Projects
+          <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
+            onClick={e => { e.stopPropagation(); onToggleSec('projects'); }}><IcChevD size={12}/></button>
+        </div>
+        {secOpen.projects && (
+          <React.Fragment>
+            <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
+            {projects.map(p => (
+              <React.Fragment key={p.id}>
+                <ProjectRow proj={p} renaming={projRenamingId === p.id} open={!!expandedProj[p.id]}
+                  onToggle={() => onToggleProj(p.id)}
+                  onOpen={() => onOpenProject(p.id)}
+                  onMenu={e => onProjectMenu(p.id, e)}
+                  onRename={t => onProjectRename(p.id, t)}/>
+                {!!expandedProj[p.id] && chats.filter(c => c.projectId === p.id && !c.archived).map(c => (
+                  <ChatRow key={c.id} chat={c} nested active={view === 'chat' && c.id === activeChatId}
+                    renaming={renamingId === c.id}
+                    onOpen={() => onOpenChat(c.id)}
+                    onMenu={e => onChatMenu(c.id, e)}
+                    onRename={t => onRename(c.id, t)}/>
+                ))}
+              </React.Fragment>
+            ))}
+          </React.Fragment>
+        )}
+        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('recents')}>
+          Recents
+          <button className={'sec-chev' + (secOpen.recents ? '' : ' closed')} title={secOpen.recents ? 'Collapse' : 'Expand'}
+            onClick={e => { e.stopPropagation(); onToggleSec('recents'); }}><IcChevD size={12}/></button>
+        </div>
+        {secOpen.recents && (
+          <div className="sb-list">
+            {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
+            {sorted.map(c => (
+              <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
+                renaming={renamingId === c.id}
+                onOpen={() => onOpenChat(c.id)}
+                onMenu={e => onChatMenu(c.id, e)}
+                onRename={t => onRename(c.id, t)}/>
+            ))}
+          </div>
+        )}
       </div>
       <div className="profile-row" onClick={onProfile}>
         <div className="avatar">{initials(profile.displayName)}</div>
@@ -470,6 +818,7 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
   return (
     <div className="rail">
       <div className="rail-logo" title="Expand sidebar" onClick={onExpand}><div className="rail-dot"/></div>
+      <button className="rail-btn" title="Expand sidebar" onClick={onExpand}><IcPanel size={17}/></button>
       <button className="rail-btn" title="New chat" onClick={onNewChat}><IcPencilSq size={17}/></button>
       <button className="rail-btn" title="Search chats" onClick={onSearch}><IcSearch size={17}/></button>
       <RailFly btn={<button className="rail-btn" title="Chats"><IcChat size={17}/></button>}>
@@ -482,6 +831,10 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
         ))}
       </RailFly>
       <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
+      <button className="rail-btn" title="Coding — opens the workspace" onClick={() => window.location.assign('vellum-workspace.html')}><IcTerminal size={17}/></button>
+      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
+      <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
+      <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
       <RailFly btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -505,15 +858,12 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
 
 /* ─── project menu ─── */
 const ProjectMenu = ({pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}}>
-      <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
-      <div className="ctx-hint">sharing is not in this preview</div>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete project</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
+    <div className="ctx-hint">sharing is not in this preview</div>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename project</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete project</div>
+  </Popover>
 );
 
 /* ─── chat ─── */
@@ -544,27 +894,200 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
-const ModeMenu = ({mode, onPick, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="mode-menu">
-      {['Extended', 'Instant'].map(m => (
-        <div key={m} className="ctx-item" onClick={() => onPick(m)}>
-          {m}{m === mode && <span className="ctx-check"><IcCheck size={13}/></span>}
+const ModelDrop = ({model, drop, onPick, onClose}) => {
+  const [q, setQ] = useState('');
+  const hits = MODELS.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <Popover className={'model-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+      <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">↻ Sync</span></div>
+      <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)}/>
+      <div className="model-list">
+        {hits.map(m => (
+          <div key={m.id} className="drop-item" onClick={() => onPick(m.id)}>
+            <span style={{overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{m.label}</span>
+            {model === m.id && <span className="drop-check"><IcCheck size={13}/></span>}
+          </div>
+        ))}
+        {hits.length === 0 && <div className="s-none">No matches.</div>}
+      </div>
+      <div className="drop-item manage" title="Key management is not in this preview"><span>Manage models &amp; keys…</span></div>
+    </Popover>
+  );
+};
+
+const PLACEHOLDERS = ['Ask anything…', 'Search your library…', 'Draft something new…', 'Think out loud…', 'Plan the week…'];
+
+/* models — curated list ported from vellum-workspace.html */
+const MODELS = [
+  { id: 'deepseek/deepseek-chat',         label: 'DeepSeek V4 Pro' },
+  { id: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V4 Flash' },
+  { id: 'minimax/minimax-01',             label: 'MiniMax' },
+  { id: 'google/gemma-3-27b-it',          label: 'Gemma 31B' },
+  { id: 'claude-3-7-sonnet-latest',       label: 'Claude 3.7 Sonnet' },
+  { id: 'gpt-4.1',                        label: 'GPT-4.1' },
+  { id: 'gemini-2.0-flash',               label: 'Gemini 2.0 Flash' },
+];
+const DEFAULT_MODEL = 'deepseek/deepseek-chat';
+const modelLabel = id => { const m = MODELS.find(x => x.id === id); return m ? m.label : id; };
+
+const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onClose}) => {
+  const [sub, setSub] = useState(null);
+  return (
+    <Popover className={'plus-menu' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+        <div className="plus-item" onMouseEnter={() => setSub(null)} onClick={onAttachFile}>
+          <span className="sb-ic"><IcUpload size={16}/></span>Add photos &amp; files
         </div>
-      ))}
+        <div className="plus-item" onMouseEnter={() => setSub('recent')}>
+          <span className="sb-ic"><IcNote size={16}/></span>Recent files<span className="p-arr"><IcChevR size={13}/></span>
+          {sub === 'recent' && (
+            <div className="plus-sub" onClick={e => e.stopPropagation()}>
+              <div className="plus-item" onClick={onOpenLibrary}><span className="sb-ic"><IcLibrary size={16}/></span>Add from library</div>
+              <div className="sub-head">Recents</div>
+              {library.slice(0, 3).map(it => (
+                <div key={it.id} className="recent-row" onClick={() => onAttachRecent(it)}>
+                  <KindIcon kind={it.kind}/>
+                  <div style={{minWidth: 0}}>
+                    <div className="r-name">{it.name}</div>
+                    <div className="r-date">{it.modified}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="plus-div"/>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcImage size={16}/></span>Create image</div>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcSparkle size={16}/></span>Deep research</div>
+        <div className="plus-item dim" title="Not in this preview" onMouseEnter={() => setSub(null)}><span className="sb-ic"><IcGlobe size={16}/></span>Web search</div>
+        <div className="plus-div"/>
+        <div className="plus-item" onMouseEnter={() => setSub('projects')}>
+          <span className="sb-ic"><IcFolder size={16}/></span>Projects<span className="p-arr"><IcChevR size={13}/></span>
+          {sub === 'projects' && (
+            <div className="plus-sub" onClick={e => e.stopPropagation()}>
+              {projects.map(p => (
+                <div key={p.id} className="plus-item" onClick={() => onOpenProject(p.id)}>
+                  <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+    </Popover>
+  );
+};
+
+const SLASH_ITEMS = [
+  { k: 'files', label: 'Add photos & files', ic: IcUpload, run: 'file' },
+  { k: 'think', label: 'Thinking',          ic: IcSparkle, dim: true },
+  { k: 'image', label: 'Create image',      ic: IcImage,   dim: true },
+  { k: 'web',   label: 'Web search',        ic: IcGlobe,   dim: true },
+  { k: 'study', label: 'Study and learn',   ic: IcLibrary, dim: true },
+];
+
+const SlashMenu = ({q, drop, apps, appSel, projects, onFile, onApp, onProject, onDismiss}) => {
+  const [sub, setSub] = useState(false);
+  const hits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(q));
+  const appHits = (apps || []).filter(a => a.name.toLowerCase().includes(q));
+  const projHit = !q || 'projects'.includes(q);
+  if (!hits.length && !appHits.length && !projHit) return null;
+  return (
+    <div className={'slash-menu' + (drop === 'down' ? ' down' : '')}>
+      {hits.map(it => {
+        const Ic = it.ic;
+        return (
+          <div key={it.k} className={'plus-item' + (it.dim ? ' dim' : '')}
+            title={it.dim ? 'Not in this preview' : undefined}
+            onMouseEnter={() => setSub(false)}
+            onClick={() => { if (it.run === 'file') onFile(); else onDismiss(); }}>
+            <span className="sb-ic"><Ic size={16}/></span>{it.label}
+          </div>
+        );
+      })}
+      {appHits.length > 0 && <div className="plus-div"/>}
+      {appHits.map(a => {
+        const Ic = APP_ICONS[a.id] || IcGrid;
+        return (
+          <div key={a.id} className="plus-item" onMouseEnter={() => setSub(false)} onClick={() => onApp(a.id)}>
+            <span className="sb-ic"><Ic size={16}/></span>{a.name}
+            {(appSel || []).includes(a.id) && <span className="ctx-check"><IcCheck size={13}/></span>}
+          </div>
+        );
+      })}
+      {projHit && (projects || []).length > 0 && (
+        <React.Fragment>
+          <div className="plus-div"/>
+          <div className="plus-item" onMouseEnter={() => setSub(true)}>
+            <span className="sb-ic"><IcFolder size={16}/></span>Projects
+            <span className="p-arr">{projects.length}&nbsp;<IcChevR size={13}/></span>
+            {sub && (
+              <div className="plus-sub">
+                {projects.map(p => (
+                  <div key={p.id} className="plus-item" onClick={() => onProject(p.id)}>
+                    <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </React.Fragment>
+      )}
     </div>
-  </React.Fragment>
-);
+  );
+};
 
-const PLACEHOLDERS = ['ask.', 'what are you reading.', 'write, or edit.', 'search your library.', 'sit with a question.'];
+const LibPickModal = ({library, onPick, onClose}) => {
+  const [q, setQ] = useState('');
+  const hits = library.filter(it => it.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="libpick">
+        <div className="lp-head">
+          <span>Add from library</span>
+          <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={15}/></button>
+        </div>
+        <input className="lp-search" autoFocus placeholder="Search library" value={q} onChange={e => setQ(e.target.value)}/>
+        <div className="lp-list">
+          {hits.map(it => (
+            <div key={it.id} className="recent-row" onClick={() => onPick(it)}>
+              <KindIcon kind={it.kind}/>
+              <div style={{minWidth: 0}}>
+                <div className="r-name">{it.name}</div>
+                <div className="r-date">Last modified {it.modified}</div>
+              </div>
+            </div>
+          ))}
+          {hits.length === 0 && <div className="s-none">Nothing by that name.</div>}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
 
-const Composer = ({text, setText, mode, setMode, onSend, busy, ph}) => {
+const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, appSel = [], onToggleSel, onConnectApp}) => {
   const [attach, setAttach] = useState([]);
-  const [modeOpen, setModeOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(false);
+  const [libOpen, setLibOpen] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [ghOpen, setGhOpen] = useState(false);
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); setPickOpen(false); setGhOpen(false); setSlashDismissed(true); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const prevSlash = useRef(false);
+  useEffect(() => {
+    const isSlash = text.startsWith('/');
+    if (!isSlash || !prevSlash.current) setSlashDismissed(false);
+    prevSlash.current = isSlash;
+  }, [text]);
+  const slashOpen = text.startsWith('/') && !slashDismissed;
   useEffect(() => {
     if (text || ph) return;
     const t = setInterval(() => setPhIdx(i => (i + 1) % PLACEHOLDERS.length), 3000);
@@ -584,36 +1107,97 @@ const Composer = ({text, setText, mode, setMode, onSend, busy, ph}) => {
       <div className="cpill">
         {attach.length > 0 && (
           <div className="attach-strip">
-            {attach.map((a, i) => (
-              <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}
-                <span className="ax" onClick={() => setAttach(at => at.filter((_, j) => j !== i))}><I d="M6 6l12 12M18 6L6 18" size={11}/></span>
+            {attach.map((a, i) => a.url ? (
+              <span key={i} className="att-img" onClick={() => onViewImage && onViewImage(a.url)}>
+                <img src={a.url} alt={a.name}/>
+                <button className="att-x" onClick={e => { e.stopPropagation(); setAttach(at => at.filter((_, j) => j !== i)); }}><I d="M6 6l12 12M18 6L6 18" size={10}/></button>
+              </span>
+            ) : (
+              <span key={i} className="att-card">
+                <span className="att-ic"><IcFile size={16}/></span>
+                <span style={{minWidth: 0}}>
+                  <span className="a-name" style={{display: 'block'}}>{a.name}</span>
+                  <span className="a-kind">File</span>
+                </span>
+                <button className="att-x" onClick={() => setAttach(at => at.filter((_, j) => j !== i))}><I d="M6 6l12 12M18 6L6 18" size={10}/></button>
               </span>
             ))}
           </div>
         )}
+        <div className="ta-wrap">
+          <textarea ref={taRef} rows={1} value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
+          {!text && (ph
+            ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
+            : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
+        </div>
         <div className="crow crow-rel">
-          <input ref={fileRef} type="file" style={{display: 'none'}}
+          <input ref={fileRef} type="file" multiple style={{display: 'none'}}
             onChange={e => {
-              const f = e.target.files && e.target.files[0];
-              if (f) setAttach(at => [...at, {name: f.name, size: fmtSize(f.size)}]);
+              const files = [...(e.target.files || [])];
+              if (files.length) setAttach(at => [...at, ...files.map(f => ({
+                name: f.name, size: fmtSize(f.size), kind: kindOf(f.name),
+                url: f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : null, fresh: true,
+              }))]);
               e.target.value = '';
             }}/>
-          <button className="cbtn" title="Attach — files land in your Library" onClick={() => fileRef.current.click()}><IcPlus/></button>
-          <div className="ta-wrap">
-            <textarea ref={taRef} rows={1} value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
-            {!text && (ph
-              ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
-              : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
-          </div>
-          <button className="mode-chip" onClick={() => setModeOpen(true)}>{mode}<IcChevD size={12}/></button>
+          <button className="cbtn" title="Add" onClick={() => setPlusOpen(true)}><IcPlus/></button>
+          {plusOpen && <PlusMenu library={library || []} projects={projects || []} drop={drop}
+            onAttachFile={() => { setPlusOpen(false); fileRef.current.click(); }}
+            onAttachRecent={it => { setPlusOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+            onOpenLibrary={() => { setPlusOpen(false); setLibOpen(true); }}
+            onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
+            onClose={() => setPlusOpen(false)}/>}
+          {apps && (() => {
+            const onApps = apps.filter(a => appSel.includes(a.id));
+            return (
+              <React.Fragment>
+                <button className="app-chip" title="Apps" onClick={() => setAppsOpen(true)}><span className="sb-ic"><IcGrid size={14}/></span>Apps<IcChevD size={11}/></button>
+                {onApps.length === 1 && (() => {
+                  const a = onApps[0];
+                  const Ic = APP_ICONS[a.id] || IcGrid;
+                  return (
+                    <button className="app-chip" title={a.name}
+                      onClick={() => a.id === 'github' ? setGhOpen(true) : setPickOpen(true)}>
+                      <span className="sb-ic" title="Disconnect" onClick={e => { e.stopPropagation(); onToggleSel(a.id); }}><IcXCircle size={14}/></span>
+                      <span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/>
+                    </button>
+                  );
+                })()}
+                {onApps.length > 1 && (
+                  <button className="app-chip" title="Selected apps" onClick={() => setPickOpen(true)}>
+                    <span className="sb-ic"><IcGrid size={14}/></span>{onApps.length} apps<IcChevD size={11}/>
+                  </button>
+                )}
+                {appsOpen && <AppsDrop apps={apps} sel={appSel} drop={drop} onToggle={onToggleSel} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
+                {pickOpen && onApps.length > 0 && <AppsPicker apps={onApps} drop={drop} onToggle={onToggleSel}
+                  onGitHub={() => { setPickOpen(false); setGhOpen(true); }} onClose={() => setPickOpen(false)}/>}
+                {ghOpen && <GitHubPanel drop={drop} onClose={() => setGhOpen(false)}/>}
+              </React.Fragment>
+            );
+          })()}
+          {slashOpen && <SlashMenu q={text.slice(1).toLowerCase()} drop={drop}
+            apps={apps} appSel={appSel} projects={projects}
+            onFile={() => { setText(''); fileRef.current.click(); }}
+            onApp={id => {
+              const a = (apps || []).find(x => x.id === id);
+              if (a && a.state === 'ready') onToggleSel(id); else if (onConnectApp) onConnectApp(id);
+              setText('');
+            }}
+            onProject={id => { setText(''); onOpenProject && onOpenProject(id); }}
+            onDismiss={() => setSlashDismissed(true)}/>}
+          <div className="cspace"/>
+          <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model)}</span><IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
           <button className="csend" disabled={busy || !text.trim()} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
             onClick={send}>{text.trim() ? <IcSend size={15}/> : <IcVoice size={15}/>}</button>
-          {modeOpen && <ModeMenu mode={mode} onPick={m => { setMode(m); setModeOpen(false); }} onClose={() => setModeOpen(false)}/>}
+          {modelOpen && <ModelDrop model={model} drop={drop} onPick={m => { setModel(m); setModelOpen(false); }} onClose={() => setModelOpen(false)}/>}
         </div>
       </div>
+      {libOpen && <LibPickModal library={library || []}
+        onPick={it => { setLibOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+        onClose={() => setLibOpen(false)}/>}
     </div>
   );
 };
@@ -664,9 +1248,8 @@ const Timeline = ({userMsgs}) => {
   );
 };
 
-const ChatView = ({chat, project, onSend, onRegen}) => {
+const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState('Extended');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
   const busy = msgs.some(m => m.streaming);
@@ -676,8 +1259,8 @@ const ChatView = ({chat, project, onSend, onRegen}) => {
     return (
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
-        <div className="land-greet">What are you reading.</div>
-        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+        <div className="land-greet">Ready when you are.</div>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} drop="down" onViewImage={onViewImage} {...composerExtras}/>
         <div className="chips">
           <button className="chip" onClick={() => setText('Write or edit ')}><span className="sb-ic"><IcPenLine size={13}/></span>Write or edit</button>
           <button className="chip" onClick={() => setText('Look something up: ')}><span className="sb-ic"><IcGlobe size={13}/></span>Look something up</button>
@@ -696,7 +1279,9 @@ const ChatView = ({chat, project, onSend, onRegen}) => {
             <div key={m.id} id={'m-' + m.id} className="bubble-wrap">
               {m.attachments && m.attachments.length > 0 && (
                 <div className="attach-strip">
-                  {m.attachments.map((a, i) => <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
+                  {m.attachments.map((a, i) => a.url
+                    ? <span key={i} className="msg-att-img" onClick={() => onViewImage && onViewImage(a.url)}><img src={a.url} alt={a.name}/></span>
+                    : <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}
                 </div>
               )}
               <div className="bubble">{m.text}</div>
@@ -711,7 +1296,7 @@ const ChatView = ({chat, project, onSend, onRegen}) => {
         </div>
       </div>
       <div className="composer-dock">
-        <Composer text={text} setText={setText} mode={mode} setMode={setMode} onSend={onSend} busy={busy}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
       </div>
     </React.Fragment>
   );
@@ -752,13 +1337,10 @@ const KindIcon = ({kind}) => {
 };
 
 const LibItemMenu = ({pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 110)}}>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 110)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+  </Popover>
 );
 
 const LibraryView = ({library, setLibrary}) => {
@@ -813,13 +1395,10 @@ const LibraryView = ({library, setLibrary}) => {
               onChange={e => { const f = e.target.files && e.target.files[0]; if (f) addUpload(f); e.target.value = ''; }}/>
             <button className="new-btn" onClick={() => setNewOpen(true)}>New<IcChevD size={12}/></button>
             {newOpen && (
-              <React.Fragment>
-                <div className="backdrop" onClick={() => setNewOpen(false)}/>
-                <div className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}}>
-                  <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
-                  <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
-                </div>
-              </React.Fragment>
+              <Popover className="ctx-menu" style={{position: 'absolute', right: 0, top: 38, left: 'auto'}} onClose={() => setNewOpen(false)}>
+                <div className="ctx-item" onClick={() => { setNewOpen(false); fileRef.current.click(); }}><span className="sb-ic"><IcUpload size={14}/></span>Upload</div>
+                <div className="ctx-item" onClick={() => { setNewOpen(false); addNote(); }}><span className="sb-ic"><IcNote size={14}/></span>Note</div>
+              </Popover>
             )}
           </div>
         </div>
@@ -896,9 +1475,8 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 );
 
 /* ─── project page ─── */
-const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
+const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState('Extended');
   const [tab, setTab] = useState('Chats');
   const fileRef = useRef(null);
   const mine = chats.filter(c => c.projectId === project.id && !c.archived);
@@ -911,8 +1489,8 @@ const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
           {project.memory === 'project-only' && <span className="proj-mem">project-only memory</span>}
         </div>
         <div className="proj-comp">
-          <Composer text={text} setText={setText} mode={mode} setMode={setMode}
-            onSend={onSend} busy={false} ph={'New chat in ' + project.name}/>
+          <Composer text={text} setText={setText} model={model} setModel={setModel}
+            onSend={onSend} busy={false} ph={'New chat in ' + project.name} drop="down" onViewImage={onViewImage} {...composerExtras}/>
         </div>
         <div className="tab-row">
           {['Chats', 'Sources'].map(t => (
@@ -930,11 +1508,21 @@ const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
             </div>
           ) : (
             <div>
-              {mine.map(c => (
-                <div key={c.id} className="proj-chat-row" onClick={() => onOpenChat(c.id)}>
-                  <span className="sb-ic"><IcChat size={14}/></span>{c.title}
-                </div>
-              ))}
+              {mine.map(c => {
+                const last = c.messages[c.messages.length - 1];
+                const snip = last ? last.text.replace(/\s+/g, ' ').slice(0, 56) : '';
+                return (
+                  <div key={c.id} className="proj-chat-row" onClick={() => onOpenChat(c.id)}>
+                    <div className="pcr-main">
+                      <div className="pcr-title">{c.title}</div>
+                      {snip && <div className="pcr-snip">{snip}</div>}
+                    </div>
+                    <span className="pcr-date">{c.created || 'Today'}</span>
+                    <button className="chat-dots pcr-dots" title="Options"
+                      onClick={e => { e.stopPropagation(); onChatMenu(c.id, e); }}><IcDots size={15}/></button>
+                  </div>
+                );
+              })}
             </div>
           )
         ) : (
@@ -973,25 +1561,114 @@ const ProjectPage = ({project, chats, onSend, onOpenChat, onAddSource}) => {
   );
 };
 
+/* ─── ledger ─── */
+const LedgerView = () => (
+  <div className="page">
+    <div className="page-inner" style={{maxWidth: 700}}>
+      <div className="page-head"><div className="page-title">Ledger</div></div>
+      <div className="led-grid">
+        <div className="led-card"><div className="led-k">Today</div><div className="led-v">18.4k<small>tokens · $0.62</small></div></div>
+        <div className="led-card"><div className="led-k">This thread</div><div className="led-v">2.1k<small>tokens</small></div></div>
+        <div className="led-card" style={{gridColumn: '1 / -1'}}>
+          <div className="led-k">Recent models</div>
+          <div className="led-row"><span className="rn">i.</span>gemma-4-31b<span className="lv">9.2k tokens · deep work</span></div>
+          <div className="led-row"><span className="rn">ii.</span>qwen-3.5-35b<span className="lv">5.1k tokens · fallback</span></div>
+          <div className="led-row"><span className="rn">iii.</span>gemma-4-12b<span className="lv">4.1k tokens · quick tasks</span></div>
+        </div>
+        <div className="led-card" style={{gridColumn: '1 / -1'}}><div className="led-k">This week</div><div className="led-v">96k<small>tokens · $3.40</small></div></div>
+      </div>
+      <div className="quiet-foot">Filed locally. Nothing sent.</div>
+    </div>
+  </div>
+);
+
+/* ─── skills ─── */
+const SkillsView = ({skills, onApprove, onRetire}) => {
+  const [tab, setTab] = useState('Proposed');
+  const lists = { Proposed: skills.proposed, Active: skills.active, Retired: skills.retired };
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 700}}>
+        <div className="page-head"><div className="page-title">Skills</div></div>
+        <div className="tab-row">
+          {['Proposed', 'Active', 'Retired'].map(t => (
+            <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t} ({lists[t].length})</button>
+          ))}
+        </div>
+        {lists[tab].length === 0 && <div className="s-none">Nothing here.</div>}
+        {lists[tab].map(s => (
+          <div key={s.id} className="skill-card">
+            <div className="sk-meta">
+              <h4>{s.name}</h4>
+              <p><span className="trig">{s.trigger}</span>{s.note ? ' — ' + s.note : ''}{s.uses != null ? ` — used ${s.uses}×, last ${s.last}` : ''}</p>
+            </div>
+            {tab === 'Proposed' && <button className="btn primary" onClick={() => onApprove(s.id)}>Approve</button>}
+            {tab === 'Active' && <button className="btn" onClick={() => onRetire(s.id)}>Retire</button>}
+          </div>
+        ))}
+        <div className="quiet-foot">Drafted from your patterns. Nothing activates without you.</div>
+      </div>
+    </div>
+  );
+};
+
+/* ─── memory ─── */
+const MemoryView = ({memory, onForget}) => (
+  <div className="page">
+    <div className="page-inner" style={{maxWidth: 700}}>
+      <div className="page-head"><div className="page-title">Memory</div></div>
+      {memory.length === 0 && <div className="s-none">Nothing held.</div>}
+      {memory.map(m => (
+        <div key={m.id} className="mem-row">
+          <span className="mem-cat">{m.cat}</span>
+          <span>{m.text}</span>
+          <button className="chat-dots" title="Forget" onClick={() => onForget(m.id)}><IcTrash size={14}/></button>
+        </div>
+      ))}
+      <div className="mem-stats">resolved questions cached: 38 · index: 1,204 notes · portrait: Honcho, local</div>
+      <div className="quiet-foot">Held on this machine. Forgetting is immediate.</div>
+    </div>
+  </div>
+);
+
+/* ─── archive ─── */
+const ArchiveView = ({chats, onRestore, onDelete}) => {
+  const archived = chats.filter(c => c.archived);
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 700}}>
+        <div className="page-head"><div className="page-title">Archive</div></div>
+        {archived.length === 0 && <div className="s-none">Nothing archived.</div>}
+        {archived.map(c => (
+          <div key={c.id} className="arc-row">
+            <span className="sb-ic"><IcArchive size={14}/></span>{c.title}
+            <span className="arc-act">
+              <button className="btn" onClick={() => onRestore(c.id)}>Restore</button>
+              <button className="btn" style={{color: 'var(--danger)'}} onClick={() => onDelete(c.id)}>Delete</button>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
-  <React.Fragment>
-    <div className="backdrop" onClick={onClose}/>
-    <div className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}}>
-      <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
-      <div className="ctx-hint">sharing is not in this preview</div>
-      <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
-      {projectName && (
-        <div className="ctx-item" onClick={() => onAction('removeproj')}>
-          <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
-        </div>
-      )}
-      <div className="ctx-div"/>
-      <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
-      <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
-      <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
-    </div>
-  </React.Fragment>
+  <Popover className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}} onClose={onClose}>
+    <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
+    <div className="ctx-hint">sharing is not in this preview</div>
+    <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+    {projectName && (
+      <div className="ctx-item" onClick={() => onAction('removeproj')}>
+        <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
+      </div>
+    )}
+    <div className="ctx-div"/>
+    <div className="ctx-item" onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
+    <div className="ctx-item" onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
+    <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+  </Popover>
 );
 
 /* ─── create project modal ─── */
@@ -1042,16 +1719,14 @@ const CreateProjectModal = ({onCreate, onClose}) => {
 };
 
 /* ─── profile ─── */
-const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
+const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onClose}) => {
   const Row = ({icon, label, hint}) => (
     <div className={'pop-row' + (hint ? ' dim' : '')} title={hint ? 'not in this preview' : undefined}>
       <span className="sb-ic">{icon}</span>{label}
     </div>
   );
   return (
-    <React.Fragment>
-      <div className="backdrop" onClick={onClose}/>
-      <div className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}}>
+    <Popover className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}} onClose={onClose}>
         <div className="pop-email">{profile.email}</div>
         <div className="pop-row">
           <div className="avatar">{initials(profile.displayName)}</div>
@@ -1065,13 +1740,14 @@ const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
         <div className="pop-row" onClick={onEditProfile}>
           <span className="sb-ic"><I size={15}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></I></span>Profile
         </div>
-        <Row icon={<IcSettings size={15}/>} label="Settings" hint/>
+        <div className="pop-row" onClick={onSettings}>
+          <span className="sb-ic"><IcSettings size={15}/></span>Settings
+        </div>
         <div className="ctx-div"/>
         <Row icon={<IcHelp size={15}/>} label="Help" hint/>
         <Row icon={<IcLogout size={15}/>} label="Log out" hint/>
         <div className="ctx-hint">dim rows are not in this preview</div>
-      </div>
-    </React.Fragment>
+    </Popover>
   );
 };
 
@@ -1107,6 +1783,100 @@ const EditProfileModal = ({profile, onSave, onClose}) => {
   );
 };
 
+/* ─── settings modal ─── */
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, onClose}) => {
+  const [tab, setTab] = useState('General');
+  const SECTIONS = [
+    {k: 'General', ic: <IcSettings size={14}/>},
+    {k: 'Reflections', ic: <IcNote size={14}/>},
+    {k: 'Saved', ic: <IcArchive size={14}/>},
+    {k: 'Feeds', ic: <IcGlobe size={14}/>},
+    {k: 'Computer use', ic: <IcTerminal size={14}/>},
+  ];
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="set-modal">
+        <div className="set-nav">
+          <div className="sn-title">Settings</div>
+          {SECTIONS.map(s => (
+            <div key={s.k} className={'set-item' + (tab === s.k ? ' on' : '')} onClick={() => setTab(s.k)}>
+              <span className="sb-ic">{s.ic}</span>{s.k}
+            </div>
+          ))}
+        </div>
+        <div className="set-body">
+          {tab === 'General' && (
+            <React.Fragment>
+              <div className="set-h">General</div>
+              <div className="set-row">Theme
+                <span className="sr-end">
+                  <button className="btn" onClick={onTheme}>{theme === 'dark' ? 'Switch to light' : 'Switch to dark'}</button>
+                </span>
+              </div>
+              <div className="set-row">Plan<span className="sr-end"><span className="cu-pill">Private</span></span></div>
+              <div className="set-row">App<span className="sr-end"><span style={{color: 'var(--dim)', fontSize: 12}}>vellum — preview</span></span></div>
+            </React.Fragment>
+          )}
+          {tab === 'Reflections' && (
+            <React.Fragment>
+              <div className="set-h">Reflections</div>
+              {SEED_REFLECTIONS.map(r => (
+                <div key={r.id} className="set-row" style={{alignItems: 'flex-start'}}>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.kind} · {r.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.text}</span></div>
+                </div>
+              ))}
+              <div className="set-note">Written at 2:00. Read when you like.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Saved' && (
+            <React.Fragment>
+              <div className="set-h">Saved</div>
+              {SEED_SAVED.map(s => (
+                <div key={s.id} className="set-row" style={{alignItems: 'flex-start'}}>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{s.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{s.text}</span></div>
+                </div>
+              ))}
+              <div className="set-note">Responses you chose to keep. Filed under Agent/Saved.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Feeds' && (
+            <React.Fragment>
+              <div className="set-h">Feeds</div>
+              {feeds.map(f => (
+                <div key={f.id} className="set-row">
+                  <div>{f.name}<span className="sr-sub">{f.sub}</span></div>
+                  <span className="sr-end">
+                    <div className={'sw' + (f.on ? ' on' : '')} role="switch" aria-checked={f.on} onClick={() => onToggleFeed(f.id)}/>
+                  </span>
+                </div>
+              ))}
+              <div className="set-note">Preview — switches hold state, nothing is fetched.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Computer use' && (
+            <React.Fragment>
+              <div className="set-h">Computer use</div>
+              <div className="set-row">Session
+                <span className="sr-end">
+                  <span className={'cu-pill' + (cu ? ' on' : '')}>{cu ? 'active · Ctrl+Alt+Esc to stop' : 'standing down'}</span>
+                </span>
+              </div>
+              <div className="set-row">
+                <span className="sr-end" style={{marginLeft: 0}}>
+                  <button className="btn primary" disabled={cu} onClick={() => onCu(true)}>Enable</button>
+                  <button className="btn" disabled={!cu} onClick={() => onCu(false)}>Stand down</button>
+                </span>
+              </div>
+              <div className="set-note">Preview — no real session starts. The desktop glow belongs to the Tauri shell.</div>
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
 /* ─── app ─── */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -1126,6 +1896,43 @@ const App = () => {
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState(SEED_PROJECTS);
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
+  const [skills, setSkills] = useState(SEED_SKILLS);
+  const [memory, setMemory] = useState(SEED_MEMORY);
+  const [feeds, setFeeds] = useState(SEED_FEEDS);
+  const [selModel, setSelModel] = useState(DEFAULT_MODEL);
+  const [apps, setApps] = useState(SEED_APPS);
+  const [draftApps, setDraftApps] = useState([]);
+  const [navTick, setNavTick] = useState(0);
+  const hist = useRef({stack: [{view: 'chat', chat: null, proj: null}], idx: 0, silent: false});
+  useEffect(() => {
+    const h = hist.current;
+    if (h.silent) { h.silent = false; return; }
+    const s = {view, chat: activeChatId, proj: activeProjectId};
+    const cur = h.stack[h.idx];
+    if (cur && cur.view === s.view && cur.chat === s.chat && cur.proj === s.proj) return;
+    h.stack = h.stack.slice(0, h.idx + 1);
+    h.stack.push(s);
+    h.idx++;
+    setNavTick(t => t + 1);
+  }, [view, activeChatId, activeProjectId]);
+  const navGo = dir => {
+    const h = hist.current;
+    const ni = h.idx + dir;
+    if (ni < 0 || ni >= h.stack.length) return;
+    h.idx = ni; h.silent = true;
+    const s = h.stack[ni];
+    setView(s.view); setActiveChatId(s.chat); setActiveProjectId(s.proj);
+    setNavTick(t => t + 1);
+  };
+  const canBack = hist.current.idx > 0;
+  const canFwd = hist.current.idx < hist.current.stack.length - 1;
+  const [secOpen, setSecOpen] = useState({projects: true, recents: true});
+  const [viewer, setViewer] = useState(null);
+  const [expandedProj, setExpandedProj] = useState({});
+  const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));
+  const toggleProj = id => setExpandedProj(e => ({...e, [id]: !e[id]}));
+  const [cuEnabled, setCuEnabled] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
   const [renamingId, setRenamingId] = useState(null);
   const [projRenamingId, setProjRenamingId] = useState(null);
@@ -1134,7 +1941,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1146,7 +1953,14 @@ const App = () => {
 
   const chatMenuAction = (id, action) => {
     setMenu(null);
-    if (action === 'rename') { setRenamingId(id); return; }
+    if (action === 'rename') {
+      const chat = chats.find(c => c.id === id);
+      setSidebar('open');
+      setSecOpen(s => ({...s, projects: true, recents: true}));
+      if (chat && chat.projectId) setExpandedProj(e => ({...e, [chat.projectId]: true}));
+      setRenamingId(id);
+      return;
+    }
     if (action === 'share') return;
     setChats(cs => {
       if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
@@ -1168,6 +1982,7 @@ const App = () => {
   const createProject = ({name, memory}) => {
     const id = uid();
     setProjects(ps => [{id, name, updated: 'Today', memory, sources: []}, ...ps]);
+    setExpandedProj(e => ({...e, [id]: true}));
     setCreateOpen(false);
     openProject(id);
   };
@@ -1181,6 +1996,21 @@ const App = () => {
       if (activeProjectId === id && view === 'project') setView('projects');
     }
   };
+  const approveSkill = id => setSkills(sk => {
+    const s = sk.proposed.find(x => x.id === id);
+    if (!s) return sk;
+    return {...sk, proposed: sk.proposed.filter(x => x.id !== id),
+      active: [{...s, uses: 0, last: 'Today'}, ...sk.active]};
+  });
+  const retireSkill = id => setSkills(sk => {
+    const s = sk.active.find(x => x.id === id);
+    if (!s) return sk;
+    return {...sk, active: sk.active.filter(x => x.id !== id), retired: [s, ...sk.retired]};
+  });
+  const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
+  const restoreChat = id => setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
+  const deleteChat = id => setChats(cs => cs.filter(c => c.id !== id));
+
   const addSource = (projId, file) => {
     const item = {id: uid(), name: file.name, kind: kindOf(file.name), size: fmtSize(file.size), modified: 'Today'};
     setProjects(ps => ps.map(p => p.id === projId ? {...p, sources: [item, ...p.sources], updated: 'Today'} : p));
@@ -1217,16 +2047,18 @@ const App = () => {
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
-    if (attach && attach.length) {
+    const freshAttach = (attach || []).filter(a => a.fresh);
+    if (freshAttach.length) {
       setLibrary(lib => [
-        ...attach.map(a => ({id: uid(), name: a.name, kind: kindOf(a.name), size: a.size, modified: 'Today'})),
+        ...freshAttach.map(a => ({id: uid(), name: a.name, kind: a.kind || kindOf(a.name), size: a.size, modified: 'Today'})),
         ...lib,
       ]);
     }
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
-      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, messages: [userMsg, aMsg]}, ...cs]);
+      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]}, ...cs]);
+      setDraftApps([]);
       setActiveChatId(chatId);
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
@@ -1236,6 +2068,7 @@ const App = () => {
 
   const sendInProject = projId => (text, attach) => {
     sendMessage(text, attach, {forceNew: true, projectId: projId});
+    setExpandedProj(e => ({...e, [projId]: true}));
     setView('chat');
   };
 
@@ -1255,6 +2088,25 @@ const App = () => {
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
   const activeChat = chats.find(c => c.id === activeChatId) || null;
+
+  // per-chat app selection — landing/new-chat and project composers draw on a draft pool
+  const selTargetIsChat = view === 'chat' && !!activeChat;
+  const currentSel = selTargetIsChat ? (activeChat.appIds || []) : draftApps;
+  const toggleSel = id => {
+    if (selTargetIsChat) {
+      setChats(cs => cs.map(c => {
+        if (c.id !== activeChat.id) return c;
+        const cur = c.appIds || [];
+        return {...c, appIds: cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]};
+      }));
+    } else {
+      setDraftApps(cur => cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]);
+    }
+  };
+  const connectApp = id => {
+    setApps(as => as.map(a => a.id === id ? {...a, state: 'ready'} : a));
+    if (!currentSel.includes(id)) toggleSel(id);
+  };
   const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
 
@@ -1263,6 +2115,10 @@ const App = () => {
       <div className="win">
         <div className="titlebar">
           <div className="appmark"/>
+          <button className="tbtn" title="Back" disabled={!canBack} onClick={() => navGo(-1)}
+            style={{opacity: canBack ? 1 : .35, marginRight: 1}}><I d="M15 18l-6-6 6-6" size={15}/></button>
+          <button className="tbtn" title="Forward" disabled={!canFwd} onClick={() => navGo(1)}
+            style={{opacity: canFwd ? 1 : .35, marginRight: 6}}><I d="M9 6l6 6-6 6" size={15}/></button>
           <div className="menu"><span>File</span><span>Edit</span><span>View</span><span>Help</span></div>
           <div className="tb-title">vellum — preview</div>
           <div className="tb-right">
@@ -1279,6 +2135,7 @@ const App = () => {
           {sidebar === 'open'
             ? <Sidebar chats={chats} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
+                secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
                 onCollapse={() => setSidebar('rail')} onNewChat={newChat} onSearch={() => setSearchOpen(true)}
                 onNav={nav} onOpenChat={openChat}
                 onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
@@ -1293,13 +2150,23 @@ const App = () => {
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 onOpenProject={openProject}/>}
           <div className="main">
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} onSend={sendMessage} onRegen={regenerate}/>}
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}
+              onViewImage={setViewer}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
+              model={selModel} setModel={setSelModel}
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
-              onAddSource={f => addSource(activeProject.id, f)}/>}
+              onAddSource={f => addSource(activeProject.id, f)}
+              onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
+              onViewImage={setViewer}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
+            {view === 'ledger' && <LedgerView/>}
+            {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
+            {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
+            {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
@@ -1311,7 +2178,13 @@ const App = () => {
           onClose={() => setSearchOpen(false)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
           onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
+          onSettings={() => { setMenu(null); setSettingsOpen(true); }}
           onClose={() => setMenu(null)}/>}
+        {settingsOpen && <SettingsModal theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
+          cu={cuEnabled} onCu={setCuEnabled}
+          onClose={() => setSettingsOpen(false)}/>}
+        {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
           onClose={() => setEditProfileOpen(false)}/>}

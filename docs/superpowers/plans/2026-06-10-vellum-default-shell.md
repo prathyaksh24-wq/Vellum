@@ -114,6 +114,106 @@
 - [ ] New checks: Create-project modal (name + Project-only memory) → project page opens; "New chat in" composer creates nested chat (sidebar indent, breadcrumb, absent from Recents); Remove from project moves chat to Recents; Sources tab Add sources via `setInputFiles` → row + Library entry; delete project keeps its chats in Recents. Update older checks that assumed inline-rename project creation.
 - [ ] Full suite green. Commit + push.
 
+## Addendum D tasks (10/06/2026, fourth pass — spec Addendum D)
+
+### Task 14: Sidebar sections — Coding link, Ledger, Skills, Memory, Archive
+**Files:** Modify `vellum-default.html`.
+- [ ] Seeds: `SEED_SKILLS` ({proposed, active, retired} arrays with name/trigger/uses/last fields per CLAUDE.md skill JSON), `SEED_MEMORY` (portrait facts with category), ledger dummy numbers.
+- [ ] Sidebar nav rows after Library: Coding (→ `window.location.assign('vellum-workspace.html')`), Ledger, Skills, Memory, Archive (views). Rail icons for Coding/Ledger/Skills/Memory.
+- [ ] `LedgerView`: stat rows (today tokens+cost, thread tokens, recent models i./ii./iii., week totals) + footer "Filed locally. Nothing sent."
+- [ ] `SkillsView`: tabs Proposed/Active/Retired; Approve moves proposed→active; Retire moves active→retired; counts in tabs.
+- [ ] `MemoryView`: fact rows (category chip + text + Forget trash) + stats line + privacy footer.
+- [ ] `ArchiveView`: archived chats with Restore/Delete; empty state.
+- [ ] Compile gate. Commit + push.
+
+### Task 15: Settings modal
+**Files:** Modify `vellum-default.html`.
+- [ ] `SettingsModal` (two-pane): General (theme control, plan, app line) · Reflections (dummy digest/reflection/provocation entries) · Saved (list) · Feeds (X/YouTube/Sports rows + switches, preview note) · Computer use (status pill, Enable/Stand down, Ctrl+Alt+Esc note, preview note).
+- [ ] Profile popover Settings row → opens modal (no longer dim); Esc/backdrop close; feeds + computer-use state in App.
+- [ ] Compile gate. Commit + push.
+
+### Task 16: Smoke coverage for sections + settings
+**Files:** Modify `smoke-default.mjs`.
+- [ ] Checks: Coding row present with workspace title (no navigation); Ledger renders footer line; Skills approve → Active count up; Memory forget → fact count down; archive chat → Archive view → Restore → back in Recents; Settings modal via profile (tabs, X-feed toggle, Computer use enable → active pill).
+- [ ] Full suite green. Commit + push.
+
+## Addendum E tasks (10/06/2026, fifth pass — spec Addendum E)
+
+### Task 17: Token + font overhaul
+**Files:** Modify `vellum-default.html`.
+- [ ] Google Fonts `<link>` (Bricolage Grotesque 500–700, Schibsted Grotesk 400–600, Spline Sans Mono 400–500); `--font-d`/`--font-m` vars; body → Schibsted Grotesk.
+- [ ] Replace `:root` + `[data-theme=light]` token blocks (ink-blue darks, mint/cyan accent, coral danger, `--glass`, `--glow`, `--onaccent`); `replace_all` `var(--ember)`→`var(--accent)`, `var(--onember)`→`var(--onaccent)`; regrade hardcoded ember colors (appmark, rail-dot, shimmer glow, cu-pill, send/primary gradients, avatar gradients).
+- [ ] Compile gate. Commit + push.
+
+### Task 18: Glass, motion, typography scale, copy
+**Files:** Modify `vellum-default.html`, `smoke-default.mjs`.
+- [ ] Glass override block (ctx-menu/pop/search-card/flyout/tl-pop/gear-pop/mode-menu/modal/set-modal → `--glass` + blur + `popIn` entrance); composer focus ring; `.main` mint atmosphere radial.
+- [ ] Display type on wordmark/landing/page/project/modal/section titles; mono on ledger values + mem-stats; greeting → "Ready when you are." (gradient land-mark, no italics); PLACEHOLDERS → modern copy.
+- [ ] Smoke: update greeting assertion (+ glow check label); full suite green. Commit + push. Screenshots + memory.
+
+## Addendum F tasks (10/06/2026, sixth pass — spec Addendum F)
+
+### Task 19: Model picker
+**Files:** Modify `vellum-default.html`.
+- [ ] `MODELS` const + `modelLabel()`; app-level `selModel` state passed to ChatView/ProjectPage; Composer replaces mode chip with `.model-pill` → `.model-drop` (drop-lbl "Model"/"↻ Sync" dim, `.model-search`, `.model-list` with ✓, "Manage models & keys…" dim footer). Remove ModeMenu/mode state.
+- [ ] Compile gate. Commit + push.
+
+### Task 20: Collapsible sections + animated folders
+**Files:** Modify `vellum-default.html`.
+- [ ] `.sb-scroll` wraps Projects + Recents sections (nav fixed above, profile pinned below); `secOpen` app state; chevrons (Projects: label→grid, chevron→toggle; Recents: header→toggle).
+- [ ] `IcFolderOpen` + `FolderIcon` crossfade component; `expandedProj` app state; ProjectRow icon click toggles (stopPropagation), row click navigates; nested chats render only when expanded; auto-expand on project create + in-project chat create.
+- [ ] Compile gate. Commit + push.
+
+### Task 21: Smoke for F
+**Files:** Modify `smoke-default.mjs`.
+- [ ] Checks: model picker search+select updates pill; Recents header collapse hides rows/re-expand shows; folder icon toggle hides/shows nested chat (inside Smoke-project flow).
+- [ ] Full suite green. Commit + push. Screenshot + memory.
+
+## Addendum G tasks (10/06/2026, seventh pass — spec Addendum G)
+
+### Task 22: Toggle behavior (spec G1)
+- [ ] ProjectRow: row click → `onToggle()` + `onOpen()` (icon has no separate handler); Projects `.sb-sec` click → `onToggleSec('projects')` (chevron same).
+- [ ] Smoke: "projects grid" navigates via rail projects icon; "remove from project" expands the folder (row click) before hovering the nested row. Compile + suite-relevant checks. Commit + push.
+
+### Task 23: + dropdown, attachments, lightbox (spec G2+G3)
+- [ ] `PlusMenu` (glass, above +): Add photos & files → fileRef; Recent files › submenu ("Add from library" → Library view; top-3 library items, click attaches `{name,size,kind}`); Create image / Deep research / Web search dim rows; Projects › submenu → `openProject`.
+- [ ] Attachment model gains `url` (createObjectURL for image/*); `.att-card` + `.att-img` strip in composer; message bubbles render image thumbs / file cards; `Lightbox` (App-level `viewer` state, `onViewImage` passed down; Esc/backdrop closes).
+- [ ] Compile gate. Commit + push.
+
+### Task 24: Apps connectors (spec G4)
+- [ ] `SEED_APPS` (airtable off · github setup · linear off · box/dropbox/gmail connect) + per-app mini icons; `AppsDrop` (toggle `.sw` for on/off; "Finish Setup"/"Connect" buttons → state on; "Connect more" hint); Apps ⌄ chip after +; enabled apps as `app-chip`s (icon+name+⌄ → reopen dropdown).
+- [ ] Compile gate. Commit + push.
+
+### Task 25: Sizing + smoke (spec G5)
+- [ ] Icon default 17; font-size bumps (body/sidebar/composer/replies/menus); padding adjustments.
+- [ ] New smoke: + menu attach-from-recents card + remove; tiny-png upload → thumb → lightbox open/Esc; GitHub Finish Setup → chip appears; Airtable toggle on/off chip. Full suite green. Commit + push. Screenshot + memory.
+
+## Addendum H tasks (10/06/2026, ninth pass — spec Addendum H)
+
+### Task 26: Whole-sidebar scroll
+- [ ] Move nav rows into `.sb-scroll` (header + profile pinned). Smoke: `.sb-scroll .sb-row` "New chat" exists. Commit + push (with Task 27/28).
+
+### Task 27: Slash menu
+- [ ] `SLASH_ITEMS` (files/run + thinking/image/web/study dim); `SlashMenu` (compact, `.slash-menu`+`.down`, no backdrop, label-filter on text after `/`); Composer: `slashDismissed` state (Esc dismisses, text change resets); file item → picker + clear text; dim items dismiss.
+
+### Task 28: App-chip rework
+- [ ] Replace per-app chips: 1 on → `⊗ Name ⌄` (⊗ = toggle off; click → picker/GitHub panel); >1 → `{n} apps ⌄` → `AppsPicker` (✓ rows toggle off; GitHub row › → `GitHubPanel` with repo search/empty state/dim config rows). Compile + full smoke (update apps check; add slash + scroll asserts). Commit + push. Screenshot + memory.
+
+## Addendum I tasks (10/06/2026, tenth pass — spec Addendum I)
+
+### Task 29: Popover primitive + caret (spec I3+I6)
+- [ ] `Popover` component (ref div, document mousedown outside → onClose); replace backdrop+div pairs in PlusMenu, AppsDrop, AppsPicker, GitHubPanel, ModelDrop, ChatMenu, ProjectMenu, ProfilePopover, ChatMenu/lib item menus. `.ph-anim{left:10px;top:8px}`.
+- [ ] Smoke: remove `.backdrop` click in + menu check (use Escape); add one-click switching assert (apps open → click + → plus menu visible in one click). Commit + push.
+
+### Task 30: Per-chat apps + slash connectors + project hover pencil (spec I1+I2+I4)
+- [ ] `apps[].state → ready/setup/connect` (airtable+linear ready); `chats[].appIds` + `draftApps`; selection helpers (toggleSel/connectApp); directory switches read selection; chip + picker read per-chat selection; sendMessage transfers draft.
+- [ ] SlashMenu: apps section (select/connect+select) + Projects {n} › submenu; ProjectRow hover pencil before dots → onOpen.
+- [ ] Smoke: rewrite apps check for selection model + per-chat isolation (chip absent on other chat); slash shows app + Projects rows. Commit + push.
+
+### Task 31: Back/forward nav (spec I5)
+- [ ] History stack of `{view, chat, proj}` in a ref (push on change unless silent), ← → titlebar buttons with disabled ends.
+- [ ] Smoke: open Library → chat → back twice → forward; assert views. Full suite green. Commit + push. Screenshot + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.

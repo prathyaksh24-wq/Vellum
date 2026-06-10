@@ -250,6 +250,204 @@ dim/absent, honest); consistency ✓ (modal/popover/menu/rename patterns reused)
 (memory setting stored and displayed but marked preview-only by the shell title);
 testability ✓ (smoke: modal create, in-project chat, nesting, remove-from, sources add).
 
+## Addendum D (10/06/2026, fourth pass) — repo-grounded sections + Settings
+
+User accepted the repo-grounded sidebar proposal with two edits: the secondary items
+(Reflections, Saved, Feeds, Computer use) live **inside Settings** (the existing profile
+popover row), and **Coding wires to `vellum-workspace.html`** (not `vellum-coding.html`).
+
+### D1. New sidebar sections (nav group, after Library; rail icons too)
+- **Coding** — navigates the window to `vellum-workspace.html` (same folder; the existing
+  workspace preview is the coding surface). No new view in this file.
+- **Ledger** (`view:'ledger'`) — from the TUI spec + audit-log fields: today's tokens/cost,
+  current-thread tokens, recent models breakdown (lowercase Roman numerals), this week's
+  totals, footer "Filed locally. Nothing sent." Dummy numbers.
+- **Skills** (`view:'skills'`) — the self-learning loop made visible: tabs Proposed /
+  Active / Retired (mirrors `.skills/` dirs). Proposed cards show trigger terms + an
+  **Approve** action (→ Active); Active cards show use counts + **Retire** (→ Retired).
+- **Memory** (`view:'memory'`) — "what Vellum knows": portrait facts (Honcho-style) with a
+  per-fact **Forget** action, plus cache/index stat line and a privacy footer.
+- **Archive** (`view:'archive'`) — archived chats (closes today's dead end): rows with
+  **Restore** (→ Recents) and **Delete**. Empty state "Nothing archived."
+
+### D2. Settings modal (profile popover → Settings)
+ChatGPT-style two-pane modal: left section nav, right content. Sections:
+- **General** — theme (dark/light control mirroring the titlebar toggle), plan "Private",
+  app line "vellum — preview".
+- **Reflections** — recent nightly digest / weekly reflection / monthly provocation entries
+  (dummy, dated DD/MM, readable one-liners).
+- **Saved** — saved responses (`Agent/Saved/` analog), small list.
+- **Feeds** — X / YouTube / Sports ingestion rows with last-sync info and an on/off switch
+  (state only, honest "preview" note).
+- **Computer use** — status pill + **Enable** / **Stand down** buttons (state only;
+  "Ctrl+Alt+Esc to stop" note; clearly marked preview, no real session).
+
+Audit deltas: intent ✓ (exactly the accepted split; Coding → workspace.html per user);
+YAGNI ✓ (no real ingestion/sessions; Reinstate-from-retired omitted); brand ✓ (ledger
+footer, one-word actions, no celebration); consistency ✓ (views reuse page/tab/list
+patterns; modal reuses modal/backdrop); honesty ✓ (preview notes on feeds + computer use);
+testability ✓ (smoke: each view renders, approve/retire, forget, archive→restore,
+settings tabs + toggles).
+
+## Addendum E (10/06/2026, fifth pass) — modern visual system ("crisp ink & mint")
+
+User direction: drop the BRAND.md/TUI register entirely for the UI ("waste files") — fresh,
+modern colors, modern fonts and typography. New system:
+
+- **Type**: Bricolage Grotesque (display: wordmark, landing, page/section titles),
+  Schibsted Grotesk (UI/body), Spline Sans Mono (numbers: ledger values, stats). Loaded via
+  Google Fonts `<link>` (file already assumes CDN for React). No Inter/Roboto/Space Grotesk.
+- **Color**: deep blue-charcoal darks (`#0c0f13` family) instead of gray-black; electric
+  **mint `#2de0a7` → cyan `#19b9e8`** gradient accent (send button, app mark, avatars,
+  primary buttons, wordmark/landing gradient text); coral `#ff6b5e` for danger. Light theme:
+  porcelain `#f7f9fa` with deepened mint `#0aa881`. Token rename `--ember`→`--accent`
+  (+`--accent2`, `--glow`, `--glass`, `--onaccent`); every component keeps reading vars.
+- **Surfaces**: popovers/menus/modals/flyouts become glass — translucent `--glass` +
+  `backdrop-filter: blur` + a shared `popIn` (fade/rise/scale .18s) entrance.
+- **Details**: composer focus ring in accent; subtle mint atmosphere radial in `.main`;
+  streaming shimmer/glow re-tinted to mint (dark glows, light stays plain — smoke contract
+  unchanged); landing greeting becomes "Ready when you are." with gradient wordmark;
+  placeholder copy modernized ("Ask anything…", "Think out loud…", …); italics dropped from
+  greeting/placeholder.
+
+Audit deltas: intent ✓ (modern fonts/colors/typography, old register fully replaced);
+consistency ✓ (vars only — themes stay symmetrical); testability ✓ (smoke greeting
+assertion updated; glow/fill computed-style contracts preserved); YAGNI ✓ (no texture
+overlays, no layout rework).
+
+## Addendum F (10/06/2026, sixth pass) — model picker, collapsible sections, animated folders
+
+### F1. Model picker (ported from `vellum-workspace.html`)
+The composer's "Extended ⌄" mode chip is replaced by the workspace's model picker, re-themed
+to ink & mint: a `model-pill` (selected model label + chevron) opening a dropdown with a
+"Model / ↻ Sync" header (Sync = dim preview hint), a search input, a scrollable curated
+model list (DeepSeek V4 Pro default, DeepSeek V4 Flash, MiniMax, Gemma 31B, Claude 3.7
+Sonnet, GPT-4.1, Gemini 2.0 Flash) with ✓ selection, and a "Manage models & keys…" footer
+(dim hint). Selection is app-level state shared by chat and project composers.
+
+### F2. Collapsible sidebar sections + scroll fix
+Projects and Recents become collapsible (chevron after the label, rotates −90° closed,
+ChatGPT "GPTs ›" pattern). Both sections live in one scrollable container (`.sb-scroll`)
+between the fixed nav rows and the pinned profile row — fixing "projects grow and Recents
+can't scroll". Projects: label click still opens the grid; the chevron toggles. Recents:
+header click toggles.
+
+### F3. Animated project folders
+Project rows get per-project expansion of their nested chats. The folder **icon** is the
+toggle: closed-folder ⇄ open-folder SVGs crossfade with a slight rotate/scale (CSS
+transitions) — open when expanded, closed when not. Row click still opens the project page.
+Creating a chat inside a project (or creating the project) auto-expands its folder.
+
+Audit deltas: intent ✓ (picker copied from workspace per user; chevron + scroll fix; the
+exact open/close folder behavior described); consistency ✓ (picker re-themed to tokens,
+glass dropdown, popIn); testability ✓ (smoke: pick a model, collapse/expand Recents,
+folder-icon toggle); YAGNI ✓ (no provider keys/sync — dim hints).
+
+## Addendum G (10/06/2026, seventh pass) — toggles, + menu, attachments, connectors, sizing
+
+### G1. Toggle behavior fixes
+- Project **row** click toggles the folder open/close animation (and still opens the project
+  page); not just the icon.
+- The **Projects** section header click collapses/expands the section (same as Recents).
+  The Projects grid stays reachable from the rail's projects icon.
+
+### G2. Composer "+" dropdown (per screenshots; "More" excluded)
+Anchored above the + button: **Add photos & files** (file picker) · **Recent files ›**
+(submenu: "Add from library" → Library view, then the 3 most recent library items with
+dates — click attaches) · **Create image**, **Deep research**, **Web search** (dim preview
+hints) · **Projects ›** (submenu listing projects → opens that project page).
+
+### G3. Attachment cards + image viewer
+Picked files render above the input as cards: files = rounded card with icon tile, name,
+"File" sublabel, ×; images = thumbnail preview (object URL) with ×. Clicking an image
+thumbnail (in the composer or on a sent message) opens a lightbox viewer (dim backdrop,
+large image, Esc/click closes).
+
+### G4. Apps / connectors (Deep research + Sites chips excluded)
+An **Apps ⌄** chip next to + opens the connectors dropdown: Airtable (toggle), GitHub
+(**Finish Setup**), Linear (toggle), Box / Dropbox / Gmail (**Connect**), "Connect more"
+(dim hint). Connect/Finish Setup click → app becomes enabled (toggle on). Enabled apps
+render as chips in the composer (icon + name + ⌄, like the GitHub screenshot); toggling
+off removes the chip. State is app-level, preview-only.
+
+### G5. Sizing
+Global bump — icons default 16→17, body 13.5→14px, sidebar rows ~14px, composer text 15px,
+replies 15px, menus/popovers ~13.5px; paddings adjusted to match.
+
+Audit deltas: intent ✓ (each screenshot mapped; exclusions honored: More, Deep research +
+Sites chips); honesty ✓ (Create image/Deep research/Web search/Connect more = hints, no
+fake runs); consistency ✓ (glass menus, sw switches reused from Settings feeds);
+testability ✓ (smoke: row-toggle flows, + menu attach from recents, png thumb → lightbox,
+GitHub Finish Setup → chip, Airtable toggle).
+
+## Addendum H (10/06/2026, ninth pass) — whole-sidebar scroll, slash menu, app-chip rework
+
+### H1. Whole-sidebar scroll (reverses part of G/F behavior per user)
+The nav rows move INSIDE the scroll container: everything between the wordmark header and
+the pinned profile row scrolls as one. Header + profile stay fixed.
+
+### H2. "/" slash command
+Typing `/` in an empty composer opens a compact popup (no backdrop; filters as you type
+after the slash): **Add photos & files** (file picker, clears the slash) · **Thinking** ·
+**Create image** · **Web search** · **Study and learn** (dim preview hints; clicking
+dismisses). Esc dismisses without clearing the text; popup drops **down** on landing /
+project page, **up** in threads (same `drop` rule as other composer menus).
+
+### H3. Enabled apps → one chip + picker + GitHub repo panel
+Enabled apps no longer render as side-by-side chips:
+- exactly one enabled → `⊗ {Name} ⌄` chip (⊗ click disconnects; chip click opens the
+  picker — or the GitHub repo panel if it's GitHub);
+- two or more → `{n} apps ⌄` chip → **AppsPicker**: rows of enabled apps, non-GitHub rows
+  carry ✓ and click-to-deselect (turns the app off); the GitHub row carries › and opens the
+  **GitHub repo panel**: "Search repositories…" input, "No repositories found" (preview),
+  divider, "Configure Repositories ↗" (dim), "Not indexed or not seeing a repository?
+  Learn more" footer (dim).
+The "Apps ⌄" directory chip (toggles / Connect / Finish Setup) is unchanged.
+
+Audit deltas: intent ✓ (matches all three screenshots incl. the ⊗ GitHub chip and the
+3-apps chip); honesty ✓ (repo search always empty + dim config rows); testability ✓
+(smoke: nav row inside .sb-scroll; slash open/filter/Esc; n-apps chip collapse, ✓
+deselect, repo panel).
+
+## Addendum I (10/06/2026, tenth pass) — slash connectors, per-chat apps, latency, nav, caret
+
+### I1. Slash menu gains connectors + Projects (per screenshot)
+Below the action items: a divider, then the **apps** (icon + name; ready apps toggle
+selection for the current chat, unconnected ones connect-then-select), then a divider and
+**Projects {n} ›** row whose submenu lists projects (click → project page). The text filter
+spans everything.
+
+### I2. Per-chat app selection
+App availability stays global (`apps[].state: 'ready'|'setup'|'connect'`), but *selection*
+becomes per-chat: `chats[].appIds`, with a `draftApps` pool for the landing/new-chat and
+project composers that transfers onto the chat created by the first message. The Apps
+directory switch now reflects/edits the current chat's selection; Connect / Finish Setup
+makes an app ready *and* selects it. The chip ("⊗ Name ⌄" / "{n} apps ⌄") therefore differs
+per chat — fixing "2 apps showing on every chat".
+
+### I3. Click latency
+Composer menus and context popovers stop using click-eating backdrops (the cause of the
+"lag": the first click only closed the open menu). A shared `Popover` wrapper closes on
+document-level outside `mousedown`, so a single click both closes the open menu and
+activates whatever was clicked. True modals (search, create-project, settings, edit
+profile, library-pick, lightbox) keep their dim backdrops by design.
+
+### I4. Project row hover: new-chat icon
+Hovering a project row shows a pencil (new chat in this project → opens the project page
+composer) to the left of the `⋯` dots.
+
+### I5. Back / forward navigation
+Chrome/Linear-style ← → buttons in the titlebar (left of the menu), driven by an in-app
+history of `{view, chat, project}` states; disabled at the ends of the stack.
+
+### I6. Caret alignment
+The placeholder overlay sits at the exact text origin of the textarea (10px/8px), so the
+caret no longer floats offset from the placeholder.
+
+Audit deltas: intent ✓ (all six fixes, screenshots matched); consistency ✓ (one Popover
+primitive replaces ad-hoc backdrops); testability ✓ (smoke: one-click menu switching,
+per-chat chip isolation, slash apps/Projects rows, back/forward round-trip).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default
