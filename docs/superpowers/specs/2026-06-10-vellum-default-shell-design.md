@@ -168,6 +168,43 @@ shell with `vellum-coding.html` inside the Tauri desktop app.
 
 ---
 
+## Addendum B (10/06/2026, second pass) — timeline, rail flyouts, live composer
+
+User additions after reviewing the shipped shell, with ChatGPT references:
+
+### B1. Conversation timeline ("the bars")
+Inside a thread, a vertical stack of small bars sits at the middle-right edge of the chat
+area — one bar per **user** message (bar width varies with message length). Hovering the
+strip opens a popup listing every user prompt from the first to the present (truncated,
+scrollable). Clicking a row smooth-scrolls to that message. Shown when the thread has ≥ 2
+user messages. Purpose: re-orient in a long-running chat the user returns to daily.
+
+### B2. Collapsed-rail flyouts + sidebar Projects section
+- **Rail**: a chats icon shows, on hover, a "Recents" flyout with the **last 10** chats
+  (pinned-first order, click opens). The projects icon shows, on hover, a Projects flyout
+  (New project + project rows with `⋯` settings).
+- **Expanded sidebar**: per the screenshot, a **Projects** section sits between nav and
+  Recents: header (click → Projects page), `New project` row, project rows. Hover `⋯` →
+  **Share project** (dim, not in preview) · **Rename project** (inline) · **Delete project**
+  (red). The standalone "Projects" nav row is replaced by this section.
+
+### B3. Dynamic composer placeholder
+The static "ask." placeholder becomes a rotating, animated overlay (only when the input is
+empty): phrases cycle every ~3s with a fade-up animation. Vellum register, lowercase:
+`ask.` · `what are you reading.` · `write, or edit.` · `search your library.` ·
+`sit with a question.`
+
+### B4. Generation glow
+While a reply streams: **dark mode** → the existing shimmer gains a soft ember glow
+(drop-shadow on the gradient text). **Light mode** → no shimmer/glow at all; plain text
+streams in normally.
+
+Audit (same 9 lenses, deltas only): intent ✓ (mirrors all four asks + screenshots);
+YAGNI ✓ (timeline only for user messages; flyouts hover-only; no virtualization);
+brand ✓ (placeholder phrases + glow use ember, lowercase register); consistency ✓
+(reuses ctx-menu/popover/rename patterns); honesty ✓ (Share project dim-hinted);
+testability ✓ (smoke checks added for each).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default

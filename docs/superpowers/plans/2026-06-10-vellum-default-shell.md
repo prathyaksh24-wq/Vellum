@@ -69,6 +69,31 @@
 - [ ] `ProjectsView`: header `Projects` + `New project` button (appends "Untitled project", inline-rename armed); card grid (name, `{n} notes`, updated). Card click = no-op.
 - [ ] Verify compile + manual. Commit + push.
 
+## Addendum tasks (10/06/2026, second pass — spec Addendum B)
+
+### Task 7: Conversation timeline (spec B1)
+**Files:** Modify `vellum-default.html`.
+- [ ] Give each user message DOM id `m-<msg.id>`.
+- [ ] `Timeline` component, absolutely positioned mid-right inside `.main` (which is `position:relative`): one `.tl-bar` per user message (width 8–22px by text length); wrapper hover opens `.tl-pop` — scrollable list of truncated user prompts; row click → `scrollIntoView({behavior:'smooth'})`; render only when ≥ 2 user messages.
+- [ ] Verify compile + manual. Commit + push.
+
+### Task 8: Rail flyouts + sidebar Projects section (spec B2)
+**Files:** Modify `vellum-default.html`.
+- [ ] Replace sidebar "Projects" nav row with a Projects section: `.sb-sec` header (click → projects page), `New project` row (creates + arms inline rename), project rows with hover `⋯` → `ProjectMenu` (Share project dim-hint / Rename project inline / Delete project red). Project rename/delete shared with Projects page state.
+- [ ] Rail: add chats icon with hover flyout "Recents" (last 10, pinned-first, click opens); projects icon hover flyout (New project + rows with `⋯` menu); flyouts are absolutely positioned panels inside a `position:relative` rail wrapper, open on mouseenter, close on mouseleave.
+- [ ] Verify compile + manual. Commit + push.
+
+### Task 9: Animated placeholder + generation glow (spec B3 + B4)
+**Files:** Modify `vellum-default.html`.
+- [ ] Composer: remove static placeholder; when `text` empty render pointer-events-none overlay span cycling `PLACEHOLDERS = ['ask.','what are you reading.','write, or edit.','search your library.','sit with a question.']` every 3s, re-animated via `key={i}` + `@keyframes phIn` fade-up.
+- [ ] Glow: dark `.areply.shimmer` gains `filter:drop-shadow(0 0 7px rgba(227,93,43,.40))`; light theme override disables shimmer entirely (`background:none; color/-webkit-text-fill-color: var(--txt); animation:none; filter:none`).
+- [ ] Verify compile + manual (both themes). Commit + push.
+
+### Task 10: Smoke coverage for addendum
+**Files:** Modify `smoke-default.mjs`.
+- [ ] New checks: timeline bars + popup rows + jump (2-message thread); rail recents flyout (≤10 rows, opens chat); sidebar Projects section (new/rename/delete project); animated placeholder present + rotates within 5s; light-mode streaming text visible (computed text fill not transparent).
+- [ ] Run full suite → all PASS. Commit + push.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.
