@@ -343,6 +343,43 @@ exact open/close folder behavior described); consistency ✓ (picker re-themed t
 glass dropdown, popIn); testability ✓ (smoke: pick a model, collapse/expand Recents,
 folder-icon toggle); YAGNI ✓ (no provider keys/sync — dim hints).
 
+## Addendum G (10/06/2026, seventh pass) — toggles, + menu, attachments, connectors, sizing
+
+### G1. Toggle behavior fixes
+- Project **row** click toggles the folder open/close animation (and still opens the project
+  page); not just the icon.
+- The **Projects** section header click collapses/expands the section (same as Recents).
+  The Projects grid stays reachable from the rail's projects icon.
+
+### G2. Composer "+" dropdown (per screenshots; "More" excluded)
+Anchored above the + button: **Add photos & files** (file picker) · **Recent files ›**
+(submenu: "Add from library" → Library view, then the 3 most recent library items with
+dates — click attaches) · **Create image**, **Deep research**, **Web search** (dim preview
+hints) · **Projects ›** (submenu listing projects → opens that project page).
+
+### G3. Attachment cards + image viewer
+Picked files render above the input as cards: files = rounded card with icon tile, name,
+"File" sublabel, ×; images = thumbnail preview (object URL) with ×. Clicking an image
+thumbnail (in the composer or on a sent message) opens a lightbox viewer (dim backdrop,
+large image, Esc/click closes).
+
+### G4. Apps / connectors (Deep research + Sites chips excluded)
+An **Apps ⌄** chip next to + opens the connectors dropdown: Airtable (toggle), GitHub
+(**Finish Setup**), Linear (toggle), Box / Dropbox / Gmail (**Connect**), "Connect more"
+(dim hint). Connect/Finish Setup click → app becomes enabled (toggle on). Enabled apps
+render as chips in the composer (icon + name + ⌄, like the GitHub screenshot); toggling
+off removes the chip. State is app-level, preview-only.
+
+### G5. Sizing
+Global bump — icons default 16→17, body 13.5→14px, sidebar rows ~14px, composer text 15px,
+replies 15px, menus/popovers ~13.5px; paddings adjusted to match.
+
+Audit deltas: intent ✓ (each screenshot mapped; exclusions honored: More, Deep research +
+Sites chips); honesty ✓ (Create image/Deep research/Web search/Connect more = hints, no
+fake runs); consistency ✓ (glass menus, sw switches reused from Settings feeds);
+testability ✓ (smoke: row-toggle flows, + menu attach from recents, png thumb → lightbox,
+GitHub Finish Setup → chip, Airtable toggle).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default

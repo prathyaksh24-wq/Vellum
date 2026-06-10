@@ -169,6 +169,25 @@
 - [ ] Checks: model picker search+select updates pill; Recents header collapse hides rows/re-expand shows; folder icon toggle hides/shows nested chat (inside Smoke-project flow).
 - [ ] Full suite green. Commit + push. Screenshot + memory.
 
+## Addendum G tasks (10/06/2026, seventh pass — spec Addendum G)
+
+### Task 22: Toggle behavior (spec G1)
+- [ ] ProjectRow: row click → `onToggle()` + `onOpen()` (icon has no separate handler); Projects `.sb-sec` click → `onToggleSec('projects')` (chevron same).
+- [ ] Smoke: "projects grid" navigates via rail projects icon; "remove from project" expands the folder (row click) before hovering the nested row. Compile + suite-relevant checks. Commit + push.
+
+### Task 23: + dropdown, attachments, lightbox (spec G2+G3)
+- [ ] `PlusMenu` (glass, above +): Add photos & files → fileRef; Recent files › submenu ("Add from library" → Library view; top-3 library items, click attaches `{name,size,kind}`); Create image / Deep research / Web search dim rows; Projects › submenu → `openProject`.
+- [ ] Attachment model gains `url` (createObjectURL for image/*); `.att-card` + `.att-img` strip in composer; message bubbles render image thumbs / file cards; `Lightbox` (App-level `viewer` state, `onViewImage` passed down; Esc/backdrop closes).
+- [ ] Compile gate. Commit + push.
+
+### Task 24: Apps connectors (spec G4)
+- [ ] `SEED_APPS` (airtable off · github setup · linear off · box/dropbox/gmail connect) + per-app mini icons; `AppsDrop` (toggle `.sw` for on/off; "Finish Setup"/"Connect" buttons → state on; "Connect more" hint); Apps ⌄ chip after +; enabled apps as `app-chip`s (icon+name+⌄ → reopen dropdown).
+- [ ] Compile gate. Commit + push.
+
+### Task 25: Sizing + smoke (spec G5)
+- [ ] Icon default 17; font-size bumps (body/sidebar/composer/replies/menus); padding adjustments.
+- [ ] New smoke: + menu attach-from-recents card + remove; tiny-png upload → thumb → lightbox open/Esc; GitHub Finish Setup → chip appears; Airtable toggle on/off chip. Full suite green. Commit + push. Screenshot + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.
