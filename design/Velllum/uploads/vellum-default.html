@@ -201,6 +201,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .pop-row:hover{background:var(--hover)}
 .pop-row .sb-ic{color:var(--dim);display:flex}
 .pop-row .avatar{width:24px;height:24px;font-size:9.5px}
+.pop-row.dim{color:var(--dim)}
 /* edit profile modal */
 .modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:440px;max-width:92vw;background:var(--modal);border:1px solid var(--line2);border-radius:16px;padding:24px;box-shadow:0 30px 100px rgba(0,0,0,.55)}
 .m-title{font-size:16px;color:var(--txt2);font-weight:500;margin-bottom:20px}
@@ -456,7 +457,7 @@ const Composer = ({text, setText, mode, setMode, onSend, busy}) => {
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
           <button className="mode-chip" onClick={() => setModeOpen(true)}>{mode}<IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
-          <button className="csend" disabled={busy || (!text.trim() && true)} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
+          <button className="csend" disabled={busy || !text.trim()} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
             onClick={send}>{text.trim() ? <IcSend size={15}/> : <IcVoice size={15}/>}</button>
           {modeOpen && <ModeMenu mode={mode} onPick={m => { setMode(m); setModeOpen(false); }} onClose={() => setModeOpen(false)}/>}
         </div>
@@ -744,6 +745,72 @@ const ChatMenu = ({chat, pos, onAction, onClose}) => (
   </React.Fragment>
 );
 
+/* ─── profile ─── */
+const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
+  const Row = ({icon, label, hint}) => (
+    <div className={'pop-row' + (hint ? ' dim' : '')} title={hint ? 'not in this preview' : undefined}>
+      <span className="sb-ic">{icon}</span>{label}
+    </div>
+  );
+  return (
+    <React.Fragment>
+      <div className="backdrop" onClick={onClose}/>
+      <div className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}}>
+        <div className="pop-email">{profile.email}</div>
+        <div className="pop-row">
+          <div className="avatar">{initials(profile.displayName)}</div>
+          {profile.displayName}
+          <span className="ctx-check"><IcCheck size={14}/></span>
+        </div>
+        <Row icon={<IcUserPlus size={15}/>} label="Add account" hint/>
+        <div className="ctx-div"/>
+        <Row icon={<IcSparkle size={15}/>} label="Upgrade plan" hint/>
+        <Row icon={<IcPenLine size={15}/>} label="Personalization" hint/>
+        <div className="pop-row" onClick={onEditProfile}>
+          <span className="sb-ic"><I size={15}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></I></span>Profile
+        </div>
+        <Row icon={<IcSettings size={15}/>} label="Settings" hint/>
+        <div className="ctx-div"/>
+        <Row icon={<IcHelp size={15}/>} label="Help" hint/>
+        <Row icon={<IcLogout size={15}/>} label="Log out" hint/>
+        <div className="ctx-hint">dim rows are not in this preview</div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const EditProfileModal = ({profile, onSave, onClose}) => {
+  const [name, setName] = useState(profile.displayName);
+  const [user, setUser] = useState(profile.username);
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="modal">
+        <div className="m-title">Edit profile</div>
+        <div className="m-avatar-wrap">
+          <div className="m-avatar">
+            {initials(name || profile.displayName)}
+            <div className="m-cam" title="Photo upload is not in this preview"><IcCamera/></div>
+          </div>
+        </div>
+        <div className="m-field">
+          <label>Display name</label>
+          <input value={name} onChange={e => setName(e.target.value)} autoFocus/>
+        </div>
+        <div className="m-field">
+          <label>Username</label>
+          <input value={user} onChange={e => setUser(e.target.value)}/>
+        </div>
+        <div className="m-help">Your profile helps people recognize you in group chats.</div>
+        <div className="m-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn primary" onClick={() => onSave({displayName: name.trim() || profile.displayName, username: user.trim() || profile.username})}>Save</button>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
 /* ─── app ─── */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -891,6 +958,12 @@ const App = () => {
           onNewChat={() => { setSearchOpen(false); newChat(); }}
           onOpenChat={id => { setSearchOpen(false); openChat(id); }}
           onClose={() => setSearchOpen(false)}/>}
+        {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
+          onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
+          onClose={() => setMenu(null)}/>}
+        {editProfileOpen && <EditProfileModal profile={profile}
+          onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
+          onClose={() => setEditProfileOpen(false)}/>}
       </div>
     </div>
   );
