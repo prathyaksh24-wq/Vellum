@@ -303,6 +303,7 @@ body{background:#000;color:var(--txt);font-family:"Geist",-apple-system,BlinkMac
 .m-actions{display:flex;justify-content:flex-end;gap:9px}
 .btn{padding:8px 18px;border-radius:18px;border:1px solid var(--line2);background:none;color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer}
 .btn:hover{background:var(--hover)}
+.btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:var(--onember)}
 .btn.primary:hover{filter:brightness(1.08)}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
@@ -1228,7 +1229,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
 };
 
 /* ─── profile ─── */
-const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
+const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onClose}) => {
   const Row = ({icon, label, hint}) => (
     <div className={'pop-row' + (hint ? ' dim' : '')} title={hint ? 'not in this preview' : undefined}>
       <span className="sb-ic">{icon}</span>{label}
@@ -1251,7 +1252,9 @@ const ProfilePopover = ({profile, pos, onEditProfile, onClose}) => {
         <div className="pop-row" onClick={onEditProfile}>
           <span className="sb-ic"><I size={15}><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></I></span>Profile
         </div>
-        <Row icon={<IcSettings size={15}/>} label="Settings" hint/>
+        <div className="pop-row" onClick={onSettings}>
+          <span className="sb-ic"><IcSettings size={15}/></span>Settings
+        </div>
         <div className="ctx-div"/>
         <Row icon={<IcHelp size={15}/>} label="Help" hint/>
         <Row icon={<IcLogout size={15}/>} label="Log out" hint/>
@@ -1293,6 +1296,100 @@ const EditProfileModal = ({profile, onSave, onClose}) => {
   );
 };
 
+/* ─── settings modal ─── */
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, onClose}) => {
+  const [tab, setTab] = useState('General');
+  const SECTIONS = [
+    {k: 'General', ic: <IcSettings size={14}/>},
+    {k: 'Reflections', ic: <IcNote size={14}/>},
+    {k: 'Saved', ic: <IcArchive size={14}/>},
+    {k: 'Feeds', ic: <IcGlobe size={14}/>},
+    {k: 'Computer use', ic: <IcTerminal size={14}/>},
+  ];
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="set-modal">
+        <div className="set-nav">
+          <div className="sn-title">Settings</div>
+          {SECTIONS.map(s => (
+            <div key={s.k} className={'set-item' + (tab === s.k ? ' on' : '')} onClick={() => setTab(s.k)}>
+              <span className="sb-ic">{s.ic}</span>{s.k}
+            </div>
+          ))}
+        </div>
+        <div className="set-body">
+          {tab === 'General' && (
+            <React.Fragment>
+              <div className="set-h">General</div>
+              <div className="set-row">Theme
+                <span className="sr-end">
+                  <button className="btn" onClick={onTheme}>{theme === 'dark' ? 'Switch to light' : 'Switch to dark'}</button>
+                </span>
+              </div>
+              <div className="set-row">Plan<span className="sr-end"><span className="cu-pill">Private</span></span></div>
+              <div className="set-row">App<span className="sr-end"><span style={{color: 'var(--dim)', fontSize: 12}}>vellum — preview</span></span></div>
+            </React.Fragment>
+          )}
+          {tab === 'Reflections' && (
+            <React.Fragment>
+              <div className="set-h">Reflections</div>
+              {SEED_REFLECTIONS.map(r => (
+                <div key={r.id} className="set-row" style={{alignItems: 'flex-start'}}>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.kind} · {r.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.text}</span></div>
+                </div>
+              ))}
+              <div className="set-note">Written at 2:00. Read when you like.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Saved' && (
+            <React.Fragment>
+              <div className="set-h">Saved</div>
+              {SEED_SAVED.map(s => (
+                <div key={s.id} className="set-row" style={{alignItems: 'flex-start'}}>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{s.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{s.text}</span></div>
+                </div>
+              ))}
+              <div className="set-note">Responses you chose to keep. Filed under Agent/Saved.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Feeds' && (
+            <React.Fragment>
+              <div className="set-h">Feeds</div>
+              {feeds.map(f => (
+                <div key={f.id} className="set-row">
+                  <div>{f.name}<span className="sr-sub">{f.sub}</span></div>
+                  <span className="sr-end">
+                    <div className={'sw' + (f.on ? ' on' : '')} role="switch" aria-checked={f.on} onClick={() => onToggleFeed(f.id)}/>
+                  </span>
+                </div>
+              ))}
+              <div className="set-note">Preview — switches hold state, nothing is fetched.</div>
+            </React.Fragment>
+          )}
+          {tab === 'Computer use' && (
+            <React.Fragment>
+              <div className="set-h">Computer use</div>
+              <div className="set-row">Session
+                <span className="sr-end">
+                  <span className={'cu-pill' + (cu ? ' on' : '')}>{cu ? 'active · Ctrl+Alt+Esc to stop' : 'standing down'}</span>
+                </span>
+              </div>
+              <div className="set-row">
+                <span className="sr-end" style={{marginLeft: 0}}>
+                  <button className="btn primary" disabled={cu} onClick={() => onCu(true)}>Enable</button>
+                  <button className="btn" disabled={!cu} onClick={() => onCu(false)}>Stand down</button>
+                </span>
+              </div>
+              <div className="set-note">Preview — no real session starts. The desktop glow belongs to the Tauri shell.</div>
+            </React.Fragment>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
 /* ─── app ─── */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -1314,6 +1411,9 @@ const App = () => {
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
   const [skills, setSkills] = useState(SEED_SKILLS);
   const [memory, setMemory] = useState(SEED_MEMORY);
+  const [feeds, setFeeds] = useState(SEED_FEEDS);
+  const [cuEnabled, setCuEnabled] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
   const [renamingId, setRenamingId] = useState(null);
   const [projRenamingId, setProjRenamingId] = useState(null);
@@ -1322,7 +1422,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1518,7 +1618,12 @@ const App = () => {
           onClose={() => setSearchOpen(false)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
           onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
+          onSettings={() => { setMenu(null); setSettingsOpen(true); }}
           onClose={() => setMenu(null)}/>}
+        {settingsOpen && <SettingsModal theme={theme} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
+          cu={cuEnabled} onCu={setCuEnabled}
+          onClose={() => setSettingsOpen(false)}/>}
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
           onClose={() => setEditProfileOpen(false)}/>}
