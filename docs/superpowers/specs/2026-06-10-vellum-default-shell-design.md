@@ -315,6 +315,34 @@ consistency ✓ (vars only — themes stay symmetrical); testability ✓ (smoke 
 assertion updated; glow/fill computed-style contracts preserved); YAGNI ✓ (no texture
 overlays, no layout rework).
 
+## Addendum F (10/06/2026, sixth pass) — model picker, collapsible sections, animated folders
+
+### F1. Model picker (ported from `vellum-workspace.html`)
+The composer's "Extended ⌄" mode chip is replaced by the workspace's model picker, re-themed
+to ink & mint: a `model-pill` (selected model label + chevron) opening a dropdown with a
+"Model / ↻ Sync" header (Sync = dim preview hint), a search input, a scrollable curated
+model list (DeepSeek V4 Pro default, DeepSeek V4 Flash, MiniMax, Gemma 31B, Claude 3.7
+Sonnet, GPT-4.1, Gemini 2.0 Flash) with ✓ selection, and a "Manage models & keys…" footer
+(dim hint). Selection is app-level state shared by chat and project composers.
+
+### F2. Collapsible sidebar sections + scroll fix
+Projects and Recents become collapsible (chevron after the label, rotates −90° closed,
+ChatGPT "GPTs ›" pattern). Both sections live in one scrollable container (`.sb-scroll`)
+between the fixed nav rows and the pinned profile row — fixing "projects grow and Recents
+can't scroll". Projects: label click still opens the grid; the chevron toggles. Recents:
+header click toggles.
+
+### F3. Animated project folders
+Project rows get per-project expansion of their nested chats. The folder **icon** is the
+toggle: closed-folder ⇄ open-folder SVGs crossfade with a slight rotate/scale (CSS
+transitions) — open when expanded, closed when not. Row click still opens the project page.
+Creating a chat inside a project (or creating the project) auto-expands its folder.
+
+Audit deltas: intent ✓ (picker copied from workspace per user; chevron + scroll fix; the
+exact open/close folder behavior described); consistency ✓ (picker re-themed to tokens,
+glass dropdown, popIn); testability ✓ (smoke: pick a model, collapse/expand Recents,
+folder-icon toggle); YAGNI ✓ (no provider keys/sync — dim hints).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default

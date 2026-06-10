@@ -151,6 +151,24 @@
 - [ ] Display type on wordmark/landing/page/project/modal/section titles; mono on ledger values + mem-stats; greeting → "Ready when you are." (gradient land-mark, no italics); PLACEHOLDERS → modern copy.
 - [ ] Smoke: update greeting assertion (+ glow check label); full suite green. Commit + push. Screenshots + memory.
 
+## Addendum F tasks (10/06/2026, sixth pass — spec Addendum F)
+
+### Task 19: Model picker
+**Files:** Modify `vellum-default.html`.
+- [ ] `MODELS` const + `modelLabel()`; app-level `selModel` state passed to ChatView/ProjectPage; Composer replaces mode chip with `.model-pill` → `.model-drop` (drop-lbl "Model"/"↻ Sync" dim, `.model-search`, `.model-list` with ✓, "Manage models & keys…" dim footer). Remove ModeMenu/mode state.
+- [ ] Compile gate. Commit + push.
+
+### Task 20: Collapsible sections + animated folders
+**Files:** Modify `vellum-default.html`.
+- [ ] `.sb-scroll` wraps Projects + Recents sections (nav fixed above, profile pinned below); `secOpen` app state; chevrons (Projects: label→grid, chevron→toggle; Recents: header→toggle).
+- [ ] `IcFolderOpen` + `FolderIcon` crossfade component; `expandedProj` app state; ProjectRow icon click toggles (stopPropagation), row click navigates; nested chats render only when expanded; auto-expand on project create + in-project chat create.
+- [ ] Compile gate. Commit + push.
+
+### Task 21: Smoke for F
+**Files:** Modify `smoke-default.mjs`.
+- [ ] Checks: model picker search+select updates pill; Recents header collapse hides rows/re-expand shows; folder icon toggle hides/shows nested chat (inside Smoke-project flow).
+- [ ] Full suite green. Commit + push. Screenshot + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.
