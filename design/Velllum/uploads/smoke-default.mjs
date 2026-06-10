@@ -37,6 +37,15 @@ await check("landing: greeting + composer + chips", async () => {
   if (await page.locator(".chip").count() !== 3) throw new Error("chips != 3");
 });
 
+await check("model picker: search + select updates pill", async () => {
+  if ((await page.locator(".model-num").first().textContent()) !== "DeepSeek V4 Pro") throw new Error("default model wrong");
+  await page.locator(".model-pill").click();
+  await page.locator(".model-drop").waitFor();
+  await page.locator(".model-search").fill("claude");
+  await page.locator(".drop-item", { hasText: "Claude 3.7 Sonnet" }).click();
+  if ((await page.locator(".model-num").first().textContent()) !== "Claude 3.7 Sonnet") throw new Error("pill not updated");
+});
+
 await check("sidebar: nav rows + projects section + recents + profile", async () => {
   for (const label of ["New chat", "Search chats", "Library", "New project"])
     if (!(await page.locator(".sb-row", { hasText: label }).count())) throw new Error("missing " + label);
@@ -149,6 +158,15 @@ await check("new chat inside project + breadcrumb + nesting", async () => {
     throw new Error("project chat leaked into Recents");
 });
 
+await check("folder icon toggles nested chats with animation state", async () => {
+  const fold = page.locator(".chat-row", { hasText: "Smoke project" }).first().locator(".fold");
+  if (!(await fold.getAttribute("class")).includes("on")) throw new Error("folder should be open after in-project chat");
+  await fold.click();
+  if (await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).count()) throw new Error("nested chat still visible after close");
+  await fold.click();
+  await page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).waitFor();
+});
+
 await check("project page lists its chats + sources upload", async () => {
   await page.locator(".chat-row", { hasText: "Smoke project" }).first().click();
   await page.locator(".proj-chat-row", { hasText: "plan the smoke run" }).waitFor();
@@ -218,6 +236,13 @@ await check("recents menu: delete removes", async () => {
   await row.locator(".chat-dots").click();
   await page.locator(".ctx-item.danger", { hasText: "Delete" }).click();
   if (await page.locator(".chat-row", { hasText: "Streaming notes" }).count()) throw new Error("still present");
+});
+
+await check("recents section collapses and expands", async () => {
+  await page.locator(".sb-sec", { hasText: "Recents" }).click();
+  if (await page.locator(".chat-row", { hasText: "Self-Perception" }).count()) throw new Error("recents still visible after collapse");
+  await page.locator(".sb-sec", { hasText: "Recents" }).click();
+  await page.locator(".chat-row", { hasText: "Self-Perception" }).first().waitFor();
 });
 
 await check("library: tabs + search + grid/list + note", async () => {
