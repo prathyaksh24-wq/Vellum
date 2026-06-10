@@ -689,6 +689,45 @@ const LibraryView = ({library, setLibrary}) => {
   );
 };
 
+/* ─── projects ─── */
+const ProjectsView = ({projects, setProjects}) => {
+  const [renamingId, setRenamingId] = useState(null);
+  const [draft, setDraft] = useState('');
+  const addProject = () => {
+    const id = uid();
+    setProjects(ps => [{id, name: 'Untitled project', notes: 0, updated: 'Today'}, ...ps]);
+    setRenamingId(id); setDraft('Untitled project');
+  };
+  const commit = id => {
+    if (draft.trim()) setProjects(ps => ps.map(p => p.id === id ? {...p, name: draft.trim()} : p));
+    setRenamingId(null);
+  };
+  return (
+    <div className="page">
+      <div className="page-inner">
+        <div className="page-head">
+          <div className="page-title">Projects</div>
+          <button className="new-btn" onClick={addProject}><IcFolderPlus size={14}/>New project</button>
+        </div>
+        <div className="pgrid">
+          {projects.map(p => (
+            <div key={p.id} className="pcard" title="Project pages are not in this preview">
+              <span className="sb-ic"><IcFolder size={18}/></span>
+              {renamingId === p.id
+                ? <input className="rename-input" autoFocus value={draft}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commit(p.id); if (e.key === 'Escape') setRenamingId(null); }}
+                    onBlur={() => commit(p.id)}/>
+                : <h3>{p.name}</h3>}
+              <p>{p.notes} {p.notes === 1 ? 'note' : 'notes'} · {p.updated}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, pos, onAction, onClose}) => (
   <React.Fragment>
@@ -844,7 +883,7 @@ const App = () => {
           <div className="main">
             {view === 'chat' && <ChatView chat={chats.find(c => c.id === activeChatId) || null} onSend={sendMessage} onRegen={regenerate}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
-            {view === 'projects' && <div className="placeholder">projects go here</div>}
+            {view === 'projects' && <ProjectsView projects={projects} setProjects={setProjects}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
