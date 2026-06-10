@@ -177,6 +177,7 @@ await check("project page lists its chats + sources upload", async () => {
 });
 
 await check("remove from project → moves to Recents", async () => {
+  await page.locator(".chat-row", { hasText: "Smoke project" }).first().click(); // re-expand folder (row click toggles)
   const row = page.locator(".chat-row.nested", { hasText: "plan the smoke run" }).first();
   await row.hover();
   await row.locator(".chat-dots").click();
@@ -328,12 +329,21 @@ await check("settings modal: feeds toggle + computer use", async () => {
   if (await page.locator(".set-modal").count()) throw new Error("Esc did not close settings");
 });
 
-await check("projects grid: cards open project page", async () => {
-  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+await check("projects grid (via rail): cards open project page", async () => {
+  await page.locator(".tbtn[title='Collapse sidebar']").click();
+  await page.locator(".rail-btn[title='Projects']").click();
+  await page.locator(".rail-logo").click();
   if (await page.locator(".pcard").count() < 3) throw new Error("seed cards missing");
   await page.locator(".pcard", { hasText: "Vellum Desktop" }).click();
   await page.locator(".proj-name", { hasText: "Vellum Desktop" }).waitFor();
   await page.locator(".proj-empty .pe-t", { hasText: "No chats yet" }).waitFor();
+});
+
+await check("projects header collapses section like recents", async () => {
+  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+  if (await page.locator(".sb-row", { hasText: "New project" }).count()) throw new Error("section still open");
+  await page.locator(".sb-sec", { hasText: "Projects" }).click();
+  await page.locator(".sb-row", { hasText: "New project" }).waitFor();
 });
 
 await check("profile popover → edit profile → save updates sidebar", async () => {

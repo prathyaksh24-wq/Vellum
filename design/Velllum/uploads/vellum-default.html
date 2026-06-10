@@ -544,8 +544,8 @@ const ProjectRow = ({proj, renaming, open, onToggle, onMenu, onOpen, onRename}) 
     );
   }
   return (
-    <div className="chat-row" onClick={onOpen}>
-      <FolderIcon open={open} onToggle={e => { e.stopPropagation(); onToggle(); }}/>
+    <div className="chat-row" onClick={() => { onToggle(); onOpen(); }}>
+      <FolderIcon open={open}/>
       <span className="chat-title">{proj.name}</span>
       <button className="chat-dots" title="Project settings"
         onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
@@ -570,7 +570,7 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
       <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
       <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
       <div className="sb-scroll">
-        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onNav('projects')}>
+        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
           Projects
           <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
             onClick={e => { e.stopPropagation(); onToggleSec('projects'); }}><IcChevD size={12}/></button>
