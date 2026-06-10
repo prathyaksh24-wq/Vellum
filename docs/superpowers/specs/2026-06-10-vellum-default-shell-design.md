@@ -409,6 +409,45 @@ Audit deltas: intent ✓ (matches all three screenshots incl. the ⊗ GitHub chi
 (smoke: nav row inside .sb-scroll; slash open/filter/Esc; n-apps chip collapse, ✓
 deselect, repo panel).
 
+## Addendum I (10/06/2026, tenth pass) — slash connectors, per-chat apps, latency, nav, caret
+
+### I1. Slash menu gains connectors + Projects (per screenshot)
+Below the action items: a divider, then the **apps** (icon + name; ready apps toggle
+selection for the current chat, unconnected ones connect-then-select), then a divider and
+**Projects {n} ›** row whose submenu lists projects (click → project page). The text filter
+spans everything.
+
+### I2. Per-chat app selection
+App availability stays global (`apps[].state: 'ready'|'setup'|'connect'`), but *selection*
+becomes per-chat: `chats[].appIds`, with a `draftApps` pool for the landing/new-chat and
+project composers that transfers onto the chat created by the first message. The Apps
+directory switch now reflects/edits the current chat's selection; Connect / Finish Setup
+makes an app ready *and* selects it. The chip ("⊗ Name ⌄" / "{n} apps ⌄") therefore differs
+per chat — fixing "2 apps showing on every chat".
+
+### I3. Click latency
+Composer menus and context popovers stop using click-eating backdrops (the cause of the
+"lag": the first click only closed the open menu). A shared `Popover` wrapper closes on
+document-level outside `mousedown`, so a single click both closes the open menu and
+activates whatever was clicked. True modals (search, create-project, settings, edit
+profile, library-pick, lightbox) keep their dim backdrops by design.
+
+### I4. Project row hover: new-chat icon
+Hovering a project row shows a pencil (new chat in this project → opens the project page
+composer) to the left of the `⋯` dots.
+
+### I5. Back / forward navigation
+Chrome/Linear-style ← → buttons in the titlebar (left of the menu), driven by an in-app
+history of `{view, chat, project}` states; disabled at the ends of the stack.
+
+### I6. Caret alignment
+The placeholder overlay sits at the exact text origin of the textarea (10px/8px), so the
+caret no longer floats offset from the placeholder.
+
+Audit deltas: intent ✓ (all six fixes, screenshots matched); consistency ✓ (one Popover
+primitive replaces ad-hoc backdrops); testability ✓ (smoke: one-click menu switching,
+per-chat chip isolation, slash apps/Projects rows, back/forward round-trip).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default

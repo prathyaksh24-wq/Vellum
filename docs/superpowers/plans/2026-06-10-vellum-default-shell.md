@@ -199,6 +199,21 @@
 ### Task 28: App-chip rework
 - [ ] Replace per-app chips: 1 on → `⊗ Name ⌄` (⊗ = toggle off; click → picker/GitHub panel); >1 → `{n} apps ⌄` → `AppsPicker` (✓ rows toggle off; GitHub row › → `GitHubPanel` with repo search/empty state/dim config rows). Compile + full smoke (update apps check; add slash + scroll asserts). Commit + push. Screenshot + memory.
 
+## Addendum I tasks (10/06/2026, tenth pass — spec Addendum I)
+
+### Task 29: Popover primitive + caret (spec I3+I6)
+- [ ] `Popover` component (ref div, document mousedown outside → onClose); replace backdrop+div pairs in PlusMenu, AppsDrop, AppsPicker, GitHubPanel, ModelDrop, ChatMenu, ProjectMenu, ProfilePopover, ChatMenu/lib item menus. `.ph-anim{left:10px;top:8px}`.
+- [ ] Smoke: remove `.backdrop` click in + menu check (use Escape); add one-click switching assert (apps open → click + → plus menu visible in one click). Commit + push.
+
+### Task 30: Per-chat apps + slash connectors + project hover pencil (spec I1+I2+I4)
+- [ ] `apps[].state → ready/setup/connect` (airtable+linear ready); `chats[].appIds` + `draftApps`; selection helpers (toggleSel/connectApp); directory switches read selection; chip + picker read per-chat selection; sendMessage transfers draft.
+- [ ] SlashMenu: apps section (select/connect+select) + Projects {n} › submenu; ProjectRow hover pencil before dots → onOpen.
+- [ ] Smoke: rewrite apps check for selection model + per-chat isolation (chip absent on other chat); slash shows app + Projects rows. Commit + push.
+
+### Task 31: Back/forward nav (spec I5)
+- [ ] History stack of `{view, chat, proj}` in a ref (push on change unless silent), ← → titlebar buttons with disabled ends.
+- [ ] Smoke: open Library → chat → back twice → forward; assert views. Full suite green. Commit + push. Screenshot + memory.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.
