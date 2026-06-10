@@ -51,6 +51,7 @@ await check("model picker: search + select updates pill", async () => {
 await check("+ menu: attach from recent files", async () => {
   await page.locator(".cbtn[title='Add']").click();
   await page.locator(".plus-item", { hasText: "Add photos & files" }).waitFor();
+  if (!(await page.locator(".plus-menu").getAttribute("class")).includes("down")) throw new Error("menu should drop down on landing");
   await page.locator(".plus-item", { hasText: "Recent files" }).hover();
   await page.locator(".plus-sub .recent-row").first().waitFor();
   const firstName = await page.locator(".plus-sub .recent-row .r-name").first().textContent();
@@ -60,6 +61,19 @@ await check("+ menu: attach from recent files", async () => {
   await card.waitFor();
   await card.locator(".att-x").click();
   if (await page.locator(".att-card").count()) throw new Error("attachment card not removed");
+});
+
+await check("add-from-library modal: search + attach", async () => {
+  await page.locator(".cbtn[title='Add']").click();
+  await page.locator(".plus-item", { hasText: "Recent files" }).hover();
+  await page.locator(".plus-sub .plus-item", { hasText: "Add from library" }).click();
+  await page.locator(".libpick .lp-head", { hasText: "Add from library" }).waitFor();
+  await page.locator(".lp-search").fill("stillness");
+  await page.locator(".libpick .recent-row", { hasText: "on stillness" }).click();
+  const card = page.locator(".att-card", { hasText: "on stillness" });
+  await card.waitFor();
+  if (await page.locator(".libpick").count()) throw new Error("modal did not close after pick");
+  await card.locator(".att-x").click();
 });
 
 await check("image attach → thumbnail → lightbox", async () => {
@@ -151,10 +165,10 @@ await check("timeline: bars + history popup + jump", async () => {
   await page.mouse.move(400, 300);
 });
 
-await check("collapse → rail → expand", async () => {
+await check("collapse → rail → expand via panel button", async () => {
   await page.locator(".tbtn[title='Collapse sidebar']").click();
   await page.locator(".rail").waitFor();
-  await page.locator(".rail-logo").click();
+  await page.locator(".rail-btn[title='Expand sidebar']").click();
   await page.locator(".sidebar").waitFor();
 });
 
@@ -208,7 +222,13 @@ await check("folder icon toggles nested chats with animation state", async () =>
 
 await check("project page lists its chats + sources upload", async () => {
   await page.locator(".chat-row", { hasText: "Smoke project" }).first().click();
-  await page.locator(".proj-chat-row", { hasText: "plan the smoke run" }).waitFor();
+  const row = page.locator(".proj-chat-row", { hasText: "plan the smoke run" });
+  await row.waitFor();
+  if (!(await row.locator(".pcr-date").textContent())) throw new Error("date missing on project chat row");
+  await row.hover();
+  await row.locator(".pcr-dots").click();
+  await page.locator(".ctx-item", { hasText: "Remove from Smoke project" }).waitFor();
+  await page.keyboard.press("Escape");
   await page.locator(".tab", { hasText: "Sources" }).click();
   await page.locator(".src-title", { hasText: "Give Vellum more context" }).waitFor();
   await page.locator(".page input[type=file]").last().setInputFiles(srcFile);

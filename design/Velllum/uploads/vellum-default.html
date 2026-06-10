@@ -54,7 +54,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 /* body */
 .body{flex:1;display:flex;min-height:0}
 /* sidebar — expanded */
-.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px}
+.sidebar{width:260px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px;overflow:hidden}
 .sb-head{display:flex;align-items:center;justify-content:space-between;padding:2px 6px 10px}
 .wordmark{font-size:16px;color:var(--txt2);letter-spacing:-.01em}
 .wordmark em{color:var(--ember);font-style:italic}
@@ -241,6 +241,25 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 /* lightbox */
 .lightbox{position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;cursor:zoom-out;animation:fadeIn .15s ease}
 .lightbox img{max-width:82vw;max-height:82vh;border-radius:14px;box-shadow:0 30px 100px rgba(0,0,0,.6)}
+/* two-row composer */
+.cpill > .ta-wrap{width:100%;padding:2px 8px 0}
+.cspace{flex:1}
+.plus-menu.down,.apps-drop.down,.model-drop.down{bottom:auto;top:46px}
+/* add-from-library modal */
+.libpick{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:70;width:560px;max-width:92vw;border:1px solid var(--line2);border-radius:16px;padding:18px 0 8px;background:var(--modal);box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.lp-head{display:flex;align-items:center;padding:0 18px 10px}
+.lp-head span{flex:1;font-family:var(--font-d);font-weight:600;font-size:16.5px;color:var(--txt2)}
+.lp-search{width:calc(100% - 36px);margin:0 18px 6px;background:transparent;border:none;border-bottom:1px solid var(--line);padding:8px 0;font:inherit;font-size:14px;color:var(--txt2);outline:none}
+.lp-search::placeholder{color:var(--dim)}
+.lp-list{max-height:340px;overflow-y:auto;padding:8px 10px}
+/* project chat rows */
+.pcr-main{flex:1;min-width:0}
+.pcr-title{font-size:13.5px;color:var(--txt2);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcr-snip{font-size:12px;color:var(--dim);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pcr-date{font-size:12px;color:var(--dim);flex-shrink:0}
+.proj-chat-row:hover .pcr-date{display:none}
+.pcr-dots{display:none}
+.proj-chat-row:hover .pcr-dots{display:flex}
 /* apps / connectors */
 .app-chip{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:14px;background:none;border:1px solid var(--line2);color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer;flex-shrink:0}
 .app-chip:hover{background:var(--hover);color:var(--txt2)}
@@ -387,7 +406,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .led-v{font-family:var(--font-m);letter-spacing:-.01em}
 .mem-stats{font-family:var(--font-m);font-size:11px}
 .ph-anim{font-style:normal}
-.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
+.ctx-menu,.pop,.flyout,.gear-pop,.mode-menu,.model-drop,.plus-menu,.plus-sub,.apps-drop,.libpick{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:popIn .18s ease}
 .modal,.set-modal,.search-card,.tl-pop{background:var(--glass);backdrop-filter:blur(18px) saturate(1.4);-webkit-backdrop-filter:blur(18px) saturate(1.4);animation:fadeIn .18s ease}
 @keyframes popIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}}
@@ -491,10 +510,10 @@ const SEED_APPS = [
   { id: 'gmail',    name: 'Gmail',    state: 'connect' },
 ];
 
-const AppsDrop = ({apps, onToggle, onConnect, onClose}) => (
+const AppsDrop = ({apps, drop, onToggle, onConnect, onClose}) => (
   <React.Fragment>
     <div className="backdrop" onClick={onClose}/>
-    <div className="apps-drop">
+    <div className={'apps-drop' + (drop === 'down' ? ' down' : '')}>
       {apps.map(a => {
         const Ic = APP_ICONS[a.id] || IcGrid;
         return (
@@ -542,11 +561,11 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
 const SEED_CHATS = [
-  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, projectId: null, messages: [] },
-  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, projectId: null, messages: [] },
-  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, projectId: null, messages: [] },
+  { id: 'c1', title: 'Self-Perception and Healing', pinned: true,  archived: false, projectId: null, created: '09/06', messages: [] },
+  { id: 'c2', title: 'Live Streaming on Vellum',     pinned: false, archived: false, projectId: null, created: '09/06', messages: [] },
+  { id: 'c3', title: 'Prioritizing Vellum Development', pinned: false, archived: false, projectId: null, created: '08/06', messages: [] },
+  { id: 'c4', title: 'Usage boost feature idea',     pinned: false, archived: false, projectId: null, created: '07/06', messages: [] },
+  { id: 'c5', title: 'Cult UI Components for Vellum', pinned: false, archived: false, projectId: null, created: '05/06', messages: [] },
 ];
 
 const SEED_LIBRARY = [
@@ -746,6 +765,7 @@ const Rail = ({view, profile, chats, projects, onExpand, onNewChat, onSearch, on
   return (
     <div className="rail">
       <div className="rail-logo" title="Expand sidebar" onClick={onExpand}><div className="rail-dot"/></div>
+      <button className="rail-btn" title="Expand sidebar" onClick={onExpand}><IcPanel size={17}/></button>
       <button className="rail-btn" title="New chat" onClick={onNewChat}><IcPencilSq size={17}/></button>
       <button className="rail-btn" title="Search chats" onClick={onSearch}><IcSearch size={17}/></button>
       <RailFly btn={<button className="rail-btn" title="Chats"><IcChat size={17}/></button>}>
@@ -824,13 +844,13 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
-const ModelDrop = ({model, onPick, onClose}) => {
+const ModelDrop = ({model, drop, onPick, onClose}) => {
   const [q, setQ] = useState('');
   const hits = MODELS.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
       <div className="backdrop" onClick={onClose}/>
-      <div className="model-drop">
+      <div className={'model-drop' + (drop === 'down' ? ' down' : '')}>
         <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">↻ Sync</span></div>
         <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)}/>
         <div className="model-list">
@@ -863,12 +883,12 @@ const MODELS = [
 const DEFAULT_MODEL = 'deepseek/deepseek-chat';
 const modelLabel = id => { const m = MODELS.find(x => x.id === id); return m ? m.label : id; };
 
-const PlusMenu = ({library, projects, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onClose}) => {
+const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onClose}) => {
   const [sub, setSub] = useState(null);
   return (
     <React.Fragment>
       <div className="backdrop" onClick={onClose}/>
-      <div className="plus-menu">
+      <div className={'plus-menu' + (drop === 'down' ? ' down' : '')}>
         <div className="plus-item" onMouseEnter={() => setSub(null)} onClick={onAttachFile}>
           <span className="sb-ic"><IcUpload size={16}/></span>Add photos &amp; files
         </div>
@@ -912,16 +932,46 @@ const PlusMenu = ({library, projects, onAttachFile, onAttachRecent, onOpenLibrar
   );
 };
 
-const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, onToggleApp, onConnectApp}) => {
+const LibPickModal = ({library, onPick, onClose}) => {
+  const [q, setQ] = useState('');
+  const hits = library.filter(it => it.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="libpick">
+        <div className="lp-head">
+          <span>Add from library</span>
+          <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={15}/></button>
+        </div>
+        <input className="lp-search" autoFocus placeholder="Search library" value={q} onChange={e => setQ(e.target.value)}/>
+        <div className="lp-list">
+          {hits.map(it => (
+            <div key={it.id} className="recent-row" onClick={() => onPick(it)}>
+              <KindIcon kind={it.kind}/>
+              <div style={{minWidth: 0}}>
+                <div className="r-name">{it.name}</div>
+                <div className="r-date">Last modified {it.modified}</div>
+              </div>
+            </div>
+          ))}
+          {hits.length === 0 && <div className="s-none">Nothing by that name.</div>}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const Composer = ({text, setText, model, setModel, onSend, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, onToggleApp, onConnectApp}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
   const [appsOpen, setAppsOpen] = useState(false);
+  const [libOpen, setLibOpen] = useState(false);
   const [phIdx, setPhIdx] = useState(0);
   const fileRef = useRef(null);
   const taRef = useRef(null);
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); } };
+    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); setLibOpen(false); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -961,6 +1011,14 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, pr
             ))}
           </div>
         )}
+        <div className="ta-wrap">
+          <textarea ref={taRef} rows={1} value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
+          {!text && (ph
+            ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
+            : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
+        </div>
         <div className="crow crow-rel">
           <input ref={fileRef} type="file" multiple style={{display: 'none'}}
             onChange={e => {
@@ -972,10 +1030,10 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, pr
               e.target.value = '';
             }}/>
           <button className="cbtn" title="Add" onClick={() => setPlusOpen(true)}><IcPlus/></button>
-          {plusOpen && <PlusMenu library={library || []} projects={projects || []}
+          {plusOpen && <PlusMenu library={library || []} projects={projects || []} drop={drop}
             onAttachFile={() => { setPlusOpen(false); fileRef.current.click(); }}
             onAttachRecent={it => { setPlusOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
-            onOpenLibrary={() => { setPlusOpen(false); onOpenLibrary && onOpenLibrary(); }}
+            onOpenLibrary={() => { setPlusOpen(false); setLibOpen(true); }}
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
           {apps && (
@@ -985,24 +1043,20 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, pr
                 const Ic = APP_ICONS[a.id] || IcGrid;
                 return <button key={a.id} className="app-chip" title={a.name + ' — connected (preview)'} onClick={() => setAppsOpen(true)}><span className="sb-ic"><Ic size={14}/></span>{a.name}<IcChevD size={11}/></button>;
               })}
-              {appsOpen && <AppsDrop apps={apps} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
+              {appsOpen && <AppsDrop apps={apps} drop={drop} onToggle={onToggleApp} onConnect={onConnectApp} onClose={() => setAppsOpen(false)}/>}
             </React.Fragment>
           )}
-          <div className="ta-wrap">
-            <textarea ref={taRef} rows={1} value={text}
-              onChange={e => setText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}/>
-            {!text && (ph
-              ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
-              : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
-          </div>
+          <div className="cspace"/>
           <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model)}</span><IcChevD size={12}/></button>
           <button className="cbtn" title="Voice — not in this preview"><IcMic/></button>
           <button className="csend" disabled={busy || !text.trim()} title={text.trim() ? 'Send' : 'Voice — not in this preview'}
             onClick={send}>{text.trim() ? <IcSend size={15}/> : <IcVoice size={15}/>}</button>
-          {modelOpen && <ModelDrop model={model} onPick={m => { setModel(m); setModelOpen(false); }} onClose={() => setModelOpen(false)}/>}
+          {modelOpen && <ModelDrop model={model} drop={drop} onPick={m => { setModel(m); setModelOpen(false); }} onClose={() => setModelOpen(false)}/>}
         </div>
       </div>
+      {libOpen && <LibPickModal library={library || []}
+        onPick={it => { setLibOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+        onClose={() => setLibOpen(false)}/>}
     </div>
   );
 };
@@ -1065,7 +1119,7 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtr
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
         <div className="land-greet">Ready when you are.</div>
-        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} drop="down" onViewImage={onViewImage} {...composerExtras}/>
         <div className="chips">
           <button className="chip" onClick={() => setText('Write or edit ')}><span className="sb-ic"><IcPenLine size={13}/></span>Write or edit</button>
           <button className="chip" onClick={() => setText('Look something up: ')}><span className="sb-ic"><IcGlobe size={13}/></span>Look something up</button>
@@ -1286,7 +1340,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 );
 
 /* ─── project page ─── */
-const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource, composerExtras, onViewImage}) => {
+const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
   const fileRef = useRef(null);
@@ -1301,7 +1355,7 @@ const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAdd
         </div>
         <div className="proj-comp">
           <Composer text={text} setText={setText} model={model} setModel={setModel}
-            onSend={onSend} busy={false} ph={'New chat in ' + project.name} onViewImage={onViewImage} {...composerExtras}/>
+            onSend={onSend} busy={false} ph={'New chat in ' + project.name} drop="down" onViewImage={onViewImage} {...composerExtras}/>
         </div>
         <div className="tab-row">
           {['Chats', 'Sources'].map(t => (
@@ -1319,11 +1373,21 @@ const ProjectPage = ({project, chats, model, setModel, onSend, onOpenChat, onAdd
             </div>
           ) : (
             <div>
-              {mine.map(c => (
-                <div key={c.id} className="proj-chat-row" onClick={() => onOpenChat(c.id)}>
-                  <span className="sb-ic"><IcChat size={14}/></span>{c.title}
-                </div>
-              ))}
+              {mine.map(c => {
+                const last = c.messages[c.messages.length - 1];
+                const snip = last ? last.text.replace(/\s+/g, ' ').slice(0, 56) : '';
+                return (
+                  <div key={c.id} className="proj-chat-row" onClick={() => onOpenChat(c.id)}>
+                    <div className="pcr-main">
+                      <div className="pcr-title">{c.title}</div>
+                      {snip && <div className="pcr-snip">{snip}</div>}
+                    </div>
+                    <span className="pcr-date">{c.created || 'Today'}</span>
+                    <button className="chat-dots pcr-dots" title="Options"
+                      onClick={e => { e.stopPropagation(); onChatMenu(c.id, e); }}><IcDots size={15}/></button>
+                  </div>
+                );
+              })}
             </div>
           )
         ) : (
@@ -1737,7 +1801,14 @@ const App = () => {
 
   const chatMenuAction = (id, action) => {
     setMenu(null);
-    if (action === 'rename') { setRenamingId(id); return; }
+    if (action === 'rename') {
+      const chat = chats.find(c => c.id === id);
+      setSidebar('open');
+      setSecOpen(s => ({...s, projects: true, recents: true}));
+      if (chat && chat.projectId) setExpandedProj(e => ({...e, [chat.projectId]: true}));
+      setRenamingId(id);
+      return;
+    }
     if (action === 'share') return;
     setChats(cs => {
       if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
@@ -1834,7 +1905,7 @@ const App = () => {
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
-      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, messages: [userMsg, aMsg]}, ...cs]);
+      setChats(cs => [{id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', messages: [userMsg, aMsg]}, ...cs]);
       setActiveChatId(chatId);
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
@@ -1912,6 +1983,7 @@ const App = () => {
               model={selModel} setModel={setSelModel}
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
               onAddSource={f => addSource(activeProject.id, f)}
+              onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, onToggleApp: toggleApp, onConnectApp: connectApp}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
