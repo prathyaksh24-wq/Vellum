@@ -921,6 +921,11 @@ const Composer = ({text, setText, model, setModel, onSend, busy, ph, library, pr
   const fileRef = useRef(null);
   const taRef = useRef(null);
   useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') { setPlusOpen(false); setAppsOpen(false); setModelOpen(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
     if (text || ph) return;
     const t = setInterval(() => setPhIdx(i => (i + 1) % PLACEHOLDERS.length), 3000);
     return () => clearInterval(t);
