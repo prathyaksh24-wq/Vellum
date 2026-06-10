@@ -114,6 +114,29 @@
 - [ ] New checks: Create-project modal (name + Project-only memory) → project page opens; "New chat in" composer creates nested chat (sidebar indent, breadcrumb, absent from Recents); Remove from project moves chat to Recents; Sources tab Add sources via `setInputFiles` → row + Library entry; delete project keeps its chats in Recents. Update older checks that assumed inline-rename project creation.
 - [ ] Full suite green. Commit + push.
 
+## Addendum D tasks (10/06/2026, fourth pass — spec Addendum D)
+
+### Task 14: Sidebar sections — Coding link, Ledger, Skills, Memory, Archive
+**Files:** Modify `vellum-default.html`.
+- [ ] Seeds: `SEED_SKILLS` ({proposed, active, retired} arrays with name/trigger/uses/last fields per CLAUDE.md skill JSON), `SEED_MEMORY` (portrait facts with category), ledger dummy numbers.
+- [ ] Sidebar nav rows after Library: Coding (→ `window.location.assign('vellum-workspace.html')`), Ledger, Skills, Memory, Archive (views). Rail icons for Coding/Ledger/Skills/Memory.
+- [ ] `LedgerView`: stat rows (today tokens+cost, thread tokens, recent models i./ii./iii., week totals) + footer "Filed locally. Nothing sent."
+- [ ] `SkillsView`: tabs Proposed/Active/Retired; Approve moves proposed→active; Retire moves active→retired; counts in tabs.
+- [ ] `MemoryView`: fact rows (category chip + text + Forget trash) + stats line + privacy footer.
+- [ ] `ArchiveView`: archived chats with Restore/Delete; empty state.
+- [ ] Compile gate. Commit + push.
+
+### Task 15: Settings modal
+**Files:** Modify `vellum-default.html`.
+- [ ] `SettingsModal` (two-pane): General (theme control, plan, app line) · Reflections (dummy digest/reflection/provocation entries) · Saved (list) · Feeds (X/YouTube/Sports rows + switches, preview note) · Computer use (status pill, Enable/Stand down, Ctrl+Alt+Esc note, preview note).
+- [ ] Profile popover Settings row → opens modal (no longer dim); Esc/backdrop close; feeds + computer-use state in App.
+- [ ] Compile gate. Commit + push.
+
+### Task 16: Smoke coverage for sections + settings
+**Files:** Modify `smoke-default.mjs`.
+- [ ] Checks: Coding row present with workspace title (no navigation); Ledger renders footer line; Skills approve → Active count up; Memory forget → fact count down; archive chat → Archive view → Restore → back in Recents; Settings modal via profile (tabs, X-feed toggle, Computer use enable → active pill).
+- [ ] Full suite green. Commit + push.
+
 ## Task 6: Profile popover + Edit-profile modal + final polish
 **Files:** Modify `vellum-default.html`.
 - [ ] `ProfilePopover` (anchored above profile row): email line; account row (avatar, displayName, IcCheck) ; `Add account` (dim hint "not in this preview"); divider; rows Upgrade plan / Personalization / **Profile** / Settings / Help / Log out — all dim-hint no-ops except Profile → opens Edit-profile modal.

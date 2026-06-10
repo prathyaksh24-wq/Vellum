@@ -250,6 +250,45 @@ dim/absent, honest); consistency ✓ (modal/popover/menu/rename patterns reused)
 (memory setting stored and displayed but marked preview-only by the shell title);
 testability ✓ (smoke: modal create, in-project chat, nesting, remove-from, sources add).
 
+## Addendum D (10/06/2026, fourth pass) — repo-grounded sections + Settings
+
+User accepted the repo-grounded sidebar proposal with two edits: the secondary items
+(Reflections, Saved, Feeds, Computer use) live **inside Settings** (the existing profile
+popover row), and **Coding wires to `vellum-workspace.html`** (not `vellum-coding.html`).
+
+### D1. New sidebar sections (nav group, after Library; rail icons too)
+- **Coding** — navigates the window to `vellum-workspace.html` (same folder; the existing
+  workspace preview is the coding surface). No new view in this file.
+- **Ledger** (`view:'ledger'`) — from the TUI spec + audit-log fields: today's tokens/cost,
+  current-thread tokens, recent models breakdown (lowercase Roman numerals), this week's
+  totals, footer "Filed locally. Nothing sent." Dummy numbers.
+- **Skills** (`view:'skills'`) — the self-learning loop made visible: tabs Proposed /
+  Active / Retired (mirrors `.skills/` dirs). Proposed cards show trigger terms + an
+  **Approve** action (→ Active); Active cards show use counts + **Retire** (→ Retired).
+- **Memory** (`view:'memory'`) — "what Vellum knows": portrait facts (Honcho-style) with a
+  per-fact **Forget** action, plus cache/index stat line and a privacy footer.
+- **Archive** (`view:'archive'`) — archived chats (closes today's dead end): rows with
+  **Restore** (→ Recents) and **Delete**. Empty state "Nothing archived."
+
+### D2. Settings modal (profile popover → Settings)
+ChatGPT-style two-pane modal: left section nav, right content. Sections:
+- **General** — theme (dark/light control mirroring the titlebar toggle), plan "Private",
+  app line "vellum — preview".
+- **Reflections** — recent nightly digest / weekly reflection / monthly provocation entries
+  (dummy, dated DD/MM, readable one-liners).
+- **Saved** — saved responses (`Agent/Saved/` analog), small list.
+- **Feeds** — X / YouTube / Sports ingestion rows with last-sync info and an on/off switch
+  (state only, honest "preview" note).
+- **Computer use** — status pill + **Enable** / **Stand down** buttons (state only;
+  "Ctrl+Alt+Esc to stop" note; clearly marked preview, no real session).
+
+Audit deltas: intent ✓ (exactly the accepted split; Coding → workspace.html per user);
+YAGNI ✓ (no real ingestion/sessions; Reinstate-from-retired omitted); brand ✓ (ledger
+footer, one-word actions, no celebration); consistency ✓ (views reuse page/tab/list
+patterns; modal reuses modal/backdrop); honesty ✓ (preview notes on feeds + computer use);
+testability ✓ (smoke: each view renders, approve/retire, forget, archive→restore,
+settings tabs + toggles).
+
 ## Appendix A — Brainstorm audit (9 lenses)
 
 1. **Intent** — User asked for ChatGPT-shell parity with listed deletions/additions, default
