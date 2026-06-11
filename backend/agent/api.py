@@ -30,7 +30,7 @@ from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
-from agent.config import get_settings
+from agent.config import REPO_ROOT, get_settings
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
@@ -513,15 +513,57 @@ def _coding_session_json(session: CodingSession) -> dict[str, Any]:
 
 def _hidden_coding_file(name: str) -> bool:
     lowered = name.casefold()
-    return lowered in {".env", ".env.local", ".env.production"} or lowered.endswith(".pem") or lowered.endswith(".key")
+    secret_names = {
+        ".aws",
+        ".env",
+        ".npmrc",
+        ".pypirc",
+        ".ssh",
+        "id_ed25519",
+        "id_rsa",
+    }
+    return (
+        lowered in secret_names
+        or lowered.startswith(".env.")
+        or lowered.endswith(".pem")
+        or lowered.endswith(".key")
+    )
+
+
+def _coding_project_roots() -> list[Path]:
+    roots = {REPO_ROOT.resolve(), Path.cwd().resolve()}
+    try:
+        settings = get_settings()
+        roots.add(settings.obsidian_vault_path.resolve())
+        roots.add(settings.filesystem_mcp_path.resolve())
+    except Exception:
+        pass
+    try:
+        for session in coding_service.list_sessions():
+            roots.add(Path(session.cwd).expanduser().resolve())
+    except Exception:
+        pass
+    return sorted(roots, key=lambda path: str(path).casefold())
+
+
+def _is_allowed_coding_project_root(path: Path) -> bool:
+    return any(path == root or path.is_relative_to(root) for root in _coding_project_roots())
 
 
 def _project_tree(root: str) -> dict[str, Any]:
     base = Path(root).expanduser().resolve()
     if not base.exists() or not base.is_dir():
         raise HTTPException(status_code=404, detail="Project not found.")
+    if not _is_allowed_coding_project_root(base):
+        raise HTTPException(status_code=403, detail="Project root is not allowed.")
     items: list[dict[str, Any]] = []
-    for path in sorted(base.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold())):
+    try:
+        paths = sorted(base.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold()))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Project root is not readable.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Project root could not be read.") from exc
+    for path in paths:
         if _hidden_coding_file(path.name):
             continue
         items.append(
@@ -534,6 +576,17 @@ def _project_tree(root: str) -> dict[str, Any]:
         if len(items) >= 250:
             break
     return {"root": str(base), "items": items}
+
+
+def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
+    message = str(exc)
+    if "not found" in message.casefold():
+        return HTTPException(status_code=404, detail=message)
+    if "already has a running turn" in message.casefold():
+        return HTTPException(status_code=409, detail=message)
+    if "not installed" in message.casefold() or "not configured" in message.casefold():
+        return HTTPException(status_code=503, detail=message)
+    return HTTPException(status_code=400, detail=message)
 
 
 @router.get("/health")
@@ -1598,7 +1651,7 @@ async def coding_session_create(body: CodingSessionBody) -> dict[str, Any]:
             )
         )
     except CodingServiceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _coding_http_exception(exc) from exc
     return _coding_session_json(session)
 
 
@@ -1607,17 +1660,33 @@ async def coding_session_get(session_id: str) -> dict[str, Any]:
     try:
         return _coding_session_json(coding_service.get_session(session_id))
     except CodingServiceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _coding_http_exception(exc) from exc
 
 
 @router.post("/coding/sessions/{session_id}/turns/stream")
 async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> StreamingResponse:
+    try:
+        session = coding_service.get_session(session_id)
+        if session.status == "running":
+            raise CodingServiceError("Coding session already has a running turn.")
+        stream = coding_service.run_turn(session_id, body.prompt)
+        first_event = await anext(stream)
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    except StopAsyncIteration:
+        async def empty_events():
+            if False:
+                yield ""
+
+        return StreamingResponse(empty_events(), media_type="text/event-stream")
+
     async def events():
+        yield coding_sse(first_event)
         try:
-            async for event in coding_service.run_turn(session_id, body.prompt):
+            async for event in stream:
                 yield coding_sse(event)
         except CodingServiceError as exc:
-            yield _sse("error", {"error": str(exc)})
+            yield _sse("error", {"type": "error", "message": str(exc)})
 
     return StreamingResponse(events(), media_type="text/event-stream")
 
@@ -1627,7 +1696,7 @@ async def coding_session_stop(session_id: str) -> dict[str, Any]:
     try:
         await coding_service.stop_turn(session_id)
     except CodingServiceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise _coding_http_exception(exc) from exc
     return {"ok": True}
 
 
@@ -1636,7 +1705,7 @@ async def coding_session_events(session_id: str) -> dict[str, Any]:
     try:
         return {"events": [event_payload(event) for event in coding_service.list_events(session_id)]}
     except CodingServiceError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise _coding_http_exception(exc) from exc
 
 
 @router.get("/coding/projects/tree")
