@@ -114,6 +114,11 @@ class UnavailableProviderCodingService(FakeCodingService):
         return [ProviderHealth(ProviderName.codex, False, False, "Codex SDK is not installed.")]
 
 
+class UnavailableCreateWouldSucceedCodingService(FakeCodingService):
+    def health(self):
+        return [ProviderHealth(ProviderName.claude, False, False, "Claude Agent SDK is not installed.")]
+
+
 def test_coding_health_endpoint(monkeypatch):
     monkeypatch.setattr(api, "coding_service", FakeCodingService())
 
@@ -146,6 +151,18 @@ def test_coding_session_create_provider_unavailable_returns_503(monkeypatch, tmp
         response = client.post(
             "/api/coding/sessions",
             json={"provider": "codex", "cwd": str(tmp_path), "access_mode": "read_only"},
+        )
+
+    assert response.status_code == 503
+
+
+def test_coding_session_create_preflights_unavailable_provider(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "coding_service", UnavailableCreateWouldSucceedCodingService())
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions",
+            json={"provider": "claude", "cwd": str(tmp_path), "access_mode": "read_only"},
         )
 
     assert response.status_code == 503

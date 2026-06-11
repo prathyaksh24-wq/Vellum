@@ -1665,6 +1665,7 @@ async def coding_sessions() -> dict[str, Any]:
 @router.post("/coding/sessions")
 async def coding_session_create(body: CodingSessionBody) -> dict[str, Any]:
     try:
+        _ensure_coding_provider_ready(body.provider)
         session = await coding_service.create_session(
             CodingSessionCreate(
                 provider=body.provider,
