@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+import re
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
+from agent.tools.web import extract_web_sources, web_search
+
+
+SearchVideosBackend = Callable[[str, int], list[dict[str, Any]]]
+TranscriptBackend = Callable[[dict[str, Any]], dict[str, Any] | None]
+
+
+class YoutubeCapabilityService:
+    def __init__(
+        self,
+        vault_root: Path,
+        search_backend: SearchVideosBackend | None = None,
+        transcript_backend: TranscriptBackend | None = None,
+    ) -> None:
+        self.vault_root = Path(vault_root)
+        self.search_backend = search_backend or self._default_search_videos
+        self.transcript_backend = transcript_backend or self._default_fetch_transcript
+
+    def build_registry(self) -> ToolRegistry:
+        registry = ToolRegistry()
+        allowed_agents = frozenset({"YoutubeAgent", "VellumAgent", "ResearchAgent", "MemoryAgent"})
+        registry.register(
+            CapabilityRecord(
+                name="youtube.search_videos",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Searched YouTube",
+                adapter=self.search_videos,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.fetch_transcript",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Fetched YouTube transcript",
+                adapter=self.fetch_transcript,
+            )
+        )
+        return registry
+
+    def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload.get("query") or "").strip()
+        max_results = _positive_int(payload.get("max_results"), default=5)
+        if not query:
+            return {"action": "youtube.search_videos", "items": []}
+        items = [
+            self._normalize_video(item)
+            for item in self.search_backend(query, max_results)
+        ]
+        return {"action": "youtube.search_videos", "items": items[:max_results]}
+
+    def fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
+        result = self.transcript_backend(payload)
+        if not result:
+            return {
+                "action": "youtube.fetch_transcript",
+                "video_id": str(payload.get("video_id") or ""),
+                "transcript": "",
+                "path": "",
+            }
+        return {
+            "action": "youtube.fetch_transcript",
+            "video_id": str(result.get("video_id") or payload.get("video_id") or ""),
+            "transcript": str(result.get("transcript") or ""),
+            "path": str(result.get("path") or ""),
+        }
+
+    def _normalize_video(self, item: dict[str, Any]) -> dict[str, str]:
+        url = _string(item.get("url") or item.get("watchUrl") or item.get("link"))
+        video_id = _string(
+            item.get("video_id")
+            or item.get("videoId")
+            or item.get("id")
+            or _video_id_from_url(url)
+        )
+        return {
+            "video_id": video_id,
+            "title": _string(item.get("title") or item.get("name")),
+            "url": url or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
+            "channel": _string(item.get("channel") or item.get("channelName") or item.get("author")),
+            "published_at": _string(item.get("published_at") or item.get("publishedAt") or item.get("date")),
+            "description": _string(item.get("description") or item.get("snippet") or item.get("body")),
+            "transcript": _string(item.get("transcript") or item.get("transcriptText")),
+        }
+
+    def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
+        output = web_search.invoke({"query": f"site:youtube.com/watch {query}"})
+        sources = extract_web_sources(str(output))
+        return [
+            {
+                "title": source.get("title", ""),
+                "url": source.get("url", ""),
+                "description": source.get("snippet", ""),
+            }
+            for source in sources
+            if "youtube.com" in str(source.get("url", ""))
+        ][:max_results]
+
+    def _default_fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        video_id = str(payload.get("video_id") or "").strip()
+        query = str(payload.get("query") or "").strip().lower()
+        youtube_root = self.vault_root / "Library" / "Youtube"
+        if not youtube_root.exists():
+            return None
+
+        for path in sorted(youtube_root.rglob("*.md")):
+            text = path.read_text(encoding="utf-8")
+            lowered = text.lower()
+            if video_id and video_id not in text:
+                continue
+            if query and query not in lowered:
+                continue
+            transcript = _extract_transcript(text)
+            return {
+                "video_id": video_id or _frontmatter_value(text, "video_id"),
+                "transcript": transcript,
+                "path": path.relative_to(self.vault_root).as_posix(),
+            }
+        return None
+
+
+def _extract_transcript(text: str) -> str:
+    match = re.search(r"(?is)^##\s+Transcript\s*(.+?)(?:\n##\s+|\Z)", text, flags=re.MULTILINE)
+    if match:
+        return match.group(1).strip()
+    body = re.sub(r"(?s)^---.*?---\s*", "", text).strip()
+    return body
+
+
+def _frontmatter_value(text: str, key: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(key)}:\s*\"?([^\"\n]+)\"?\s*$", text)
+    return match.group(1).strip() if match else ""
+
+
+def _positive_int(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(1, parsed)
+
+
+def _video_id_from_url(url: str) -> str:
+    match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
+    return match.group(1) if match else ""
+
+
+def _string(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)

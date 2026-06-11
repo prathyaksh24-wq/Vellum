@@ -9,6 +9,7 @@ from agent.master.registry import PupilRegistry
 from agent.master.state import MasterThreadStateStore
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
+from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 from agent.agents import (
     MemoryAgent,
     MemoryProposal,
@@ -251,10 +252,21 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
             }
         ]
     )
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Arsenal highlights",
+                "url": "https://www.youtube.com/watch?v=arsenal123",
+                "channel": "Arsenal",
+                "description": "Title parade and player reactions.",
+            }
+        ],
+    )
     registry = PupilRegistry(
         {
             "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
-            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault"),
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
             "MemoryAgent": MemoryAgent(vault_root=tmp_path / "Vault"),
             "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault"),
         }
@@ -276,8 +288,9 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert youtube_result is not None
     assert youtube_result.agent_name == "YoutubeAgent"
-    assert "full YouTube specialist execution deferred" in youtube_result.answer
-    assert youtube_result.tools == ["youtube_agent"]
+    assert "Arsenal highlights" in youtube_result.answer
+    assert youtube_result.tools == ["youtube_agent", "web_search"]
+    assert youtube_result.sources[0]["url"] == "https://www.youtube.com/watch?v=arsenal123"
 
     assert memory_result is not None
     assert memory_result.agent_name == "MemoryAgent"
@@ -465,15 +478,44 @@ def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
     assert "network unavailable" in response.analysis
 
 
-def test_youtube_agent_stub_defers_full_execution(tmp_path):
-    agent = YoutubeAgent(vault_root=tmp_path)
+def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Arsenal parade highlights",
+                "url": "https://www.youtube.com/watch?v=abc123XYZ09",
+                "channel": "Arsenal",
+                "description": "Premier League title parade highlights.",
+                "transcript": "Players lifted the trophy in north London.",
+            }
+        ],
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
 
-    response = agent.answer("Summarize the latest YouTube videos")
+    response = agent.answer("Summarize Arsenal highlights on YouTube")
 
     assert agent.name == "YoutubeAgent"
     assert agent.can_handle("youtube channel transcript")
+    assert response.status == "answered"
+    assert "Arsenal parade highlights" in response.summary
+    assert "Players lifted the trophy" in response.summary
+    assert response.sources[0].kind == "web"
+    assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
+    assert "youtube.search_videos" in response.analysis
+
+
+def test_youtube_agent_returns_needs_fetch_when_service_has_no_results(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [],
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+
+    response = agent.answer("Summarize latest YouTube videos")
+
     assert response.status == "needs_fetch"
-    assert "full YouTube specialist execution deferred" in response.summary
+    assert "did not find matching YouTube videos" in response.summary
 
 
 def test_memory_agent_answers_from_memory_capability_context(tmp_path):
