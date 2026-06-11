@@ -17,6 +17,19 @@ def test_pupil_registry_exposes_default_pupils(tmp_path):
     assert hasattr(registry.get("XAgent"), "x_service")
 
 
+def test_default_pupil_registry_shares_one_tool_registry(tmp_path):
+    registry = PupilRegistry.default(vault_root=tmp_path)
+
+    x_registry = registry.get("XAgent").tool_registry
+    youtube_registry = registry.get("YoutubeAgent").tool_registry
+    memory_registry = registry.get("MemoryAgent").tool_registry
+
+    assert x_registry is not None
+    assert x_registry is youtube_registry
+    assert x_registry is memory_registry
+    assert "youtube.search_videos" in x_registry.names()
+
+
 def test_pupil_registry_prioritizes_explicit_source_agents_over_sports(tmp_path):
     registry = PupilRegistry.default(vault_root=tmp_path)
 

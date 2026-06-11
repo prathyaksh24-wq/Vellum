@@ -10,6 +10,7 @@ from agent.master.state import MasterThreadStateStore
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 from agent.agents import (
     MemoryAgent,
     MemoryProposal,
@@ -450,6 +451,29 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
     assert response.sources[0].path_or_url == "https://x.com/naval/status/1"
 
 
+def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="x.search_posts",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"XAgent"}),
+            stream_label="Searched X",
+            adapter=lambda payload: calls.append(payload) or {
+                "items": [{"text": "Registry X result", "handle": "nba", "url": "https://x.com/nba/status/2"}]
+            },
+        )
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer("What did NBA post on X?")
+
+    assert calls == [{"query": "What did NBA post on X?", "max_results": 5}]
+    assert "Registry X result" in response.summary
+
+
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
     agent = XAgent(vault_root=tmp_path, x_service=service)
@@ -505,6 +529,35 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
     assert "youtube.search_videos" in response.analysis
 
 
+def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="youtube.search_videos",
+            namespace="youtube",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"YoutubeAgent"}),
+            stream_label="Searched YouTube",
+            adapter=lambda payload: calls.append(payload) or {
+                "items": [
+                    {
+                        "title": "Registry YouTube result",
+                        "url": "https://www.youtube.com/watch?v=registry123",
+                        "description": "Registry-backed search.",
+                    }
+                ]
+            },
+        )
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer("Summarize YouTube videos")
+
+    assert calls == [{"query": "Summarize YouTube videos", "max_results": 5}]
+    assert "Registry YouTube result" in response.summary
+
+
 def test_youtube_agent_returns_needs_fetch_when_service_has_no_results(tmp_path):
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
@@ -539,6 +592,29 @@ def test_memory_agent_answers_from_memory_capability_context(tmp_path):
     assert response.sources[0].kind == "memory"
     assert response.sources[0].path_or_url == "Agent/Memories/Shared/sports-style.md"
     assert "memory.build_context_pack" in response.analysis
+
+
+def test_memory_agent_invokes_shared_tool_registry_when_provided(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="memory.build_context_pack",
+            namespace="memory",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"MemoryAgent"}),
+            stream_label="Built memory context",
+            adapter=lambda payload: calls.append(("context", payload)) or {
+                "cards": [{"path": "Agent/Memories/Shared/style.md", "text": "User likes direct answers."}]
+            },
+        )
+    )
+    agent = MemoryAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer("What do you remember about style?")
+
+    assert calls == [("context", {"query": "What do you remember about style?", "agent_name": "MemoryAgent"})]
+    assert "direct answers" in response.summary
 
 
 def test_memory_agent_proposes_query_specific_memory_without_mutating(tmp_path):

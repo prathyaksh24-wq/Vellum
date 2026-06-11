@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agent.agents.base import MemoryProposal, SpecialistResponse, SpecialistSource
-from agent.tools.capabilities.memory_service import MemoryCapabilityService
+from agent.tools.registry import ToolRegistry
+
+if TYPE_CHECKING:
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
 
 class MemoryAgent:
@@ -23,11 +27,14 @@ class MemoryAgent:
         vault_root: Path,
         memory_service: MemoryCapabilityService | None = None,
         sessions_db: Path | None = None,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
-        self.memory_service = memory_service or MemoryCapabilityService(
-            vault_root=self.vault_root,
-            sessions_db=sessions_db or self.vault_root / "Agent" / "Memory" / "memory-agent-sessions.db",
+        self.tool_registry = tool_registry
+        self.memory_service = memory_service or (
+            None
+            if tool_registry is not None
+            else self._default_memory_service(sessions_db)
         )
 
     def can_handle(self, query: str) -> bool:
@@ -41,9 +48,7 @@ class MemoryAgent:
         return self._answer_memory_lookup(clean_query)
 
     def _answer_memory_lookup(self, query: str) -> SpecialistResponse:
-        pack = self.memory_service.build_context_pack(
-            {"query": query, "agent_name": self.name}
-        )
+        pack = self._memory_invoke("memory.build_context_pack", {"query": query, "agent_name": self.name})
         cards = pack.get("cards") or []
         if not cards:
             return SpecialistResponse(
@@ -83,7 +88,8 @@ class MemoryAgent:
     def _answer_remember_instruction(self, query: str) -> SpecialistResponse:
         memory_text = self._memory_text_from_instruction(query)
         claim = f"User asked Vellum to remember: {self._sentence(memory_text)}"
-        proposal_result = self.memory_service.propose_card(
+        proposal_result = self._memory_invoke(
+            "memory.propose_card",
             {
                 "scope": "memory",
                 "claim": claim,
@@ -91,7 +97,8 @@ class MemoryAgent:
                 "confidence": 0.8,
             }
         )
-        reviewed = self.memory_service.review_proposals(
+        reviewed = self._memory_invoke(
+            "memory.review_proposals",
             {"proposals": [proposal_result.get("proposal", {})]}
         )
         proposals = [
@@ -109,6 +116,20 @@ class MemoryAgent:
 
     def review_proposals(self, proposals: list[MemoryProposal]) -> list[MemoryProposal]:
         return [proposal for proposal in proposals if proposal.confidence >= 0.75]
+
+    def _memory_invoke(self, name: str, payload: dict) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke(name, payload, agent_name=self.name)
+        action = name.rsplit(".", 1)[-1]
+        return getattr(self.memory_service, action)(payload)
+
+    def _default_memory_service(self, sessions_db: Path | None):
+        from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+        return MemoryCapabilityService(
+            vault_root=self.vault_root,
+            sessions_db=sessions_db or self.vault_root / "Agent" / "Memory" / "memory-agent-sessions.db",
+        )
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
