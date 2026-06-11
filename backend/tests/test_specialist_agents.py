@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.master.registry import PupilRegistry
 from agent.master.state import MasterThreadStateStore
+from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.agents import (
     MemoryAgent,
@@ -280,7 +281,7 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
 
     assert memory_result is not None
     assert memory_result.agent_name == "MemoryAgent"
-    assert "does not mutate shared memory directly" in memory_result.answer
+    assert "Prepared a reviewed memory proposal" in memory_result.answer
     assert memory_result.tools == ["memory_agent"]
 
 
@@ -316,6 +317,34 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
     assert x_result.agent_name == "XAgent"
     assert state_store.get("thread-1").active_agent == "XAgent"
     assert main_result is None
+
+
+def test_live_dispatcher_forwards_memory_sources_for_workspace_ui(tmp_path):
+    vault = tmp_path / "Vault"
+    memory_dir = vault / "Agent" / "Memories" / "Shared"
+    memory_dir.mkdir(parents=True)
+    (memory_dir / "answer-style.md").write_text(
+        "User prefers concise answers with direct next steps.",
+        encoding="utf-8",
+    )
+    registry = PupilRegistry(
+        {
+            "MemoryAgent": MemoryAgent(vault_root=vault),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=vault,
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("What do you remember about my answer preference?", thread_id="mem-thread")
+
+    assert result is not None
+    assert result.agent_name == "MemoryAgent"
+    assert result.sources
+    assert result.sources[0]["url"] == "Agent/Memories/Shared/answer-style.md"
+    assert result.sources[0]["domain"] == "memory"
 
 
 def test_specialist_router_delegates_sports_queries(tmp_path):
@@ -447,17 +476,43 @@ def test_youtube_agent_stub_defers_full_execution(tmp_path):
     assert "full YouTube specialist execution deferred" in response.summary
 
 
-def test_memory_agent_stub_answers_without_mutating_shared_memory(tmp_path):
-    agent = MemoryAgent(vault_root=tmp_path)
+def test_memory_agent_answers_from_memory_capability_context(tmp_path):
+    vault = tmp_path / "Vault"
+    memory_dir = vault / "Agent" / "Memories" / "Shared"
+    memory_dir.mkdir(parents=True)
+    (memory_dir / "sports-style.md").write_text(
+        "---\nscope: shared\n---\n\nUser prefers concise sports analysis with injuries first.\n",
+        encoding="utf-8",
+    )
+    memory_service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(vault_root=vault, memory_service=memory_service)
 
-    response = agent.answer("Remember my sports analysis preference")
+    response = agent.answer("What do you remember about my sports analysis preference?")
 
     assert agent.name == "MemoryAgent"
     assert agent.can_handle("remember my preference")
     assert response.status == "answered"
-    assert "does not mutate shared memory directly" in response.summary
+    assert "concise sports analysis" in response.summary
+    assert response.sources
+    assert response.sources[0].kind == "memory"
+    assert response.sources[0].path_or_url == "Agent/Memories/Shared/sports-style.md"
+    assert "memory.build_context_pack" in response.analysis
+
+
+def test_memory_agent_proposes_query_specific_memory_without_mutating(tmp_path):
+    vault = tmp_path / "Vault"
+    memory_service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    agent = MemoryAgent(vault_root=vault, memory_service=memory_service)
+
+    response = agent.answer("Remember that I prefer short answers")
+
+    assert response.status == "answered"
+    assert "Prepared a reviewed memory proposal" in response.summary
     assert response.memory_proposals
-    assert all(proposal.confidence >= 0.75 for proposal in response.memory_proposals)
+    assert response.memory_proposals[0].claim == "User asked Vellum to remember: I prefer short answers."
+    assert response.memory_proposals[0].evidence == "Remember that I prefer short answers"
+    assert response.memory_proposals[0].confidence >= 0.75
+    assert not (vault / "Agent" / "Memories").exists()
 
 
 def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
