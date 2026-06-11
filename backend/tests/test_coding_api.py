@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from fastapi.testclient import TestClient
 
 from agent import api
+from agent.coding.adapters.base import CodingAdapterError
 from agent.coding.models import AccessMode, CodingEvent, ProviderHealth, ProviderName, utc_now
 from agent.coding.service import CodingServiceError
 
@@ -101,6 +102,18 @@ class RunningSessionCodingService(FakeCodingService):
         )()
 
 
+class FailingCreateCodingService(FakeCodingService):
+    async def create_session(self, request):
+        raise CodingServiceError("Coding session failed to start.") from CodingAdapterError(
+            "Codex SDK is not installed."
+        )
+
+
+class UnavailableProviderCodingService(FakeCodingService):
+    def health(self):
+        return [ProviderHealth(ProviderName.codex, False, False, "Codex SDK is not installed.")]
+
+
 def test_coding_health_endpoint(monkeypatch):
     monkeypatch.setattr(api, "coding_service", FakeCodingService())
 
@@ -124,6 +137,18 @@ def test_coding_session_create_endpoint(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert response.json()["id"] == "code_1"
     assert response.json()["provider_session_id"] == "thread_1"
+
+
+def test_coding_session_create_provider_unavailable_returns_503(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "coding_service", FailingCreateCodingService())
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions",
+            json={"provider": "codex", "cwd": str(tmp_path), "access_mode": "read_only"},
+        )
+
+    assert response.status_code == 503
 
 
 def test_coding_turn_stream_endpoint(monkeypatch):
@@ -154,6 +179,15 @@ def test_coding_turn_stream_running_session_returns_409(monkeypatch):
         response = client.post("/api/coding/sessions/code_1/turns/stream", json={"prompt": "hello"})
 
     assert response.status_code == 409
+
+
+def test_coding_turn_stream_provider_unavailable_returns_503(monkeypatch):
+    monkeypatch.setattr(api, "coding_service", UnavailableProviderCodingService())
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/coding/sessions/code_1/turns/stream", json={"prompt": "hello"})
+
+    assert response.status_code == 503
 
 
 def test_coding_stop_missing_session_returns_404(monkeypatch):

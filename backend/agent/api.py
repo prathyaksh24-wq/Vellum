@@ -516,9 +516,13 @@ def _hidden_coding_file(name: str) -> bool:
     secret_names = {
         ".aws",
         ".env",
+        ".envrc",
+        ".netrc",
         ".npmrc",
         ".pypirc",
         ".ssh",
+        "id_dsa",
+        "id_ecdsa",
         "id_ed25519",
         "id_rsa",
     }
@@ -527,6 +531,8 @@ def _hidden_coding_file(name: str) -> bool:
         or lowered.startswith(".env.")
         or lowered.endswith(".pem")
         or lowered.endswith(".key")
+        or lowered.endswith(".p12")
+        or lowered.endswith(".pfx")
     )
 
 
@@ -569,7 +575,7 @@ def _project_tree(root: str) -> dict[str, Any]:
         items.append(
             {
                 "name": path.name,
-                "path": str(path),
+                "path": path.relative_to(base).as_posix(),
                 "kind": "directory" if path.is_dir() else "file",
             }
         )
@@ -580,13 +586,30 @@ def _project_tree(root: str) -> dict[str, Any]:
 
 def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
     message = str(exc)
-    if "not found" in message.casefold():
+    cause = exc.__cause__
+    cause_message = str(cause) if cause is not None else ""
+    searchable = f"{message} {cause_message}".casefold()
+    if "not found" in searchable:
         return HTTPException(status_code=404, detail=message)
-    if "already has a running turn" in message.casefold():
+    if "already has a running turn" in searchable:
         return HTTPException(status_code=409, detail=message)
-    if "not installed" in message.casefold() or "not configured" in message.casefold():
+    if (
+        "not installed" in searchable
+        or "not configured" in searchable
+        or "sdk unavailable" in searchable
+        or "failed to start" in searchable
+    ):
         return HTTPException(status_code=503, detail=message)
     return HTTPException(status_code=400, detail=message)
+
+
+def _ensure_coding_provider_ready(provider: ProviderName) -> None:
+    for health in coding_service.health():
+        if health.provider == provider:
+            if not health.available or not health.configured:
+                raise CodingServiceError(health.message)
+            return
+    raise CodingServiceError("Provider is not configured.")
 
 
 @router.get("/health")
@@ -1669,6 +1692,7 @@ async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> Streaming
         session = coding_service.get_session(session_id)
         if session.status == "running":
             raise CodingServiceError("Coding session already has a running turn.")
+        _ensure_coding_provider_ready(session.provider)
         stream = coding_service.run_turn(session_id, body.prompt)
         first_event = await anext(stream)
     except CodingServiceError as exc:
