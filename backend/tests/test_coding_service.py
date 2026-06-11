@@ -330,21 +330,16 @@ def test_service_stop_turn_rejects_missing_turn_id(tmp_path: Path):
     assert adapter.stopped == []
 
 
-def test_service_stop_turn_rejects_idle_session_without_turn_id(tmp_path: Path):
+def test_service_stop_turn_without_running_turn_stops_session(tmp_path: Path):
     adapter = StopRecordingAdapter()
     store = CodingSessionStore(tmp_path / "coding.db")
     service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
     session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
 
-    try:
-        asyncio.run(service.stop_turn(session.id))
-    except CodingServiceError as exc:
-        assert str(exc) == "Coding turn is not running."
-    else:
-        raise AssertionError("expected idle stop failure")
+    asyncio.run(service.stop_turn(session.id))
 
-    assert service.get_session(session.id).status == "idle"
-    assert adapter.stopped == []
+    assert service.get_session(session.id).status == "stopped"
+    assert adapter.stopped == [(session.id, "")]
 
 
 def test_service_initialization_marks_stale_running_turns_stopped(tmp_path: Path):

@@ -133,7 +133,7 @@ class CodingSessionService:
     async def stop_turn(self, session_id: str, turn_id: str | None = None) -> None:
         session = self.get_session(session_id)
         active_turn = self.store.get_turn(turn_id) if turn_id else self.store.get_running_turn(session.id)
-        if active_turn is None:
+        if turn_id is not None and active_turn is None:
             raise CodingServiceError("Coding turn is not running.")
         if active_turn and active_turn.session_id != session.id:
             raise CodingServiceError("Coding turn does not belong to session.")
