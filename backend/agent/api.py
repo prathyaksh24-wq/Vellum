@@ -23,6 +23,9 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
+from agent.coding.events import event_payload, sse as coding_sse
+from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName
+from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
@@ -50,6 +53,7 @@ from agent.voice.tts import get_tts_engine
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
 terminal_session_manager = TerminalSessionManager()
+coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
 _live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
 
@@ -133,6 +137,17 @@ class ReindexResponse(BaseModel):
 
 class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+
+
+class CodingSessionBody(BaseModel):
+    provider: ProviderName
+    cwd: str = Field(min_length=1)
+    access_mode: AccessMode = AccessMode.read_only
+    title: str = ""
+
+
+class CodingTurnBody(BaseModel):
+    prompt: str = Field(min_length=1)
 
 
 def _computer_use_overlay() -> DesktopActivityOverlay:
@@ -480,6 +495,45 @@ def _embedding_health() -> dict[str, Any]:
         return {"ok": True, "provider": "sentence-transformers"}
     except Exception as exc:
         return {"ok": False, "provider": "sentence-transformers", "error": str(exc)}
+
+
+def _coding_session_json(session: CodingSession) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "provider": session.provider.value,
+        "provider_session_id": session.provider_session_id,
+        "cwd": session.cwd,
+        "access_mode": session.access_mode.value,
+        "title": session.title,
+        "status": session.status,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+    }
+
+
+def _hidden_coding_file(name: str) -> bool:
+    lowered = name.casefold()
+    return lowered in {".env", ".env.local", ".env.production"} or lowered.endswith(".pem") or lowered.endswith(".key")
+
+
+def _project_tree(root: str) -> dict[str, Any]:
+    base = Path(root).expanduser().resolve()
+    if not base.exists() or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found.")
+    items: list[dict[str, Any]] = []
+    for path in sorted(base.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold())):
+        if _hidden_coding_file(path.name):
+            continue
+        items.append(
+            {
+                "name": path.name,
+                "path": str(path),
+                "kind": "directory" if path.is_dir() else "file",
+            }
+        )
+        if len(items) >= 250:
+            break
+    return {"root": str(base), "items": items}
 
 
 @router.get("/health")
@@ -1510,6 +1564,89 @@ async def public_settings() -> dict[str, Any]:
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
     }
+
+
+@router.get("/coding/health")
+async def coding_health() -> dict[str, Any]:
+    providers = []
+    for health in coding_service.health():
+        providers.append(
+            {
+                "provider": health.provider.value,
+                "available": health.available,
+                "configured": health.configured,
+                "message": health.message,
+            }
+        )
+    return {"providers": providers}
+
+
+@router.get("/coding/sessions")
+async def coding_sessions() -> dict[str, Any]:
+    return {"sessions": [_coding_session_json(session) for session in coding_service.list_sessions()]}
+
+
+@router.post("/coding/sessions")
+async def coding_session_create(body: CodingSessionBody) -> dict[str, Any]:
+    try:
+        session = await coding_service.create_session(
+            CodingSessionCreate(
+                provider=body.provider,
+                cwd=body.cwd,
+                access_mode=body.access_mode,
+                title=body.title,
+            )
+        )
+    except CodingServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _coding_session_json(session)
+
+
+@router.get("/coding/sessions/{session_id}")
+async def coding_session_get(session_id: str) -> dict[str, Any]:
+    try:
+        return _coding_session_json(coding_service.get_session(session_id))
+    except CodingServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/coding/sessions/{session_id}/turns/stream")
+async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> StreamingResponse:
+    async def events():
+        try:
+            async for event in coding_service.run_turn(session_id, body.prompt):
+                yield coding_sse(event)
+        except CodingServiceError as exc:
+            yield _sse("error", {"error": str(exc)})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@router.post("/coding/sessions/{session_id}/stop")
+async def coding_session_stop(session_id: str) -> dict[str, Any]:
+    try:
+        await coding_service.stop_turn(session_id)
+    except CodingServiceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.get("/coding/sessions/{session_id}/events")
+async def coding_session_events(session_id: str) -> dict[str, Any]:
+    try:
+        return {"events": [event_payload(event) for event in coding_service.list_events(session_id)]}
+    except CodingServiceError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/coding/projects/tree")
+async def coding_project_tree(root: str) -> dict[str, Any]:
+    return _project_tree(root)
+
+
+@router.get("/coding/projects/recent")
+async def coding_recent_projects() -> dict[str, Any]:
+    return {"projects": []}
 
 
 _SETUP_STATE_PATH = Path("data/memory/setup_state.json")
