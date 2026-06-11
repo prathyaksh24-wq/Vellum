@@ -61,6 +61,24 @@ def test_coding_store_updates_provider_session_and_records_turn_events(tmp_path:
     assert store.list_events(session.id)[0].id == event.id
 
 
+def test_coding_store_finish_running_turn_only_allows_one_terminal_transition(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))
+    turn = store.create_turn(session.id, "Run tests")
+
+    first = store.finish_running_turn(turn.id, status="stopped", error="first stop")
+    second = store.finish_running_turn(turn.id, status="stopped", error="second stop")
+
+    assert first is not None
+    assert first.status == "stopped"
+    assert first.error == "first stop"
+    assert second is None
+    persisted = store.get_turn(turn.id)
+    assert persisted is not None
+    assert persisted.status == "stopped"
+    assert persisted.error == "first stop"
+
+
 def test_coding_store_rejects_orphan_turns_and_events(tmp_path: Path):
     store = CodingSessionStore(tmp_path / "coding.db")
 

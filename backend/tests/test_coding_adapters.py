@@ -12,6 +12,11 @@ from agent.coding.adapters.codex import CodexAdapter, codex_sandbox_name
 from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName, utc_now
 
 
+def test_adapter_dependency_module_names_are_stable():
+    assert CodexAdapter().sdk_module_name == "openai_codex"
+    assert ClaudeAdapter().sdk_module_name == "claude_agent_sdk"
+
+
 def test_codex_health_reports_missing_dependency(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
 
@@ -67,6 +72,8 @@ def test_claude_message_text_extracts_content_blocks_without_repr():
 
 def test_codex_start_session_resolves_cwd_and_returns_thread_id(monkeypatch, tmp_path):
     calls = []
+    find_spec_calls = []
+    import_module_calls = []
 
     class FakeSandbox:
         read_only = "read_only"
@@ -88,11 +95,12 @@ def test_codex_start_session_resolves_cwd_and_returns_thread_id(monkeypatch, tmp
             return FakeThread()
 
     fake_module = SimpleNamespace(AsyncCodex=FakeCodex, Sandbox=FakeSandbox)
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr("importlib.import_module", lambda name: fake_module)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: find_spec_calls.append(name) or object())
+    monkeypatch.setattr("importlib.import_module", lambda name: import_module_calls.append(name) or fake_module)
 
+    adapter = CodexAdapter()
     provider_session_id = asyncio.run(
-        CodexAdapter().start_session(
+        adapter.start_session(
             CodingSessionCreate(
                 provider=ProviderName.codex,
                 cwd=str(tmp_path / ".." / tmp_path.name),
@@ -102,6 +110,8 @@ def test_codex_start_session_resolves_cwd_and_returns_thread_id(monkeypatch, tmp
     )
 
     assert provider_session_id == "codex-thread-from-start"
+    assert find_spec_calls == [adapter.sdk_module_name]
+    assert import_module_calls == [adapter.sdk_module_name]
     assert calls == [{"cwd": str(tmp_path.resolve()), "sandbox": "full_access"}]
 
 
@@ -181,6 +191,8 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
 
 def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_path):
     options_seen = []
+    find_spec_calls = []
+    import_module_calls = []
 
     class FakeOptions:
         def __init__(self, **kwargs):
@@ -199,8 +211,8 @@ def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_p
         yield SimpleNamespace(session_id="claude-session-3", result="claude done")
 
     fake_module = SimpleNamespace(query=fake_query, ClaudeAgentOptions=FakeOptions)
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
-    monkeypatch.setattr("importlib.import_module", lambda name: fake_module)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: find_spec_calls.append(name) or object())
+    monkeypatch.setattr("importlib.import_module", lambda name: import_module_calls.append(name) or fake_module)
 
     session = CodingSession(
         id="code_1",
@@ -213,7 +225,8 @@ def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_p
         updated_at=utc_now(),
     )
 
-    events = asyncio.run(_collect(ClaudeAdapter().run_turn(session, "fix tests", "turn_1")))
+    adapter = ClaudeAdapter()
+    events = asyncio.run(_collect(adapter.run_turn(session, "fix tests", "turn_1")))
 
     assert [event.type for event in events] == [
         "session.resumed",
@@ -225,6 +238,8 @@ def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_p
     assert events[1].payload == {"text": "working now"}
     assert events[2].payload == {"provider_session_id": "claude-session-3"}
     assert events[3].payload == {"text": "claude done"}
+    assert find_spec_calls == [adapter.sdk_module_name]
+    assert import_module_calls == [adapter.sdk_module_name]
     assert options_seen == [
         {"cwd": str(tmp_path), "permission_mode": "acceptEdits", "resume": "claude-session-1"}
     ]

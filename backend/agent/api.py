@@ -23,11 +23,14 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
+from agent.coding.events import event_payload, sse as coding_sse
+from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName
+from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
-from agent.config import get_settings
+from agent.config import REPO_ROOT, get_settings
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
@@ -50,6 +53,7 @@ from agent.voice.tts import get_tts_engine
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
 terminal_session_manager = TerminalSessionManager()
+coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
 _live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
 
@@ -133,6 +137,17 @@ class ReindexResponse(BaseModel):
 
 class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+
+
+class CodingSessionBody(BaseModel):
+    provider: ProviderName
+    cwd: str = Field(min_length=1)
+    access_mode: AccessMode = AccessMode.read_only
+    title: str = ""
+
+
+class CodingTurnBody(BaseModel):
+    prompt: str = Field(min_length=1)
 
 
 def _computer_use_overlay() -> DesktopActivityOverlay:
@@ -480,6 +495,121 @@ def _embedding_health() -> dict[str, Any]:
         return {"ok": True, "provider": "sentence-transformers"}
     except Exception as exc:
         return {"ok": False, "provider": "sentence-transformers", "error": str(exc)}
+
+
+def _coding_session_json(session: CodingSession) -> dict[str, Any]:
+    return {
+        "id": session.id,
+        "provider": session.provider.value,
+        "provider_session_id": session.provider_session_id,
+        "cwd": session.cwd,
+        "access_mode": session.access_mode.value,
+        "title": session.title,
+        "status": session.status,
+        "created_at": session.created_at,
+        "updated_at": session.updated_at,
+    }
+
+
+def _hidden_coding_file(name: str) -> bool:
+    lowered = name.casefold()
+    secret_names = {
+        ".aws",
+        ".env",
+        ".envrc",
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+        ".ssh",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+        "id_rsa",
+    }
+    return (
+        lowered in secret_names
+        or lowered.startswith(".env.")
+        or lowered.endswith(".pem")
+        or lowered.endswith(".key")
+        or lowered.endswith(".p12")
+        or lowered.endswith(".pfx")
+    )
+
+
+def _coding_project_roots() -> list[Path]:
+    roots = {REPO_ROOT.resolve(), Path.cwd().resolve()}
+    try:
+        settings = get_settings()
+        roots.add(settings.obsidian_vault_path.resolve())
+        roots.add(settings.filesystem_mcp_path.resolve())
+    except Exception:
+        pass
+    try:
+        for session in coding_service.list_sessions():
+            roots.add(Path(session.cwd).expanduser().resolve())
+    except Exception:
+        pass
+    return sorted(roots, key=lambda path: str(path).casefold())
+
+
+def _is_allowed_coding_project_root(path: Path) -> bool:
+    return any(path == root or path.is_relative_to(root) for root in _coding_project_roots())
+
+
+def _project_tree(root: str) -> dict[str, Any]:
+    base = Path(root).expanduser().resolve()
+    if not base.exists() or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not _is_allowed_coding_project_root(base):
+        raise HTTPException(status_code=403, detail="Project root is not allowed.")
+    items: list[dict[str, Any]] = []
+    try:
+        paths = sorted(base.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold()))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Project root is not readable.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Project root could not be read.") from exc
+    for path in paths:
+        if _hidden_coding_file(path.name):
+            continue
+        items.append(
+            {
+                "name": path.name,
+                "path": path.relative_to(base).as_posix(),
+                "kind": "directory" if path.is_dir() else "file",
+            }
+        )
+        if len(items) >= 250:
+            break
+    return {"root": str(base), "items": items}
+
+
+def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
+    message = str(exc)
+    cause = exc.__cause__
+    cause_message = str(cause) if cause is not None else ""
+    searchable = f"{message} {cause_message}".casefold()
+    if "not found" in searchable:
+        return HTTPException(status_code=404, detail=message)
+    if "already has a running turn" in searchable:
+        return HTTPException(status_code=409, detail=message)
+    if (
+        "not installed" in searchable
+        or "not configured" in searchable
+        or "sdk unavailable" in searchable
+        or "failed to start" in searchable
+    ):
+        return HTTPException(status_code=503, detail=message)
+    return HTTPException(status_code=400, detail=message)
+
+
+def _ensure_coding_provider_ready(provider: ProviderName) -> None:
+    for health in coding_service.health():
+        if health.provider == provider:
+            if not health.available or not health.configured:
+                raise CodingServiceError(health.message)
+            return
+    raise CodingServiceError("Provider is not configured.")
 
 
 @router.get("/health")
@@ -1510,6 +1640,107 @@ async def public_settings() -> dict[str, Any]:
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
     }
+
+
+@router.get("/coding/health")
+async def coding_health() -> dict[str, Any]:
+    providers = []
+    for health in coding_service.health():
+        providers.append(
+            {
+                "provider": health.provider.value,
+                "available": health.available,
+                "configured": health.configured,
+                "message": health.message,
+            }
+        )
+    return {"providers": providers}
+
+
+@router.get("/coding/sessions")
+async def coding_sessions() -> dict[str, Any]:
+    return {"sessions": [_coding_session_json(session) for session in coding_service.list_sessions()]}
+
+
+@router.post("/coding/sessions")
+async def coding_session_create(body: CodingSessionBody) -> dict[str, Any]:
+    try:
+        _ensure_coding_provider_ready(body.provider)
+        session = await coding_service.create_session(
+            CodingSessionCreate(
+                provider=body.provider,
+                cwd=body.cwd,
+                access_mode=body.access_mode,
+                title=body.title,
+            )
+        )
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    return _coding_session_json(session)
+
+
+@router.get("/coding/sessions/{session_id}")
+async def coding_session_get(session_id: str) -> dict[str, Any]:
+    try:
+        return _coding_session_json(coding_service.get_session(session_id))
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.post("/coding/sessions/{session_id}/turns/stream")
+async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> StreamingResponse:
+    try:
+        session = coding_service.get_session(session_id)
+        if session.status == "running":
+            raise CodingServiceError("Coding session already has a running turn.")
+        _ensure_coding_provider_ready(session.provider)
+        stream = coding_service.run_turn(session_id, body.prompt)
+        first_event = await anext(stream)
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    except StopAsyncIteration:
+        async def empty_events():
+            if False:
+                yield ""
+
+        return StreamingResponse(empty_events(), media_type="text/event-stream")
+
+    async def events():
+        yield coding_sse(first_event)
+        try:
+            async for event in stream:
+                yield coding_sse(event)
+        except CodingServiceError as exc:
+            yield _sse("error", {"type": "error", "message": str(exc)})
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@router.post("/coding/sessions/{session_id}/stop")
+async def coding_session_stop(session_id: str) -> dict[str, Any]:
+    try:
+        await coding_service.stop_turn(session_id)
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    return {"ok": True}
+
+
+@router.get("/coding/sessions/{session_id}/events")
+async def coding_session_events(session_id: str) -> dict[str, Any]:
+    try:
+        return {"events": [event_payload(event) for event in coding_service.list_events(session_id)]}
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.get("/coding/projects/tree")
+async def coding_project_tree(root: str) -> dict[str, Any]:
+    return _project_tree(root)
+
+
+@router.get("/coding/projects/recent")
+async def coding_recent_projects() -> dict[str, Any]:
+    return {"projects": []}
 
 
 _SETUP_STATE_PATH = Path("data/memory/setup_state.json")

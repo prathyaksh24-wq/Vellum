@@ -56,9 +56,10 @@ def claude_permission_mode(access_mode: AccessMode) -> str:
 
 class ClaudeAdapter:
     provider = ProviderName.claude
+    sdk_module_name = "claude_agent_sdk"
 
     def health(self) -> ProviderHealth:
-        available = importlib.util.find_spec("claude_agent_sdk") is not None
+        available = importlib.util.find_spec(self.sdk_module_name) is not None
         return ProviderHealth(
             provider=self.provider,
             available=available,
@@ -70,9 +71,9 @@ class ClaudeAdapter:
         return None
 
     async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
-        if importlib.util.find_spec("claude_agent_sdk") is None:
+        if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Claude Agent SDK is not installed.")
-        module = importlib.import_module("claude_agent_sdk")
+        module = importlib.import_module(self.sdk_module_name)
         query = getattr(module, "query")
         ClaudeAgentOptions = getattr(module, "ClaudeAgentOptions")
         options = ClaudeAgentOptions(

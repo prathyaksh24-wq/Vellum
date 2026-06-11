@@ -20,9 +20,10 @@ def codex_sandbox_name(access_mode: AccessMode) -> str:
 
 class CodexAdapter:
     provider = ProviderName.codex
+    sdk_module_name = "openai_codex"
 
     def health(self) -> ProviderHealth:
-        available = importlib.util.find_spec("openai_codex") is not None
+        available = importlib.util.find_spec(self.sdk_module_name) is not None
         return ProviderHealth(
             provider=self.provider,
             available=available,
@@ -31,9 +32,9 @@ class CodexAdapter:
         )
 
     async def start_session(self, request: CodingSessionCreate) -> str | None:
-        if importlib.util.find_spec("openai_codex") is None:
+        if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Codex SDK is not installed.")
-        module = importlib.import_module("openai_codex")
+        module = importlib.import_module(self.sdk_module_name)
         AsyncCodex = getattr(module, "AsyncCodex")
         Sandbox = getattr(module, "Sandbox")
         sandbox = getattr(Sandbox, codex_sandbox_name(request.access_mode))
@@ -44,9 +45,9 @@ class CodexAdapter:
         return extract_codex_thread_id(thread)
 
     async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
-        if importlib.util.find_spec("openai_codex") is None:
+        if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Codex SDK is not installed.")
-        module = importlib.import_module("openai_codex")
+        module = importlib.import_module(self.sdk_module_name)
         AsyncCodex = getattr(module, "AsyncCodex")
         Sandbox = getattr(module, "Sandbox")
         sandbox = getattr(Sandbox, codex_sandbox_name(session.access_mode))

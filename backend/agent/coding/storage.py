@@ -203,6 +203,31 @@ class CodingSessionStore:
             raise KeyError(turn_id)
         return self._turn_from_row(row)
 
+    def finish_running_turn(
+        self,
+        turn_id: str,
+        *,
+        status: str,
+        final_response: str = "",
+        error: str = "",
+    ) -> CodingTurn | None:
+        completed_at = utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE coding_turns
+                SET status = ?, completed_at = ?, final_response = ?, error = ?
+                WHERE id = ? AND status = 'running'
+                """,
+                (status, completed_at, final_response, error, turn_id),
+            )
+            row = conn.execute("SELECT * FROM coding_turns WHERE id = ?", (turn_id,)).fetchone()
+        if row is None:
+            raise KeyError(turn_id)
+        if cursor.rowcount == 0:
+            return None
+        return self._turn_from_row(row)
+
     def get_turn(self, turn_id: str) -> CodingTurn | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM coding_turns WHERE id = ?", (turn_id,)).fetchone()
