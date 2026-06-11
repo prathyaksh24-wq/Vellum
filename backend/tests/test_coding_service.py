@@ -96,6 +96,43 @@ class FailingAfterStopAdapter(FakeAdapter):
         yield
 
 
+class QuietAfterStopAdapter(StopRecordingAdapter):
+    def __init__(self):
+        super().__init__()
+        self.release = asyncio.Event()
+
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        await self.release.wait()
+        if False:
+            yield CodingEvent("", session.id, turn_id, self.provider, "assistant.final", "done", {}, utc_now())
+
+    async def stop_turn(self, session: CodingSession, turn_id: str) -> None:
+        await super().stop_turn(session, turn_id)
+        self.release.set()
+
+
+class CompletingDuringStopAdapter(StopRecordingAdapter):
+    def __init__(self):
+        super().__init__()
+        self.stop_started = asyncio.Event()
+        self.stop_release = asyncio.Event()
+
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        await self.stop_started.wait()
+        yield CodingEvent("", session.id, turn_id, self.provider, "assistant.final", "done", {"text": "late"}, utc_now())
+
+    async def stop_turn(self, session: CodingSession, turn_id: str) -> None:
+        await super().stop_turn(session, turn_id)
+        self.stop_started.set()
+        await self.stop_release.wait()
+
+
+class FailingStopAdapter(StopRecordingAdapter):
+    async def stop_turn(self, session: CodingSession, turn_id: str) -> None:
+        await super().stop_turn(session, turn_id)
+        raise RuntimeError("stop failed")
+
+
 def test_service_creates_session_and_records_provider_id(tmp_path: Path):
     service = CodingSessionService(
         store=CodingSessionStore(tmp_path / "coding.db"),
@@ -211,7 +248,7 @@ def test_service_honors_empty_adapter_map(tmp_path: Path):
 
     try:
         asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
-    except Exception as exc:
+    except CodingServiceError as exc:
         assert str(exc) == "Provider is not configured."
     else:
         raise AssertionError("expected missing provider failure")
@@ -365,6 +402,89 @@ def test_service_stop_turn_prevents_late_provider_error_from_overwriting_stopped
         "turn.started",
         "turn.stopped",
     ]
+
+
+def test_service_stop_turn_handles_provider_quiet_exit_without_completion(tmp_path: Path):
+    adapter = QuietAfterStopAdapter()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def run_stop_then_collect():
+        stream = service.run_turn(session.id, "hello")
+        first = await anext(stream)
+        await service.stop_turn(session.id)
+        remaining = [event async for event in stream]
+        return first, remaining
+
+    first, remaining = asyncio.run(run_stop_then_collect())
+
+    assert first.type == "turn.started"
+    assert remaining == []
+    turn = store.get_turn(first.turn_id)
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert turn.final_response == ""
+    assert adapter.stopped == [(session.id, first.turn_id)]
+    assert [event.type for event in store.list_events(session.id)] == [
+        "session.started",
+        "turn.started",
+        "turn.stopped",
+    ]
+
+
+def test_service_stop_turn_wins_when_provider_completes_while_stop_is_pending(tmp_path: Path):
+    adapter = CompletingDuringStopAdapter()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def run_race():
+        stream = service.run_turn(session.id, "hello")
+        first = await anext(stream)
+        stop_task = asyncio.create_task(service.stop_turn(session.id))
+        await adapter.stop_started.wait()
+        remaining = [event async for event in stream]
+        adapter.stop_release.set()
+        await stop_task
+        return first, remaining
+
+    first, remaining = asyncio.run(run_race())
+
+    assert first.type == "turn.started"
+    assert remaining == []
+    turn = store.get_turn(first.turn_id)
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert turn.final_response == ""
+    assert service.get_session(session.id).status == "stopped"
+    assert [event.type for event in store.list_events(session.id)] == [
+        "session.started",
+        "turn.started",
+        "turn.stopped",
+    ]
+
+
+def test_service_stop_turn_keeps_local_stopped_state_when_provider_stop_fails(tmp_path: Path):
+    adapter = FailingStopAdapter()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+    turn = store.create_turn(session.id, "hello")
+    store.set_session_status(session.id, "running")
+
+    try:
+        asyncio.run(service.stop_turn(session.id))
+    except RuntimeError as exc:
+        assert str(exc) == "stop failed"
+    else:
+        raise AssertionError("expected provider stop failure")
+
+    stopped_turn = store.get_turn(turn.id)
+    assert stopped_turn is not None
+    assert stopped_turn.status == "stopped"
+    assert service.get_session(session.id).status == "stopped"
+    assert store.list_events(session.id)[-1].type == "turn.stopped"
 
 
 def test_service_stop_turn_rejects_turn_from_another_session(tmp_path: Path):

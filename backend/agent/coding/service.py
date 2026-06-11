@@ -56,9 +56,9 @@ class CodingSessionService:
                 message="Coding session started",
                 payload={"cwd": session.cwd, "provider_session_id": session.provider_session_id},
             )
-        except Exception:
+        except Exception as exc:
             self.store.delete_session(session.id)
-            raise CodingServiceError("Coding session failed to start.") from None
+            raise CodingServiceError("Coding session failed to start.") from exc
         return session
 
     async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
@@ -97,7 +97,14 @@ class CodingSessionService:
                 if event.type == "assistant.final":
                     final_text = str(event.payload.get("text") or "")
                 yield event
-            self.store.complete_turn(turn.id, final_response=final_text)
+            current_turn = self.store.get_turn(turn.id)
+            if current_turn is not None and current_turn.status == "stopped":
+                turn_finished = True
+                return
+            completed_turn = self.store.finish_running_turn(turn.id, status="completed", final_response=final_text)
+            if completed_turn is None:
+                turn_finished = True
+                return
             self.store.set_session_status(session.id, "idle")
             turn_finished = True
             yield self.store.record_event(
@@ -114,7 +121,10 @@ class CodingSessionService:
                 turn_finished = True
                 return
             message = str(exc) or exc.__class__.__name__
-            self.store.complete_turn(turn.id, error=message)
+            errored_turn = self.store.finish_running_turn(turn.id, status="error", error=message)
+            if errored_turn is None:
+                turn_finished = True
+                return
             self.store.set_session_status(session.id, "error")
             turn_finished = True
             yield self.store.record_event(
@@ -127,8 +137,13 @@ class CodingSessionService:
             )
         finally:
             if not turn_finished:
-                self.store.finish_turn(turn.id, status="stopped", error="Coding turn cancelled.")
-                self.store.set_session_status(session.id, "stopped")
+                stopped_turn = self.store.finish_running_turn(
+                    turn.id,
+                    status="stopped",
+                    error="Coding turn cancelled.",
+                )
+                if stopped_turn is not None:
+                    self.store.set_session_status(session.id, "stopped")
 
     async def stop_turn(self, session_id: str, turn_id: str | None = None) -> None:
         session = self.get_session(session_id)
@@ -140,9 +155,15 @@ class CodingSessionService:
         if active_turn and active_turn.status != "running":
             raise CodingServiceError("Coding turn is not running.")
         active_turn_id = active_turn.id if active_turn else (turn_id or "")
-        await self._adapter(session.provider).stop_turn(session, active_turn_id)
         if active_turn:
-            self.store.finish_turn(active_turn.id, status="stopped", error="Coding turn stopped.")
+            stopped_turn = self.store.finish_running_turn(
+                active_turn.id,
+                status="stopped",
+                error="Coding turn stopped.",
+            )
+            if stopped_turn is None:
+                return
+            self.store.set_session_status(session.id, "stopped")
             self.store.record_event(
                 session_id=session.id,
                 turn_id=active_turn.id,
@@ -151,7 +172,9 @@ class CodingSessionService:
                 message="Coding turn stopped",
                 payload={"turn_id": active_turn.id},
             )
-        self.store.set_session_status(session.id, "stopped")
+        else:
+            self.store.set_session_status(session.id, "stopped")
+        await self._adapter(session.provider).stop_turn(session, active_turn_id)
 
     def list_events(self, session_id: str) -> list[CodingEvent]:
         self.get_session(session_id)
