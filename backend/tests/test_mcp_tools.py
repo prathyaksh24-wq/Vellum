@@ -117,6 +117,40 @@ def test_apify_tool_calls_mcp_and_returns_sanitized_result(monkeypatch, tmp_path
     assert seen["sse_read_timeout"] == 300
 
 
+def test_apify_youtube_search_calls_configured_actor_and_parses_items(monkeypatch):
+    fake_session = FakeSession(
+        text='[{"videoId":"yt1234567","title":"Arsenal analysis","url":"https://www.youtube.com/watch?v=yt1234567"}]'
+    )
+
+    monkeypatch.setattr(apify_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(apify_tools, "ClientSession", lambda read, write: fake_session)
+    monkeypatch.setattr(
+        apify_tools,
+        "get_settings",
+        lambda: SimpleNamespace(
+            apify_mcp_url="https://mcp.apify.com",
+            apify_api_token="token",
+            apify_youtube_actor="youtube/test-actor",
+            apify_amazon_actor="amazon/test-actor",
+            mcp_timeout_seconds=300,
+        ),
+    )
+
+    result = asyncio.run(apify_tools.search_youtube_videos_async("Arsenal analysis", 2))
+
+    assert result == [
+        {
+            "videoId": "yt1234567",
+            "title": "Arsenal analysis",
+            "url": "https://www.youtube.com/watch?v=yt1234567",
+        }
+    ]
+    assert fake_session.calls[0][0] == apify_tools.APIFY_CALL_ACTOR_TOOL
+    assert fake_session.calls[0][1]["actor"] == "youtube/test-actor"
+    assert fake_session.calls[0][1]["input"]["maxItems"] == 2
+    assert "Arsenal analysis" in fake_session.calls[0][1]["input"]["search"]
+
+
 def test_playwright_navigate_calls_core_mcp_tool(monkeypatch):
     fake_session = FakeSession(tools=["browser_navigate"], text='- heading "Example" [level=1]')
     seen = {}

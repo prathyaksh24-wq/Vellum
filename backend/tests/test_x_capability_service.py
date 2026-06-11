@@ -88,10 +88,65 @@ def test_x_service_publish_post_uses_settings_when_allow_posts_omitted(monkeypat
     assert result == {"action": "x.publish_post", "tweet": {"id": "1", "text": "hello"}}
 
 
+def test_x_service_private_oauth_reads_require_enabled_gate():
+    service = XCapabilityService(
+        account_backend=lambda: {"id": "42", "username": "vellum"},
+        bookmarks_backend=lambda user_id, max_results: {"data": []},
+        allow_private_reads=False,
+    )
+
+    try:
+        service.account({})
+    except ToolPermissionError as exc:
+        assert "X_TOOL_ALLOW_PRIVATE_READS=true" in str(exc)
+    else:
+        raise AssertionError("account read should require private-read env gate")
+
+    try:
+        service.bookmarks({"max_results": 3})
+    except ToolPermissionError as exc:
+        assert "X_TOOL_ALLOW_PRIVATE_READS=true" in str(exc)
+    else:
+        raise AssertionError("bookmark read should require private-read env gate")
+
+
+def test_x_service_account_and_bookmarks_use_oauth_backends():
+    calls = {}
+
+    def fake_account():
+        calls["account"] = True
+        return {"id": "42", "username": "vellum"}
+
+    def fake_bookmarks(user_id, max_results):
+        calls["bookmarks"] = {"user_id": user_id, "max_results": max_results}
+        return {
+            "data": [
+                {"id": "1", "text": "Useful post", "url": "https://x.com/vellum/status/1"},
+            ],
+            "meta": {"result_count": 1},
+        }
+
+    service = XCapabilityService(
+        account_backend=fake_account,
+        bookmarks_backend=fake_bookmarks,
+        allow_private_reads=True,
+    )
+
+    account = service.account({})
+    bookmarks = service.bookmarks({"max_results": 3})
+
+    assert account == {"action": "x.account", "account": {"id": "42", "username": "vellum"}}
+    assert bookmarks["items"][0]["text"] == "Useful post"
+    assert bookmarks["meta"] == {"result_count": 1}
+    assert calls == {"account": True, "bookmarks": {"user_id": "42", "max_results": 3}}
+
+
 def test_x_service_registers_capabilities_with_tool_registry():
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
     registry = service.build_registry()
 
     assert "x.search_posts" in registry.names()
     assert "x.publish_post" in registry.names()
+    assert "x.account" in registry.names()
+    assert "x.bookmarks" in registry.names()
     assert registry.get("x.search_posts").stream_label == "Searched X"

@@ -35,8 +35,12 @@ def test_mcp_health_each_server_has_required_keys(client: TestClient) -> None:
         assert "name" in entry
         assert "configured" in entry  # bool
         assert "endpoint" in entry
+        assert "reachable" in entry
+        assert "status" in entry
+        assert "probe" in entry
         assert "notes" in entry
         assert isinstance(entry["configured"], bool)
+        assert entry["probe"] in {"disabled", "live"}
 
 
 def test_mcp_health_includes_adjacent_services(client: TestClient) -> None:
@@ -45,3 +49,17 @@ def test_mcp_health_includes_adjacent_services(client: TestClient) -> None:
     assert "honcho" in body
     assert "reachable" in body["honcho"]
     assert "base_url" in body["honcho"]
+
+
+def test_mcp_health_live_probe_adds_reachability_status(client: TestClient, monkeypatch) -> None:
+    def _fake_probe(entry):
+        return {"reachable": True, "status": f"{entry['name']}:ok"}
+
+    monkeypatch.setattr(api_mod, "_probe_mcp_server", _fake_probe)
+
+    body = client.get("/api/mcp/health?probe=true").json()
+
+    for entry in body["mcp_servers"]:
+        assert entry["probe"] == "live"
+        assert entry["reachable"] is True
+        assert entry["status"].endswith(":ok")

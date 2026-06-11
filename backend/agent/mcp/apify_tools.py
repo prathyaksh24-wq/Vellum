@@ -9,6 +9,7 @@ prompt or user-visible tool response.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 from typing import Any
@@ -26,6 +27,32 @@ APIFY_CALL_ACTOR_TOOL = "call-actor"
 ASIN_RE = re.compile(r"\b(?:ASIN[:\s#-]*)?[A-Z0-9]{10}\b")
 URL_RE = re.compile(r"https?://\S+", re.I)
 PRESIDIO_URL_RE = re.compile(r"\[URL_\d+\]")
+YOUTUBE_VIDEO_FIELDS = (
+    "videoId",
+    "video_id",
+    "id",
+    "url",
+    "videoUrl",
+    "video_url",
+    "watchUrl",
+    "watch_url",
+    "link",
+    "title",
+    "name",
+    "channel",
+    "channelName",
+    "channel_name",
+    "author",
+    "publishedAt",
+    "published_at",
+    "date",
+    "description",
+    "snippet",
+    "body",
+    "transcript",
+    "transcriptText",
+    "transcript_text",
+)
 
 
 def _apify_mcp_url() -> str:
@@ -63,6 +90,90 @@ def _amazon_actor_input(query: str, max_items: int) -> dict:
         "getFullDetails": False,
         "headless": True,
     }
+
+
+def _youtube_actor_input(query: str, max_items: int) -> dict:
+    return {
+        "search": query,
+        "searchQuery": query,
+        "searchQueries": [query],
+        "maxItems": max_items,
+        "maxResults": max_items,
+        "maxVideos": max_items,
+        "includeTranscript": True,
+        "transcriptLanguage": "en",
+        "sortBy": "relevance",
+    }
+
+
+def _json_items(raw_text: str) -> list[dict[str, Any]]:
+    if not raw_text.strip():
+        return []
+    try:
+        payload = json.loads(raw_text)
+    except json.JSONDecodeError:
+        match = re.search(r"(?s)(\[.*\]|\{.*\})", raw_text)
+        if not match:
+            return []
+        try:
+            payload = json.loads(match.group(1))
+        except json.JSONDecodeError:
+            return []
+
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        items = next(
+            (
+                value
+                for key in ("items", "data", "results", "videos")
+                if isinstance((value := payload.get(key)), list)
+            ),
+            [],
+        )
+    else:
+        items = []
+
+    return [_safe_youtube_item(item) for item in items if isinstance(item, dict)]
+
+
+def _safe_youtube_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {key: item[key] for key in YOUTUBE_VIDEO_FIELDS if key in item and item[key] is not None}
+
+
+async def search_youtube_videos_async(query: str, max_results: int) -> list[dict[str, Any]]:
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    logger.info("[APIFY] Running YouTube search for: %s", query[:50])
+    timeout = get_settings().mcp_timeout_seconds
+    async with streamablehttp_client(
+        _apify_mcp_url(),
+        headers=_apify_headers(),
+        timeout=timeout,
+        sse_read_timeout=timeout,
+    ) as (read, write, _get_session_id):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(
+                APIFY_CALL_ACTOR_TOOL,
+                {
+                    "actor": get_settings().apify_youtube_actor,
+                    "input": _youtube_actor_input(query, int(max_results)),
+                    "previewOutput": True,
+                    "callOptions": {"timeout": timeout},
+                },
+            )
+            return _json_items(_content_text(result))[:max_results]
+
+
+def search_youtube_videos(query: str, max_results: int) -> list[dict[str, Any]]:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(search_youtube_videos_async(query, max_results))
+    raise RuntimeError("apify_tools.search_youtube_videos cannot run inside an active event loop.")
 
 
 async def _run_tool_inner(params: dict) -> str:
