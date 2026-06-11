@@ -93,15 +93,9 @@ class LiveAgentDispatcher:
             answer=response.summary,
             tools=tools,
             sources=[
-                {
-                    "url": source.path_or_url,
-                    "title": source.title,
-                    "snippet": "",
-                    "domain": self._domain(source.path_or_url),
-                    "fetched_at": source.captured_at,
-                }
+                self._source_record(source)
                 for source in response.sources
-                if source.kind == "web" and source.path_or_url
+                if source.path_or_url
             ],
         )
 
@@ -126,6 +120,16 @@ class LiveAgentDispatcher:
     def _domain(self, url: str) -> str:
         match = re.match(r"https?://(?:www\.)?([^/]+)", url)
         return match.group(1) if match else ""
+
+    def _source_record(self, source) -> dict[str, str]:
+        domain = self._domain(source.path_or_url) if source.kind == "web" else source.kind
+        return {
+            "url": source.path_or_url,
+            "title": source.title,
+            "snippet": "",
+            "domain": domain,
+            "fetched_at": source.captured_at,
+        }
 
     def _tool_name(self, agent_name: str) -> str:
         name = re.sub(r"(?<!^)(?=[A-Z])", "_", agent_name).lower()

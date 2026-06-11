@@ -69,7 +69,9 @@ Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
 - Specialist agents advise; Vellum decides.
 - SportsAgent handles on-demand public sports research, scores, news, injuries, standings, and analysis for any sport.
-- XAgent and YoutubeAgent are routed specialist surfaces; their first implementation may return contract-compatible stubs until full specialist loops are built.
+- XAgent handles X search through the shared X capability service when configured.
+- YoutubeAgent handles read-only YouTube search, metadata, and transcript-backed summaries through the shared YouTube capability service.
+- MemoryAgent handles durable memory lookup and reviewed memory proposals through the shared Memory capability service.
 
 Rules:
 - Always search the vault first.

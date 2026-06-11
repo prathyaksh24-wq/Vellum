@@ -122,3 +122,6 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "YoutubeAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "on-demand public sports research" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "transcript-backed summaries" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "durable memory lookup" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "contract-compatible stubs" not in agent_graph.VELLUM_SYSTEM_PROMPT

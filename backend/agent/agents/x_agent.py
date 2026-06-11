@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.tools.capabilities.x_service import XCapabilityService
+from agent.tools.registry import ToolRegistry
 
 
 class XAgent:
@@ -19,9 +20,15 @@ class XAgent:
         r"(?<!\w)on\s+x(?!\w)",
     )
 
-    def __init__(self, vault_root: Path, x_service: XCapabilityService | None = None) -> None:
+    def __init__(
+        self,
+        vault_root: Path,
+        x_service: XCapabilityService | None = None,
+        tool_registry: ToolRegistry | None = None,
+    ) -> None:
         self.vault_root = Path(vault_root)
-        self.x_service = x_service or XCapabilityService()
+        self.tool_registry = tool_registry
+        self.x_service = x_service or (None if tool_registry is not None else XCapabilityService())
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
@@ -31,7 +38,7 @@ class XAgent:
 
     def answer(self, query: str) -> SpecialistResponse:
         try:
-            result = self.x_service.search_posts({"query": query, "max_results": 5})
+            result = self._search_posts({"query": query, "max_results": 5})
         except Exception as exc:
             return SpecialistResponse(
                 agent=self.name,
@@ -73,6 +80,11 @@ class XAgent:
             sources=sources,
             confidence=0.75,
         )
+
+    def _search_posts(self, payload: dict) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("x.search_posts", payload, agent_name=self.name)
+        return self.x_service.search_posts(payload)
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None

@@ -8,6 +8,7 @@ from agent.agents.memory_agent import MemoryAgent
 from agent.agents.sports import SportsAgent
 from agent.agents.x_agent import XAgent
 from agent.agents.youtube import YoutubeAgent
+from agent.tools.capabilities.registry import build_shared_tool_registry
 
 
 class PupilRegistry:
@@ -17,10 +18,11 @@ class PupilRegistry:
     @classmethod
     def default(cls, vault_root: Path) -> "PupilRegistry":
         root = Path(vault_root)
+        tool_registry = build_shared_tool_registry(vault_root=root)
         pupils: list[SpecialistAgent] = [
-            XAgent(vault_root=root),
-            YoutubeAgent(vault_root=root),
-            MemoryAgent(vault_root=root),
+            XAgent(vault_root=root, tool_registry=tool_registry),
+            YoutubeAgent(vault_root=root, tool_registry=tool_registry),
+            MemoryAgent(vault_root=root, tool_registry=tool_registry),
             SportsAgent(vault_root=root),
         ]
         return cls({pupil.name: pupil for pupil in pupils})
