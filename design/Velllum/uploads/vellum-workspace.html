@@ -1665,8 +1665,32 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
               continue;
             }
             if(ev==="meta"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; }
+            else if(ev==="tool" && !semanticSeen){
+              if(j.name && tools.indexOf(j.name)<0) tools.push(j.name);
+              const act = {label:"Used "+(j.name||"tool"), detail:"", name:j.name||"tool", status:"running"};
+              activity = activity.concat([act]);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),tools:tools.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running"}));
+            }
+            else if(ev==="activity" && !semanticSeen){
+              activity = activity.concat([{label:j.label||"Agent activity", detail:j.detail||"", status:"running"}]);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running"}));
+            }
+            else if(ev==="source" && !semanticSeen){
+              sources = mergeSourceList(sources, j);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,sources:sources.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running",sources:mergeSourceList(p.sources, j)}));
+            }
             else if(ev==="token" && !semanticSeen){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
-            else if(ev==="final" && !semanticSeen){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; const fin=acc||j.answer||""; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:j.sources||[],tools:j.tools||[],thinking:false,streaming:false}:x)); }
+            else if(ev==="final" && !semanticSeen){
+              if(j.thread_id) threadRef.current[chatId]=j.thread_id;
+              const fin=acc||j.answer||"";
+              const finalSources = j.sources||sources;
+              const finalTools = j.tools||tools;
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:finalSources,tools:finalTools,activity:activity.slice(),thinking:false,streaming:false}:x));
+              setProgFor(chatId,p=>({...p,status:"done",sources:finalSources}));
+            }
           }catch(e){}
         }
       }
