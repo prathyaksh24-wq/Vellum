@@ -119,6 +119,79 @@ def test_service_creates_session_and_records_provider_id(tmp_path: Path):
     assert event.payload == {"cwd": str(tmp_path.resolve()), "provider_session_id": "provider-thread-1"}
 
 
+def test_service_reports_health_from_configured_adapters(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+
+    [health] = service.health()
+
+    assert health.provider == ProviderName.codex
+    assert health.available is True
+    assert health.configured is True
+    assert health.message == "ready"
+
+
+def test_service_lists_sessions_from_store(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+    first = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+    second = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    sessions = service.list_sessions()
+
+    assert [session.id for session in sessions] == [second.id, first.id]
+
+
+def test_service_get_session_rejects_missing_session(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+
+    try:
+        service.get_session("missing-session")
+    except CodingServiceError as exc:
+        assert str(exc) == "Coding session not found."
+    else:
+        raise AssertionError("expected missing session failure")
+
+
+def test_service_create_session_rejects_missing_project(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+
+    try:
+        asyncio.run(
+            service.create_session(
+                CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path / "missing-project"))
+            )
+        )
+    except CodingServiceError as exc:
+        assert str(exc) == "Project not found."
+    else:
+        raise AssertionError("expected missing project failure")
+
+
+def test_service_list_events_rejects_missing_session(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+
+    try:
+        service.list_events("missing-session")
+    except CodingServiceError as exc:
+        assert str(exc) == "Coding session not found."
+    else:
+        raise AssertionError("expected missing session failure")
+
+
 def test_service_does_not_persist_session_when_provider_start_fails(tmp_path: Path):
     store = CodingSessionStore(tmp_path / "coding.db")
     service = CodingSessionService(store=store, adapters={ProviderName.codex: FailingStartAdapter()})
