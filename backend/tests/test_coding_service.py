@@ -237,6 +237,8 @@ def test_service_does_not_persist_session_when_provider_start_fails(tmp_path: Pa
         asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
     except CodingServiceError as exc:
         assert str(exc) == "Coding session failed to start."
+        assert exc.__cause__ is not None
+        assert str(exc.__cause__) == "sdk unavailable"
     else:
         raise AssertionError("expected provider start failure")
 
