@@ -503,6 +503,14 @@ button{font-family:inherit}
 .mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
 .mode-chip:hover{color:#aaa;background:#181818}
 .mode-chip.active{color:#111;background:#d8d8d8}
+.coding-main-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;max-width:720px;margin:0 auto 10px;padding:9px 10px;background:#0f0f0f;border:1px solid #1e1e1e;border-radius:8px;color:#7d7d7d;font-size:12px}
+.coding-targets{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.coding-target-btn{border:1px solid #242424;background:#151515;color:#8b8b8b;border-radius:7px;padding:6px 9px;font-family:'Geist',sans-serif;font-size:12px;cursor:pointer}
+.coding-target-btn:hover{border-color:#333;color:#cfcfcf}
+.coding-target-btn.active{background:#dedede;border-color:#dedede;color:#111}
+.coding-root{display:flex;align-items:center;gap:7px;min-width:220px;flex:1;justify-content:flex-end}
+.coding-root-input{height:28px;min-width:190px;max-width:280px;background:#090909;border:1px solid #242424;border-radius:7px;color:#d0d0d0;padding:0 9px;font-family:'Geist Mono',monospace;font-size:11.5px}
+.coding-health{max-width:720px;margin:-4px auto 10px;color:#4d4d4d;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes tpulse{0%,100%{opacity:.25}50%{opacity:1}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -1125,7 +1133,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [codingHealth, setCodingHealth] = useState({providers:[]});
   const [codingSession, setCodingSession] = useState(null);
   const [codingEvents, setCodingEvents] = useState([]);
-  const [codingProjectRoot, setCodingProjectRoot] = useState("");
+  const [codingTarget, setCodingTarget] = useState("codex");
+  const [codingProjectRoot, setCodingProjectRoot] = useState("D:\\Vellum");
   const [codingProvider, setCodingProvider] = useState("codex");
   const [codingAccessMode, setCodingAccessMode] = useState("read_only");
   const [running, setRunning]         = useState(false);
@@ -1397,13 +1406,14 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     abortRef.current = null; setRunning(false);
   }
   /* Coding-mode backend bridge. */
-  async function ensureCodingSession(){
-    if(codingSession) return codingSession;
+  async function ensureCodingSession(provider){
+    const selectedProvider = provider || codingProvider;
+    if(codingSession && codingSession.provider===selectedProvider) return codingSession;
     const api = window.__vellumCodingApi;
     if(!api) throw new Error("Coding API unavailable.");
     if(!codingProjectRoot.trim()) throw new Error("Open a project folder first.");
     const session = await api.createSession({
-      provider: codingProvider,
+      provider: selectedProvider,
       cwd: codingProjectRoot.trim(),
       access_mode: codingAccessMode,
       title: chatTitleFor(activeChat) || "Coding session",
@@ -1415,10 +1425,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const payload = (data && data.payload) || {};
     return payload.text || data.message || "";
   }
-  async function runBackendCodingTurn(chatId, aid, userText){
+  async function runBackendCodingTurn(chatId, aid, userText, provider){
     let answer = "";
     try{
-      const session = await ensureCodingSession();
+      const session = await ensureCodingSession(provider);
       setProgFor(chatId, prog=> ({...prog, status:"running"}));
       await window.__vellumCodingApi.runTurn(session.id, userText, (evt)=>{
         const data = evt.data || {};
@@ -1473,7 +1483,12 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const userMsg = { id:uid, type:"user", text:t, atts:atts };
     setMsgsFor(chatId, m=> [...m, userMsg, { id:aid, type:"assistant", text:"", streaming:true, thinking:true }]);
     setRunning(true); streamTargetRef.current = chatId;
-    if(activeMode==="coding"){ runBackendCodingTurn(chatId, aid, t); return; }
+    if(activeMode==="coding"){
+      if(codingTarget==="computer"){ streamBackend(chatId, aid, t); return; }
+      const provider = codingTarget==="claude" ? "claude" : "codex";
+      runBackendCodingTurn(chatId, aid, t, provider);
+      return;
+    }
     const prevMsgs = chatMsgs[chatId] || [];
     if(useBackend){ streamBackend(chatId, aid, t); return; }
     const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
@@ -1526,11 +1541,11 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function backendBase(){ return (backendUrl||"http://127.0.0.1:8000").trim().replace(/\/+$/,""); }
   async function pingBackend(){
     setBackendStatus("checking");
-    try{ const r = await fetch(backendBase()+"/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
+    try{ const r = await fetch(backendBase()+"/api/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
     catch(e){ setBackendStatus("offline"); }
   }
   async function loadMemory(){
-    try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
+    try{ const r = await fetch(backendBase()+"/api/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
   }
   function normalizeResponseStreamEvent(ev, payload){
     if(!payload) return null;
@@ -1554,7 +1569,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   async function streamBackend(chatId, aid, message){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
-      const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
+      const resp = await fetch(backendBase()+"/api/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
       if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
       const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
       let semanticSeen = false;
@@ -1752,6 +1767,36 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
     models, modelLabel, syncModels, syncing, memoryOn, setMemoryOn,
   };
+  function chooseCodingTarget(target){
+    setCodingTarget(target);
+    if(target==="codex" || target==="claude") setCodingProvider(target);
+  }
+  function codingHealthLine(){
+    const providers = codingHealth.providers || [];
+    if(!providers.length) return "Coding backend unavailable.";
+    return providers.map(p => `${p.provider}: ${p.message}`).join(" | ");
+  }
+  function CodingMainStrip(){
+    if(activeMode!=="coding") return null;
+    return (
+      <Fragment>
+        <div className="coding-main-strip">
+          <div className="coding-targets">
+            <button className={"coding-target-btn"+(codingTarget==="codex"?" active":"")} onClick={()=>chooseCodingTarget("codex")}>Codex</button>
+            <button className={"coding-target-btn"+(codingTarget==="claude"?" active":"")} onClick={()=>chooseCodingTarget("claude")}>Claude Code</button>
+            <button className={"coding-target-btn"+(codingTarget==="computer"?" active":"")} onClick={()=>chooseCodingTarget("computer")}>Computer</button>
+            <button className={"coding-target-btn"+(codingAccessMode==="read_only"?" active":"")} onClick={()=>setCodingAccessMode("read_only")}>Read</button>
+            <button className={"coding-target-btn"+(codingAccessMode==="workspace_write"?" active":"")} onClick={()=>setCodingAccessMode("workspace_write")}>Write</button>
+          </div>
+          <div className="coding-root">
+            <span>Root</span>
+            <input className="coding-root-input" value={codingProjectRoot} onChange={(e)=>setCodingProjectRoot(e.target.value)} placeholder="D:\Vellum"/>
+          </div>
+        </div>
+        <div className="coding-health">{codingHealthLine()}</div>
+      </Fragment>
+    );
+  }
 
   function openCtx(e){ e.preventDefault(); e.stopPropagation(); const r = rootRef.current.getBoundingClientRect(); setCtxMenu({ x: Math.min(e.clientX-r.left, r.width-236), y: Math.min(e.clientY-r.top, r.height-300) }); }
   const prog = progressByChat[activeChat] || emptyProgress();
@@ -1969,6 +2014,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <div className="landing">
               <div><div className="landing-title">{apObj ? ("What should we build in "+apObj.name+"?") : "What should we work on?"}</div></div>
               <div style={{width:"100%",maxWidth:572,position:"relative"}}>
+                <CodingMainStrip/>
                 <InputBox placeholder="Do anything" model="5.5" api={composerApi} onSend={onMainSend}/>
                 <div style={{padding:"8px 24px 0", position:"relative"}}>
                   <div className="proj-tag" onClick={(e)=>{e.stopPropagation(); setProjPicker(v=>!v);}}><IcFolder size={12}/><span>{apObj ? apObj.name : "Work in a project"}</span><IcChevD size={11}/></div>
@@ -2012,6 +2058,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {messages.map(renderMsg)}
               </div>
 
+              <CodingMainStrip/>
               <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
 
               {/* Progress floating card */}
@@ -2092,35 +2139,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                   </div>
                 )}
 
-                {!activeTabObj && activeMode==="coding" && (
-                  <div className="workspace-body">
-                    <div className="workspace-empty">
-                      <div style={{fontSize:14,color:"#aaa",marginBottom:8}}>Coding Assistant</div>
-                      <div style={{marginBottom:12}}>Open a project folder, then run Codex or Claude Code from this workspace.</div>
-                      <input
-                        className="modal-input"
-                        value={codingProjectRoot}
-                        onChange={(e)=>setCodingProjectRoot(e.target.value)}
-                        placeholder="D:\Vellum"
-                      />
-                      <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:12,flexWrap:"wrap"}}>
-                        <button className={"modal-btn"+(codingProvider==="codex"?" primary":"")} onClick={()=>setCodingProvider("codex")}>Codex</button>
-                        <button className={"modal-btn"+(codingProvider==="claude"?" primary":"")} onClick={()=>setCodingProvider("claude")}>Claude Code</button>
-                        <button className={"modal-btn"+(codingAccessMode==="read_only"?" primary":"")} onClick={()=>setCodingAccessMode("read_only")}>Read only</button>
-                        <button className={"modal-btn"+(codingAccessMode==="workspace_write"?" primary":"")} onClick={()=>setCodingAccessMode("workspace_write")}>Workspace write</button>
-                      </div>
-                      <div className="cm-note" style={{marginTop:12}}>
-                        {(codingHealth.providers||[]).map(p => `${p.provider}: ${p.message}`).join(" | ") || "Backend unavailable."}
-                      </div>
-                      <div className="cm-note" style={{marginTop:8}}>
-                        {codingSession ? `Session: ${codingSession.id}` : "No coding session yet."}
-                        {codingEvents.length ? ` | ${codingEvents.length} events` : ""}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {!activeTabObj && activeMode!=="coding" && (()=>{ const ks = launcherKinds(); const cols = ks.length===4 ? 2 : ks.length; return (
+                {!activeTabObj && (()=>{ const ks = launcherKinds(); const cols = ks.length===4 ? 2 : ks.length; return (
                   <div className="workspace-body"><div className="launcher" style={chatInProject?null:{flex:1,display:"flex",flexDirection:"column",justifyContent:"center"}}>
                     <div className="launch-grid" style={{gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))"}}>
                       {ks.map(k=>(<div key={k} className="launch-card" onClick={()=>addTab(k)}><span className="launch-ic">{KIND_META[k].big}</span><div className="launch-title">{KIND_META[k].label}</div><div className="launch-sub">{KIND_META[k].sub}</div>{KIND_META[k].kbd && <span className="kbd" style={{marginTop:4}}>{KIND_META[k].kbd}</span>}</div>))}
