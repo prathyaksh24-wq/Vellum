@@ -161,3 +161,37 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
     assert completed["response"]["output_text"] == "Live sports answer"
     assert completed["response"]["tools"] == ["sports_agent", "web_search"]
     assert completed["response"]["sources"][0]["domain"] == "formula1.com"
+
+
+def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                answer="XAgent could not complete this request.",
+                status="error",
+                tools=["x_agent"],
+            )
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="What did NBA post on X?",
+            active_thread_id="thread-1",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    done_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.done"]
+
+    assert any(item["type"] == "subagent_call" and item["status"] == "failed" for item in done_items)

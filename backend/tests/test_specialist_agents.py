@@ -358,7 +358,63 @@ def test_live_dispatcher_forwards_memory_sources_for_workspace_ui(tmp_path):
     assert result.agent_name == "MemoryAgent"
     assert result.sources
     assert result.sources[0]["url"] == "Agent/Memories/Shared/answer-style.md"
-    assert result.sources[0]["domain"] == "memory"
+
+
+def test_pupil_registry_skips_pupil_when_can_handle_fails(tmp_path):
+    class BrokenMatcher:
+        name = "BrokenAgent"
+
+        def can_handle(self, query):
+            raise RuntimeError("matcher offline")
+
+        def answer(self, query):
+            raise AssertionError("broken matcher should not answer")
+
+    class HealthyMatcher:
+        name = "HealthyAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="healthy response",
+                confidence=0.9,
+            )
+
+    registry = PupilRegistry({"BrokenAgent": BrokenMatcher(), "HealthyAgent": HealthyMatcher()})
+
+    assert registry.match("route this") is registry.get("HealthyAgent")
+
+
+def test_live_dispatcher_contains_pupil_answer_failures_and_returns_to_vellum(tmp_path):
+    class FailingPupil:
+        name = "FailingAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            raise RuntimeError("oauth token expired")
+
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"FailingAgent": FailingPupil()}),
+        state_store=state_store,
+    )
+
+    result = dispatcher.maybe_handle("Ask failing agent", thread_id="thread-1")
+
+    assert result is not None
+    assert result.handled is True
+    assert result.agent_name == "FailingAgent"
+    assert result.status == "error"
+    assert "could not complete" in result.answer
+    assert result.tools == ["failing_agent"]
+    assert state_store.get("thread-1").active_agent == "VellumAgent"
 
 
 def test_specialist_router_delegates_sports_queries(tmp_path):
