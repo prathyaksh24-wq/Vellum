@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const VELLUM_CHAT_URL: &str = "http://127.0.0.1:5173/ui/vellum-chat.html?desktop=1";
+const VELLUM_CHAT_URL: &str = "http://127.0.0.1:5173/ui/vellum-workspace.html?desktop=1";
 const DESKTOP_OVERLAY_DEV_URL: &str = "http://127.0.0.1:1420/overlay.html";
 
 #[derive(Serialize)]
