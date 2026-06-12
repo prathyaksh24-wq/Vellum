@@ -1,0 +1,2352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vellum — Workspace Preview</title>
+
+<!-- React + Babel (CDN). Double-click this file to run. -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600&display=swap');
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body,#root{height:100%;width:100%;overflow:hidden}
+body{font-family:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;background:#050507;color:#d8d8d8;font-size:13px;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
+button{font-family:inherit}
+
+/* Stage / backdrop */
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.desktop-bg{position:absolute;inset:0;z-index:0;
+  background:radial-gradient(120% 90% at 50% -10%, rgba(227,93,43,.07), transparent 45%),radial-gradient(80% 70% at 85% 110%, rgba(80,70,120,.05), transparent 50%),linear-gradient(180deg,#0a0a0e 0%,#070709 60%,#050506 100%)}
+.desktop-bg::after{content:"";position:absolute;inset:0;opacity:.35;background-image:radial-gradient(rgba(255,255,255,.04) 1px, transparent 1px);background-size:22px 22px;mask-image:radial-gradient(circle at 50% 40%, #000 30%, transparent 80%)}
+.bg-orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.4;z-index:0;pointer-events:none}
+
+/* Window */
+.window{position:relative;z-index:2;display:flex;flex-direction:column;overflow:hidden;background:#0d0d0d;animation:winIn .45s cubic-bezier(.2,.7,.2,1);transition:width .22s ease,height .22s ease,border-radius .22s ease}
+.win-float{width:min(1340px,94vw);height:min(862px,92vh);border-radius:12px;border:1px solid #232326;box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 40px 120px rgba(0,0,0,.7),0 8px 30px rgba(0,0,0,.55)}
+.win-max{width:100vw;height:100vh;border-radius:0;border:none;box-shadow:none}
+@keyframes winIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+
+/* Chrome */
+.chrome{display:flex;flex-direction:column;height:100%;min-height:0}
+.window-body{flex:1;min-height:0;position:relative;overflow:hidden;background:#0d0d0d}
+.drag-region{-webkit-app-region:drag}
+.chrome-toggle{display:flex;align-items:center;gap:2px;background:#141416;border:1px solid #232326;border-radius:8px;padding:2px;flex-shrink:0}
+.chrome-toggle button{border:none;background:transparent;color:#6a6a6e;width:27px;height:22px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.chrome-toggle button:hover{color:#bbb}
+.chrome-toggle button.active{background:#2a2a2e;color:#ededed}
+.win-ctrls{display:flex;align-items:stretch;height:100%}
+.win-ctrl{width:44px;display:flex;align-items:center;justify-content:center;border:none;background:transparent;color:#9a9a9a;cursor:pointer;transition:background .12s,color .12s}
+.win-ctrl:hover{background:#1d1d1f;color:#eee}
+.win-ctrl.wc-close:hover{background:#e3402f;color:#fff}
+.win-ctrl svg{display:block}
+.chrome-browser .bz-tabs{display:flex;align-items:flex-end;height:38px;background:#070708;padding-left:8px;gap:2px;border-bottom:1px solid #161618}
+.bz-tab{display:flex;align-items:center;gap:8px;height:30px;padding:0 11px;border-radius:9px 9px 0 0;background:#0d0d0d;color:#bbb;font-size:12px;max-width:230px;cursor:default;border:1px solid #1c1c1f;border-bottom:none;position:relative;top:1px}
+.bz-fav{width:13px;height:13px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#f6a25f,#e35d2b);flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.bz-tab-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bz-x{margin-left:4px;color:#666;font-size:12px;width:16px;height:16px;display:flex;align-items:center;justify-content:center;border-radius:4px;cursor:pointer}
+.bz-x:hover{background:#222;color:#ddd}
+.bz-newtab{width:28px;height:28px;border:none;background:transparent;color:#666;border-radius:6px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;align-self:center;margin-bottom:2px}
+.bz-newtab:hover{background:#161618;color:#bbb}
+.bz-tabsfill{flex:1;height:100%}
+.bz-toolbar{display:flex;align-items:center;gap:6px;height:42px;background:#0d0d0d;padding:0 10px;border-bottom:1px solid #161618}
+.bz-nav{width:30px;height:30px;border:none;background:transparent;color:#777;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.bz-nav:hover{background:#1a1a1c;color:#ccc}
+.bz-nav.dim{color:#3c3c3c;cursor:default}
+.bz-omni{flex:1;display:flex;align-items:center;gap:9px;height:30px;background:#161618;border:1px solid #232326;border-radius:16px;padding:0 13px;color:#9a9a9a;font-size:12.5px;cursor:text;min-width:0}
+.bz-omni .bz-url{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bz-omni .bz-host{color:#ddd}
+.bz-iconbtn{width:30px;height:30px;border:none;background:transparent;color:#888;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.bz-iconbtn:hover{background:#1a1a1c;color:#ccc}
+.bz-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#e35d2b,#7a4cf0);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0}
+.chrome-desktop .ws-titlebar{display:flex;align-items:center;height:36px;background:#0a0a0b;padding-left:10px;border-bottom:1px solid #161618;position:relative}
+.wt-appmark{width:15px;height:15px;border-radius:4px;background:radial-gradient(circle at 35% 30%,#f6a25f,#e35d2b);margin-right:9px;flex-shrink:0;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.wt-navbtns{display:flex;align-items:center;gap:1px;margin-right:8px;-webkit-app-region:no-drag}
+.wt-navbtn{display:flex;align-items:center;justify-content:center;width:26px;height:24px;border-radius:6px;background:transparent;border:none;color:#7a7a7a;cursor:pointer;transition:background .12s,color .12s}
+.wt-navbtn:hover{background:#1c1c1e;color:#cfcfcf}
+.wt-menu{display:flex;align-items:center;gap:2px;margin-left:4px}
+.wt-mi{padding:3px 9px;border-radius:5px;color:#aaa;font-size:12.5px;cursor:default;transition:background .12s,color .12s}
+.wt-mi:hover{background:#1c1c1f;color:#eee}
+.wt-title{position:absolute;left:50%;transform:translateX(-50%);font-size:12px;color:#666;pointer-events:none;white-space:nowrap}
+.wt-right{margin-left:auto;display:flex;align-items:center;gap:8px;height:100%}
+.wt-right .chrome-toggle{margin-right:6px}
+
+/* Workspace root */
+.workspace{display:flex;height:100%;width:100%;overflow:hidden;position:relative;background:#0d0d0d}
+.sb-trigger{position:absolute;top:0;left:0;width:14px;height:100%;z-index:90}
+.sidebar{position:absolute;top:0;left:0;width:272px;height:100%;background:#0c0c0d;border-right:1px solid #191919;z-index:120;display:flex;flex-direction:column;transform:translateX(-100%);transition:transform .18s cubic-bezier(.4,0,.2,1);box-shadow:0 0 40px rgba(0,0,0,.5)}
+.sidebar.open{transform:translateX(0)}
+.sb-top{padding:8px 10px 6px;display:flex;flex-direction:column;gap:1px}
+.sb-nav-btn{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:6px;cursor:pointer;color:#888;font-size:13px;transition:background .12s,color .12s;border:none;background:none;width:100%;text-align:left}
+.sb-nav-btn:hover{background:#181818;color:#ddd}
+.sb-nav-kbd{margin-left:auto}
+.sb-section{padding:10px 10px 4px}
+.sb-section-lbl{font-size:11px;color:#484848;font-weight:500;letter-spacing:.06em;padding:2px 10px 6px;text-transform:uppercase}
+.proj-row{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:6px;cursor:pointer;color:#888;font-size:13px;transition:background .12s,color .12s}
+.proj-row:hover,.proj-row.open{color:#ccc}
+.chat-row{display:flex;align-items:center;justify-content:space-between;padding:4px 10px 4px 28px;border-radius:6px;cursor:pointer;color:#777;font-size:12.5px;transition:background .12s,color .12s;gap:6px}
+.chat-row:hover{background:#181818;color:#ccc}
+.chat-row.active{background:#1c1c1c;color:#ddd}
+.chat-row-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.chat-row-age{font-size:11px;color:#444;flex-shrink:0}
+.chat-row-actions{display:none;align-items:center;gap:1px;flex-shrink:0}
+.chat-row:hover .chat-row-age{display:none}
+.chat-row:hover .chat-row-actions{display:flex}
+.cr-act{border:none;background:none;color:#888;cursor:pointer;padding:3px;border-radius:4px;display:flex;align-items:center}
+.cr-act:hover{color:#fff;background:#2a2a2a}
+.confirm-btn{border:1px solid rgba(227,93,43,.45);background:rgba(227,93,43,.14);color:#e35d2b;border-radius:6px;font-size:11px;padding:2px 9px;cursor:pointer;flex-shrink:0}
+.confirm-btn:hover{background:rgba(227,93,43,.24)}
+.sb-add-proj{display:flex;align-items:center;gap:8px;padding:6px 10px;margin:2px 6px;border:1px dashed #2a2a2a;border-radius:7px;color:#666;font-size:12.5px;cursor:pointer}
+.sb-add-proj:hover{color:#ccc;border-color:#3a3a3a;background:#141414}
+.proj-file{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 22px;color:#777;font-size:12px;cursor:pointer;border-radius:6px}
+.proj-file:hover{background:#181818;color:#ccc}
+.proj-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-row-actions{display:none;align-items:center;gap:1px;flex-shrink:0}
+.proj-row:hover .proj-row-actions{display:flex}
+.pr-act{border:none;background:none;color:#888;cursor:pointer;padding:3px;border-radius:4px;display:flex;align-items:center}
+.pr-act:hover{color:#fff;background:#2a2a2a}
+.proj-nochats{font-size:12px;color:#3a3a3a;padding:3px 10px 3px 28px}
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:700;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.modal-box{width:380px;max-width:90%;background:#161618;border:1px solid #2a2a2e;border-radius:13px;padding:18px;box-shadow:0 24px 70px rgba(0,0,0,.8)}
+.modal-hd{display:flex;align-items:flex-start;justify-content:space-between}
+.modal-title{font-size:16px;color:#eee;font-weight:500}
+.modal-x{cursor:pointer;color:#666;display:flex}.modal-x:hover{color:#ddd}
+.modal-sub{font-size:12.5px;color:#666;margin-top:3px}
+.modal-input{width:100%;margin-top:14px;background:#0f0f10;border:1px solid #2a2a2e;border-radius:9px;padding:10px 12px;color:#eee;font-size:13.5px;font-family:'Geist',sans-serif;outline:none}
+.modal-input:focus{border-color:#3a3a40}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.modal-btn{border:1px solid #2a2a2e;background:#1c1c1f;color:#ccc;border-radius:8px;padding:7px 16px;font-size:12.5px;cursor:pointer}
+.modal-btn:hover{background:#242428}
+.modal-btn.primary{background:#e8e8e8;color:#111;border-color:#e8e8e8}
+.modal-btn.primary:hover{background:#fff}
+.compute-modal{width:580px;max-width:94%;max-height:84vh;overflow-y:auto}
+.cm-sec{margin-top:18px}
+.cm-sec-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.cm-sec-hd > span{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.06em;font-weight:500}
+.cm-scan{border:1px solid #2a2a2e;background:#1c1c1f;color:#ddd;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer}
+.cm-scan:hover{background:#242428}
+.cm-hint{font-size:12px;color:#666;line-height:1.5}
+.cm-specs{display:flex;flex-wrap:wrap;gap:7px}
+.cm-chip{display:flex;flex-direction:column;gap:2px;background:#121214;border:1px solid #242427;border-radius:9px;padding:8px 12px;min-width:96px}
+.cm-chip b{color:#6a6a6a;font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.cm-chip span{color:#ddd;font-size:13px}
+.cm-note{font-size:11px;color:#555;margin-top:8px;line-height:1.5}
+.cm-reco{border-radius:11px;padding:13px 14px;border:1px solid #242427;background:#121214}
+.cm-reco.capable{border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.05)}
+.cm-reco.modest{border-color:rgba(227,93,43,.3);background:rgba(227,93,43,.05)}
+.cm-reco.cloud{border-color:rgba(91,155,213,.3);background:rgba(91,155,213,.05)}
+.cm-reco-t{font-size:13.5px;color:#e6e6e6;font-weight:500;margin-bottom:4px}
+.cm-reco-b{font-size:12px;color:#888;line-height:1.55}
+.cm-dl{margin-top:11px;border:none;background:#e8e8e8;color:#111;border-radius:8px;padding:7px 14px;font-size:12.5px;font-weight:500;cursor:pointer}
+.cm-dl:hover{background:#fff}
+.cm-prov{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid #1a1a1c}
+.cm-prov:last-child{border-bottom:none}
+.cm-prov-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid #3a3a3e;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cm-prov-radio.on{border-color:#e35d2b}
+.cm-prov-radio.on::after{content:"";width:8px;height:8px;border-radius:50%;background:#e35d2b}
+.cm-prov-main{flex:1;min-width:0}
+.cm-prov-name{font-size:13px;color:#ddd}
+.cm-prov-sub{font-size:11px;color:#666;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cm-key{display:flex;align-items:center;gap:7px;background:#0f0f10;border:1px solid #242427;border-radius:8px;padding:5px 10px;width:188px;flex-shrink:0}
+.cm-key input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:11.5px;font-family:'Geist Mono',monospace;min-width:0}
+.cm-key input::placeholder{color:#444}
+.cm-key-dot{width:7px;height:7px;border-radius:50%;background:#333;flex-shrink:0}
+.cm-key-dot.on{background:#4ade80}
+.att-row{display:flex;flex-wrap:wrap;gap:6px}
+.att-row.att-compose{padding:9px 12px 2px}
+.att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #262629;border-radius:8px;padding:4px 8px;font-size:11.5px;color:#bbb;max-width:180px}
+.att-chip img{width:24px;height:24px;border-radius:4px;object-fit:cover;flex-shrink:0}
+.att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-x{cursor:pointer;color:#666;display:flex;flex-shrink:0}
+.att-x:hover{color:#ddd}
+.spinner{width:13px;height:13px;border:1.5px solid #2a2a2a;border-top-color:#e35d2b;border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
+.sb-bottom{border-top:1px solid #191919;padding:6px 10px 8px;position:relative}
+.sb-settings-row{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-radius:6px;cursor:pointer;color:#777;font-size:13px;transition:background .12s,color .12s}
+.sb-settings-row:hover{background:#181818;color:#ccc}
+.kbd{font-size:10px;color:#3a3a3a;background:#161616;border:1px solid #222;border-radius:3px;padding:1px 5px;font-family:'Geist Mono',monospace}
+.core-row{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:6px;color:#777;font-size:12.5px;cursor:pointer;transition:background .12s,color .12s}
+.core-row:hover{background:#181818;color:#ccc}
+.core-count{margin-left:auto;font-size:11px;color:#444}
+.settings-pop{position:absolute;bottom:46px;left:10px;width:230px;background:#161616;border:1px solid #222;border-radius:10px;overflow:hidden;z-index:300;box-shadow:0 8px 40px rgba(0,0,0,.7)}
+.sp-hdr{padding:10px 14px 8px;border-bottom:1px solid #222}
+.sp-email{font-size:12px;color:#999}
+.sp-role{font-size:11px;color:#484848;margin-top:2px}
+.sp-item{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;color:#888;font-size:12.5px}
+.sp-item:hover{background:#1e1e1e;color:#ddd}
+.sp-item-row{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;cursor:pointer;color:#888;font-size:12.5px}
+.sp-item-row:hover{background:#1e1e1e;color:#ddd}
+.sp-div{height:1px;background:#1e1e1e;margin:2px 0}
+.usage-inner{padding:2px 14px 8px}
+.usage-line{display:flex;justify-content:space-between;font-size:11.5px;color:#666;padding:2px 0}
+.usage-sub{font-size:11px;color:#444}
+.upgrade-link{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#666;cursor:pointer;padding:3px 0}
+.upgrade-link:hover{color:#aaa}
+
+/* Main */
+.main{flex:1;display:flex;overflow:hidden;min-width:0;transition:margin-left .18s cubic-bezier(.4,0,.2,1)}
+.main.desk-inset{border-top-left-radius:22px;border-top:1px solid #202022;border-left:1px solid #202022}
+.main.desk-inset .chat-pane{border-top-left-radius:22px}
+.proj-picker{position:absolute;top:34px;left:24px;min-width:248px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:11px;padding:4px;box-shadow:0 16px 50px rgba(0,0,0,.75);z-index:300}
+.pp-search{display:flex;align-items:center;gap:8px;padding:7px 10px 9px;color:#666;border-bottom:1px solid #232326;margin-bottom:4px}
+.pp-search input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12.5px;font-family:'Geist',sans-serif}
+.pp-search input::placeholder{color:#555}
+.pp-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;color:#cfcfcf;font-size:12.5px;position:relative}
+.pp-item:hover{background:#2a2a2e;color:#fff}
+.pp-l{display:flex;align-items:center;gap:9px}
+.pp-submenu{position:absolute;left:100%;top:-4px;margin-left:6px;min-width:212px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:11px;padding:4px;box-shadow:0 16px 50px rgba(0,0,0,.75);z-index:310}
+.chat-pane{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;background:#0d0d0d;position:relative}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;min-height:42px;flex-shrink:0;gap:8px;position:relative;z-index:5}
+.tb-left{display:flex;align-items:center;gap:6px;min-width:0;flex:1}
+.tb-title{font-size:13px;color:#bbb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tb-more{display:flex;align-items:center;padding:4px 5px;border-radius:5px;cursor:pointer;color:#444;transition:color .12s,background .12s;flex-shrink:0}
+.tb-more:hover{color:#888;background:#181818}
+.tb-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.icon-btn{display:flex;align-items:center;padding:5px;border-radius:5px;cursor:pointer;color:#484848;transition:color .12s,background .12s;border:none;background:none;line-height:1}
+.icon-btn:hover{color:#999;background:#181818}
+.icon-btn.on{color:#bbb;background:#1c1c1c}
+.landing{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;gap:28px}
+.landing-title{font-size:25px;color:#ddd;font-weight:400;letter-spacing:-.03em;text-align:center}
+.landing-subtitle{margin-top:7px;color:#555;font-size:13px;text-align:center}
+/* Messages */
+.msgs{flex:1;overflow-y:auto;padding:12px 0 4px;display:flex;flex-direction:column;transition:padding-right .18s ease}
+.msg-wrap{padding:3px 20px}
+.msg-text{color:#ccc;font-size:13.5px;line-height:1.65;letter-spacing:-.01em}
+.user-msg{align-self:flex-end;max-width:78%;margin:8px 20px;background:#1a1a1c;border:1px solid #242427;border-radius:13px 13px 4px 13px;padding:9px 13px;color:#e2e2e2;font-size:13.5px;line-height:1.55;animation:fadeUp .18s ease}
+.sys-line{display:flex;align-items:center;gap:6px;color:#444;font-size:12px;padding:3px 20px}
+.sys-dot{width:5px;height:5px;border-radius:50%;background:#2a2a2a;flex-shrink:0}
+.sys-cmd{font-size:12px;color:#484848}
+.icode{display:inline;background:#1c1c1c;border:1px solid #252525;border-radius:4px;padding:1px 6px;font-family:'Geist Mono',monospace;font-size:11.5px;color:#e09a4a}
+.tdot{width:5px;height:5px;border-radius:50%;background:#e35d2b;display:inline-block;animation:tpulse 1.4s ease infinite}
+.tdot:nth-child(2){animation-delay:.2s}
+.tdot:nth-child(3){animation-delay:.4s}
+.working-line{display:flex;align-items:center;gap:9px;padding:6px 20px}
+.glow-text{font-size:13px;font-weight:500;background:linear-gradient(90deg,#5f5f5f 0%,#fff 22%,#e35d2b 42%,#ffd9b8 55%,#fff 74%,#5f5f5f 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 2s linear infinite}
+.streaming-text{font-size:13.5px;line-height:1.65;background:linear-gradient(90deg,#9a9a9a 0%,#fff 18%,#e35d2b 38%,#ffe2c8 52%,#fff 72%,#9a9a9a 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 2.6s linear infinite}
+.caret{display:inline-block;width:7px;height:14px;background:#e35d2b;margin-left:3px;border-radius:1px;vertical-align:text-bottom;box-shadow:0 0 7px rgba(227,93,43,.8);animation:blink 1.05s step-end infinite}
+@keyframes shimmer{0%{background-position:140% center}100%{background-position:-140% center}}
+@keyframes blink{50%{opacity:0}}
+.spawn-block{margin:3px 20px;background:#111;border:1px solid #1e1e1e;border-radius:8px;padding:9px 12px}
+.spawn-hdr{display:flex;align-items:center;gap:6px;font-size:12px;color:#555;margin-bottom:5px}
+.spawn-created{font-size:12px;color:#555;margin-bottom:3px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.spawn-agent{color:#d0d0d0;font-weight:500}
+.spawn-instr{font-size:11px;color:#484848;font-family:'Geist Mono',monospace;line-height:1.4}
+.close-hdr{display:flex;align-items:center;gap:6px;font-size:12px;color:#444;padding:3px 20px;cursor:pointer}
+.close-item{display:flex;align-items:center;gap:6px;font-size:12px;color:#484848;padding:1px 20px 1px 30px}
+.learning-inline{margin:7px 20px;background:#101010;border:1px solid #232323;border-radius:10px;padding:10px 12px}
+.learning-inline-kicker{font-size:10.5px;color:#e35d2b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.learning-inline-title{font-size:13px;color:#bbb;margin-bottom:3px}
+.learning-inline-body{font-size:12px;color:#666;line-height:1.5}
+
+/* Input */
+.input-wrap{padding:10px 14px 12px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
+.input-box{background:#121212;border:1px solid #1e1e1e;border-radius:13px;overflow:hidden;transition:border-color .15s}
+.input-box:focus-within{border-color:#2a2a2a}
+.input-ta{width:100%;background:transparent;border:none;outline:none;color:#d8d8d8;font-size:13.5px;font-family:'Geist',sans-serif;padding:12px 14px 6px;resize:none;line-height:1.55}
+.input-ta::placeholder{color:#383838}
+.input-footer{display:flex;align-items:center;justify-content:space-between;padding:5px 10px 9px}
+.input-lft{display:flex;align-items:center;gap:5px}
+.input-rgt{display:flex;align-items:center;gap:5px}
+.pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#666;font-size:11.5px;transition:border-color .12s,color .12s;white-space:nowrap}
+.pill.accent{color:#e35d2b;border-color:rgba(227,93,43,.25)}
+.model-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#777;font-size:11.5px;transition:border-color .12s,color .12s}
+.model-pill:hover{border-color:#333;color:#aaa}
+.model-num{font-weight:600;color:#bbb;font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-search{width:100%;background:#0f0f10;border:1px solid #242427;border-radius:7px;padding:5px 9px;color:#ccc;font-size:12px;font-family:'Geist',sans-serif;outline:none;margin:2px 0 4px}
+.model-search::placeholder{color:#444}
+.model-list{max-height:260px;overflow-y:auto}
+.model-sync{font-size:11px;color:#e35d2b;cursor:pointer}
+.model-sync:hover{color:#f6824f}
+.send-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#d8d8d8;cursor:pointer;border:none;color:#0d0d0d;transition:background .12s,transform .12s;flex-shrink:0}
+.send-btn:hover{background:#fff;transform:translateY(-1px)}
+.send-btn:disabled{background:#2a2a2a;color:#555;cursor:default;transform:none}
+.stop-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#1a1a1a;border:1px solid #2a2a2a;cursor:pointer;color:#e35d2b;transition:background .12s;flex-shrink:0;box-shadow:0 0 0 3px rgba(227,93,43,.07)}
+.proj-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;background:#181818;border:1px solid #1e1e1e;color:#555;font-size:11.5px;cursor:pointer}
+
+/* Menus */
+.menu-pop{position:absolute;background:#161618;border:1px solid #242427;border-radius:10px;overflow:visible;z-index:200;min-width:210px;box-shadow:0 12px 44px rgba(0,0,0,.7);padding:4px}
+.menu-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;color:#bbb;font-size:12.5px;transition:background .12s}
+.menu-item:hover{background:#202024}
+.menu-item-l{display:flex;align-items:center;gap:9px}
+.menu-sec{padding:7px 10px 3px;font-size:10px;color:#4a4a4a;letter-spacing:.07em;text-transform:uppercase}
+.toggle{width:30px;height:17px;border-radius:999px;background:#2a2a2e;position:relative;transition:background .15s;flex-shrink:0}
+.toggle.on{background:#e35d2b}
+.toggle::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:transform .15s}
+.toggle.on::after{transform:translateX(13px)}
+.plug-ic{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
+.submenu{position:absolute;left:100%;bottom:0;top:auto;margin-left:6px;background:#161618;border:1px solid #242427;border-radius:10px;min-width:210px;box-shadow:0 12px 44px rgba(0,0,0,.7);padding:4px;z-index:210}
+/* desktop menu bar dropdowns */
+.wt-mi{position:relative}
+.wt-mi.open{background:#1c1c1f;color:#eee}
+.menubar-drop{position:absolute;top:26px;left:0;min-width:218px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:9px;padding:4px;box-shadow:0 14px 44px rgba(0,0,0,.7);z-index:600}
+.menubar-item{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:6px 10px;border-radius:6px;color:#cfcfcf;font-size:12.5px;cursor:default;white-space:nowrap}
+.menubar-item:hover{background:#2a2a2e;color:#fff}
+.menubar-item.dim{color:#555}.menubar-item.dim:hover{background:transparent;color:#555}
+.menubar-k{color:#666;font-size:11.5px;font-family:'Geist Mono',monospace}
+.menubar-sep{height:1px;background:#2a2a2e;margin:4px 6px}
+/* sidebar section header menus */
+.sb-section-hd{display:flex;align-items:center;padding:2px 10px 6px;position:relative}
+.sb-section-hd .sb-section-lbl{padding:0;flex:1}
+.sb-hd-actions{display:flex;align-items:center;gap:2px;opacity:0;transition:opacity .12s}
+.sb-section-hd:hover .sb-hd-actions{opacity:1}
+.sb-hd-btn{border:none;background:none;color:#666;cursor:pointer;padding:3px;border-radius:4px;display:flex;align-items:center}
+.sb-hd-btn:hover{color:#ccc;background:#1c1c1c}
+.sb-opt-menu{position:absolute;top:24px;left:10px;min-width:200px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:9px;padding:4px;box-shadow:0 14px 44px rgba(0,0,0,.7);z-index:200}
+.sb-opt-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;border-radius:6px;color:#cfcfcf;font-size:12.5px;cursor:pointer;position:relative}
+.sb-opt-item:hover{background:#2a2a2e;color:#fff}
+.sb-opt-l{display:flex;align-items:center;gap:9px}
+.sb-submenu{position:absolute;left:100%;top:-4px;margin-left:6px;min-width:190px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:9px;padding:4px;box-shadow:0 14px 44px rgba(0,0,0,.7);z-index:210}
+.resize-h{width:6px;flex-shrink:0;cursor:col-resize;position:relative;z-index:30;background:transparent}
+.model-drop{position:absolute;bottom:60px;z-index:320;display:flex;gap:3px}
+.drop-panel{background:#181818;border:1px solid #232323;border-radius:8px;overflow:hidden;min-width:158px;box-shadow:0 4px 24px rgba(0,0,0,.6)}
+.drop-lbl{font-size:10.5px;color:#484848;padding:7px 13px 2px;letter-spacing:.05em;text-transform:uppercase}
+.drop-item{display:flex;align-items:center;justify-content:space-between;padding:7px 13px;cursor:pointer;color:#888;font-size:12.5px}
+.drop-item:hover{background:#222;color:#ddd}
+.drop-item.sel{color:#ddd}
+.drop-check{color:#e35d2b;font-size:12px}
+
+/* Slash menu */
+.slash-pop{position:absolute;bottom:62px;left:14px;width:calc(100% - 28px);max-height:360px;overflow-y:auto;background:#1c1c1e;border:1px solid #2a2a2d;border-radius:12px;z-index:220;box-shadow:0 18px 55px rgba(0,0,0,.8);padding:6px}
+.slash-item{display:flex;align-items:center;gap:11px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s}
+.slash-item.hi,.slash-item:hover{background:#2c2c2f}
+.slash-ic{color:#9a9a9a;display:flex;flex-shrink:0}
+.slash-name{font-size:13px;color:#ededed;font-weight:450;flex-shrink:0}
+.slash-desc{font-size:12px;color:#7e7e7e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slash-tag{margin-left:auto;font-size:11px;color:#6a6a6a;flex-shrink:0;padding-left:12px}
+.slash-sec{font-size:11px;color:#6a6a6a;padding:8px 12px 4px}
+
+/* Progress floating card (inside chat) */
+.prog-float{position:absolute;top:54px;right:18px;bottom:18px;border:1px solid #2a2a2d;border-radius:14px;background:#101011;overflow-y:auto;z-index:8;box-shadow:0 18px 50px rgba(0,0,0,.5);animation:popIn .16s ease}
+.prog-empty-card{position:absolute;top:64px;right:24px;width:min(300px,calc(100% - 48px));border:1px solid #2a2a2d;border-radius:16px;background:#242424;padding:16px 18px;z-index:7;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.prog-empty-card .prog-sec{padding:0 0 16px;border-bottom:1px solid #3a3a3a;margin-bottom:16px}
+.prog-empty-card .prog-sec:last-child{padding-bottom:0;border-bottom:none;margin-bottom:0}
+.prog-empty-text{font-size:13px;color:#aaa;line-height:1.5}
+.prog-sec{padding:13px 14px;border-bottom:1px solid #191919}
+.prog-sec:last-child{border-bottom:none}
+.prog-title{font-size:11px;color:#555;font-weight:500;margin-bottom:8px;letter-spacing:.05em;text-transform:uppercase}
+.task-row{display:flex;align-items:flex-start;gap:8px;padding:3px 0}
+.task-lbl{font-size:12px;color:#666;line-height:1.45}
+.task-lbl.done{color:#888}
+.show-more{color:#444;font-size:12px;cursor:pointer;padding:4px 0;transition:color .12s}
+.show-more:hover{color:#888}
+.out-file{display:flex;align-items:center;gap:6px;padding:3px 0;color:#666;font-size:12px;cursor:pointer;transition:color .12s}
+.out-file:hover{color:#aaa}
+.sa-row{display:flex;align-items:center;gap:9px;padding:6px 0;cursor:pointer}
+.sa-row:hover .sa-name{color:#fff}
+.sa-name{font-size:12.5px;color:#cfcfcf;flex-shrink:0;transition:color .12s}
+.sa-working{font-size:11px;color:#555}
+.sa-stat{margin-left:auto;display:flex;gap:6px;font-family:'Geist Mono',monospace;font-size:11px}
+.sa-add{color:#4ade80}.sa-rem{color:#f87171}
+.sources-row{display:flex;align-items:center;justify-content:space-between;color:#555;font-size:12.5px;cursor:pointer;padding:3px 0;transition:color .12s}
+.sources-row:hover{color:#aaa}
+
+/* Memory cards */
+.memory-card{background:#121212;border:1px solid #202020;border-radius:9px;padding:9px 10px;margin:6px 0;cursor:pointer;transition:border-color .12s,background .12s}
+.memory-card:hover{background:#171717;border-color:#2b2b2b}
+.memory-title{font-size:12.5px;color:#bbb;line-height:1.35}
+.memory-meta{font-size:10.5px;color:#e35d2b;margin-top:2px;letter-spacing:.04em;text-transform:uppercase}
+.memory-reason{font-size:11.5px;color:#606060;line-height:1.45;margin-top:4px}
+.learn-card{background:#121212;border:1px solid #222;border-radius:9px;padding:9px 10px;margin:6px 0}
+.learn-title{font-size:12.5px;color:#bbb;margin-bottom:3px}
+.learn-body{font-size:11.5px;color:#606060;line-height:1.45}
+.learn-conf{font-size:10.5px;color:#e35d2b;margin-top:6px;text-transform:uppercase;letter-spacing:.05em}
+
+/* Workspace column */
+.sub-panel{display:flex;flex-direction:column;min-width:0;overflow:hidden;background:#0d0d0d;flex-shrink:0;position:relative}
+.workspace-bar{display:flex;align-items:center;border-bottom:1px solid #191919;padding:5px 6px;min-height:41px;background:#0f0f0f;flex-shrink:0;gap:4px;overflow-x:auto;position:relative}
+.workspace-bar::-webkit-scrollbar{height:0}
+.workspace-tab{display:flex;align-items:center;gap:6px;border:1px solid transparent;background:transparent;color:#555;border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s,border-color .12s}
+.workspace-tab:hover{color:#aaa;background:#181818}
+.workspace-tab.active{color:#d8d8d8;background:#151515;border-color:#272727}
+.workspace-tab-icon{font-size:11.5px;color:#777;display:flex;align-items:center}
+.workspace-tab-x{display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;opacity:.4;transition:opacity .12s,background .12s}
+.workspace-tab-x:hover{opacity:1;background:#262626}
+.tab-add-btn{display:flex;align-items:center;padding:5px;border-radius:6px;cursor:pointer;color:#3a3a3a;transition:color .12s,background .12s}
+.tab-add-btn:hover{color:#888;background:#181818}
+.tabs-right{margin-left:auto;display:flex;align-items:center;gap:2px;flex-shrink:0}
+.plus-drop{position:absolute;top:42px;left:6px;background:#181818;border:1px solid #232323;border-radius:8px;overflow:hidden;z-index:80;min-width:212px;box-shadow:0 8px 28px rgba(0,0,0,.65);padding:3px}
+.plus-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;cursor:pointer;color:#999;font-size:12.5px}
+.plus-item:hover{background:#222;color:#ddd}
+.plus-item-l{display:flex;align-items:center;gap:8px}
+.plus-sec{padding:7px 10px 2px;font-size:10px;color:#484848;letter-spacing:.06em;text-transform:uppercase}
+.plus-file{display:flex;align-items:center;gap:7px;padding:6px 10px;border-radius:6px;cursor:pointer;color:#666;font-size:12px}
+.plus-file:hover{background:#222;color:#ddd}
+.workspace-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;background:#0d0d0d}
+
+/* Launcher (new tab) */
+.launcher{padding:16px}
+.launch-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.launch-card{background:#0f0f10;border:1px solid #1e1e20;border-radius:12px;padding:24px 14px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;transition:background .12s,border-color .12s;text-align:center}
+.launch-card:hover{background:#151517;border-color:#2a2a2d}
+.launch-ic{color:#cfcfcf;margin-bottom:2px}
+.launch-title{font-size:13px;color:#e2e2e2}
+.launch-sub{font-size:11px;color:#666}
+.launch-sec{font-size:10.5px;color:#555;text-transform:uppercase;letter-spacing:.06em;margin:18px 2px 6px}
+.launch-doc{display:flex;align-items:center;gap:11px;padding:9px 8px;border-radius:9px;cursor:pointer;transition:background .12s}
+.launch-doc:hover{background:#161618}
+.launch-doc-ic{width:32px;height:32px;border-radius:7px;background:#15151a;border:1px solid #232326;display:flex;align-items:center;justify-content:center;color:#888;flex-shrink:0}
+.launch-doc-name{font-size:12.5px;color:#cfcfcf}
+.launch-doc-sub{font-size:11px;color:#555;margin-top:1px}
+
+.drawer-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 14px;border-bottom:1px solid #191919;background:#0f0f0f;flex-shrink:0}
+.drawer-title{display:flex;align-items:center;gap:8px;color:#ddd;font-size:13.5px}
+.drawer-sub{font-size:11.5px;color:#555;margin-top:3px}
+.drawer-section-title{font-size:10.5px;color:#555;font-weight:500;margin:13px 14px 4px;letter-spacing:.06em;text-transform:uppercase}
+.status-pill{font-size:10px;color:#555;border:1px solid #262626;border-radius:999px;padding:3px 7px;background:#151515;text-transform:capitalize;white-space:nowrap}
+.status-pill.running{color:#e35d2b;border-color:rgba(227,93,43,.35);background:rgba(227,93,43,.08)}
+.status-pill.complete{color:#4ade80;border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.08)}
+.status-pill.reviewing{color:#a78bfa;border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.08)}
+.agent-dock{display:flex;flex-direction:column;padding:10px 12px 6px;gap:6px;border-bottom:1px solid #191919}
+.agent-dock-card{display:flex;align-items:center;gap:9px;background:#111;border:1px solid #1f1f1f;border-radius:9px;padding:8px 9px;cursor:pointer;transition:border-color .12s,background .12s}
+.agent-dock-card:hover,.agent-dock-card.active{background:#171717;border-color:#2a2a2a}
+.agent-name{font-size:12.5px;color:#bbb}
+.agent-task{font-size:11px;color:#555;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;max-width:150px}
+.agent-status{font-size:10px;color:#555;border:1px solid #262626;border-radius:999px;padding:2px 6px;background:#151515;text-transform:capitalize;white-space:nowrap}
+.agent-status.running{color:#e35d2b;border-color:rgba(227,93,43,.35);background:rgba(227,93,43,.08)}
+.agent-status.complete{color:#4ade80;border-color:rgba(74,222,128,.25);background:rgba(74,222,128,.08)}
+.agent-status.reviewing{color:#a78bfa;border-color:rgba(167,139,250,.25);background:rgba(167,139,250,.08)}
+.agent-status.closed{color:#555}.agent-status.idle{color:#444}
+.relationship-tree{margin:8px 12px;background:#101010;border:1px solid #1f1f1f;border-radius:9px;padding:10px 12px;font-family:'Geist Mono',monospace;font-size:11px;color:#555;line-height:1.65}
+.tree-root{color:#aaa;margin-bottom:2px}.tree-branch{color:#666}
+.compact-msgs{overflow:visible;display:block;padding-top:6px;flex:none}
+.terminal-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#070707}
+.terminal-toolbar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;flex-shrink:0}
+.terminal-shell{height:28px;background:#161618;border:1px solid #242427;border-radius:7px;color:#ccc;font-family:'Geist',sans-serif;font-size:12px;padding:0 8px;outline:none}
+.terminal-connect,.terminal-run{height:28px;border:1px solid #242427;background:#18181a;color:#cfcfcf;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer}
+.terminal-connect:hover,.terminal-run:hover{background:#222225;color:#fff}
+.terminal-output{min-height:0;overflow:auto;padding:12px 13px;font-family:'Geist Mono',monospace;font-size:12px;color:#bdbdbd;line-height:1.65;white-space:pre-wrap;background:#070707}
+.terminal-inputbar{display:flex;align-items:center;gap:8px;border-top:1px solid #191919;background:#0f0f0f;padding:9px 10px}
+.terminal-prompt{color:#e35d2b;font-family:'Geist Mono',monospace;font-size:12px;flex-shrink:0}
+.terminal-input{flex:1;min-width:0;background:#151517;border:1px solid #242427;border-radius:8px;color:#e6e6e6;height:32px;padding:0 10px;font-family:'Geist Mono',monospace;font-size:12px;outline:none}
+.terminal-statusline{font-family:'Geist Mono',monospace;font-size:11px;color:#555;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.terminal-dim{color:#555}
+.workspace-empty{margin:14px;background:#101010;border:1px dashed #262626;border-radius:10px;padding:18px;color:#555;font-size:12.5px;text-align:center;line-height:1.5}
+.browser-mini{margin:0;display:flex;flex-direction:column;height:100%}
+.bm-bar{display:flex;align-items:center;gap:7px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;color:#777}
+.bm-omni{flex:1;background:#161618;border:1px solid #232326;border-radius:14px;padding:5px 11px;color:#888;font-size:11.5px}
+.bm-stage{flex:1;display:flex;align-items:center;justify-content:center;color:#444;font-size:12.5px;text-align:center;padding:20px}
+.browser-tool{height:100%;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#0a0a0a}
+.browser-toolbar{display:grid;grid-template-columns:30px 30px 30px 1fr 32px;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;color:#777}
+.browser-nav,.browser-ext{width:30px;height:30px;border:none;background:transparent;color:#777;border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.browser-nav:hover,.browser-ext:hover{background:#1a1a1c;color:#ccc}
+.browser-nav:disabled{color:#333;cursor:default;background:transparent}
+.browser-form{min-width:0}
+.browser-address{width:100%;height:30px;background:#161618;border:1px solid #232326;border-radius:15px;color:#ddd;font-family:'Geist Mono',monospace;font-size:12px;padding:0 12px;outline:none}
+.browser-frame-wrap{min-height:0;position:relative;background:#101010}
+.browser-frame{width:100%;height:100%;border:0;background:#fff}
+.browser-blank{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;color:#555;font-size:12.5px;line-height:1.5;padding:24px;pointer-events:none}
+.browser-status{height:24px;line-height:24px;border-top:1px solid #191919;background:#0f0f0f;color:#555;font-family:'Geist Mono',monospace;font-size:11px;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.diff-block{background:#111;border:1px solid #1e1e1e;border-radius:8px;overflow:hidden;margin:8px 0}
+.diff-hdr{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #1e1e1e}
+.diff-title{display:flex;align-items:center;gap:6px;font-size:13px;color:#aaa}
+.diff-acts{display:flex;align-items:center;gap:6px}
+.diff-btn{padding:3px 9px;border-radius:5px;font-size:11.5px;cursor:pointer;border:1px solid #232323;background:#181818;color:#777}
+.diff-btn:hover{background:#222;color:#ccc}
+.diff-file-row{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid #161616}
+.diff-file-row:last-child{border-bottom:none}
+.diff-fname{font-size:12px;font-family:'Geist Mono',monospace;color:#777}
+.diff-add{color:#4ade80;font-family:'Geist Mono',monospace;font-size:12px}
+.diff-rem{color:#f87171;font-family:'Geist Mono',monospace;font-size:12px}
+.test-pass{font-family:'Geist Mono',monospace;font-size:12px;color:#4ade80;background:#0a1f0a;border:1px solid #173317;border-radius:4px;padding:3px 9px;display:inline-block}
+.ul{list-style:disc;padding-left:17px}
+.ul li{color:#777;font-size:12.5px;line-height:1.75}
+.files-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #191919;background:#0f0f0f;color:#777;font-size:12px;font-family:'Geist Mono',monospace;flex-shrink:0}
+.files-body{flex:1;display:flex;min-height:0}
+.files-left{flex:1;display:flex;align-items:center;justify-content:center;border-right:1px solid #191919;min-width:0;overflow:auto}
+.files-empty{display:flex;flex-direction:column;align-items:center;gap:5px;color:#555}
+.files-empty-t{font-size:14px;color:#cfcfcf;margin-top:4px}
+.files-empty-s{font-size:12px;color:#555}
+.files-tree{width:250px;flex-shrink:0;overflow-y:auto;padding:8px}
+.files-filter{display:flex;align-items:center;gap:7px;background:#161618;border:1px solid #232326;border-radius:8px;padding:6px 10px;margin-bottom:8px;color:#666}
+.files-filter input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12px;font-family:'Geist',sans-serif}
+.files-filter input::placeholder{color:#444}
+.ftree-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;cursor:pointer;color:#aaa;font-size:12.5px;transition:background .12s}
+.ftree-row:hover{background:#161618;color:#ddd}
+.md-badge{font-size:9px;color:#4ade80;border:1px solid #1f4d2c;border-radius:3px;padding:0 3px;font-family:'Geist Mono',monospace;flex-shrink:0}
+.files-preview{padding:18px;align-self:flex-start;width:100%}
+.files-preview-name{font-size:13px;color:#ddd;font-family:'Geist Mono',monospace;margin-bottom:8px}
+.files-preview-body{font-size:12px;color:#666;line-height:1.6;font-family:'Geist Mono',monospace}
+.resize-h{width:6px;flex-shrink:0;cursor:col-resize;position:relative;z-index:30;background:transparent}
+.resize-h::after{content:"";position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:1px;background:#191919;transition:background .12s,width .12s}
+.resize-h:hover::after,.resize-h.active::after{background:#e35d2b;width:2px}
+.ctx-menu{position:absolute;background:#181818;border:1px solid #232323;border-radius:8px;overflow:hidden;z-index:400;min-width:224px;box-shadow:0 4px 28px rgba(0,0,0,.75);padding:3px}
+.ctx-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;cursor:pointer;color:#888;font-size:12.5px}
+.ctx-item:hover{background:#222;color:#ddd}
+.ctx-item-l{display:flex;align-items:center;gap:8px}
+.ctx-item.dim{color:#3a3a3a;cursor:default}
+.ctx-div{height:1px;background:#202020;margin:2px 0}
+.palette-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding-top:11vh;backdrop-filter:blur(3px)}
+.palette-box{width:min(560px,90%);background:#161618;border:1px solid #2a2a2e;border-radius:13px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.8);max-height:62vh;display:flex;flex-direction:column}
+.palette-input-row{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid #232326}
+.palette-in{flex:1;background:transparent;border:none;outline:none;color:#ddd;font-size:14.5px;font-family:'Geist',sans-serif}
+.palette-in::placeholder{color:#3c3c3c}
+.palette-list{overflow-y:auto;padding:5px}
+.palette-sec{font-size:10px;color:#4a4a4a;padding:8px 12px 4px;letter-spacing:.07em;text-transform:uppercase}
+.palette-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;cursor:pointer}
+.palette-item.hi{background:#23232a}
+.palette-item-l{display:flex;align-items:center;gap:10px;min-width:0}
+.palette-item-title{font-size:13px;color:#cfcfcf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.palette-item-sub{font-size:11.5px;color:#555;margin-left:4px}
+.palette-empty{padding:22px;text-align:center;color:#444;font-size:12.5px}
+.gh-btn{display:flex;align-items:center;gap:4px;padding:4px 9px;border-radius:6px;background:#181818;border:1px solid #222;cursor:pointer;color:#888;font-size:12px}
+.gh-btn:hover{border-color:#333;color:#ccc}
+.mode-switch{display:flex;align-items:center;gap:4px;background:#111;border:1px solid #1d1d1d;border-radius:999px;padding:3px}
+.mode-switch.compact{margin-right:4px}
+.mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
+.mode-chip:hover{color:#aaa;background:#181818}
+.mode-chip.active{color:#111;background:#d8d8d8}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes tpulse{0%,100%{opacity:.25}50%{opacity:1}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{animation:fadeUp .16s ease}
+@keyframes popIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.pop-in{animation:popIn .14s ease}
+</style>
+</head>
+<body>
+<div id="root" style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-family:Geist,sans-serif">Loading Vellum…</div>
+
+<script type="module">
+  import { createCodingApi } from "./coding-api.js";
+  window.__vellumCodingApi = createCodingApi({ apiBase: "http://127.0.0.1:8000" });
+</script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, Fragment } = React;
+
+/* ─── Icons ─── */
+const I = ({ d, size=16, stroke="currentColor", fill="none", sw=1.5, children, vb="0 0 24 24" }) => (
+  <svg width={size} height={size} viewBox={vb} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d ? <path d={d}/> : children}</svg>
+);
+const IcPlus     = ({size=16}) => <I size={size} d="M12 5v14M5 12h14"/>;
+const IcSearch   = ({size=16}) => <I size={size} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>;
+const IcPlugin   = ({size=16}) => <I size={size} d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z"/>;
+const IcAuto     = ({size=16}) => <I size={size} d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>;
+const IcFolder   = ({size=16}) => <I size={size} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>;
+const IcFolderPlus = ({size=16}) => <I size={size} d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7zM12 11v6M9 14h6"/>;
+const IcChevR    = ({size=16}) => <I size={size} d="M9 18l6-6-6-6"/>;
+const IcChevD    = ({size=16}) => <I size={size} d="M6 9l6 6 6-6"/>;
+const IcChevL    = ({size=16}) => <I size={size} d="M15 18l-6-6 6-6"/>;
+const IcSettings = ({size=16}) => <I size={size} d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm8.94-3a8.94 8.94 0 0 1-.09 1.25l2.09 1.63-2 3.46-2.45-.99a8.88 8.88 0 0 1-2.16 1.26l-.37 2.61h-4l-.37-2.61a8.88 8.88 0 0 1-2.16-1.26l-2.45.99-2-3.46 2.09-1.63A8.94 8.94 0 0 1 3.06 12a8.94 8.94 0 0 1 .09-1.25L1.06 9.12l2-3.46 2.45.99A8.88 8.88 0 0 1 7.67 5.4l.37-2.61h4l.37 2.61a8.88 8.88 0 0 1 2.16 1.26l2.45-.99 2 3.46-2.09 1.63A8.94 8.94 0 0 1 20.94 12z"/>;
+const IcMic      = ({size=16}) => <I size={size} d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>;
+const IcSend     = ({size=16}) => <I size={size} d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>;
+const IcStop     = ({size=16}) => <I size={size} fill="currentColor" stroke="none"><rect x="5" y="5" width="14" height="14" rx="2"/></I>;
+const IcSidebar  = ({size=16}) => <I size={size} d="M21 3H3a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM9 3v18"/>;
+const IcLayout   = ({size=16}) => <I size={size} d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM3 9h18"/>;
+const IcTasks    = ({size=16}) => <I size={size}><circle cx="4.5" cy="6" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.3" fill="currentColor" stroke="none"/><path d="M9 6h11M9 12h11M9 18h11"/></I>;
+const IcColumns  = ({size=16}) => <I size={size} d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zM15 3v18"/>;
+const IcPin      = ({size=16}) => <I size={size} d="M12 2l2.5 5.5L21 9l-5 4.5 1.5 6.5L12 17l-5.5 3 1.5-6.5L3 9l6.5-1.5L12 2z"/>;
+const IcEdit     = ({size=16}) => <I size={size} d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
+const IcArchive  = ({size=16}) => <I size={size} d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>;
+const IcCopy     = ({size=16}) => <I size={size} d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2M8 4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2M8 4h8"/>;
+const IcFork     = ({size=16}) => <I size={size} d="M6 3v12M18 3v5M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM18 8a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM6 15c0-3 3-5 6-5h1a5 5 0 0 0 5-5"/>;
+const IcWindow   = ({size=16}) => <I size={size} d="M3 3h18v18H3zM3 9h18"/>;
+const IcX        = ({size=16}) => <I size={size} d="M18 6L6 18M6 6l12 12"/>;
+const IcFile     = ({size=16}) => <I size={size} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM14 2v6h6"/>;
+const IcGlobe    = ({size=16}) => <I size={size} d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>;
+const IcTerminal = ({size=16}) => <I size={size} d="M4 17l6-6-6-6M12 19h8"/>;
+const IcUser     = ({size=16}) => <I size={size} d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"/>;
+const IcLogOut   = ({size=16}) => <I size={size} d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>;
+const IcRefresh  = ({size=16}) => <I size={size} d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>;
+const IcMoreDots = ({size=16}) => <I size={size}><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></I>;
+const IcImage    = ({size=16}) => <I size={size} d="M3 3h18v18H3zM3 15l5-5 4 4 3-3 6 6"/>;
+const IcTarget   = ({size=16}) => <I size={size}><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/></I>;
+const IcMonitor  = ({size=16}) => <I size={size} d="M3 4h18v12H3zM8 20h8M12 16v4"/>;
+const IcSpark    = ({size=16}) => <I size={size} d="M12 3l1.6 5.4L19 10l-5.4 1.6L12 17l-1.6-5.4L5 10l5.4-1.6z"/>;
+const IcShield   = ({size=16}) => <I size={size} d="M12 3l8 3v6c0 4.5-3 7.6-8 9-5-1.4-8-4.5-8-9V6z"/>;
+const IcBook     = ({size=16}) => <I size={size} d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zM18 3v18"/>;
+const IcExpand   = ({size=16}) => <I size={size} d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>;
+const IcGauge    = ({size=16}) => <I size={size} d="M12 14l4-4M4 18a8 8 0 1 1 16 0"/>;
+const IcChat     = ({size=16}) => <I size={size} d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>;
+const IcCheckCircle = ({size=16}) => <I size={size} stroke="#4ade80" d="M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3"/>;
+const IcCircle      = ({size=16}) => <I size={size}><circle cx="12" cy="12" r="9" stroke="#3a3a3a" strokeWidth="1.5" fill="none"/></I>;
+const IcCircleRun   = ({size=16}) => <I size={size}><circle cx="12" cy="12" r="9" stroke="#e35d2b" strokeWidth="1.5" fill="none" strokeDasharray="4 3"/></I>;
+const IcGitHub   = ({size=15}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>;
+
+/* ─── Pixel-art subagent sprites ─── */
+const SPRITES = {
+  person: ["  XX  ","  XX  ","XXXXXX"," XXXX ","  XX  "," X  X "],
+  robot:  ["X    X"," XXXX ","X XX X","X    X"," XXXX "," X  X "],
+  spark:  ["  X   ","X X X "," XXX  ","X X X ","  X   "],
+  flask:  [" XXX ","  X  ","  X  "," XXX ","XXXXX","XXXXX"],
+  mag:    [" XXX ","X   X","X   X"," XXX ","   X ","    X"],
+  chart:  ["X     ","X   X ","X X X ","X X X ","XXXXXX"],
+};
+function PixelSprite({ name, color, px=2 }){
+  const rows = SPRITES[name] || SPRITES.robot;
+  const cells = [];
+  rows.forEach((row,y)=>{ for(let x=0;x<row.length;x++){ if(row[x]!==" ") cells.push(<rect key={x+"_"+y} x={x*px} y={y*px} width={px} height={px}/>); } });
+  const w = (rows[0]||"").length*px, h = rows.length*px;
+  return <svg width={w} height={h} viewBox={"0 0 "+w+" "+h} fill={color} style={{display:"block"}}>{cells}</svg>;
+}
+
+/* ─── Data ─── */
+const PROJECTS = [];   /* projects are attached by the user from their computer */
+const OUTPUTS = [];
+const FILE_TREE = [];
+const KIND_META = {
+  files:    {label:"Files",     sub:"Browse project files",       kbd:"Ctrl P", big:<IcFolder size={22}/>,   sm:<IcFolder size={13}/>},
+  side:     {label:"Side chat", sub:"Start a side conversation",  kbd:"",       big:<IcChat size={22}/>,     sm:<IcChat size={13}/>},
+  browser:  {label:"Browser",   sub:"Open a website",             kbd:"Ctrl T", big:<IcGlobe size={22}/>,    sm:<IcGlobe size={13}/>},
+  terminal: {label:"Terminal",  sub:"Start an interactive shell", kbd:"Ctrl `", big:<IcTerminal size={22}/>, sm:<IcTerminal size={13}/>},
+};
+const initialChatMsgs = {};
+const agentById = (id)=> null;
+const MODES = [{id:"general",label:"General"},{id:"coding",label:"Coding"},{id:"computer",label:"Computer"}];
+const PLUGINS = [
+  { id:"browser",     name:"Browser",          ic:<IcGlobe size={13}/>,   bg:"#13233a", fg:"#5b9bd5" },
+  { id:"computer",    name:"Computer",         ic:<IcMonitor size={13}/>, bg:"#2a1633", fg:"#c084fc" },
+  { id:"superpowers", name:"Superpowers",      ic:<IcSpark size={13}/>,   bg:"#2a1d10", fg:"#e35d2b" },
+  { id:"github",      name:"GitHub",           ic:<IcGitHub size={13}/>,  bg:"#1c1c1c", fg:"#ddd" },
+  { id:"macos",       name:"Build macOS Apps", ic:<IcMonitor size={13}/>, bg:"#15243a", fg:"#7aa2d6" },
+  { id:"remotion",    name:"Remotion",         ic:<IcSpark size={13}/>,   bg:"#241033", fg:"#b07cf0" },
+];
+const DESKTOP_MENUS = {
+  File: [ {l:"Close",k:"Ctrl+W"},{l:"New Window",k:"Ctrl+Shift+N"},{l:"New Chat",k:"Ctrl+N",act:"new"},{l:"Quick Chat",k:"Alt+Ctrl+N"},{l:"Open Folder…",k:"Ctrl+O"},"-",{l:"Settings…",k:"Ctrl+Comma"},"-",{l:"Log Out"},{l:"Exit"} ],
+  Edit: [ {l:"Undo",k:"Ctrl+Z"},{l:"Redo",k:"Ctrl+Y"},"-",{l:"Cut",k:"Ctrl+X"},{l:"Copy",k:"Ctrl+C"},{l:"Paste",k:"Ctrl+V"},{l:"Delete"},"-",{l:"Select All",k:"Ctrl+A"} ],
+  View: [ {l:"Toggle Sidebar",k:"Ctrl+B",act:"sidebar"},{l:"Toggle Bottom Panel",k:"Ctrl+J"},{l:"Open Terminal",k:"Ctrl+`",act:"terminal"},{l:"Toggle File Tree",k:"Ctrl+Shift+E",act:"files"},{l:"Open Browser Tab",k:"Ctrl+T",act:"browser"},{l:"Reload Browser Page",k:"Ctrl+R",dim:true},{l:"Toggle Side Panel",k:"Alt+Ctrl+B",act:"side"},{l:"Find",k:"Ctrl+F",act:"palette"},"-",{l:"Previous Chat",k:"Ctrl+Shift+["},{l:"Next Chat",k:"Ctrl+Shift+]"},{l:"Back",k:"Ctrl+["},{l:"Forward",k:"Ctrl+]"},"-",{l:"Zoom In",k:"Ctrl+Shift+="},{l:"Zoom Out",k:"Ctrl+-"},{l:"Actual Size",k:"Ctrl+0"},"-",{l:"Toggle Full Screen",k:"F11",act:"max"} ],
+  Window: [ {l:"Minimize",k:"Ctrl+M"},{l:"Zoom",act:"max"},{l:"Close",k:"Ctrl+W"} ],
+  Help: [ {l:"Documentation"},{l:"Keyboard Shortcuts"},{l:"Release Notes"},"-",{l:"About Vellum"} ],
+};
+const MODELS = ["GPT-5.5","GPT-5.4","GPT-5.4-Mini","GPT-5.3-Codex","GPT-5.2"];
+const REASONING = ["Low","Medium","High","Extra High"];
+const ACCESS_MODES = [
+  { id:"full", label:"Full access", sub:"Read, write, run, browse" },
+  { id:"write", label:"Read & write", sub:"No shell or network" },
+  { id:"read", label:"Read only", sub:"Inspect, never modify" },
+  { id:"ask", label:"Ask every time", sub:"Confirm each action" },
+];
+const PROVIDERS = [
+  { id:"openrouter", name:"OpenRouter", sub:"400+ models behind one key — best when you can't run local", ph:"sk-or-v1-…" },
+  { id:"openai",     name:"OpenAI",     sub:"GPT-5, GPT-5-mini",     ph:"sk-…" },
+  { id:"anthropic",  name:"Anthropic",  sub:"Claude Opus / Sonnet",  ph:"sk-ant-…" },
+  { id:"google",     name:"Google AI",  sub:"Gemini 2.x",            ph:"AIza…" },
+];
+function recommendModel(hw){
+  const ram = (hw && hw.ram) || 0, gpu = !!(hw && hw.gpu);
+  if(ram>=8 && gpu) return {tier:"capable", title:"You can run a small model locally", note:"Your GPU and memory can handle a quantized 7–8B model. It downloads once and runs offline; reach for OpenRouter when you want larger models.", model:"Llama 3.1 8B · Q4_K_M", size:"~4.9 GB"};
+  if(ram>=8)        return {tier:"modest",  title:"Light local models possible (CPU only)", note:"No dedicated GPU detected. Small models run on CPU but slowly — fine for quick tasks; cloud is better for heavy reasoning.", model:"Gemma 2 2B · Q4", size:"~1.6 GB"};
+  return {tier:"cloud", title:"Best with cloud models", note:"Not enough headroom to run capable models locally — and weights never need to touch your disk. Connect OpenRouter (one key, 400+ models) or a specific provider below.", model:null, size:null};
+}
+/* Curated OpenRouter models (Sync replaces these with the live catalog). */
+const OR_MODELS_DEFAULT = [
+  { id:"deepseek/deepseek-chat",         label:"DeepSeek V4 Pro" },
+  { id:"deepseek/deepseek-chat-v3-0324", label:"DeepSeek V4 Flash" },
+  { id:"minimax/minimax-01",             label:"MiniMax" },
+  { id:"google/gemma-3-27b-it",          label:"Gemma 31B" },
+  { id:"google/gemma-2-27b-it",          label:"Gemma 26B" },
+];
+const DEFAULT_MODEL = "deepseek/deepseek-chat";
+const OPENAI_MODELS = [
+  { id:"gpt-4o",       label:"GPT-4o" },
+  { id:"gpt-4o-mini",  label:"GPT-4o mini" },
+  { id:"gpt-4.1",      label:"GPT-4.1" },
+  { id:"gpt-4.1-mini", label:"GPT-4.1 mini" },
+  { id:"o1",           label:"o1" },
+  { id:"o1-mini",      label:"o1-mini" },
+];
+const ANTHROPIC_MODELS = [
+  { id:"claude-3-7-sonnet-latest", label:"Claude 3.7 Sonnet" },
+  { id:"claude-3-5-haiku-latest",  label:"Claude 3.5 Haiku" },
+  { id:"claude-3-opus-latest",     label:"Claude 3 Opus" },
+];
+const GOOGLE_MODELS = [
+  { id:"gemini-2.0-flash", label:"Gemini 2.0 Flash" },
+  { id:"gemini-1.5-pro",   label:"Gemini 1.5 Pro" },
+];
+/* ── Coding-mode streaming protocol (Codex-shaped, JSON-RPC 2.0 frames) ── */
+const VPROTO = {
+  uuid(){ try{ return crypto.randomUUID(); }catch(e){ return "id-"+Math.random().toString(36).slice(2); } },
+  tag(parent, sub){ return "agent:"+parent+":subagent:"+sub; },
+  masterTag(turnId){ return "agent:master:turn:"+turnId; },
+  frame(method, params){ return { jsonrpc:"2.0", method, params }; },
+  turnStarted(threadId, turnId){ return this.frame("turn/started", {threadId, turnId}); },
+  plan(turnId, complex, reason, tasks){ return this.frame("item/plan", {turnId, complex, reason, tasks}); },
+  subagentStarted(turnId, routingTag, persona, task){ return this.frame("item/subagent/started", {turnId, routingTag, persona, task}); },
+  agentDelta(routingTag, text){ return this.frame("item/agentMessage/delta", {routingTag, text}); },
+  reasoningDelta(routingTag, text){ return this.frame("item/reasoning/delta", {routingTag, text}); },
+  subagentCompleted(routingTag, status, output){ return this.frame("item/subagent/completed", {routingTag, status, output}); },
+  steer(threadId, turnId, text){ return this.frame("turn/steer", {threadId, turnId, text}); },
+  turnCompleted(turnId, finalItemId){ return this.frame("turn/completed", {turnId, finalItemId}); },
+  /* Tolerant parse of a planner reply. Returns {complex, reason, tasks:[{id,title,role}]}.
+     Falls back to {complex:false} on any failure so callers degrade to a single answer. */
+  parsePlan(text){
+    if(!text) return {complex:false, reason:"", tasks:[]};
+    let raw = String(text);
+    const fence = raw.match(/```(?:json)?\s*([\s\S]*?)```/i); if(fence) raw = fence[1];
+    const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
+    if(s<0 || e<=s) return {complex:false, reason:"", tasks:[]};
+    let obj; try{ obj = JSON.parse(raw.slice(s, e+1)); }catch(err){ return {complex:false, reason:"", tasks:[]}; }
+    if(!obj || obj.complex!==true || !Array.isArray(obj.tasks) || !obj.tasks.length) return {complex:false, reason:(obj&&obj.reason)||"", tasks:[]};
+    const roles = {worker:1, reviewer:1, analyst:1};
+    const tasks = obj.tasks.slice(0,5).map((t,i)=>({
+      id: "t"+(i+1),
+      title: String((t&&t.title)||("Task "+(i+1))).slice(0,120),
+      role: roles[(t&&t.role)] ? t.role : "worker",
+    }));
+    return {complex:true, reason:String(obj.reason||"").slice(0,200), tasks};
+  },
+};
+const PROVIDER_CFG = {
+  openrouter:{ chatUrl:"https://openrouter.ai/api/v1/chat/completions", listUrl:"https://openrouter.ai/api/v1/models", keyId:"openrouter", models:OR_MODELS_DEFAULT, default:"deepseek/deepseek-chat", referer:true },
+  openai:    { chatUrl:"https://api.openai.com/v1/chat/completions",    listUrl:"https://api.openai.com/v1/models",    keyId:"openai",     models:OPENAI_MODELS,    default:"gpt-4o" },
+  anthropic: { chatUrl:null, listUrl:null, keyId:"anthropic", models:ANTHROPIC_MODELS, default:"claude-3-7-sonnet-latest" },
+  google:    { chatUrl:null, listUrl:null, keyId:"google",    models:GOOGLE_MODELS,    default:"gemini-2.0-flash" },
+};
+
+/* Helpers */
+function Spinner(){ return <div className="spinner"/>; }
+function InlineCode({children}){ return <code className="icode">{children}</code>; }
+function MsgText({msg}){
+  if (msg.textParts && msg.codes) return (<div className="msg-text">{msg.textParts[0]}<InlineCode>{msg.codes[0]}</InlineCode>{msg.textParts[1]}<InlineCode>{msg.codes[1]}</InlineCode>{msg.textParts[2]}</div>);
+  return <div className="msg-text">{msg.text}</div>;
+}
+function Toggle({on}){ return <div className={"toggle"+(on?" on":"")}/>; }
+const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
+
+function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-up changes", model="5.5", api, wrapStyle, panelOpen=false }){
+  const [text, setText] = useState("");
+  const [openMenu, setOpenMenu] = useState(null);   // plus | model | access | null
+  const [pluginsSub, setPluginsSub] = useState(false);
+  const [slashIdx, setSlashIdx] = useState(0);
+  const [atts, setAtts] = useState([]);
+  const [modelQ, setModelQ] = useState("");
+  const ref = useRef(null);
+  const fileRef = useRef(null);
+  const a = api || {};
+  function onFiles(e){
+    const fl = Array.from(e.target.files||[]);
+    const items = fl.map(f=>({ name:f.name, image:f.type.startsWith("image/"), url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }));
+    setAtts(prev=> [...prev, ...items]); setOpenMenu(null); e.target.value="";
+  }
+  const slashOpen = text.trimStart().startsWith("/");
+  const list = (slashOpen && a.slashList) ? a.slashList(text) : [];
+  useEffect(()=>{
+    const h = (e)=>{ if(ref.current && !ref.current.contains(e.target)){ setOpenMenu(null); setPluginsSub(false); } };
+    window.addEventListener("mousedown", h); return ()=> window.removeEventListener("mousedown", h);
+  },[]);
+  function doSend(){
+    if(slashOpen){ if(list.length) a.runSlash(list[Math.min(slashIdx,list.length-1)]); setText(""); setSlashIdx(0); return; }
+    const t = text.trim(); if(!t && atts.length===0) return; onSend && onSend(t, atts); setText(""); setAtts([]);
+  }
+  function keyDown(e){
+    if(slashOpen && list.length){
+      if(e.key==="ArrowDown"){ e.preventDefault(); setSlashIdx(i=>Math.min(list.length-1,i+1)); return; }
+      if(e.key==="ArrowUp"){ e.preventDefault(); setSlashIdx(i=>Math.max(0,i-1)); return; }
+    }
+    if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); doSend(); }
+  }
+  return (
+    <div className="input-wrap" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
+      {openMenu==="model" && (
+        <div className="model-drop fade-up" style={{right: panelOpen?344:14}}>
+          <div className="drop-panel"><div className="drop-lbl">Reasoning</div>{REASONING.map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}</div>
+          <div className="drop-panel" style={{minWidth:236}}>
+            <div className="drop-lbl" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>Model</span><span className="model-sync" onClick={()=>a.syncModels && a.syncModels()}>{a.syncing?"syncing…":"↻ Sync"}</span></div>
+            <div style={{padding:"0 9px"}}><input className="model-search" placeholder="Search models" value={modelQ} onChange={(e)=>setModelQ(e.target.value)}/></div>
+            <div className="model-list">
+              {(a.models||[]).filter(m=> !modelQ || m.label.toLowerCase().includes(modelQ.toLowerCase()) || m.id.toLowerCase().includes(modelQ.toLowerCase())).slice(0,60).map(m=>(
+                <div key={m.id} className={"drop-item"+(a.selModel===m.id?" sel":"")} onClick={()=>{a.setSelModel(m.id);setOpenMenu(null);setModelQ("");}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:178}}>{m.label}</span>{a.selModel===m.id && <span className="drop-check">✓</span>}</div>
+              ))}
+            </div>
+            <div className="drop-item" style={{borderTop:"1px solid #232323",color:"#e35d2b"}} onClick={()=>{a.openModels && a.openModels(); setOpenMenu(null);}}><span>Manage models & keys…</span></div>
+          </div>
+        </div>
+      )}
+      {openMenu==="plus" && (
+        <div className="menu-pop pop-in" style={{bottom:62, left:14}}>
+          <div className="menu-item" onClick={()=>fileRef.current && fileRef.current.click()}><div className="menu-item-l"><IcImage size={15}/><span>Add photos & files</span></div><span className="kbd">Ctrl U</span></div>
+          <div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>
+          <div className="menu-item" onClick={()=>a.setIncludeIde(v=>!v)}><div className="menu-item-l"><IcColumns size={15}/><span>Include IDE context</span></div><Toggle on={a.includeIde}/></div>
+          <div className="menu-item" onClick={()=>a.setPlanMode(v=>!v)}><div className="menu-item-l"><IcLayout size={15}/><span>Plan mode</span></div><Toggle on={a.planMode}/></div>
+          <div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>
+          <div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
+            <div className="menu-item-l"><IcPlugin size={15}/><span>Plugins</span></div><IcChevR size={13}/>
+            {pluginsSub && (<div className="submenu pop-in"><div className="menu-sec">6 installed plugins</div>{PLUGINS.map(p=>(<div key={p.id} className="menu-item" onClick={(e)=>{e.stopPropagation(); a.setPluginsOn(o=>({...o,[p.id]:!o[p.id]}));}}><div className="menu-item-l"><span className="plug-ic" style={{background:p.bg,color:p.fg}}>{p.ic}</span><span>{p.name}</span></div><Toggle on={a.pluginsOn && a.pluginsOn[p.id]}/></div>))}</div>)}
+          </div>
+        </div>
+      )}
+      {openMenu==="access" && (
+        <div className="menu-pop pop-in" style={{bottom:62, left:52}}>
+          {ACCESS_MODES.map(am=>(<div key={am.id} className="menu-item" onClick={()=>{a.setAccessMode(am.id);setOpenMenu(null);}}><div className="menu-item-l" style={{flexDirection:"column",alignItems:"flex-start",gap:1}}><span style={{color:am.id===a.accessMode?"#e35d2b":"#ccc"}}>{am.label}</span><span style={{fontSize:10.5,color:"#555"}}>{am.sub}</span></div>{am.id===a.accessMode && <span className="drop-check">✓</span>}</div>))}
+        </div>
+      )}
+      {slashOpen && list.length>0 && (
+        <div className="slash-pop pop-in">
+          {list.filter(x=>x.group==="cmd").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic">{c.ic}</span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span></div>); })}
+          {list.some(x=>x.group==="skill") && <div className="slash-sec">Skills</div>}
+          {list.filter(x=>x.group==="skill").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic"><IcSpark size={14}/></span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span><span className="slash-tag">Personal</span></div>); })}
+        </div>
+      )}
+      <input type="file" multiple ref={fileRef} style={{display:"none"}} onChange={onFiles}/>
+      <div className="input-box">
+        {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><span className="att-x" onClick={()=>setAtts(prev=>prev.filter((_,j)=>j!==i))}><IcX size={11}/></span></div>))}</div>}
+        <textarea className="input-ta" placeholder={placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
+        <div className="input-footer">
+          <div className="input-lft">
+            <button className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add"><IcPlus size={15}/></button>
+            <div className="pill accent" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}}><IcShield size={12}/><span>{a.accessLabel||"Full access"}</span><IcChevD size={12}/></div>
+          </div>
+          <div className="input-rgt">
+            <div className="model-pill" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.modelLabel ? a.modelLabel(a.selModel) : model}</span><span>{a.selReasoning||"High"}</span><IcChevD size={12}/></div>
+            <button className="icon-btn"><IcMic size={15}/></button>
+            {running ? <button className="stop-btn" onClick={onStop} title="Stop"><IcStop size={13}/></button>
+                     : <button className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send"><IcSend size={13}/></button>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function MenuBar(){
+  const [open, setOpen] = useState(null);
+  const ref = useRef(null);
+  useEffect(()=>{ const h=(e)=>{ if(ref.current && !ref.current.contains(e.target)) setOpen(null); }; window.addEventListener("mousedown",h); return ()=>window.removeEventListener("mousedown",h); },[]);
+  return (
+    <div className="wt-menu" ref={ref}>
+      {Object.keys(DESKTOP_MENUS).map(name=>(
+        <span key={name} className={"wt-mi"+(open===name?" open":"")}
+          onClick={(e)=>{e.stopPropagation(); setOpen(o=>o===name?null:name);}}
+          onMouseEnter={()=>{ if(open) setOpen(name); }}>
+          {name}
+          {open===name && (
+            <div className="menubar-drop" onClick={(e)=>e.stopPropagation()}>
+              {DESKTOP_MENUS[name].map((it,i)=> it==="-"
+                ? <div key={i} className="menubar-sep"/>
+                : <div key={i} className={"menubar-item"+(it.dim?" dim":"")} onClick={()=>{ window.dispatchEvent(new CustomEvent("vellum-menu", {detail:it.act})); setOpen(null); }}>
+                    <span>{it.l}</span>{it.k && <span className="menubar-k">{it.k}</span>}
+                  </div>
+              )}
+            </div>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+function ShellToggle({ shell, onShell }){
+  return (
+    <div className="chrome-toggle">
+      <button className={shell==="browser"?"active":""} onClick={()=>onShell("browser")} title="Browser shell"><IcGlobe size={13}/></button>
+      <button className={shell==="terminal"?"active":""} onClick={()=>onShell("terminal")} title="Terminal shell"><IcTerminal size={13}/></button>
+      <button className={shell==="desktop"?"active":""} onClick={()=>onShell("desktop")} title="Desktop app shell"><IcMonitor size={13}/></button>
+    </div>
+  );
+}
+function WinControls({ maximized, onMax }){
+  return (
+    <div className="win-ctrls">
+      <button className="win-ctrl" title="Minimize"><svg width="11" height="11" viewBox="0 0 11 11"><line x1="1.5" y1="6" x2="9.5" y2="6" stroke="currentColor" strokeWidth="1"/></svg></button>
+      <button className="win-ctrl" title={maximized?"Restore":"Maximize"} onClick={onMax}>
+        {maximized
+          ? <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1"><rect x="2" y="3.2" width="5.5" height="5.5"/><path d="M3.6 3.2V1.6h5.7v5.7H7.6"/></svg>
+          : <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1"><rect x="1.8" y="1.8" width="7.4" height="7.4"/></svg>}
+      </button>
+      <button className="win-ctrl wc-close" title="Close"><svg width="11" height="11" viewBox="0 0 11 11"><path d="M2 2l7 7M9 2l-7 7" stroke="currentColor" strokeWidth="1"/></svg></button>
+    </div>
+  );
+}
+function ChromeBrowser({ children, maximized, onMax, shell, onShell }){
+  return (
+    <div className="chrome chrome-browser">
+      <div className="bz-tabs">
+        <div className="bz-tab"><span className="bz-fav"/><span className="bz-tab-title">Vellum — Workspace</span><span className="bz-x"><IcX size={11}/></span></div>
+        <button className="bz-newtab">+</button><div className="bz-tabsfill"/><WinControls maximized={maximized} onMax={onMax}/>
+      </div>
+      <div className="bz-toolbar">
+        <button className="bz-nav" title="Back"><IcChevL size={17}/></button>
+        <button className="bz-nav dim" title="Forward"><IcChevR size={17}/></button>
+        <button className="bz-nav" title="Reload"><IcRefresh size={15}/></button>
+        <div className="bz-omni"><IcShield size={13}/><span className="bz-url"><span className="bz-host">app.vellum.ai</span>/workspace/find-best-non-veg-meal</span></div>
+        <ShellToggle shell={shell} onShell={onShell}/>
+        <button className="bz-iconbtn" title="Extensions"><IcPlugin size={16}/></button>
+        <div className="bz-avatar">P</div>
+      </div>
+      <div className="window-body">{children}</div>
+    </div>
+  );
+}
+function ChromeDesktop({ children, maximized, onMax, title, shell, onShell }){
+  return (
+    <div className="chrome chrome-desktop">
+      <div className="ws-titlebar drag-region">
+        <span className="wt-appmark"/>
+        <div className="wt-navbtns">
+          <button className="wt-navbtn" title="Toggle sidebar" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"sidebar"}))}><IcSidebar size={15}/></button>
+          <button className="wt-navbtn" title="Back" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"navback"}))}><IcChevL size={16}/></button>
+          <button className="wt-navbtn" title="Forward" onClick={()=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:"navfwd"}))}><IcChevR size={16}/></button>
+        </div>
+        <MenuBar/>
+        <div className="wt-title">{title}</div>
+        <div className="wt-right"><ShellToggle shell={shell} onShell={onShell}/><WinControls maximized={maximized} onMax={onMax}/></div>
+      </div>
+      <div className="window-body">{children}</div>
+    </div>
+  );
+}
+function ChromeTerminal({ maximized, onMax, shell, onShell }){
+  return (
+    <div className="chrome chrome-browser">
+      <div className="bz-tabs">
+        <div className="bz-tab"><IcTerminal size={13}/><span className="bz-tab-title">C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe</span></div>
+        <button className="bz-newtab">+</button><div className="bz-tabsfill"/><WinControls maximized={maximized} onMax={onMax}/>
+      </div>
+      <div className="bz-toolbar">
+        <button className="bz-nav dim" title="Back"><IcChevL size={17}/></button>
+        <button className="bz-nav dim" title="Forward"><IcChevR size={17}/></button>
+        <div className="bz-omni"><IcTerminal size={13}/><span className="bz-url"><span className="bz-host">C:\Users\User\OneDrive\Desktop\Vellum</span></span></div>
+        <ShellToggle shell={shell} onShell={onShell}/>
+      </div>
+      <div className="window-body"><TerminalPane backendBase={"http://127.0.0.1:8000"}/></div>
+    </div>
+  );
+}
+
+/* ═══ Workspace ═══ */
+function normalizeBrowserUrl(value){
+  const raw = String(value || "").trim();
+  if(!raw) return "about:blank";
+  if(/^(about:|https?:\/\/|file:\/\/)/i.test(raw)) return raw;
+  if(/^[\w.-]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(raw)) return "https://" + raw;
+  return "https://www.google.com/search?igu=1&q=" + encodeURIComponent(raw);
+}
+function htmlEscape(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function browserFrameFor(url){
+  if(url === "about:blank") return {src:"about:blank", srcDoc:null};
+  let u=null; try{ u=new URL(url); }catch(e){}
+  const host = u ? u.hostname.replace(/^www\./,"") : "";
+  const q = u ? (u.searchParams.get("q") || "") : "";
+  if(host === "google.com" || (u && u.pathname.includes("/search"))){
+    const query = q || (host === "google.com" ? "" : url);
+    const results = query ? [
+      ["Google", "https://www.google.com", "Search the world's information, including webpages, images, videos and more."],
+      ["Google Maps", "https://maps.google.com", "Find local businesses, view maps and get driving directions."],
+      ["Google Cloud", "https://cloud.google.com", "Cloud products and AI infrastructure for building modern applications."],
+      ["Google Search Help", "https://support.google.com/websearch", "Learn how Google Search works and refine your results."]
+    ] : [];
+    const body = query
+      ? `<div class="tabs"><span class="on">All</span><span>Images</span><span>Videos</span><span>Forums</span></div>${results.map(r=>`<div class="res"><div class="res-url">${htmlEscape(r[1])}</div><h2>${htmlEscape(r[0])}</h2><p>${htmlEscape(r[2])}</p></div>`).join("")}`
+      : `<div class="home"><div class="logo"><span style="color:#4285f4">G</span><span style="color:#ea4335">o</span><span style="color:#fbbc05">o</span><span style="color:#4285f4">g</span><span style="color:#34a853">l</span><span style="color:#ea4335">e</span></div><div class="hint">Type a search in the Vellum browser bar.</div></div>`;
+    return {src:"about:blank", srcDoc:`<!doctype html><html><head><meta charset="utf-8"><style>
+      body{margin:0;background:#202124;color:#e8eaed;font:14px Arial,sans-serif} .top{height:58px;display:flex;align-items:center;padding:0 24px;border-bottom:1px solid #3c4043;gap:16px}
+      .brand{font-size:22px;font-weight:500}.search{height:40px;max-width:580px;flex:1;border-radius:22px;background:#303134;display:flex;align-items:center;padding:0 18px;color:#bdc1c6}
+      .tabs{display:flex;gap:24px;padding:14px 28px 8px;border-bottom:1px solid #3c4043;color:#bdc1c6}.tabs span{padding-bottom:8px}.tabs .on{color:#e8eaed;border-bottom:3px solid #8ab4f8}
+      .res{padding:18px 28px;border-bottom:1px solid #3c4043;max-width:760px}.res-url{font-size:12px;color:#bdc1c6;margin-bottom:6px}.res h2{margin:0 0 6px;color:#8ab4f8;font-size:20px;font-weight:400}.res p{margin:0;color:#bdc1c6;line-height:1.45}
+      .home{height:calc(100vh - 58px);display:flex;align-items:center;justify-content:center;flex-direction:column}.logo{font-size:64px;letter-spacing:-4px}.hint{color:#bdc1c6;margin-top:18px}
+    </style></head><body><div class="top"><div class="brand">Google</div><div class="search">${htmlEscape(query || "google.com")}</div></div>${body}</body></html>`};
+  }
+  return {src:url, srcDoc:null};
+}
+function wsUrlForBackend(base){
+  const clean = String(base || "http://127.0.0.1:8000").replace(/\/+$/,"");
+  return clean.replace(/^https:/i,"wss:").replace(/^http:/i,"ws:") + "/api/terminal/ws";
+}
+async function runWorkspaceAction(base, payload){
+  const clean = String(base || "http://127.0.0.1:8000").replace(/\/+$/,"");
+  const resp = await fetch(clean + "/api/computer-use/workspace/action", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  });
+  const body = await resp.json().catch(()=>({}));
+  if(!resp.ok) throw new Error(body.detail || body.message || ("HTTP " + resp.status));
+  return body;
+}
+function BrowserPane({ backendBase }){
+  const [url,setUrl] = useState("about:blank");
+  const [draft,setDraft] = useState("");
+  const [history,setHistory] = useState(["about:blank"]);
+  const [idx,setIdx] = useState(0);
+  const [status,setStatus] = useState("ready");
+  function go(next, replace){
+    const normalized = normalizeBrowserUrl(next);
+    setUrl(normalized);
+    setDraft(normalized === "about:blank" ? "" : normalized);
+    setStatus(normalized === "about:blank" ? "blank" : ("loading " + normalized));
+    if(replace) setHistory(h=> h.map((x,i)=> i===idx ? normalized : x));
+    else { setHistory(h=> [...h.slice(0,idx+1), normalized]); setIdx(i=> i+1); }
+    if(normalized !== "about:blank"){
+      runWorkspaceAction(backendBase, {action:"browser.navigate", url:normalized})
+        .then(r=> setStatus(r.message || ("loaded " + normalized)))
+        .catch(e=> setStatus("local frame updated; browser bridge offline: " + (e.message || e)));
+    }
+  }
+  function submit(e){ e.preventDefault(); go(draft, false); }
+  function back(){ if(idx<=0) return; const next=history[idx-1]; setIdx(idx-1); setUrl(next); setDraft(next==="about:blank"?"":next); setStatus("history back"); }
+  function forward(){ if(idx>=history.length-1) return; const next=history[idx+1]; setIdx(idx+1); setUrl(next); setDraft(next==="about:blank"?"":next); setStatus("history forward"); }
+  function reload(){ setStatus("reloading " + url); setUrl("about:blank"); setTimeout(()=>setUrl(history[idx] || "about:blank"), 0); }
+  function openExternal(){ const target = url === "about:blank" ? normalizeBrowserUrl(draft) : url; if(target && target !== "about:blank") window.open(target, "_blank", "noopener,noreferrer"); }
+  const frame = browserFrameFor(url);
+  return (
+    <div className="browser-tool">
+      <div className="browser-toolbar">
+        <button className="browser-nav" title="Back" disabled={idx<=0} onClick={back}><IcChevL size={15}/></button>
+        <button className="browser-nav" title="Forward" disabled={idx>=history.length-1} onClick={forward}><IcChevR size={15}/></button>
+        <button className="browser-nav" title="Reload" onClick={reload}><IcRefresh size={13}/></button>
+        <form className="browser-form" onSubmit={submit}><input className="browser-address" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Search or enter URL"/></form>
+        <button className="browser-ext" title="Open externally" onClick={openExternal}><IcExpand size={13}/></button>
+      </div>
+      <div className="browser-frame-wrap">
+        {url !== "about:blank" && <iframe className="browser-frame" src={frame.src} srcDoc={frame.srcDoc || undefined} title="Vellum browser view"/>}
+        {url === "about:blank" && <div className="browser-blank">Enter a URL to open a page inside Vellum.<br/>Pages that block embedding can still be opened externally or driven through the browser bridge.</div>}
+      </div>
+      <div className="browser-status">{status}</div>
+    </div>
+  );
+}
+function TerminalPane({ backendBase }){
+  const [profile,setProfile] = useState("powershell");
+  const [status,setStatus] = useState("disconnected");
+  const [output,setOutput] = useState("");
+  const [cmd,setCmd] = useState("");
+  const socketRef = useRef(null);
+  const outRef = useRef(null);
+  function append(text){ setOutput(prev=> (prev + text).slice(-50000)); }
+  function connect(){
+    if(socketRef.current){ try{ socketRef.current.close(); }catch(e){} }
+    setStatus("connecting");
+    const ws = new WebSocket(wsUrlForBackend(backendBase));
+    socketRef.current = ws;
+    ws.onopen = ()=>{ ws.send(JSON.stringify({type:"start", profile, cols:120, rows:32})); setStatus(profile + " connecting"); };
+    ws.onmessage = (event)=>{
+      let msg; try{ msg = JSON.parse(event.data); }catch(e){ append(String(event.data)); return; }
+      if(msg.type==="ready") setStatus(profile + " ready");
+      else if(msg.type==="output") append(msg.data || "");
+      else if(msg.type==="error"){ append("\r\n" + (msg.message || "terminal error") + "\r\n"); setStatus("error"); }
+      else if(msg.type==="exit") setStatus("exited");
+    };
+    ws.onerror = ()=> setStatus("websocket error");
+    ws.onclose = ()=> setStatus(s=> s==="exited" ? s : "disconnected");
+  }
+  useEffect(()=>{ connect(); return ()=>{ if(socketRef.current){ try{ socketRef.current.close(); }catch(e){} } }; }, [profile, backendBase]);
+  useEffect(()=>{ if(outRef.current) outRef.current.scrollTop = outRef.current.scrollHeight; }, [output]);
+  async function submit(e){
+    e.preventDefault();
+    const text = cmd.trim();
+    if(!text) return;
+    setCmd("");
+    const ws = socketRef.current;
+    if(ws && ws.readyState === WebSocket.OPEN){ ws.send(JSON.stringify({type:"input", data:text + "\r"})); return; }
+    append("> " + text + "\r\n");
+    setStatus("running fallback command");
+    try{
+      const res = await runWorkspaceAction(backendBase, {action:"terminal.run", command:text});
+      const data = res.data || {};
+      if(data.stdout) append(data.stdout);
+      if(data.stderr) append(data.stderr);
+      append("\r\n[exit " + (data.returncode ?? "?") + "]\r\n");
+      setStatus(res.message || "command complete");
+    }catch(err){
+      append("terminal backend unavailable: " + (err.message || err) + "\r\n");
+      setStatus("offline");
+    }
+  }
+  return (
+    <div className="terminal-panel">
+      <div className="terminal-toolbar">
+        <select className="terminal-shell" value={profile} onChange={e=>setProfile(e.target.value)}>
+          <option value="powershell">PowerShell</option>
+          <option value="cmd">CMD</option>
+          <option value="pwsh">PowerShell Core</option>
+          <option value="wsl">WSL</option>
+        </select>
+        <button className="terminal-connect" onClick={connect}>Reconnect</button>
+        <span className="terminal-statusline">{status}</span>
+      </div>
+      <div className="terminal-output" ref={outRef}>{output || "Connecting to the Vellum terminal backend...\r\n"}</div>
+      <form className="terminal-inputbar" onSubmit={submit}>
+        <span className="terminal-prompt">&gt;</span>
+        <input className="terminal-input" value={cmd} onChange={e=>setCmd(e.target.value)} placeholder="Run a command"/>
+        <button className="terminal-run" type="submit">Run</button>
+      </form>
+    </div>
+  );
+}
+
+function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
+  const [sbPinned, setSbPinned]       = useState(false);   // toggle keeps it fixed-open
+  const [sbHover, setSbHover]         = useState(false);   // edge-hover reveals it
+  const sbOpen = sbPinned || sbHover;
+  const [projects, setProjects]       = useState(PROJECTS);
+  const [activeChat, setActiveChat]   = useState("new");
+  const [showPalette, setShowPalette] = useState(false);
+  const [paletteQ, setPaletteQ]       = useState("");
+  const [palIdx, setPalIdx]           = useState(0);
+  const [ctxMenu, setCtxMenu]         = useState(null);
+  const [showProg, setShowProg]       = useState(false);
+  const [showSub, setShowSub]         = useState(false);
+  const [tabs, setTabs]               = useState([]);
+  const [activeTab, setActiveTab]     = useState("");
+  const [activeMode, setActiveMode]   = useState("coding");
+  const [showPlus, setShowPlus]       = useState(false);
+  const [planMode, setPlanMode]       = useState(false);
+  const [pursueGoal, setPursueGoal]   = useState(false);
+  const [includeIde, setIncludeIde]   = useState(false);
+  const [pluginsOn, setPluginsOn]     = useState({browser:true, computer:true, superpowers:true, github:true, macos:false, remotion:false});
+  const [accessMode, setAccessMode]   = useState("full");
+  const [selModel, setSelModel]       = useState(DEFAULT_MODEL);
+  const [selReasoning, setSelReasoning] = useState("High");
+  const [models, setModels]           = useState(OR_MODELS_DEFAULT);
+  const [syncing, setSyncing]         = useState(false);
+  const [sbMenu, setSbMenu]           = useState(null);   // projects | chats | null
+  const [sbSub, setSbSub]             = useState(null);   // organize | sort | null
+  const [projAddMenu, setProjAddMenu] = useState(false);
+  const [projPicker, setProjPicker]   = useState(false);
+  const [projPickerSub, setProjPickerSub] = useState(false);
+  const [projSearch, setProjSearch]   = useState("");
+  const [nameModal, setNameModal]     = useState(null);   // {name, mode, id}
+  const [projRowMenu, setProjRowMenu] = useState(null);   // project id
+  const [activeProject, setActiveProject] = useState(null);
+  const [showModels, setShowModels]   = useState(false);
+  const [hw, setHw]                   = useState(null);
+  const [scanning, setScanning]       = useState(false);
+  const [apiKeys, setApiKeys]         = useState({openrouter:"", openai:"", anthropic:"", google:""});
+  const [activeProvider, setActiveProvider] = useState("openrouter");
+  const [backendUrl, setBackendUrl]   = useState("http://127.0.0.1:8000");
+  const [useBackend, setUseBackend]   = useState(false);
+  const [backendStatus, setBackendStatus] = useState("unknown");
+  const [memoryEntries, setMemoryEntries] = useState([]);
+  const [memoryOn, setMemoryOn]       = useState(true);
+  const [sortBy, setSortBy]           = useState("updated");
+  const [organizeBy, setOrganizeBy]   = useState("project");
+  const [showSettings, setShowSettings] = useState(false);
+  const [showUsage, setShowUsage]     = useState(false);
+  const [wsWidth, setWsWidth]         = useState(480);
+  const [resizing, setResizing]       = useState(false);
+  const [chatMsgs, setChatMsgs]       = useState(initialChatMsgs);
+  const [codingHealth, setCodingHealth] = useState({providers:[]});
+  const [codingSession, setCodingSession] = useState(null);
+  const [codingEvents, setCodingEvents] = useState([]);
+  const [codingProjectRoot, setCodingProjectRoot] = useState("");
+  const [codingProvider, setCodingProvider] = useState("codex");
+  const [codingAccessMode, setCodingAccessMode] = useState("read_only");
+  const [running, setRunning]         = useState(false);
+  const [progressByChat, setProgressByChat] = useState({}); // chatId -> {status,turnId,reason,tasks:[],outputs:[],sources:[]}
+  const steerRef = useRef({}); // turnId -> pending steer text
+  const [selFile, setSelFile]         = useState(null);
+  const [newChats, setNewChats]       = useState([]);
+  const [pinned, setPinned]           = useState([]);
+  const [archived, setArchived]       = useState([]);
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
+
+  const rootRef = useRef(null), trigRef = useRef(null), msgsRef = useRef(null), projInputRef = useRef(null), threadRef = useRef({});
+  const idRef = useRef(2000), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
+  const nextId = ()=> (++idRef.current);
+
+  const accessLabel = (ACCESS_MODES.find(a=>a.id===accessMode)||ACCESS_MODES[0]).label;
+  const allChats = projects.flatMap(p=> (p.chats||[]).map(c=> ({...c, project:p.name})));
+  const messages = chatMsgs[activeChat] || [];
+  const isLanding = activeChat==="new" || !activeChat;
+  const activeTabObj = tabs.find(t=>t.id===activeTab) || tabs[0];
+  const chatInProject = projects.length>0;
+  const apObj = projects.find(p=>p.id===activeProject);
+  function launcherKinds(){
+    if(isLanding) return ["browser","terminal"];
+    if(projects.length>0) return ["files","side","browser","terminal"];
+    return ["side","browser","terminal"];
+  }
+  function toggleProj(id){ setProjects(prev=> prev.map(p=> p.id===id ? {...p, expanded:!p.expanded} : p)); }
+  async function addProject(){
+    setSbHover(true);
+    try{
+      if(window.showDirectoryPicker){
+        const dir = await window.showDirectoryPicker();
+        const files = [];
+        for await (const ent of dir.values()){ files.push({name:ent.name, dir:ent.kind==="directory"}); if(files.length>=120) break; }
+        files.sort((a,b)=> (b.dir?1:0)-(a.dir?1:0) || a.name.localeCompare(b.name));
+        setProjects(prev=> [...prev, {id:"proj-"+(++idRef.current), name:dir.name, files, chats:[], expanded:true}]);
+      } else if(projInputRef.current){ projInputRef.current.click(); }
+    }catch(e){ /* picker cancelled */ }
+  }
+  function closeProjMenus(){ setProjAddMenu(false); setProjPicker(false); setProjPickerSub(false); }
+  function startFromScratch(){ closeProjMenus(); setNameModal({name:"New project", mode:"create", id:null}); }
+  function useExistingFolder(){ closeProjMenus(); addProject(); }
+  function openNameModal(mode, proj){ closeProjMenus(); setProjRowMenu(null); setNameModal({name: proj?proj.name:"New project", mode, id: proj?proj.id:null}); }
+  function saveNameModal(){
+    if(!nameModal) return;
+    const nm = (nameModal.name||"").trim() || "Untitled project";
+    if(nameModal.mode==="rename"){ setProjects(prev=> prev.map(p=> p.id===nameModal.id ? {...p, name:nm} : p)); }
+    else { setProjects(prev=> [...prev, {id:"proj-"+(++idRef.current), name:nm, files:[], chats:[], expanded:true}]); }
+    setNameModal(null);
+  }
+  function newChatInProject(id){ setActiveProject(id); setActiveChat("new"); setSbHover(false); setProjRowMenu(null); }
+  function pinProject(id){ setProjects(prev=> prev.map(p=> p.id===id ? {...p, pinned:!p.pinned} : p)); setProjRowMenu(null); }
+  function removeProject(id){ setProjects(prev=> prev.filter(p=>p.id!==id)); if(activeProject===id) setActiveProject(null); setProjRowMenu(null); }
+  function archiveProjectChats(id){ setProjects(prev=> prev.map(p=> p.id===id ? {...p, chats:[]} : p)); setProjRowMenu(null); }
+  function collapseAllProjects(){ setProjects(prev=>{ const anyOpen = prev.some(p=>p.expanded); return prev.map(p=>({...p, expanded:!anyOpen})); }); }
+  async function scanHardware(){
+    setScanning(true);
+    const out = { cores:null, ram:null, storage:null, gpu:null, platform:"Unknown" };
+    try{ out.cores = navigator.hardwareConcurrency || null; }catch(e){}
+    try{ out.ram = navigator.deviceMemory || null; }catch(e){}
+    try{ if(navigator.storage && navigator.storage.estimate){ const est = await navigator.storage.estimate(); if(est && est.quota) out.storage = Math.round(est.quota/1e9); } }catch(e){}
+    try{
+      if(navigator.gpu){
+        const adapter = await navigator.gpu.requestAdapter();
+        if(adapter){
+          let info = adapter.info || null;
+          if(!info && adapter.requestAdapterInfo){ try{ info = await adapter.requestAdapterInfo(); }catch(e){} }
+          out.gpu = info ? (info.architecture || info.description || info.vendor || "WebGPU GPU") : "WebGPU capable";
+        }
+      }
+    }catch(e){}
+    try{ const uad = navigator.userAgentData; out.platform = (uad && uad.platform) || navigator.platform || "Unknown"; }catch(e){}
+    setHw(out); setScanning(false);
+  }
+  function onProjInput(e){
+    const fl = Array.from(e.target.files||[]);
+    if(!fl.length){ return; }
+    const root = (fl[0].webkitRelativePath||fl[0].name).split("/")[0] || "project";
+    const top = {};
+    fl.forEach(f=>{ const parts=(f.webkitRelativePath||f.name).split("/"); const seg = parts.length>1?parts[1]:parts[0]; if(seg) top[seg] = {name:seg, dir: parts.length>2}; });
+    const files = Object.values(top).sort((a,b)=> (b.dir?1:0)-(a.dir?1:0) || a.name.localeCompare(b.name)).slice(0,120);
+    setProjects(prev=> [...prev, {id:"proj-"+(++idRef.current), name:root, files, chats:[], expanded:true}]);
+    e.target.value="";
+  }
+  function titleFor(text){
+    const t = text.trim().toLowerCase();
+    if(/^(hi|hey|hello|yo|sup|hiya|greetings)\b/.test(t)) return "Greet";
+    const w = text.trim().split(/\s+/).slice(0,4).join(" ");
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }
+  function chatTitleFor(id){
+    const c = allChats.find(c=>c.id===id); if(c) return c.title;
+    const n = newChats.find(n=>n.id===id); if(n) return n.title;
+    return "";
+  }
+
+  useEffect(()=>{ // chat-only by default; a freshly-created chat auto-opens Progress
+    if(isLanding){ setShowProg(false); setShowSub(false); }
+    else if(openProgRef.current === activeChat){ setShowProg(true); setShowSub(false); openProgRef.current = null; }
+    else { setShowProg(false); setShowSub(false); }
+    setArchiveConfirm(null);
+  }, [activeChat]);
+
+  useEffect(()=>{
+    const trig = trigRef.current, sb = rootRef.current && rootRef.current.querySelector(".sidebar");
+    if(!trig || !sb) return;
+    const open = ()=> setSbHover(true);
+    const close = (e)=> { if(!sb.contains(e.relatedTarget)) setSbHover(false); };
+    trig.addEventListener("mouseenter", open); sb.addEventListener("mouseleave", close);
+    return ()=>{ trig.removeEventListener("mouseenter", open); sb.removeEventListener("mouseleave", close); };
+  },[]);
+
+  useEffect(()=>{
+    const h = (e)=>{
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase()==="b"){ e.preventDefault(); setSbPinned(v=>!v); }
+      else if (mod && e.key.toLowerCase()==="k"){ e.preventDefault(); setShowPalette(v=>!v); setPaletteQ(""); setPalIdx(0); }
+      else if (mod && e.key==="\\"){ e.preventDefault(); onSwitchShell(); }
+      else if (mod && e.key==="1"){ e.preventDefault(); setActiveMode("general"); }
+      else if (mod && e.key==="2"){ e.preventDefault(); setActiveMode("coding"); }
+      else if (mod && e.key==="3"){ e.preventDefault(); setActiveMode("computer"); }
+      else if (e.key==="Escape"){ setShowPalette(false); setCtxMenu(null); setShowPlus(false); setShowSettings(false); setSbHover(false); setSbMenu(null); setProjAddMenu(false); setProjPicker(false); }
+    };
+    window.addEventListener("keydown", h);
+    return ()=> window.removeEventListener("keydown", h);
+  },[onSwitchShell]);
+
+  /* desktop menu-bar actions */
+  useEffect(()=>{
+    const h = (e)=>{
+      const act = e.detail;
+      if(act==="sidebar") setSbPinned(v=>!v);
+      else if(act==="new") setActiveChat("new");
+      else if(act==="palette"){ setShowPalette(true); setPaletteQ(""); setPalIdx(0); }
+      else if(act==="max") onToggleMax();
+      else if(act==="terminal") addTab("terminal");
+      else if(act==="browser") addTab("browser");
+      else if(act==="files") addTab("files");
+      else if(act==="side") addSideChat();
+      else if(act==="navback") navBack();
+      else if(act==="navfwd") navFwd();
+    };
+    window.addEventListener("vellum-menu", h);
+    return ()=> window.removeEventListener("vellum-menu", h);
+  },[onToggleMax]);
+
+  /* lightweight chat back/forward history (desktop titlebar nav) */
+  const navRef = useRef({stack:[], idx:-1, suppress:false});
+  useEffect(()=>{
+    const n = navRef.current;
+    if(n.suppress){ n.suppress=false; return; }
+    n.stack = n.stack.slice(0, n.idx+1);
+    if(n.stack[n.idx] !== activeChat){ n.stack.push(activeChat); n.idx = n.stack.length-1; }
+  }, [activeChat]);
+  function navBack(){ const n=navRef.current; if(n.idx>0){ n.idx--; n.suppress=true; setActiveChat(n.stack[n.idx]); } }
+  function navFwd(){ const n=navRef.current; if(n.idx<n.stack.length-1){ n.idx++; n.suppress=true; setActiveChat(n.stack[n.idx]); } }
+
+  useEffect(()=>{
+    const h = (e)=>{
+      if(!e.target.closest(".ctx-menu")) setCtxMenu(null);
+      if(!e.target.closest(".plus-drop") && !e.target.closest(".tab-add-btn")) setShowPlus(false);
+      if(!e.target.closest(".sb-opt-menu") && !e.target.closest(".sb-hd-btn")){ setSbMenu(null); setSbSub(null); setProjAddMenu(false); }
+      if(!e.target.closest(".proj-picker") && !e.target.closest(".proj-tag")){ setProjPicker(false); setProjPickerSub(false); }
+      if(!e.target.closest(".sb-opt-menu") && !e.target.closest(".pr-act")) setProjRowMenu(null);
+      if(!e.target.closest(".settings-pop") && !e.target.closest(".sb-settings-row")) setShowSettings(false);
+    };
+    window.addEventListener("mousedown", h);
+    return ()=> window.removeEventListener("mousedown", h);
+  },[]);
+
+  useEffect(()=>{ const el = msgsRef.current; if(el) el.scrollTop = el.scrollHeight; }, [chatMsgs, activeChat]);
+  useEffect(()=>{ if(activeTabObj && activeTabObj.kind==="memory" && backendStatus==="connected") loadMemory(); }, [activeTab, backendStatus]);
+  useEffect(()=>{
+    const api = window.__vellumCodingApi;
+    if(!api) return;
+    api.health().then(setCodingHealth).catch(()=>setCodingHealth({providers:[]}));
+  }, []);
+  useEffect(()=>{ setCodingSession(null); }, [codingProvider, codingAccessMode, codingProjectRoot]);
+  useEffect(()=> ()=> clearTimeout(timerRef.current), []);
+
+  /* streaming (per-chat) */
+  function setMsgsFor(chatId, fn){ setChatMsgs(prev=> ({...prev, [chatId]: fn(prev[chatId]||[])})); }
+  function emptyProgress(){ return { status:"idle", turnId:null, reason:"", tasks:[], outputs:[], sources:[] }; }
+  function setProgFor(chatId, fn){ setProgressByChat(prev=> ({...prev, [chatId]: fn(prev[chatId]||emptyProgress())})); }
+  /* Pure reducer: fold one VPROTO frame into a progress object. */
+  function applyFrame(prog, f){
+    const p = {...prog, tasks:[...(prog.tasks||[])]};
+    const m = f.method, a = f.params||{};
+    if(m==="turn/started"){ return {...emptyProgress(), status:"planning", turnId:a.turnId}; }
+    if(m==="item/plan"){
+      if(!a.complex) return {...p, status:"done", reason:a.reason};
+      p.status = "running"; p.reason = a.reason;
+      p.tasks = (a.tasks||[]).map(t=>({ id:t.id, title:t.title, role:t.role, status:"pending", routingTag:null, persona:null, output:"" }));
+      return p;
+    }
+    if(m==="item/subagent/started"){
+      const i = p.tasks.findIndex(t=>t.id===a.task.id);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], status:"running", routingTag:a.routingTag, persona:a.persona};
+      return p;
+    }
+    if(m==="item/agentMessage/delta"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], output:(p.tasks[i].output||"")+a.text};
+      return p;
+    }
+    if(m==="item/reasoning/delta"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], review:(p.tasks[i].review||"")+a.text};
+      return p;
+    }
+    if(m==="item/subagent/completed"){
+      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
+      if(i>=0) p.tasks[i] = {...p.tasks[i], status:a.status, output:a.output!=null?a.output:p.tasks[i].output};
+      return p;
+    }
+    if(m==="turn/completed"){ return {...p, status:"done"}; }
+    return p;
+  }
+  /* Emit a frame: reduce it into this chat's progress. The sole UI data path. */
+  function emitFrame(chatId, frame){ setProgFor(chatId, prog=> applyFrame(prog, frame)); }
+  function toORMessages(msgs){
+    const out = [{role:"system", content:"You are Vellum — a calm, precise, personal AI assistant. Answer plainly and concisely."}];
+    msgs.forEach(m=>{ if(m.type==="user"){ if(m.text) out.push({role:"user", content:m.text}); } else if(m.type==="assistant"){ if(m.text) out.push({role:"assistant", content:m.text}); } });
+    return out;
+  }
+  /* Low-level provider stream. Returns the full text. Calls onDelta(chunk) per token.
+     Does NOT touch chat messages or progress — callers decide what to do with the text. */
+  async function streamModel({messages, model, signal, onDelta}){
+    const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
+    const key = (apiKeys[cfg.keyId]||"").trim();
+    if(!cfg.chatUrl) throw new Error("Provider has no chat endpoint in preview");
+    if(!key) throw new Error("Missing API key");
+    const headers = { "Authorization":"Bearer "+key, "Content-Type":"application/json" };
+    if(cfg.referer){ headers["HTTP-Referer"]="https://vellum.app"; headers["X-Title"]="Vellum"; }
+    const resp = await fetch(cfg.chatUrl, { method:"POST", signal, headers, body: JSON.stringify({ model, stream:true, messages }) });
+    if(!resp.ok || !resp.body){
+      let msg = "Request failed ("+resp.status+")";
+      try{ const j = await resp.json(); if(j && j.error && j.error.message) msg = j.error.message; }catch(e){}
+      throw new Error(msg);
+    }
+    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf="", acc="";
+    while(true){
+      const r = await reader.read(); if(r.done) break;
+      buf += dec.decode(r.value, {stream:true});
+      let idx;
+      while((idx = buf.indexOf("\n")) >= 0){
+        const line = buf.slice(0, idx).trim(); buf = buf.slice(idx+1);
+        if(!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if(data==="[DONE]") continue;
+        try{ const j = JSON.parse(data); const d = j.choices && j.choices[0] && j.choices[0].delta; const c = d && d.content; if(c){ acc += c; if(onDelta) onDelta(c); } }catch(e){}
+      }
+    }
+    return acc;
+  }
+  async function streamChat(chatId, aid, history, model){
+    const ctrl = new AbortController(); abortRef.current = ctrl;
+    try{
+      const text = await streamModel({
+        messages: toORMessages(history), model, signal: ctrl.signal,
+        onDelta: (c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid ? {...x, text:(x.text||"")+c, thinking:false} : x)),
+      });
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
+    }catch(e){
+      if(e && e.name==="AbortError") setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
+      else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Network error"), thinking:false, streaming:false}:x));
+    }
+    abortRef.current = null; setRunning(false);
+  }
+  /* Coding-mode backend bridge. */
+  async function ensureCodingSession(){
+    if(codingSession) return codingSession;
+    const api = window.__vellumCodingApi;
+    if(!api) throw new Error("Coding API unavailable.");
+    if(!codingProjectRoot.trim()) throw new Error("Open a project folder first.");
+    const session = await api.createSession({
+      provider: codingProvider,
+      cwd: codingProjectRoot.trim(),
+      access_mode: codingAccessMode,
+      title: chatTitleFor(activeChat) || "Coding session",
+    });
+    setCodingSession(session);
+    return session;
+  }
+  function codingEventText(data){
+    const payload = (data && data.payload) || {};
+    return payload.text || data.message || "";
+  }
+  async function runBackendCodingTurn(chatId, aid, userText){
+    let answer = "";
+    try{
+      const session = await ensureCodingSession();
+      setProgFor(chatId, prog=> ({...prog, status:"running"}));
+      await window.__vellumCodingApi.runTurn(session.id, userText, (evt)=>{
+        const data = evt.data || {};
+        setCodingEvents(prev=> [...prev.slice(-99), {event:evt.event, data}]);
+        if(evt.event==="turn" || data.type==="turn.started"){
+          setProgFor(chatId, prog=> ({...prog, status:"running", turnId:data.turn_id || prog.turnId}));
+        }
+        if(evt.event==="assistant_delta" || data.type==="assistant.delta"){
+          const text = codingEventText(data);
+          if(text){
+            answer += text;
+            setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer, thinking:false}:x));
+          }
+        }
+        if(evt.event==="assistant_final" || data.type==="assistant.final"){
+          const text = codingEventText(data);
+          if(text) answer = text;
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer, thinking:false, streaming:false}:x));
+        }
+        if(evt.event==="done" || data.type==="turn.completed"){
+          setProgFor(chatId, prog=> ({...prog, status:"done", turnId:data.turn_id || prog.turnId}));
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer || x.text || "Done.", thinking:false, streaming:false}:x));
+        }
+        if(evt.event==="error" || data.type==="turn.error"){
+          const text = codingEventText(data) || "Coding run failed.";
+          setProgFor(chatId, prog=> ({...prog, status:"error"}));
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Warning: "+text, thinking:false, streaming:false}:x));
+        }
+      });
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer || x.text || "Done.", thinking:false, streaming:false}:x));
+    }catch(e){
+      const text = (e && e.message) || "Coding run failed.";
+      setProgFor(chatId, prog=> ({...prog, status:"error"}));
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text, thinking:false, streaming:false}:x));
+    }
+    abortRef.current=null; setRunning(false);
+  }
+  function sendToChat(chatId, text, atts){
+    const t = (text||"").trim();
+    if(running){
+      // mid-turn steer for an active coding turn (does NOT abort — the turn keeps running)
+      const pr = progressByChat[chatId]; const tid = pr && pr.turnId;
+      if(t && tid && activeMode==="coding" && (pr.status==="running"||pr.status==="planning")){
+        steerRef.current[tid] = t;
+        emitFrame(chatId, VPROTO.steer(chatId, tid, t));
+        setMsgsFor(chatId, m=> [...m, { id:nextId(), type:"system", label:"Steer: "+t, icon:"dot" }]);
+      }
+      return;
+    }
+    if(!t && (!atts || !atts.length)) return;
+    const uid = nextId(), aid = nextId();
+    const userMsg = { id:uid, type:"user", text:t, atts:atts };
+    setMsgsFor(chatId, m=> [...m, userMsg, { id:aid, type:"assistant", text:"", streaming:true, thinking:true }]);
+    setRunning(true); streamTargetRef.current = chatId;
+    if(activeMode==="coding"){ runBackendCodingTurn(chatId, aid, t); return; }
+    const prevMsgs = chatMsgs[chatId] || [];
+    if(useBackend){ streamBackend(chatId, aid, t); return; }
+    const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
+    const key = (apiKeys[cfg.keyId]||"").trim();
+    const pn = (PROVIDERS.find(p=>p.id===activeProvider)||{}).name || activeProvider;
+    if(!cfg.chatUrl){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:pn+" chats through the Vellum backend in the full app. In this browser preview, pick OpenRouter or OpenAI in Models & Compute.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
+    else if(!key){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Add your "+pn+" key in Settings → Models & Compute to chat.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
+    else { streamChat(chatId, aid, [...prevMsgs, userMsg], selModel); }
+  }
+  function onMainSend(text, atts){
+    let chatId = activeChat;
+    if(isLanding){
+      const seed = (text && text.trim()) ? text : (atts && atts.length ? atts[0].name : "New chat");
+      chatId = "chat-" + (++idRef.current);
+      const meta = {id:chatId, title:titleFor(seed), age:"now"};
+      if(activeProject){ setProjects(prev=> prev.map(p=> p.id===activeProject ? {...p, chats:[meta, ...(p.chats||[])], expanded:true} : p)); }
+      else { setNewChats(prev=> [meta, ...prev]); }
+      openProgRef.current = chatId; setActiveChat(chatId);
+    }
+    sendToChat(chatId, text, atts);
+  }
+  function stopStream(){
+    clearTimeout(timerRef.current);
+    if(abortRef.current){ try{ abortRef.current.abort(); }catch(e){} abortRef.current=null; }
+    const chatId = streamTargetRef.current || activeChat;
+    setMsgsFor(chatId, m=> m.map(x=> x.streaming ? {...x, streaming:false, thinking:false} : x));
+    setRunning(false);
+  }
+  function setProvider(id){ setActiveProvider(id); const cfg = PROVIDER_CFG[id]; if(cfg){ setModels(cfg.models); setSelModel(cfg.default); } }
+  async function syncModels(){
+    const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
+    if(!cfg.listUrl) return;
+    setSyncing(true);
+    try{
+      const headers = {}; const key = (apiKeys[cfg.keyId]||"").trim();
+      if(activeProvider==="openai" && key) headers["Authorization"] = "Bearer "+key;
+      const resp = await fetch(cfg.listUrl, {headers});
+      const j = await resp.json();
+      let list = [];
+      if(j && j.data){
+        if(activeProvider==="openrouter") list = j.data.map(m=>({id:m.id, label:(m.name||m.id)}));
+        else if(activeProvider==="openai") list = j.data.filter(m=>/gpt|^o\d|o1|o3|o4/i.test(m.id)).map(m=>({id:m.id, label:m.id}));
+      }
+      if(list.length){ list.sort((a,b)=> a.label.localeCompare(b.label)); setModels(list); }
+    }catch(e){}
+    setSyncing(false);
+  }
+  function modelLabel(id){ const m = models.find(x=>x.id===id); return m ? m.label : id; }
+  /* ── Vellum backend (memory: Honcho + FTS5 + Obsidian; Qdrant off) ── */
+  function backendBase(){ return (backendUrl||"http://127.0.0.1:8000").trim().replace(/\/+$/,""); }
+  async function pingBackend(){
+    setBackendStatus("checking");
+    try{ const r = await fetch(backendBase()+"/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
+    catch(e){ setBackendStatus("offline"); }
+  }
+  async function loadMemory(){
+    try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
+  }
+  function normalizeResponseStreamEvent(ev, payload){
+    if(!payload) return null;
+    if(ev && ev.indexOf("response.")===0) return {type:ev, payload};
+    if(ev==="error") return {type:"error", payload};
+    return null;
+  }
+  function responseItemActivity(item){
+    if(!item) return null;
+    if(item.type==="subagent_call") return {label:item.label||("Routed to "+(item.name||"subagent")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="tool_call") return {label:item.label||("Used "+(item.name||"tool")), detail:item.detail||"", name:item.name, itemId:item.id, status:item.status};
+    if(item.type==="reasoning") return {label:item.label||"Thinking", detail:item.detail||"", itemId:item.id, status:item.status};
+    return null;
+  }
+  function mergeSourceList(list, source){
+    if(!source || !source.url) return list || [];
+    const arr = list ? list.slice() : [];
+    if(!arr.some(s=>s.url===source.url)) arr.push(source);
+    return arr;
+  }
+  async function streamBackend(chatId, aid, message){
+    const ctrl = new AbortController(); abortRef.current = ctrl;
+    try{
+      const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
+      if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
+      const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
+      let semanticSeen = false;
+      let tools = [];
+      let sources = [];
+      let activity = [];
+      while(true){
+        const r=await reader.read(); if(r.done) break;
+        buf+=dec.decode(r.value,{stream:true});
+        let sep;
+        while((sep=buf.indexOf("\n\n"))>=0){
+          const block=buf.slice(0,sep); buf=buf.slice(sep+2);
+          let ev="message", data="";
+          block.split("\n").forEach(line=>{ if(line.indexOf("event:")===0) ev=line.slice(6).trim(); else if(line.indexOf("data:")===0) data+=line.slice(5).trim(); });
+          if(!data) continue;
+          try{ const j=JSON.parse(data);
+            const sem = normalizeResponseStreamEvent(ev, j);
+            if(sem){
+              semanticSeen = true;
+              if(sem.type==="response.created" || sem.type==="response.in_progress"){
+                if(j.thread_id) threadRef.current[chatId]=j.thread_id;
+              } else if(sem.type==="response.output_item.added"){
+                const item = j.item || {};
+                if(item.type==="source" && item.source){
+                  sources = mergeSourceList(sources, item.source);
+                  setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,sources:sources.slice(),thinking:false}:x));
+                } else {
+                  const act = responseItemActivity(item);
+                  if(act){
+                    activity = activity.concat([act]);
+                    if(item.name && item.type==="tool_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    if(item.name && item.type==="subagent_call" && tools.indexOf(item.name)<0) tools.push(item.name);
+                    setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),tools:tools.slice(),thinking:false}:x));
+                  }
+                }
+              } else if(sem.type==="response.output_text.delta"){
+                if(j.delta){ acc+=j.delta; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); }
+              } else if(sem.type==="response.completed"){
+                const r = j.response || {};
+                if(r.thread_id) threadRef.current[chatId]=r.thread_id;
+                const fin = acc || r.output_text || "";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:r.sources||sources,tools:r.tools||tools,activity:activity,thinking:false,streaming:false}:x));
+              } else if(sem.type==="error"){
+                const msg = (j.error && (j.error.message || j.error)) || "Backend error";
+                setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"Warning: "+msg,thinking:false,streaming:false}:x));
+              }
+              continue;
+            }
+            if(ev==="meta"){ if(j.thread_id) threadRef.current[chatId]=j.thread_id; }
+            else if(ev==="tool" && !semanticSeen){
+              if(j.name && tools.indexOf(j.name)<0) tools.push(j.name);
+              const act = {label:"Used "+(j.name||"tool"), detail:"", name:j.name||"tool", status:"running"};
+              activity = activity.concat([act]);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),tools:tools.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running"}));
+            }
+            else if(ev==="activity" && !semanticSeen){
+              activity = activity.concat([{label:j.label||"Agent activity", detail:j.detail||"", status:"running"}]);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,activity:activity.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running"}));
+            }
+            else if(ev==="source" && !semanticSeen){
+              sources = mergeSourceList(sources, j);
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,sources:sources.slice(),thinking:false}:x));
+              setProgFor(chatId,p=>({...p,status:"running",sources:mergeSourceList(p.sources, j)}));
+            }
+            else if(ev==="token" && !semanticSeen){ if(j.text){ acc+=j.text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:acc,thinking:false}:x)); } }
+            else if(ev==="final" && !semanticSeen){
+              if(j.thread_id) threadRef.current[chatId]=j.thread_id;
+              const fin=acc||j.answer||"";
+              const finalSources = j.sources||sources;
+              const finalTools = j.tools||tools;
+              setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:fin,sources:finalSources,tools:finalTools,activity:activity.slice(),thinking:false,streaming:false}:x));
+              setProgFor(chatId,p=>({...p,status:"done",sources:finalSources}));
+            }
+          }catch(e){}
+        }
+      }
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,streaming:false,thinking:false}:x));
+      loadMemory();
+    }catch(e){
+      if(e && e.name==="AbortError") setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,streaming:false,thinking:false}:x));
+      else setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ Backend unreachable. Start it (uvicorn agent.api:app) and serve this UI from :5173 so CORS allows it.",thinking:false,streaming:false}:x));
+    }
+    abortRef.current=null; setRunning(false);
+  }
+
+  /* tabs */
+  function addSideChat(){
+    const n = (++sideCtRef.current);
+    const id = "side-" + n;
+    const name = n===1 ? "Side chat" : "Side chat " + n;
+    setTabs(prev=> [...prev, {id, kind:"side", label:name, icon:"side"}]);
+    setActiveTab(id); setShowSub(true); setShowPlus(false);
+  }
+  function addTab(kind){
+    if(kind==="side") return addSideChat();
+    const meta = { terminal:{label:"Terminal",icon:"term"}, browser:{label:"Browser",icon:"globe"}, memory:{label:"Memory",icon:"mem"}, files:{label:"Open file",icon:"file"} }[kind] || {label:"Tab",icon:"globe"};
+    const id = kind + "-" + (++tabCt.current);
+    setTabs(prev=> [...prev, {id, kind, label:meta.label, icon:meta.icon}]);
+    setActiveTab(id); setShowSub(true); setShowPlus(false);
+  }
+  function openSubagent(agent){
+    if(!agent) return;
+    setShowSub(true);
+    const exist = tabs.find(t=>t.kind==="agent" && t.agentId===agent.id);
+    if(exist){ setActiveTab(exist.id); return; }
+    const id = "agent-"+agent.id;
+    setTabs(prev=> [...prev, {id, kind:"agent", label:agent.name, icon:"sprite", agentId:agent.id}]);
+    setActiveTab(id);
+  }
+  function openTaskAgent(task){
+    setShowSub(true);
+    const id = "task-"+task.id;
+    setTabs(prev=> prev.find(t=>t.id===id) ? prev : [...prev, {id, kind:"taskagent", label:task.persona?task.persona.name:task.title, icon:"sprite", taskId:task.id, sprite:task.persona&&task.persona.sprite, color:task.persona&&task.persona.color}]);
+    setActiveTab(id);
+  }
+  function closeTab(id, e){
+    e && e.stopPropagation();
+    setTabs(prev=>{
+      const idx = prev.findIndex(t=>t.id===id);
+      const next = prev.filter(t=>t.id!==id);
+      if(activeTab===id){ if(next.length) setActiveTab(next[Math.max(0, idx-1)].id); else setActiveTab(""); }
+      return next;
+    });
+  }
+  function tabIcon(t){
+    if(t.icon==="sprite"){ if(t.sprite){ return <PixelSprite name={t.sprite} color={t.color} px={2}/>; } const a = agentById(t.agentId); return a ? <PixelSprite name={a.sprite} color={a.color} px={2}/> : <IcUser size={12}/>; }
+    if(t.icon==="term") return <IcTerminal size={12}/>;
+    if(t.icon==="globe") return <IcGlobe size={12}/>;
+    if(t.icon==="mem") return <span>❖</span>;
+    if(t.icon==="side") return <IcChat size={12}/>;
+    if(t.icon==="file") return <IcFile size={12}/>;
+    return <IcGlobe size={12}/>;
+  }
+
+  /* palette */
+  const COMMANDS = [
+    { id:"new",      title:"New chat",               icon:<IcEdit size={14}/>,    kbd:"",       run:()=> setActiveChat("new") },
+    { id:"sidebar",  title:"Toggle sidebar",         icon:<IcSidebar size={14}/>, kbd:"Ctrl B", run:()=> setSbPinned(v=>!v) },
+    { id:"mission",  title:"Toggle Progress panel",  icon:<IcLayout size={14}/>,  kbd:"",       run:()=> setShowProg(v=>!v) },
+    { id:"work",     title:"Toggle Workspace panel", icon:<IcColumns size={14}/>, kbd:"",       run:()=> setShowSub(v=>!v) },
+    { id:"shell",    title:(shell==="browser"?"Switch to Desktop app shell":"Switch to Browser shell"), icon:<IcWindow size={14}/>, kbd:"Ctrl \\", run:()=> onSwitchShell() },
+    { id:"max",      title:(maximized?"Restore window":"Maximize window"), icon:<IcExpand size={14}/>, kbd:"", run:()=> onToggleMax() },
+    { id:"m-coding", title:"Mode: Coding",           icon:<IcTerminal size={14}/>,kbd:"Ctrl 2", run:()=> setActiveMode("coding") },
+    { id:"t-memory", title:"Open Memory trace",      icon:<IcBook size={14}/>,    kbd:"",       run:()=> addTab("memory") },
+  ];
+  const q = paletteQ.trim().toLowerCase();
+  const cmdMatches  = COMMANDS.filter(c=> !q || c.title.toLowerCase().includes(q));
+  const chatMatches = allChats.filter(c=> !q || c.title.toLowerCase().includes(q));
+  const flat = [...cmdMatches.map(c=>({kind:"cmd", item:c})), ...chatMatches.map(c=>({kind:"chat", item:c}))];
+  function runPalette(entry){ if(!entry) return; if(entry.kind==="cmd") entry.item.run(); else setActiveChat(entry.item.id); setShowPalette(false); setPaletteQ(""); }
+  function paletteKey(e){
+    if(e.key==="ArrowDown"){ e.preventDefault(); setPalIdx(i=> Math.min(flat.length-1, i+1)); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); setPalIdx(i=> Math.max(0, i-1)); }
+    else if(e.key==="Enter"){ e.preventDefault(); runPalette(flat[palIdx]); }
+  }
+
+  /* slash commands */
+  const SLASH_CMDS = [
+    { id:"code-review", name:"Code review", desc:"Review unstaged changes or compare against a branch", ic:<IcFork size={14}/> },
+    { id:"compact", name:"Compact", desc:"Compact this thread's context (83% full)", ic:<IcColumns size={14}/> },
+    { id:"fast", name:"Fast", desc:"1.5x speed, increased usage", ic:<IcSpark size={14}/> },
+    { id:"feedback", name:"Feedback", desc:"Send feedback about this chat", ic:<IcChat size={14}/> },
+    { id:"goal", name:"Goal", desc:"Set a goal that Vellum keeps working towards", ic:<IcTarget size={14}/>, run:()=> setPursueGoal(true) },
+    { id:"mcp", name:"MCP", desc:"Show MCP server status", ic:<IcPlugin size={14}/> },
+    { id:"memories", name:"Memories", desc:"Generate on", ic:<IcBook size={14}/>, run:()=> addTab("memory") },
+    { id:"model", name:"Model", desc:selModel, ic:<IcGauge size={14}/> },
+    { id:"personality", name:"Personality", desc:"Choose how Vellum responds", ic:<IcUser size={14}/> },
+    { id:"pet", name:"Pet", desc:"Wake or tuck away the desktop pet", ic:<IcSpark size={14}/> },
+    { id:"plan", name:"Plan mode", desc:"Turn plan mode on", ic:<IcLayout size={14}/>, run:()=> setPlanMode(v=>!v) },
+    { id:"reasoning", name:"Reasoning", desc:selReasoning, ic:<IcGauge size={14}/> },
+    { id:"side", name:"Side", desc:"Start a side conversation in an ephemeral fork", ic:<IcChat size={14}/>, run:()=> addTab("side") },
+    { id:"status", name:"Status", desc:"Show chat id, context usage, and rate limits", ic:<IcGauge size={14}/> },
+  ];
+  const SLASH_SKILLS = [
+    { id:"brainstorming", name:"Brainstorming", desc:"Explore intent, requirements, and design before implementation" },
+    { id:"browser-skill", name:"Browser", desc:"Let Vellum open and control the in-app browser" },
+    { id:"ci-debug", name:"CI Debug", desc:"Debug failing GitHub Actions checks" },
+    { id:"computer-use", name:"Computer Use", desc:"Control Windows apps from Vellum" },
+    { id:"dispatch", name:"Dispatching Parallel Agents", desc:"Split independent work across parallel agents" },
+    { id:"exec-plans", name:"Executing Plans", desc:"Execute written implementation plans with review checkpoints" },
+    { id:"finish-branch", name:"Finishing a Development Branch", desc:"Wrap up implementation and choose integration path" },
+  ];
+  function slashFiltered(text){
+    const s = (text||"").trimStart().slice(1).toLowerCase();
+    const cmds = SLASH_CMDS.filter(c=> !s || c.name.toLowerCase().includes(s)).map(c=>({...c, group:"cmd"}));
+    const sk = SLASH_SKILLS.filter(c=> !s || c.name.toLowerCase().includes(s)).map(c=>({...c, group:"skill"}));
+    return [...cmds, ...sk];
+  }
+  function runSlash(item){ if(item && item.run) item.run(); }
+  const composerApi = {
+    accessLabel, accessMode, setAccessMode, selModel, setSelModel, selReasoning, setSelReasoning,
+    planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
+    slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
+    models, modelLabel, syncModels, syncing, memoryOn, setMemoryOn,
+  };
+
+  function openCtx(e){ e.preventDefault(); e.stopPropagation(); const r = rootRef.current.getBoundingClientRect(); setCtxMenu({ x: Math.min(e.clientX-r.left, r.width-236), y: Math.min(e.clientY-r.top, r.height-300) }); }
+  const prog = progressByChat[activeChat] || emptyProgress();
+  const progDone = prog.tasks.filter(t=> t.status==="done" || t.status==="error").length;
+  const progPct = prog.tasks.length ? Math.round((progDone/prog.tasks.length)*100) : 0;
+
+  function renderMsg(msg){
+    if(msg.type==="user") return <div key={msg.id} className="user-msg">{msg.atts && msg.atts.length>0 && <div className="att-row" style={{marginBottom:msg.text?6:0}}>{msg.atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span></div>))}</div>}{msg.text}</div>;
+    if(msg.type==="assistant"){
+      if(msg.thinking) return <div key={msg.id} className="working-line"><span className="glow-text">Vellum is working</span><span className="tdot"/><span className="tdot"/><span className="tdot"/></div>;
+      return <div key={msg.id} className="msg-wrap">
+        {msg.plan && msg.plan.length>0 && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const byId={}; (pr.tasks||[]).forEach(t=>byId[t.id]=t); return (
+          <div className="plan-block" style={{border:"1px solid #1e1e1e",borderRadius:10,padding:"8px 10px",margin:"4px 0 10px",background:"#121212"}}>
+            <div className="prog-title" style={{marginBottom:4}}>Plan</div>
+            {msg.plan.map(t=>{ const st=(byId[t.id]||{}).status||"pending"; return (
+              <div key={t.id} className="task-row">
+                {st==="done"?<IcCheckCircle size={14}/>:st==="running"||st==="review"?<Spinner/>:<IcCircle size={14}/>}
+                <span className={"task-lbl"+(st==="done"?" done":"")}>{t.title}</span>
+                {(byId[t.id]&&byId[t.id].persona&&st==="running")&&<span className="sa-working" style={{marginLeft:6}}>{byId[t.id].persona.name}</span>}
+              </div>
+            ); })}
+          </div>
+        ); })()}
+        {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {msg.activity && msg.activity.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.activity.slice(0,4).map((a,i)=><span key={i} className="att-chip"><Spinner/><span className="att-name">{a.label}</span></span>)}</div>}
+        {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
+      </div>;
+    }
+    if(msg.type==="system") return <div key={msg.id} className="sys-line">{msg.icon==="cmd" ? <Fragment><span style={{fontSize:12,color:"#3a3a3a"}}>⬡</span><span className="sys-cmd">{msg.label}</span></Fragment> : <Fragment><div className="sys-dot"/><span>{msg.label}</span></Fragment>}</div>;
+    if(msg.type==="learning") return <div key={msg.id} className="learning-inline"><div className="learning-inline-kicker">Learning event</div><div className="learning-inline-title">{msg.title}</div><div className="learning-inline-body">{msg.body}</div></div>;
+    if(msg.type==="spawn"){ const a = agentById(msg.agentId); return (
+      <div key={msg.id} className="spawn-block">
+        <div className="spawn-hdr"><span>{msg.header}</span><IcChevD size={12}/></div>
+        <div className="spawn-created">Assigned {a && <PixelSprite name={a.sprite} color={a.color} px={2}/>}<span className="spawn-agent">{a?a.name:msg.agentId}</span>{msg.agentRole && <span style={{color:"#484848"}}>({msg.agentRole})</span>}<span style={{color:"#484848"}}>with a narrow brief:</span></div>
+        <div className="spawn-instr">{msg.instruction}</div>
+      </div>
+    );}
+    if(msg.type==="closed") return <div key={msg.id}><div className="close-hdr"><div className="sys-dot"/><span>Closed {msg.count} agent sessions</span><IcChevD size={12}/></div>{msg.agents.map((a,i)=>(<div key={i} className="close-item"><span style={{color:"#484848"}}>Closed</span><span>{a}</span></div>))}</div>;
+    return <div key={msg.id} className="msg-wrap"><MsgText msg={msg}/></div>;
+  }
+
+  const chatTitle = chatTitleFor(activeChat);
+
+  function togglePin(chat){
+    setPinned(prev=> prev.some(p=>p.id===chat.id) ? prev.filter(p=>p.id!==chat.id) : [{id:chat.id, title:chat.title, age:chat.age}, ...prev]);
+  }
+  function archiveChat(id){
+    setArchived(prev=> prev.includes(id) ? prev : [...prev, id]);
+    setPinned(prev=> prev.filter(p=>p.id!==id));
+    setNewChats(prev=> prev.filter(c=>c.id!==id));
+    setArchiveConfirm(null);
+    if(activeChat===id) setActiveChat("new");
+  }
+  function chatRow(chat){
+    const id = chat.id;
+    return (
+      <div key={id} className={"chat-row"+(id===activeChat?" active":"")} onClick={()=>{setActiveChat(id);setSbHover(false);}} onContextMenu={openCtx}>
+        <span className="chat-row-title">{chat.title}</span>
+        {archiveConfirm===id ? (
+          <button className="confirm-btn" onClick={(e)=>{e.stopPropagation(); archiveChat(id);}}>Confirm</button>
+        ) : (
+          <Fragment>
+            <div className="chat-row-actions">
+              <button className="cr-act" title={pinned.some(p=>p.id===id)?"Unpin":"Pin"} onClick={(e)=>{e.stopPropagation(); togglePin(chat);}}><IcPin size={13}/></button>
+              <button className="cr-act" title="Archive" onClick={(e)=>{e.stopPropagation(); setArchiveConfirm(id);}}><IcArchive size={13}/></button>
+            </div>
+            {chat.age ? <span className="chat-row-age">{chat.age}</span> : <Spinner/>}
+          </Fragment>
+        )}
+      </div>
+    );
+  }
+
+  function sbOptMenu(){
+    return (
+      <div className="sb-opt-menu pop-in" onClick={(e)=>e.stopPropagation()}>
+        <div className="sb-opt-item"><div className="sb-opt-l"><IcArchive size={14}/><span>Archive all chats</span></div></div>
+        <div className="sb-opt-item" onMouseEnter={()=>setSbSub("organize")} onMouseLeave={()=>setSbSub(null)}>
+          <div className="sb-opt-l"><IcFolder size={14}/><span>Organize sidebar</span></div><IcChevR size={13}/>
+          {sbSub==="organize" && (
+            <div className="sb-submenu">
+              <div className="sb-opt-item" onClick={()=>{setOrganizeBy("project"); setSbMenu(null);}}><div className="sb-opt-l"><IcFolder size={13}/><span>By project</span></div>{organizeBy==="project" && <span className="drop-check">✓</span>}</div>
+              <div className="sb-opt-item" onClick={()=>{setOrganizeBy("recent"); setSbMenu(null);}}><div className="sb-opt-l"><IcFolder size={13}/><span>Recent projects</span></div>{organizeBy==="recent" && <span className="drop-check">✓</span>}</div>
+              <div className="sb-opt-item" onClick={()=>{setOrganizeBy("chrono"); setSbMenu(null);}}><div className="sb-opt-l"><IcAuto size={13}/><span>Chronological list</span></div>{organizeBy==="chrono" && <span className="drop-check">✓</span>}</div>
+              <div className="sb-opt-item" onClick={()=>setSbMenu(null)}><div className="sb-opt-l"><span style={{fontSize:13,width:13,display:"flex",justifyContent:"center"}}>↑</span><span>Move up</span></div></div>
+            </div>
+          )}
+        </div>
+        <div className="sb-opt-item" onMouseEnter={()=>setSbSub("sort")} onMouseLeave={()=>setSbSub(null)}>
+          <div className="sb-opt-l"><IcRefresh size={14}/><span>Sort by</span></div><IcChevR size={13}/>
+          {sbSub==="sort" && (
+            <div className="sb-submenu">
+              <div className="sb-opt-item" onClick={()=>{setSortBy("created"); setSbMenu(null);}}><div className="sb-opt-l"><IcFile size={13}/><span>Created</span></div>{sortBy==="created" && <span className="drop-check">✓</span>}</div>
+              <div className="sb-opt-item" onClick={()=>{setSortBy("updated"); setSbMenu(null);}}><div className="sb-opt-l"><IcEdit size={13}/><span>Updated</span></div>{sortBy==="updated" && <span className="drop-check">✓</span>}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  function sbHeader(label, key, addBtn){
+    return (
+      <div className="sb-section-hd">
+        <span className="sb-section-lbl">{label}</span>
+        <div className="sb-hd-actions">
+          <button className="sb-hd-btn" onClick={(e)=>{e.stopPropagation(); setSbMenu(sbMenu===key?null:key); setSbSub(null);}}><IcMoreDots size={14}/></button>
+          {addBtn || <button className="sb-hd-btn" title="New chat" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={13}/></button>}
+        </div>
+        {sbMenu===key && sbOptMenu()}
+      </div>
+    );
+  }
+
+  return (
+    <div className="workspace" ref={rootRef} onClick={()=>setCtxMenu(null)}>
+      <div ref={trigRef} className="sb-trigger"/>
+
+      {/* Sidebar */}
+      <div className={"sidebar"+(sbOpen?" open":"")}>
+        <div className="sb-top">
+          <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New chat</span></button>
+          <button className="sb-nav-btn" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);setSbHover(false);}}><IcSearch size={15}/><span>Search</span><span className="kbd sb-nav-kbd">Ctrl K</span></button>
+          <button className="sb-nav-btn"><IcPlugin size={15}/><span>Plugins</span></button>
+          <button className="sb-nav-btn"><IcAuto size={15}/><span>Automations</span></button>
+          <button className="sb-nav-btn"><span style={{color:"#4a90d9",display:"flex"}}><IcMonitor size={15}/></span><span>Vellum mobile</span></button>
+        </div>
+        <div style={{flex:1, overflow:"visible"}}>
+          {pinned.filter(p=>!archived.includes(p.id)).length>0 && (
+            <div className="sb-section">
+              <div className="sb-section-lbl">Pinned</div>
+              {pinned.filter(p=>!archived.includes(p.id)).map(chatRow)}
+            </div>
+          )}
+          <div className="sb-section">
+            {sbHeader("Projects","projects", (
+              <Fragment>
+                <button className="sb-hd-btn" title="Collapse / expand all" onClick={(e)=>{e.stopPropagation(); collapseAllProjects();}}><IcExpand size={13}/></button>
+                <div style={{position:"relative",display:"flex"}}>
+                  <button className="sb-hd-btn" title="Add project" onClick={(e)=>{e.stopPropagation(); setProjAddMenu(v=>!v);}}><IcFolderPlus size={14}/></button>
+                  {projAddMenu && (
+                    <div className="sb-opt-menu" style={{left:"auto", right:0}} onClick={(e)=>e.stopPropagation()}>
+                      <div className="sb-opt-item" onClick={startFromScratch}><div className="sb-opt-l"><IcFolderPlus size={14}/><span>Start from scratch</span></div></div>
+                      <div className="sb-opt-item" onClick={useExistingFolder}><div className="sb-opt-l"><IcFolder size={14}/><span>Use an existing folder</span></div></div>
+                    </div>
+                  )}
+                </div>
+              </Fragment>
+            ))}
+            <input type="file" multiple ref={el=>{ if(el){ projInputRef.current=el; el.setAttribute("webkitdirectory",""); el.setAttribute("directory",""); } }} style={{display:"none"}} onChange={onProjInput}/>
+            {projects.length===0 && <div className="sb-add-proj" onClick={startFromScratch}><IcFolderPlus size={13}/><span>Create a project</span></div>}
+            {[...projects].sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)).map(proj=>{
+              const chats = (proj.chats||[]).filter(c=>!archived.includes(c.id));
+              return (
+              <div key={proj.id}>
+                <div className={"proj-row"+(proj.expanded?" open":"")} style={{position:"relative"}} onClick={()=>toggleProj(proj.id)}>
+                  {proj.expanded?<IcChevD size={14}/>:<IcChevR size={14}/>}<IcFolder size={14}/>
+                  <span className="proj-name">{proj.name}</span>
+                  <div className="proj-row-actions">
+                    <button className="pr-act" title="Project options" onClick={(e)=>{e.stopPropagation(); setProjRowMenu(projRowMenu===proj.id?null:proj.id);}}><IcMoreDots size={14}/></button>
+                    <button className="pr-act" title="New chat in project" onClick={(e)=>{e.stopPropagation(); newChatInProject(proj.id);}}><IcEdit size={13}/></button>
+                  </div>
+                  {projRowMenu===proj.id && (
+                    <div className="sb-opt-menu" style={{top:26, left:14}} onClick={(e)=>e.stopPropagation()}>
+                      <div className="sb-opt-item" onClick={()=>pinProject(proj.id)}><div className="sb-opt-l"><IcPin size={13}/><span>{proj.pinned?"Unpin project":"Pin project"}</span></div></div>
+                      <div className="sb-opt-item" onClick={()=>setProjRowMenu(null)}><div className="sb-opt-l"><IcFolder size={13}/><span>Open in Explorer</span></div></div>
+                      <div className="sb-opt-item" onClick={()=>openNameModal("rename", proj)}><div className="sb-opt-l"><IcEdit size={13}/><span>Rename project</span></div></div>
+                      <div className="sb-opt-item" onClick={()=>archiveProjectChats(proj.id)}><div className="sb-opt-l"><IcArchive size={13}/><span>Archive chats</span></div></div>
+                      <div className="sb-opt-item" onClick={()=>removeProject(proj.id)}><div className="sb-opt-l"><IcX size={13}/><span>Remove</span></div></div>
+                    </div>
+                  )}
+                </div>
+                {proj.expanded && (chats.length>0 ? chats.map(chatRow) : <div className="proj-nochats">No chats</div>)}
+              </div>
+            );})}
+          </div>
+          <div className="sb-section">
+            {sbHeader("Chats","chats")}
+            {newChats.filter(c=>!archived.includes(c.id)).length===0
+              ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No chats</div>
+              : newChats.filter(c=>!archived.includes(c.id)).map(chatRow)}
+          </div>
+          <div className="sb-section">
+            <div className="sb-section-lbl">Vellum Core</div>
+            <div className="core-row" onClick={()=>{addTab("memory");}}><span>❖</span><span>Memory</span><span className="core-count">3 used</span></div>
+            <div className="core-row"><span>⬦</span><span>Knowledge</span><span className="core-count">4 sources</span></div>
+            <div className="core-row"><span>⚛</span><span>Agents</span><span className="core-count">live</span></div>
+            <div className="core-row"><span>✦</span><span>Skills</span><span className="core-count">12 ready</span></div>
+          </div>
+        </div>
+        <div className="sb-bottom">
+          {showSettings && (
+            <div className="settings-pop fade-up">
+              <div className="sp-hdr"><div className="sp-email">prathyaksh24@gmail.com</div><div className="sp-role">Personal account</div></div>
+              <div className="sp-item"><IcUser size={13}/><span>Profile</span></div>
+              <div className="sp-item" onClick={()=>{setShowModels(true); setShowSettings(false);}}><IcGauge size={13}/><span>Models & Compute</span></div>
+              <div className="sp-item-row"><span style={{display:"flex",alignItems:"center",gap:8}}><IcSettings size={13}/><span>Settings</span></span><span className="kbd">Ctrl ,</span></div>
+              <div className="sp-item-row" onClick={()=>setShowUsage(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcRefresh size={13}/><span>Usage remaining</span></span><IcChevD size={12}/></div>
+              {showUsage && (<div className="usage-inner fade-up"><div className="usage-line"><span>5h</span><span className="usage-sub">25% · 12:20 PM</span></div><div className="usage-line"><span>Weekly</span><span className="usage-sub">88% · Jun 8</span></div><div style={{marginTop:6,display:"flex",flexDirection:"column",gap:2}}><div className="upgrade-link">✦ Upgrade to Pro</div><div className="upgrade-link">Learn more →</div></div></div>)}
+              <div className="sp-div"/><div className="sp-item"><IcLogOut size={13}/><span>Log out</span></div>
+            </div>
+          )}
+          <div className="sb-settings-row" onClick={()=>setShowSettings(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcSettings size={14}/><span>Settings</span></span><span className="kbd">P</span></div>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div className={"main"+(shell==="desktop"&&sbPinned?" desk-inset":"")} style={sbPinned?{marginLeft:272}:undefined}>
+        <div className="chat-pane">
+        {isLanding ? (
+          <Fragment>
+            <div className="topbar">
+              <div/>
+              <div style={{display:"flex",alignItems:"center",gap:6}}><div className="gh-btn"><IcGitHub size={15}/><IcChevD size={12}/></div><button className={"icon-btn"+(showSub?" on":"")} title="Toggle side panel" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
+            </div>
+            <div className="landing">
+              <div><div className="landing-title">{apObj ? ("What should we build in "+apObj.name+"?") : "What should we work on?"}</div></div>
+              <div style={{width:"100%",maxWidth:572,position:"relative"}}>
+                <InputBox placeholder="Do anything" model="5.5" api={composerApi} onSend={onMainSend}/>
+                <div style={{padding:"8px 24px 0", position:"relative"}}>
+                  <div className="proj-tag" onClick={(e)=>{e.stopPropagation(); setProjPicker(v=>!v);}}><IcFolder size={12}/><span>{apObj ? apObj.name : "Work in a project"}</span><IcChevD size={11}/></div>
+                  {projPicker && (
+                    <div className="proj-picker" onClick={(e)=>e.stopPropagation()}>
+                      <div className="pp-search"><IcSearch size={13}/><input placeholder="Search projects" value={projSearch} onChange={(e)=>setProjSearch(e.target.value)}/></div>
+                      {projects.filter(p=>!projSearch || p.name.toLowerCase().includes(projSearch.toLowerCase())).map(p=>(
+                        <div key={p.id} className="pp-item" onClick={()=>{ setProjPicker(false); }}><div className="pp-l"><IcFolder size={13}/><span>{p.name}</span></div></div>
+                      ))}
+                      <div className="pp-item" onMouseEnter={()=>setProjPickerSub(true)} onMouseLeave={()=>setProjPickerSub(false)}>
+                        <div className="pp-l"><IcFolderPlus size={13}/><span>Add new project</span></div><IcChevR size={12}/>
+                        {projPickerSub && (
+                          <div className="pp-submenu">
+                            <div className="pp-item" onClick={startFromScratch}><div className="pp-l"><IcPlus size={13}/><span>Start from scratch</span></div></div>
+                            <div className="pp-item" onClick={useExistingFolder}><div className="pp-l"><IcFolder size={13}/><span>Use an existing folder</span></div></div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Fragment>
+        ) : (
+          <Fragment>
+              <div className="topbar">
+                <div className="tb-left">
+                  <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>setSbPinned(v=>!v)} title="Pin sidebar (Ctrl B)"><IcSidebar size={15}/></button>
+                  <span className="tb-title">{chatTitle}</span>
+                  <div className="tb-more" onClick={openCtx}><IcMoreDots size={15}/></div>
+                </div>
+                <div className="tb-right">
+                  <div className="mode-switch compact">{MODES.map(m=>(<button key={m.id} className={"mode-chip"+(activeMode===m.id?" active":"")} onClick={()=>setActiveMode(m.id)}>{m.label}</button>))}</div>
+                  <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcTasks size={15}/></button>
+                  <button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={15}/></button>
+                </div>
+              </div>
+
+              <div className="msgs" ref={msgsRef} style={showProg?{paddingRight:338}:null}>
+                {messages.map(renderMsg)}
+              </div>
+
+              <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
+
+              {/* Progress floating card */}
+              {showProg && (
+                <div className="prog-float" style={{width:310}}>
+                  {prog.tasks.length>0 && (
+                  <div className="prog-sec">
+                    <div className="prog-title">Progress</div>
+                    {prog.tasks.map(t=>(
+                      <div key={t.id} className="task-row">
+                        {t.status==="done" ? <IcCheckCircle size={15}/> : t.status==="running"||t.status==="review" ? <Spinner/> : <IcCircle size={15}/>}
+                        <span className={"task-lbl"+(t.status==="done"?" done":"")}>{t.title}</span>
+                        {t.persona && (t.status==="running"||t.status==="review") && <span className="sa-working" style={{marginLeft:6}}>{t.persona.name} is working</span>}
+                      </div>
+                    ))}
+                  </div>
+                  )}
+                  <div className="prog-sec">
+                    <div className="prog-title">Outputs</div>
+                    {(prog.outputs && prog.outputs.length>0)
+                      ? prog.outputs.map((o,i)=>(<div key={i} className="out-file"><IcFile size={13}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))
+                      : <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No artifacts yet</div>}
+                  </div>
+                  {tabs.some(t=>t.kind==="side") && (
+                    <div className="prog-sec">
+                      <div className="prog-title">Side chats</div>
+                      {tabs.filter(t=>t.kind==="side").map(t=>(
+                        <div key={t.id} className="sa-row" onClick={()=>{setActiveTab(t.id); setShowSub(true);}}>
+                          <IcCircle size={14}/><span className="sa-name">{t.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {prog.tasks.some(t=>t.persona) && (
+                  <div className="prog-sec">
+                    <div className="prog-title">Subagents</div>
+                    {prog.tasks.filter(t=>t.persona).map(t=>(
+                      <div key={t.id} className="sa-row" onClick={()=>openTaskAgent(t)}>
+                        <PixelSprite name={t.persona.sprite} color={t.persona.color} px={2}/>
+                        <span className="sa-name">{t.persona.name}</span>
+                        {t.status==="running" && <span className="sa-working">is working</span>}
+                        {t.status==="done" && <span className="sa-working" style={{color:"#5a8f5a"}}>done</span>}
+                      </div>
+                    ))}
+                  </div>
+                  )}
+                  <div className="prog-sec">
+                    <div className="prog-title">Sources</div>
+                    {(prog.sources && prog.sources.length>0)
+                      ? prog.sources.map((s,i)=>(<div key={i} className="out-file"><IcGlobe size={13}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.domain||s.title||s.url||"source"}</span></div>))
+                      : <div className="task-empty" style={{color:"#555",fontSize:12.5,padding:"2px 0"}}>No sources yet</div>}
+                  </div>
+                </div>
+              )}
+          </Fragment>
+        )}
+        </div>
+
+        {/* Workspace column */}
+        {showSub && <div className={"resize-h"+(resizing?" active":"")} onMouseDown={(e)=>{e.preventDefault();setResizing(true);const sx=e.clientX,sw=wsWidth;const mv=(ev)=>setWsWidth(clamp(sw-(ev.clientX-sx),340,760));const up=()=>{setResizing(false);window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",up);document.body.style.cursor="";};window.addEventListener("mousemove",mv);window.addEventListener("mouseup",up);document.body.style.cursor="col-resize";}}/>}
+            {showSub && (
+              <div className="sub-panel" style={{width:wsWidth, borderLeft:"1px solid #191919"}}>
+                <div className="workspace-bar">
+                  {tabs.map(t=>(
+                    <button key={t.id} className={"workspace-tab"+(activeTab===t.id?" active":"")} onClick={()=>setActiveTab(t.id)}>
+                      <span className="workspace-tab-icon">{tabIcon(t)}</span><span>{t.label}</span>
+                      <span className="workspace-tab-x" onClick={(e)=>closeTab(t.id,e)}><IcX size={11}/></span>
+                    </button>
+                  ))}
+                  <div className="tab-add-btn" onClick={(e)=>{e.stopPropagation();setShowPlus(v=>!v);}}><IcPlus size={13}/></div>
+                  <div className="tabs-right"><button className="icon-btn"><IcExpand size={14}/></button><button className="icon-btn" onClick={()=>setShowSub(false)} title="Close panel"><IcColumns size={14}/></button></div>
+                </div>
+                {showPlus && (
+                  <div className="plus-drop pop-in">
+                    {launcherKinds().map(k=>(<div key={k} className="plus-item" onClick={()=>addTab(k)}><div className="plus-item-l">{KIND_META[k].sm}<span>{KIND_META[k].label}</span></div>{KIND_META[k].kbd && <span className="kbd">{KIND_META[k].kbd}</span>}</div>))}
+                    {chatInProject && OUTPUTS.length>0 && <div className="plus-sec">Suggested</div>}
+                    {chatInProject && OUTPUTS.length>0 && OUTPUTS.map((o,i)=>(<div key={i} className="plus-file" onClick={()=>addTab("browser")}><IcFile size={12}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))}
+                  </div>
+                )}
+
+                {!activeTabObj && activeMode==="coding" && (
+                  <div className="workspace-body">
+                    <div className="workspace-empty">
+                      <div style={{fontSize:14,color:"#aaa",marginBottom:8}}>Coding Assistant</div>
+                      <div style={{marginBottom:12}}>Open a project folder, then run Codex or Claude Code from this workspace.</div>
+                      <input
+                        className="modal-input"
+                        value={codingProjectRoot}
+                        onChange={(e)=>setCodingProjectRoot(e.target.value)}
+                        placeholder="D:\Vellum"
+                      />
+                      <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:12,flexWrap:"wrap"}}>
+                        <button className={"modal-btn"+(codingProvider==="codex"?" primary":"")} onClick={()=>setCodingProvider("codex")}>Codex</button>
+                        <button className={"modal-btn"+(codingProvider==="claude"?" primary":"")} onClick={()=>setCodingProvider("claude")}>Claude Code</button>
+                        <button className={"modal-btn"+(codingAccessMode==="read_only"?" primary":"")} onClick={()=>setCodingAccessMode("read_only")}>Read only</button>
+                        <button className={"modal-btn"+(codingAccessMode==="workspace_write"?" primary":"")} onClick={()=>setCodingAccessMode("workspace_write")}>Workspace write</button>
+                      </div>
+                      <div className="cm-note" style={{marginTop:12}}>
+                        {(codingHealth.providers||[]).map(p => `${p.provider}: ${p.message}`).join(" | ") || "Backend unavailable."}
+                      </div>
+                      <div className="cm-note" style={{marginTop:8}}>
+                        {codingSession ? `Session: ${codingSession.id}` : "No coding session yet."}
+                        {codingEvents.length ? ` | ${codingEvents.length} events` : ""}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!activeTabObj && activeMode!=="coding" && (()=>{ const ks = launcherKinds(); const cols = ks.length===4 ? 2 : ks.length; return (
+                  <div className="workspace-body"><div className="launcher" style={chatInProject?null:{flex:1,display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <div className="launch-grid" style={{gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))"}}>
+                      {ks.map(k=>(<div key={k} className="launch-card" onClick={()=>addTab(k)}><span className="launch-ic">{KIND_META[k].big}</span><div className="launch-title">{KIND_META[k].label}</div><div className="launch-sub">{KIND_META[k].sub}</div>{KIND_META[k].kbd && <span className="kbd" style={{marginTop:4}}>{KIND_META[k].kbd}</span>}</div>))}
+                    </div>
+                    {chatInProject && OUTPUTS.length>0 && <div className="launch-sec">Suggested</div>}
+                    {chatInProject && OUTPUTS.length>0 && OUTPUTS.map((o,i)=>(<div key={i} className="launch-doc" onClick={()=>addTab("browser")}><span className="launch-doc-ic"><IcFile size={15}/></span><div><div className="launch-doc-name">{o}</div><div className="launch-doc-sub">Document</div></div></div>))}
+                  </div></div>
+                ); })()}
+
+                {activeTabObj && activeTabObj.kind==="taskagent" && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const t = (pr.tasks||[]).find(x=>x.id===activeTabObj.taskId) || {title:activeTabObj.label, status:"pending", output:""}; return (
+                  <div className="workspace-body">
+                    <div className="drawer-hdr">
+                      <div><div className="drawer-title">{t.persona && <PixelSprite name={t.persona.sprite} color={t.persona.color} px={3}/>} {t.persona?t.persona.name:t.title}</div><div className="drawer-sub">{t.title}</div></div>
+                      <span className={"status-pill "+(t.status==="done"?"complete":t.status==="error"?"closed":"running")}>{t.status}</span>
+                    </div>
+                    <div className="msgs compact-msgs" style={{padding:"10px 12px"}}>
+                      <div className="msg-text" style={{whiteSpace:"pre-wrap"}}>{t.output || (t.status==="running"?"…":"No output yet")}</div>
+                      {t.review && <div className="msg-text" style={{whiteSpace:"pre-wrap",marginTop:10,color:"#a78bfa"}}>Review: {t.review}</div>}
+                    </div>
+                  </div>
+                ); })()}                {activeTabObj && activeTabObj.kind==="agent" && (
+                  <div className="workspace-body">
+                    <div className="workspace-empty">
+                      Coding activity appears here when Codex or Claude emits real session events.
+                    </div>
+                  </div>
+                )}
+                {activeTabObj && activeTabObj.kind==="terminal" && (
+                  <div className="workspace-body">
+                    <div className="drawer-hdr"><div><div className="drawer-title"><IcTerminal size={15}/> Terminal</div><div className="drawer-sub">Command execution stays visible and reviewable.</div></div><span className="status-pill running">ready</span></div>
+                    <TerminalPane backendBase={backendBase()}/>
+                  </div>
+                )}
+                {activeTabObj && activeTabObj.kind==="browser" && (
+                  <div className="workspace-body"><BrowserPane backendBase={backendBase()}/></div>
+                )}
+                {activeTabObj && activeTabObj.kind==="files" && (
+                  <div className="workspace-body">
+                    <div className="files-bar"><span>/</span><button className="icon-btn" style={{marginLeft:"auto"}} title="Workspace root"><IcFolder size={14}/></button></div>
+                    <div className="files-body">
+                      <div className="files-left">
+                        {selFile
+                          ? <div className="files-preview"><div className="files-preview-name">{selFile}</div><div className="files-preview-body"># {selFile.replace(/\.md$/,"")}<br/><br/>Preview of the selected file would render here.</div></div>
+                          : <div className="files-empty"><IcFolder size={30}/><div className="files-empty-t">Open file</div><div className="files-empty-s">Select a file from the workspace tree</div></div>}
+                      </div>
+                      <div className="files-tree">
+                        <div className="files-filter"><IcSearch size={13}/><input placeholder="Filter files…"/></div>
+                        {FILE_TREE.map((f,i)=> f.dir
+                          ? <div key={i} className="ftree-row"><IcChevR size={13}/><IcFolder size={13}/><span>{f.name}</span></div>
+                          : <div key={i} className="ftree-row" style={{paddingLeft:9}} onClick={()=>setSelFile(f.name)}><span className="md-badge">M↓</span><span>{f.name}</span></div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {activeTabObj && activeTabObj.kind==="memory" && (
+                  <div className="workspace-body">
+                    <div className="drawer-hdr">
+                      <div><div className="drawer-title">❖ Memory Trace</div><div className="drawer-sub">{backendStatus==="connected" ? "Live from FTS5 + Honcho · Qdrant off" : "What Vellum remembered, used, and learned."}</div></div>
+                      <span className={"status-pill "+(backendStatus==="connected"?"complete":"running")} onClick={loadMemory} style={{cursor:"pointer"}}>{backendStatus==="connected"?"live ↻":"demo"}</span>
+                    </div>
+                    {(backendStatus==="connected" && memoryEntries.length>0) ? (
+                      <Fragment>
+                        <div className="drawer-section-title">Recent memory · {memoryEntries.length}</div>
+                        {memoryEntries.slice(0,30).map((e,i)=>(<div key={i} className="memory-card"><div className="memory-reason" style={{marginTop:0,color:"#9a9a9a",lineHeight:1.55}}>{((e.content||e.text||"")+"").slice(0,280)}</div></div>))}
+                      </Fragment>                    ) : (
+                      <div className="cm-note" style={{margin:"12px 14px"}}>
+                        {backendStatus==="connected" ? "No stored memories for this workspace yet." : "Turn on the backend in Settings -> Models & Compute to see your real stored memories here."}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {activeTabObj && activeTabObj.kind==="side" && (()=>{ const sid = activeTabObj.id; const smsgs = chatMsgs[sid] || []; return (
+                  <div className="workspace-body">
+                    <div className="drawer-hdr"><div><div className="drawer-title"><IcChat size={15}/> {activeTabObj.label}</div><div className="drawer-sub">A focused side conversation, separate from the main task.</div></div></div>
+                    {smsgs.length===0
+                      ? <div className="msgs" style={{flex:1,alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center",color:"#444"}}><div style={{fontSize:14,color:"#777",marginBottom:4}}>New side chat</div><div style={{fontSize:12}}>Ask anything — it won't disturb the main thread.</div></div></div>
+                      : <div className="msgs">{smsgs.map(renderMsg)}</div>}
+                    <InputBox running={running} model="5.5" api={composerApi} onSend={(t,a)=>sendToChat(sid,t,a)} onStop={stopStream} placeholder={"Message "+activeTabObj.label+"…"}/>
+                  </div>
+                ); })()}
+              </div>
+            )}
+      </div>
+
+      {/* Name project modal */}
+      {nameModal && (
+        <div className="modal-overlay" onClick={()=>setNameModal(null)}>
+          <div className="modal-box pop-in" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-hd"><div className="modal-title">{nameModal.mode==="rename"?"Rename project":"Name project"}</div><span className="modal-x" onClick={()=>setNameModal(null)}><IcX size={15}/></span></div>
+            <div className="modal-sub">Keep it short and recognizable</div>
+            <input className="modal-input" value={nameModal.name}
+              ref={(el)=>{ if(el && !el._sel){ el._sel=true; el.focus(); el.select(); } }}
+              onChange={(e)=>setNameModal(m=>({...m, name:e.target.value}))}
+              onKeyDown={(e)=>{ if(e.key==="Enter"){ e.preventDefault(); saveNameModal(); } }}/>
+            <div className="modal-actions"><button className="modal-btn" onClick={()=>setNameModal(null)}>Cancel</button><button className="modal-btn primary" onClick={saveNameModal}>Save</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* Models & Compute modal */}
+      {showModels && (()=>{ const rec = hw ? recommendModel(hw) : null; return (
+        <div className="modal-overlay" onClick={()=>setShowModels(false)}>
+          <div className="modal-box compute-modal pop-in" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-hd"><div className="modal-title">Models & Compute</div><span className="modal-x" onClick={()=>setShowModels(false)}><IcX size={15}/></span></div>
+            <div className="modal-sub">Vellum decides where your models run. Scan your machine, then download a local model if it fits — or bring your own key for a cloud provider.</div>
+
+            <div className="cm-sec">
+              <div className="cm-sec-hd"><span>Your hardware</span><button className="cm-scan" onClick={scanHardware}>{scanning?"Scanning…":(hw?"Re-scan":"Scan this computer")}</button></div>
+              {hw ? (
+                <Fragment>
+                  <div className="cm-specs">
+                    <div className="cm-chip"><b>CPU</b><span>{hw.cores?hw.cores+" cores":"—"}</span></div>
+                    <div className="cm-chip"><b>Memory</b><span>{hw.ram?("≥ "+hw.ram+" GB"):"—"}</span></div>
+                    <div className="cm-chip"><b>GPU</b><span>{hw.gpu||"none detected"}</span></div>
+                    <div className="cm-chip"><b>Free disk</b><span>{hw.storage?("~"+hw.storage+" GB"):"—"}</span></div>
+                    <div className="cm-chip"><b>OS</b><span>{hw.platform}</span></div>
+                  </div>
+                  <div className="cm-note">Browser scan is approximate — memory caps at 8 GB and VRAM isn't exposed. The desktop app reports exact specs.</div>
+                </Fragment>
+              ) : <div className="cm-hint">Detects cores, memory, GPU and free disk to tell you whether a local model is realistic — or whether you're better off on a cloud key.</div>}
+            </div>
+
+            {rec && (
+              <div className="cm-sec">
+                <div className="cm-sec-hd"><span>Recommendation</span></div>
+                <div className={"cm-reco "+rec.tier}>
+                  <div className="cm-reco-t">{rec.title}</div>
+                  <div className="cm-reco-b">{rec.note}</div>
+                  {rec.model && <button className="cm-dl">Download {rec.model} · {rec.size}</button>}
+                </div>
+              </div>
+            )}
+
+            <div className="cm-sec">
+              <div className="cm-sec-hd"><span>Connect a provider — bring your own key</span></div>
+              {PROVIDERS.map(p=>(
+                <div key={p.id} className="cm-prov">
+                  <div className={"cm-prov-radio"+(activeProvider===p.id?" on":"")} onClick={()=>setProvider(p.id)}/>
+                  <div className="cm-prov-main" onClick={()=>setProvider(p.id)}>
+                    <div className="cm-prov-name">{p.name}</div>
+                    <div className="cm-prov-sub">{p.sub}</div>
+                  </div>
+                  <div className="cm-key">
+                    <span className={"cm-key-dot"+(apiKeys[p.id]?" on":"")}/>
+                    <input type="password" placeholder={p.ph} value={apiKeys[p.id]} onChange={(e)=>setApiKeys(k=>({...k,[p.id]:e.target.value}))}/>
+                  </div>
+                </div>
+              ))}
+              <div className="cm-note">Keys are stored locally and only the active provider is used. Each Vellum user sets up their own — nothing is shared.</div>
+            </div>
+
+            <div className="cm-sec">
+              <div className="cm-sec-hd"><span>Vellum backend — memory, privacy, vault</span><span className={"status-pill "+(backendStatus==="connected"?"complete":backendStatus==="checking"?"running":"")}>{backendStatus}</span></div>
+              <div className="cm-prov">
+                <div className={"cm-prov-radio"+(useBackend?" on":"")} onClick={()=>{ const n=!useBackend; setUseBackend(n); if(n) pingBackend(); }}/>
+                <div className="cm-prov-main" onClick={()=>{ const n=!useBackend; setUseBackend(n); if(n) pingBackend(); }}>
+                  <div className="cm-prov-name">Route chats through the backend</div>
+                  <div className="cm-prov-sub">Engages Honcho user-model + FTS5 search + Obsidian write-back + privacy gate.</div>
+                </div>
+                <div className="cm-key" style={{width:172}}><input placeholder="http://127.0.0.1:8000" value={backendUrl} onChange={(e)=>setBackendUrl(e.target.value)}/></div>
+              </div>
+              <div className="cm-note">Retrieval runs on <b style={{color:"#888"}}>FTS5 + Honcho</b> — Qdrant (vector search) stays off. Needs the backend running and this UI served from an allowed origin (:5173). <span style={{color:"#e35d2b",cursor:"pointer"}} onClick={pingBackend}>Test connection</span></div>
+            </div>
+
+            <div className="modal-actions"><button className="modal-btn" onClick={()=>setShowModels(false)}>Close</button><button className="modal-btn primary" onClick={()=>setShowModels(false)}>Save</button></div>
+          </div>
+        </div>
+      ); })()}
+
+      {/* Context menu */}
+      {ctxMenu && (
+        <div className="ctx-menu pop-in" style={{top:ctxMenu.y, left:ctxMenu.x}} onClick={(e)=>e.stopPropagation()}>
+          <div className="ctx-item"><div className="ctx-item-l"><IcPin size={13}/><span>Pin chat</span></div><span className="kbd">Ctrl Alt P</span></div>
+          <div className="ctx-item"><div className="ctx-item-l"><IcEdit size={13}/><span>Rename chat</span></div><span className="kbd">Ctrl Alt R</span></div>
+          <div className="ctx-item"><div className="ctx-item-l"><IcArchive size={13}/><span>Archive chat</span></div><span className="kbd">Ctrl Shift A</span></div>
+          <div className="ctx-div"/>
+          <div className="ctx-item" onClick={()=>{setCtxMenu(null); addSideChat();}}><div className="ctx-item-l"><IcChat size={13}/><span>Open side chat</span></div></div>
+          <div className="ctx-item"><div className="ctx-item-l"><IcCopy size={13}/><span>Copy</span></div><IcChevR size={12}/></div>
+          <div className="ctx-item"><div className="ctx-item-l"><IcFork size={13}/><span>Fork</span></div><IcChevR size={12}/></div>
+          <div className="ctx-item dim"><div className="ctx-item-l"><IcAuto size={13}/><span>Add automation…</span></div></div>
+          <div className="ctx-div"/>
+          <div className="ctx-item"><div className="ctx-item-l"><IcWindow size={13}/><span>Open in new window</span></div></div>
+        </div>
+      )}
+
+      {/* Command palette */}
+      {showPalette && (
+        <div className="palette-overlay" onClick={()=>{setShowPalette(false);setPaletteQ("");}}>
+          <div className="palette-box pop-in" onClick={(e)=>e.stopPropagation()}>
+            <div className="palette-input-row"><IcSearch size={16}/><input className="palette-in" autoFocus placeholder="Search commands and chats…" value={paletteQ} onChange={(e)=>{setPaletteQ(e.target.value); setPalIdx(0);}} onKeyDown={paletteKey}/><span className="kbd">Esc</span></div>
+            <div className="palette-list">
+              {flat.length===0 && <div className="palette-empty">No matches for “{paletteQ}”.</div>}
+              {cmdMatches.length>0 && <div className="palette-sec">Commands</div>}
+              {cmdMatches.map((c)=>{ const gi = flat.findIndex(f=>f.kind==="cmd" && f.item.id===c.id); return (<div key={c.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"cmd",item:c})}><div className="palette-item-l"><span style={{color:"#888",display:"flex"}}>{c.icon}</span><span className="palette-item-title">{c.title}</span></div>{c.kbd && <span className="kbd">{c.kbd}</span>}</div>); })}
+              {chatMatches.length>0 && <div className="palette-sec">Chats</div>}
+              {chatMatches.map((c)=>{ const gi = flat.findIndex(f=>f.kind==="chat" && f.item.id===c.id); return (<div key={c.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"chat",item:c})}><div className="palette-item-l">{c.age?<span style={{color:"#444"}}>◷</span>:<Spinner/>}<span className="palette-item-title">{c.title}</span><span className="palette-item-sub">{c.project}</span></div>{c.age && <span className="kbd">{c.age}</span>}</div>); })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ App ═══ */
+function App(){
+  const [shell, setShell] = useState("browser");
+  const [maximized, setMaximized] = useState(false);
+  const switchShell = (next)=> setShell(s=> next || (s==="browser" ? "desktop" : "browser"));
+  const toggleMax = ()=> setMaximized(m=>!m);
+  const workspace = <VellumWorkspace shell={shell} onSwitchShell={switchShell} onToggleMax={toggleMax} maximized={maximized}/>;
+  return (
+    <div className="stage">
+      <div className="desktop-bg"/>
+      <div className="bg-orb" style={{width:420,height:420,left:"6%",top:"12%",background:"radial-gradient(circle,#e35d2b,transparent 70%)"}}/>
+      <div className="bg-orb" style={{width:380,height:380,right:"8%",bottom:"6%",background:"radial-gradient(circle,#5a4bd6,transparent 70%)",opacity:.25}}/>
+      <div className={"window "+(maximized?"win-max":"win-float")}>
+        {shell==="terminal" ? <ChromeTerminal maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}/> : shell==="browser"
+          ? <ChromeBrowser maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}>{workspace}</ChromeBrowser>
+          : <ChromeDesktop maximized={maximized} onMax={toggleMax} title="Find best non-veg meal — Vellum" shell={shell} onShell={setShell}>{workspace}</ChromeDesktop>}
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
