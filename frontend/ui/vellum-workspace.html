@@ -503,6 +503,14 @@ button{font-family:inherit}
 .mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
 .mode-chip:hover{color:#aaa;background:#181818}
 .mode-chip.active{color:#111;background:#d8d8d8}
+.coding-main-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;max-width:720px;margin:0 auto 10px;padding:9px 10px;background:#0f0f0f;border:1px solid #1e1e1e;border-radius:8px;color:#7d7d7d;font-size:12px}
+.coding-targets{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.coding-target-btn{border:1px solid #242424;background:#151515;color:#8b8b8b;border-radius:7px;padding:6px 9px;font-family:'Geist',sans-serif;font-size:12px;cursor:pointer}
+.coding-target-btn:hover{border-color:#333;color:#cfcfcf}
+.coding-target-btn.active{background:#dedede;border-color:#dedede;color:#111}
+.coding-root{display:flex;align-items:center;gap:7px;min-width:220px;flex:1;justify-content:flex-end}
+.coding-root-input{height:28px;min-width:190px;max-width:280px;background:#090909;border:1px solid #242424;border-radius:7px;color:#d0d0d0;padding:0 9px;font-family:'Geist Mono',monospace;font-size:11.5px}
+.coding-health{max-width:720px;margin:-4px auto 10px;color:#4d4d4d;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes tpulse{0%,100%{opacity:.25}50%{opacity:1}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -513,6 +521,11 @@ button{font-family:inherit}
 </head>
 <body>
 <div id="root" style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-family:Geist,sans-serif">Loading Vellum…</div>
+
+<script type="module">
+  import { createCodingApi } from "./coding-api.js";
+  window.__vellumCodingApi = createCodingApi({ apiBase: "http://127.0.0.1:8000" });
+</script>
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, Fragment } = React;
@@ -585,53 +598,17 @@ function PixelSprite({ name, color, px=2 }){
 
 /* ─── Data ─── */
 const PROJECTS = [];   /* projects are attached by the user from their computer */
-const TASKS = [
-  { id:1, label:"Task 1: Operator contract and Codex fallback stub", done:true },
-  { id:2, label:"Task 2: Native window discovery", done:true },
-  { id:3, label:"Task 3: Accessibility tree normalization", done:false, running:true },
-  { id:4, label:"Task 4: Native screenshot capture", done:false },
-  { id:5, label:"Task 5: SendInput actions", done:false },
-  { id:6, label:"Task 6: Native driver assembly", done:false },
-  { id:7, label:"Task 7: Integration harness", done:false },
-  { id:8, label:"Task 8: Documentation", done:false },
-  { id:9, label:"Task 9: Performance benchmarks", done:false },
-  { id:10,label:"Task 10: Release packaging", done:false },
-];
-const OUTPUTS = ["2026-05-31-native-windows-computer-use.md","2026-05-31-native-windows-computer-use-design.md"];
-const FILE_TREE = [
-  { name:"backend", dir:true },
-  { name:"docs", dir:true },
-  { name:"overlay_refs", dir:true },
-  { name:"Vellum", dir:true },
-  { name:"Vellum TUI", dir:true },
-  { name:"TUI_CHAT_INTERFACE.md" },
-  { name:"TUI_DASHBOARD.md" },
-];
+const OUTPUTS = [];
+const FILE_TREE = [];
 const KIND_META = {
   files:    {label:"Files",     sub:"Browse project files",       kbd:"Ctrl P", big:<IcFolder size={22}/>,   sm:<IcFolder size={13}/>},
   side:     {label:"Side chat", sub:"Start a side conversation",  kbd:"",       big:<IcChat size={22}/>,     sm:<IcChat size={13}/>},
   browser:  {label:"Browser",   sub:"Open a website",             kbd:"Ctrl T", big:<IcGlobe size={22}/>,    sm:<IcGlobe size={13}/>},
   terminal: {label:"Terminal",  sub:"Start an interactive shell", kbd:"Ctrl `", big:<IcTerminal size={22}/>, sm:<IcTerminal size={13}/>},
 };
-const SUBAGENTS = [
-  { id:"faraday",    name:"Faraday",    sprite:"person", color:"#f5b50a", role:"worker",   status:"running",   task:"Normalizing accessibility tree", add:124, rem:8 },
-  { id:"raman",      name:"Raman",      sprite:"robot",  color:"#f5b50a", role:"worker",   status:"complete",  task:"Implemented operator contract" },
-  { id:"nietzsche",  name:"Nietzsche",  sprite:"mag",    color:"#a78bfa", role:"reviewer", status:"reviewing", task:"Spec compliance gate" },
-  { id:"copernicus", name:"Copernicus", sprite:"robot",  color:"#5b9bd5", role:"worker",   status:"closed",    task:"Native window discovery" },
-  { id:"mill",       name:"Mill",       sprite:"spark",  color:"#e8932b", role:"reviewer", status:"closed",    task:"Maintainability review" },
-  { id:"kant",       name:"Kant",       sprite:"flask",  color:"#f87171", role:"analyst",  status:"closed",    task:"Risk and test coverage" },
-];
-const agentById = (id)=> SUBAGENTS.find(a=>a.id===id);
+const initialChatMsgs = {};
+const agentById = (id)=> null;
 const MODES = [{id:"general",label:"General"},{id:"coding",label:"Coding"},{id:"computer",label:"Computer"}];
-const MEMORY_USED = [
-  { title:"Codex-style continuity", meta:"UI preference", reason:"Keep General, Coding, and Computer modes inside one workspace." },
-  { title:"Vellum = self-learning agent", meta:"Product identity", reason:"Expose memory, learning, and sources instead of only coding progress." },
-  { title:"Master / Pupil architecture", meta:"Agent model", reason:"Show delegation without overwhelming the main conversation." },
-];
-const LEARNING_EVENTS = [
-  { title:"Preference captured", body:"User wants Codex-level transparency without losing ChatGPT-style simplicity.", confidence:"High" },
-  { title:"Pattern reinforced", body:"Coding mode and normal mode should share the same mental model.", confidence:"High" },
-];
 const PLUGINS = [
   { id:"browser",     name:"Browser",          ic:<IcGlobe size={13}/>,   bg:"#13233a", fg:"#5b9bd5" },
   { id:"computer",    name:"Computer",         ic:<IcMonitor size={13}/>, bg:"#2a1633", fg:"#c084fc" },
@@ -733,43 +710,7 @@ const PROVIDER_CFG = {
   google:    { chatUrl:null, listUrl:null, keyId:"google",    models:GOOGLE_MODELS,    default:"gemini-2.0-flash" },
 };
 
-const MAIN_MSGS = [
-  { id:1,  type:"msg", text:"Baseline is clean: the current computer-use/config focused tests are passing in the clean implementation worktree. I'm now finding the subagent dispatch tool and then I'll start Task 1." },
-  { id:2,  type:"system", label:"Ran 4 commands", icon:"cmd" },
-  { id:3,  type:"msg", text:"Task 1 is a small, self-contained contract module, so I'm dispatching one worker for just those files. While it runs, I'll stay in coordination mode and won't edit the same files locally." },
-  { id:4,  type:"system", label:"Agent assigned", icon:"dot" },
-  { id:6,  type:"msg", text:"Task 1 implementation is back and pushed. I'm sending it through the first review gate now: spec compliance only, before code-quality review." },
-  { id:8,  type:"msg", text:"Spec compliance passed for Task 1. I'm sending the same diff through the second gate now: code quality and maintainability." },
-  { id:11, type:"msg", textParts:["One portability issue remains in the tests: monkeypatching "," needs "," so non-Windows runners don't fail before the behavior is checked. I'm sending that tiny fix back now."], codes:["ctypes.windll","raising=False"] },
-  { id:14, type:"system", label:"Agent updated", icon:"dot" },
-  { id:15, type:"closed", agents:["Copernicus (worker)","Mill","Kant"], count:3 },
-  { id:16, type:"msg", text:"Task 2 is complete after the review loop and pushed. I'm starting Task 3 now: accessibility tree normalization, with another fresh worker and narrow file ownership." },
-  { id:17, type:"spawn", agentId:"faraday", agentRole:"worker", header:"Agent joined the task",
-    instruction:"You are implementing Task 3: Accessibility Tree Normalization for Vellum. Work from this directory only: C:\\Users\\User..." },
-  { id:181,type:"learning", title:"Continuity preference reinforced", body:"Vellum should keep the same workspace UI across General, Coding, and Computer modes." },
-  { id:18, type:"msg", text:"Task 3 is with a worker. I'll keep the pipeline moving through the same review gates once it reports back." },
-];
-const RAMAN_MSGS = [
-  { id:1, type:"system", label:"Ran targeted tests", icon:"cmd" },
-  { id:2, type:"diff", testLine:"3 passed in 0.13s",
-    commitSection:{ title:"Commit and push:", bullets:[
-      { label:"Commit:", code:"505151f6a9c05fc9d4a1130584be448f20c9bf07" },
-      { label:"Push result:", text:"pushed to ", codeSm:"origin/native-windows-computer-use-impl" },
-      { label:"", text:"Remote verification confirmed that branch points to the commit above" },
-    ]},
-    files:[
-      { name:"backend/agent/computer_use/operator.py",      added:174, removed:0 },
-      { name:"backend/tests/test_computer_use_operator.py", added:40,  removed:0 },
-    ] },
-];
-const REPLIES = [
-  "Reading the worktree now. The accessibility-tree normalizer is the one blocking task — I'll hand it to a fresh worker with narrow file ownership and keep the review gates between each step.",
-  "Filed. I pulled the three closest notes from your vault and checked them against the current diff before answering, so this stays grounded in what you already wrote.",
-  "Two paths. The native UIA driver is more work but keeps Vellum local-first; leaning on the Codex plugin is faster but couples you to its internals. I'd take the native driver.",
-  "Done. Tests pass and the change is pushed to the implementation branch. I can open the next review gate, or stop here and write a memory card from the decision.",
-];
-
-/* ─── Helpers ─── */
+/* Helpers */
 function Spinner(){ return <div className="spinner"/>; }
 function InlineCode({children}){ return <code className="icode">{children}</code>; }
 function MsgText({msg}){
@@ -1186,10 +1127,16 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [organizeBy, setOrganizeBy]   = useState("project");
   const [showSettings, setShowSettings] = useState(false);
   const [showUsage, setShowUsage]     = useState(false);
-  const [tasksExpanded, setTasksExpanded] = useState(false);
   const [wsWidth, setWsWidth]         = useState(480);
   const [resizing, setResizing]       = useState(false);
-  const [chatMsgs, setChatMsgs]       = useState({}); // chats start empty; coding progress is live (see runCodingTurn)
+  const [chatMsgs, setChatMsgs]       = useState(initialChatMsgs);
+  const [codingHealth, setCodingHealth] = useState({providers:[]});
+  const [codingSession, setCodingSession] = useState(null);
+  const [codingEvents, setCodingEvents] = useState([]);
+  const [codingTarget, setCodingTarget] = useState("codex");
+  const [codingProjectRoot, setCodingProjectRoot] = useState("D:\\Vellum");
+  const [codingProvider, setCodingProvider] = useState("codex");
+  const [codingAccessMode, setCodingAccessMode] = useState("read_only");
   const [running, setRunning]         = useState(false);
   const [progressByChat, setProgressByChat] = useState({}); // chatId -> {status,turnId,reason,tasks:[],outputs:[],sources:[]}
   const steerRef = useRef({}); // turnId -> pending steer text
@@ -1200,7 +1147,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [archiveConfirm, setArchiveConfirm] = useState(null);
 
   const rootRef = useRef(null), trigRef = useRef(null), msgsRef = useRef(null), projInputRef = useRef(null), threadRef = useRef({});
-  const idRef = useRef(2000), replyRef = useRef(0), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
+  const idRef = useRef(2000), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
   const nextId = ()=> (++idRef.current);
 
   const accessLabel = (ACCESS_MODES.find(a=>a.id===accessMode)||ACCESS_MODES[0]).label;
@@ -1361,6 +1308,12 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
   useEffect(()=>{ const el = msgsRef.current; if(el) el.scrollTop = el.scrollHeight; }, [chatMsgs, activeChat]);
   useEffect(()=>{ if(activeTabObj && activeTabObj.kind==="memory" && backendStatus==="connected") loadMemory(); }, [activeTab, backendStatus]);
+  useEffect(()=>{
+    const api = window.__vellumCodingApi;
+    if(!api) return;
+    api.health().then(setCodingHealth).catch(()=>setCodingHealth({providers:[]}));
+  }, []);
+  useEffect(()=>{ setCodingSession(null); }, [codingProvider, codingAccessMode, codingProjectRoot]);
   useEffect(()=> ()=> clearTimeout(timerRef.current), []);
 
   /* streaming (per-chat) */
@@ -1452,69 +1405,65 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     }
     abortRef.current = null; setRunning(false);
   }
-  /* ── Coding-mode orchestration (planner → parallel subagents → reviewer → synthesis) ── */
-  const PLANNER_SYS = "You are Vellum's coding orchestrator. Decide if the user's request needs to be split into multiple independent sub-tasks for parallel sub-agents. "
-    + "Reply with ONLY a JSON object, no prose. Schema: {\"complex\": boolean, \"reason\": string, \"tasks\": [{\"title\": string, \"role\": \"worker\"|\"reviewer\"|\"analyst\"}]}. "
-    + "Set complex=false for simple asks (a question, a one-file edit, a rename). Set complex=true only for genuinely multi-step builds; then list 2-5 concrete tasks. Keep titles under 8 words.";
-  async function planTask(userText, history, signal){
-    const messages = [{role:"system", content:PLANNER_SYS}].concat(toORMessages(history).slice(1)).concat([{role:"user", content:userText}]);
-    let text=""; try{ text = await streamModel({messages, model:selModel, signal, onDelta:null}); }catch(e){ return {complex:false, reason:"", tasks:[]}; }
-    return VPROTO.parsePlan(text);
+  /* Coding-mode backend bridge. */
+  async function ensureCodingSession(provider){
+    const selectedProvider = provider || codingProvider;
+    if(codingSession && codingSession.provider===selectedProvider) return codingSession;
+    const api = window.__vellumCodingApi;
+    if(!api) throw new Error("Coding API unavailable.");
+    if(!codingProjectRoot.trim()) throw new Error("Open a project folder first.");
+    const session = await api.createSession({
+      provider: selectedProvider,
+      cwd: codingProjectRoot.trim(),
+      access_mode: codingAccessMode,
+      title: chatTitleFor(activeChat) || "Coding session",
+    });
+    setCodingSession(session);
+    return session;
   }
-  const REVIEW_ON = true; // reviewer gate toggle (spec §5)
-  function assignPersona(i){ const a = SUBAGENTS[i % SUBAGENTS.length]; return {name:a.name, sprite:a.sprite, color:a.color, role:a.role}; }
-  function workerSys(goal, task){ return "You are sub-agent \""+task.title+"\" working under Vellum's coding orchestrator. Overall goal: "+goal+". Do ONLY your task: \""+task.title+"\". Be concise and produce concrete output (code/text) for just this part. Do not restate the whole plan."; }
-  function reviewerSys(task){ return "You are a reviewer sub-agent. Briefly gate the work for task \""+task.title+"\": note in 1-2 lines whether it meets the task and any fix. Start with PASS or NEEDS-FIX."; }
-  function synthSys(goal){ return "You are Vellum. Combine the sub-agent outputs below into one coherent, final answer to the user's request: "+goal+". Integrate, deduplicate, and present cleanly. Do not mention sub-agents or the orchestration."; }
-  async function runCodingTurn(chatId, aid, userText, history){
-    const ctrl = new AbortController(); abortRef.current = ctrl;
-    const turnId = VPROTO.uuid();
-    emitFrame(chatId, VPROTO.turnStarted(chatId, turnId));
+  function codingEventText(data){
+    const payload = (data && data.payload) || {};
+    return payload.text || data.message || "";
+  }
+  async function runBackendCodingTurn(chatId, aid, userText, provider){
+    let answer = "";
     try{
-      const plan = await planTask(userText, history, ctrl.signal);
-      emitFrame(chatId, VPROTO.plan(turnId, plan.complex, plan.reason, plan.tasks));
-      if(!plan.complex){
-        const text = await streamModel({ messages: toORMessages([...history, {type:"user", text:userText}]), model:selModel, signal:ctrl.signal,
-          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
-        setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
-        emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
-        abortRef.current=null; setRunning(false); return;
-      }
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, turnId, plan:plan.tasks, thinking:false}:x));
-      const results = await Promise.all(plan.tasks.map(async (task, i)=>{
-        const tag = VPROTO.tag(turnId, VPROTO.uuid());
-        const persona = assignPersona(i);
-        emitFrame(chatId, VPROTO.subagentStarted(turnId, tag, persona, task));
-        let out="";
-        try{
-          out = await streamModel({ messages:[{role:"system", content:workerSys(userText, task)}, {role:"user", content:task.title + (steerRef.current[turnId]?("\n\nUser steer: "+steerRef.current[turnId]):"")}], model:selModel, signal:ctrl.signal,
-            onDelta:(c)=> emitFrame(chatId, VPROTO.agentDelta(tag, c)) });
-          if(REVIEW_ON){
-            const rv = await streamModel({ messages:[{role:"system", content:reviewerSys(task)}, {role:"user", content:out.slice(0,4000)}], model:selModel, signal:ctrl.signal,
-              onDelta:(c)=> emitFrame(chatId, VPROTO.reasoningDelta(tag, c)) });
-            void rv;
-          }
-          emitFrame(chatId, VPROTO.subagentCompleted(tag, "done", out));
-        }catch(e){
-          emitFrame(chatId, VPROTO.subagentCompleted(tag, "error", "⚠ "+((e&&e.message)||"failed")));
+      const session = await ensureCodingSession(provider);
+      setProgFor(chatId, prog=> ({...prog, status:"running"}));
+      await window.__vellumCodingApi.runTurn(session.id, userText, (evt)=>{
+        const data = evt.data || {};
+        setCodingEvents(prev=> [...prev.slice(-99), {event:evt.event, data}]);
+        if(evt.event==="turn" || data.type==="turn.started"){
+          setProgFor(chatId, prog=> ({...prog, status:"running", turnId:data.turn_id || prog.turnId}));
         }
-        return { task, out };
-      }));
-      const bundle = results.map(r=> "## "+r.task.title+"\n"+r.out).join("\n\n");
-      const steerNote = steerRef.current[turnId] ? ("\n\nUser steer (apply this): "+steerRef.current[turnId]) : "";
-      let fin="";
-      try{
-        fin = await streamModel({ messages:[{role:"system", content:synthSys(userText)}, {role:"user", content:bundle+steerNote}], model:selModel, signal:ctrl.signal,
-          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
-      }catch(e){ fin = bundle; }
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:fin||bundle, streaming:false, thinking:false}:x));
-      emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
+        if(evt.event==="assistant_delta" || data.type==="assistant.delta"){
+          const text = codingEventText(data);
+          if(text){
+            answer += text;
+            setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer, thinking:false}:x));
+          }
+        }
+        if(evt.event==="assistant_final" || data.type==="assistant.final"){
+          const text = codingEventText(data);
+          if(text) answer = text;
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer, thinking:false, streaming:false}:x));
+        }
+        if(evt.event==="done" || data.type==="turn.completed"){
+          setProgFor(chatId, prog=> ({...prog, status:"done", turnId:data.turn_id || prog.turnId}));
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer || x.text || "Done.", thinking:false, streaming:false}:x));
+        }
+        if(evt.event==="error" || data.type==="turn.error"){
+          const text = codingEventText(data) || "Coding run failed.";
+          setProgFor(chatId, prog=> ({...prog, status:"error"}));
+          setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Warning: "+text, thinking:false, streaming:false}:x));
+        }
+      });
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer || x.text || "Done.", thinking:false, streaming:false}:x));
     }catch(e){
-      if(!(e && e.name==="AbortError")) setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Coding run failed"), thinking:false, streaming:false}:x));
-      else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
+      const text = (e && e.message) || "Coding run failed.";
       setProgFor(chatId, prog=> ({...prog, status:"error"}));
+      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text, thinking:false, streaming:false}:x));
     }
-    delete steerRef.current[turnId];
     abortRef.current=null; setRunning(false);
   }
   function sendToChat(chatId, text, atts){
@@ -1531,17 +1480,22 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     }
     if(!t && (!atts || !atts.length)) return;
     const uid = nextId(), aid = nextId();
-    const prevMsgs = chatMsgs[chatId] || [];
     const userMsg = { id:uid, type:"user", text:t, atts:atts };
     setMsgsFor(chatId, m=> [...m, userMsg, { id:aid, type:"assistant", text:"", streaming:true, thinking:true }]);
     setRunning(true); streamTargetRef.current = chatId;
+    if(activeMode==="coding"){
+      if(codingTarget==="computer"){ streamBackend(chatId, aid, t); return; }
+      const provider = codingTarget==="claude" ? "claude" : "codex";
+      runBackendCodingTurn(chatId, aid, t, provider);
+      return;
+    }
+    const prevMsgs = chatMsgs[chatId] || [];
     if(useBackend){ streamBackend(chatId, aid, t); return; }
     const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
     const key = (apiKeys[cfg.keyId]||"").trim();
     const pn = (PROVIDERS.find(p=>p.id===activeProvider)||{}).name || activeProvider;
     if(!cfg.chatUrl){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:pn+" chats through the Vellum backend in the full app. In this browser preview, pick OpenRouter or OpenAI in Models & Compute.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
     else if(!key){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Add your "+pn+" key in Settings → Models & Compute to chat.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
-    else if(activeMode==="coding"){ runCodingTurn(chatId, aid, t, prevMsgs); }
     else { streamChat(chatId, aid, [...prevMsgs, userMsg], selModel); }
   }
   function onMainSend(text, atts){
@@ -1587,11 +1541,11 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function backendBase(){ return (backendUrl||"http://127.0.0.1:8000").trim().replace(/\/+$/,""); }
   async function pingBackend(){
     setBackendStatus("checking");
-    try{ const r = await fetch(backendBase()+"/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
+    try{ const r = await fetch(backendBase()+"/api/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
     catch(e){ setBackendStatus("offline"); }
   }
   async function loadMemory(){
-    try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
+    try{ const r = await fetch(backendBase()+"/api/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
   }
   function normalizeResponseStreamEvent(ev, payload){
     if(!payload) return null;
@@ -1615,7 +1569,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   async function streamBackend(chatId, aid, message){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
-      const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
+      const resp = await fetch(backendBase()+"/api/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
       if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
       const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
       let semanticSeen = false;
@@ -1719,6 +1673,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     setActiveTab(id); setShowSub(true); setShowPlus(false);
   }
   function openSubagent(agent){
+    if(!agent) return;
     setShowSub(true);
     const exist = tabs.find(t=>t.kind==="agent" && t.agentId===agent.id);
     if(exist){ setActiveTab(exist.id); return; }
@@ -1812,9 +1767,38 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
     models, modelLabel, syncModels, syncing, memoryOn, setMemoryOn,
   };
+  function chooseCodingTarget(target){
+    setCodingTarget(target);
+    if(target==="codex" || target==="claude") setCodingProvider(target);
+  }
+  function codingHealthLine(){
+    const providers = codingHealth.providers || [];
+    if(!providers.length) return "Coding backend unavailable.";
+    return providers.map(p => `${p.provider}: ${p.message}`).join(" | ");
+  }
+  function CodingMainStrip(){
+    if(activeMode!=="coding") return null;
+    return (
+      <Fragment>
+        <div className="coding-main-strip">
+          <div className="coding-targets">
+            <button className={"coding-target-btn"+(codingTarget==="codex"?" active":"")} onClick={()=>chooseCodingTarget("codex")}>Codex</button>
+            <button className={"coding-target-btn"+(codingTarget==="claude"?" active":"")} onClick={()=>chooseCodingTarget("claude")}>Claude Code</button>
+            <button className={"coding-target-btn"+(codingTarget==="computer"?" active":"")} onClick={()=>chooseCodingTarget("computer")}>Computer</button>
+            <button className={"coding-target-btn"+(codingAccessMode==="read_only"?" active":"")} onClick={()=>setCodingAccessMode("read_only")}>Read</button>
+            <button className={"coding-target-btn"+(codingAccessMode==="workspace_write"?" active":"")} onClick={()=>setCodingAccessMode("workspace_write")}>Write</button>
+          </div>
+          <div className="coding-root">
+            <span>Root</span>
+            <input className="coding-root-input" value={codingProjectRoot} onChange={(e)=>setCodingProjectRoot(e.target.value)} placeholder="D:\Vellum"/>
+          </div>
+        </div>
+        <div className="coding-health">{codingHealthLine()}</div>
+      </Fragment>
+    );
+  }
 
   function openCtx(e){ e.preventDefault(); e.stopPropagation(); const r = rootRef.current.getBoundingClientRect(); setCtxMenu({ x: Math.min(e.clientX-r.left, r.width-236), y: Math.min(e.clientY-r.top, r.height-300) }); }
-  const visibleTasks = tasksExpanded ? TASKS : TASKS.slice(0,6);
   const prog = progressByChat[activeChat] || emptyProgress();
   const progDone = prog.tasks.filter(t=> t.status==="done" || t.status==="error").length;
   const progPct = prog.tasks.length ? Math.round((progDone/prog.tasks.length)*100) : 0;
@@ -1998,7 +1982,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <div className="sb-section-lbl">Vellum Core</div>
             <div className="core-row" onClick={()=>{addTab("memory");}}><span>❖</span><span>Memory</span><span className="core-count">3 used</span></div>
             <div className="core-row"><span>⬦</span><span>Knowledge</span><span className="core-count">4 sources</span></div>
-            <div className="core-row" onClick={()=>openSubagent(SUBAGENTS[0])}><span>⚛</span><span>Agents</span><span className="core-count">3 active</span></div>
+            <div className="core-row"><span>⚛</span><span>Agents</span><span className="core-count">live</span></div>
             <div className="core-row"><span>✦</span><span>Skills</span><span className="core-count">12 ready</span></div>
           </div>
         </div>
@@ -2030,6 +2014,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <div className="landing">
               <div><div className="landing-title">{apObj ? ("What should we build in "+apObj.name+"?") : "What should we work on?"}</div></div>
               <div style={{width:"100%",maxWidth:572,position:"relative"}}>
+                <CodingMainStrip/>
                 <InputBox placeholder="Do anything" model="5.5" api={composerApi} onSend={onMainSend}/>
                 <div style={{padding:"8px 24px 0", position:"relative"}}>
                   <div className="proj-tag" onClick={(e)=>{e.stopPropagation(); setProjPicker(v=>!v);}}><IcFolder size={12}/><span>{apObj ? apObj.name : "Work in a project"}</span><IcChevD size={11}/></div>
@@ -2073,6 +2058,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {messages.map(renderMsg)}
               </div>
 
+              <CodingMainStrip/>
               <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
 
               {/* Progress floating card */}
@@ -2148,8 +2134,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {showPlus && (
                   <div className="plus-drop pop-in">
                     {launcherKinds().map(k=>(<div key={k} className="plus-item" onClick={()=>addTab(k)}><div className="plus-item-l">{KIND_META[k].sm}<span>{KIND_META[k].label}</span></div>{KIND_META[k].kbd && <span className="kbd">{KIND_META[k].kbd}</span>}</div>))}
-                    {chatInProject && <div className="plus-sec">Suggested</div>}
-                    {chatInProject && OUTPUTS.map((o,i)=>(<div key={i} className="plus-file" onClick={()=>addTab("browser")}><IcFile size={12}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))}
+                    {chatInProject && OUTPUTS.length>0 && <div className="plus-sec">Suggested</div>}
+                    {chatInProject && OUTPUTS.length>0 && OUTPUTS.map((o,i)=>(<div key={i} className="plus-file" onClick={()=>addTab("browser")}><IcFile size={12}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o}</span></div>))}
                   </div>
                 )}
 
@@ -2158,8 +2144,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                     <div className="launch-grid" style={{gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))"}}>
                       {ks.map(k=>(<div key={k} className="launch-card" onClick={()=>addTab(k)}><span className="launch-ic">{KIND_META[k].big}</span><div className="launch-title">{KIND_META[k].label}</div><div className="launch-sub">{KIND_META[k].sub}</div>{KIND_META[k].kbd && <span className="kbd" style={{marginTop:4}}>{KIND_META[k].kbd}</span>}</div>))}
                     </div>
-                    {chatInProject && <div className="launch-sec">Suggested</div>}
-                    {chatInProject && OUTPUTS.map((o,i)=>(<div key={i} className="launch-doc" onClick={()=>addTab("browser")}><span className="launch-doc-ic"><IcFile size={15}/></span><div><div className="launch-doc-name">{o}</div><div className="launch-doc-sub">Document</div></div></div>))}
+                    {chatInProject && OUTPUTS.length>0 && <div className="launch-sec">Suggested</div>}
+                    {chatInProject && OUTPUTS.length>0 && OUTPUTS.map((o,i)=>(<div key={i} className="launch-doc" onClick={()=>addTab("browser")}><span className="launch-doc-ic"><IcFile size={15}/></span><div><div className="launch-doc-name">{o}</div><div className="launch-doc-sub">Document</div></div></div>))}
                   </div></div>
                 ); })()}
 
@@ -2174,42 +2160,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                       {t.review && <div className="msg-text" style={{whiteSpace:"pre-wrap",marginTop:10,color:"#a78bfa"}}>Review: {t.review}</div>}
                     </div>
                   </div>
-                ); })()}
-                {activeTabObj && activeTabObj.kind==="agent" && (()=>{ const a = agentById(activeTabObj.agentId) || SUBAGENTS[0]; return (
+                ); })()}                {activeTabObj && activeTabObj.kind==="agent" && (
                   <div className="workspace-body">
-                    <div className="drawer-hdr">
-                      <div><div className="drawer-title"><PixelSprite name={a.sprite} color={a.color} px={3}/> {a.name}</div><div className="drawer-sub">{a.role} agent · {a.task}</div></div>
-                      <span className={"status-pill "+a.status}>{a.status}</span>
+                    <div className="workspace-empty">
+                      Coding activity appears here when Codex or Claude emits real session events.
                     </div>
-                    <div className="relationship-tree">
-                      <div className="tree-root">Vellum Master</div>
-                      <div className="tree-branch">├─ Faraday → implementation</div>
-                      <div className="tree-branch">├─ Nietzsche → spec review</div>
-                      <div className="tree-branch">└─ {a.name} → {a.task}</div>
-                    </div>
-                    <div className="msgs compact-msgs">
-                      {RAMAN_MSGS.map(msg=>{
-                        if(msg.type==="system") return (<div key={msg.id} className="sys-line"><span style={{fontSize:12,color:"#3a3a3a"}}>⬡</span><span className="sys-cmd">{msg.label}</span></div>);
-                        if(msg.type==="diff") return (
-                          <div key={msg.id} className="msg-wrap">
-                            <div className="test-pass">{msg.testLine}</div>
-                            <div style={{marginTop:10}}>
-                              <div style={{fontSize:13,color:"#aaa",marginBottom:6}}>{msg.commitSection.title}</div>
-                              <ul className="ul">{msg.commitSection.bullets.map((b,i)=>(<li key={i}>{b.label && <span style={{color:"#555"}}>{b.label} </span>}{b.code && <InlineCode>{b.code}</InlineCode>}{b.codeSm && <Fragment><span style={{color:"#888"}}>{b.text}</span><InlineCode>{b.codeSm}</InlineCode></Fragment>}{!b.code && !b.codeSm && <span style={{color:"#888"}}>{b.text}</span>}</li>))}</ul>
-                              <div className="diff-block">
-                                <div className="diff-hdr"><div className="diff-title"><span style={{fontSize:14,opacity:.7}}>⌘</span><span>Edited 2 files</span></div><div className="diff-acts"><button className="diff-btn">Undo ↺</button><button className="diff-btn">Review</button></div></div>
-                                {msg.files.map((f,i)=>(<div key={i} className="diff-file-row"><span className="diff-fname">{f.name}</span><span><span className="diff-add">+{f.added}</span> <span className="diff-rem">-{f.removed}</span></span></div>))}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                        return null;
-                      })}
-                    </div>
-                    <InputBox running={false} model="5.5" api={composerApi} onSend={(t,att)=>sendToChat(activeTabObj.id,t,att)} placeholder={"Message "+a.name+"…"}/>
                   </div>
-                ); })()}
-
+                )}
                 {activeTabObj && activeTabObj.kind==="terminal" && (
                   <div className="workspace-body">
                     <div className="drawer-hdr"><div><div className="drawer-title"><IcTerminal size={15}/> Terminal</div><div className="drawer-sub">Command execution stays visible and reviewable.</div></div><span className="status-pill running">ready</span></div>
@@ -2248,13 +2205,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                       <Fragment>
                         <div className="drawer-section-title">Recent memory · {memoryEntries.length}</div>
                         {memoryEntries.slice(0,30).map((e,i)=>(<div key={i} className="memory-card"><div className="memory-reason" style={{marginTop:0,color:"#9a9a9a",lineHeight:1.55}}>{((e.content||e.text||"")+"").slice(0,280)}</div></div>))}
-                      </Fragment>
-                    ) : (
-                      <Fragment>
-                        <div className="drawer-section-title">Used in this task</div>{MEMORY_USED.map((m,i)=>(<div key={i} className="memory-card"><div className="memory-title">{m.title}</div><div className="memory-meta">{m.meta}</div><div className="memory-reason">Why: {m.reason}</div></div>))}
-                        <div className="drawer-section-title">Learning events</div>{LEARNING_EVENTS.map((e,i)=>(<div key={i} className="learn-card"><div className="learn-title">{e.title}</div><div className="learn-body">{e.body}</div><div className="learn-conf">Confidence · {e.confidence}</div></div>))}
-                        {backendStatus!=="connected" && <div className="cm-note" style={{margin:"12px 14px"}}>Turn on the backend in Settings → Models & Compute to see your real stored memories here.</div>}
-                      </Fragment>
+                      </Fragment>                    ) : (
+                      <div className="cm-note" style={{margin:"12px 14px"}}>
+                        {backendStatus==="connected" ? "No stored memories for this workspace yet." : "Turn on the backend in Settings -> Models & Compute to see your real stored memories here."}
+                      </div>
                     )}
                   </div>
                 )}

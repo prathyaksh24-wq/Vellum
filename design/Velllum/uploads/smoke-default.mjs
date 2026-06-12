@@ -111,7 +111,8 @@ await check("slash command menu: actions + connectors + projects, filter, dismis
   await ta.fill("/");
   await page.locator(".slash-menu .plus-item", { hasText: "Add photos & files" }).waitFor();
   await page.locator(".slash-menu .plus-item", { hasText: "Airtable" }).waitFor();
-  await page.locator(".slash-menu .plus-item", { hasText: "Projects" }).waitFor();
+  await page.locator(".slash-menu .plus-item", { hasText: "Projects" }).click();   // drill-in
+  await page.locator(".slash-menu .plus-item", { hasText: "Vellum Desktop" }).waitFor();
   await ta.fill("/web");
   if (await page.locator(".slash-menu .plus-item").count() !== 1) throw new Error("slash filter wrong");
   await page.keyboard.press("Escape");
@@ -209,6 +210,23 @@ await check("timeline: bars + history popup + jump", async () => {
   await page.locator(".tl-row").first().click();
   await page.locator(".bubble").first().waitFor();
   await page.mouse.move(400, 300);
+});
+
+await check("chat header: files panel + move to project round-trip", async () => {
+  await page.locator(".chat-head .tbtn[title='Chat options']").click();
+  await page.locator(".ctx-item", { hasText: "View files in chat" }).click();
+  await page.locator(".fp-head", { hasText: "Files in chat" }).waitFor();
+  await page.locator(".fp-empty", { hasText: "No files referenced yet" }).waitFor();
+  await page.locator(".files-panel .tbtn[title='Close']").click();
+  await page.locator(".chat-head .tbtn[title='Chat options']").click();
+  await page.locator(".ctx-item", { hasText: "Move to project" }).hover();
+  await page.locator(".plus-sub .plus-item", { hasText: "Vellum Desktop" }).click();
+  await page.locator(".crumb", { hasText: "Vellum Desktop" }).waitFor();
+  const nested = page.locator(".chat-row.nested").first();
+  await nested.hover();
+  await nested.locator(".chat-dots[title='Options']").click();
+  await page.locator(".ctx-item", { hasText: "Remove from Vellum Desktop" }).click();
+  if (await page.locator(".crumb").count()) throw new Error("crumb still present after removing from project");
 });
 
 await check("collapse → rail → expand via panel button", async () => {

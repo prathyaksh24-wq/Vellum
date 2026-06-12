@@ -245,9 +245,24 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .cpill > .ta-wrap{width:100%;padding:2px 8px 0}
 .cspace{flex:1}
 .plus-menu.down,.apps-drop.down,.model-drop.down{bottom:auto;top:46px}
-/* slash menu */
-.slash-menu{position:absolute;left:34px;bottom:46px;z-index:50;width:218px;border:1px solid var(--line2);border-radius:14px;padding:5px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
+/* slash menu — compact, scrollable, never clips */
+.slash-menu{position:absolute;left:34px;bottom:46px;z-index:50;width:232px;max-height:300px;overflow-y:auto;border:1px solid var(--line2);border-radius:14px;padding:4px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
 .slash-menu.down{bottom:auto;top:46px}
+.slash-menu .plus-item{padding:7px 10px;font-size:13px;gap:9px}
+/* chat header + files panel */
+.chat-head{position:absolute;top:8px;right:14px;z-index:25;display:flex;align-items:center;gap:4px}
+.ch-share{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:14px;background:none;border:none;color:var(--dim);font:inherit;font-size:12.5px;cursor:pointer}
+.ch-share:hover{background:var(--hover);color:var(--txt)}
+.thread-wrap{flex:1;display:flex;min-height:0}
+.thread-col{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+.files-panel{width:300px;border-left:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;background:var(--panel)}
+.fp-head{display:flex;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line)}
+.fp-head span{flex:1;font-family:var(--font-d);font-weight:600;font-size:14.5px;color:var(--txt2)}
+.fp-body{flex:1;overflow-y:auto;padding:10px}
+.fp-empty{color:var(--dim);font-size:12.5px;padding:14px 6px}
+.fp-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:9px;cursor:default}
+.fp-row:hover{background:var(--hover)}
+.fp-row .r-name{font-size:13px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* add-from-library modal */
 .libpick{position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:70;width:560px;max-width:92vw;border:1px solid var(--line2);border-radius:16px;padding:18px 0 8px;background:var(--modal);box-shadow:0 24px 80px rgba(0,0,0,.5)}
 .lp-head{display:flex;align-items:center;padding:0 18px 10px}
@@ -318,6 +333,7 @@ body{background:#000;color:var(--txt);font-family:"Schibsted Grotesk",-apple-sys
 .ctx-item:hover{background:var(--hover)}
 .ctx-item .sb-ic{color:var(--dim);display:flex}
 .ctx-item.danger{color:var(--danger)}
+.ctx-item.dim{color:var(--dim)}
 .ctx-item.danger .sb-ic{color:var(--danger)}
 .ctx-div{height:1px;background:var(--line);margin:5px 4px}
 .ctx-hint{font-size:11px;color:var(--dim2);padding:2px 10px 6px;font-style:italic}
@@ -985,53 +1001,84 @@ const SLASH_ITEMS = [
 ];
 
 const SlashMenu = ({q, drop, apps, appSel, projects, onFile, onApp, onProject, onDismiss}) => {
-  const [sub, setSub] = useState(false);
+  const [mode, setMode] = useState('root');
+  useEffect(() => { setMode('root'); }, [q]);
   const hits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(q));
   const appHits = (apps || []).filter(a => a.name.toLowerCase().includes(q));
-  const projHit = !q || 'projects'.includes(q);
+  const projHit = (!q || 'projects'.includes(q)) && (projects || []).length > 0;
   if (!hits.length && !appHits.length && !projHit) return null;
   return (
     <div className={'slash-menu' + (drop === 'down' ? ' down' : '')}>
-      {hits.map(it => {
-        const Ic = it.ic;
-        return (
-          <div key={it.k} className={'plus-item' + (it.dim ? ' dim' : '')}
-            title={it.dim ? 'Not in this preview' : undefined}
-            onMouseEnter={() => setSub(false)}
-            onClick={() => { if (it.run === 'file') onFile(); else onDismiss(); }}>
-            <span className="sb-ic"><Ic size={16}/></span>{it.label}
-          </div>
-        );
-      })}
-      {appHits.length > 0 && <div className="plus-div"/>}
-      {appHits.map(a => {
-        const Ic = APP_ICONS[a.id] || IcGrid;
-        return (
-          <div key={a.id} className="plus-item" onMouseEnter={() => setSub(false)} onClick={() => onApp(a.id)}>
-            <span className="sb-ic"><Ic size={16}/></span>{a.name}
-            {(appSel || []).includes(a.id) && <span className="ctx-check"><IcCheck size={13}/></span>}
-          </div>
-        );
-      })}
-      {projHit && (projects || []).length > 0 && (
+      {mode === 'projects' ? (
         <React.Fragment>
-          <div className="plus-div"/>
-          <div className="plus-item" onMouseEnter={() => setSub(true)}>
-            <span className="sb-ic"><IcFolder size={16}/></span>Projects
-            <span className="p-arr">{projects.length}&nbsp;<IcChevR size={13}/></span>
-            {sub && (
-              <div className="plus-sub">
-                {projects.map(p => (
-                  <div key={p.id} className="plus-item" onClick={() => onProject(p.id)}>
-                    <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
-                  </div>
-                ))}
+          <div className="sub-head">Projects</div>
+          {projects.map(p => (
+            <div key={p.id} className="plus-item" onClick={() => onProject(p.id)}>
+              <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+            </div>
+          ))}
+        </React.Fragment>
+      ) : (
+        <React.Fragment>
+          {hits.map(it => {
+            const Ic = it.ic;
+            return (
+              <div key={it.k} className={'plus-item' + (it.dim ? ' dim' : '')}
+                title={it.dim ? 'Not in this preview' : undefined}
+                onClick={() => { if (it.run === 'file') onFile(); else onDismiss(); }}>
+                <span className="sb-ic"><Ic size={15}/></span>{it.label}
               </div>
-            )}
-          </div>
+            );
+          })}
+          {appHits.length > 0 && <div className="plus-div"/>}
+          {appHits.map(a => {
+            const Ic = APP_ICONS[a.id] || IcGrid;
+            return (
+              <div key={a.id} className="plus-item" onClick={() => onApp(a.id)}>
+                <span className="sb-ic"><Ic size={15}/></span>{a.name}
+                {(appSel || []).includes(a.id) && <span className="ctx-check"><IcCheck size={13}/></span>}
+              </div>
+            );
+          })}
+          {projHit && (
+            <React.Fragment>
+              <div className="plus-div"/>
+              <div className="plus-item" onClick={() => setMode('projects')}>
+                <span className="sb-ic"><IcFolder size={15}/></span>Projects
+                <span className="p-arr">{projects.length}&nbsp;<IcChevR size={13}/></span>
+              </div>
+            </React.Fragment>
+          )}
         </React.Fragment>
       )}
     </div>
+  );
+};
+
+const ChatHeadMenu = ({chat, projects, pos, onAction, onMove, onNewProject, onClose}) => {
+  const [sub, setSub] = useState(false);
+  return (
+    <Popover className="ctx-menu" style={{right: 14, top: Math.min(pos.y + 8, window.innerHeight - 300), left: 'auto', position: 'fixed'}} onClose={onClose}>
+      <div className="ctx-item dim" title="Not in this preview" onMouseEnter={() => setSub(false)}><span className="sb-ic"><IcUserPlus size={14}/></span>Start a group chat</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('files')}><span className="sb-ic"><IcLibrary size={14}/></span>View files in chat</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(true)} style={{position: 'relative'}}>
+        <span className="sb-ic"><IcFolder size={14}/></span>Move to project<span className="p-arr"><IcChevR size={13}/></span>
+        {sub && (
+          <div className="plus-sub" style={{left: 'auto', right: 'calc(100% - 4px)'}}>
+            <div className="plus-item" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus size={15}/></span>New project</div>
+            {projects.filter(p => p.id !== chat.projectId).map(p => (
+              <div key={p.id} className="plus-item" onClick={() => onMove(p.id)}>
+                <span className="sb-ic"><IcFolder size={15}/></span>{p.name}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="ctx-div"/>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('pin')}><span className="sb-ic"><IcPin size={14}/></span>{chat.pinned ? 'Unpin chat' : 'Pin chat'}</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('archive')}><span className="sb-ic"><IcArchive size={14}/></span>Archive</div>
+      <div className="ctx-item danger" onMouseEnter={() => setSub(false)} onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
+    </Popover>
   );
 };
 
@@ -1248,7 +1295,26 @@ const Timeline = ({userMsgs}) => {
   );
 };
 
-const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtras, onViewImage}) => {
+const FilesPanel = ({files, onViewImage, onClose}) => (
+  <div className="files-panel">
+    <div className="fp-head">
+      <span>Files in chat</span>
+      <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={14}/></button>
+    </div>
+    <div className="fp-body">
+      {files.length === 0 && <div className="fp-empty">No files referenced yet</div>}
+      {files.map((f, i) => (
+        <div key={i} className="fp-row" style={f.url ? {cursor: 'zoom-in'} : undefined}
+          onClick={() => f.url && onViewImage && onViewImage(f.url)}>
+          <KindIcon kind={f.kind || 'note'}/>
+          <span className="r-name">{f.name}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -1269,9 +1335,15 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtr
       </div>
     );
   }
+  const chatFiles = msgs.flatMap(m => m.attachments || []);
   return (
-    <React.Fragment>
+    <div className="thread-wrap">
+      <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
+      <div className="chat-head">
+        <button className="ch-share" title="Sharing is not in this preview"><IcShare size={14}/>Share</button>
+        <button className="tbtn" title="Chat options" onClick={e => onHeadMenu(e)}><IcDots size={16}/></button>
+      </div>
       <Timeline userMsgs={msgs.filter(m => m.role === 'user')}/>
       <div className="msgs">
         <div className="msgs-inner">
@@ -1298,7 +1370,9 @@ const ChatView = ({chat, project, model, setModel, onSend, onRegen, composerExtr
       <div className="composer-dock">
         <Composer text={text} setText={setText} model={model} setModel={setModel} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
       </div>
-    </React.Fragment>
+      </div>
+      {filesOpen && <FilesPanel files={chatFiles} onViewImage={onViewImage} onClose={onCloseFiles}/>}
+    </div>
   );
 };
 
@@ -1902,6 +1976,8 @@ const App = () => {
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [apps, setApps] = useState(SEED_APPS);
   const [draftApps, setDraftApps] = useState([]);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const pendingMoveRef = useRef(null);
   const [navTick, setNavTick] = useState(0);
   const hist = useRef({stack: [{view: 'chat', chat: null, proj: null}], idx: 0, silent: false});
   useEffect(() => {
@@ -1941,7 +2017,7 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -1979,12 +2055,22 @@ const App = () => {
 
   const newProject = () => { setMenu(null); setCreateOpen(true); };
   const openProject = id => { setActiveProjectId(id); setView('project'); setMenu(null); };
+  const moveToProject = (chatId, projId) => {
+    setChats(cs => cs.map(c => c.id === chatId ? {...c, projectId: projId} : c));
+    setExpandedProj(e => ({...e, [projId]: true}));
+    setMenu(null);
+  };
   const createProject = ({name, memory}) => {
     const id = uid();
     setProjects(ps => [{id, name, updated: 'Today', memory, sources: []}, ...ps]);
     setExpandedProj(e => ({...e, [id]: true}));
     setCreateOpen(false);
-    openProject(id);
+    if (pendingMoveRef.current) {
+      moveToProject(pendingMoveRef.current, id);
+      pendingMoveRef.current = null;
+    } else {
+      openProject(id);
+    }
   };
   const projectMenuAction = (id, action) => {
     setMenu(null);
@@ -2152,6 +2238,8 @@ const App = () => {
           <div className="main">
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={setSelModel} onSend={sendMessage} onRegen={regenerate}
               onViewImage={setViewer}
+              filesOpen={filesOpen} onCloseFiles={() => setFilesOpen(false)}
+              onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
@@ -2170,6 +2258,14 @@ const App = () => {
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
+        {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
+          onAction={a => {
+            if (a === 'files') { setMenu(null); setFilesOpen(true); return; }
+            chatMenuAction(activeChat.id, a);
+          }}
+          onMove={projId => moveToProject(activeChat.id, projId)}
+          onNewProject={() => { pendingMoveRef.current = activeChat.id; setMenu(null); setCreateOpen(true); }}
+          onClose={() => setMenu(null)}/>}
         {createOpen && <CreateProjectModal onCreate={createProject} onClose={() => setCreateOpen(false)}/>}
         {menu && menu.type === 'project' && <ProjectMenu pos={menu} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {searchOpen && <SearchOverlay chats={chats}

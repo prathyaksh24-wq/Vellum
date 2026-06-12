@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import re
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from agent.mcp import apify_tools
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 from agent.tools.web import extract_web_sources, web_search
 
 
+logger = logging.getLogger(__name__)
+
 SearchVideosBackend = Callable[[str, int], list[dict[str, Any]]]
+ApifySearchBackend = Callable[[str, int], list[dict[str, Any]]]
+WebSearchBackend = Callable[[str, int], list[dict[str, Any]]]
 TranscriptBackend = Callable[[dict[str, Any]], dict[str, Any] | None]
 
 
@@ -18,9 +24,13 @@ class YoutubeCapabilityService:
         self,
         vault_root: Path,
         search_backend: SearchVideosBackend | None = None,
+        apify_search_backend: ApifySearchBackend | None = None,
+        web_search_backend: WebSearchBackend | None = None,
         transcript_backend: TranscriptBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
+        self.apify_search_backend = apify_search_backend or self._default_apify_search_videos
+        self.web_search_backend = web_search_backend or self._default_web_search_videos
         self.search_backend = search_backend or self._default_search_videos
         self.transcript_backend = transcript_backend or self._default_fetch_transcript
 
@@ -95,6 +105,19 @@ class YoutubeCapabilityService:
         }
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
+        try:
+            apify_items = self.apify_search_backend(query, max_results)
+        except Exception as exc:
+            logger.warning("YouTube Apify search failed; falling back to web search: %s", exc)
+            apify_items = []
+        if apify_items:
+            return apify_items[:max_results]
+        return self.web_search_backend(query, max_results)[:max_results]
+
+    def _default_apify_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
+        return apify_tools.search_youtube_videos(query=query, max_results=max_results)
+
+    def _default_web_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         output = web_search.invoke({"query": f"site:youtube.com/watch {query}"})
         sources = extract_web_sources(str(output))
         return [
