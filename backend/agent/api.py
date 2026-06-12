@@ -751,13 +751,14 @@ def _response_output_item_done(
     thread_id: str,
     item: dict[str, Any],
     output_index: int = 0,
+    status: str = "completed",
 ) -> str:
     return _response_event(
         "response.output_item.done",
         response_id=response_id,
         thread_id=thread_id,
         output_index=output_index,
-        item={**item, "status": "completed"},
+        item={**item, "status": status},
     )
 
 
@@ -954,7 +955,13 @@ async def _stream_agent_turn(
         if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
             (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
         yield _sse("final", response.model_dump_json())
-        yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=subagent_item)
+        subagent_status = "failed" if live_result.status == "error" else "completed"
+        yield _response_output_item_done(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            item=subagent_item,
+            status=subagent_status,
+        )
         yield _response_completed(
             response_id=response_id,
             thread_id=active_thread_id,

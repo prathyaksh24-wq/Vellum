@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import logging
 from pathlib import Path
 
 from agent.agents.base import SpecialistAgent
@@ -9,6 +10,9 @@ from agent.agents.sports import SportsAgent
 from agent.agents.x_agent import XAgent
 from agent.agents.youtube import YoutubeAgent
 from agent.tools.capabilities.registry import build_shared_tool_registry
+
+
+logger = logging.getLogger(__name__)
 
 
 class PupilRegistry:
@@ -35,6 +39,9 @@ class PupilRegistry:
 
     def match(self, query: str) -> SpecialistAgent | None:
         for pupil in self._pupils.values():
-            if pupil.can_handle(query):
-                return pupil
+            try:
+                if pupil.can_handle(query):
+                    return pupil
+            except Exception:
+                logger.exception("Pupil %s failed while matching query.", pupil.name)
         return None

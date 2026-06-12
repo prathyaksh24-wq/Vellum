@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 import re
 
@@ -11,11 +12,15 @@ from agent.master.registry import PupilRegistry
 from agent.master.state import MasterThreadStateStore
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class LiveAgentResult:
     handled: bool
     agent_name: str
     answer: str
+    status: str = "answered"
     tools: list[str] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)
 
@@ -67,13 +72,29 @@ class LiveAgentDispatcher:
                     agent_name=matched_pupil.name,
                     reason=f"{matched_pupil.name} intent detected",
                 )
-            return self._result_from_response(matched_pupil.answer(message))
+            try:
+                return self._result_from_response(matched_pupil.answer(message))
+            except Exception:
+                logger.exception("Pupil %s failed while answering.", matched_pupil.name)
+                self.state_store.set_active_agent(thread_id, "VellumAgent")
+                self.state_store.clear_pending_reroute(thread_id)
+                return LiveAgentResult(
+                    handled=True,
+                    agent_name=matched_pupil.name,
+                    status="error",
+                    answer=(
+                        f"{matched_pupil.name} could not complete this request. "
+                        "I routed control back to Vellum so the main agent can continue."
+                    ),
+                    tools=[self._tool_name(matched_pupil.name)],
+                )
 
         if active_agent != "VellumAgent":
             self.state_store.set_pending_reroute(thread_id, "VellumAgent", "non-sports turn while SportsAgent active")
             return LiveAgentResult(
                 handled=True,
                 agent_name=active_agent,
+                status="needs_handoff",
                 answer=(
                     f"This looks outside {active_agent}. Should I route this back to Vellum "
                     "so the main agent can handle it?"
@@ -91,6 +112,7 @@ class LiveAgentDispatcher:
             handled=True,
             agent_name=response.agent,
             answer=response.summary,
+            status=response.status,
             tools=tools,
             sources=[
                 self._source_record(source)
