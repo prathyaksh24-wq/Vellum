@@ -8,11 +8,14 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shutil
 import time
 from typing import Any
+import urllib.error
+import urllib.request
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from langchain_core.messages import ToolMessage
@@ -1516,18 +1519,64 @@ async def list_models() -> dict[str, Any]:
     }
 
 
+def _probe_mcp_server(entry: dict[str, Any]) -> dict[str, Any]:
+    if not entry.get("configured"):
+        return {"reachable": False, "status": "not_configured"}
+
+    name = str(entry.get("name") or "")
+    endpoint = str(entry.get("endpoint") or "")
+    if name == "filesystem":
+        path = Path(endpoint)
+        return {
+            "reachable": path.exists() and path.is_dir(),
+            "status": "directory_ok" if path.exists() and path.is_dir() else "directory_missing",
+        }
+
+    if name in {"playwright", "context_mode"}:
+        command = endpoint.split(" ", 1)[0]
+        available = bool(shutil.which(command))
+        return {
+            "reachable": available,
+            "status": "command_available" if available else "command_missing",
+        }
+
+    if endpoint.startswith(("http://", "https://")):
+        try:
+            req = urllib.request.Request(endpoint, method="HEAD")
+            with urllib.request.urlopen(req, timeout=2) as response:
+                return {"reachable": True, "status": f"http_{response.status}"}
+        except urllib.error.HTTPError as exc:
+            return {"reachable": exc.code < 500, "status": f"http_{exc.code}"}
+        except Exception as exc:
+            return {"reachable": False, "status": f"unreachable:{type(exc).__name__}"}
+
+    return {"reachable": False, "status": "unsupported_endpoint"}
+
+
 @router.get("/mcp/health")
-async def mcp_health() -> dict[str, Any]:
+async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
     """Per-MCP-server configuration + reachability hint.
 
-    Reports whether each server has its required env vars set. Does NOT
-    invoke any MCP tool — calling them has side effects and rate-limit
-    cost. To functionally probe a server, call its tool from a chat turn."""
+    Reports whether each server has its required env vars set. With
+    probe=true, performs side-effect-free filesystem, command, and HTTP
+    reachability checks. It does not invoke MCP tools."""
     settings = get_settings()
     servers: list[dict[str, Any]] = []
 
     def _entry(name: str, configured: bool, url_or_cmd: str, notes: str = "") -> dict[str, Any]:
-        return {"name": name, "configured": configured, "endpoint": url_or_cmd, "notes": notes}
+        entry = {
+            "name": name,
+            "configured": configured,
+            "endpoint": url_or_cmd,
+            "reachable": None,
+            "status": "probe_disabled",
+            "probe": "disabled",
+            "notes": notes,
+        }
+        if probe:
+            entry.update(_probe_mcp_server(entry))
+            entry["probe"] = "live"
+        return entry
 
     servers.append(_entry(
         "filesystem",
@@ -1583,7 +1632,6 @@ async def mcp_health() -> dict[str, Any]:
 
     honcho_reachable = False
     try:
-        import urllib.request
         req = urllib.request.Request(settings.honcho_base_url, method="HEAD")
         with urllib.request.urlopen(req, timeout=1):
             honcho_reachable = True

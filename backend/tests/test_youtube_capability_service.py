@@ -1,6 +1,70 @@
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 
 
+def test_youtube_service_prefers_apify_backend_over_web_fallback(tmp_path):
+    calls = []
+
+    def apify_search(query, max_results):
+        calls.append(("apify", query, max_results))
+        return [
+            {
+                "videoId": "apify12345",
+                "title": "Apify result",
+                "url": "https://www.youtube.com/watch?v=apify12345",
+            }
+        ]
+
+    def web_search(query, max_results):
+        calls.append(("web", query, max_results))
+        return [
+            {
+                "videoId": "web1234567",
+                "title": "Web result",
+                "url": "https://www.youtube.com/watch?v=web1234567",
+            }
+        ]
+
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        apify_search_backend=apify_search,
+        web_search_backend=web_search,
+    )
+
+    result = service.search_videos({"query": "Arsenal highlights", "max_results": 2})
+
+    assert calls == [("apify", "Arsenal highlights", 2)]
+    assert result["items"][0]["video_id"] == "apify12345"
+
+
+def test_youtube_service_falls_back_to_web_when_apify_empty(tmp_path):
+    calls = []
+
+    def apify_search(query, max_results):
+        calls.append(("apify", query, max_results))
+        return []
+
+    def web_search(query, max_results):
+        calls.append(("web", query, max_results))
+        return [
+            {
+                "videoId": "web1234567",
+                "title": "Web result",
+                "url": "https://www.youtube.com/watch?v=web1234567",
+            }
+        ]
+
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        apify_search_backend=apify_search,
+        web_search_backend=web_search,
+    )
+
+    result = service.search_videos({"query": "NBA analysis", "max_results": 4})
+
+    assert calls == [("apify", "NBA analysis", 4), ("web", "NBA analysis", 4)]
+    assert result["items"][0]["video_id"] == "web1234567"
+
+
 def test_youtube_service_normalizes_search_results(tmp_path):
     service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",

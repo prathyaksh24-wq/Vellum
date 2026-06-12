@@ -16,6 +16,8 @@ from agent.tools.registry import (
 
 SearchPostsBackend = Callable[[str, int], list[dict[str, Any]]]
 PostBackend = Callable[[str], dict[str, Any]]
+AccountBackend = Callable[[], dict[str, Any]]
+BookmarksBackend = Callable[[str, int], dict[str, Any]]
 
 
 def _load_script(name: str):
@@ -34,11 +36,24 @@ class XCapabilityService:
         self,
         search_posts_backend: SearchPostsBackend | None = None,
         post_backend: PostBackend | None = None,
+        account_backend: AccountBackend | None = None,
+        bookmarks_backend: BookmarksBackend | None = None,
+        allow_private_reads: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
         self.search_posts_backend = search_posts_backend or self._default_search_posts
         self.post_backend = post_backend or self._default_post
-        self.allow_posts = get_settings().x_tool_allow_posts if allow_posts is None else allow_posts
+        self.account_backend = account_backend or self._default_account
+        self.bookmarks_backend = bookmarks_backend or self._default_bookmarks
+        settings = get_settings()
+        self.allow_private_reads = (
+            bool(getattr(settings, "x_tool_allow_private_reads", False))
+            if allow_private_reads is None
+            else allow_private_reads
+        )
+        self.allow_posts = (
+            bool(getattr(settings, "x_tool_allow_posts", False)) if allow_posts is None else allow_posts
+        )
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -50,6 +65,28 @@ class XCapabilityService:
                 allowed_agents=frozenset({"XAgent", "ResearchAgent", "MemoryAgent", "VellumAgent"}),
                 stream_label="Searched X",
                 adapter=self.search_posts,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="x.account",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Read X account",
+                adapter=self.account,
+                required_env_flags=frozenset({"X_TOOL_ALLOW_PRIVATE_READS"}),
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="x.bookmarks",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "MemoryAgent", "VellumAgent"}),
+                stream_label="Read X bookmarks",
+                adapter=self.bookmarks,
+                required_env_flags=frozenset({"X_TOOL_ALLOW_PRIVATE_READS"}),
             )
         )
         registry.register(
@@ -70,6 +107,27 @@ class XCapabilityService:
         max_results = self._normalize_max_results(payload.get("max_results", 10))
         items = [self._normalize_post(item) for item in self.search_posts_backend(query, max_results)]
         return {"action": "x.search_posts", "items": items}
+
+    def account(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.allow_private_reads:
+            raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
+        return {"action": "x.account", "account": self.account_backend()}
+
+    def bookmarks(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.allow_private_reads:
+            raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
+        max_results = self._normalize_max_results(payload.get("max_results", 10))
+        account = self.account_backend()
+        user_id = str(account.get("id") or "").strip()
+        if not user_id:
+            raise ToolPermissionError("X bookmarks require an authenticated user id.")
+        result = self.bookmarks_backend(user_id, max_results)
+        return {
+            "action": "x.bookmarks",
+            "account": account,
+            "items": result.get("data", []),
+            "meta": result.get("meta", {}),
+        }
 
     def publish_post(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_posts:
@@ -120,3 +178,21 @@ class XCapabilityService:
     def _default_post(text: str) -> dict[str, Any]:
         client = _load_script("x_api_client")
         return client.post_tweet(text=text).get("data", {})
+
+    @staticmethod
+    def _oauth_file():
+        return REPO_ROOT / "data" / "x-api-oauth.json"
+
+    @staticmethod
+    def _default_account() -> dict[str, Any]:
+        client = _load_script("x_api_client")
+        return client.get_me(oauth_file=XCapabilityService._oauth_file()).get("data", {})
+
+    @staticmethod
+    def _default_bookmarks(user_id: str, max_results: int) -> dict[str, Any]:
+        client = _load_script("x_api_client")
+        return client.get_bookmarks(
+            user_id=user_id,
+            max_results=max_results,
+            oauth_file=XCapabilityService._oauth_file(),
+        )
