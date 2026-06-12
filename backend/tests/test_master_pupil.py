@@ -80,6 +80,29 @@ def test_delegation_manager_normalizes_pupil_response_and_memory_proposals(tmp_p
     assert result.memory_proposals[0].claim == "User likes concise answers."
 
 
+def test_delegation_manager_contains_pupil_failures(tmp_path):
+    class FailingPupil:
+        name = "FailingAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            raise RuntimeError("backend unavailable")
+
+    manager = DelegationManager(PupilRegistry({"FailingAgent": FailingPupil()}))
+
+    result = manager.delegate("FailingAgent", "handle this", task_id="task-err")
+
+    assert result.task_id == "task-err"
+    assert result.pupil == "FailingAgent"
+    assert result.status == "error"
+    assert "could not complete" in result.answer
+    assert result.confidence == 0.0
+    assert result.sources == []
+    assert result.memory_proposals == []
+
+
 def test_reward_scorer_and_store_round_trip(tmp_path):
     signal = RewardSignal(
         task_id="task-1",

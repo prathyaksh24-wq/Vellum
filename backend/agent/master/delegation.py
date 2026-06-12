@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 
 from agent.agents.base import MemoryProposal, SpecialistSource
 from agent.master.registry import PupilRegistry
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,7 +27,19 @@ class DelegationManager:
 
     def delegate(self, pupil_name: str, user_message: str, task_id: str) -> DelegationResult:
         pupil = self.registry.get(pupil_name)
-        response = pupil.answer(user_message)
+        try:
+            response = pupil.answer(user_message)
+        except Exception:
+            logger.exception("Pupil %s failed during delegated task %s.", pupil_name, task_id)
+            return DelegationResult(
+                task_id=task_id,
+                pupil=pupil_name,
+                status="error",
+                answer=f"{pupil_name} could not complete this delegated task.",
+                confidence=0.0,
+                sources=[],
+                memory_proposals=[],
+            )
         return DelegationResult(
             task_id=task_id,
             pupil=response.agent,
