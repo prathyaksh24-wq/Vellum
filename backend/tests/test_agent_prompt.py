@@ -138,3 +138,10 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "transcript-backed summaries" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "durable memory lookup" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "contract-compatible stubs" not in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
+def test_agent_prompt_forbids_live_access_refusal_when_tools_exist():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "Do not tell the user you lack live information access" in prompt
+    assert "use web_search" in prompt

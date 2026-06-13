@@ -157,7 +157,7 @@ class SportsAgent:
                 return SerpApiClient(
                     api_key=settings.serpapi_api_key,
                     log_path=settings.serpapi_log_path,
-                ).google_search_text(query, num=5)
+                ).fresh_google_search_text(query, num=5)
             except Exception:
                 pass
         return web_search.invoke({"query": query})

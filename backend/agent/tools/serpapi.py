@@ -40,16 +40,15 @@ class SerpApiClient:
 
     def google_search_text(self, query: str, *, num: int = 5) -> str:
         payload = self.search({"engine": "google", "q": query, "num": num})
-        results = payload.get("organic_results") or []
-        blocks = []
-        for item in results[:num]:
-            title = _string(item.get("title") or item.get("source") or "Search result")
-            link = _string(item.get("link") or item.get("url"))
-            snippet = _string(item.get("snippet") or item.get("description"))
-            if not link:
-                continue
-            blocks.append(f"**{title}**\n{snippet}\n{link}")
-        return "\n\n".join(blocks) if blocks else "No web results found."
+        return _google_payload_text(payload, num=num)
+
+    def fresh_google_search_text(self, query: str, *, num: int = 5) -> str:
+        for engine in ("google_ai_mode", "google_light", "google"):
+            payload = self.search({"engine": engine, "q": query, "num": num})
+            text = _google_payload_text(payload, num=num)
+            if text != "No web results found.":
+                return text
+        return "No web results found."
 
     def youtube_search(self, query: str, *, max_results: int = 5) -> list[dict[str, Any]]:
         payload = self.search({"engine": "youtube", "search_query": query})
@@ -101,6 +100,42 @@ def _normalize_youtube_video(item: dict[str, Any]) -> dict[str, Any]:
         "publishedAt": _string(item.get("published_date") or item.get("publishedAt") or item.get("date")),
         "description": _string(item.get("description") or item.get("snippet")),
     }
+
+
+def _google_payload_text(payload: dict[str, Any], *, num: int) -> str:
+    blocks: list[str] = []
+
+    answer = _string(payload.get("answer") or payload.get("ai_answer") or payload.get("summary"))
+    if answer:
+        blocks.append(answer)
+
+    text_blocks = payload.get("text_blocks")
+    if isinstance(text_blocks, list):
+        for block in text_blocks[:num]:
+            text = _string(block.get("text") if isinstance(block, dict) else block)
+            if text:
+                blocks.append(text)
+
+    for item in _search_items(payload)[:num]:
+        if not isinstance(item, dict):
+            continue
+        title = _string(item.get("title") or item.get("source") or "Search result")
+        link = _string(item.get("link") or item.get("url"))
+        snippet = _string(item.get("snippet") or item.get("description"))
+        if not link:
+            continue
+        blocks.append(f"**{title}**\n{snippet}\n{link}")
+
+    return "\n\n".join(block for block in blocks if block.strip()) or "No web results found."
+
+
+def _search_items(payload: dict[str, Any]) -> list[Any]:
+    items: list[Any] = []
+    for key in ("references", "organic_results", "top_stories", "news_results"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            items.extend(value)
+    return items
 
 
 def _video_id_from_url(url: str) -> str:

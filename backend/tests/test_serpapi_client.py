@@ -73,6 +73,95 @@ def test_serpapi_google_search_text_is_extractable(monkeypatch, tmp_path):
     assert "https://www.formula1.com/en/results.html" in text
 
 
+def test_serpapi_google_search_prefers_ai_mode_then_light_then_normal(monkeypatch, tmp_path):
+    calls = []
+    responses = [
+        {"search_metadata": {"id": "ai-empty", "status": "Success"}},
+        {
+            "search_metadata": {"id": "light-ok", "status": "Success"},
+            "organic_results": [
+                {
+                    "title": "Portugal fixtures",
+                    "link": "https://www.fifa.com/fixtures",
+                    "snippet": "Portugal's next listed fixture.",
+                }
+            ],
+        },
+    ]
+
+    def fake_urlopen(request, timeout):
+        query = parse_qs(urlparse(request.full_url).query)
+        calls.append(query["engine"][0])
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("agent.tools.serpapi.urllib.request.urlopen", fake_urlopen)
+    client = SerpApiClient(api_key="secret-token", log_path=tmp_path / "serpapi.jsonl")
+
+    text = client.fresh_google_search_text("Portugal vs Argentina next match", num=3)
+
+    assert calls == ["google_ai_mode", "google_light"]
+    assert "**Portugal fixtures**" in text
+    assert "https://www.fifa.com/fixtures" in text
+
+
+def test_serpapi_google_search_uses_normal_google_after_ai_and_light_empty(monkeypatch, tmp_path):
+    calls = []
+    responses = [
+        {"search_metadata": {"id": "ai-empty", "status": "Success"}},
+        {"search_metadata": {"id": "light-empty", "status": "Success"}},
+        {
+            "search_metadata": {"id": "google-ok", "status": "Success"},
+            "organic_results": [
+                {
+                    "title": "F1 standings",
+                    "link": "https://www.formula1.com/en/results.html",
+                    "snippet": "Current driver standings.",
+                }
+            ],
+        },
+    ]
+
+    def fake_urlopen(request, timeout):
+        query = parse_qs(urlparse(request.full_url).query)
+        calls.append(query["engine"][0])
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("agent.tools.serpapi.urllib.request.urlopen", fake_urlopen)
+    client = SerpApiClient(api_key="secret-token", log_path=tmp_path / "serpapi.jsonl")
+
+    text = client.fresh_google_search_text("formula 1 standings", num=3)
+
+    assert calls == ["google_ai_mode", "google_light", "google"]
+    assert "**F1 standings**" in text
+    assert "https://www.formula1.com/en/results.html" in text
+
+
+def test_serpapi_ai_mode_text_blocks_and_references_are_extractable(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "agent.tools.serpapi.urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(
+            {
+                "search_metadata": {"id": "ai-ok", "status": "Success"},
+                "answer": "There is no Portugal vs Argentina fixture currently listed.",
+                "references": [
+                    {
+                        "title": "FIFA Fixtures",
+                        "link": "https://www.fifa.com/fixtures",
+                        "snippet": "Official FIFA fixtures.",
+                    }
+                ],
+            }
+        ),
+    )
+    client = SerpApiClient(api_key="secret-token", log_path=tmp_path / "serpapi.jsonl")
+
+    text = client.fresh_google_search_text("Portugal vs Argentina next match", num=3)
+
+    assert "There is no Portugal vs Argentina fixture currently listed." in text
+    assert "**FIFA Fixtures**" in text
+    assert "https://www.fifa.com/fixtures" in text
+
+
 def test_serpapi_youtube_search_and_transcript_normalize_results(monkeypatch, tmp_path):
     responses = [
         {

@@ -216,7 +216,7 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
         def __init__(self, api_key, log_path):
             calls["init"] = {"api_key": api_key, "log_path": log_path}
 
-        def google_search_text(self, query, num):
+        def fresh_google_search_text(self, query, num):
             calls["search"] = {"query": query, "num": num}
             return (
                 "**NBA schedule**\n"
