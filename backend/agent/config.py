@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     apify_api_token: str = Field(default="", alias="APIFY_API_TOKEN")
     apify_amazon_actor: str = Field(default="scrapeai/amazon-product-scraper", alias="APIFY_AMAZON_ACTOR")
     apify_youtube_actor: str = Field(default="majdijm/youtube-channel-scraper", alias="APIFY_YOUTUBE_ACTOR")
+    serpapi_api_key: str = Field(default="", alias="SERPAPI_API_KEY")
+    serpapi_base_url: str = Field(default="https://serpapi.com/search.json", alias="SERPAPI_BASE_URL")
+    serpapi_log_path: Path = Field(default=Path("data/logs/serpapi-searches.jsonl"), alias="SERPAPI_LOG_PATH")
     playwright_mcp_command: str = Field(default="npx", alias="PLAYWRIGHT_MCP_COMMAND")
     playwright_mcp_args: str = Field(default="-y @playwright/mcp@latest --isolated", alias="PLAYWRIGHT_MCP_ARGS")
     playwright_mcp_allow_mutations: bool = Field(default=False, alias="PLAYWRIGHT_MCP_ALLOW_MUTATIONS")
@@ -184,6 +187,8 @@ class Settings(BaseSettings):
             raise ValueError("VOICE_TTS_SPEED must be greater than 0.")
         if not self.apify_mcp_url.startswith(("https://", "http://")):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
+        if not self.serpapi_base_url.startswith(("https://", "http://")):
+            raise ValueError("SERPAPI_BASE_URL must be an HTTP(S) URL.")
         if not self.github_mcp_url.startswith(("https://", "http://")):
             raise ValueError("GITHUB_MCP_URL must be an HTTP(S) URL.")
         if not self.obsidian_mcp_url.startswith(("https://", "http://")):

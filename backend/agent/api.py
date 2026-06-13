@@ -1595,7 +1595,13 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         "apify",
         configured=bool(settings.apify_api_token) and settings.apify_mcp_url.startswith("http"),
         url_or_cmd=settings.apify_mcp_url,
-        notes="amazon + youtube scrapers; requires APIFY_API_TOKEN.",
+        notes="Amazon scraper; requires APIFY_API_TOKEN. YouTube now uses SerpAPI.",
+    ))
+    servers.append(_entry(
+        "serpapi",
+        configured=bool(settings.serpapi_api_key) and settings.serpapi_base_url.startswith("http"),
+        url_or_cmd=settings.serpapi_base_url,
+        notes="Sports Google results plus YouTube search/video/transcript APIs; logs redacted search metadata.",
     ))
     servers.append(_entry(
         "playwright",
@@ -1851,7 +1857,15 @@ def _setup_catalog() -> dict[str, Any]:
             "label": "Apify",
             "category": "Built-in",
             "url": settings.apify_mcp_url,
-            "scope": "amazon + youtube scrapers",
+            "scope": "amazon scraper",
+            "enabled": True,
+        },
+        {
+            "id": "builtin.serpapi",
+            "label": "SerpAPI",
+            "category": "Built-in",
+            "url": settings.serpapi_base_url,
+            "scope": "sports Google search + YouTube search/video/transcripts",
             "enabled": True,
         },
     ]

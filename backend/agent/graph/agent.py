@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import sqlite3
 
@@ -107,6 +108,7 @@ Rules:
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
 - For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and cite sources.
+- Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search and cite sources instead of answering from model memory or refusing.
 - Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 """
 
@@ -157,10 +159,13 @@ def vellum_prompt(state, config=None):
         memory_block = ""
 
     active_model = get_provider_registry().current_model()
+    current_date = datetime.now().date().isoformat()
     runtime_text = (
+        f"Runtime current date: {current_date}. "
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
         "If asked which model is being used, answer with this runtime value; "
-        "do not infer from model weights or provider defaults."
+        "do not infer from model weights or provider defaults. "
+        "Do not answer from training cutoff dates; use the runtime current date for year/currentness questions."
     )
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
     if memory_block:

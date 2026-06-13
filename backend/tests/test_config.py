@@ -13,6 +13,8 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.fast_model == "google/gemma-3-12b-it"
     assert settings.fast_model != "google/gemma-4-12b-it"
     assert settings.apify_mcp_url == "https://mcp.apify.com"
+    assert settings.serpapi_base_url == "https://serpapi.com/search.json"
+    assert settings.serpapi_log_path.name == "serpapi-searches.jsonl"
     assert settings.playwright_mcp_command == "npx"
     assert "@playwright/mcp@latest" in settings.playwright_mcp_args
     assert isinstance(settings.playwright_mcp_allow_mutations, bool)

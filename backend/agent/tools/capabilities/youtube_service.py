@@ -6,15 +6,17 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent.mcp import apify_tools
+from agent.config import get_settings
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
+from agent.tools.serpapi import SerpApiClient
 from agent.tools.web import extract_web_sources, web_search
 
 
 logger = logging.getLogger(__name__)
 
 SearchVideosBackend = Callable[[str, int], list[dict[str, Any]]]
-ApifySearchBackend = Callable[[str, int], list[dict[str, Any]]]
+SerpApiSearchBackend = Callable[[str, int], list[dict[str, Any]]]
+SerpApiTranscriptBackend = Callable[[str], dict[str, Any] | None]
 WebSearchBackend = Callable[[str, int], list[dict[str, Any]]]
 TranscriptBackend = Callable[[dict[str, Any]], dict[str, Any] | None]
 
@@ -24,12 +26,14 @@ class YoutubeCapabilityService:
         self,
         vault_root: Path,
         search_backend: SearchVideosBackend | None = None,
-        apify_search_backend: ApifySearchBackend | None = None,
+        serpapi_search_backend: SerpApiSearchBackend | None = None,
+        serpapi_transcript_backend: SerpApiTranscriptBackend | None = None,
         web_search_backend: WebSearchBackend | None = None,
         transcript_backend: TranscriptBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
-        self.apify_search_backend = apify_search_backend or self._default_apify_search_videos
+        self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
+        self.serpapi_transcript_backend = serpapi_transcript_backend or self._default_serpapi_fetch_transcript
         self.web_search_backend = web_search_backend or self._default_web_search_videos
         self.search_backend = search_backend or self._default_search_videos
         self.transcript_backend = transcript_backend or self._default_fetch_transcript
@@ -106,16 +110,22 @@ class YoutubeCapabilityService:
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:
-            apify_items = self.apify_search_backend(query, max_results)
+            serpapi_items = self.serpapi_search_backend(query, max_results)
         except Exception as exc:
-            logger.warning("YouTube Apify search failed; falling back to web search: %s", exc)
-            apify_items = []
-        if apify_items:
-            return apify_items[:max_results]
+            logger.warning("YouTube SerpAPI search failed; falling back to web search: %s", exc)
+            serpapi_items = []
+        if serpapi_items:
+            return serpapi_items[:max_results]
         return self.web_search_backend(query, max_results)[:max_results]
 
-    def _default_apify_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        return apify_tools.search_youtube_videos(query=query, max_results=max_results)
+    def _default_serpapi_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
+        settings = get_settings()
+        if not settings.serpapi_api_key:
+            return []
+        return SerpApiClient(api_key=settings.serpapi_api_key, log_path=settings.serpapi_log_path).youtube_search(
+            query,
+            max_results=max_results,
+        )
 
     def _default_web_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         output = web_search.invoke({"query": f"site:youtube.com/watch {query}"})
@@ -132,6 +142,14 @@ class YoutubeCapabilityService:
 
     def _default_fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         video_id = str(payload.get("video_id") or "").strip()
+        if video_id:
+            try:
+                result = self.serpapi_transcript_backend(video_id)
+            except Exception as exc:
+                logger.warning("YouTube SerpAPI transcript failed; falling back to local cards: %s", exc)
+                result = None
+            if result and result.get("transcript"):
+                return result
         query = str(payload.get("query") or "").strip().lower()
         youtube_root = self.vault_root / "Library" / "Youtube"
         if not youtube_root.exists():
@@ -151,6 +169,14 @@ class YoutubeCapabilityService:
                 "path": path.relative_to(self.vault_root).as_posix(),
             }
         return None
+
+    def _default_serpapi_fetch_transcript(self, video_id: str) -> dict[str, Any] | None:
+        settings = get_settings()
+        if not settings.serpapi_api_key:
+            return None
+        return SerpApiClient(api_key=settings.serpapi_api_key, log_path=settings.serpapi_log_path).youtube_transcript(
+            video_id
+        )
 
 
 def _extract_transcript(text: str) -> str:
