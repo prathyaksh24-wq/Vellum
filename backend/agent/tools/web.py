@@ -1,12 +1,14 @@
-"""Privacy-gated DuckDuckGo web search tool."""
+"""Privacy-gated web search tool."""
 
 import logging
 from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
+from agent.config import get_settings
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
+from agent.tools.serpapi import SerpApiClient
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,18 @@ def web_search(query: str) -> str:
         return f"Web search blocked for privacy: {reason}"
 
     clean_query, _ = PrivacyScrubber().scrub(query)
+    settings = get_settings()
+    if settings.serpapi_api_key:
+        try:
+            result = SerpApiClient(
+                api_key=settings.serpapi_api_key,
+                log_path=settings.serpapi_log_path,
+            ).fresh_google_search_text(clean_query, num=5)
+            if result and not result.startswith("No web results"):
+                return result
+        except Exception as exc:
+            logger.error("[TOOL:web] SerpAPI error: %s", exc)
+
     try:
         from duckduckgo_search import DDGS
     except ImportError:

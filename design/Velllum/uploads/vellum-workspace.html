@@ -1587,11 +1587,11 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function backendBase(){ return (backendUrl||"http://127.0.0.1:8000").trim().replace(/\/+$/,""); }
   async function pingBackend(){
     setBackendStatus("checking");
-    try{ const r = await fetch(backendBase()+"/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
+    try{ const r = await fetch(backendBase()+"/api/health"); setBackendStatus(r.ok?"connected":"offline"); if(r.ok) loadMemory(); }
     catch(e){ setBackendStatus("offline"); }
   }
   async function loadMemory(){
-    try{ const r = await fetch(backendBase()+"/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
+    try{ const r = await fetch(backendBase()+"/api/memory/entries?limit=30"); const j = await r.json(); if(j && j.entries) setMemoryEntries(j.entries); }catch(e){}
   }
   function normalizeResponseStreamEvent(ev, payload){
     if(!payload) return null;
@@ -1615,7 +1615,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   async function streamBackend(chatId, aid, message){
     const ctrl = new AbortController(); abortRef.current = ctrl;
     try{
-      const resp = await fetch(backendBase()+"/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
+      const resp = await fetch(backendBase()+"/api/chat/stream", { method:"POST", signal:ctrl.signal, headers:{"Content-Type":"application/json"}, body: JSON.stringify({ message, thread_id: threadRef.current[chatId]||null, model: selModel, store: memoryOn }) });
       if(!resp.ok || !resp.body){ let msg="Backend error ("+resp.status+")"; try{ const j=await resp.json(); if(j&&j.detail) msg=j.detail; }catch(e){} setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:"⚠ "+msg,thinking:false,streaming:false}:x)); abortRef.current=null; setRunning(false); return; }
       const reader=resp.body.getReader(); const dec=new TextDecoder(); let buf="", acc="";
       let semanticSeen = false;
