@@ -65,6 +65,42 @@ def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
     assert result["items"][0]["video_id"] == "web1234567"
 
 
+def test_youtube_service_filters_simulation_videos_and_ranks_official_recent_results(tmp_path):
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "videoId": "fake123456",
+                "title": "Portugal 112-1 Argentina | Ronaldo Messi | PES Gameplay",
+                "url": "https://www.youtube.com/watch?v=fake123456",
+                "channelName": "Football Gaming",
+                "publishedAt": "2 years ago",
+                "description": "PES simulation and fantasy score.",
+            },
+            {
+                "videoId": "fifa123456",
+                "title": "Argentina v Portugal highlights",
+                "url": "https://www.youtube.com/watch?v=fifa123456",
+                "channelName": "FIFA",
+                "publishedAt": "2 days ago",
+                "description": "Official match archive highlights.",
+            },
+            {
+                "videoId": "fan1234567",
+                "title": "Argentina vs Portugal friendly highlights",
+                "url": "https://www.youtube.com/watch?v=fan1234567",
+                "channelName": "Football Star",
+                "publishedAt": "4 years ago",
+                "description": "Fan upload.",
+            },
+        ],
+    )
+
+    result = service.search_videos({"query": "Portugal Argentina football highlights", "max_results": 3})
+
+    assert [item["video_id"] for item in result["items"]] == ["fifa123456", "fan1234567"]
+
+
 def test_youtube_service_fetches_serpapi_transcript_before_local_cards(tmp_path):
     calls = {}
 
