@@ -226,6 +226,10 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     by_url = {p["url"]: p for p in source_payloads}
     assert by_url[URL_A]["domain"] == "formula1.com"
     assert by_url[URL_B]["domain"] == "skysports.com"
+    assert by_url[URL_A]["source_index"] == 1
+    assert by_url[URL_B]["source_index"] == 2
+    assert by_url[URL_A]["source_type"] == "web"
+    assert by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
 
     # The 'final' payload JSON carries the same sources (>= 2) with url/domain.
     final_data = next(data for name, data in events if name == "final")
@@ -237,6 +241,9 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(final_by_url) == {URL_A, URL_B}
     assert final_by_url[URL_A]["domain"] == "formula1.com"
     assert final_by_url[URL_B]["domain"] == "skysports.com"
+    assert final_by_url[URL_A]["source_index"] == 1
+    assert final_by_url[URL_A]["source_type"] == "web"
+    assert final_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
 
     response_final = json.loads(next(data for name, data in events if name == "response.completed"))
     assert response_final["response"]["output_text"] == "Verstappen won the last race."
@@ -245,6 +252,9 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(response_by_url) == {URL_A, URL_B}
     assert response_by_url[URL_A]["domain"] == "formula1.com"
     assert response_by_url[URL_B]["domain"] == "skysports.com"
+    assert response_by_url[URL_A]["source_index"] == 1
+    assert response_by_url[URL_A]["source_type"] == "web"
+    assert response_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
 
     response_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
     assert any(item["type"] == "tool_call" and item["name"] == "web_search" for item in response_items)
@@ -253,3 +263,6 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(response_source_by_url) == {URL_A, URL_B}
     assert response_source_by_url[URL_A]["domain"] == "formula1.com"
     assert response_source_by_url[URL_B]["domain"] == "skysports.com"
+    assert response_source_by_url[URL_A]["source_index"] == 1
+    assert response_source_by_url[URL_A]["source_type"] == "web"
+    assert response_source_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
