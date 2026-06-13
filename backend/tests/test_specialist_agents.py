@@ -102,6 +102,9 @@ def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
     assert agent.can_handle("Any F1 race updates?")
     assert agent.can_handle("NBA injury report")
     assert agent.can_handle("Arsenal score")
+    assert agent.can_handle("who won the opening match in the fifa world cup 2026")
+    assert agent.can_handle("when is Portugal's next match?")
+    assert agent.can_handle("no in the fifa i meant")
     assert agent.can_handle("UFC updates tonight?")
     assert not agent.can_handle("What is on my calendar tomorrow?")
 
@@ -152,6 +155,13 @@ def test_sports_agent_generic_terms_need_sports_context():
     assert not agent.can_handle("Can you improve my model score function?")
 
 
+def test_sports_agent_resolves_fifa_world_cup_context():
+    agent = SportsAgent(vault_root=Path("unused"))
+
+    assert agent.resolve_league("who won the opening match in the fifa world cup 2026") == "FIFA-World-Cup"
+    assert agent.resolve_league("when is Portugal's next match?") == "FIFA-World-Cup"
+
+
 def test_sports_agent_ignores_seeded_placeholder_latest_and_uses_web(tmp_path):
     vault_root = tmp_path / "Vault"
     latest = vault_root / "Library" / "Sports" / "NBA" / "latest.md"
@@ -197,6 +207,41 @@ def test_sports_agent_prefers_web_over_stale_latest_sports_note(tmp_path):
     assert "Knicks" not in response.summary
     assert response.sources[0].path_or_url == "https://www.nba.com/news/finals-injury-report"
     assert response.memory_proposals[0].scope == "sports"
+
+
+def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakeSerpApiClient:
+        def __init__(self, api_key, log_path):
+            calls["init"] = {"api_key": api_key, "log_path": log_path}
+
+        def google_search_text(self, query, num):
+            calls["search"] = {"query": query, "num": num}
+            return (
+                "**NBA schedule**\n"
+                "The next NBA game is listed on the official schedule.\n"
+                "https://www.nba.com/schedule\n"
+            )
+
+    monkeypatch.setattr("agent.agents.sports.SerpApiClient", FakeSerpApiClient)
+    monkeypatch.setattr(
+        "agent.agents.sports.get_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {"serpapi_api_key": "serp-token", "serpapi_log_path": tmp_path / "serpapi.jsonl"},
+        )(),
+    )
+
+    agent = SportsAgent(vault_root=tmp_path / "Vault")
+    response = agent.answer("when is the next NBA game?")
+
+    assert response.status == "answered"
+    assert calls["init"]["api_key"] == "serp-token"
+    assert calls["search"]["num"] == 5
+    assert "next NBA game" in calls["search"]["query"]
+    assert response.sources[0].path_or_url == "https://www.nba.com/schedule"
 
 
 def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_path):

@@ -6,6 +6,8 @@ import re
 from pathlib import Path
 
 from agent.agents.base import MemoryProposal, SpecialistResponse, SpecialistSource
+from agent.config import get_settings
+from agent.tools.serpapi import SerpApiClient
 from agent.tools.web import extract_web_sources, web_search
 
 
@@ -33,6 +35,12 @@ class SportsAgent:
         "epl",
         "champions league",
         "ucl",
+        "fifa",
+        "world cup",
+        "fifa world cup",
+        "portugal",
+        "national team",
+        "opening match",
         "football",
         "soccer",
         "nfl",
@@ -64,6 +72,7 @@ class SportsAgent:
         ("Formula-One", ("f1", "formula 1", "formula one", "grand prix", "gp")),
         ("Premier-League", ("premier league", "arsenal", "epl")),
         ("Champions-League", ("champions league", "ucl")),
+        ("FIFA-World-Cup", ("fifa", "world cup", "fifa world cup", "portugal", "national team")),
         ("UFC", ("ufc", "mma", "fight card", "fight night", "octagon")),
         ("Boxing", ("boxing", "title fight", "fight card")),
         ("Cricket", ("cricket", "ipl", "test match", "odi", "t20")),
@@ -142,6 +151,15 @@ class SportsAgent:
         return "Ambient"
 
     def _default_web_searcher(self, query: str) -> str:
+        settings = get_settings()
+        if settings.serpapi_api_key:
+            try:
+                return SerpApiClient(
+                    api_key=settings.serpapi_api_key,
+                    log_path=settings.serpapi_log_path,
+                ).google_search_text(query, num=5)
+            except Exception:
+                pass
         return web_search.invoke({"query": query})
 
     def _search_query(self, query: str, league: str) -> str:

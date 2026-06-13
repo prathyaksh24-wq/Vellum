@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import sqlite3
 
@@ -157,10 +158,13 @@ def vellum_prompt(state, config=None):
         memory_block = ""
 
     active_model = get_provider_registry().current_model()
+    current_date = datetime.now().date().isoformat()
     runtime_text = (
+        f"Runtime current date: {current_date}. "
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
         "If asked which model is being used, answer with this runtime value; "
-        "do not infer from model weights or provider defaults."
+        "do not infer from model weights or provider defaults. "
+        "Do not answer from training cutoff dates; use the runtime current date for year/currentness questions."
     )
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
     if memory_block:

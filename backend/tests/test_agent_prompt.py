@@ -35,6 +35,19 @@ def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):
     assert all("<PROTECTED>" not in m.content for m in messages)
 
 
+def test_vellum_prompt_includes_runtime_date_grounding(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "agent.graph.agent._prompt_project_ctx",
+        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
+        raising=False,
+    )
+
+    messages = vellum_prompt({"messages": [HumanMessage(content="which year are you in?")]}, {})
+
+    assert "Runtime current date:" in messages[0].content
+    assert "Do not answer from training cutoff dates" in messages[0].content
+
+
 def test_vellum_prompt_documents_x_action_safety_rules():
     assert "x_action" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
