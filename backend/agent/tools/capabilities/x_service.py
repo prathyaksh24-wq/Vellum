@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from agent.config import REPO_ROOT, get_settings
@@ -15,9 +16,11 @@ from agent.tools.registry import (
 )
 
 SearchPostsBackend = Callable[[str, int], list[dict[str, Any]]]
-PostBackend = Callable[[str], dict[str, Any]]
+PostBackend = Callable[..., dict[str, Any]]
 AccountBackend = Callable[[], dict[str, Any]]
 BookmarksBackend = Callable[[str, int], dict[str, Any]]
+ImageBackend = Callable[[str], dict[str, Any]]
+MediaUploadBackend = Callable[[str], dict[str, Any]]
 
 
 def _load_script(name: str):
@@ -38,6 +41,8 @@ class XCapabilityService:
         post_backend: PostBackend | None = None,
         account_backend: AccountBackend | None = None,
         bookmarks_backend: BookmarksBackend | None = None,
+        image_backend: ImageBackend | None = None,
+        media_upload_backend: MediaUploadBackend | None = None,
         allow_private_reads: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
@@ -45,6 +50,8 @@ class XCapabilityService:
         self.post_backend = post_backend or self._default_post
         self.account_backend = account_backend or self._default_account
         self.bookmarks_backend = bookmarks_backend or self._default_bookmarks
+        self.image_backend = image_backend or self._default_generate_image
+        self.media_upload_backend = media_upload_backend or self._default_upload_media
         settings = get_settings()
         self.allow_private_reads = (
             bool(getattr(settings, "x_tool_allow_private_reads", False))
@@ -100,6 +107,17 @@ class XCapabilityService:
                 adapter=self.publish_post,
             )
         )
+        registry.register(
+            CapabilityRecord(
+                name="x.publish_post_with_media",
+                namespace="x",
+                access=CapabilityAccess.EXTERNAL_WRITE,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Posted image to X",
+                requires_confirmation=True,
+                adapter=self.publish_post_with_media,
+            )
+        )
         return registry
 
     def search_posts(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -137,6 +155,34 @@ class XCapabilityService:
         text = str(payload.get("text", ""))
         return {"action": "x.publish_post", "tweet": self.post_backend(text)}
 
+    def publish_post_with_media(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.allow_posts:
+            raise ToolPermissionError("Posting to X requires X_TOOL_ALLOW_POSTS=true.")
+        if payload.get("confirm") is not True:
+            raise ToolPermissionError("Posting to X requires confirm=True.")
+        text = str(payload.get("text", "")).strip()
+        image_path = str(payload.get("image_path") or "").strip()
+        image: dict[str, Any] = {"path": image_path} if image_path else {}
+        if not image_path:
+            image_prompt = str(payload.get("image_prompt") or payload.get("prompt") or "").strip()
+            if not image_prompt:
+                raise ToolPermissionError("Image post requires image_path or image_prompt.")
+            image = self.image_backend(image_prompt)
+            image_path = str(image.get("path") or "").strip()
+        if not image_path:
+            raise ToolPermissionError("Generated image did not return a file path.")
+        uploaded = self.media_upload_backend(image_path)
+        media_id = self._extract_media_id(uploaded)
+        if not media_id:
+            raise ToolPermissionError("X media upload did not return a media id.")
+        tweet = self.post_backend(text, media_ids=[media_id], made_with_ai=not bool(payload.get("image_path")))
+        return {
+            "action": "x.publish_post_with_media",
+            "tweet": tweet,
+            "image": image,
+            "media": uploaded,
+        }
+
     @staticmethod
     def _normalize_max_results(value: Any) -> int:
         try:
@@ -172,16 +218,26 @@ class XCapabilityService:
             start=now - timedelta(days=7),
             end=now,
             max_items=max_results,
+            oauth_file=XCapabilityService._xai_oauth_file(),
         )
 
     @staticmethod
-    def _default_post(text: str) -> dict[str, Any]:
+    def _default_post(text: str, media_ids: list[str] | None = None, made_with_ai: bool = False) -> dict[str, Any]:
         client = _load_script("x_api_client")
-        return client.post_tweet(text=text).get("data", {})
+        return client.post_tweet(
+            text=text,
+            media_ids=media_ids,
+            made_with_ai=made_with_ai,
+            oauth_file=XCapabilityService._oauth_file(),
+        ).get("data", {})
 
     @staticmethod
     def _oauth_file():
         return REPO_ROOT / "data" / "x-api-oauth.json"
+
+    @staticmethod
+    def _xai_oauth_file():
+        return REPO_ROOT / "data" / "xai-oauth.json"
 
     @staticmethod
     def _default_account() -> dict[str, Any]:
@@ -196,3 +252,34 @@ class XCapabilityService:
             max_results=max_results,
             oauth_file=XCapabilityService._oauth_file(),
         )
+
+    @staticmethod
+    def _default_generate_image(prompt: str) -> dict[str, Any]:
+        client = _load_script("openai_image_client")
+        settings = get_settings()
+        return client.generate_image_file(
+            prompt=prompt,
+            api_key=getattr(settings, "openai_api_key", None),
+            base_url=getattr(settings, "openai_base_url", "https://api.openai.com/v1"),
+        )
+
+    @staticmethod
+    def _default_upload_media(path: str) -> dict[str, Any]:
+        client = _load_script("x_api_client")
+        result = client.upload_media(media_path=Path(path), oauth_file=XCapabilityService._oauth_file())
+        data = result.get("data", {})
+        return data if isinstance(data, dict) else {}
+
+    @staticmethod
+    def _extract_media_id(uploaded: dict[str, Any]) -> str:
+        for key in ("id", "media_id", "media_id_string"):
+            value = uploaded.get(key)
+            if value:
+                return str(value)
+        data = uploaded.get("data")
+        if isinstance(data, dict):
+            for key in ("id", "media_id", "media_id_string"):
+                value = data.get(key)
+                if value:
+                    return str(value)
+        return ""
