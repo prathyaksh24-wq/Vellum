@@ -77,6 +77,56 @@ class McpCapabilityService:
                 adapter=self.obsidian_search_notes,
             )
         )
+        registry.register(
+            CapabilityRecord(
+                name="web_research.search",
+                namespace="web_research",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"ResearchAgent", "MemoryAgent", "VellumAgent", "SportsAgent"}),
+                stream_label="Searched live web research",
+                adapter=self.web_research_search,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="web_research.answer",
+                namespace="web_research",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"ResearchAgent", "MemoryAgent", "VellumAgent", "SportsAgent"}),
+                stream_label="Answered with live web research",
+                adapter=self.web_research_answer,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="web_extract.fetch",
+                namespace="web_extract",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"ResearchAgent", "MemoryAgent", "VellumAgent"}),
+                stream_label="Fetched a web page",
+                adapter=self.web_extract_fetch,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="web_extract.crawl",
+                namespace="web_extract",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"ResearchAgent", "MemoryAgent", "VellumAgent"}),
+                stream_label="Crawled a website",
+                adapter=self.web_extract_crawl,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="web_extract.extract",
+                namespace="web_extract",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"ResearchAgent", "MemoryAgent", "VellumAgent"}),
+                stream_label="Extracted web content",
+                adapter=self.web_extract_extract,
+            )
+        )
         return registry
 
     def resolve_library(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +167,31 @@ class McpCapabilityService:
         params = dict(payload)
         params["action"] = "search"
         return self._call("obsidian", params, "obsidian.search_notes")
+
+    def web_research_search(self, payload: dict[str, Any]) -> dict[str, Any]:
+        params = dict(payload)
+        params["action"] = "search"
+        return self._call("tavily", params, "web_research.search")
+
+    def web_research_answer(self, payload: dict[str, Any]) -> dict[str, Any]:
+        params = dict(payload)
+        params["action"] = "answer"
+        return self._call("tavily", params, "web_research.answer")
+
+    def web_extract_fetch(self, payload: dict[str, Any]) -> dict[str, Any]:
+        params = dict(payload)
+        params["action"] = "fetch"
+        return self._call("firecrawl", params, "web_extract.fetch")
+
+    def web_extract_crawl(self, payload: dict[str, Any]) -> dict[str, Any]:
+        params = dict(payload)
+        params["action"] = "crawl"
+        return self._call("firecrawl", params, "web_extract.crawl")
+
+    def web_extract_extract(self, payload: dict[str, Any]) -> dict[str, Any]:
+        params = dict(payload)
+        params["action"] = "extract"
+        return self._call("firecrawl", params, "web_extract.extract")
 
     def _call(self, server: str, params: dict[str, Any], action: str) -> dict[str, str]:
         text = self.runner(server, params)

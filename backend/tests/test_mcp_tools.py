@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from agent.tools import browser as browser_tools
-from agent.mcp import apify_tools, filesystem_tools, github_tools, obsidian_tools, playwright_tools
+from agent.mcp import apify_tools, firecrawl_tools, filesystem_tools, github_tools, obsidian_tools, playwright_tools, tavily_tools
 from agent.mcp.client import McpToolRequest, run_tools_async
 
 
@@ -557,6 +557,90 @@ def test_github_token_reads_pat_from_settings(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
     assert github_tools._github_token() == "ghp_from_settings"
+
+
+def test_tavily_search_calls_remote_mcp_with_api_key(monkeypatch):
+    fake_session = FakeSession(tools=["tavily_search"], text="search result")
+    seen = {}
+
+    def fake_streamablehttp_client(url, headers=None, timeout=None, sse_read_timeout=None):
+        seen.update({"url": url, "headers": headers, "timeout": timeout, "sse_read_timeout": sse_read_timeout})
+        return AsyncStreamableHttpContext()
+
+    monkeypatch.setattr(
+        tavily_tools,
+        "get_settings",
+        lambda: SimpleNamespace(
+            tavily_api_key="tvly_test",
+            tavily_mcp_url="https://mcp.tavily.com/mcp/",
+            mcp_timeout_seconds=30,
+        ),
+    )
+    monkeypatch.setattr(tavily_tools, "streamablehttp_client", fake_streamablehttp_client)
+    monkeypatch.setattr(tavily_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(tavily_tools.run_tool_async({"action": "search", "query": "latest sports", "max_results": 3}))
+
+    assert result == "search result"
+    assert fake_session.calls[0] == ("tavily_search", {"query": "latest sports", "max_results": 3})
+    assert seen["url"] == "https://mcp.tavily.com/mcp/?tavilyApiKey=tvly_test"
+
+
+def test_tavily_answer_maps_to_search_with_answer(monkeypatch):
+    fake_session = FakeSession(tools=["tavily_search"], text="answer result")
+    monkeypatch.setattr(
+        tavily_tools,
+        "get_settings",
+        lambda: SimpleNamespace(
+            tavily_api_key="tvly_test",
+            tavily_mcp_url="https://mcp.tavily.com/mcp/",
+            mcp_timeout_seconds=30,
+        ),
+    )
+    monkeypatch.setattr(tavily_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(tavily_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(tavily_tools.run_tool_async({"action": "answer", "query": "what happened"}))
+
+    assert result == "answer result"
+    assert fake_session.calls[0] == ("tavily_search", {"query": "what happened", "include_answer": True})
+
+
+def test_firecrawl_fetch_calls_stdio_mcp_with_api_key(monkeypatch):
+    fake_session = FakeSession(tools=["firecrawl_scrape"], text="page markdown")
+    seen = {}
+
+    def fake_stdio_client(params):
+        seen["params"] = params
+        return AsyncPairContext()
+
+    monkeypatch.setattr(
+        firecrawl_tools,
+        "get_settings",
+        lambda: SimpleNamespace(
+            firecrawl_api_key="fc_test",
+            firecrawl_mcp_command="npx",
+            firecrawl_mcp_args="-y firecrawl-mcp",
+            mcp_timeout_seconds=30,
+        ),
+    )
+    monkeypatch.setattr(firecrawl_tools, "stdio_client", fake_stdio_client)
+    monkeypatch.setattr(firecrawl_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(firecrawl_tools.run_tool_async({"action": "fetch", "url": "https://example.com"}))
+
+    assert result == "page markdown"
+    assert fake_session.calls[0] == ("firecrawl_scrape", {"url": "https://example.com", "formats": ["markdown"]})
+    assert seen["params"].command == "npx"
+    assert seen["params"].args == ["-y", "firecrawl-mcp"]
+    assert seen["params"].env["FIRECRAWL_API_KEY"] == "fc_test"
+
+
+def test_mcp_client_registers_tavily_and_firecrawl_runners():
+    from agent.mcp import client as mcp_client
+
+    assert mcp_client.SERVER_RUNNERS["tavily"] is tavily_tools.run_tool_async
+    assert mcp_client.SERVER_RUNNERS["firecrawl"] is firecrawl_tools.run_tool_async
 
 
 def test_obsidian_read_calls_local_mcp(monkeypatch):
