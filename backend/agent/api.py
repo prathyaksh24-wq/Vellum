@@ -1656,6 +1656,18 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         notes="Sports Google results plus YouTube search/video/transcript APIs; logs redacted search metadata.",
     ))
     servers.append(_entry(
+        "tavily",
+        configured=bool(settings.tavily_api_key) and settings.tavily_mcp_url.startswith("http"),
+        url_or_cmd=settings.tavily_mcp_url,
+        notes="Shared live web research/search MCP; API key is supplied out-of-band by Vellum.",
+    ))
+    servers.append(_entry(
+        "firecrawl",
+        configured=bool(settings.firecrawl_api_key) and bool(settings.firecrawl_mcp_command),
+        url_or_cmd=f"{settings.firecrawl_mcp_command} {settings.firecrawl_mcp_args}",
+        notes="Shared page fetch/crawl/extract MCP; reads URLs and returns LLM-ready content.",
+    ))
+    servers.append(_entry(
         "playwright",
         configured=bool(settings.playwright_mcp_command),
         url_or_cmd=f"{settings.playwright_mcp_command} {settings.playwright_mcp_args}",
