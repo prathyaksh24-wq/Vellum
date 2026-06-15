@@ -103,6 +103,8 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     agent_graph.build_agent()
 
     assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
@@ -127,6 +129,17 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     asyncio.run(agent_graph.build_async_agent())
 
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
+
+
+def test_agent_prompt_documents_tavily_and_firecrawl_tools():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "web_research" in prompt
+    assert "Tavily" in prompt
+    assert "web_extract" in prompt
+    assert "Firecrawl" in prompt
 
 
 def test_prompt_describes_main_agent_as_router_with_specialists():

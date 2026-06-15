@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     serpapi_api_key: str = Field(default="", alias="SERPAPI_API_KEY")
     serpapi_base_url: str = Field(default="https://serpapi.com/search.json", alias="SERPAPI_BASE_URL")
     serpapi_log_path: Path = Field(default=Path("data/logs/serpapi-searches.jsonl"), alias="SERPAPI_LOG_PATH")
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    tavily_mcp_url: str = Field(default="https://mcp.tavily.com/mcp/", alias="TAVILY_MCP_URL")
+    firecrawl_api_key: str = Field(default="", alias="FIRECRAWL_API_KEY")
+    firecrawl_mcp_command: str = Field(default="npx", alias="FIRECRAWL_MCP_COMMAND")
+    firecrawl_mcp_args: str = Field(default="-y firecrawl-mcp", alias="FIRECRAWL_MCP_ARGS")
     playwright_mcp_command: str = Field(default="npx", alias="PLAYWRIGHT_MCP_COMMAND")
     playwright_mcp_args: str = Field(default="-y @playwright/mcp@latest --isolated", alias="PLAYWRIGHT_MCP_ARGS")
     playwright_mcp_allow_mutations: bool = Field(default=False, alias="PLAYWRIGHT_MCP_ALLOW_MUTATIONS")
@@ -189,6 +194,8 @@ class Settings(BaseSettings):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.serpapi_base_url.startswith(("https://", "http://")):
             raise ValueError("SERPAPI_BASE_URL must be an HTTP(S) URL.")
+        if not self.tavily_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("TAVILY_MCP_URL must be an HTTP(S) URL.")
         if not self.github_mcp_url.startswith(("https://", "http://")):
             raise ValueError("GITHUB_MCP_URL must be an HTTP(S) URL.")
         if not self.obsidian_mcp_url.startswith(("https://", "http://")):

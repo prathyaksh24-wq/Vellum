@@ -16,6 +16,11 @@ def test_mcp_service_registers_existing_context7_and_project_tools():
     assert "context_mode.fetch_and_index" in registry.names()
     assert "github.read_issue" in registry.names()
     assert "obsidian.search_notes" in registry.names()
+    assert "web_research.search" in registry.names()
+    assert "web_research.answer" in registry.names()
+    assert "web_extract.fetch" in registry.names()
+    assert "web_extract.crawl" in registry.names()
+    assert "web_extract.extract" in registry.names()
 
 
 def test_mcp_service_invokes_context7_with_structured_result():
@@ -115,6 +120,71 @@ def test_mcp_service_confirmed_github_write_issue_routes_create_issue():
         "server": "github",
         "text": "created",
     }
+
+
+def test_mcp_service_invokes_tavily_research_capabilities():
+    calls = []
+
+    def fake_runner(server, params):
+        calls.append((server, params))
+        return "research result"
+
+    service = McpCapabilityService(runner=fake_runner)
+    registry = service.build_registry()
+
+    search = registry.invoke(
+        "web_research.search",
+        {"query": "latest f1 standings", "max_results": 5},
+        agent_name="ResearchAgent",
+    )
+    answer = registry.invoke(
+        "web_research.answer",
+        {"query": "who leads f1 standings"},
+        agent_name="VellumAgent",
+    )
+
+    assert calls == [
+        ("tavily", {"action": "search", "query": "latest f1 standings", "max_results": 5}),
+        ("tavily", {"action": "answer", "query": "who leads f1 standings"}),
+    ]
+    assert search["action"] == "web_research.search"
+    assert answer["server"] == "tavily"
+
+
+def test_mcp_service_invokes_firecrawl_extraction_capabilities():
+    calls = []
+
+    def fake_runner(server, params):
+        calls.append((server, params))
+        return "page content"
+
+    service = McpCapabilityService(runner=fake_runner)
+    registry = service.build_registry()
+
+    fetch = registry.invoke(
+        "web_extract.fetch",
+        {"url": "https://example.com/article"},
+        agent_name="MemoryAgent",
+    )
+    crawl = registry.invoke(
+        "web_extract.crawl",
+        {"url": "https://example.com/docs", "limit": 10},
+        agent_name="ResearchAgent",
+    )
+    extract = registry.invoke(
+        "web_extract.extract",
+        {"url": "https://example.com/product", "schema": {"name": "string"}},
+        agent_name="VellumAgent",
+    )
+
+    assert calls == [
+        ("firecrawl", {"action": "fetch", "url": "https://example.com/article"}),
+        ("firecrawl", {"action": "crawl", "url": "https://example.com/docs", "limit": 10}),
+        ("firecrawl", {"action": "extract", "url": "https://example.com/product", "schema": {"name": "string"}}),
+    ]
+    assert fetch["server"] == "firecrawl"
+    assert crawl["backend"] == "mcp"
+    assert extract["action"] == "web_extract.extract"
 
 
 def test_mcp_default_runner_works_inside_active_event_loop(monkeypatch):

@@ -12,6 +12,7 @@ import shutil
 import time
 from typing import Any
 import urllib.error
+import urllib.parse
 import urllib.request
 from uuid import uuid4
 
@@ -85,6 +86,10 @@ class Source(BaseModel):
     snippet: str = ""
     domain: str = ""
     fetched_at: str = ""
+    source_index: int = 0
+    source_type: str = ""
+    favicon_url: str = ""
+    provider_label: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -816,6 +821,45 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _source_domain(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    domain = parsed.netloc
+    if domain.startswith("www."):
+        domain = domain[4:]
+    return domain
+
+
+def _source_type(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return "web"
+    return "memory"
+
+
+def _favicon_url(domain: str) -> str:
+    if not domain:
+        return ""
+    return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+
+
+def _decorate_source_record(record: dict[str, Any], *, source_index: int) -> dict[str, Any]:
+    url = str(record.get("url") or "")
+    domain = str(record.get("domain") or _source_domain(url))
+    source_type = str(record.get("source_type") or _source_type(url))
+    return {
+        **record,
+        "domain": domain,
+        "source_index": int(record.get("source_index") or source_index),
+        "source_type": source_type,
+        "favicon_url": str(record.get("favicon_url") or (_favicon_url(domain) if source_type == "web" else "")),
+        "provider_label": str(record.get("provider_label") or domain or source_type),
+    }
+
+
+def _decorate_source_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_decorate_source_record(record, source_index=index) for index, record in enumerate(records, start=1)]
+
+
 def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
     label = _ACTIVITY_LABELS.get(name, f"Used {name}")
     detail = ""
@@ -855,7 +899,11 @@ def _sources_from_messages(messages: list) -> list[Source]:
             if record["url"] in seen:
                 continue
             seen.add(record["url"])
-            collected.append(Source(fetched_at=_now_iso(), **record))
+            decorated = _decorate_source_record(
+                {**record, "fetched_at": _now_iso()},
+                source_index=len(collected) + 1,
+            )
+            collected.append(Source(**decorated))
     return collected
 
 
@@ -886,6 +934,7 @@ async def _stream_agent_turn(
     message_item_id = _stream_id("msg")
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     if live_result is not None and live_result.handled:
+        live_sources = _decorate_source_list(list(live_result.sources))
         yield _response_created(response_id=response_id, thread_id=active_thread_id)
         yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
         yield _sse("meta", {"thread_id": active_thread_id})
@@ -915,7 +964,7 @@ async def _stream_agent_turn(
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=tool_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=tool_item)
             yield _sse("tool", {"name": tool_name})
-        for source_record in live_result.sources:
+        for source_record in live_sources:
             source_item = {
                 "id": _stream_id("item"),
                 "type": "source",
@@ -945,12 +994,12 @@ async def _stream_agent_turn(
             answer=live_result.answer,
             thread_id=active_thread_id,
             tools=live_result.tools,
-            sources=[Source(**source) for source in live_result.sources],
+            sources=[Source(**source) for source in live_sources],
         ) if voice else ChatResponse(
             answer=live_result.answer,
             thread_id=active_thread_id,
             tools=live_result.tools,
-            sources=[Source(**source) for source in live_result.sources],
+            sources=[Source(**source) for source in live_sources],
         )
         if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
             (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
@@ -967,7 +1016,7 @@ async def _stream_agent_turn(
             thread_id=active_thread_id,
             answer=live_result.answer,
             tools=live_result.tools,
-            sources=live_result.sources,
+            sources=live_sources,
         )
         if synthesize_audio and live_result.answer:
             async for audio_event in _synthesize_audio_event(live_result.answer):
@@ -1057,7 +1106,10 @@ async def _stream_agent_turn(
                             if record["url"] in seen_urls:
                                 continue
                             seen_urls.add(record["url"])
-                            record = {**record, "fetched_at": _now_iso()}
+                            record = _decorate_source_record(
+                                {**record, "fetched_at": _now_iso()},
+                                source_index=len(sources) + 1,
+                            )
                             sources.append(record)
                             source_item = {
                                 "id": _stream_id("item"),
@@ -1602,6 +1654,18 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         configured=bool(settings.serpapi_api_key) and settings.serpapi_base_url.startswith("http"),
         url_or_cmd=settings.serpapi_base_url,
         notes="Sports Google results plus YouTube search/video/transcript APIs; logs redacted search metadata.",
+    ))
+    servers.append(_entry(
+        "tavily",
+        configured=bool(settings.tavily_api_key) and settings.tavily_mcp_url.startswith("http"),
+        url_or_cmd=settings.tavily_mcp_url,
+        notes="Shared live web research/search MCP; API key is supplied out-of-band by Vellum.",
+    ))
+    servers.append(_entry(
+        "firecrawl",
+        configured=bool(settings.firecrawl_api_key) and bool(settings.firecrawl_mcp_command),
+        url_or_cmd=f"{settings.firecrawl_mcp_command} {settings.firecrawl_mcp_args}",
+        notes="Shared page fetch/crawl/extract MCP; reads URLs and returns LLM-ready content.",
     ))
     servers.append(_entry(
         "playwright",

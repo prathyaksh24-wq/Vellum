@@ -26,6 +26,7 @@ def test_mcp_health_returns_all_servers(client: TestClient) -> None:
     assert servers == {
         "filesystem", "apify", "serpapi", "playwright", "github",
         "obsidian", "context7", "gitmcp", "context_mode",
+        "tavily", "firecrawl",
     }
 
 
