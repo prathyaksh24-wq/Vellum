@@ -575,6 +575,79 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
     assert "Registry X result" in response.summary
 
 
+def test_x_agent_reads_bookmarks_through_registry(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="x.bookmarks",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"XAgent"}),
+            stream_label="Read X bookmarks",
+            adapter=lambda payload: calls.append(payload) or {
+                "items": [{"text": "Saved analysis", "url": "https://x.com/a/status/1"}],
+            },
+        )
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer("Show my X bookmarks")
+
+    assert calls == [{"max_results": 5}]
+    assert response.status == "answered"
+    assert "Saved analysis" in response.summary
+
+
+def test_x_agent_publishes_confirmed_post_through_registry(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="x.publish_post",
+            namespace="x",
+            access=CapabilityAccess.EXTERNAL_WRITE,
+            allowed_agents=frozenset({"XAgent"}),
+            stream_label="Posted to X",
+            requires_confirmation=True,
+            adapter=lambda payload: calls.append(payload) or {"tweet": {"id": "99", "text": payload["text"]}},
+        )
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer('Post to X: "hello world"')
+
+    assert calls == [{"text": "hello world", "confirm": True}]
+    assert response.status == "answered"
+    assert "Posted to X" in response.summary
+
+
+def test_x_agent_publishes_generated_image_post_through_registry(tmp_path):
+    registry = ToolRegistry()
+    calls = []
+    registry.register(
+        CapabilityRecord(
+            name="x.publish_post_with_media",
+            namespace="x",
+            access=CapabilityAccess.EXTERNAL_WRITE,
+            allowed_agents=frozenset({"XAgent"}),
+            stream_label="Posted image to X",
+            requires_confirmation=True,
+            adapter=lambda payload: calls.append(payload) or {
+                "tweet": {"id": "99", "text": payload["text"]},
+                "image": {"path": "D:/tmp/image.png"},
+            },
+        )
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
+
+    response = agent.answer('Generate an image of a stadium and post to X: "match day"')
+
+    assert calls == [{"text": "match day", "image_prompt": "a stadium", "confirm": True}]
+    assert response.status == "answered"
+    assert "Posted image to X" in response.summary
+
+
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
     agent = XAgent(vault_root=tmp_path, x_service=service)

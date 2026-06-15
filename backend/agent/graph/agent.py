@@ -66,7 +66,7 @@ Tools:
 16. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
 18. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, text posting, and generated/image posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
 
@@ -114,7 +114,7 @@ Rules:
 - For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and cite sources.
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search and cite sources instead of answering from model memory or refusing.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
-- Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires X_TOOL_ALLOW_POSTS=true and confirm=True.
+- Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 """
 
 _prompt_project_ctx: ProjectContext | None = None

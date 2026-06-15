@@ -53,6 +53,7 @@ def test_x_service_default_search_backend_passes_window_to_script(monkeypatch):
 
     assert calls["query"] == "Arsenal"
     assert calls["max_items"] == 5
+    assert calls["oauth_file"] == x_service.XCapabilityService._xai_oauth_file()
     assert isinstance(calls["start"], datetime)
     assert isinstance(calls["end"], datetime)
     assert calls["start"] < calls["end"]
@@ -86,6 +87,42 @@ def test_x_service_publish_post_uses_settings_when_allow_posts_omitted(monkeypat
     result = service.publish_post({"text": "hello", "confirm": True})
 
     assert result == {"action": "x.publish_post", "tweet": {"id": "1", "text": "hello"}}
+
+
+def test_x_service_publish_post_with_generated_image_uploads_media():
+    calls = {}
+
+    def fake_image(prompt):
+        calls["image"] = prompt
+        return {"path": "D:/tmp/x-image.png", "model": "fake-image-model"}
+
+    def fake_upload(path):
+        calls["upload"] = path
+        return {"id": "media-1"}
+
+    def fake_post(text, media_ids=None, made_with_ai=False):
+        calls["post"] = {"text": text, "media_ids": media_ids, "made_with_ai": made_with_ai}
+        return {"id": "tweet-1", "text": text}
+
+    service = XCapabilityService(
+        post_backend=fake_post,
+        image_backend=fake_image,
+        media_upload_backend=fake_upload,
+        allow_posts=True,
+    )
+
+    result = service.publish_post_with_media(
+        {"text": "hello", "image_prompt": "clean product photo", "confirm": True}
+    )
+
+    assert result["action"] == "x.publish_post_with_media"
+    assert result["tweet"]["id"] == "tweet-1"
+    assert result["image"]["path"] == "D:/tmp/x-image.png"
+    assert calls == {
+        "image": "clean product photo",
+        "upload": "D:/tmp/x-image.png",
+        "post": {"text": "hello", "media_ids": ["media-1"], "made_with_ai": True},
+    }
 
 
 def test_x_service_private_oauth_reads_require_enabled_gate():
@@ -147,6 +184,7 @@ def test_x_service_registers_capabilities_with_tool_registry():
 
     assert "x.search_posts" in registry.names()
     assert "x.publish_post" in registry.names()
+    assert "x.publish_post_with_media" in registry.names()
     assert "x.account" in registry.names()
     assert "x.bookmarks" in registry.names()
     assert registry.get("x.search_posts").stream_label == "Searched X"
