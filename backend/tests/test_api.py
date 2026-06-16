@@ -92,6 +92,21 @@ def test_cors_allows_local_vite_fallback_ports():
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5174"
 
 
+def test_cors_allows_file_opened_default_ui():
+    with TestClient(api.app) as client:
+        response = client.options(
+            "/api/chat/stream",
+            headers={
+                "Origin": "null",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "null"
+
+
 def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     fake_agent = FakeAgent()
     runtime = ComputerUseRuntime(
