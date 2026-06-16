@@ -1,14 +1,16 @@
 import asyncio
 import importlib.util
+import os
 from types import SimpleNamespace
 
 from agent.coding.adapters.claude import (
     ClaudeAdapter,
     claude_permission_mode,
+    claude_auth_configured,
     extract_claude_session_id,
     message_result_text,
 )
-from agent.coding.adapters.codex import CodexAdapter, codex_sandbox_name
+from agent.coding.adapters.codex import CodexAdapter, codex_auth_configured, codex_sandbox_name
 from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName, utc_now
 
 
@@ -30,12 +32,51 @@ def test_codex_health_reports_missing_dependency(monkeypatch):
 
 def test_claude_health_reports_available_dependency(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(
+        os,
+        "environ",
+        {"ANTHROPIC_API_KEY": "test-key"},
+    )
 
     health = ClaudeAdapter().health()
 
     assert health.provider == ProviderName.claude
     assert health.available is True
     assert health.configured is True
+
+
+def test_claude_health_requires_auth_configuration(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr(os, "environ", {})
+
+    health = ClaudeAdapter().health()
+
+    assert health.available is True
+    assert health.configured is False
+    assert "ANTHROPIC_API_KEY" in health.message
+
+
+def test_claude_auth_configuration_accepts_supported_provider_env(monkeypatch):
+    monkeypatch.setattr(os, "environ", {"CLAUDE_CODE_USE_VERTEX": "1"})
+
+    assert claude_auth_configured() is True
+
+
+def test_codex_health_reports_sdk_installed_but_unconfigured(monkeypatch):
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
+    monkeypatch.setattr("agent.coding.adapters.codex.codex_auth_configured", lambda: False)
+
+    health = CodexAdapter().health()
+
+    assert health.available is True
+    assert health.configured is False
+    assert "auth" in health.message.lower()
+
+
+def test_codex_auth_configuration_accepts_api_key(monkeypatch):
+    monkeypatch.setattr(os, "environ", {"OPENAI_API_KEY": "test-key"})
+
+    assert codex_auth_configured() is True
 
 
 def test_codex_access_mode_mapping_is_explicit():
@@ -70,33 +111,10 @@ def test_claude_message_text_extracts_content_blocks_without_repr():
     assert message_result_text(message) == "Hello there."
 
 
-def test_codex_start_session_resolves_cwd_and_returns_thread_id(monkeypatch, tmp_path):
-    calls = []
+def test_codex_start_session_validates_dependency_without_prestarting_thread(monkeypatch, tmp_path):
     find_spec_calls = []
-    import_module_calls = []
-
-    class FakeSandbox:
-        read_only = "read_only"
-        workspace_write = "workspace_write"
-        full_access = "full_access"
-
-    class FakeThread:
-        thread_id = "codex-thread-from-start"
-
-    class FakeCodex:
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return None
-
-        async def thread_start(self, **kwargs):
-            calls.append(kwargs)
-            return FakeThread()
-
-    fake_module = SimpleNamespace(AsyncCodex=FakeCodex, Sandbox=FakeSandbox)
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: find_spec_calls.append(name) or object())
-    monkeypatch.setattr("importlib.import_module", lambda name: import_module_calls.append(name) or fake_module)
+    monkeypatch.setattr("agent.coding.adapters.codex.codex_auth_configured", lambda: True)
 
     adapter = CodexAdapter()
     provider_session_id = asyncio.run(
@@ -109,10 +127,8 @@ def test_codex_start_session_resolves_cwd_and_returns_thread_id(monkeypatch, tmp
         )
     )
 
-    assert provider_session_id == "codex-thread-from-start"
+    assert provider_session_id is None
     assert find_spec_calls == [adapter.sdk_module_name]
-    assert import_module_calls == [adapter.sdk_module_name]
-    assert calls == [{"cwd": str(tmp_path.resolve()), "sandbox": "full_access"}]
 
 
 def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatch, tmp_path):

@@ -3,9 +3,39 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 import importlib
 import importlib.util
+import os
+from pathlib import Path
+
+from dotenv import dotenv_values
 
 from agent.coding.adapters.base import CodingAdapterError
 from agent.coding.models import AccessMode, CodingEvent, CodingSession, CodingSessionCreate, ProviderHealth, ProviderName, utc_now
+
+
+_CLAUDE_PROVIDER_ENV_FLAGS = (
+    "CLAUDE_CODE_USE_BEDROCK",
+    "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "CLAUDE_CODE_USE_VERTEX",
+    "CLAUDE_CODE_USE_FOUNDRY",
+)
+
+
+def _repo_env_value(name: str) -> str:
+    env_path = Path(__file__).resolve().parents[4] / ".env"
+    if not env_path.exists():
+        return ""
+    value = dotenv_values(env_path).get(name)
+    return str(value or "").strip()
+
+
+def _env_or_repo_env_present(name: str) -> bool:
+    return bool(os.environ.get(name) or _repo_env_value(name))
+
+
+def claude_auth_configured() -> bool:
+    if _env_or_repo_env_present("ANTHROPIC_API_KEY"):
+        return True
+    return any(_env_or_repo_env_present(name) for name in _CLAUDE_PROVIDER_ENV_FLAGS)
 
 
 def extract_claude_session_id(message: object) -> str | None:
@@ -60,11 +90,18 @@ class ClaudeAdapter:
 
     def health(self) -> ProviderHealth:
         available = importlib.util.find_spec(self.sdk_module_name) is not None
+        configured = available and claude_auth_configured()
         return ProviderHealth(
             provider=self.provider,
             available=available,
-            configured=available,
-            message="Claude Agent SDK ready." if available else "Claude Agent SDK is not installed.",
+            configured=configured,
+            message=(
+                "Claude Agent SDK ready."
+                if configured
+                else "Claude Agent SDK is installed, but ANTHROPIC_API_KEY or a Claude provider auth mode is not configured."
+                if available
+                else "Claude Agent SDK is not installed."
+            ),
         )
 
     async def start_session(self, request: CodingSessionCreate) -> str | None:
