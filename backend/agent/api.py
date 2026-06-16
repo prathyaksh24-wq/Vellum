@@ -6,6 +6,7 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import inspect
 import json
 from pathlib import Path
 import shutil
@@ -172,6 +173,44 @@ class ActiveModelResponse(BaseModel):
     label: str
     provider: str
     open_weights: bool
+
+
+_UI_CONVERSATIONS_PATH = REPO_ROOT / "data" / "ui" / "conversations.json"
+
+
+def _read_ui_conversations() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(_UI_CONVERSATIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    conversations = payload.get("conversations") if isinstance(payload, dict) else payload
+    return conversations if isinstance(conversations, list) else []
+
+
+def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
+    _UI_CONVERSATIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UI_CONVERSATIONS_PATH.write_text(
+        json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _conversation_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    record = dict(payload)
+    record["id"] = str(record.get("id") or conversation_id)
+    record["thread_id"] = str(record.get("thread_id") or record["id"])
+    record["title"] = str(record.get("title") or "New chat")
+    record["created"] = str(record.get("created") or "Today")
+    record["pinned"] = bool(record.get("pinned", False))
+    record["archived"] = bool(record.get("archived", False))
+    record["projectId"] = record.get("projectId")
+    record["messages"] = record.get("messages") if isinstance(record.get("messages"), list) else []
+    record["updated_at"] = _conversation_timestamp()
+    return record
 
 
 @asynccontextmanager
@@ -649,6 +688,140 @@ async def status() -> dict[str, Any]:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     return await _run_agent(request.message, request.thread_id, request.model)
+
+
+@router.get("/conversations")
+async def list_conversations() -> dict[str, Any]:
+    conversations = sorted(
+        _read_ui_conversations(),
+        key=lambda item: str(item.get("updated_at") or ""),
+        reverse=True,
+    )
+    return {"conversations": conversations}
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str) -> dict[str, Any]:
+    for conversation in _read_ui_conversations():
+        if str(conversation.get("id")) == conversation_id:
+            return {"conversation": conversation}
+    raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@router.put("/conversations/{conversation_id}")
+async def put_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    record = _normalize_ui_conversation(conversation_id, payload)
+    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
+    conversations.insert(0, record)
+    _write_ui_conversations(conversations)
+    return {"conversation": record}
+
+
+@router.patch("/conversations/{conversation_id}")
+async def patch_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    conversations = _read_ui_conversations()
+    for index, conversation in enumerate(conversations):
+        if str(conversation.get("id")) == conversation_id:
+            updated = _normalize_ui_conversation(conversation_id, {**conversation, **payload})
+            conversations[index] = updated
+            _write_ui_conversations(conversations)
+            return {"conversation": updated}
+    raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str) -> dict[str, bool]:
+    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
+    _write_ui_conversations(conversations)
+    return {"ok": True}
+
+
+@router.get("/skills")
+async def list_skills_catalog() -> dict[str, Any]:
+    return {
+        "mock": True,
+        "skills": {
+            "proposed": [
+                {
+                    "id": "sports-snapshot-brief",
+                    "name": "Sports snapshot brief",
+                    "trigger": "score · fixture · standings",
+                    "note": "Template until user-approved skill persistence is connected.",
+                },
+                {
+                    "id": "source-backed-answer",
+                    "name": "Source-backed answer",
+                    "trigger": "latest · verify · cite",
+                    "note": "Uses live search and source drawer behavior.",
+                },
+            ],
+            "active": [
+                {
+                    "id": "subagent-routing",
+                    "name": "Sub-agent routing",
+                    "trigger": "sports · x · youtube · memory",
+                    "uses": 0,
+                    "last": "live",
+                }
+            ],
+            "retired": [],
+        },
+    }
+
+
+@router.get("/automations")
+async def list_automation_templates() -> dict[str, Any]:
+    return {
+        "mock": True,
+        "automations": [
+            {
+                "id": "nightly-digest",
+                "name": "Nightly digest",
+                "schedule": "Daily at 02:00",
+                "status": "template",
+                "description": "Summarize new memories, sports changes, and notable watched sources.",
+            },
+            {
+                "id": "sports-matchday-brief",
+                "name": "Sports matchday brief",
+                "schedule": "On demand",
+                "status": "template",
+                "description": "Prepare scores, fixtures, injuries, and source-backed context when asked.",
+            },
+            {
+                "id": "memory-card-rollup",
+                "name": "Memory card rollup",
+                "schedule": "Before deletion windows",
+                "status": "template",
+                "description": "Condense aging memories into durable memory cards.",
+            },
+        ],
+    }
+
+
+@router.get("/subagents")
+async def list_subagents() -> dict[str, Any]:
+    from agent.master.registry import PupilRegistry
+
+    registry = PupilRegistry.default(get_settings().obsidian_vault_path)
+    descriptions = {
+        "SportsAgent": "Scores, schedules, standings, injuries, and sports analysis.",
+        "XAgent": "X search, account reads, bookmarks, and confirmed posting workflows.",
+        "YoutubeAgent": "YouTube search, video metadata, transcripts, and summaries.",
+        "MemoryAgent": "Long-term memory lookup, context packs, and preference recall.",
+    }
+    return {
+        "subagents": [
+            {
+                "id": name.replace("Agent", "").casefold() or name.casefold(),
+                "name": name,
+                "enabled": True,
+                "status": "available",
+                "description": descriptions.get(name, "Specialized Vellum sub-agent."),
+            }
+            for name in registry.names()
+        ]
+    }
 
 
 def _chunk_text(chunk: Any) -> str:
@@ -1724,6 +1897,27 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
             "notes": "Self-hosted via Docker; if down, identity-memory layer is dead but chat still works.",
         },
     }
+
+
+@router.get("/plugins")
+async def list_plugins() -> dict[str, Any]:
+    health_result = mcp_health(probe=False)
+    if inspect.isawaitable(health_result):
+        health_result = await health_result
+    servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
+    plugins = [
+        {
+            "id": str(server.get("name") or ""),
+            "name": str(server.get("name") or "").replace("_", " ").title(),
+            "type": "mcp",
+            "configured": bool(server.get("configured")),
+            "status": str(server.get("status") or "unknown"),
+            "notes": str(server.get("notes") or ""),
+        }
+        for server in servers
+        if server.get("name")
+    ]
+    return {"plugins": plugins}
 
 
 @router.post("/settings/active-model", response_model=ActiveModelResponse)

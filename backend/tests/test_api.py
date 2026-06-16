@@ -100,6 +100,57 @@ def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
 
 
+def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
+
+    payload = {
+        "id": "chat-1",
+        "thread_id": "thread-1",
+        "title": "Sports question",
+        "created": "Today",
+        "pinned": False,
+        "archived": False,
+        "projectId": None,
+        "messages": [
+            {"id": "u1", "role": "user", "text": "When is the next NBA game?"},
+            {"id": "a1", "role": "assistant", "text": "Live answer"},
+        ],
+    }
+
+    with TestClient(api.app) as client:
+        saved = client.put("/api/conversations/chat-1", json=payload)
+        listed = client.get("/api/conversations")
+        fetched = client.get("/api/conversations/chat-1")
+        patched = client.patch("/api/conversations/chat-1", json={"pinned": True, "title": "Pinned sports"})
+        deleted = client.delete("/api/conversations/chat-1")
+
+    assert saved.status_code == 200
+    assert listed.json()["conversations"][0]["title"] == "Sports question"
+    assert fetched.json()["conversation"]["messages"][1]["text"] == "Live answer"
+    assert patched.json()["conversation"]["pinned"] is True
+    assert patched.json()["conversation"]["title"] == "Pinned sports"
+    assert deleted.json() == {"ok": True}
+
+
+def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(monkeypatch):
+    monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": [{"name": "serpapi", "configured": True, "status": "probe_disabled"}]})
+
+    with TestClient(api.app) as client:
+        plugins = client.get("/api/plugins")
+        skills = client.get("/api/skills")
+        automations = client.get("/api/automations")
+        subagents = client.get("/api/subagents")
+
+    assert plugins.status_code == 200
+    assert plugins.json()["plugins"][0]["id"] == "serpapi"
+    assert skills.status_code == 200
+    assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
+    assert automations.status_code == 200
+    assert any(item["id"] == "nightly-digest" for item in automations.json()["automations"])
+    assert subagents.status_code == 200
+    assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
+
+
 def test_computer_use_mode_endpoints_toggle_state(monkeypatch, tmp_path):
     runtime = ComputerUseRuntime(
         state_path=tmp_path / "mode.json",
