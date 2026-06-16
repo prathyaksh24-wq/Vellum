@@ -49,7 +49,7 @@ def test_health_endpoint_reports_service_and_vector_store(monkeypatch):
     monkeypatch.setattr(api, "_embedding_health", lambda: {"ok": True, "provider": "sentence-transformers"})
 
     with TestClient(api.app) as client:
-        response = client.get("/api/health")
+        response = client.get("/api/health?deep=true")
 
     assert response.status_code == 200
     body = response.json()
@@ -57,6 +57,25 @@ def test_health_endpoint_reports_service_and_vector_store(monkeypatch):
     assert body["vector"]["ok"] is True
     assert body["embeddings"]["ok"] is True
     assert body["models"]["primary"]
+
+
+def test_health_endpoint_is_lightweight_by_default(monkeypatch):
+    def fail_heavy_probe():
+        raise AssertionError("lightweight health must not run heavy dependency probes")
+
+    monkeypatch.setattr(api, "_vector_health", fail_heavy_probe)
+    monkeypatch.setattr(api, "_embedding_health", fail_heavy_probe)
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/health")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["service"] == "personal-agent-api"
+    assert body["checks"]["mode"] == "lightweight"
+    assert "vector" not in body
+    assert "embeddings" not in body
 
 
 def test_cors_allows_local_vite_fallback_ports():

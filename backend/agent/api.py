@@ -660,14 +660,12 @@ def _ensure_coding_provider_ready(provider: ProviderName) -> None:
 
 
 @router.get("/health")
-async def health() -> dict[str, Any]:
+async def health(deep: bool = Query(default=False)) -> dict[str, Any]:
     settings = get_settings()
-    return {
+    body: dict[str, Any] = {
         "ok": True,
         "service": "personal-agent-api",
         "vault": {"path": str(settings.obsidian_vault_path), "exists": settings.obsidian_vault_path.exists()},
-        "vector": _vector_health(),
-        "embeddings": _embedding_health(),
         "models": {
             "primary": settings.primary_model,
             "fallback": settings.fallback_model,
@@ -677,12 +675,17 @@ async def health() -> dict[str, Any]:
             "apify_url": settings.apify_mcp_url,
             "filesystem_path": str(settings.filesystem_mcp_path),
         },
+        "checks": {"mode": "deep" if deep else "lightweight"},
     }
+    if deep:
+        body["vector"] = _vector_health()
+        body["embeddings"] = _embedding_health()
+    return body
 
 
 @router.get("/status")
-async def status() -> dict[str, Any]:
-    return await health()
+async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
+    return await health(deep=deep)
 
 
 @router.post("/chat", response_model=ChatResponse)
