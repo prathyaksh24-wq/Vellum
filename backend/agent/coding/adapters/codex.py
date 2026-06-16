@@ -4,6 +4,10 @@ from collections.abc import AsyncIterator
 import inspect
 import importlib
 import importlib.util
+import os
+from pathlib import Path
+
+from dotenv import dotenv_values
 
 from agent.coding.adapters.base import CodingAdapterError
 from agent.coding.models import AccessMode, CodingEvent, CodingSession, CodingSessionCreate, ProviderHealth, ProviderName, utc_now
@@ -18,31 +22,53 @@ def codex_sandbox_name(access_mode: AccessMode) -> str:
     }[access_mode]
 
 
+def _repo_env_value(name: str) -> str:
+    env_path = Path(__file__).resolve().parents[4] / ".env"
+    if not env_path.exists():
+        return ""
+    value = dotenv_values(env_path).get(name)
+    return str(value or "").strip()
+
+
+def _codex_auth_file_exists() -> bool:
+    codex_home = os.environ.get("CODEX_HOME")
+    candidates = []
+    if codex_home:
+        candidates.append(Path(codex_home).expanduser() / "auth.json")
+    candidates.append(Path.home() / ".codex" / "auth.json")
+    return any(path.exists() and path.is_file() for path in candidates)
+
+
+def codex_auth_configured() -> bool:
+    return bool(os.environ.get("OPENAI_API_KEY") or _repo_env_value("OPENAI_API_KEY") or _codex_auth_file_exists())
+
+
 class CodexAdapter:
     provider = ProviderName.codex
     sdk_module_name = "openai_codex"
 
     def health(self) -> ProviderHealth:
         available = importlib.util.find_spec(self.sdk_module_name) is not None
+        configured = available and codex_auth_configured()
         return ProviderHealth(
             provider=self.provider,
             available=available,
-            configured=available,
-            message="Codex SDK ready." if available else "Codex SDK is not installed.",
+            configured=configured,
+            message=(
+                "Codex SDK ready."
+                if configured
+                else "Codex SDK is installed, but Codex auth is not configured."
+                if available
+                else "Codex SDK is not installed."
+            ),
         )
 
     async def start_session(self, request: CodingSessionCreate) -> str | None:
         if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Codex SDK is not installed.")
-        module = importlib.import_module(self.sdk_module_name)
-        AsyncCodex = getattr(module, "AsyncCodex")
-        Sandbox = getattr(module, "Sandbox")
-        sandbox = getattr(Sandbox, codex_sandbox_name(request.access_mode))
-        async with AsyncCodex() as codex:
-            thread = await _maybe_await(
-                codex.thread_start(cwd=request.resolved_cwd(), sandbox=sandbox)
-            )
-        return extract_codex_thread_id(thread)
+        if not codex_auth_configured():
+            raise CodingAdapterError("Codex auth is not configured.")
+        return None
 
     async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
         if importlib.util.find_spec(self.sdk_module_name) is None:
