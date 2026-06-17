@@ -84,6 +84,7 @@ class YoutubeAgent:
                         kind="web",
                         title=title,
                         path_or_url=url,
+                        snippet=detail[:500],
                         captured_at=str(item.get("published_at") or ""),
                         freshness="recent",
                     )

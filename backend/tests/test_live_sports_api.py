@@ -47,6 +47,47 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
     assert "Sports Pupil answer" in calls[0][0]["messages"][0]["content"]
 
 
+def test_run_agent_includes_specialist_snippets_and_fact_priority(monkeypatch):
+    calls = []
+
+    async def _natural_answer(payload, config=None):
+        calls.append((payload, config))
+        return {"messages": [type("Msg", (), {"content": "The next F1 race is the Austrian Grand Prix.", "tool_calls": []})()]}
+
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="SportsAgent",
+                answer="SportsAgent found the next race in fresh public sources.",
+                tools=["sports_agent", "web_search"],
+                sources=[
+                    {
+                        "url": "https://www.formula1.com/en/racing/2026",
+                        "title": "F1 calendar",
+                        "snippet": "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco.",
+                        "domain": "formula1.com",
+                    }
+                ],
+            )
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api.agent, "ainvoke", _natural_answer)
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
+
+    response = asyncio.run(api._run_agent("What is the next F1 race?", "thread-1", None))
+
+    prompt = calls[0][0]["messages"][0]["content"]
+    assert response.answer == "The next F1 race is the Austrian Grand Prix."
+    assert "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco." in prompt
+    assert "treat the specialist result and source snippets as authoritative" in prompt.lower()
+
+
 def _parse_sse(chunks):
     events = []
     for chunk in chunks:
@@ -238,3 +279,40 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
     done_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.done"]
 
     assert any(item["type"] == "subagent_call" and item["status"] == "failed" for item in done_items)
+
+
+def test_stream_agent_turn_times_out_silent_model_stream(monkeypatch):
+    class SilentAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            await asyncio.sleep(1)
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": type("Chunk", (), {"content": "too late"})()},
+            }
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    class Settings:
+        llm_stream_timeout_seconds = 0.01
+
+    monkeypatch.setattr(api, "agent", SilentAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "get_settings", lambda: Settings())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="hello",
+            active_thread_id="thread-timeout",
+            model=None,
+            store=False,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+
+    assert any(name == "error" and "timed out" in data for name, data in events)

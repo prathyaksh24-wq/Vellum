@@ -107,6 +107,7 @@ class Settings(BaseSettings):
     thread_id: str = Field(default="default", alias="THREAD_ID")
     cloud_escalation_model: str = Field(default="google/gemini-2.5-pro", alias="CLOUD_ESCALATION_MODEL")
     cloud_escalation_enabled: bool = Field(default=True, alias="CLOUD_ESCALATION_ENABLED")
+    llm_stream_timeout_seconds: float = Field(default=90.0, alias="LLM_STREAM_TIMEOUT_SECONDS")
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
     honcho_user_id: str = Field(default="default", alias="HONCHO_USER_ID")
@@ -182,6 +183,8 @@ class Settings(BaseSettings):
             raise ValueError("MAX_CONTEXT_TOKENS must be at least 1.")
         if self.mcp_timeout_seconds < 1:
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
+        if self.llm_stream_timeout_seconds <= 0:
+            raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
         if self.voice_stt_engine not in {"moonshine"}:

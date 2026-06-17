@@ -140,7 +140,7 @@ class LiveAgentDispatcher:
         return {
             "url": source.path_or_url,
             "title": source.title,
-            "snippet": "",
+            "snippet": str(getattr(source, "snippet", "") or ""),
             "domain": domain,
             "fetched_at": source.captured_at,
         }

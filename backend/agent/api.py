@@ -1115,13 +1115,15 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
         snippet = str(source.get("snippet") or "").strip()
         line = f"[{index}] {title}: {url}" if url else f"[{index}] {title}"
         if snippet:
-            line += f" — {snippet[:220]}"
+            line += f" - {snippet[:220]}"
         source_lines.append(line)
     sources_text = "\n".join(source_lines) if source_lines else "No external sources returned."
     return (
         "You are Vellum, the main agent. A specialist sub-agent was used as a tool. "
         "Do not expose raw tool dumps. Answer the user naturally and directly, like ChatGPT, "
-        "using the specialist result as evidence. Mention uncertainty when the specialist "
+        "using the specialist result as evidence. Treat the specialist result and source snippets "
+        "as authoritative for current/live facts. If they conflict with your prior knowledge, "
+        "follow the specialist evidence and say so briefly. Mention uncertainty when the specialist "
         "could not fully answer. Keep citations/source references consistent with provided sources.\n\n"
         f"User message:\n{clean_message}\n\n"
         f"Specialist tool: {live_result.agent_name}\n"
@@ -1129,6 +1131,18 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
         f"Specialist raw result:\n{live_result.answer}\n\n"
         f"Sources:\n{sources_text}"
     )
+
+
+async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
+    try:
+        return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
+    except StopAsyncIteration:
+        raise
+    except TimeoutError as exc:
+        close = getattr(stream_iterator, "aclose", None)
+        if close is not None:
+            await close()
+        raise TimeoutError(f"Model stream timed out after {timeout_seconds:g} seconds.") from exc
 
 
 async def _stream_agent_turn(
@@ -1231,7 +1245,13 @@ async def _stream_agent_turn(
                 config=_thread_config(active_thread_id),
                 version="v2",
             )
-            async for event in stream:
+            stream_iterator = stream.__aiter__()
+            timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
+            while True:
+                try:
+                    event = await _next_agent_stream_event(stream_iterator, timeout_seconds)
+                except StopAsyncIteration:
+                    break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
                     text = _chunk_text(event.get("data", {}).get("chunk"))

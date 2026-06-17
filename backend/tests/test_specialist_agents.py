@@ -70,6 +70,18 @@ def test_specialist_source_defaults_to_historical_without_capture_time():
     assert source.freshness == "historical"
 
 
+def test_specialist_source_can_carry_snippet_evidence():
+    source = SpecialistSource(
+        kind="web",
+        title="F1 calendar",
+        path_or_url="https://www.formula1.com/en/racing/2026",
+        snippet="The next race is the Austrian Grand Prix at Red Bull Ring.",
+        freshness="live",
+    )
+
+    assert source.snippet == "The next race is the Austrian Grand Prix at Red Bull Ring."
+
+
 def test_memory_proposal_structure_and_confidence_validation():
     proposal = MemoryProposal(
         scope="sports",
@@ -265,6 +277,24 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     handoffs = list((tmp_path / "Vault" / "Agent" / "Queries").glob("*.md"))
     assert handoffs
     assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
+
+
+def test_live_dispatcher_preserves_specialist_source_snippets(tmp_path):
+    search_output = (
+        "**F1 calendar**\n"
+        "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco.\n"
+        "https://www.formula1.com/en/racing/2026"
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("What is the next F1 race?", thread_id="t-snippet")
+
+    assert result is not None
+    assert result.sources[0]["snippet"] == "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco."
 
 
 def test_live_dispatcher_returns_to_vellum_for_non_sports_turn_while_sports_active(tmp_path):

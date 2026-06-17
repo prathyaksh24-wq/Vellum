@@ -127,6 +127,7 @@ class SportsAgent:
                     kind="web",
                     title=str(source.get("title") or source.get("domain") or "Sports source"),
                     path_or_url=str(source.get("url") or ""),
+                    snippet=str(source.get("snippet") or "").strip()[:500],
                     captured_at=now,
                     freshness="live",
                 )

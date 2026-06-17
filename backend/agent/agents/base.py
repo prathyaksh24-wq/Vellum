@@ -15,6 +15,7 @@ class SpecialistSource(BaseModel):
     kind: SourceKind
     title: str
     path_or_url: str
+    snippet: str = ""
     captured_at: str = ""
     freshness: Freshness = "historical"
 
