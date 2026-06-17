@@ -33,6 +33,7 @@
     var sources = [];
     var activity = [];
     var semanticSeen = false;
+    var completed = false;
 
     function addTool(name) {
       if (name && tools.indexOf(name) < 0) tools.push(name);
@@ -80,8 +81,16 @@
             text = text || finalResponse.output_text || "";
             sources = finalResponse.sources || sources;
             tools = finalResponse.tools || tools;
+            completed = true;
             if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: finalResponse.thread_id });
+          } else if (ev === "response.output_item.done") {
+            var doneItem = data.item || {};
+            activity = activity.map(function (item) {
+              return item.name && doneItem.name && item.name === doneItem.name ? Object.assign({}, item, { status: doneItem.status || "completed" }) : item;
+            });
+            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
           } else if (ev === "error" && handlers.error) {
+            completed = true;
             handlers.error((data.error && (data.error.message || data.error)) || "Backend error");
           }
           continue;
@@ -106,9 +115,13 @@
           text = text || data.answer || "";
           sources = data.sources || sources;
           tools = data.tools || tools;
+          completed = true;
           if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: data.thread_id });
         }
       }
+    }
+    if (!completed && handlers.done) {
+      handlers.done({ text: text || "No response.", sources: sources, tools: tools, activity: activity });
     }
     return { abort: function () { controller.abort(); } };
   }

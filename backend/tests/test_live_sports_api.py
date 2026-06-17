@@ -5,9 +5,12 @@ from agent import api
 from agent.agents.live_dispatcher import LiveAgentResult
 
 
-def test_run_agent_uses_live_dispatcher_before_main_agent(monkeypatch):
-    async def _should_not_call(*args, **kwargs):
-        raise AssertionError("main graph agent should not run for handled sports turns")
+def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
+    calls = []
+
+    async def _natural_answer(payload, config=None):
+        calls.append((payload, config))
+        return {"messages": [type("Msg", (), {"content": "Natural Vellum answer.", "tool_calls": []})()]}
 
     class FakeDispatcher:
         def maybe_handle(self, message, thread_id):
@@ -26,16 +29,22 @@ def test_run_agent_uses_live_dispatcher_before_main_agent(monkeypatch):
                 ],
             )
 
+    async def _async_noop(*args, **kwargs):
+        return None
+
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
-    monkeypatch.setattr(api.agent, "ainvoke", _should_not_call)
+    monkeypatch.setattr(api.agent, "ainvoke", _natural_answer)
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     response = asyncio.run(api._run_agent("NBA Finals update", "thread-1", None))
 
-    assert response.answer == "Sports Pupil answer"
+    assert response.answer == "Natural Vellum answer."
     assert response.thread_id == "thread-1"
     assert response.tools == ["sports_agent", "web_search"]
     assert response.sources[0].url == "https://www.nba.com/news/finals"
+    assert "Sports Pupil answer" in calls[0][0]["messages"][0]["content"]
 
 
 def _parse_sse(chunks):
@@ -52,7 +61,7 @@ def _parse_sse(chunks):
     return events
 
 
-def test_stream_agent_turn_emits_sports_dispatch_activity_and_sources(monkeypatch):
+def test_stream_agent_turn_emits_sports_dispatch_then_main_agent_answer(monkeypatch):
     class FakeDispatcher:
         def maybe_handle(self, message, thread_id):
             return LiveAgentResult(
@@ -73,8 +82,20 @@ def test_stream_agent_turn_emits_sports_dispatch_activity_and_sources(monkeypatc
     async def _async_noop(*args, **kwargs):
         return None
 
+    class FakeAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            assert "Live sports answer" in payload["messages"][0]["content"]
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": type("Chunk", (), {"content": "Natural streamed answer."})()},
+            }
+
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     async def _collect():
@@ -95,7 +116,7 @@ def test_stream_agent_turn_emits_sports_dispatch_activity_and_sources(monkeypatc
     source_payload = next(json.loads(data) for name, data in events if name == "source")
     assert source_payload["domain"] == "formula1.com"
     final = json.loads(next(data for name, data in events if name == "final"))
-    assert final["answer"] == "Live sports answer"
+    assert final["answer"] == "Natural streamed answer."
 
 
 def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monkeypatch):
@@ -119,8 +140,19 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
     async def _async_noop(*args, **kwargs):
         return None
 
+    class FakeAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": type("Chunk", (), {"content": "Natural streamed answer."})()},
+            }
+
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     async def _collect():
@@ -153,12 +185,12 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
 
     delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
     assert delta["type"] == "response.output_text.delta"
-    assert delta["delta"] == "Live sports answer"
+    assert delta["delta"] == "Natural streamed answer."
 
     completed = json.loads(next(data for name, data in events if name == "response.completed"))
     assert completed["type"] == "response.completed"
     assert completed["response"]["status"] == "completed"
-    assert completed["response"]["output_text"] == "Live sports answer"
+    assert completed["response"]["output_text"] == "Natural streamed answer."
     assert completed["response"]["tools"] == ["sports_agent", "web_search"]
     assert completed["response"]["sources"][0]["domain"] == "formula1.com"
 
@@ -177,8 +209,19 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
     async def _async_noop(*args, **kwargs):
         return None
 
+    class FakeAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": type("Chunk", (), {"content": "I could not complete the X lookup, but I can keep helping."})()},
+            }
+
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     async def _collect():

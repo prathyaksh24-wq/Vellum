@@ -267,7 +267,7 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
 
 
-def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(tmp_path):
+def test_live_dispatcher_returns_to_vellum_for_non_sports_turn_while_sports_active(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -282,9 +282,8 @@ def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(t
 
     result = dispatcher.maybe_handle("Now draft an email to Sam", thread_id="t1")
 
-    assert result is not None
-    assert result.agent_name == "SportsAgent"
-    assert "route this back to Vellum" in result.answer
+    assert result is None
+    assert dispatcher.state_store.get("t1").active_agent == "VellumAgent"
 
 
 def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
@@ -485,11 +484,14 @@ def test_specialist_router_delegates_x_and_youtube_queries(tmp_path):
 
     x_decision = router.route("What did AlexHormozi post on X?")
     youtube_decision = router.route("Summarize the latest YouTube videos")
+    upload_decision = router.route("What did KSI upload?")
 
     assert x_decision.agent_name == "XAgent"
     assert x_decision.should_delegate is True
     assert youtube_decision.agent_name == "YoutubeAgent"
     assert youtube_decision.should_delegate is True
+    assert upload_decision.agent_name == "YoutubeAgent"
+    assert upload_decision.should_delegate is True
 
 
 def test_specialist_router_does_not_route_bare_math_or_chart_x(tmp_path):

@@ -90,17 +90,9 @@ class LiveAgentDispatcher:
                 )
 
         if active_agent != "VellumAgent":
-            self.state_store.set_pending_reroute(thread_id, "VellumAgent", "non-sports turn while SportsAgent active")
-            return LiveAgentResult(
-                handled=True,
-                agent_name=active_agent,
-                status="needs_handoff",
-                answer=(
-                    f"This looks outside {active_agent}. Should I route this back to Vellum "
-                    "so the main agent can handle it?"
-                ),
-                tools=[self._tool_name(active_agent)],
-            )
+            self.state_store.set_active_agent(thread_id, "VellumAgent")
+            self.state_store.clear_pending_reroute(thread_id)
+            return None
 
         return None
 
