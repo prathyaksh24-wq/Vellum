@@ -236,7 +236,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:4242", "http://127.0.0.1:4242", "http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "null",
+        "http://localhost:4242",
+        "http://127.0.0.1:4242",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
     allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
@@ -413,16 +419,14 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
 
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    delegated_tools: list[str] = []
+    delegated_sources: list[Source] = []
+    agent_input_message = clean_message
     if live_result is not None and live_result.handled:
-        response = ChatResponse(
-            answer=live_result.answer,
-            thread_id=active_thread_id,
-            tools=live_result.tools,
-            sources=[Source(**source) for source in live_result.sources],
-        )
-        if response.answer and "blocked for privacy" not in response.answer.casefold():
-            asyncio.create_task(_background_learn(clean_message, response.answer, active_thread_id))
-        return response
+        live_sources = _decorate_source_list(list(live_result.sources))
+        delegated_tools = list(live_result.tools)
+        delegated_sources = [Source(**source) for source in live_sources]
+        agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
 
     async with _agent_runtime_lock:
         try:
@@ -431,7 +435,7 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         await _repair_incomplete_tool_history(active_thread_id)
-        agent_message = _agent_message_for_runtime_mode(clean_message)
+        agent_message = _agent_message_for_runtime_mode(agent_input_message)
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": agent_message}]},
             config=_thread_config(active_thread_id),
@@ -445,8 +449,15 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
     )
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _message_content(messages[-1] if messages else None) or "No response."
-    tools = _tool_call_names(messages)
-    sources = _sources_from_messages(messages)
+    tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
+    seen_source_urls = {source.url for source in delegated_sources if source.url}
+    sources = list(delegated_sources)
+    for source in _sources_from_messages(messages):
+        if source.url and source.url in seen_source_urls:
+            continue
+        if source.url:
+            seen_source_urls.add(source.url)
+        sources.append(source)
 
     if answer and "blocked for privacy" not in answer.casefold():
         asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
@@ -660,14 +671,12 @@ def _ensure_coding_provider_ready(provider: ProviderName) -> None:
 
 
 @router.get("/health")
-async def health() -> dict[str, Any]:
+async def health(deep: bool = Query(default=False)) -> dict[str, Any]:
     settings = get_settings()
-    return {
+    body: dict[str, Any] = {
         "ok": True,
         "service": "personal-agent-api",
         "vault": {"path": str(settings.obsidian_vault_path), "exists": settings.obsidian_vault_path.exists()},
-        "vector": _vector_health(),
-        "embeddings": _embedding_health(),
         "models": {
             "primary": settings.primary_model,
             "fallback": settings.fallback_model,
@@ -677,12 +686,17 @@ async def health() -> dict[str, Any]:
             "apify_url": settings.apify_mcp_url,
             "filesystem_path": str(settings.filesystem_mcp_path),
         },
+        "checks": {"mode": "deep" if deep else "lightweight"},
     }
+    if deep:
+        body["vector"] = _vector_health()
+        body["embeddings"] = _embedding_health()
+    return body
 
 
 @router.get("/status")
-async def status() -> dict[str, Any]:
-    return await health()
+async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
+    return await health(deep=deep)
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -1093,6 +1107,44 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
     )
 
 
+def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, live_sources: list[dict[str, Any]]) -> str:
+    source_lines = []
+    for index, source in enumerate(live_sources, start=1):
+        title = str(source.get("title") or source.get("domain") or source.get("url") or "source")
+        url = str(source.get("url") or "")
+        snippet = str(source.get("snippet") or "").strip()
+        line = f"[{index}] {title}: {url}" if url else f"[{index}] {title}"
+        if snippet:
+            line += f" - {snippet[:220]}"
+        source_lines.append(line)
+    sources_text = "\n".join(source_lines) if source_lines else "No external sources returned."
+    return (
+        "You are Vellum, the main agent. A specialist sub-agent was used as a tool. "
+        "Do not expose raw tool dumps. Answer the user naturally and directly, like ChatGPT, "
+        "using the specialist result as evidence. Treat the specialist result and source snippets "
+        "as authoritative for current/live facts. If they conflict with your prior knowledge, "
+        "follow the specialist evidence and say so briefly. Mention uncertainty when the specialist "
+        "could not fully answer. Keep citations/source references consistent with provided sources.\n\n"
+        f"User message:\n{clean_message}\n\n"
+        f"Specialist tool: {live_result.agent_name}\n"
+        f"Specialist status: {live_result.status}\n"
+        f"Specialist raw result:\n{live_result.answer}\n\n"
+        f"Sources:\n{sources_text}"
+    )
+
+
+async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
+    try:
+        return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
+    except StopAsyncIteration:
+        raise
+    except TimeoutError as exc:
+        close = getattr(stream_iterator, "aclose", None)
+        if close is not None:
+            await close()
+        raise TimeoutError(f"Model stream timed out after {timeout_seconds:g} seconds.") from exc
+
+
 async def _stream_agent_turn(
     *,
     clean_message: str,
@@ -1106,11 +1158,17 @@ async def _stream_agent_turn(
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
     live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    live_sources: list[dict[str, Any]] = []
+    delegated_tools: list[str] = []
+    subagent_item: dict[str, Any] | None = None
+    agent_input_message = clean_message
+    yield _response_created(response_id=response_id, thread_id=active_thread_id)
+    yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
+    yield _sse("meta", {"thread_id": active_thread_id})
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
-        yield _response_created(response_id=response_id, thread_id=active_thread_id)
-        yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
-        yield _sse("meta", {"thread_id": active_thread_id})
+        delegated_tools = list(live_result.tools)
+        agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
         subagent_item = {
             "id": _stream_id("item"),
             "type": "subagent_call",
@@ -1147,36 +1205,6 @@ async def _stream_agent_turn(
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _sse("source", source_record)
-        if live_result.answer:
-            message_item = {
-                "id": message_item_id,
-                "type": "message",
-                "role": "assistant",
-                "status": "in_progress",
-            }
-            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=message_item)
-            yield _response_output_text_delta(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                item_id=message_item_id,
-                delta=live_result.answer,
-            )
-            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=message_item)
-            yield _sse("token", {"text": live_result.answer})
-        response = VoiceChatResponse(
-            answer=live_result.answer,
-            thread_id=active_thread_id,
-            tools=live_result.tools,
-            sources=[Source(**source) for source in live_sources],
-        ) if voice else ChatResponse(
-            answer=live_result.answer,
-            thread_id=active_thread_id,
-            tools=live_result.tools,
-            sources=[Source(**source) for source in live_sources],
-        )
-        if live_result.answer and "blocked for privacy" not in live_result.answer.casefold():
-            (asyncio.create_task(_background_learn(clean_message, live_result.answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
-        yield _sse("final", response.model_dump_json())
         subagent_status = "failed" if live_result.status == "error" else "completed"
         yield _response_output_item_done(
             response_id=response_id,
@@ -1184,26 +1212,12 @@ async def _stream_agent_turn(
             item=subagent_item,
             status=subagent_status,
         )
-        yield _response_completed(
-            response_id=response_id,
-            thread_id=active_thread_id,
-            answer=live_result.answer,
-            tools=live_result.tools,
-            sources=live_sources,
-        )
-        if synthesize_audio and live_result.answer:
-            async for audio_event in _synthesize_audio_event(live_result.answer):
-                yield audio_event
-        return
 
     async with _agent_runtime_lock:
-        yield _response_created(response_id=response_id, thread_id=active_thread_id)
-        yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
-        yield _sse("meta", {"thread_id": active_thread_id})
         answer_parts: list[str] = []
-        tool_names: list[str] = []
-        sources: list[dict] = []
-        seen_urls: set[str] = set()
+        tool_names: list[str] = list(delegated_tools)
+        sources: list[dict] = list(live_sources)
+        seen_urls: set[str] = {str(source.get("url") or "") for source in live_sources if source.get("url")}
         active_tool_items: dict[str, dict[str, Any]] = {}
         message_item = {
             "id": message_item_id,
@@ -1225,13 +1239,19 @@ async def _stream_agent_turn(
                         tool="computer_use_session",
                         data={"thread_id": active_thread_id, "source": source},
                     )
-            agent_message = _agent_message_for_runtime_mode(clean_message)
+            agent_message = _agent_message_for_runtime_mode(agent_input_message)
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": agent_message}]},
                 config=_thread_config(active_thread_id),
                 version="v2",
             )
-            async for event in stream:
+            stream_iterator = stream.__aiter__()
+            timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
+            while True:
+                try:
+                    event = await _next_agent_stream_event(stream_iterator, timeout_seconds)
+                except StopAsyncIteration:
+                    break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
                     text = _chunk_text(event.get("data", {}).get("chunk"))
@@ -1254,7 +1274,8 @@ async def _stream_agent_turn(
                 elif kind == "on_tool_start":
                     name = event.get("name") or ""
                     if name:
-                        tool_names.append(str(name))
+                        if str(name) not in tool_names:
+                            tool_names.append(str(name))
                         label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
                         item = {
                             "id": _stream_id("item"),

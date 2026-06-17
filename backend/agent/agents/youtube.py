@@ -15,6 +15,12 @@ class YoutubeAgent:
         "youtube",
         "yt",
     )
+    _VIDEO_INTENT_PATTERNS = (
+        r"(?<!\w)what\s+did\s+.+\s+upload(?:ed)?(?!\w)",
+        r"(?<!\w).+\s+latest\s+upload(?:s)?(?!\w)",
+        r"(?<!\w).+\s+latest\s+video(?:s)?(?!\w)",
+        r"(?<!\w).+\s+new\s+video(?:s)?(?!\w)",
+    )
 
     def __init__(
         self,
@@ -30,7 +36,9 @@ class YoutubeAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS)
+        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS) or any(
+            re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS
+        )
 
     def answer(self, query: str) -> SpecialistResponse:
         try:
@@ -76,6 +84,7 @@ class YoutubeAgent:
                         kind="web",
                         title=title,
                         path_or_url=url,
+                        snippet=detail[:500],
                         captured_at=str(item.get("published_at") or ""),
                         freshness="recent",
                     )

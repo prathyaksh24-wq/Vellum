@@ -77,6 +77,7 @@ class XAgent:
                         kind="web",
                         title=f"@{handle} on X",
                         path_or_url=url,
+                        snippet=text[:500],
                         captured_at=str(item.get("created_at") or ""),
                         freshness="live",
                     )
@@ -202,7 +203,15 @@ class XAgent:
             url = str(item.get("url") or "").strip()
             lines.append(f"[{index}] @{handle}: {text}" if handle else f"[{index}] {text}")
             if url:
-                sources.append(SpecialistSource(kind="web", title=f"@{handle} on X", path_or_url=url, freshness="live"))
+                sources.append(
+                    SpecialistSource(
+                        kind="web",
+                        title=f"@{handle} on X",
+                        path_or_url=url,
+                        snippet=text[:500],
+                        freshness="live",
+                    )
+                )
         return lines, sources
 
     def _error(self, summary: str, exc: Exception) -> SpecialistResponse:
