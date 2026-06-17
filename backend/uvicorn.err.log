@@ -1,6 +1,21 @@
-C:\Users\User\OneDrive\Desktop\Vellum\Vellum\.venv\Lib\site-packages\langgraph\checkpoint\serde\encrypted.py:5: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.
+D:\Vellum\.venv\Lib\site-packages\langgraph\checkpoint\serde\encrypted.py:5: LangChainPendingDeprecationWarning: The default value of `allowed_objects` will change in a future version. Pass an explicit value (e.g., allowed_objects='messages' or allowed_objects='core') to suppress this warning.
   from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-INFO:     Started server process [1244]
+INFO:     Started server process [14256]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+D:\Vellum\.venv\Lib\site-packages\huggingface_hub\file_download.py:731: UserWarning: Not enough free disk space to download the file. The expected file size is: 2271.15 MB. The target location C:\Users\User\.cache\huggingface\hub\models--BAAI--bge-m3\blobs only has 32.96 MB free disk space.
+  warnings.warn(
+[OBSIDIAN] Failed to process watcher event for D:\Vellum\Vault\Agent\Queries\20260617-073301-what-is-the-next-f1-race.md: I/O error: IO Error: There is not enough space on the disk. (os error 112)
+D:\Vellum\.venv\Lib\site-packages\huggingface_hub\file_download.py:731: UserWarning: Not enough free disk space to download the file. The expected file size is: 2271.15 MB. The target location C:\Users\User\.cache\huggingface\hub\models--BAAI--bge-m3\blobs only has 36.50 MB free disk space.
+  warnings.warn(
+[OBSIDIAN] Failed to process watcher event for D:\Vellum\Vault\Library\Sports\Formula-One\20260617-073309-sports-response.md: I/O error: IO Error: There is not enough space on the disk. (os error 112)
+D:\Vellum\.venv\Lib\site-packages\huggingface_hub\file_download.py:731: UserWarning: Not enough free disk space to download the file. The expected file size is: 2271.15 MB. The target location C:\Users\User\.cache\huggingface\hub\models--BAAI--bge-m3\blobs only has 32.85 MB free disk space.
+  warnings.warn(
+[OBSIDIAN] Failed to process watcher event for D:\Vellum\Vault\Meta\profile.md: I/O error: IO Error: There is not enough space on the disk. (os error 112)
+D:\Vellum\.venv\Lib\site-packages\huggingface_hub\file_download.py:731: UserWarning: Not enough free disk space to download the file. The expected file size is: 2271.15 MB. The target location C:\Users\User\.cache\huggingface\hub\models--BAAI--bge-m3\blobs only has 32.72 MB free disk space.
+  warnings.warn(
+[TOOL:vault] Vector search unavailable; using vault fallback: I/O error: IO Error: There is not enough space on the disk. (os error 112)
+D:\Vellum\.venv\Lib\site-packages\huggingface_hub\file_download.py:731: UserWarning: Not enough free disk space to download the file. The expected file size is: 2271.15 MB. The target location C:\Users\User\.cache\huggingface\hub\models--BAAI--bge-m3\blobs only has 30.05 MB free disk space.
+  warnings.warn(

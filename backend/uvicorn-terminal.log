@@ -1,208 +1,44 @@
-C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
-  from pydantic.v1.fields import FieldInfo as FieldInfoV1
-C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.2) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
-  warnings.warn(
-INFO:     Started server process [3080]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     127.0.0.1:59841 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     connection closed
-Exception in thread Thread-10:
-Traceback (most recent call last):
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 25, in _create_client
-    from qdrant_client import QdrantClient
-ModuleNotFoundError: No module named 'qdrant_client'
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\threading.py", line 1082, in _bootstrap_inner
-    self._context.run(self.run)
-    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\threading.py", line 1385, in run
-    self.function(*self.args, **self.kwargs)
-    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\watcher.py", line 91, in flush
-    self._flush_locked()
-    ~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\watcher.py", line 100, in _flush_locked
-    ingester = self.ingester_factory()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\ingester.py", line 52, in __init__
-    self.store = store or VectorStore()
-                          ~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 19, in __init__
-    self.client = client or self._create_client()
-                            ~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 27, in _create_client
-    raise RuntimeError(
-    ...<2 lines>...
-    ) from exc
-RuntimeError: qdrant-client is required for vector storage. Install requirements.txt before using the RAG layer.
-Exception in thread Thread-13:
-Traceback (most recent call last):
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 25, in _create_client
-    from qdrant_client import QdrantClient
-ModuleNotFoundError: No module named 'qdrant_client'
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\threading.py", line 1082, in _bootstrap_inner
-    self._context.run(self.run)
-    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\threading.py", line 1385, in run
-    self.function(*self.args, **self.kwargs)
-    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\watcher.py", line 91, in flush
-    self._flush_locked()
-    ~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\watcher.py", line 100, in _flush_locked
-    ingester = self.ingester_factory()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\obsidian\ingester.py", line 52, in __init__
-    self.store = store or VectorStore()
-                          ~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 19, in __init__
-    self.client = client or self._create_client()
-                            ~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\rag\store.py", line 27, in _create_client
-    raise RuntimeError(
-    ...<2 lines>...
-    ) from exc
-RuntimeError: qdrant-client is required for vector storage. Install requirements.txt before using the RAG layer.
-INFO:     127.0.0.1:59938 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59940 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     127.0.0.1:59943 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-ERROR:    Exception in ASGI application
-Traceback (most recent call last):
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\uvicorn\protocols\websockets\websockets_impl.py", line 244, in run_asgi
-    result = await self.app(self.scope, self.asgi_receive, self.asgi_send)  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\applications.py", line 1160, in __call__
-    await super().__call__(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\applications.py", line 107, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\cors.py", line 79, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 716, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 736, in app
-    await route.handle(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 364, in handle
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 156, in app
-    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 153, in app
-    await func(session)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 760, in app
-    await dependant.call(**solved_result.values)
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\api.py", line 497, in terminal_ws
-    await terminal_session_manager.terminate(session.id)
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 201, in terminate
-    await session.terminate()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 181, in terminate
-    await self.transport.terminate()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 133, in terminate
-    self._process.terminate(force=True)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\winpty\ptyprocess.py", line 250, in terminate
-    self.kill(signal.SIGTERM)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\winpty\ptyprocess.py", line 280, in kill
-    os.kill(self.pid, sig)
-    ~~~~~~~^^^^^^^^^^^^^^^
-PermissionError: [WinError 5] Access is denied
-INFO:     connection closed
-INFO:     connection closed
-INFO:     127.0.0.1:59971 - "GET /api/health HTTP/1.1" 200 OK
-INFO:     127.0.0.1:59975 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     127.0.0.1:59979 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     connection closed
-INFO:     127.0.0.1:59993 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     connection closed
-INFO:     127.0.0.1:60003 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-INFO:     connection closed
-INFO:     127.0.0.1:60006 - "WebSocket /api/terminal/ws" [accepted]
-INFO:     connection open
-ERROR:    Exception in ASGI application
-Traceback (most recent call last):
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\uvicorn\protocols\websockets\websockets_impl.py", line 244, in run_asgi
-    result = await self.app(self.scope, self.asgi_receive, self.asgi_send)  # type: ignore[func-returns-value]
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 60, in __call__
-    return await self.app(scope, receive, send)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\applications.py", line 1160, in __call__
-    await super().__call__(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\applications.py", line 107, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\errors.py", line 151, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\cors.py", line 79, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
-    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 716, in __call__
-    await self.middleware_stack(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 736, in app
-    await route.handle(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\routing.py", line 364, in handle
-    await self.app(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 156, in app
-    await wrap_app_handling_exceptions(app, session)(scope, receive, send)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
-    raise exc
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
-    await app(scope, receive, sender)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 153, in app
-    await func(session)
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\fastapi\routing.py", line 760, in app
-    await dependant.call(**solved_result.values)
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\api.py", line 497, in terminal_ws
-    await terminal_session_manager.terminate(session.id)
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 201, in terminate
-    await session.terminate()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 181, in terminate
-    await self.transport.terminate()
-  File "C:\Users\User\OneDrive\Desktop\Vellum\Vellum\backend\agent\terminal\session.py", line 133, in terminate
-    self._process.terminate(force=True)
-    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\winpty\ptyprocess.py", line 250, in terminate
-    self.kill(signal.SIGTERM)
-    ~~~~~~~~~^^^^^^^^^^^^^^^^
-  File "C:\Users\User\AppData\Local\Programs\Python\Python314\Lib\site-packages\winpty\ptyprocess.py", line 280, in kill
-    os.kill(self.pid, sig)
-    ~~~~~~~^^^^^^^^^^^^^^^
-PermissionError: [WinError 5] Access is denied
-INFO:     connection closed
-INFO:     connection closed
+INFO:     127.0.0.1:60758 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60787 - "GET /api/settings/models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60798 - "GET /models HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:60807 - "GET /api/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60812 - "POST /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60884 - "GET /api/plugins HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60886 - "GET /api/skills HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60885 - "GET /api/automations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60888 - "GET /api/subagents HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60884 - "GET /api/settings HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60889 - "GET /api/conversations HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60890 - "GET /api/models HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60906 - "OPTIONS /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60905 - "OPTIONS /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60906 - "POST /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60905 - "PUT /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60919 - "OPTIONS /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60920 - "OPTIONS /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60921 - "OPTIONS /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60920 - "POST /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60921 - "PUT /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60906 - "OPTIONS /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60919 - "POST /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60906 - "OPTIONS /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60923 - "PUT /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60906 - "PUT /api/conversations/v1wgklqf HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60958 - "OPTIONS /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60958 - "PUT /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60959 - "OPTIONS /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60959 - "PUT /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60960 - "OPTIONS /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60960 - "POST /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60961 - "OPTIONS /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60961 - "POST /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60962 - "OPTIONS /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60975 - "OPTIONS /api/conversations/ay8vjeev HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60976 - "OPTIONS /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60975 - "POST /api/chat/stream HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60976 - "PUT /api/conversations/ay8vjeev HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60962 - "POST /api/settings/active-model HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60962 - "OPTIONS /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60961 - "OPTIONS /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60962 - "PUT /api/conversations/9hg4b03q HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60961 - "PUT /api/conversations/9hg4b03q HTTP/1.1" 200 OK

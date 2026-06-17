@@ -1,0 +1,736 @@
+{
+  "conversations": [
+    {
+      "id": "9hg4b03q",
+      "thread_id": "9hg4b03q",
+      "title": "who is leading the f1 driver…",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "1jnnzeax",
+          "role": "user",
+          "text": "who is leading the f1 drivers champship?",
+          "attachments": []
+        },
+        {
+          "id": "6za0hvya",
+          "role": "assistant",
+          "text": "Backend error: Model stream timed out after 90 seconds.",
+          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"who is leading the f1 drivers champship?\" is one slice, not three. Cut it to the part that ships today.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "who is leading the f1 drivers champship?",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "label": "Searched your library",
+              "detail": "F1 Formula 1 drivers championship standings 2026",
+              "name": "search_my_notes",
+              "status": "in_progress"
+            }
+          ],
+          "tools": [
+            "SportsAgent",
+            "sports_agent",
+            "web_search",
+            "search_my_notes"
+          ],
+          "sources": [
+            {
+              "url": "https://www.f1-fansite.com/f1-results/f1-standings-2026-championship/",
+              "title": "2026 F1 Drivers Standings - ESPN",
+              "snippet": "Formula 1 Standings 2026. DriversConstructors. 2026. 2025. 2024. 2023. 2022. 2021. 2020. 2019. 2018. 2017. 2016. 2015. 2014. 2013. https://www.espn.com/f1/standings **All the key moments from the 2026 Barcelona-Catalunya GP** Jun 14, 2026 — BARCELONA LOWDOWN: All the key moments as Hamilton lands su",
+              "domain": "f1-fansite.com",
+              "fetched_at": "2026-06-17T07:38:08+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=f1-fansite.com&sz=64",
+              "provider_label": "f1-fansite.com"
+            }
+          ]
+        },
+        {
+          "id": "llvu5cxg",
+          "role": "user",
+          "text": "what about team construstors?",
+          "attachments": []
+        },
+        {
+          "id": "il7rci24",
+          "role": "assistant",
+          "text": "Backend error: Model stream timed out after 90 seconds.",
+          "full": "On \"what about team construstors?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Searched your library",
+              "detail": "F1 constructors championship standings 2026",
+              "name": "search_my_notes",
+              "status": "in_progress"
+            }
+          ],
+          "tools": [
+            "search_my_notes"
+          ]
+        }
+      ],
+      "updated_at": "2026-06-17T07:41:56+00:00"
+    },
+    {
+      "id": "ay8vjeev",
+      "thread_id": "ay8vjeev",
+      "title": "who won the ipl",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "12k357tc",
+          "role": "user",
+          "text": "who won the ipl",
+          "attachments": []
+        },
+        {
+          "id": "o3g9qx3j",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"who won the ipl\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-17T07:41:04+00:00"
+    },
+    {
+      "id": "v1wgklqf",
+      "thread_id": "v1wgklqf",
+      "title": "who won the ipl?",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "eu8n1qbg",
+          "role": "user",
+          "text": "who won the ipl?",
+          "attachments": []
+        },
+        {
+          "id": "q0rn9rjv",
+          "role": "assistant",
+          "text": "Backend error: Model stream timed out after 90 seconds.",
+          "full": "On \"who won the ipl?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Searched your library",
+              "detail": "IPL winner",
+              "name": "search_my_notes",
+              "status": "in_progress"
+            }
+          ],
+          "tools": [
+            "search_my_notes"
+          ]
+        }
+      ],
+      "updated_at": "2026-06-17T07:38:16+00:00"
+    },
+    {
+      "id": "m6e778w6",
+      "thread_id": "m6e778w6",
+      "title": "hey",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "ajiwonrp",
+          "role": "user",
+          "text": "hey",
+          "attachments": []
+        },
+        {
+          "id": "2vv6v9q6",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-17T07:06:58+00:00"
+    },
+    {
+      "id": "y7jc0cjv",
+      "thread_id": "y7jc0cjv",
+      "title": "what have you learnt about m…",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "uul0v54c",
+          "role": "user",
+          "text": "what have you learnt about me so far?",
+          "attachments": []
+        },
+        {
+          "id": "zpx221q6",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"what have you learnt about me so far?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-17T06:44:44+00:00"
+    },
+    {
+      "id": "end512ms",
+      "thread_id": "end512ms",
+      "title": "hey",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "ug7rsd6h",
+          "role": "user",
+          "text": "hey",
+          "attachments": []
+        },
+        {
+          "id": "f71sy7y5",
+          "role": "assistant",
+          "text": "Hey pratyakksh. How can I help you today?",
+          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "tools": [],
+          "sources": []
+        },
+        {
+          "id": "895d6ufu",
+          "role": "user",
+          "text": "next f1 race",
+          "attachments": []
+        },
+        {
+          "id": "221igxgj",
+          "role": "assistant",
+          "text": "The next F1 race is the Monaco Grand Prix.",
+          "full": "On \"next f1 race\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "next f1 race",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://www.skysports.com/f1/standings",
+              "title": "F1 News - Results, Fixtures, Scores, Stats, and Rumors - The Athletic",
+              "snippet": "",
+              "domain": "skysports.com",
+              "fetched_at": "2026-06-17T06:30:16+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=skysports.com&sz=64",
+              "provider_label": "skysports.com"
+            }
+          ]
+        },
+        {
+          "id": "65ni2a31",
+          "role": "user",
+          "text": "are you sure?",
+          "attachments": []
+        },
+        {
+          "id": "zi3a8voe",
+          "role": "assistant",
+          "text": "I should be cautious here. The information I have mentions the Monaco Grand Prix in a report from June 7, 2026, but it describes Max Verstappen retiring after stalling on the grid, which sounds like a result from a race that has already happened or is currently being reported on.\n\nTo be absolutely sure about the *next* race on the calendar, let me double-check the current F1 schedule for you.",
+          "full": "On \"are you sure?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "tools": [],
+          "sources": []
+        },
+        {
+          "id": "klxi5dpl",
+          "role": "user",
+          "text": "what happend today in fifa?",
+          "attachments": []
+        },
+        {
+          "id": "hhy06mrk",
+          "role": "assistant",
+          "text": "The main news coming out of FIFA is that Ruben Dias is expected to miss Portugal's opening match due to an injury. Additionally, there's some discussion regarding Spain's slow start following a draw with Cape Verde, with a focus on getting Lamine Yamal fit and performing.",
+          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"what happend today in fifa?\" is one slice, not three. Cut it to the part that ships today.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "what happend today in fifa?",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://www.facebook.com/abcsport.au/posts/fifas-hydration-breaks-that-are-interrupting-matches-at-the-world-cup-are-causin/1566903181765099/",
+              "title": "FIFA Men's World Cup on ESPN - Scores, Stats, News and ...",
+              "snippet": "",
+              "domain": "facebook.com",
+              "fetched_at": "2026-06-17T06:32:00+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=facebook.com&sz=64",
+              "provider_label": "facebook.com"
+            }
+          ]
+        },
+        {
+          "id": "5q30dxeu",
+          "role": "user",
+          "text": "the next f11 race is austrian grand prix why did you say monaco",
+          "attachments": []
+        },
+        {
+          "id": "seeo27k2",
+          "role": "assistant",
+          "text": "You're right, and I apologize for the mistake. The next race is indeed the Austrian Grand Prix, scheduled for June 26–28, 2026. I previously relied on a report about the Monaco Grand Prix, but the official calendar confirms Austria is the next round.",
+          "full": "On \"the next f11 race is austrian grand prix why did you say mon\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "the next f11 race is austrian grand prix why did you say monaco",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://www.redbullracing.com/int-en/races/austrian-grand-prix-2026",
+              "title": "Google Sports Data",
+              "snippet": "",
+              "domain": "redbullracing.com",
+              "fetched_at": "2026-06-17T06:35:15+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=redbullracing.com&sz=64",
+              "provider_label": "redbullracing.com"
+            }
+          ]
+        },
+        {
+          "id": "fwiyfvmp",
+          "role": "user",
+          "text": "also what happend in fifa today? you are getting the right answers from google but why are you telling me different answer",
+          "attachments": []
+        },
+        {
+          "id": "n2pj2lf7",
+          "role": "assistant",
+          "text": "I apologize for the confusion. I've been struggling to synthesize the specific snapshots provided by the tools, which led to me giving you inconsistent or incomplete information. I'm working on being more precise with how I process these updates.\n\nRegarding FIFA today, the latest update is that France defeated Senegal 3-1 in their World Cup opener. While it was a loss for Senegal, their single goal was seen as a positive sign for the team.",
+          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"also what happend in fifa today? you are getting the right a\" is one slice, not three. Cut it to the part that ships today.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "also what happend in fifa today? you are getting the right answers from google but why are you telling me different answer",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://www.nytimes.com/athletic/live-blogs/france-vs-senegal-live-updates-world-cup-2026-score-result/ysIXlHyhjyJr/",
+              "title": "FIFA World Cup 2026 Today: Live news updates as USA training ...",
+              "snippet": "",
+              "domain": "nytimes.com",
+              "fetched_at": "2026-06-17T06:36:26+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=nytimes.com&sz=64",
+              "provider_label": "nytimes.com"
+            }
+          ]
+        },
+        {
+          "id": "2289hum0",
+          "role": "user",
+          "text": "what is the latest video uploaded by KSI on youtube",
+          "attachments": []
+        },
+        {
+          "id": "epn817bu",
+          "role": "assistant",
+          "text": "Based on the results, the latest video uploaded on KSI's own channel appears to be **\"Pop The Balloon: Women Edition\"** — a video where he hosts a balloon-popping challenge with women.\n\nThere are also a couple of recent music videos from his music channel: **\"Thick Of It\"** (feat. Trippie Redd) and **\"Dirty\"**.\n\nThat said, I can't confirm the exact upload timestamps from what I have. Want me to check directly on YouTube for the precise latest upload?",
+          "full": "On \"what is the latest video uploaded by KSI on youtube\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to YoutubeAgent",
+              "detail": "what is the latest video uploaded by KSI on youtube",
+              "name": "YoutubeAgent",
+              "status": "completed"
+            },
+            {
+              "label": "Used youtube_agent",
+              "detail": "",
+              "name": "youtube_agent",
+              "status": "completed"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "tools": [
+            "youtube_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://www.youtube.com/watch?v=OcuVWAv3nZg",
+              "title": "The Disgusting KSI Situation…",
+              "snippet": "",
+              "domain": "youtube.com",
+              "fetched_at": "13 hours ago",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+              "provider_label": "youtube.com"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=IEjFXhNdZOY",
+              "title": "KSI's New Response Is Disgusting..",
+              "snippet": "",
+              "domain": "youtube.com",
+              "fetched_at": "2 days ago",
+              "source_index": 2,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+              "provider_label": "youtube.com"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=At8v_Yc044Y",
+              "title": "KSI - Thick Of It (feat. Trippie Redd) [Official Music Video]",
+              "snippet": "",
+              "domain": "youtube.com",
+              "fetched_at": "1 year ago",
+              "source_index": 3,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+              "provider_label": "youtube.com"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=_azHcO2nhG8",
+              "title": "Pop The Balloon: Women Edition",
+              "snippet": "",
+              "domain": "youtube.com",
+              "fetched_at": "9 months ago",
+              "source_index": 4,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+              "provider_label": "youtube.com"
+            },
+            {
+              "url": "https://www.youtube.com/watch?v=VoDh1h1dPUE",
+              "title": "KSI - Dirty [Official Visualiser]",
+              "snippet": "",
+              "domain": "youtube.com",
+              "fetched_at": "1 year ago",
+              "source_index": 5,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
+              "provider_label": "youtube.com"
+            }
+          ]
+        }
+      ],
+      "updated_at": "2026-06-17T06:39:37+00:00"
+    },
+    {
+      "id": "fq35iuvs",
+      "thread_id": "fq35iuvs",
+      "title": "??",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "25lc70pm",
+          "role": "user",
+          "text": "??",
+          "attachments": []
+        },
+        {
+          "id": "7ww2stem",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"??\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-16T09:37:50+00:00"
+    },
+    {
+      "id": "f8k96nxn",
+      "thread_id": "f8k96nxn",
+      "title": "what do you know about me?",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "s6d4mgly",
+          "role": "user",
+          "text": "what do you know about me?",
+          "attachments": []
+        },
+        {
+          "id": "wdjk67at",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"what do you know about me?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-16T09:35:29+00:00"
+    },
+    {
+      "id": "ivjyknca",
+      "thread_id": "ivjyknca",
+      "title": "how many goals did germany s…",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "nvf87coc",
+          "role": "user",
+          "text": "how many goals did germany scored in their opening match",
+          "attachments": []
+        },
+        {
+          "id": "fk9jw3fc",
+          "role": "assistant",
+          "text": "SportsAgent checked fresh public sources for: how many goals did germany scored in their opening match.\n[1] Germany 4-0 Finland (May 31, 2026) Game Analysis - ESPN: May 31, 2026 — Germany defeated Finland 4-0 in their first World Cup warm-up match but they will be sweating on the fitness of Deniz Undav. The S... https://www.espn.com/soccer/report/_/gameId/758381 **Curaçao scores a goal in its first World Cup game, but ...** Jun 14, 2026 — Germany sped past Cura\nUse this as a live update snapshot; exact lineups and injury statuses can still move close to game time.",
+          "full": "On \"how many goals did germany scored in their opening match\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "label": "Routed to SportsAgent",
+              "detail": "how many goals did germany scored in their opening match",
+              "name": "SportsAgent",
+              "status": "in_progress"
+            },
+            {
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "in_progress"
+            },
+            {
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "in_progress"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "sources": [
+            {
+              "url": "https://sports.yahoo.com/articles/world-cup-highlights-germany-scoring-205600292.html",
+              "title": "Germany 4-0 Finland (May 31, 2026) Game Analysis - ESPN",
+              "snippet": "",
+              "domain": "sports.yahoo.com",
+              "fetched_at": "2026-06-16T07:07:40+00:00",
+              "source_index": 1,
+              "source_type": "web",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=sports.yahoo.com&sz=64",
+              "provider_label": "sports.yahoo.com"
+            }
+          ]
+        }
+      ],
+      "updated_at": "2026-06-16T07:07:40+00:00"
+    },
+    {
+      "id": "96t40mt4",
+      "thread_id": "96t40mt4",
+      "title": "space x ipo",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "n2zx62f6",
+          "role": "user",
+          "text": "space x ipo",
+          "attachments": []
+        },
+        {
+          "id": "pvsvqo62",
+          "role": "assistant",
+          "text": "",
+          "full": "On \"space x ipo\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": true
+        }
+      ],
+      "updated_at": "2026-06-16T07:04:45+00:00"
+    },
+    {
+      "id": "5kil8ntn",
+      "thread_id": "5kil8ntn",
+      "title": "hey",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "32uy101n",
+          "role": "user",
+          "text": "hey",
+          "attachments": []
+        },
+        {
+          "id": "jio1ly24",
+          "role": "assistant",
+          "text": "Backend error: Error code: 400 - {'error': {'message': 'Provider returned error', 'code': 400, 'metadata': {'raw': '{\"details\":\"This model supports at most 20 tool definitions per request (received 31). Reduce the number of entries in the `tools` array.\",\"error\":\"Invalid request parameters\"}', 'provider_name': 'Venice', 'is_byok': False, 'retry_after_seconds': 30, 'retry_after_seconds_raw': 29.873, 'previous_errors': [{'code': 429, 'message': 'Provider returned error', 'provider_name': 'Together', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'DeepInfra', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'Novita', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'Parasail', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}]}}, 'user_id': 'user_2wXZS8eq2l1TddjKIUdJUJfeW0p'}",
+          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false
+        },
+        {
+          "id": "bfaq4lqg",
+          "role": "user",
+          "text": "hey",
+          "attachments": []
+        },
+        {
+          "id": "8c9kaoi8",
+          "role": "assistant",
+          "text": "Hey. What are you working on today?",
+          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "sources": [],
+          "tools": [],
+          "activity": []
+        }
+      ],
+      "updated_at": "2026-06-16T07:03:20+00:00"
+    }
+  ]
+}
