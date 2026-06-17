@@ -459,10 +459,49 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .areply{font-size:14px;line-height:1.7;color:var(--txt);white-space:pre-wrap}
 .msg-activity{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 4px}
 .msg-act{font-size:11.5px;color:var(--dim);border:1px solid var(--line);border-radius:12px;padding:3px 8px;background:var(--glass)}
+.turn-trace{display:flex;flex-direction:column;gap:7px;margin:2px 0 8px;color:var(--dim);font-size:13px}
+.turn-thinking{display:inline-flex;align-items:center;gap:8px;width:max-content;border:none;background:none;color:var(--dim);font:inherit;font-size:13px;padding:0;cursor:pointer}
+.trace-glow{background:linear-gradient(90deg,var(--dim) 0%,var(--txt2) 28%,#fff 48%,var(--ember) 66%,var(--dim) 100%);background-size:260% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2.1s linear infinite;filter:drop-shadow(0 0 8px var(--glow))}
+.turn-line{display:flex;align-items:center;gap:9px;min-height:20px;color:var(--dim);line-height:1.35}
+.turn-line svg{flex-shrink:0;color:var(--dim)}
+.turn-line.active .turn-label{color:var(--txt2)}
+.turn-source-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-left:27px}
+.source-pill,.worked-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;background:var(--glass);color:var(--txt);font:inherit;font-size:11.5px;padding:4px 8px;cursor:pointer;max-width:230px}
+.source-pill:hover,.worked-pill:hover{background:var(--hover);border-color:var(--line2)}
+.source-pill img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+.source-pill span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msg-sources{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 2px}
-.msg-src{display:inline-flex;align-items:center;gap:6px;max-width:210px;border:1px solid var(--line);border-radius:12px;padding:3px 8px;color:var(--txt);text-decoration:none;background:var(--glass);font-size:11.5px}
+.msg-src{display:inline-flex;align-items:center;gap:6px;max-width:210px;border:1px solid var(--line);border-radius:12px;padding:3px 8px;color:var(--txt);text-decoration:none;background:var(--glass);font:inherit;font-size:11.5px;cursor:pointer}
 .msg-src img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
 .msg-src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.activity-drawer{position:absolute;right:0;top:45px;bottom:0;width:min(390px,42vw);min-width:330px;z-index:35;background:color-mix(in srgb,var(--bg) 94%,#000);border-left:1px solid var(--line);box-shadow:-24px 0 60px rgba(0,0,0,.38);display:flex;flex-direction:column;animation:drawerIn .16s ease both}
+.activity-head{height:46px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line);padding:0 15px;flex-shrink:0}
+.activity-title{font-weight:600;color:var(--txt2)}
+.activity-dot{color:var(--dim2)}
+.activity-time{color:var(--dim);font-size:13px}
+.activity-close{margin-left:auto}
+.activity-body{overflow-y:auto;padding:18px 18px 28px;display:flex;flex-direction:column;gap:24px}
+.activity-section-title{font-size:18px;font-weight:650;color:var(--txt2);margin-bottom:12px}
+.activity-timeline{display:flex;flex-direction:column;gap:0}
+.activity-step{position:relative;display:grid;grid-template-columns:18px 1fr;gap:8px;padding:0 0 16px}
+.activity-step::after{content:"";position:absolute;left:8.5px;top:21px;bottom:0;width:1px;background:var(--line)}
+.activity-step:last-child::after{display:none}
+.activity-step-ic{width:18px;height:18px;display:flex;align-items:center;justify-content:center;color:var(--dim);background:var(--bg);z-index:1}
+.activity-step-main{min-width:0}
+.activity-step-label{font-size:13px;color:var(--txt2);line-height:1.45}
+.activity-step-detail{font-size:12.5px;color:var(--dim);line-height:1.45;margin-top:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.activity-source-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.activity-src-mini{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--glass);border-radius:999px;color:var(--txt);font-size:11.5px;padding:4px 8px;text-decoration:none;max-width:150px}
+.activity-src-mini img{width:14px;height:14px;border-radius:3px}
+.activity-src-mini span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.activity-sources{display:flex;flex-direction:column;gap:11px}
+.activity-source-card{display:grid;grid-template-columns:20px 1fr;gap:10px;text-decoration:none;color:var(--txt);border-radius:8px;padding:7px 0}
+.activity-source-card:hover .activity-source-title{text-decoration:underline}
+.activity-source-card img{width:17px;height:17px;border-radius:4px;margin-top:1px}
+.activity-source-title{font-size:13px;color:var(--txt2);font-weight:600;line-height:1.35}
+.activity-source-domain{font-size:12px;color:var(--dim);margin-bottom:3px}
+.activity-source-snippet{font-size:12.5px;color:var(--dim);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+@keyframes drawerIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:translateX(0)}}
 .shimmer{background:linear-gradient(90deg,var(--dim) 0%,var(--txt2) 18%,var(--ember) 38%,var(--txt2) 58%,var(--dim) 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2.4s linear infinite;filter:drop-shadow(0 0 8px var(--glow))}
 @keyframes sh{to{background-position:-240% center}}
 [data-theme="light"] .shimmer{background:none;-webkit-background-clip:initial;background-clip:initial;color:var(--txt);-webkit-text-fill-color:var(--txt);animation:none;filter:none}
@@ -1891,25 +1930,176 @@ const MsgActions = ({msg, onRegen}) => {
   );
 };
 
-const MessageMeta = ({msg}) => (
+function sourceName(s) {
+  return (s && (s.provider_label || s.domain || s.title || s.url)) || 'source';
+}
+
+function sourceFavicon(s) {
+  if (!s) return '';
+  if (s.favicon_url) return s.favicon_url;
+  const domain = s.domain || (s.url || '').replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+  return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : '';
+}
+
+function traceElapsed(trace) {
+  if (!trace) return 0;
+  if (typeof trace.elapsedSeconds === 'number') return trace.elapsedSeconds;
+  const start = trace.startedAt || Date.now();
+  const end = trace.completedAt || Date.now();
+  return Math.max(0, Math.round((end - start) / 1000));
+}
+
+function initialTrace() {
+  const now = Date.now();
+  return {
+    status: 'thinking',
+    startedAt: now,
+    completedAt: null,
+    elapsedSeconds: 0,
+    steps: [{id: 'thinking', type: 'thinking', label: 'Thinking', detail: '', status: 'in_progress', at: now}],
+    sources: [],
+    tools: [],
+  };
+}
+
+function errorTrace(message) {
+  const now = Date.now();
+  return {
+    status: 'error',
+    startedAt: now,
+    completedAt: now,
+    elapsedSeconds: 0,
+    steps: [
+      {id: 'thinking', type: 'thinking', label: 'Thinking', detail: '', status: 'completed', at: now},
+      {id: 'error', type: 'error', label: 'Stream error', detail: message, status: 'failed', at: now},
+    ],
+    sources: [],
+    tools: [],
+  };
+}
+
+const TraceIcon = ({type, status}) => {
+  if (type === 'source') return <IcGlobe size={15}/>;
+  if (type === 'error' || status === 'failed') return <IcInfo size={15}/>;
+  if (type === 'subagent_call') return <IcBrain size={15}/>;
+  if (type === 'tool_call') return <IcSearch size={15}/>;
+  return <IcGlobe size={15}/>;
+};
+
+const MessageTraceInline = ({msg, onOpenActivity}) => {
+  const trace = msg.trace;
+  const sources = (trace && trace.sources && trace.sources.length ? trace.sources : msg.sources) || [];
+  const steps = (trace && trace.steps) || [];
+  const visibleSteps = steps.filter(s => s.label && s.id !== 'thinking').slice(-3);
+  const canOpen = onOpenActivity && (trace || sources.length || (msg.activity && msg.activity.length));
+  const open = () => canOpen && onOpenActivity(msg.id);
+  if (!trace && !sources.length && !(msg.activity && msg.activity.length)) return null;
+  return (
+    <div className="turn-trace">
+      {trace && (
+        <button className="turn-thinking" onClick={open} title="Open activity">
+          <span className={msg.streaming ? 'trace-glow' : ''}>{msg.streaming ? 'Thinking' : `Worked for ${traceElapsed(trace)}s`}</span>
+          {!msg.streaming && <IcChevD size={12}/>}
+        </button>
+      )}
+      {visibleSteps.map((step, i) => (
+        <div key={step.id || i} className={'turn-line' + (msg.streaming && i === visibleSteps.length - 1 ? ' active' : '')}>
+          <TraceIcon type={step.type} status={step.status}/>
+          <span className={msg.streaming && i === visibleSteps.length - 1 ? 'turn-label trace-glow' : 'turn-label'}>{step.label}</span>
+        </div>
+      ))}
+      {sources.length > 0 && (
+        <div className="turn-source-row">
+          {sources.slice(0, 4).map((s, i) => (
+            <button key={s.url || i} className="source-pill" onClick={open} title={s.title || s.url}>
+              {sourceFavicon(s) && <img src={sourceFavicon(s)} alt=""/>}
+              <span>{sourceName(s)}</span>
+            </button>
+          ))}
+          {sources.length > 4 && <button className="source-pill" onClick={open}>+{sources.length - 4} more</button>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MessageMeta = ({msg, onOpenActivity}) => (
   <React.Fragment>
-    {msg.activity && msg.activity.length > 0 && (
+    <MessageTraceInline msg={msg} onOpenActivity={onOpenActivity}/>
+    {!msg.trace && msg.activity && msg.activity.length > 0 && (
       <div className="msg-activity">
         {msg.activity.slice(0, 4).map((a, i) => <span key={i} className="msg-act">{a.label || a.name || 'Agent activity'}</span>)}
       </div>
     )}
-    {msg.sources && msg.sources.length > 0 && (
+    {!msg.trace && msg.sources && msg.sources.length > 0 && (
       <div className="msg-sources">
         {msg.sources.slice(0, 6).map((s, i) => (
-          <a key={i} className="msg-src" href={s.url} target="_blank" rel="noreferrer" title={s.title || s.url}>
-            {s.favicon_url && <img src={s.favicon_url} alt=""/>}
-            <span>{s.provider_label || s.domain || s.title || s.url}</span>
-          </a>
+          <button key={i} className="msg-src" onClick={() => onOpenActivity ? onOpenActivity(msg.id) : window.open(s.url, '_blank', 'noopener')} title={s.title || s.url}>
+            {sourceFavicon(s) && <img src={sourceFavicon(s)} alt=""/>}
+            <span>{sourceName(s)}</span>
+          </button>
         ))}
       </div>
     )}
   </React.Fragment>
 );
+
+const ActivityDrawer = ({msg, onClose}) => {
+  if (!msg) return null;
+  const trace = msg.trace || {status: msg.streaming ? 'thinking' : 'done', steps: msg.activity || [], sources: msg.sources || [], tools: msg.tools || [], elapsedSeconds: 0};
+  const sources = (trace.sources && trace.sources.length ? trace.sources : msg.sources) || [];
+  const steps = (trace.steps || []).filter(s => s.label);
+  return (
+    <div className="activity-drawer">
+      <div className="activity-head">
+        <span className="activity-title">Activity</span>
+        <span className="activity-dot">-</span>
+        <span className="activity-time">{trace.status === 'done' ? `Worked for ${traceElapsed(trace)}s` : `${traceElapsed(trace)}s`}</span>
+        <button className="tbtn activity-close" title="Close activity" onClick={onClose}><IcX size={15}/></button>
+      </div>
+      <div className="activity-body">
+        <section>
+          <div className="activity-section-title">{trace.status === 'done' ? 'Done' : 'Thinking'}</div>
+          <div className="activity-timeline">
+            {steps.map((step, i) => (
+              <div key={step.id || i} className="activity-step">
+                <span className="activity-step-ic"><TraceIcon type={step.type} status={step.status}/></span>
+                <div className="activity-step-main">
+                  <div className="activity-step-label">{step.label}</div>
+                  {step.detail && <div className="activity-step-detail">{step.detail}</div>}
+                  {step.source && (
+                    <div className="activity-source-chips">
+                      <a className="activity-src-mini" href={step.source.url} target="_blank" rel="noreferrer">
+                        {sourceFavicon(step.source) && <img src={sourceFavicon(step.source)} alt=""/>}
+                        <span>{sourceName(step.source)}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section>
+          <div className="activity-section-title">Sources - {sources.length}</div>
+          <div className="activity-sources">
+            {sources.length === 0 && <div className="activity-step-detail">No external sources were used in this turn.</div>}
+            {sources.map((s, i) => (
+              <a key={s.url || i} className="activity-source-card" href={s.url} target="_blank" rel="noreferrer">
+                {sourceFavicon(s) ? <img src={sourceFavicon(s)} alt=""/> : <IcGlobe size={17}/>}
+                <div>
+                  <div className="activity-source-domain">{sourceName(s)}</div>
+                  <div className="activity-source-title">{s.title || s.url}</div>
+                  {s.snippet && <div className="activity-source-snippet">{s.snippet}</div>}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
 
 const Timeline = ({userMsgs}) => {
   const [open, setOpen] = useState(false);
@@ -1979,7 +2169,7 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras}) => {
+const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, onOpenActivity, composerExtras}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const Icon = agent.icon;
@@ -2059,7 +2249,7 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
             <div className="bubble">{m.text}</div>
           </div>
         ) : (
-          <div key={m.id}><div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '\u2026'}</div><MessageMeta msg={m}/>{!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}</div>
+          <div key={m.id}><div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || ''}</div><MessageMeta msg={m} onOpenActivity={onOpenActivity}/>{!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}</div>
         ))}
         <div ref={endRef}/>
       </div></div>
@@ -2104,7 +2294,7 @@ const AgentSettingsModal = ({agent, cfg, onSave, onClose}) => {
   );
 };
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onOpenActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -2146,7 +2336,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRe
           ) : (
             <div key={m.id}>
               <div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '…'}</div>
-              <MessageMeta msg={m}/>
+              <MessageMeta msg={m} onOpenActivity={onOpenActivity}/>
               {!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}
             </div>
           ))}
@@ -3057,6 +3247,7 @@ const App = () => {
   const [subagents, setSubagents] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [activityMsgId, setActivityMsgId] = useState(null);
   const threadRef = useRef({});
   const pendingMoveRef = useRef(null);
   const [navTick, setNavTick] = useState(0);
@@ -3146,16 +3337,16 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setShortcutsOpen(false); setCustomInstrOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setActivityMsgId(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); };
-  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); };
-  const nav = v => { setView(v); setMenu(null); };
-  const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); };
+  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); setActivityMsgId(null); };
+  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); setActivityMsgId(null); };
+  const nav = v => { setView(v); setMenu(null); setActivityMsgId(null); };
+  const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsgId(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
   const streamAgentReply = (agentId, convoId, msgId, full) => {
@@ -3163,7 +3354,7 @@ const App = () => {
     const tick = () => {
       i += 3;
       const done = i >= full.length;
-      setAgentConvos(ac => ({...ac, [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done} : m)} : cv)}));
+      setAgentConvos(ac => ({...ac, [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done, trace: done ? {...(m.trace || initialTrace()), status: 'done', completedAt: Date.now(), elapsedSeconds: traceElapsed(m.trace || initialTrace())} : m.trace} : m)} : cv)}));
       if (!done) timers.current[msgId] = setTimeout(tick, 22);
     };
     timers.current[msgId] = setTimeout(tick, 400);
@@ -3180,10 +3371,11 @@ const App = () => {
       await API.chat.stream(
         {message: routedMessage, thread_id: convoId, model: selModel, store: true},
         {
+          trace: trace => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, trace, sources: trace.sources || m.sources || [], tools: trace.tools || m.tools || [], streaming: true} : m)})),
           activity: (activity, tools) => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, activity, tools, streaming: true} : m)})),
           sources: sources => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, sources, streaming: true} : m)})),
           delta: text => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text, streaming: true} : m)})),
-          error: error => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, streaming: false} : m)})),
+          error: error => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, trace: m.trace || errorTrace(error), streaming: false} : m)})),
           done: final => updateAgentConvo(agent.id, convoId, cv => ({
             ...cv,
             messages: cv.messages.map(m => m.id === assistantId ? {...m, text: final.text || m.text || 'No response.', sources: final.sources || m.sources || [], tools: final.tools || m.tools || [], activity: final.activity || m.activity || [], streaming: false} : m),
@@ -3191,7 +3383,7 @@ const App = () => {
         }
       );
     } catch (err) {
-      updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', streaming: false} : m)}));
+      updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', trace: m.trace || errorTrace('Backend unreachable'), streaming: false} : m)}));
     }
   };
   const sendToAgent = (text, attach) => {
@@ -3199,7 +3391,7 @@ const App = () => {
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: [], tools: []};
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: [], tools: [], trace: initialTrace()};
     let cid = activeConvo[ag.id];
     if (!cid) {
       cid = uid();
@@ -3221,7 +3413,7 @@ const App = () => {
     const idx = convo.messages.findIndex(m => m.id === msgId);
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const reply = agentReply(ag, prevUser ? prevUser.text : '');
-    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true} : m)} : cv)}));
+    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, trace: initialTrace()} : m)} : cv)}));
     if (FEATURE_FLAGS.realChat) streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
     else streamAgentReply(ag.id, cid, msgId, reply);
   };
@@ -3337,7 +3529,7 @@ const App = () => {
       i += 3;
       const done = i >= full.length;
       setChats(cs => cs.map(c => c.id === chatId
-        ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done} : m)}
+        ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done, trace: done ? {...(m.trace || initialTrace()), status: 'done', completedAt: Date.now(), elapsedSeconds: traceElapsed(m.trace || initialTrace())} : m.trace} : m)}
         : c));
       if (!done) timers.current[msgId] = setTimeout(tick, 22);
     };
@@ -3369,6 +3561,10 @@ const App = () => {
               updateChat(chatId, c => ({...c, thread_id: meta.thread_id}));
             }
           },
+          trace: trace => updateChat(chatId, c => ({
+            ...c,
+            messages: c.messages.map(m => m.id === assistantId ? {...m, trace, sources: trace.sources || m.sources || [], tools: trace.tools || m.tools || [], streaming: true} : m),
+          })),
           activity: (activity, tools) => updateChat(chatId, c => ({
             ...c,
             messages: c.messages.map(m => m.id === assistantId ? {...m, activity, tools, streaming: true} : m),
@@ -3383,7 +3579,7 @@ const App = () => {
           })),
           error: error => updateChat(chatId, c => ({
             ...c,
-            messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, streaming: false} : m),
+            messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, trace: m.trace || errorTrace(error), streaming: false} : m),
           }), true),
           done: final => updateChat(chatId, c => ({
             ...c,
@@ -3402,7 +3598,7 @@ const App = () => {
     } catch (err) {
       updateChat(chatId, c => ({
         ...c,
-        messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', streaming: false} : m),
+        messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', trace: m.trace || errorTrace('Backend unreachable'), streaming: false} : m),
       }), true);
     }
   };
@@ -3411,7 +3607,7 @@ const App = () => {
     let chatId = opts.forceNew ? null : activeChatId;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: [], tools: [], trace: initialTrace()};
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
       setLibrary(lib => [
@@ -3448,7 +3644,7 @@ const App = () => {
     const old = chat.messages[idx];
     const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
     setChats(cs => cs.map(c => c.id === chat.id
-      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true} : m)}
+      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, trace: initialTrace()} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
     else streamReply(chat.id, msgId, reply);
@@ -3462,6 +3658,10 @@ const App = () => {
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
   const activeChat = chats.find(c => c.id === activeChatId) || null;
+  const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
+  const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
+  const activityMessagePool = view === 'agent' && activeAgentConvo ? activeAgentConvo.messages : (activeChat ? activeChat.messages : []);
+  const activityMessage = activityMsgId ? activityMessagePool.find(m => m.id === activityMsgId) : null;
 
   const pushToast = msg => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2200); };
   const selectModel = async id => {
@@ -3583,6 +3783,7 @@ const App = () => {
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onRegen={regenerate}
               onViewImage={setViewer}
               filesOpen={filesOpen} onCloseFiles={() => setFilesOpen(false)}
+              onOpenActivity={setActivityMsgId}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
@@ -3599,7 +3800,8 @@ const App = () => {
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
             {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={AGENTS.find(a => a.id === activeAgentId)} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onOpenActivity={setActivityMsgId} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {activityMessage && <ActivityDrawer msg={activityMessage} onClose={() => setActivityMsgId(null)}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
