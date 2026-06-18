@@ -6,9 +6,13 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import inspect
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import time
 from typing import Any
 import urllib.error
@@ -59,6 +63,7 @@ terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
 _live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
+_x_oauth_process: subprocess.Popen[Any] | None = None
 
 _project_context_singleton: ProjectContext | None = None
 
@@ -142,6 +147,18 @@ class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
 
 
+class XOAuthStartRequest(BaseModel):
+    provider: str = "xapi"
+
+
+class XOAuthStatusResponse(BaseModel):
+    x_api_configured: bool
+    x_api_connected: bool
+    private_reads_enabled: bool
+    posting_enabled: bool
+    setup_running: bool = False
+
+
 class CodingSessionBody(BaseModel):
     provider: ProviderName
     cwd: str = Field(min_length=1)
@@ -167,6 +184,44 @@ class ActiveModelResponse(BaseModel):
     label: str
     provider: str
     open_weights: bool
+
+
+_UI_CONVERSATIONS_PATH = REPO_ROOT / "data" / "ui" / "conversations.json"
+
+
+def _read_ui_conversations() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(_UI_CONVERSATIONS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    conversations = payload.get("conversations") if isinstance(payload, dict) else payload
+    return conversations if isinstance(conversations, list) else []
+
+
+def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
+    _UI_CONVERSATIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _UI_CONVERSATIONS_PATH.write_text(
+        json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _conversation_timestamp() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    record = dict(payload)
+    record["id"] = str(record.get("id") or conversation_id)
+    record["thread_id"] = str(record.get("thread_id") or record["id"])
+    record["title"] = str(record.get("title") or "New chat")
+    record["created"] = str(record.get("created") or "Today")
+    record["pinned"] = bool(record.get("pinned", False))
+    record["archived"] = bool(record.get("archived", False))
+    record["projectId"] = record.get("projectId")
+    record["messages"] = record.get("messages") if isinstance(record.get("messages"), list) else []
+    record["updated_at"] = _conversation_timestamp()
+    return record
 
 
 @asynccontextmanager
@@ -200,6 +255,24 @@ app.add_middleware(
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _x_api_oauth_file() -> Path:
+    return REPO_ROOT / "data" / "x-api-oauth.json"
+
+
+def _x_oauth_setup_running() -> bool:
+    return _x_oauth_process is not None and _x_oauth_process.poll() is None
+
+
+def _repo_python() -> Path:
+    windows_python = REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    if windows_python.exists():
+        return windows_python
+    posix_python = REPO_ROOT / ".venv" / "bin" / "python"
+    if posix_python.exists():
+        return posix_python
+    return Path(sys.executable)
 
 
 def _thread_config(thread_id: str | None) -> dict[str, dict[str, str]]:
@@ -641,9 +714,208 @@ async def status() -> dict[str, Any]:
     return await health()
 
 
+@router.get("/x/oauth/status", response_model=XOAuthStatusResponse)
+async def x_oauth_status() -> XOAuthStatusResponse:
+    settings = get_settings()
+    return XOAuthStatusResponse(
+        x_api_configured=bool(settings.x_api_client_id.strip()),
+        x_api_connected=_x_api_oauth_file().exists(),
+        private_reads_enabled=bool(settings.x_tool_allow_private_reads),
+        posting_enabled=bool(settings.x_tool_allow_posts),
+        setup_running=_x_oauth_setup_running(),
+    )
+
+
+@router.post("/x/oauth/start")
+async def x_oauth_start(_request: XOAuthStartRequest) -> dict[str, Any]:
+    global _x_oauth_process
+
+    settings = get_settings()
+    client_id = settings.x_api_client_id.strip()
+    if not client_id:
+        raise HTTPException(status_code=409, detail="Set X_API_CLIENT_ID in .env before starting X OAuth.")
+    if _x_oauth_setup_running():
+        return {
+            "status": "already_running",
+            "message": "X sign-in is already waiting in the external browser.",
+            "callback_url": "http://127.0.0.1:56122/callback",
+        }
+
+    setup_script = REPO_ROOT / "scripts" / "setup_x_api_oauth.py"
+    if not setup_script.exists():
+        raise HTTPException(status_code=500, detail="X OAuth setup script is missing.")
+
+    runtime_dir = REPO_ROOT / ".api-runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = runtime_dir / "x-oauth.out.log"
+    stderr_path = runtime_dir / "x-oauth.err.log"
+    env = {
+        **os.environ,
+        "X_API_CLIENT_ID": client_id,
+        "X_API_CLIENT_SECRET": settings.x_api_client_secret.strip(),
+    }
+    creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    out_fh = stdout_path.open("ab")
+    err_fh = stderr_path.open("ab")
+    try:
+        _x_oauth_process = subprocess.Popen(
+            [str(_repo_python()), str(setup_script), "--timeout-secs", "300"],
+            cwd=str(REPO_ROOT),
+            env=env,
+            stdout=out_fh,
+            stderr=err_fh,
+            creationflags=creationflags,
+        )
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not start X OAuth setup: {exc}") from exc
+    finally:
+        out_fh.close()
+        err_fh.close()
+
+    return {
+        "status": "started",
+        "message": "Opened the external browser for X sign-in. Complete the login there, then return to Vellum.",
+        "callback_url": "http://127.0.0.1:56122/callback",
+    }
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     return await _run_agent(request.message, request.thread_id, request.model)
+
+
+@router.get("/conversations")
+async def list_conversations() -> dict[str, Any]:
+    conversations = sorted(
+        _read_ui_conversations(),
+        key=lambda item: str(item.get("updated_at") or ""),
+        reverse=True,
+    )
+    return {"conversations": conversations}
+
+
+@router.get("/conversations/{conversation_id}")
+async def get_conversation(conversation_id: str) -> dict[str, Any]:
+    for conversation in _read_ui_conversations():
+        if str(conversation.get("id")) == conversation_id:
+            return {"conversation": conversation}
+    raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@router.put("/conversations/{conversation_id}")
+async def put_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    record = _normalize_ui_conversation(conversation_id, payload)
+    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
+    conversations.insert(0, record)
+    _write_ui_conversations(conversations)
+    return {"conversation": record}
+
+
+@router.patch("/conversations/{conversation_id}")
+async def patch_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    conversations = _read_ui_conversations()
+    for index, conversation in enumerate(conversations):
+        if str(conversation.get("id")) == conversation_id:
+            updated = _normalize_ui_conversation(conversation_id, {**conversation, **payload})
+            conversations[index] = updated
+            _write_ui_conversations(conversations)
+            return {"conversation": updated}
+    raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str) -> dict[str, bool]:
+    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
+    _write_ui_conversations(conversations)
+    return {"ok": True}
+
+
+@router.get("/skills")
+async def list_skills_catalog() -> dict[str, Any]:
+    return {
+        "mock": True,
+        "skills": {
+            "proposed": [
+                {
+                    "id": "sports-snapshot-brief",
+                    "name": "Sports snapshot brief",
+                    "trigger": "score · fixture · standings",
+                    "note": "Template until user-approved skill persistence is connected.",
+                },
+                {
+                    "id": "source-backed-answer",
+                    "name": "Source-backed answer",
+                    "trigger": "latest · verify · cite",
+                    "note": "Uses live search and source drawer behavior.",
+                },
+            ],
+            "active": [
+                {
+                    "id": "subagent-routing",
+                    "name": "Sub-agent routing",
+                    "trigger": "sports · x · youtube · memory",
+                    "uses": 0,
+                    "last": "live",
+                }
+            ],
+            "retired": [],
+        },
+    }
+
+
+@router.get("/automations")
+async def list_automation_templates() -> dict[str, Any]:
+    return {
+        "mock": True,
+        "automations": [
+            {
+                "id": "nightly-digest",
+                "name": "Nightly digest",
+                "schedule": "Daily at 02:00",
+                "status": "template",
+                "description": "Summarize new memories, sports changes, and notable watched sources.",
+            },
+            {
+                "id": "sports-matchday-brief",
+                "name": "Sports matchday brief",
+                "schedule": "On demand",
+                "status": "template",
+                "description": "Prepare scores, fixtures, injuries, and source-backed context when asked.",
+            },
+            {
+                "id": "memory-card-rollup",
+                "name": "Memory card rollup",
+                "schedule": "Before deletion windows",
+                "status": "template",
+                "description": "Condense aging memories into durable memory cards.",
+            },
+        ],
+    }
+
+
+@router.get("/subagents")
+async def list_subagents() -> dict[str, Any]:
+    from agent.master.registry import PupilRegistry
+
+    registry = PupilRegistry.default(get_settings().obsidian_vault_path)
+    descriptions = {
+        "SportsAgent": "Scores, schedules, standings, injuries, and sports analysis.",
+        "XAgent": "X search, account reads, bookmarks, and confirmed posting workflows.",
+        "YoutubeAgent": "YouTube search, video metadata, transcripts, and summaries.",
+        "MemoryAgent": "Long-term memory lookup, context packs, and preference recall.",
+    }
+    return {
+        "subagents": [
+            {
+                "id": name.replace("Agent", "").casefold() or name.casefold(),
+                "name": name,
+                "enabled": True,
+                "status": "available",
+                "description": descriptions.get(name, "Specialized Vellum sub-agent."),
+            }
+            for name in registry.names()
+        ]
+    }
 
 
 def _chunk_text(chunk: Any) -> str:
@@ -1683,6 +1955,27 @@ async def set_active_model(request: SetActiveModelRequest) -> ActiveModelRespons
         provider=entry.provider,
         open_weights=entry.open_weights,
     )
+
+
+@router.get("/plugins")
+async def list_plugins() -> dict[str, Any]:
+    health_result = mcp_health(probe=False)
+    if inspect.isawaitable(health_result):
+        health_result = await health_result
+    servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
+    plugins = [
+        {
+            "id": str(server.get("name") or ""),
+            "name": str(server.get("name") or "").replace("_", " ").title(),
+            "type": "mcp",
+            "configured": bool(server.get("configured")),
+            "status": str(server.get("status") or "unknown"),
+            "notes": str(server.get("notes") or ""),
+        }
+        for server in servers
+        if server.get("name")
+    ]
+    return {"plugins": plugins}
 
 
 @router.get("/settings")

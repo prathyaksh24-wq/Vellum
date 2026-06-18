@@ -23,6 +23,8 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.computer_use_activity_overlay is True
     assert settings.github_mcp_url == "https://api.githubcopilot.com/mcp/"
     assert isinstance(settings.github_pat, str)
+    assert isinstance(settings.x_api_client_id, str)
+    assert isinstance(settings.x_api_client_secret, str)
     assert isinstance(settings.obsidian_api_key, str)
     assert settings.obsidian_mcp_url == "https://127.0.0.1:27124/mcp/"
     assert settings.obsidian_mcp_use_stream is False
