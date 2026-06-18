@@ -58,6 +58,35 @@ def test_youtube_service_filters_non_youtube_provider_results(tmp_path):
     assert [item["url"] for item in result["items"]] == ["https://www.youtube.com/watch?v=abc123XYZ09"]
 
 
+def test_youtube_service_rewrites_and_ranks_creator_upload_queries(tmp_path):
+    calls = []
+
+    def search(query, max_results):
+        calls.append(query)
+        return [
+            {
+                "title": "Why Did KSI Leave The SIDEMEN...",
+                "url": "https://www.youtube.com/watch?v=commentary1",
+                "channel": "KSIClips",
+                "description": "Commentary about KSI.",
+            },
+            {
+                "title": "I Tried The New Game Mode",
+                "url": "https://www.youtube.com/watch?v=official1",
+                "channel": "KSI",
+                "description": "Latest upload from KSI.",
+            },
+        ]
+
+    service = YoutubeCapabilityService(vault_root=tmp_path / "Vault", search_backend=search)
+
+    result = service.search_videos({"query": "what did KSI upload", "max_results": 5})
+
+    assert calls == ["KSI official channel latest upload"]
+    assert result["items"][0]["url"] == "https://www.youtube.com/watch?v=official1"
+    assert result["items"][0]["channel"] == "KSI"
+
+
 def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
     calls = []
 

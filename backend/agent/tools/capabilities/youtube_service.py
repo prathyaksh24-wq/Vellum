@@ -68,14 +68,16 @@ class YoutubeCapabilityService:
         max_results = _positive_int(payload.get("max_results"), default=5)
         if not query:
             return {"action": "youtube.search_videos", "items": []}
+        search_query = _search_query_for_intent(query)
         items = [
             item
             for item in (
                 self._normalize_video(raw_item)
-                for raw_item in self.search_backend(query, max_results)
+                for raw_item in self.search_backend(search_query, max_results)
             )
             if _is_youtube_video_url(item.get("url", ""))
         ]
+        items = _rank_videos_for_query(query, items)
         return {"action": "youtube.search_videos", "items": items[:max_results]}
 
     def fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -202,6 +204,72 @@ def _positive_int(value: Any, *, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, parsed)
+
+
+def _search_query_for_intent(query: str) -> str:
+    creator = _creator_from_upload_query(query)
+    if creator:
+        return f"{creator} official channel latest upload"
+    return query
+
+
+def _creator_from_upload_query(query: str) -> str:
+    patterns = (
+        r"\bwhat\s+did\s+(.+?)\s+upload(?:ed)?\b",
+        r"\b(?:latest|new|recent)\s+(.+?)\s+video\b",
+        r"\b(?:video|upload|uploaded|transcript)\s+(?:from|by|of)\s+(.+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, query, flags=re.I)
+        if match:
+            creator = re.sub(r"\s+", " ", match.group(1)).strip(" ?!.")
+            return creator[:80]
+    return ""
+
+
+def _rank_videos_for_query(query: str, items: list[dict[str, str]]) -> list[dict[str, str]]:
+    creator = _creator_from_upload_query(query)
+    if not creator:
+        return items
+    creator_key = _norm_key(creator)
+    commentary_terms = (
+        "reaction",
+        "reacts",
+        "response",
+        "drama",
+        "explained",
+        "why did",
+        "leaving",
+        "leave",
+        "addresses",
+        "gets personal",
+    )
+
+    def score(item: dict[str, str]) -> int:
+        title = item.get("title", "")
+        channel = item.get("channel", "")
+        description = item.get("description", "")
+        title_key = _norm_key(title)
+        channel_key = _norm_key(channel)
+        text = f"{title} {channel} {description}".lower()
+        value = 0
+        if channel_key == creator_key:
+            value += 40
+        elif channel_key.startswith(creator_key) or creator_key in channel_key:
+            value += 12
+        if title_key.startswith(creator_key):
+            value += 5
+        elif creator_key and creator_key in title_key:
+            value += 2
+        if channel_key != creator_key and any(term in text for term in commentary_terms):
+            value -= 12
+        return value
+
+    return sorted(items, key=score, reverse=True)
+
+
+def _norm_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _video_id_from_url(url: str) -> str:

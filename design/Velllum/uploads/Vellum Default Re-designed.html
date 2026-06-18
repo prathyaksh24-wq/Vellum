@@ -2696,6 +2696,13 @@ const DATES = ['2 days ago','5 days ago','1 week ago','3 weeks ago','last month'
 const cap = (x) => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
 const STOPW = ['does','what','when','where','which','this','that','with','from','your','about','into','have','will','would','should','could','their','there','here','make','like','want','need','using','use'];
 const buildActivity = (text) => {
+  return {
+    refLines: [],
+    steps: [{kind:'eval', title:'Thinking', text:''}],
+    sources: [],
+    duration: 0,
+    leadIn: '',
+  };
   const q = (text||'').trim().replace(/\s+/g,' ');
   const big = q.replace(/[^\w\s]/g,'').split(' ').filter(w => w.length > 3 && !STOPW.includes(w.toLowerCase()));
   const kw = big.slice(0,4).join(' ') || 'this topic';
@@ -2725,8 +2732,19 @@ const buildActivity = (text) => {
   return {refLines, steps, sources, duration: dur, leadIn};
 };
 
-const Favicon = ({dom, size=14}) => {
+const liveActivity = () => ({
+  refLines: [],
+  steps: [{kind:'eval', title:'Thinking', text:''}],
+  sources: [],
+  duration: 0,
+  leadIn: '',
+});
+
+const Favicon = ({dom, url, size=14}) => {
   const clean = (dom||'?').replace(/^www\./,'');
+  if (url) {
+    return <span className="favicon" style={{width:size+5, height:size+5, background:'transparent', overflow:'hidden'}}><img src={url} alt="" style={{width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%'}}/></span>;
+  }
   const letter = clean.charAt(0).toUpperCase();
   const hue = [...clean].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
   return <span className="favicon" style={{width:size+5, height:size+5, background:'hsl('+hue+' 52% 42%)', fontSize:size-2}}>{letter}</span>;
@@ -2771,7 +2789,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
           <MsgActions msg={msg} onRegen={onRegen}/>
           {(msg.sources||[]).length > 0 && (
             <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View sources & activity">
-              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} size={12}/>)}</span>Sources
+              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} url={sc.favicon_url} size={12}/>)}</span>Sources
             </button>
           )}
         </div>
@@ -2793,7 +2811,7 @@ const ActivityPanel = ({msg, onClose}) => (
           <span className={'act-step-ic ' + st.kind}>{st.kind==='search' ? <IcGlobe size={15}/> : st.kind==='eval' ? <IcChat size={15}/> : <IcCheck size={15}/>}</span>
           <div className="act-step-body">
             <div className="act-step-title">{st.title}</div>
-            {st.chips && <div className="act-chips">{st.chips.map((c,j) => (<a key={j} className="act-chip" href={'https://'+c.dom} target="_blank" rel="noopener"><Favicon dom={c.dom} size={12}/>{c.dom.replace(/^www\./,'')}</a>))}{st.more > 0 && <span className="act-chip more"><Favicon dom={'x'} size={12}/>{st.more} more</span>}</div>}
+            {st.chips && <div className="act-chips">{st.chips.map((c,j) => (<a key={j} className="act-chip" href={'https://'+c.dom} target="_blank" rel="noopener"><Favicon dom={c.dom} url={c.favicon_url} size={12}/>{c.dom.replace(/^www\./,'')}</a>))}{st.more > 0 && <span className="act-chip more"><Favicon dom={'x'} size={12}/>{st.more} more</span>}</div>}
             {st.text && <div className="act-step-text">{st.text}</div>}
           </div>
         </div>
@@ -2801,7 +2819,7 @@ const ActivityPanel = ({msg, onClose}) => (
       <div className="act-sec-h act-sources-h">Sources · {(msg.sources||[]).length}</div>
       {(msg.sources||[]).map((sc,i) => (
         <a key={i} className="act-source" href={sc.url} target="_blank" rel="noopener">
-          <div className="act-src-pub"><Favicon dom={sc.dom} size={13}/>{sc.pub}</div>
+          <div className="act-src-pub"><Favicon dom={sc.dom} url={sc.favicon_url} size={13}/>{sc.pub}</div>
           <div className="act-src-title">{sc.title}</div>
           <div className="act-src-snip">{sc.date} — {sc.snippet}</div>
         </a>
@@ -4097,8 +4115,9 @@ const App = () => {
         ]);
         if (!alive) return;
         if (conv && Array.isArray(conv.conversations)) {
-          setChats(conv.conversations);
-          conv.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
+          const cleanConversations = conv.conversations.map(sanitizeConversation);
+          setChats(cleanConversations);
+          cleanConversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
         }
         if (modelData && Array.isArray(modelData.models)) {
           const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id}));
@@ -4137,7 +4156,7 @@ const App = () => {
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
   const streamAgentReply = (agentId, convoId, msgId, data) => {
-    const payload = typeof data === 'string' ? {answer:data, ...buildActivity(data)} : data;
+    const payload = typeof data === 'string' ? {answer:data, ...liveActivity(data)} : data;
     startAgentTurnPhases(agentId, convoId, msgId, payload);
     let i = 0;
     const startAnswer = () => {
@@ -4173,27 +4192,33 @@ const App = () => {
         {
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
+            const liveRefs = liveSources.length ? refLinesFromSources(liveSources, []) : refLinesFromActivity(trace.steps, []);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              refLines: liveRefs.length ? liveRefs : m.refLines,
               tools: trace.tools || m.tools || [],
-              phase: m.phase === 'thinking' ? 'refs' : m.phase,
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              leadIn: '',
+              phase: m.phase === 'thinking' && liveRefs.length ? 'refs' : m.phase,
+              refShown: liveRefs.length ? Math.max(m.refShown || 0, Math.min(2, liveRefs.length)) : (m.refShown || 0),
               streaming: true,
             }));
           },
-          activity: (activity, tools) => updateAgentTurn(agent.id, convoId, assistantId, m => ({
-            ...m,
-            activity,
-            tools,
-            steps: stepsFromActivity(activity, m.steps),
-            refLines: refLinesFromActivity(activity, m.refLines),
-            phase: m.phase === 'thinking' ? 'refs' : m.phase,
-            refShown: Math.max(m.refShown || 0, 1),
-            streaming: true,
-          })),
+          activity: (activity, tools) => updateAgentTurn(agent.id, convoId, assistantId, m => {
+            const liveRefs = refLinesFromActivity(activity, []);
+            return {
+              ...m,
+              activity,
+              tools,
+              steps: stepsFromActivity(activity, m.steps),
+              refLines: liveRefs.length ? liveRefs : m.refLines,
+              leadIn: '',
+              phase: m.phase === 'thinking' && liveRefs.length ? 'refs' : m.phase,
+              refShown: liveRefs.length ? Math.max(m.refShown || 0, 1) : (m.refShown || 0),
+              streaming: true,
+            };
+          }),
           sources: sources => {
             const liveSources = normalizeSources(sources);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
@@ -4201,8 +4226,9 @@ const App = () => {
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
               refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
-              phase: 'refs',
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              leadIn: '',
+              phase: liveSources.length ? 'refs' : m.phase,
+              refShown: liveSources.length ? Math.max(m.refShown || 0, 2) : (m.refShown || 0),
               streaming: true,
             }));
           },
@@ -4231,6 +4257,7 @@ const App = () => {
               refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
               tools: final.tools || m.tools || [],
               activity: final.activity || m.activity || [],
+              leadIn: '',
               phase: 'done',
               refShown:(m.refLines || []).length,
               streaming: false,
@@ -4240,16 +4267,16 @@ const App = () => {
       );
     } catch (err) {
       finishTurn(assistantId);
-      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
+      const detail = err && err.message ? err.message : 'Start the Vellum API and try again.';
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: m.text || ('Backend stream failed: ' + detail), phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
-    const reply = agentReply(ag, text);
-    const act = buildActivity(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
+    const act = liveActivity(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: '', streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
     let cid = activeConvo[ag.id];
     if (!cid) {
       cid = uid();
@@ -4259,12 +4286,8 @@ const App = () => {
     } else {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
-    if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startAgentTurnPhases(ag.id, cid, aMsg.id, act), 0);
-      streamBackendAgentReply(ag, cid, aMsg.id, text);
-    } else {
-      streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
-    }
+    setTimeout(() => startAgentTurnPhases(ag.id, cid, aMsg.id, act), 0);
+    streamBackendAgentReply(ag, cid, aMsg.id, text);
   };
   const regenAgent = (msgId) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
@@ -4274,15 +4297,10 @@ const App = () => {
     if (!convo) return;
     const idx = convo.messages.findIndex(m => m.id === msgId);
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
-    const reply = agentReply(ag, prevUser ? prevUser.text : '');
-    const act = buildActivity(prevUser ? prevUser.text : '');
-    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
-    if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startAgentTurnPhases(ag.id, cid, msgId, act), 0);
-      streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
-    } else {
-      streamAgentReply(ag.id, cid, msgId, {...act, answer: reply});
-    }
+    const act = liveActivity(prevUser ? prevUser.text : '');
+    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: '', streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
+    setTimeout(() => startAgentTurnPhases(ag.id, cid, msgId, act), 0);
+    streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
   };
 
   const stopAgentStream = () => {
@@ -4451,6 +4469,35 @@ const App = () => {
     catch { return String(src.domain || src.provider || src.url || 'source').replace(/^https?:\/\//, '').split('/')[0] || 'source'; }
   };
   const sourceTitle = src => src.title || src.name || src.url || src.link || 'Source';
+  const prettyProvider = dom => {
+    const clean = String(dom || '').replace(/^www\./, '').split('/')[0];
+    if (!clean) return '';
+    const base = clean.split('.').slice(-2, -1)[0] || clean.split('.')[0] || clean;
+    return base
+      .split(/[-_]/)
+      .filter(Boolean)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
+  };
+  const isLegacyMockTurn = msg => {
+    const lead = String(msg.leadIn || '');
+    const sources = msg.sources || [];
+    const genericTitle = sources.some(src => /practical guide to|patterns, pitfalls|modern apps approach|understanding .* end to end|official reference/i.test(sourceTitle(src)));
+    return lead.includes('couple of angles, drawing on the most relevant sources') || (sources.length >= 20 && genericTitle);
+  };
+  const sanitizeConversation = conversation => ({
+    ...conversation,
+    messages: (conversation.messages || []).map(msg => {
+      if (!isLegacyMockTurn(msg)) return msg;
+      return {
+        ...msg,
+        sources: [],
+        refLines: [],
+        steps: [],
+        leadIn: '',
+      };
+    }),
+  });
   const normalizeSources = sources => (sources || []).filter(Boolean).map(src => {
     const dom = src.domain || sourceDomain(src);
     return {
@@ -4522,19 +4569,29 @@ const App = () => {
   };
   const startTurnPhases = (chatId, msgId, act) => {
     finishTurn(msgId);
+    const refs = (act && act.refLines) || [];
+    if (!refs.length) {
+      turnCtl.current[msgId] = {chatId, timers: []};
+      return;
+    }
     const timersForTurn = [
       setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
       setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
-      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || refs || []).length})), 1880),
     ];
     turnCtl.current[msgId] = {chatId, timers: timersForTurn};
   };
   const startAgentTurnPhases = (agentId, convoId, msgId, act) => {
     finishTurn(msgId);
+    const refs = (act && act.refLines) || [];
+    if (!refs.length) {
+      turnCtl.current[msgId] = {agentId, convoId, timers: []};
+      return;
+    }
     const timersForTurn = [
       setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
       setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
-      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || refs || []).length})), 1880),
     ];
     turnCtl.current[msgId] = {agentId, convoId, timers: timersForTurn};
   };
@@ -4593,27 +4650,33 @@ const App = () => {
           },
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
+            const liveRefs = liveSources.length ? refLinesFromSources(liveSources, []) : refLinesFromActivity(trace.steps, []);
             updateTurn(chatId, assistantId, m => ({
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              refLines: liveRefs.length ? liveRefs : m.refLines,
               tools: trace.tools || m.tools || [],
-              phase: m.phase === 'thinking' ? 'refs' : m.phase,
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              leadIn: '',
+              phase: m.phase === 'thinking' && liveRefs.length ? 'refs' : m.phase,
+              refShown: liveRefs.length ? Math.max(m.refShown || 0, Math.min(2, liveRefs.length)) : (m.refShown || 0),
               streaming: true,
             }));
           },
-          activity: (activity, tools) => updateTurn(chatId, assistantId, m => ({
-            ...m,
-            activity,
-            tools,
-            steps: stepsFromActivity(activity, m.steps),
-            refLines: refLinesFromActivity(activity, m.refLines),
-            phase: m.phase === 'thinking' ? 'refs' : m.phase,
-            refShown: Math.max(m.refShown || 0, 1),
-            streaming: true,
-          })),
+          activity: (activity, tools) => updateTurn(chatId, assistantId, m => {
+            const liveRefs = refLinesFromActivity(activity, []);
+            return {
+              ...m,
+              activity,
+              tools,
+              steps: stepsFromActivity(activity, m.steps),
+              refLines: liveRefs.length ? liveRefs : m.refLines,
+              leadIn: '',
+              phase: m.phase === 'thinking' && liveRefs.length ? 'refs' : m.phase,
+              refShown: liveRefs.length ? Math.max(m.refShown || 0, 1) : (m.refShown || 0),
+              streaming: true,
+            };
+          }),
           sources: sources => {
             const liveSources = normalizeSources(sources);
             updateTurn(chatId, assistantId, m => ({
@@ -4621,8 +4684,9 @@ const App = () => {
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
               refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
-              phase: 'refs',
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              leadIn: '',
+              phase: liveSources.length ? 'refs' : m.phase,
+              refShown: liveSources.length ? Math.max(m.refShown || 0, 2) : (m.refShown || 0),
               streaming: true,
             }));
           },
@@ -4654,6 +4718,7 @@ const App = () => {
                 refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
                 tools: final.tools || m.tools || [],
                 activity: final.activity || m.activity || [],
+                leadIn: '',
                 phase: 'done',
                 refShown:(m.refLines || []).length,
                 streaming: false,
@@ -4664,16 +4729,16 @@ const App = () => {
       );
     } catch (err) {
       finishTurn(assistantId);
-      updateTurn(chatId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
+      const detail = err && err.message ? err.message : 'Start the Vellum API and try again.';
+      updateTurn(chatId, assistantId, m => ({...m, text: m.text || ('Backend stream failed: ' + detail), phase:'done', streaming: false}), true);
     }
   };
 
   const sendMessage = (text, attach, opts = {}) => {
     let chatId = opts.forceNew ? null : activeChatId;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
-    const reply = vellumReply(text);
-    const act = buildActivity(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, phase: 'thinking', refShown: 0, refLines: act.refLines, steps: act.steps, sources: act.sources, duration: act.duration, leadIn: act.leadIn};
+    const act = liveActivity(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: '', streaming: true, phase: 'thinking', refShown: 0, refLines: act.refLines, steps: act.steps, sources: act.sources, duration: act.duration, leadIn: act.leadIn};
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
       setLibrary(lib => [
@@ -4692,12 +4757,8 @@ const App = () => {
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
     }
-    if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startTurnPhases(chatId, aMsg.id, act), 0);
-      streamBackendReply(chatId, aMsg.id, text, threadRef.current[chatId]);
-    } else {
-      streamReply(chatId, aMsg.id, {answer: reply, refLines: act.refLines, leadIn: act.leadIn});
-    }
+    setTimeout(() => startTurnPhases(chatId, aMsg.id, act), 0);
+    streamBackendReply(chatId, aMsg.id, text, threadRef.current[chatId]);
   };
 
   const sendInProject = projId => (text, attach) => {
@@ -4712,17 +4773,12 @@ const App = () => {
     const idx = chat.messages.findIndex(m => m.id === msgId);
     const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const old = chat.messages[idx];
-    const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
-    const act = buildActivity(prevUser ? prevUser.text : '');
+    const act = liveActivity(prevUser ? prevUser.text : '');
     setChats(cs => cs.map(c => c.id === chat.id
-      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, phase: 'thinking', refShown: 0, refLines: act.refLines, steps: act.steps, sources: act.sources, duration: act.duration, leadIn: act.leadIn} : m)}
+      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: '', streaming: true, phase: 'thinking', refShown: 0, refLines: act.refLines, steps: act.steps, sources: act.sources, duration: act.duration, leadIn: act.leadIn} : m)}
       : c));
-    if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startTurnPhases(chat.id, msgId, act), 0);
-      streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
-    } else {
-      streamReply(chat.id, msgId, {answer: reply, refLines: act.refLines, leadIn: act.leadIn});
-    }
+    setTimeout(() => startTurnPhases(chat.id, msgId, act), 0);
+    streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
   };
 
   const stopChatStream = () => {

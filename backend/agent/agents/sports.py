@@ -192,8 +192,35 @@ class SportsAgent:
         return web_search.invoke({"query": query})
 
     def _search_query(self, query: str, league: str, source_budget: int) -> str:
+        if self._schedule_intent(query):
+            year = datetime.now(timezone.utc).year
+            if league == "Formula-One":
+                return f"{query} {year} official Formula 1 calendar next Grand Prix race date schedule"
+            if league == "NBA":
+                return f"{query} {year} official NBA schedule next game date fixtures"
+            if league in {"FIFA-World-Cup", "Football", "Champions-League", "Premier-League"}:
+                return f"{query} {year} official fixtures next match schedule date"
+            return f"{query} {year} official schedule next match game race date fixtures"
         multi_source_hint = "official schedule standings news reports" if source_budget >= 5 else "official latest"
         return f"{query} latest {league} scores schedule news injuries analysis {multi_source_hint}"
+
+    def _schedule_intent(self, query: str) -> bool:
+        lowered = query.lower()
+        has_next = any(marker in lowered for marker in ("next", "upcoming", "when is", "fixture", "fixtures", "schedule"))
+        has_event = any(
+            marker in lowered
+            for marker in (
+                "race",
+                "grand prix",
+                "match",
+                "game",
+                "fixture",
+                "fixtures",
+                "schedule",
+                "vs",
+            )
+        )
+        return has_next and has_event
 
     def _normalize_search_result(self, search_result: WebSearchResult) -> tuple[str, list[dict[str, Any]]]:
         if isinstance(search_result, dict):
@@ -258,12 +285,32 @@ class SportsAgent:
         current_month = now.strftime("%b").lower()
         current_month_full = now.strftime("%B").lower()
 
+        schedule_intent = self._schedule_intent(query)
+        official_schedule_domains = {
+            "formula1.com",
+            "fifa.com",
+            "nba.com",
+            "uefa.com",
+            "premierleague.com",
+        }
+        schedule_terms = ("schedule", "calendar", "fixture", "fixtures", "race date", "grand prix", "next", "match")
+        low_value_domains = {"support.google.com"}
+
         def score(source: dict[str, Any]) -> int:
             text = " ".join(
                 str(source.get(key) or "")
                 for key in ("title", "snippet", "domain", "provider_label", "url")
             ).lower()
             value = sum(2 for term in query_terms if term in text)
+            domain = str(source.get("domain") or "").lower().removeprefix("www.")
+            if schedule_intent:
+                value += sum(5 for term in schedule_terms if term in text)
+                if domain in official_schedule_domains:
+                    value += 14
+                if "official" in text:
+                    value += 6
+                if any(noise in text for noise in ("standings", "rumours", "rumors", "gossip", "regulations", "beginner's guide")):
+                    value -= 8
             if any(marker and marker in text for marker in yesterday_markers):
                 value += 12
             if "yesterday" in lowered_query or "today" in lowered_query or "latest" in lowered_query:
@@ -271,8 +318,8 @@ class SportsAgent:
                     value += 6
                 if "2026" in text and "apr" in text:
                     value -= 8
-            if source.get("domain") in {"support.google.com"}:
-                value -= 5
+            if domain in low_value_domains:
+                value -= 50
             return value
 
         return sorted(sources, key=score, reverse=True)
@@ -313,7 +360,10 @@ class SportsAgent:
 
     def _snapshot_from_sources(self, query: str, sources: list[dict]) -> str:
         lowered = query.lower()
-        if not any(marker in lowered for marker in ("yesterday", "today", "latest", "performance")):
+        if not (
+            any(marker in lowered for marker in ("yesterday", "today", "latest", "performance"))
+            or self._schedule_intent(query)
+        ):
             return ""
         for source in sources:
             title = str(source.get("title") or "").strip()

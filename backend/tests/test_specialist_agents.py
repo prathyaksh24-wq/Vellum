@@ -172,6 +172,54 @@ def test_sports_agent_prioritizes_current_sources_for_yesterday_queries(tmp_path
     assert response.summary.startswith("Portugal's Ronaldo does little")
 
 
+def test_sports_agent_prioritizes_official_schedule_for_next_f1_race(tmp_path):
+    seen = {}
+    search_result = {
+        "text": "Google Sports Data\nThis response uses data provided by Google Sports",
+        "sources": [
+            {
+                "title": "2026 F1 Standings: Drivers & Constructors Championship List",
+                "url": "https://www.f1-fansite.com/f1-results/f1-standings-2026-championship/",
+                "snippet": "Jun 17, 2026 — 2026 F1 standings championship.",
+                "domain": "f1-fansite.com",
+            },
+            {
+                "title": "Google Sports Data",
+                "url": "https://support.google.com/knowledgepanel/answer/9787176",
+                "snippet": "This response uses data provided by Google Sports",
+                "domain": "support.google.com",
+            },
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "2026 FIA Formula One World Championship Race Calendar. Next. Round 8 Austria, 26 - 28 Jun.",
+                "domain": "formula1.com",
+            },
+            {
+                "title": "F1 news, rumours and gossip",
+                "url": "https://www.skysports.com/f1/live-blog",
+                "snippet": "Latest Formula 1 news and rumours.",
+                "domain": "skysports.com",
+            },
+        ],
+    }
+
+    def searcher(query):
+        seen["query"] = query
+        return search_result
+
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=searcher)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert "official Formula 1 calendar" in seen["query"]
+    assert "2026" in seen["query"]
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
+    assert response.summary.startswith("F1 Schedule 2026")
+    assert "Austria" in response.summary
+    assert "support.google.com" not in response.sources[0].path_or_url
+
+
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
     agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
 
