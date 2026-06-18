@@ -70,6 +70,8 @@ def test_sources_from_messages_parses_dedupes_and_strips_www():
 
     assert by_url[URL_A].domain == "formula1.com"  # www. stripped
     assert by_url[URL_B].domain == "skysports.com"  # www. stripped
+    assert by_url[URL_A].provider_label == "Formula 1"
+    assert by_url[URL_B].provider_label == "Sky Sports"
     assert by_url[URL_A].title == "Verstappen wins the last F1 race"
     assert "Verstappen" in by_url[URL_A].snippet
     assert by_url[URL_A].fetched_at  # populated via _now_iso()
@@ -77,6 +79,33 @@ def test_sources_from_messages_parses_dedupes_and_strips_www():
 
 def test_activity_for_web_search_label_and_detail():
     assert api._activity_for("web_search", {"query": "x"}) == ("Searched the web", "x")
+
+
+def test_delegated_agent_prompt_requires_source_labeled_natural_answer():
+    prompt = api._delegated_agent_message(
+        "who leads the fifa career goals all time?",
+        SimpleNamespace(
+            agent_name="SportsAgent",
+            status="answered",
+            answer="Snapshot: Lionel Messi and Miroslav Klose are tied on 16 goals.",
+        ),
+        [
+            {
+                "title": "World Cup top scorers",
+                "url": "https://www.theguardian.com/football/world-cup-top-scorers",
+                "snippet": "Messi joined Klose at the top of the all-time World Cup scoring chart.",
+                "domain": "theguardian.com",
+                "provider_label": "The Guardian",
+            }
+        ],
+    )
+
+    assert "Do not expose raw tool dumps" in prompt
+    assert "Start with the direct answer" in prompt
+    assert "source-labeled evidence blocks" in prompt
+    assert "compact markdown table" in prompt
+    assert "never invent extra fixtures" in prompt
+    assert "The Guardian" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -230,6 +259,7 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert by_url[URL_B]["source_index"] == 2
     assert by_url[URL_A]["source_type"] == "web"
     assert by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
+    assert by_url[URL_A]["provider_label"] == "Formula 1"
 
     # The 'final' payload JSON carries the same sources (>= 2) with url/domain.
     final_data = next(data for name, data in events if name == "final")

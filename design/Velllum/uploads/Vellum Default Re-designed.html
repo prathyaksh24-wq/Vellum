@@ -485,7 +485,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sources-btn:hover{background:var(--hover);color:var(--txt2)}
 .src-favs{display:flex}
 .src-favs .favicon{margin-right:-5px;box-shadow:0 0 0 1.5px var(--modal)}
-.favicon{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:700;flex-shrink:0;line-height:1}
+.favicon{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:700;flex-shrink:0;line-height:1;background:var(--input);object-fit:cover}
 /* activity panel */
 .activity-panel{width:340px}
 .act-head{gap:9px}
@@ -2040,14 +2040,44 @@ const MsgActions = ({msg, onRegen}) => {
 };
 
 function sourceName(s) {
-  return (s && (s.provider_label || s.domain || s.title || s.url)) || 'source';
+  if (!s) return 'source';
+  const domain = (s.domain || s.dom || '').replace(/^www\./, '');
+  return s.provider_label || s.pub || prettyProvider(domain) || s.title || s.url || 'source';
 }
 
 function sourceFavicon(s) {
   if (!s) return '';
-  if (s.favicon_url) return s.favicon_url;
-  const domain = s.domain || (s.url || '').replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+  if (s.favicon_url || s.logo_url) return s.favicon_url || s.logo_url;
+  const domain = s.domain || s.dom || (s.url || '').replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
   return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : '';
+}
+
+function prettyProvider(domain) {
+  const clean = (domain || '').toLowerCase().replace(/^www\./, '');
+  const labels = {
+    'bbc.com': 'BBC',
+    'espn.com': 'ESPN',
+    'fifa.com': 'FIFA',
+    'formula1.com': 'Formula 1',
+    'foxsports.com': 'FOX Sports',
+    'instagram.com': 'Instagram',
+    'nba.com': 'NBA',
+    'nbcsports.com': 'NBC Sports',
+    'reddit.com': 'Reddit',
+    'skysports.com': 'Sky Sports',
+    'theguardian.com': 'The Guardian',
+    'usatoday.com': 'USA Today',
+    'x.com': 'X',
+    'twitter.com': 'X',
+    'sports.yahoo.com': 'Yahoo Sports',
+    'yahoo.com': 'Yahoo',
+    'youtube.com': 'YouTube',
+  };
+  if (labels[clean]) return labels[clean];
+  if (clean.endsWith('.espn.com')) return 'ESPN';
+  if (clean.endsWith('.yahoo.com')) return 'Yahoo';
+  if (clean.endsWith('.youtube.com')) return 'YouTube';
+  return clean || '';
 }
 
 function traceElapsed(trace) {
@@ -2446,7 +2476,6 @@ const XConnectModal = ({onClose, onConnected}) => {
     try {
       const next = await api.client.request('/api/x/oauth/status');
       setStatus(next);
-      if (next.xai_connected && (!next.x_api_configured || next.x_api_connected)) onConnected(next.x_api_connected ? 'X account connected' : 'SuperGrok connected');
     } catch (err) {
       setError(err.message || 'Could not read X connection status.');
     }
@@ -2485,7 +2514,7 @@ const XConnectModal = ({onClose, onConnected}) => {
           <div className="xc-page">
             <div className="xc-logo"><XLogo size={30}/></div>
             <div className="xc-h">Connect X Agent</div>
-            <div className="xc-sub">Use real browser OAuth. Vellum saves refreshable tokens locally and never asks for your X password.</div>
+            <div className="xc-sub">Use the real browser OAuth popup. Vellum saves refreshable tokens locally and never asks for your X password.</div>
             <div className="xc-perms" style={{marginTop:18}}>
               <div className="xc-perm"><IcCheck size={14}/>{xaiOk ? 'SuperGrok / xAI search connected' : 'Connect SuperGrok / xAI search for live X search'}</div>
               <div className="xc-perm"><IcCheck size={14}/>{xapiOk ? 'X API account actions connected' : 'Connect X API for posting, bookmarks, account reads, and media upload'}</div>
@@ -2497,6 +2526,7 @@ const XConnectModal = ({onClose, onConnected}) => {
             {status && !status.posting_enabled && <div className="xc-note xc-note-sm">Posting also requires <b>X_TOOL_ALLOW_POSTS=true</b> plus per-action confirmation.</div>}
             {error && <div className="xc-note xc-note-sm" style={{color:'#ff7b72'}}>{error}</div>}
             <button className="xc-btn" style={{marginTop:12}} onClick={loadStatus}>Refresh status</button>
+            {(xaiOk || xapiOk) && <button className="xc-cancel" onClick={() => onConnected(xapiOk ? 'X account connected' : 'SuperGrok connected')}>Use connected account</button>}
           </div>
         </div>
       </div>
@@ -2664,10 +2694,15 @@ const buildActivity = (text) => {
   return {refLines, steps, sources: [], duration: dur, leadIn};
 };
 
-const Favicon = ({dom, size=14}) => {
+const Favicon = ({dom, src, source, size=14}) => {
+  const [failed, setFailed] = useState(false);
+  const candidate = src || sourceFavicon(source || {domain: dom, dom});
   const clean = (dom||'?').replace(/^www\./,'');
   const letter = clean.charAt(0).toUpperCase();
   const hue = [...clean].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+  if (candidate && !failed) {
+    return <img className="favicon" src={candidate} alt="" width={size+5} height={size+5} style={{width:size+5, height:size+5}} onError={() => setFailed(true)}/>;
+  }
   return <span className="favicon" style={{width:size+5, height:size+5, background:'hsl('+hue+' 52% 42%)', fontSize:size-2}}>{letter}</span>;
 };
 
@@ -2710,7 +2745,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
           <MsgActions msg={msg} onRegen={onRegen}/>
           {(msg.sources||[]).length > 0 && (
             <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View sources & activity">
-              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} size={12}/>)}</span>Sources
+              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} source={sc} size={12}/>)}</span>Sources
             </button>
           )}
         </div>
@@ -2732,7 +2767,7 @@ const ActivityPanel = ({msg, onClose}) => (
           <span className={'act-step-ic ' + st.kind}>{st.kind==='search' ? <IcGlobe size={15}/> : st.kind==='eval' ? <IcChat size={15}/> : <IcCheck size={15}/>}</span>
           <div className="act-step-body">
             <div className="act-step-title">{st.title}</div>
-            {st.chips && <div className="act-chips">{st.chips.map((c,j) => (<a key={j} className="act-chip" href={'https://'+c.dom} target="_blank" rel="noopener"><Favicon dom={c.dom} size={12}/>{c.dom.replace(/^www\./,'')}</a>))}{st.more > 0 && <span className="act-chip more"><Favicon dom={'x'} size={12}/>{st.more} more</span>}</div>}
+            {st.chips && <div className="act-chips">{st.chips.map((c,j) => (<a key={j} className="act-chip" href={'https://'+c.dom} target="_blank" rel="noopener"><Favicon dom={c.dom} source={c} size={12}/>{c.dom.replace(/^www\./,'')}</a>))}{st.more > 0 && <span className="act-chip more"><Favicon dom={'source'} size={12}/>{st.more} more</span>}</div>}
             {st.text && <div className="act-step-text">{st.text}</div>}
           </div>
         </div>
@@ -2740,7 +2775,7 @@ const ActivityPanel = ({msg, onClose}) => (
       <div className="act-sec-h act-sources-h">Sources · {(msg.sources||[]).length}</div>
       {(msg.sources||[]).map((sc,i) => (
         <a key={i} className="act-source" href={sc.url} target="_blank" rel="noopener">
-          <div className="act-src-pub"><Favicon dom={sc.dom} size={13}/>{sc.pub}</div>
+          <div className="act-src-pub"><Favicon dom={sc.dom} source={sc} size={13}/>{sc.pub}</div>
           <div className="act-src-title">{sc.title}</div>
           <div className="act-src-snip">{sc.date} — {sc.snippet}</div>
         </a>
@@ -4094,18 +4129,19 @@ const App = () => {
   const normalizeSources = sources => (sources || []).filter(Boolean).map(src => {
     const dom = src.domain || sourceDomain(src);
     return {
-      pub: src.provider_label || src.provider || src.publisher || dom.replace(/^www\./, ''),
+      pub: src.provider_label || src.provider || src.publisher || prettyProvider(dom) || dom.replace(/^www\./, ''),
       dom,
       url: src.url || src.link || ('https://' + dom),
       title: sourceTitle(src),
       date: src.date || src.published || src.published_at || '',
       snippet: src.snippet || src.summary || src.description || '',
+      favicon_url: src.favicon_url || src.logo_url || (dom ? `https://www.google.com/s2/favicons?domain=${dom}&sz=64` : ''),
     };
   });
   const activityFromSources = (sources, fallbackSteps) => {
     if (!sources.length) return fallbackSteps || [];
     return [
-      {kind:'search', title:'Searching live sources', chips:sources.slice(0,3).map(s => ({dom:s.dom})), more: Math.max(0, sources.length - 3)},
+      {kind:'search', title:'Searching live sources', chips:sources.slice(0,3).map(s => ({dom:s.dom, favicon_url:s.favicon_url})), more: Math.max(0, sources.length - 3)},
       {kind:'eval', title:'Evaluating sources for the answer', text:'Checking the live results and using the most relevant source details in the final response.'},
       {kind:'done', title:'Worked with live context', text:'Done'},
     ];

@@ -173,6 +173,8 @@ def test_serpapi_fresh_google_search_accumulates_sources_across_engines(monkeypa
                     "title": "F1 schedule",
                     "link": "https://www.formula1.com/en/racing/2026/Austria.html",
                     "snippet": "Austria is next on the calendar.",
+                    "source": "Formula 1",
+                    "favicon": "https://www.formula1.com/favicon.ico",
                 }
             ],
         },
@@ -210,6 +212,8 @@ def test_serpapi_fresh_google_search_accumulates_sources_across_engines(monkeypa
         "https://www.fia.com/events/fia-formula-one-world-championship/season-2026/calendar",
         "https://www.autosport.com/f1/news/austrian-gp-preview",
     ]
+    assert out["sources"][0]["provider_label"] == "Formula 1"
+    assert out["sources"][0]["favicon_url"] == "https://www.formula1.com/favicon.ico"
 
 
 def test_serpapi_youtube_search_and_transcript_normalize_results(monkeypatch, tmp_path):

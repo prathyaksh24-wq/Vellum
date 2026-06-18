@@ -167,12 +167,21 @@ def _google_payload_sources(payload: dict[str, Any], *, num: int) -> list[dict[s
             continue
         parsed = urllib.parse.urlparse(url)
         domain = parsed.netloc[4:] if parsed.netloc.startswith("www.") else parsed.netloc
+        provider_label = _string(item.get("source") or item.get("displayed_link") or domain)
+        favicon_url = _string(
+            item.get("favicon")
+            or item.get("source_icon")
+            or item.get("thumbnail")
+            or item.get("logo")
+        )
         sources.append(
             {
-                "title": _string(item.get("title") or item.get("source") or domain or "Search result"),
+                "title": _string(item.get("title") or provider_label or domain or "Search result"),
                 "url": url,
                 "snippet": _string(item.get("snippet") or item.get("description"))[:700],
                 "domain": domain,
+                "favicon_url": favicon_url,
+                "provider_label": provider_label or domain,
             }
         )
     return sources

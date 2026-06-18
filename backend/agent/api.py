@@ -1191,17 +1191,53 @@ def _favicon_url(domain: str) -> str:
     return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
 
 
+_PROVIDER_LABELS = {
+    "bbc.com": "BBC",
+    "espn.com": "ESPN",
+    "fifa.com": "FIFA",
+    "formula1.com": "Formula 1",
+    "foxsports.com": "FOX Sports",
+    "instagram.com": "Instagram",
+    "nba.com": "NBA",
+    "nbcsports.com": "NBC Sports",
+    "reddit.com": "Reddit",
+    "skysports.com": "Sky Sports",
+    "theguardian.com": "The Guardian",
+    "usatoday.com": "USA Today",
+    "x.com": "X",
+    "twitter.com": "X",
+    "yahoo.com": "Yahoo",
+    "sports.yahoo.com": "Yahoo Sports",
+    "youtube.com": "YouTube",
+}
+
+
+def _provider_label(domain: str, fallback: str = "") -> str:
+    clean = (domain or "").lower().removeprefix("www.")
+    if clean in _PROVIDER_LABELS:
+        return _PROVIDER_LABELS[clean]
+    if clean.endswith(".espn.com"):
+        return "ESPN"
+    if clean.endswith(".yahoo.com"):
+        return "Yahoo"
+    if clean.endswith(".youtube.com"):
+        return "YouTube"
+    label = fallback or clean
+    return label or "source"
+
+
 def _decorate_source_record(record: dict[str, Any], *, source_index: int) -> dict[str, Any]:
     url = str(record.get("url") or "")
     domain = str(record.get("domain") or _source_domain(url))
     source_type = str(record.get("source_type") or _source_type(url))
+    raw_provider = str(record.get("provider_label") or record.get("provider") or "")
     return {
         **record,
         "domain": domain,
         "source_index": int(record.get("source_index") or source_index),
         "source_type": source_type,
         "favicon_url": str(record.get("favicon_url") or (_favicon_url(domain) if source_type == "web" else "")),
-        "provider_label": str(record.get("provider_label") or domain or source_type),
+        "provider_label": _provider_label(domain, raw_provider or source_type),
     }
 
 
@@ -1289,7 +1325,14 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
         "could not fully answer. Preserve exact names, dates, scores, standings, and event order from "
         "the specialist result. Do not replace a live snapshot with older model-memory facts. If the "
         "specialist result includes multiple sources, synthesize across them instead of relying on one. "
-        "Keep citations/source references consistent with provided sources.\n\n"
+        "Keep citations/source references consistent with provided sources. Start with the direct answer "
+        "in one or two sentences. Then, when useful, add source-labeled evidence blocks using the publisher "
+        "or domain name as a short label, for example 'The Guardian' or 'Yahoo Sports'. For rankings, "
+        "standings, schedules, scores, or statistical lists, include a compact markdown table when the "
+        "source data contains enough structured facts. For broad live sports questions, include relevant "
+        "latest news, match results, schedule, injury, or tactical context only when it appears in the "
+        "specialist result or source snippets; never invent extra fixtures, scores, records, injuries, "
+        "or standings to make the answer look complete.\n\n"
         f"User message:\n{clean_message}\n\n"
         f"Specialist tool: {live_result.agent_name}\n"
         f"Specialist status: {live_result.status}\n"
