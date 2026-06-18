@@ -1,6 +1,1378 @@
 {
   "conversations": [
     {
+      "id": "xqmn0fvz",
+      "thread_id": "xqmn0fvz",
+      "title": "tell me about ronaldo perfor…",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "54z8w2s9",
+          "role": "user",
+          "text": "tell me about ronaldo performance against congo yesterday",
+          "attachments": []
+        },
+        {
+          "id": "otnk0nxm",
+          "role": "assistant",
+          "text": "I couldn't find any record of a match between Cristiano Ronaldo and Congo occurring yesterday (June 17, 2026). \n\nIt is possible there might be a misunderstanding regarding the teams or the date. If you are referring to a specific tournament or a different player, please let me know and I will look into it for you.",
+          "full": "On \"tell me about ronaldo performance against congo yesterday\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_ce31d6bbb0c54cfa859c6fb8fe1b9c29",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Cristiano Ronaldo performance vs Congo yesterday",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "id": "item_5d4ae938aacc47b3bac1e9d4b918bfda",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Cristiano Ronaldo match vs Congo June 2026",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "id": "item_f869e1b6a0c74461b3339145ba75f719",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Cristiano Ronaldo match results June 2026",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "help.zoho.com",
+              "dom": "help.zoho.com",
+              "url": "https://help.zoho.com/portal/en/community/topic/issue-when-saving-to-date-time-field-in-deluge-function",
+              "title": "Issue when saving to Date/Time field in Deluge function - Zoho Cares",
+              "date": "",
+              "snippet": "I am trying to save the timestamp of when the request was made and store that in a date/time field on the custom module.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=help.zoho.com&sz=64"
+            },
+            {
+              "pub": "stackoverflow.com",
+              "dom": "stackoverflow.com",
+              "url": "https://stackoverflow.com/questions/75738206/issue-when-saving-to-date-time-field-in-deluge-function",
+              "title": "Issue when saving to Date/Time field in Deluge function",
+              "date": "",
+              "snippet": "I am trying to save the timestamp of when the request was made and store that in a date/time field on the custom module.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64"
+            },
+            {
+              "pub": "joellipman.com",
+              "dom": "joellipman.com",
+              "url": "https://www.joellipman.com/articles/crm/zoho/zoho-deluge/zoho-deluge-push-a-value-to-a-datetime-field-in-crm.html",
+              "title": "Zoho Deluge: Push a value to a datetime field in CRM",
+              "date": "",
+              "snippet": "Zoho Deluge: Push a value to a datetime field in CRM ... What? A very quick article to show pushing the date and time to ZohoCRM or ZohoCreator.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=joellipman.com&sz=64"
+            },
+            {
+              "pub": "learn.microsoft.com",
+              "dom": "learn.microsoft.com",
+              "url": "https://learn.microsoft.com/en-us/dynamics365/fin-ops-core/dev-itpro/data-entities/dual-write/whats-new-dual-write",
+              "title": "What's new or changed in dual-write - Finance & Operations",
+              "date": "",
+              "snippet": "Performance improvement in dual-write plugins by reducing the number of calls to the linked finance and operations apps environment. General availability. Bug ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=learn.microsoft.com&sz=64"
+            },
+            {
+              "pub": "reddit.com",
+              "dom": "reddit.com",
+              "url": "https://www.reddit.com/r/Zoho/comments/1e4w0jm/deluge_error/",
+              "title": "Deluge Error : r/Zoho - Reddit",
+              "date": "",
+              "snippet": "I'm writing a deluge script and getting this error: Data type of the argument of the function 'get' did not match the required data type of…",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=reddit.com&sz=64"
+            },
+            {
+              "pub": "help.zoho.com",
+              "dom": "help.zoho.com",
+              "url": "https://help.zoho.com/portal/en/community/topic/date-time-field-manipulation-in-custom-deluge-function",
+              "title": "Date time field manipulation in custom Deluge function - Zoho Cares",
+              "date": "",
+              "snippet": "I'm having trouble manipulating the date-time field in a custom function. I want to do a seemingly simple thing like add minutes to a date-time value but it ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=help.zoho.com&sz=64"
+            },
+            {
+              "pub": "facebook.com",
+              "dom": "facebook.com",
+              "url": "https://www.facebook.com/groups/zohoapps/posts/2035575563921998/",
+              "title": "Im having an issue with my Zoho Flow. The date is not coming up ...",
+              "date": "",
+              "snippet": "Ensure the field type matches in your custom module (Date vs DateTime). Handle any timezone differences so the date shows correctly.Apply ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=facebook.com&sz=64"
+            },
+            {
+              "pub": "mbadawy.com",
+              "dom": "mbadawy.com",
+              "url": "https://www.mbadawy.com/blogs/deluge-date-time-format",
+              "title": "Date & Time Format Conversion (parse, format, time zones, null-safety)",
+              "date": "",
+              "snippet": "Date/DateTime formatting depends on form settings; inspect sample values and match patterns. End-to-end example (transform & store). // Input ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=mbadawy.com&sz=64"
+            },
+            {
+              "pub": "theworkflowacademy.com",
+              "dom": "theworkflowacademy.com",
+              "url": "https://www.theworkflowacademy.com/date-time-format-conversion-in-zoho-deluge/",
+              "title": "Date-Time Format Conversion in Zoho Deluge",
+              "date": "",
+              "snippet": "When it comes to date-time fields, Zoho demands a specific format to be parsed for a successful field update via Deluge.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=theworkflowacademy.com&sz=64"
+            }
+          ],
+          "tools": [
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including help.zoho.com, stackoverflow.com, joellipman.com",
+            "Reading help.zoho.com",
+            "Cross-checking stackoverflow.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "help.zoho.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=help.zoho.com&sz=64"
+                },
+                {
+                  "dom": "stackoverflow.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64"
+                },
+                {
+                  "dom": "joellipman.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=joellipman.com&sz=64"
+                }
+              ],
+              "more": 6
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 19,
+          "leadIn": "I am gathering the relevant context for tell ronaldo performance against before answering."
+        },
+        {
+          "id": "7nisiqe3",
+          "role": "user",
+          "text": "when is neymar playing ?",
+          "attachments": []
+        },
+        {
+          "id": "jhbcd308",
+          "role": "assistant",
+          "text": "I couldn't find a specific upcoming match scheduled for Neymar in the immediate future. \n\nSince it is currently June 2026, Neymar's schedule would depend heavily on whether he is participating in the **2026 FIFA World Cup** or playing for his club. \n\nTo give you an accurate answer, could you clarify if you are looking for:\n1.  **International matches** (with the Brazil national team)?\n2.  **Club matches** (for his current team)?\n\nIf you can provide his current club or the specific tournament you are interested in, I can search for the exact fixture details for you.",
+          "full": "On \"when is neymar playing ?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_6c9311477eef48a592a3c092dc7b8613",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Neymar next match schedule June 2026",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "veeam.com",
+              "dom": "veeam.com",
+              "url": "https://www.veeam.com/kb1994",
+              "title": "KB1994: Job's Next Run Date Doesn't Match Schedule - Veeam",
+              "date": "",
+              "snippet": "Solution. To resolve this issue, ensure that the periodic Full schedule matches the schedule specified on the Schedule tab of the job.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=veeam.com&sz=64"
+            },
+            {
+              "pub": "stackoverflow.com",
+              "dom": "stackoverflow.com",
+              "url": "https://stackoverflow.com/questions/51940548/need-help-creating-league-schedule-based-on-matchup-table",
+              "title": "python - Need help creating league schedule based on matchup table",
+              "date": "",
+              "snippet": "I need to create a weekly matchup schedule (ex: week 1 - a vs b, c vs d, etc.) based on this table so that all games will be played in 10 weeks.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64"
+            },
+            {
+              "pub": "reddit.com",
+              "dom": "reddit.com",
+              "url": "https://www.reddit.com/r/coybig/comments/1pfuv4c/world_cup_group_a_match_schedule_eastern_usa_time/",
+              "title": "World Cup Group A Match Schedule (Eastern USA Time) - Reddit",
+              "date": "",
+              "snippet": "World Cup Group A Match Schedule (Eastern USA Time) · Comments Section.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=reddit.com&sz=64"
+            },
+            {
+              "pub": "kb.score7.io",
+              "dom": "kb.score7.io",
+              "url": "https://kb.score7.io/blog/guides/match-schedule-template/",
+              "title": "Match Schedule Template: Plan Your Tournament Timeline",
+              "date": "",
+              "snippet": "Plan your tournament timeline with match counts, duration estimates, and scheduling formulas. Includes time tables for common formats and ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=kb.score7.io&sz=64"
+            },
+            {
+              "pub": "fifa.com",
+              "dom": "fifa.com",
+              "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/updated-fifa-world-cup-2026-match-schedule-now-available",
+              "title": "Updated match schedule reveals venues and kick-off times for ... - FIFA",
+              "date": "",
+              "snippet": "Find out the fixtures, venues and kick-off times for the FIFA World Cup 2026™ after the revealing of the updated match schedule in ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=fifa.com&sz=64"
+            }
+          ],
+          "tools": [
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including veeam.com, stackoverflow.com, reddit.com",
+            "Reading veeam.com",
+            "Cross-checking stackoverflow.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "veeam.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=veeam.com&sz=64"
+                },
+                {
+                  "dom": "stackoverflow.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64"
+                },
+                {
+                  "dom": "reddit.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=reddit.com&sz=64"
+                }
+              ],
+              "more": 2
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 24,
+          "leadIn": "I am checking the latest available context for neymar playing before answering."
+        },
+        {
+          "id": "wwivflyr",
+          "role": "user",
+          "text": "where can i find the best chicken tenders?",
+          "attachments": []
+        },
+        {
+          "id": "pf34k7dt",
+          "role": "assistant",
+          "text": "Since \"the best\" is subjective, the answer depends on what kind of experience you are looking for. Here is a breakdown of where to find top-tier chicken tenders based on different styles:\n\n### 1. The \"Fast Food Classics\" (Reliable & Consistent)\nIf you want something quick, salty, and nostalgic:\n*   **Raising Cane's:** Widely considered the gold standard for fast-food tenders. The focus is entirely on the chicken and their signature Cane's Sauce. The tenders are usually very consistent in texture.\n*   **Chick-fil-A:** Best if you prefer a slightly more \"polished\" and juicy tender with a focus on high-quality service and a mild, consistent flavor profile.\n*   **Popeyes:** Best if you want a heavy, craggy, spicy, and extremely crunchy breading. Their flavor profile is much bolder than the others.\n\n### 2. The \"Gourmet/Craft\" Style (Higher Quality)\nIf you are willing to pay a bit more for better ingredients and unique flavors:\n*   **Local Craft Chicken Spots:** Look for local restaurants that specialize in \"Nashville Hot Chicken.\" These often use high-quality bird, hand-breaded techniques, and offer varying heat levels.\n*   **Korean Fried Chicken (KFC) Joints:** If you want the ultimate crunch, look for Korean Fried Chicken. They use a double-fry method that results in a thin, glass-like crispy skin that stays crunchy even when tossed in sauces (like soy garlic or gochujang).\n\n### 3. The \"Home-Style/Southern\" Experience\nIf you want something that feels like it was made in a kitchen rather than a factory:\n*   **Local Southern BBQ or Soul Food Restaurants:** These often serve tenders that are buttermilk-brined and fried in peanut oil, giving them a deep, savory flavor and a tender, moist interior that fast food can't replicate.\n\n### How to find the best near you right now:\nTo get a specific recommendation for your current location, I suggest:\n1.  **Search Google Maps/Yelp for:** *\"Best chicken tenders near me\"* or *\"Nashville hot chicken near me.\"*\n2.  **Look for these keywords in reviews:** *\"Juicy,\" \"Crunchy breading,\" \"Hand-breaded,\"* and *\"Not dry.\"*\n\n**What is your preference?** Do you like them extra spicy, super crunchy, or more on the juicy/mild side? I can help you narrow it down!",
+          "full": "On \"where can i find the best chicken tenders?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 18,
+          "leadIn": "I am comparing the most relevant context around find best chicken tenders before giving you a clear answer."
+        },
+        {
+          "id": "6wc3tzm2",
+          "role": "user",
+          "text": "Christian Pulisic",
+          "attachments": []
+        },
+        {
+          "id": "ejcrisk0",
+          "role": "assistant",
+          "text": "No response.",
+          "full": "On \"Christian Pulisic\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_9180e21b732e4a759ea19d6cd2ee7267",
+              "type": "tool_call",
+              "label": "Searched your library",
+              "detail": "Christian Pulisic",
+              "name": "search_my_notes",
+              "status": "completed"
+            },
+            {
+              "id": "item_896ccb5e854a4a20b381c22c0127b9e1",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Christian Pulisic current team and recent performance June 2026",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "support.scoro.com",
+              "dom": "support.scoro.com",
+              "url": "https://support.scoro.com/hc/en-us/articles/34225361531661-Team-performance-report",
+              "title": "Team performance report - Scoro Help Center",
+              "date": "",
+              "snippet": "Scoro's real-time team performance report gathers different data points related to team members into a single view to help you easily compare them",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=support.scoro.com&sz=64"
+            },
+            {
+              "pub": "zoho.com",
+              "dom": "zoho.com",
+              "url": "https://www.zoho.com/deluge/help/functions/datetime/now.html",
+              "title": "now function | Help - Zoho Deluge",
+              "date": "",
+              "snippet": "The now function returns the current date-time value, in the format selected in Application settings. Note: The returned date-time format can be converted ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=zoho.com&sz=64"
+            },
+            {
+              "pub": "joellipman.com",
+              "dom": "joellipman.com",
+              "url": "https://www.joellipman.com/articles/crm/zoho/zoho-deluge/zoho-deluge-push-a-value-to-a-datetime-field-in-crm.html",
+              "title": "Zoho Deluge: Push a value to a datetime field in CRM",
+              "date": "",
+              "snippet": "A very quick article to show pushing the date and time to ZohoCRM or ZohoCreator. zoho.currenttime.toTime();",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=joellipman.com&sz=64"
+            },
+            {
+              "pub": "stackoverflow.com",
+              "dom": "stackoverflow.com",
+              "url": "https://stackoverflow.com/questions/75738206/issue-when-saving-to-date-time-field-in-deluge-function",
+              "title": "Issue when saving to Date/Time field in Deluge function",
+              "date": "",
+              "snippet": "I am trying to save the timestamp of when the request was made and store that in a date/time field on the custom module.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=stackoverflow.com&sz=64"
+            },
+            {
+              "pub": "datameer.com",
+              "dom": "datameer.com",
+              "url": "https://www.datameer.com/blog/how-to-get-only-the-date-part-from-the-datetime-in-sql-server/",
+              "title": "How to get only the DATE part from the DATETIME in SQL Server ...",
+              "date": "",
+              "snippet": "In SQL Server 2008 and above, we can either use the CONVERT or CAST function to return the DATE part from the DATETIME datatype.",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=datameer.com&sz=64"
+            }
+          ],
+          "tools": [
+            "search_my_notes",
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including support.scoro.com, zoho.com, joellipman.com",
+            "Reading support.scoro.com",
+            "Cross-checking zoho.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "support.scoro.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=support.scoro.com&sz=64"
+                },
+                {
+                  "dom": "zoho.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=zoho.com&sz=64"
+                },
+                {
+                  "dom": "joellipman.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=joellipman.com&sz=64"
+                }
+              ],
+              "more": 2
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 14,
+          "leadIn": "I am gathering the relevant context for Christian Pulisic before answering."
+        },
+        {
+          "id": "mxhobg0y",
+          "role": "user",
+          "text": "what memory system are using under the hood?",
+          "attachments": []
+        },
+        {
+          "id": "99xpl84l",
+          "role": "assistant",
+          "text": "Under the hood, I use a multi-layered memory system centered around a local, self-hosted user modeling server called **Honcho**. This system is designed to transform our interactions into a structured, private portrait of your intellectual life without ever sending your raw data to the cloud.\n\nThe architecture consists of several key components:\n\n**Dialectic User Modeling (Honcho)**\nInstead of just storing facts, I use Honcho to perform \"dialectic modeling.\" This means that every time we interact, the system processes the conversation to resolve agreements or contradictions, updates confidence scores on your preferences, and maintains a queryable model of who you are. This context is injected into my prompt at the start of every session so I can respond with a deeper understanding of your specific needs.\n\n**The Learning Loop & Vault Integration**\nMy memory is deeply integrated with your Obsidian vault through a continuous loop of extraction and synthesis:\n*   **Extraction & Storage:** I extract facts and skill signals from our conversations and store them locally.\n*   **Periodic Synthesis:** I perform nightly, weekly, and monthly syntheses to create high-level reflections and summaries.\n*   **Vault Write-Back:** These insights are written back to your vault in specific folders (like `Agent/Memories/`) so that your own thinking is preserved and accessible to you.\n\n**Retention and Management**\nTo keep your vault clean and efficient, I follow a structured retention policy.\n\n**Agent/Memories/retention-policy.md**\n> Vellum preserves durable lessons from growing ingestion folders (such as YouTube or web scrapes) without keeping the massive raw files forever. This ensures that while the \"lessons\" and \"preferences\" are kept, the vault remains performant and uncluttered.",
+          "full": "On \"what memory system are using under the hood?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_001ed527610b47e7930363f417db5c32",
+              "type": "subagent_call",
+              "label": "Routed to MemoryAgent",
+              "detail": "what memory system are using under the hood?",
+              "name": "MemoryAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_d56638ce7af0429e9ea4abee95ed4028",
+              "type": "tool_call",
+              "label": "Used memory_agent",
+              "detail": "",
+              "name": "memory_agent",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "memory",
+              "dom": "memory",
+              "url": "Agent/Memories/retention-policy.md",
+              "title": "retention-policy",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+            },
+            {
+              "pub": "memory",
+              "dom": "memory",
+              "url": "Agent/Memories/sports_champions_league_fetch_20260530_120616.md",
+              "title": "sports_champions_league_fetch_20260530_120616",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+            },
+            {
+              "pub": "memory",
+              "dom": "memory",
+              "url": "Agent/Memories/sports_formula_one_fetch_20260519_115847.md",
+              "title": "sports_formula_one_fetch_20260519_115847",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+            }
+          ],
+          "tools": [
+            "memory_agent"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including memory, memory, memory",
+            "Reading memory",
+            "Cross-checking memory"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "memory",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+                },
+                {
+                  "dom": "memory",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+                },
+                {
+                  "dom": "memory",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=memory&sz=64"
+                }
+              ],
+              "more": 0
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 23,
+          "leadIn": "I am gathering the relevant context for memory system under hood before answering."
+        },
+        {
+          "id": "t8vqk45d",
+          "role": "user",
+          "text": "what did FIFA uplod on youtube and get me the transcript of it",
+          "attachments": []
+        },
+        {
+          "id": "uzo3io9c",
+          "role": "assistant",
+          "text": "I found several recent videos related to the 2026 FIFA World Cup uploaded by FOX Soccer and FOX Sports, covering various match highlights and fan experiences. I cannot provide a full transcript in this response, but I can summarize the content of these videos for you.\n\n**FOX Soccer / FOX Sports**\nThe following recent uploads cover key moments from the tournament:\n\n| Video Topic | Match / Context | Date |\n| :--- | :--- | :--- |\n| Jordan fans watching their first World Cup match | Austria vs. Jordan | - |\n| A player's debut in the World Cup | Iraq vs. Norway | 6/16/2026 |\n| Ronaldo's reaction to a draw in Portugal's opener | Portugal vs. DR Congo | 6/17/2026 |\n| Lionel Messi scoring a brace | Argentina vs. Algeria | 6/16/2026 |\n\n**Jenny Hoyos**\n*   An advertisement/short titled \"What Team Are You Rooting For at the FIFA World Cup?\"\n\nIf you would like the full transcript for a specific video from the list above, please let me know which one, and I will fetch it for you.",
+          "full": "On \"what did FIFA uplod on youtube and get me the transcript of \" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_1ef699d3a264431394ed8f8bd1cc1aab",
+              "type": "subagent_call",
+              "label": "Routed to YoutubeAgent",
+              "detail": "what did FIFA uplod on youtube and get me the transcript of it",
+              "name": "YoutubeAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_d8e3ca0f619742e4a621212c7c37c3b7",
+              "type": "tool_call",
+              "label": "Used youtube_agent",
+              "detail": "",
+              "name": "youtube_agent",
+              "status": "completed"
+            },
+            {
+              "id": "item_f97db5de29d648fca3cd4eccb80cc1aa",
+              "type": "tool_call",
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=FAsIN01-xBI",
+              "title": "This is how Jordan fans watched their first ever FIFA World Cup match 🇯🇴",
+              "date": "",
+              "snippet": "FOXSoccer #fifaworldcuponyt #fifaworldcup #soccer #jordan #fans #austriavsjordan The Official Home for Streaming the FIFA ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=T71mftCP0cQ",
+              "title": "Imagine seeing your son debut in a FIFA World Cup",
+              "date": "",
+              "snippet": "Check out this in-game content from Iraq vs Norway on 6/16/2026 #FIFAWorldCupOnYT (#FOXSports or #FoxSoccer) #iraq ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=uFsOe9P8oqg",
+              "title": "What Team Are You Rooting For at the FIFA World Cup? #ad #FIFAWorldCup⚽🏆",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=tgyKvf_T8-k",
+              "title": "Ronaldo was stunned after drawing DR Congo in Portugal's FIFA World Cup opener 🇵🇹",
+              "date": "",
+              "snippet": "Check out this post-game content from Portugal vs DR Congo on 6/17/2026 #FIFAWorldCupOnYT #FOXSports #portugal ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=fDFW7pyw5XI",
+              "title": "IT’S A LIONEL MESSI BRACE IN THE 2026 FIFA WORLD CUP!",
+              "date": "",
+              "snippet": "Check out this in-game content from Argentina vs. Algeria on 6/16/2026 #FIFAWorldCupOnYT #FOXSports #Argentina #Algeria ...",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+            }
+          ],
+          "tools": [
+            "youtube_agent",
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including youtube.com, youtube.com, youtube.com",
+            "Reading youtube.com",
+            "Cross-checking youtube.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "youtube.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+                },
+                {
+                  "dom": "youtube.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+                },
+                {
+                  "dom": "youtube.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64"
+                }
+              ],
+              "more": 2
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 16,
+          "leadIn": "I am gathering the relevant context for FIFA uplod youtube transcript before answering."
+        }
+      ],
+      "updated_at": "2026-06-18T06:37:19+00:00"
+    },
+    {
+      "id": "34eqjui8",
+      "thread_id": "34eqjui8",
+      "title": "hello",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "vndmftdu",
+          "role": "user",
+          "text": "hello",
+          "attachments": []
+        },
+        {
+          "id": "9nt59up3",
+          "role": "assistant",
+          "text": "Hello, pratyakksh. I'm here. How can I help you today?",
+          "full": "On \"hello\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 19,
+          "leadIn": "I am gathering the relevant context for hello before answering."
+        },
+        {
+          "id": "2futkkrj",
+          "role": "user",
+          "text": "what happened yesterday and today in fifa?",
+          "attachments": []
+        },
+        {
+          "id": "5livztbg",
+          "role": "assistant",
+          "text": "The 2026 World Cup is currently underway. In recent action, Harry Kane has made headlines by netting a record-tying brace, contributing to a dominant performance where England scored twice more [1].",
+          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"what happened yesterday and today in fifa?\" is one slice, not three. Cut it to the part that ships today.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_963b7cda4bc747bf9124e7e324139a96",
+              "type": "subagent_call",
+              "label": "Routed to SportsAgent",
+              "detail": "what happened yesterday and today in fifa?",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_e5a67e51622b4f27b25bd16eadb5c402",
+              "type": "tool_call",
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "id": "item_445134e9d16941c4ac53bc7935e13c7b",
+              "type": "tool_call",
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "local10.com",
+              "dom": "local10.com",
+              "url": "https://www.local10.com/sports/2026/06/17/fifa-world-cup-2026-here-is-the-june-17-schedule-for-day-7-of-group-matches-clone/",
+              "title": "2026 World Cup news live updates: Injuries, storylines as the tournament kicks off",
+              "date": "",
+              "snippet": "Jun 11, 2026 — Adidas leads the way among World Cup nations World Cup 2026: Harry Kane notches record-tying brace, then England scores twice more... https://sports.yahoo.com/soccer/live/2026-world-cup-news-live-updates-injuries-storylines-as-the-tournament-kicks-off-200000921.html **World Cup Buzz:"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including local10.com",
+            "Reading local10.com",
+            "Checking source details"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "local10.com"
+                }
+              ],
+              "more": 0
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 13,
+          "leadIn": "I am checking the latest available context for happened yesterday today fifa before answering."
+        },
+        {
+          "id": "mdjbnmuh",
+          "role": "user",
+          "text": "when is the next argentina match",
+          "attachments": []
+        },
+        {
+          "id": "0tg2ee7m",
+          "role": "assistant",
+          "text": "I'm sorry, but I couldn't find the specific date or time for Argentina's next match in the current updates. The available information focuses primarily on injury reports for players like Messi and Martinez [1].",
+          "full": "On \"when is the next argentina match\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_d6c7b491cfcd4adc94cf7333e7d09be3",
+              "type": "subagent_call",
+              "label": "Routed to SportsAgent",
+              "detail": "when is the next argentina match",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_ab4939172c2f416b92163e789813d7cf",
+              "type": "tool_call",
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "id": "item_e59dfe4c6c4040e68c63f3bb2fa09e2a",
+              "type": "tool_call",
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "fifa.com",
+              "dom": "fifa.com",
+              "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/argentina-v-algeria-highlights-match-report",
+              "title": "Argentina Injury Update: Messi, Martinez, and 5 Others Facing ...",
+              "date": "",
+              "snippet": "Jun 1, 2026 — Leandro Paredes is managing minor discomfort while Nicolás González has almost fully recovered from a muscle tear. Nahuel Molina i... https://sports.yahoo.com/articles/argentina-injury-messi-martinez-5-080603127.html **Argentina defender Leonardo Balerdi suffers calf injury, out of Wor"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including fifa.com",
+            "Reading fifa.com",
+            "Checking source details"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "fifa.com"
+                }
+              ],
+              "more": 0
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 24,
+          "leadIn": "I am checking the latest available context for next argentina match before answering."
+        },
+        {
+          "id": "jj7nn5f9",
+          "role": "user",
+          "text": "any new videos uploaded on youtube",
+          "attachments": []
+        },
+        {
+          "id": "xol467ou",
+          "role": "assistant",
+          "text": "It looks like there aren't any specific new videos from your interests or a particular creator, but there are several recent guides on how to optimize YouTube uploads in 2026. These include tips on the \"right way\" to upload to avoid sabotaging performance [1], strategies for getting more views [3], and lists of things to do (or avoid) immediately after uploading a video [4, 5].",
+          "full": "On \"any new videos uploaded on youtube\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_32f95d3335da47a39a484f6a0f60c9a5",
+              "type": "subagent_call",
+              "label": "Routed to YoutubeAgent",
+              "detail": "any new videos uploaded on youtube",
+              "name": "YoutubeAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_2c04b6909d144130b902cff4bd999b12",
+              "type": "tool_call",
+              "label": "Used youtube_agent",
+              "detail": "",
+              "name": "youtube_agent",
+              "status": "completed"
+            },
+            {
+              "id": "item_2d1ecbf0295d49f5b03b553734b9e3e8",
+              "type": "tool_call",
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=5SkEuxyAu7I",
+              "title": "How to Upload Videos on YouTube in 2026 (The Right Way)",
+              "date": "",
+              "snippet": "Uploading a YouTube video the wrong way can quietly sabotage its performance before anyone ever has a chance to watch it."
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=dAOlDK_1_rg",
+              "title": "How to Find Recently Uploaded Videos on Youtube",
+              "date": "",
+              "snippet": "How to Find Recently Uploaded Videos on Yotube For More Google Account Tips and Tricks Be Sure to Subscribe to Our ..."
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=5V7bwPtRb6A",
+              "title": "How to Upload YouTube VIdeos to get more VIEWS",
+              "date": "",
+              "snippet": "Day 9 Upload your YouTube videos the right way so you get more views by optimizing your video. I'm giving you a simple ..."
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=CYNzZTO4Ctk",
+              "title": "14 things you MUST do after uploading a YouTube video",
+              "date": "",
+              "snippet": "Want me to help you grow your channel? Join here: https://www.ytwealthacademy.org Struggling to get more views and grow your ..."
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=jElJ9fNPpa8",
+              "title": "11 things you should NEVER do after uploading a YouTube video",
+              "date": "",
+              "snippet": "11 things you should NEVER do after uploading a YouTube video Join My Private Community: ..."
+            }
+          ],
+          "tools": [
+            "youtube_agent",
+            "web_search"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including youtube.com, youtube.com, youtube.com",
+            "Reading youtube.com",
+            "Cross-checking youtube.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "youtube.com"
+                },
+                {
+                  "dom": "youtube.com"
+                },
+                {
+                  "dom": "youtube.com"
+                }
+              ],
+              "more": 2
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 25,
+          "leadIn": "I am checking the latest available context for videos uploaded youtube before answering."
+        },
+        {
+          "id": "9frdlo6j",
+          "role": "user",
+          "text": "can you convert a file into odf?",
+          "attachments": []
+        },
+        {
+          "id": "qzrdjy5t",
+          "role": "assistant",
+          "text": "I don't have a built-in tool to directly convert file formats (like converting a document to ODF). However, depending on where the file is, I might be able to help you find a way to do it using your computer or a web-based tool. \n\nIf you can tell me what the current file format is and where it's located, I can try to guide you through the process or see if there's a script I can run in my workspace to handle it.",
+          "full": "On \"can you convert a file into odf?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 19,
+          "leadIn": "I am gathering the relevant context for convert file before answering."
+        },
+        {
+          "id": "kcoi803u",
+          "role": "user",
+          "text": "what can you see in this image?",
+          "attachments": [
+            {
+              "name": "apps_drop_down.png",
+              "size": "15.1 KB",
+              "kind": "image",
+              "url": "blob:http://127.0.0.1:5173/e879f126-7555-4b60-959d-87acc87ad211",
+              "fresh": true
+            }
+          ]
+        },
+        {
+          "id": "qlo0r1jk",
+          "role": "assistant",
+          "text": "Please provide the image you are referring to! Once you upload or share it, I can analyze it and tell you exactly what I see.",
+          "full": "On \"what can you see in this image?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 23,
+          "leadIn": "I am gathering the relevant context for image before answering."
+        },
+        {
+          "id": "ce90sies",
+          "role": "user",
+          "text": "which model are you usning?",
+          "attachments": []
+        },
+        {
+          "id": "7dbgc492",
+          "role": "assistant",
+          "text": "I'm currently running on **DeepSeek V4 Pro** (`deepseek/deepseek-v4-pro`). That's the model being used right now to assist you.",
+          "full": "On \"which model are you usning?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 24,
+          "leadIn": "I am gathering the relevant context for model usning before answering."
+        },
+        {
+          "id": "55cz09or",
+          "role": "user",
+          "text": "what else can you do?",
+          "attachments": []
+        },
+        {
+          "id": "m9uflx5l",
+          "role": "assistant",
+          "text": "I can assist you in quite a few ways. Here's a quick overview of what I'm capable of:\n\n### 🔍 **Knowledge & Research**\n- **Search your private vault** (Obsidian) — your notes, books, and curated content are always my first stop.\n- **Web search and research** — I can pull live information from the internet when it's not in your library.\n- **Extract and crawl websites** — if you need a deep dive into a specific URL.\n\n### 💻 **Computer & Browser Use**\n- **Navigate and interact with websites** — I can open pages, click around, fill forms, or capture snapshots of what's on screen.\n- **Desktop control** — with your permission, I can open apps, move windows, type, and click on your host machine (though I'm careful about sensitive actions like purchases or banking).\n- **Terminal commands** — I can run scripts or terminal operations in my workspace.\n\n### 🗂️ **File & Note Management**\n- **Create, read, list, and append** to notes in your Obsidian vault.\n- Search for specific content in your local files.\n\n### 🛠️ **Coding & Development**\n- **Sandboxed code execution** — I can run Python, JavaScript, Bash, and other languages to compute answers on the fly instead of pulling tons of files into context.\n- **GitHub interaction** — read code, issues, commits, or repos; I can even commit and push with your permission.\n- **Library and repo documentation** — I can look up the latest docs for almost any software library or open-source project.\n- **Cloud escalation** — if a task is too complex for me, I can hand it off to a stronger cloud model and save the lesson for next time.\n\n### 📱 **Social & Communication**\n- **X (Twitter)** — I can search, check bookmarks, and even post (only when you explicitly ask).\n\n### 🏅 **Specialist Agents**\n- **SportsAgent** — live scores, schedules, injury reports, and tournament news.\n- **YoutubeAgent** — search and summarize YouTube videos using transcripts.\n- **MemoryAgent** — for long-term, durable memory beyond our sessions.\n\n### 🛒 **Shopping**\n- **Amazon search** — I can look up products, compare prices, and summarize reviews for you.\n\n### 🧠 **Self-Learning**\n- Over time, I learn from our conversations, build a model of your preferences, and can propose custom \"skills\" to help with recurring tasks.\n\nIs there something specific you'd like me to try?",
+          "full": "On \"what else can you do?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 14,
+          "leadIn": "I am gathering the relevant context for else before answering."
+        },
+        {
+          "id": "hug1oszz",
+          "role": "user",
+          "text": "what is the first message i sent you?",
+          "attachments": []
+        },
+        {
+          "id": "08w29hnl",
+          "role": "assistant",
+          "text": "Your first message in this conversation was simply:\n\n> **\"hello\"**",
+          "full": "On \"what is the first message i sent you?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 15,
+          "leadIn": "I am working through the relevant context for first message sent so the answer is grounded and direct."
+        },
+        {
+          "id": "dgxeq47i",
+          "role": "user",
+          "text": "what about the foruth message",
+          "attachments": []
+        },
+        {
+          "id": "hydbuqda",
+          "role": "assistant",
+          "text": "Your fourth message was:\n\n> **\"any new videos uploaded on youtube\"**",
+          "full": "On \"what about the foruth message\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 2,
+          "refLines": [
+            "Thinking",
+            "Answering from gathered context"
+          ],
+          "steps": [
+            {
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 15,
+          "leadIn": "I am gathering the relevant context for foruth message before answering."
+        },
+        {
+          "id": "86svc3iw",
+          "role": "user",
+          "text": "can you get the latest transcript from miniminter video",
+          "attachments": []
+        },
+        {
+          "id": "6meh4l43",
+          "role": "assistant",
+          "text": "Backend error: Model stream timed out after 90 seconds.",
+          "full": "On \"can you get the latest transcript from miniminter video\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "item_55b0c6f8f6b4406f80c6776959a07feb",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Miniminter latest video 2025 2026",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "id": "item_bc497007fb8c42f286eac5eb9fa10b77",
+              "type": "tool_call",
+              "label": "Searched the web",
+              "detail": "Miniminter latest youtube video 2026",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "id": "item_29b64c3e814f4f4baee1c83d29415f99",
+              "type": "tool_call",
+              "label": "Used web_extract",
+              "detail": "https://youtranscript.com/?v=QF5YpZI1wnk",
+              "name": "web_extract",
+              "status": "in_progress"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "help.zoho.com",
+              "dom": "help.zoho.com",
+              "url": "https://help.zoho.com/portal/en/community/topic/issue-when-saving-to-date-time-field-in-deluge-function",
+              "title": "How to find out when a video was created that was sent to me by a ...",
+              "date": "",
+              "snippet": "There's a certain amount of what is known as “tradecraft” involved in determining date and time on videos, and it really depends very much on ... https://www.quora.com/How-can-I-find-out-when-a-video-was-created-that-was-sent-to-me-by-a-3rd-party **Latest one video uploaded in youtube channel - Stac"
+            },
+            {
+              "pub": "youtube.com",
+              "dom": "youtube.com",
+              "url": "https://www.youtube.com/watch?v=rMkWgvRdilM",
+              "title": "How I Tricked The Internet",
+              "date": "",
+              "snippet": "Apr 9, 2026 — this who's that knock is how I became. the biggest streamer in the world. now you may be wondering. why are you doing it how on ea... https://www.youtube.com/watch?v=gfGSGjh77tw **I Survived 100 Days in Skyblock** Apr 11, 2026 — all right Darius you're going to be on mining duty all ri"
+            }
+          ],
+          "tools": [
+            "web_search",
+            "web_extract"
+          ],
+          "phase": "done",
+          "refShown": 3,
+          "refLines": [
+            "Browsed live sources including help.zoho.com, youtube.com",
+            "Reading help.zoho.com",
+            "Cross-checking youtube.com"
+          ],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "help.zoho.com"
+                },
+                {
+                  "dom": "youtube.com"
+                }
+              ],
+              "more": 0
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 22,
+          "leadIn": "I am checking the latest available context for latest transcript miniminter video before answering."
+        }
+      ],
+      "updated_at": "2026-06-18T03:43:53+00:00"
+    },
+    {
       "id": "9hg4b03q",
       "thread_id": "9hg4b03q",
       "title": "who is leading the f1 driver…",
@@ -96,69 +1468,6 @@
       "updated_at": "2026-06-17T07:41:56+00:00"
     },
     {
-      "id": "ay8vjeev",
-      "thread_id": "ay8vjeev",
-      "title": "who won the ipl",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "12k357tc",
-          "role": "user",
-          "text": "who won the ipl",
-          "attachments": []
-        },
-        {
-          "id": "o3g9qx3j",
-          "role": "assistant",
-          "text": "",
-          "full": "On \"who won the ipl\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": true
-        }
-      ],
-      "updated_at": "2026-06-17T07:41:04+00:00"
-    },
-    {
-      "id": "v1wgklqf",
-      "thread_id": "v1wgklqf",
-      "title": "who won the ipl?",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "eu8n1qbg",
-          "role": "user",
-          "text": "who won the ipl?",
-          "attachments": []
-        },
-        {
-          "id": "q0rn9rjv",
-          "role": "assistant",
-          "text": "Backend error: Model stream timed out after 90 seconds.",
-          "full": "On \"who won the ipl?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Searched your library",
-              "detail": "IPL winner",
-              "name": "search_my_notes",
-              "status": "in_progress"
-            }
-          ],
-          "tools": [
-            "search_my_notes"
-          ]
-        }
-      ],
-      "updated_at": "2026-06-17T07:38:16+00:00"
-    },
-    {
       "id": "m6e778w6",
       "thread_id": "m6e778w6",
       "title": "hey",
@@ -209,528 +1518,6 @@
         }
       ],
       "updated_at": "2026-06-17T06:44:44+00:00"
-    },
-    {
-      "id": "end512ms",
-      "thread_id": "end512ms",
-      "title": "hey",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "ug7rsd6h",
-          "role": "user",
-          "text": "hey",
-          "attachments": []
-        },
-        {
-          "id": "f71sy7y5",
-          "role": "assistant",
-          "text": "Hey pratyakksh. How can I help you today?",
-          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [],
-          "tools": [],
-          "sources": []
-        },
-        {
-          "id": "895d6ufu",
-          "role": "user",
-          "text": "next f1 race",
-          "attachments": []
-        },
-        {
-          "id": "221igxgj",
-          "role": "assistant",
-          "text": "The next F1 race is the Monaco Grand Prix.",
-          "full": "On \"next f1 race\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to SportsAgent",
-              "detail": "next f1 race",
-              "name": "SportsAgent",
-              "status": "completed"
-            },
-            {
-              "label": "Used sports_agent",
-              "detail": "",
-              "name": "sports_agent",
-              "status": "completed"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "completed"
-            }
-          ],
-          "tools": [
-            "sports_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://www.skysports.com/f1/standings",
-              "title": "F1 News - Results, Fixtures, Scores, Stats, and Rumors - The Athletic",
-              "snippet": "",
-              "domain": "skysports.com",
-              "fetched_at": "2026-06-17T06:30:16+00:00",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=skysports.com&sz=64",
-              "provider_label": "skysports.com"
-            }
-          ]
-        },
-        {
-          "id": "65ni2a31",
-          "role": "user",
-          "text": "are you sure?",
-          "attachments": []
-        },
-        {
-          "id": "zi3a8voe",
-          "role": "assistant",
-          "text": "I should be cautious here. The information I have mentions the Monaco Grand Prix in a report from June 7, 2026, but it describes Max Verstappen retiring after stalling on the grid, which sounds like a result from a race that has already happened or is currently being reported on.\n\nTo be absolutely sure about the *next* race on the calendar, let me double-check the current F1 schedule for you.",
-          "full": "On \"are you sure?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [],
-          "tools": [],
-          "sources": []
-        },
-        {
-          "id": "klxi5dpl",
-          "role": "user",
-          "text": "what happend today in fifa?",
-          "attachments": []
-        },
-        {
-          "id": "hhy06mrk",
-          "role": "assistant",
-          "text": "The main news coming out of FIFA is that Ruben Dias is expected to miss Portugal's opening match due to an injury. Additionally, there's some discussion regarding Spain's slow start following a draw with Cape Verde, with a focus on getting Lamine Yamal fit and performing.",
-          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"what happend today in fifa?\" is one slice, not three. Cut it to the part that ships today.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to SportsAgent",
-              "detail": "what happend today in fifa?",
-              "name": "SportsAgent",
-              "status": "completed"
-            },
-            {
-              "label": "Used sports_agent",
-              "detail": "",
-              "name": "sports_agent",
-              "status": "completed"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "completed"
-            }
-          ],
-          "tools": [
-            "sports_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://www.facebook.com/abcsport.au/posts/fifas-hydration-breaks-that-are-interrupting-matches-at-the-world-cup-are-causin/1566903181765099/",
-              "title": "FIFA Men's World Cup on ESPN - Scores, Stats, News and ...",
-              "snippet": "",
-              "domain": "facebook.com",
-              "fetched_at": "2026-06-17T06:32:00+00:00",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=facebook.com&sz=64",
-              "provider_label": "facebook.com"
-            }
-          ]
-        },
-        {
-          "id": "5q30dxeu",
-          "role": "user",
-          "text": "the next f11 race is austrian grand prix why did you say monaco",
-          "attachments": []
-        },
-        {
-          "id": "seeo27k2",
-          "role": "assistant",
-          "text": "You're right, and I apologize for the mistake. The next race is indeed the Austrian Grand Prix, scheduled for June 26–28, 2026. I previously relied on a report about the Monaco Grand Prix, but the official calendar confirms Austria is the next round.",
-          "full": "On \"the next f11 race is austrian grand prix why did you say mon\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to SportsAgent",
-              "detail": "the next f11 race is austrian grand prix why did you say monaco",
-              "name": "SportsAgent",
-              "status": "completed"
-            },
-            {
-              "label": "Used sports_agent",
-              "detail": "",
-              "name": "sports_agent",
-              "status": "completed"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "completed"
-            }
-          ],
-          "tools": [
-            "sports_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://www.redbullracing.com/int-en/races/austrian-grand-prix-2026",
-              "title": "Google Sports Data",
-              "snippet": "",
-              "domain": "redbullracing.com",
-              "fetched_at": "2026-06-17T06:35:15+00:00",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=redbullracing.com&sz=64",
-              "provider_label": "redbullracing.com"
-            }
-          ]
-        },
-        {
-          "id": "fwiyfvmp",
-          "role": "user",
-          "text": "also what happend in fifa today? you are getting the right answers from google but why are you telling me different answer",
-          "attachments": []
-        },
-        {
-          "id": "n2pj2lf7",
-          "role": "assistant",
-          "text": "I apologize for the confusion. I've been struggling to synthesize the specific snapshots provided by the tools, which led to me giving you inconsistent or incomplete information. I'm working on being more precise with how I process these updates.\n\nRegarding FIFA today, the latest update is that France defeated Senegal 3-1 in their World Cup opener. While it was a loss for Senegal, their single goal was seen as a positive sign for the team.",
-          "full": "Building belongs in the coding room — that preview has the full bench. Briefly: \"also what happend in fifa today? you are getting the right a\" is one slice, not three. Cut it to the part that ships today.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to SportsAgent",
-              "detail": "also what happend in fifa today? you are getting the right answers from google but why are you telling me different answer",
-              "name": "SportsAgent",
-              "status": "completed"
-            },
-            {
-              "label": "Used sports_agent",
-              "detail": "",
-              "name": "sports_agent",
-              "status": "completed"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "completed"
-            }
-          ],
-          "tools": [
-            "sports_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://www.nytimes.com/athletic/live-blogs/france-vs-senegal-live-updates-world-cup-2026-score-result/ysIXlHyhjyJr/",
-              "title": "FIFA World Cup 2026 Today: Live news updates as USA training ...",
-              "snippet": "",
-              "domain": "nytimes.com",
-              "fetched_at": "2026-06-17T06:36:26+00:00",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=nytimes.com&sz=64",
-              "provider_label": "nytimes.com"
-            }
-          ]
-        },
-        {
-          "id": "2289hum0",
-          "role": "user",
-          "text": "what is the latest video uploaded by KSI on youtube",
-          "attachments": []
-        },
-        {
-          "id": "epn817bu",
-          "role": "assistant",
-          "text": "Based on the results, the latest video uploaded on KSI's own channel appears to be **\"Pop The Balloon: Women Edition\"** — a video where he hosts a balloon-popping challenge with women.\n\nThere are also a couple of recent music videos from his music channel: **\"Thick Of It\"** (feat. Trippie Redd) and **\"Dirty\"**.\n\nThat said, I can't confirm the exact upload timestamps from what I have. Want me to check directly on YouTube for the precise latest upload?",
-          "full": "On \"what is the latest video uploaded by KSI on youtube\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to YoutubeAgent",
-              "detail": "what is the latest video uploaded by KSI on youtube",
-              "name": "YoutubeAgent",
-              "status": "completed"
-            },
-            {
-              "label": "Used youtube_agent",
-              "detail": "",
-              "name": "youtube_agent",
-              "status": "completed"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "completed"
-            }
-          ],
-          "tools": [
-            "youtube_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://www.youtube.com/watch?v=OcuVWAv3nZg",
-              "title": "The Disgusting KSI Situation…",
-              "snippet": "",
-              "domain": "youtube.com",
-              "fetched_at": "13 hours ago",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-              "provider_label": "youtube.com"
-            },
-            {
-              "url": "https://www.youtube.com/watch?v=IEjFXhNdZOY",
-              "title": "KSI's New Response Is Disgusting..",
-              "snippet": "",
-              "domain": "youtube.com",
-              "fetched_at": "2 days ago",
-              "source_index": 2,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-              "provider_label": "youtube.com"
-            },
-            {
-              "url": "https://www.youtube.com/watch?v=At8v_Yc044Y",
-              "title": "KSI - Thick Of It (feat. Trippie Redd) [Official Music Video]",
-              "snippet": "",
-              "domain": "youtube.com",
-              "fetched_at": "1 year ago",
-              "source_index": 3,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-              "provider_label": "youtube.com"
-            },
-            {
-              "url": "https://www.youtube.com/watch?v=_azHcO2nhG8",
-              "title": "Pop The Balloon: Women Edition",
-              "snippet": "",
-              "domain": "youtube.com",
-              "fetched_at": "9 months ago",
-              "source_index": 4,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-              "provider_label": "youtube.com"
-            },
-            {
-              "url": "https://www.youtube.com/watch?v=VoDh1h1dPUE",
-              "title": "KSI - Dirty [Official Visualiser]",
-              "snippet": "",
-              "domain": "youtube.com",
-              "fetched_at": "1 year ago",
-              "source_index": 5,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=youtube.com&sz=64",
-              "provider_label": "youtube.com"
-            }
-          ]
-        }
-      ],
-      "updated_at": "2026-06-17T06:39:37+00:00"
-    },
-    {
-      "id": "fq35iuvs",
-      "thread_id": "fq35iuvs",
-      "title": "??",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "25lc70pm",
-          "role": "user",
-          "text": "??",
-          "attachments": []
-        },
-        {
-          "id": "7ww2stem",
-          "role": "assistant",
-          "text": "",
-          "full": "On \"??\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": true
-        }
-      ],
-      "updated_at": "2026-06-16T09:37:50+00:00"
-    },
-    {
-      "id": "f8k96nxn",
-      "thread_id": "f8k96nxn",
-      "title": "what do you know about me?",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "s6d4mgly",
-          "role": "user",
-          "text": "what do you know about me?",
-          "attachments": []
-        },
-        {
-          "id": "wdjk67at",
-          "role": "assistant",
-          "text": "",
-          "full": "On \"what do you know about me?\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": true
-        }
-      ],
-      "updated_at": "2026-06-16T09:35:29+00:00"
-    },
-    {
-      "id": "ivjyknca",
-      "thread_id": "ivjyknca",
-      "title": "how many goals did germany s…",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "nvf87coc",
-          "role": "user",
-          "text": "how many goals did germany scored in their opening match",
-          "attachments": []
-        },
-        {
-          "id": "fk9jw3fc",
-          "role": "assistant",
-          "text": "SportsAgent checked fresh public sources for: how many goals did germany scored in their opening match.\n[1] Germany 4-0 Finland (May 31, 2026) Game Analysis - ESPN: May 31, 2026 — Germany defeated Finland 4-0 in their first World Cup warm-up match but they will be sweating on the fitness of Deniz Undav. The S... https://www.espn.com/soccer/report/_/gameId/758381 **Curaçao scores a goal in its first World Cup game, but ...** Jun 14, 2026 — Germany sped past Cura\nUse this as a live update snapshot; exact lineups and injury statuses can still move close to game time.",
-          "full": "On \"how many goals did germany scored in their opening match\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "activity": [
-            {
-              "label": "Routed to SportsAgent",
-              "detail": "how many goals did germany scored in their opening match",
-              "name": "SportsAgent",
-              "status": "in_progress"
-            },
-            {
-              "label": "Used sports_agent",
-              "detail": "",
-              "name": "sports_agent",
-              "status": "in_progress"
-            },
-            {
-              "label": "Used web_search",
-              "detail": "",
-              "name": "web_search",
-              "status": "in_progress"
-            }
-          ],
-          "tools": [
-            "sports_agent",
-            "web_search"
-          ],
-          "sources": [
-            {
-              "url": "https://sports.yahoo.com/articles/world-cup-highlights-germany-scoring-205600292.html",
-              "title": "Germany 4-0 Finland (May 31, 2026) Game Analysis - ESPN",
-              "snippet": "",
-              "domain": "sports.yahoo.com",
-              "fetched_at": "2026-06-16T07:07:40+00:00",
-              "source_index": 1,
-              "source_type": "web",
-              "favicon_url": "https://www.google.com/s2/favicons?domain=sports.yahoo.com&sz=64",
-              "provider_label": "sports.yahoo.com"
-            }
-          ]
-        }
-      ],
-      "updated_at": "2026-06-16T07:07:40+00:00"
-    },
-    {
-      "id": "96t40mt4",
-      "thread_id": "96t40mt4",
-      "title": "space x ipo",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "n2zx62f6",
-          "role": "user",
-          "text": "space x ipo",
-          "attachments": []
-        },
-        {
-          "id": "pvsvqo62",
-          "role": "assistant",
-          "text": "",
-          "full": "On \"space x ipo\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": true
-        }
-      ],
-      "updated_at": "2026-06-16T07:04:45+00:00"
-    },
-    {
-      "id": "5kil8ntn",
-      "thread_id": "5kil8ntn",
-      "title": "hey",
-      "pinned": false,
-      "archived": false,
-      "projectId": null,
-      "created": "Today",
-      "appIds": [],
-      "messages": [
-        {
-          "id": "32uy101n",
-          "role": "user",
-          "text": "hey",
-          "attachments": []
-        },
-        {
-          "id": "jio1ly24",
-          "role": "assistant",
-          "text": "Backend error: Error code: 400 - {'error': {'message': 'Provider returned error', 'code': 400, 'metadata': {'raw': '{\"details\":\"This model supports at most 20 tool definitions per request (received 31). Reduce the number of entries in the `tools` array.\",\"error\":\"Invalid request parameters\"}', 'provider_name': 'Venice', 'is_byok': False, 'retry_after_seconds': 30, 'retry_after_seconds_raw': 29.873, 'previous_errors': [{'code': 429, 'message': 'Provider returned error', 'provider_name': 'Together', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'DeepInfra', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'Novita', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}, {'code': 429, 'message': 'Provider returned error', 'provider_name': 'Parasail', 'raw': 'google/gemma-4-31b-it is temporarily rate-limited upstream. Please retry shortly, or add your own key to accumulate your rate limits: https://openrouter.ai/settings/integrations'}]}}, 'user_id': 'user_2wXZS8eq2l1TddjKIUdJUJfeW0p'}",
-          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false
-        },
-        {
-          "id": "bfaq4lqg",
-          "role": "user",
-          "text": "hey",
-          "attachments": []
-        },
-        {
-          "id": "8c9kaoi8",
-          "role": "assistant",
-          "text": "Hey. What are you working on today?",
-          "full": "On \"hey\" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
-          "streaming": false,
-          "sources": [],
-          "tools": [],
-          "activity": []
-        }
-      ],
-      "updated_at": "2026-06-16T07:03:20+00:00"
     }
   ]
 }
