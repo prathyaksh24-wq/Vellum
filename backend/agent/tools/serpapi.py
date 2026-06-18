@@ -9,6 +9,8 @@ import urllib.request
 
 from agent.config import get_settings
 
+GOOGLE_RESULT_SEPARATOR = "\n\n---\n\n"
+
 
 class SerpApiClient:
     def __init__(
@@ -49,6 +51,31 @@ class SerpApiClient:
             if text != "No web results found.":
                 return text
         return "No web results found."
+
+    def fresh_google_search(self, query: str, *, num: int = 5, min_sources: int = 3) -> dict[str, Any]:
+        text = ""
+        sources: list[dict[str, str]] = []
+        seen_urls: set[str] = set()
+        engines_used: list[str] = []
+        for engine in ("google_ai_mode", "google_light", "google"):
+            payload = self.search({"engine": engine, "q": query, "num": num})
+            engines_used.append(engine)
+            candidate_text = _google_payload_text(payload, num=num)
+            if not text and candidate_text != "No web results found.":
+                text = candidate_text
+            for source in _google_payload_sources(payload, num=num):
+                url = source.get("url", "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                sources.append({**source, "engine": engine})
+            if text and len(sources) >= min_sources:
+                break
+        return {
+            "text": text or "No web results found.",
+            "sources": sources,
+            "engines": engines_used,
+        }
 
     def youtube_search(self, query: str, *, max_results: int = 5) -> list[dict[str, Any]]:
         payload = self.search({"engine": "youtube", "search_query": query})
@@ -126,7 +153,32 @@ def _google_payload_text(payload: dict[str, Any], *, num: int) -> str:
             continue
         blocks.append(f"**{title}**\n{snippet}\n{link}")
 
-    return "\n\n".join(block for block in blocks if block.strip()) or "No web results found."
+    return GOOGLE_RESULT_SEPARATOR.join(block for block in blocks if block.strip()) or "No web results found."
+
+
+def _google_payload_sources(payload: dict[str, Any], *, num: int) -> list[dict[str, str]]:
+    sources: list[dict[str, str]] = []
+    for item in _search_items(payload)[:num]:
+        if not isinstance(item, dict):
+            continue
+        url = _string(item.get("link") or item.get("url"))
+        if not url:
+            continue
+        parsed = urllib.parse.urlparse(url)
+        domain = parsed.netloc[4:] if parsed.netloc.startswith("www.") else parsed.netloc
+        provider_label = _string(item.get("source") or item.get("displayed_link") or domain)
+        favicon_url = _string(item.get("favicon") or item.get("source_icon") or item.get("thumbnail") or item.get("logo"))
+        sources.append(
+            {
+                "title": _string(item.get("title") or provider_label or domain or "Search result"),
+                "url": url,
+                "snippet": _string(item.get("snippet") or item.get("description"))[:700],
+                "domain": domain,
+                "favicon_url": favicon_url,
+                "provider_label": provider_label or domain,
+            }
+        )
+    return sources
 
 
 def _search_items(payload: dict[str, Any]) -> list[Any]:

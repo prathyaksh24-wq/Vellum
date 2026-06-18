@@ -11,9 +11,11 @@ from agent.tools.registry import ToolRegistry
 class YoutubeAgent:
     name = "YoutubeAgent"
 
-    _SOURCE_KEYWORDS = (
-        "youtube",
-        "yt",
+    _INTENT_PATTERNS = (
+        re.compile(r"(?<!\w)(?:youtube|yt)(?!\w)", re.I),
+        re.compile(r"\bwhat\s+did\s+.+\s+upload(?:ed)?\b", re.I),
+        re.compile(r"\b(?:latest|new|recent)\s+.+\s+video\b", re.I),
+        re.compile(r"\b(?:video|upload|uploaded|transcript)\s+(?:from|by|of)\s+.+", re.I),
     )
 
     def __init__(
@@ -29,8 +31,7 @@ class YoutubeAgent:
         )
 
     def can_handle(self, query: str) -> bool:
-        lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS)
+        return any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
 
     def answer(self, query: str) -> SpecialistResponse:
         try:
@@ -70,7 +71,7 @@ class YoutubeAgent:
                 label += f": {detail[:240]}"
             lines.append(label)
             url = str(item.get("url") or "").strip()
-            if url:
+            if url and self._is_youtube_url(url):
                 sources.append(
                     SpecialistSource(
                         kind="web",
@@ -98,8 +99,8 @@ class YoutubeAgent:
             return self.tool_registry.invoke("youtube.search_videos", payload, agent_name=self.name)
         return self.youtube_service.search_videos(payload)
 
-    def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
-        return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
+    def _is_youtube_url(self, url: str) -> bool:
+        return "youtube.com/watch" in url or "youtu.be/" in url
 
     def _sanitize_error(self, exc: Exception) -> str:
         message = str(exc).replace("\r", " ").replace("\n", " ").strip()

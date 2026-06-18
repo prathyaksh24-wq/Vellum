@@ -69,8 +69,12 @@ class YoutubeCapabilityService:
         if not query:
             return {"action": "youtube.search_videos", "items": []}
         items = [
-            self._normalize_video(item)
-            for item in self.search_backend(query, max_results)
+            item
+            for item in (
+                self._normalize_video(raw_item)
+                for raw_item in self.search_backend(query, max_results)
+            )
+            if _is_youtube_video_url(item.get("url", ""))
         ]
         return {"action": "youtube.search_videos", "items": items[:max_results]}
 
@@ -137,7 +141,7 @@ class YoutubeCapabilityService:
                 "description": source.get("snippet", ""),
             }
             for source in sources
-            if "youtube.com" in str(source.get("url", ""))
+            if _is_youtube_video_url(str(source.get("url", "")))
         ][:max_results]
 
     def _default_fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any] | None:
@@ -203,6 +207,10 @@ def _positive_int(value: Any, *, default: int) -> int:
 def _video_id_from_url(url: str) -> str:
     match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
     return match.group(1) if match else ""
+
+
+def _is_youtube_video_url(url: str) -> bool:
+    return "youtube.com/watch" in url or "youtu.be/" in url or "youtube.com/shorts/" in url
 
 
 def _string(value: Any) -> str:

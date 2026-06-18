@@ -58,6 +58,7 @@ class LiveAgentDispatcher:
         self.state_store = state_store or MasterThreadStateStore()
 
     def maybe_handle(self, message: str, thread_id: str) -> LiveAgentResult | None:
+        message = self._clean_surface_prefix(message)
         state = self.state_store.get(thread_id)
         active_agent = state.active_agent
         matched_pupil = self.registry.match(message)
@@ -156,3 +157,12 @@ class LiveAgentDispatcher:
     def _tool_name(self, agent_name: str) -> str:
         name = re.sub(r"(?<!^)(?=[A-Z])", "_", agent_name).lower()
         return name[:-6] + "_agent" if name.endswith("_agent") else name
+
+    def _clean_surface_prefix(self, message: str) -> str:
+        return re.sub(
+            r"^\s*(?:x|youtube|sports|memory|mcp|research)\s+agent\s*:\s*",
+            "",
+            message,
+            count=1,
+            flags=re.I,
+        ).strip()

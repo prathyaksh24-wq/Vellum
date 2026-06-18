@@ -131,6 +131,47 @@ def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_
     assert "UFC 302 results and bonuses" in saved[0].read_text(encoding="utf-8")
 
 
+def test_sports_agent_routes_public_athlete_performance_questions(tmp_path):
+    search_output = (
+        "**Cristiano Ronaldo match report**\n"
+        "Ronaldo scored and created two chances in yesterday's match.\n"
+        "https://www.espn.com/soccer/ronaldo-match-report"
+    )
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)
+
+    assert agent.can_handle("Cristiano Ronaldo performance yesterday")
+    response = agent.answer("Cristiano Ronaldo performance yesterday")
+
+    assert response.status == "answered"
+    assert "Ronaldo" in response.summary
+
+
+def test_sports_agent_prioritizes_current_sources_for_yesterday_queries(tmp_path):
+    search_result = {
+        "text": "Cristiano Ronaldo returns from injury with TWO goals, watch Apr 3, 2026.",
+        "sources": [
+            {
+                "title": "Cristiano Ronaldo returns from injury with TWO goals",
+                "url": "https://sports.yahoo.com/old-ronaldo",
+                "snippet": "Apr 3, 2026 — Ronaldo scored twice on return from injury.",
+                "domain": "sports.yahoo.com",
+            },
+            {
+                "title": "Portugal's Ronaldo does little to shake perception he is yesterday's man",
+                "url": "https://www.reuters.com/sports/soccer/ronaldo-2026-06-17/",
+                "snippet": "Jun 17, 2026 — Portugal's Ronaldo was held in a 1-1 draw.",
+                "domain": "reuters.com",
+            },
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("Cristiano Ronaldo performance yesterday")
+
+    assert response.sources[0].path_or_url == "https://www.reuters.com/sports/soccer/ronaldo-2026-06-17/"
+    assert response.summary.startswith("Portugal's Ronaldo does little")
+
+
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
     agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
 
@@ -628,6 +669,27 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
     assert "youtube.search_videos" in response.analysis
+
+
+def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "KSI uploaded a new challenge",
+                "url": "https://www.youtube.com/watch?v=abc123XYZ09",
+                "channel": "KSI",
+                "description": "Latest upload from the channel.",
+            }
+        ],
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+
+    assert agent.can_handle("what did KSI upload")
+    response = agent.answer("what did KSI upload")
+
+    assert response.status == "answered"
+    assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
 
 
 def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):

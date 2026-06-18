@@ -36,6 +36,28 @@ def test_youtube_service_prefers_serpapi_backend_over_web_fallback(tmp_path):
     assert result["items"][0]["video_id"] == "serp123456"
 
 
+def test_youtube_service_filters_non_youtube_provider_results(tmp_path):
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Irrelevant CRM result",
+                "url": "https://www.zoho.com/issues",
+                "description": "Not a YouTube video.",
+            },
+            {
+                "title": "Creator upload",
+                "url": "https://www.youtube.com/watch?v=abc123XYZ09",
+                "description": "A real YouTube video.",
+            },
+        ],
+    )
+
+    result = service.search_videos({"query": "what did KSI upload", "max_results": 5})
+
+    assert [item["url"] for item in result["items"]] == ["https://www.youtube.com/watch?v=abc123XYZ09"]
+
+
 def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
     calls = []
 
