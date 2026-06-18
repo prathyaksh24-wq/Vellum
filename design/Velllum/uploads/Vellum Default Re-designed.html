@@ -2438,58 +2438,66 @@ const XLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
 );
 const XConnectModal = ({onClose, onConnected}) => {
-  const [step, setStep] = useState('signin'); // signin | authorize | connecting
-  const [handle, setHandle] = useState('');
-  const [pw, setPw] = useState('');
-  const cleanHandle = (handle || 'pratyakksh').replace(/^@/, '').replace(/\s+/g, '') || 'pratyakksh';
-  const authorize = () => {
-    setStep('connecting');
-    setTimeout(() => onConnected('@' + cleanHandle), 1400);
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const api = window.VellumApi;
+  const loadStatus = async () => {
+    try {
+      const next = await api.client.request('/api/x/oauth/status');
+      setStatus(next);
+      if (next.xai_connected && (!next.x_api_configured || next.x_api_connected)) onConnected(next.x_api_connected ? 'X account connected' : 'SuperGrok connected');
+    } catch (err) {
+      setError(err.message || 'Could not read X connection status.');
+    }
   };
+  useEffect(() => {
+    loadStatus();
+    const id = setInterval(loadStatus, 2200);
+    return () => clearInterval(id);
+  }, []);
+  const start = async (provider) => {
+    setBusy(provider);
+    setError('');
+    try {
+      const out = await api.client.request('/api/x/oauth/start', api.client.jsonOptions('POST', {provider}));
+      window.open(out.authorize_url, 'vellum_x_oauth_' + provider, 'popup,width=620,height=760');
+    } catch (err) {
+      setError(err.message || 'Could not start OAuth.');
+    } finally {
+      setBusy('');
+      setTimeout(loadStatus, 1200);
+    }
+  };
+  const xaiOk = status && status.xai_connected;
+  const xapiOk = status && status.x_api_connected;
+  const xapiConfigured = status && status.x_api_configured;
   return (
     <React.Fragment>
       <div className="backdrop dim xc-backdrop" onClick={onClose}/>
-      <div className="xc-win" role="dialog" aria-label="Sign in with X">
+      <div className="xc-win" role="dialog" aria-label="Connect X">
         <div className="xc-bar">
           <div className="xc-dots"><span className="xc-dot r" onClick={onClose} title="Close"/><span className="xc-dot y"/><span className="xc-dot g"/></div>
-          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>accounts.x.ai<span className="xc-url-path">/oauth2/authorize</span></div>
+          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>accounts.x.ai<span className="xc-url-path">/oauth</span></div>
           <button className="xc-close" onClick={onClose} aria-label="Close"><IcX size={15}/></button>
         </div>
         <div className="xc-body">
-          {step === 'signin' && (
-            <div className="xc-page">
-              <div className="xc-logo"><XLogo size={30}/></div>
-              <div className="xc-h">Sign in to X</div>
-              <div className="xc-sub">to continue to <b>Vellum</b></div>
-              <label className="xc-field"><span>Phone, email, or username</span><input autoFocus value={handle} onChange={e => setHandle(e.target.value)} placeholder="@username"/></label>
-              <label className="xc-field"><span>Password</span><input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="Password"/></label>
-              <button className="xc-btn" onClick={() => setStep('authorize')}>Sign in</button>
-              <div className="xc-note"><IcSparkle size={12}/>Requires an active <b>SuperGrok</b> or <b>X&nbsp;Premium+</b> subscription.</div>
+          <div className="xc-page">
+            <div className="xc-logo"><XLogo size={30}/></div>
+            <div className="xc-h">Connect X Agent</div>
+            <div className="xc-sub">Use real browser OAuth. Vellum saves refreshable tokens locally and never asks for your X password.</div>
+            <div className="xc-perms" style={{marginTop:18}}>
+              <div className="xc-perm"><IcCheck size={14}/>{xaiOk ? 'SuperGrok / xAI search connected' : 'Connect SuperGrok / xAI search for live X search'}</div>
+              <div className="xc-perm"><IcCheck size={14}/>{xapiOk ? 'X API account actions connected' : 'Connect X API for posting, bookmarks, account reads, and media upload'}</div>
             </div>
-          )}
-          {step === 'authorize' && (
-            <div className="xc-page">
-              <div className="xc-logo"><XLogo size={30}/></div>
-              <div className="xc-h">Authorize Vellum</div>
-              <div className="xc-acct"><span className="xc-acct-ava">{cleanHandle.slice(0,1).toUpperCase()}</span><div className="xc-acct-meta"><div className="xc-acct-handle">@{cleanHandle}</div><div className="xc-acct-plan"><span className="xc-plan-dot"/>SuperGrok active</div></div></div>
-              <div className="xc-perm-title">Vellum will be able to</div>
-              <div className="xc-perms">
-                <div className="xc-perm"><IcCheck size={14}/>Use Grok models on your subscription</div>
-                <div className="xc-perm"><IcCheck size={14}/>Read posts, threads, and trends from X</div>
-                <div className="xc-perm"><IcCheck size={14}/>Draft and schedule posts on your behalf</div>
-              </div>
-              <button className="xc-btn" onClick={authorize}>Authorize app</button>
-              <button className="xc-cancel" onClick={onClose}>Cancel</button>
-              <div className="xc-note xc-note-sm">Vellum refreshes your session in the background — no API key required.</div>
-            </div>
-          )}
-          {step === 'connecting' && (
-            <div className="xc-page xc-connecting">
-              <div className="xc-spin"/>
-              <div className="xc-h">Completing sign-in…</div>
-              <div className="xc-sub">Redirecting back to Vellum</div>
-            </div>
-          )}
+            <button className="xc-btn" disabled={busy === 'xai' || xaiOk} onClick={() => start('xai')}>{xaiOk ? 'SuperGrok connected' : busy === 'xai' ? 'Opening SuperGrok OAuth...' : 'Connect SuperGrok'}</button>
+            <button className="xc-cancel" disabled={!xapiConfigured || busy === 'xapi' || xapiOk} onClick={() => start('xapi')}>{xapiOk ? 'X account actions connected' : busy === 'xapi' ? 'Opening X OAuth...' : 'Connect X account actions'}</button>
+            {!xapiConfigured && <div className="xc-note xc-note-sm">Set <b>X_API_CLIENT_ID</b> in .env to enable posting, bookmarks, and account actions. SuperGrok search can still connect above.</div>}
+            {status && !status.private_reads_enabled && <div className="xc-note xc-note-sm">Private reads also require <b>X_TOOL_ALLOW_PRIVATE_READS=true</b>.</div>}
+            {status && !status.posting_enabled && <div className="xc-note xc-note-sm">Posting also requires <b>X_TOOL_ALLOW_POSTS=true</b> plus per-action confirmation.</div>}
+            {error && <div className="xc-note xc-note-sm" style={{color:'#ff7b72'}}>{error}</div>}
+            <button className="xc-btn" style={{marginTop:12}} onClick={loadStatus}>Refresh status</button>
+          </div>
         </div>
       </div>
     </React.Fragment>

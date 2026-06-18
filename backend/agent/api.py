@@ -6,10 +6,12 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+import importlib.util
 import inspect
 import json
 from pathlib import Path
 import shutil
+import sys
 import time
 from typing import Any
 import urllib.error
@@ -19,7 +21,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from langchain_core.messages import ToolMessage
 from pydantic import BaseModel, Field
 
@@ -61,6 +63,7 @@ terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
 _live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
+_oauth_flows: dict[str, dict[str, Any]] = {}
 
 _project_context_singleton: ProjectContext | None = None
 
@@ -71,6 +74,17 @@ def _project_context() -> ProjectContext:
         s = get_settings()
         _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
     return _project_context_singleton
+
+
+def _load_script_module(name: str):
+    path = REPO_ROOT / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load script {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class ChatRequest(BaseModel):
@@ -146,6 +160,25 @@ class ReindexResponse(BaseModel):
 
 class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+
+
+class XOAuthStartRequest(BaseModel):
+    provider: str = Field(default="xai")
+
+
+class XOAuthStartResponse(BaseModel):
+    provider: str
+    authorize_url: str
+    status: str
+    message: str = ""
+
+
+class XOAuthStatusResponse(BaseModel):
+    xai_connected: bool
+    x_api_connected: bool
+    x_api_configured: bool
+    private_reads_enabled: bool
+    posting_enabled: bool
 
 
 class CodingSessionBody(BaseModel):
@@ -250,6 +283,135 @@ app.add_middleware(
 )
 
 router = APIRouter(prefix="/api")
+
+
+def _x_oauth_file(provider: str) -> Path:
+    return REPO_ROOT / "data" / ("xai-oauth.json" if provider == "xai" else "x-api-oauth.json")
+
+
+def _x_oauth_callback_url(provider: str) -> str:
+    return f"http://127.0.0.1:8000/api/x/oauth/callback/{provider}"
+
+
+def _x_oauth_status() -> XOAuthStatusResponse:
+    settings = get_settings()
+    return XOAuthStatusResponse(
+        xai_connected=_x_oauth_file("xai").exists(),
+        x_api_connected=_x_oauth_file("xapi").exists(),
+        x_api_configured=bool(settings.x_api_client_id),
+        private_reads_enabled=bool(settings.x_tool_allow_private_reads),
+        posting_enabled=bool(settings.x_tool_allow_posts),
+    )
+
+
+@router.get("/x/oauth/status", response_model=XOAuthStatusResponse)
+async def x_oauth_status() -> XOAuthStatusResponse:
+    return _x_oauth_status()
+
+
+@router.post("/x/oauth/start", response_model=XOAuthStartResponse)
+async def x_oauth_start(request: XOAuthStartRequest) -> XOAuthStartResponse:
+    provider = request.provider.strip().lower().replace("-", "_")
+    if provider in {"x", "x_api", "xapi"}:
+        provider = "xapi"
+    if provider not in {"xai", "xapi"}:
+        raise HTTPException(status_code=400, detail="provider must be xai or xapi")
+
+    if provider == "xai":
+        mod = _load_script_module("setup_xai_oauth")
+        discovery = await asyncio.to_thread(mod.discover_oauth, 60)
+        verifier, challenge = mod.make_pkce_pair()
+        state = mod.secrets.token_urlsafe(32)
+        nonce = mod.secrets.token_urlsafe(32)
+        redirect_uri = _x_oauth_callback_url("xai")
+        authorize_url = mod.build_authorize_url(
+            authorization_endpoint=discovery["authorization_endpoint"],
+            redirect_uri=redirect_uri,
+            state=state,
+            nonce=nonce,
+            code_challenge=challenge,
+        )
+        _oauth_flows["xai"] = {
+            "state": state,
+            "verifier": verifier,
+            "challenge": challenge,
+            "redirect_uri": redirect_uri,
+            "discovery": discovery,
+            "created_at": time.time(),
+        }
+        return XOAuthStartResponse(provider="xai", authorize_url=authorize_url, status="started")
+
+    settings = get_settings()
+    if not settings.x_api_client_id:
+        raise HTTPException(status_code=409, detail="Set X_API_CLIENT_ID in .env before connecting X account actions.")
+    mod = _load_script_module("setup_x_api_oauth")
+    verifier, challenge = mod.make_pkce_pair()
+    state = mod.secrets.token_urlsafe(32)
+    redirect_uri = _x_oauth_callback_url("xapi")
+    authorize_url = mod.build_authorize_url(
+        client_id=settings.x_api_client_id,
+        redirect_uri=redirect_uri,
+        state=state,
+        code_challenge=challenge,
+    )
+    _oauth_flows["xapi"] = {
+        "state": state,
+        "verifier": verifier,
+        "redirect_uri": redirect_uri,
+        "client_id": settings.x_api_client_id,
+        "client_secret": settings.x_api_client_secret,
+        "created_at": time.time(),
+    }
+    return XOAuthStartResponse(provider="xapi", authorize_url=authorize_url, status="started")
+
+
+@router.get("/x/oauth/callback/{provider}")
+async def x_oauth_callback(provider: str, code: str = "", state: str = "", error: str = "", error_description: str = "") -> HTMLResponse:
+    provider = provider.strip().lower()
+    if provider not in {"xai", "xapi"}:
+        raise HTTPException(status_code=404, detail="Unknown OAuth provider.")
+    if error:
+        return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{error_description or error}</p></body></html>", status_code=400)
+    flow = _oauth_flows.get(provider)
+    if not flow or state != flow.get("state"):
+        return HTMLResponse("<html><body><h1>X OAuth failed</h1><p>State mismatch. Start the connection again from Vellum.</p></body></html>", status_code=400)
+    if not code:
+        return HTMLResponse("<html><body><h1>X OAuth failed</h1><p>No authorization code was returned.</p></body></html>", status_code=400)
+
+    try:
+        if provider == "xai":
+            mod = _load_script_module("setup_xai_oauth")
+            tokens = await asyncio.to_thread(
+                mod.exchange_authorization_code,
+                token_endpoint=flow["discovery"]["token_endpoint"],
+                code=code,
+                redirect_uri=flow["redirect_uri"],
+                code_verifier=flow["verifier"],
+                code_challenge=flow["challenge"],
+                timeout_secs=60,
+            )
+            await asyncio.to_thread(mod.save_oauth_file, _x_oauth_file("xai"), tokens=tokens, discovery=flow["discovery"])
+        else:
+            mod = _load_script_module("setup_x_api_oauth")
+            tokens = await asyncio.to_thread(
+                mod.exchange_authorization_code,
+                client_id=flow["client_id"],
+                client_secret=flow.get("client_secret") or "",
+                code=code,
+                redirect_uri=flow["redirect_uri"],
+                code_verifier=flow["verifier"],
+                timeout_secs=60,
+            )
+            await asyncio.to_thread(mod.save_oauth_file, _x_oauth_file("xapi"), client_id=flow["client_id"], tokens=tokens)
+    except Exception as exc:
+        return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{str(exc)}</p></body></html>", status_code=500)
+    finally:
+        _oauth_flows.pop(provider, None)
+
+    return HTMLResponse(
+        "<html><body><h1>X OAuth complete</h1><p>You can close this tab and return to Vellum.</p>"
+        "<script>setTimeout(function(){ window.close(); }, 900);</script></body></html>"
+    )
 
 
 def _thread_config(thread_id: str | None) -> dict[str, dict[str, str]]:
@@ -1124,7 +1286,10 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
         "using the specialist result as evidence. Treat the specialist result and source snippets "
         "as authoritative for current/live facts. If they conflict with your prior knowledge, "
         "follow the specialist evidence and say so briefly. Mention uncertainty when the specialist "
-        "could not fully answer. Keep citations/source references consistent with provided sources.\n\n"
+        "could not fully answer. Preserve exact names, dates, scores, standings, and event order from "
+        "the specialist result. Do not replace a live snapshot with older model-memory facts. If the "
+        "specialist result includes multiple sources, synthesize across them instead of relying on one. "
+        "Keep citations/source references consistent with provided sources.\n\n"
         f"User message:\n{clean_message}\n\n"
         f"Specialist tool: {live_result.agent_name}\n"
         f"Specialist status: {live_result.status}\n"
