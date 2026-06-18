@@ -2283,7 +2283,7 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT}) => {
+const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const Icon = agent.icon;
@@ -2387,12 +2387,14 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
             <div className="bubble">{m.text}</div>
           </div>
         ) : (
-          <div key={m.id}><div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '\u2026'}</div>{!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}</div>
+          <div key={m.id} id={'m-' + m.id}>
+            <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
+          </div>
         ))}
         <div ref={endRef}/>
       </div></div>
       <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
-    </div></div>
+    </div>{activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}</div>
   );
 };
 
@@ -2621,34 +2623,37 @@ const SNIP_TPL = [
 const DATES = ['2 days ago','5 days ago','1 week ago','3 weeks ago','last month','7 days ago','yesterday','2 weeks ago'];
 const cap = (x) => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
 const STOPW = ['does','what','when','where','which','this','that','with','from','your','about','into','have','will','would','should','could','their','there','here','make','like','want','need','using','use'];
+const inferLeadIn = (kw, q) => {
+  const lower = (q || '').toLowerCase();
+  if (/(latest|today|now|current|live|next|when|score|standings|injur|upload|posted|news)/.test(lower)) {
+    return 'I am checking the latest available context for ' + kw + ' before answering.';
+  }
+  if (/(compare|difference|versus| vs |better|best)/.test(lower)) {
+    return 'I am comparing the most relevant context around ' + kw + ' before giving you a clear answer.';
+  }
+  if (/(how|why|explain|what is|what are)/.test(lower)) {
+    return 'I am working through the relevant context for ' + kw + ' so the answer is grounded and direct.';
+  }
+  return 'I am gathering the relevant context for ' + kw + ' before answering.';
+};
 const buildActivity = (text) => {
   const q = (text||'').trim().replace(/\s+/g,' ');
   const big = q.replace(/[^\w\s]/g,'').split(' ').filter(w => w.length > 3 && !STOPW.includes(w.toLowerCase()));
   const kw = big.slice(0,4).join(' ') || 'this topic';
   const short = big.slice(0,2).join(' ') || 'the topic';
   const dur = 13 + Math.floor(Math.random()*13);
-  const sources = [];
-  for (let i=0;i<50;i++){
-    const d = SRC_DOMAINS[i % SRC_DOMAINS.length];
-    sources.push({
-      pub: d.pub, dom: d.dom, url: 'https://' + d.dom,
-      title: TITLE_TPL[i % TITLE_TPL.length].replace('{q}', kw).replace('{Q}', cap(kw)),
-      date: DATES[i % DATES.length],
-      snippet: SNIP_TPL[i % SNIP_TPL.length].replace('{q}', kw),
-    });
-  }
   const refLines = [
-    'Browsed ' + short + ' implementations and searched various developer resources',
-    'Searching ' + SRC_DOMAINS[1].dom,
-    'Reading ' + SRC_DOMAINS[0].dom + ' and ' + SRC_DOMAINS[2].dom,
+    'Understanding the request around ' + short,
+    'Waiting for live tool and source results',
+    'Preparing an answer from the gathered context',
   ];
   const steps = [
-    {kind:'search', title:'Searching ' + kw, chips: SRC_DOMAINS.slice(0,3).map(d=>({dom:d.dom})), more: 47},
-    {kind:'eval', title:'Evaluating sources', text:'Cross-checking the most authoritative results and deciding which official docs to cite — favouring primary references over raw links.'},
+    {kind:'search', title:'Checking live context for ' + kw, chips: [], more: 0},
+    {kind:'eval', title:'Evaluating the request', text:'Waiting for backend tools, sub-agent routing, and source events before finalizing the answer.'},
     {kind:'done', title:'Worked for ' + dur + 's', text:'Done'},
   ];
-  const leadIn = "I'll answer this from a couple of angles, drawing on the most relevant sources I found.";
-  return {refLines, steps, sources, duration: dur, leadIn};
+  const leadIn = inferLeadIn(kw, q);
+  return {refLines, steps, sources: [], duration: dur, leadIn};
 };
 
 const Favicon = ({dom, size=14}) => {
@@ -3801,15 +3806,28 @@ const App = () => {
   const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
-  const streamAgentReply = (agentId, convoId, msgId, full) => {
+  const streamAgentReply = (agentId, convoId, msgId, data) => {
+    const payload = typeof data === 'string' ? {answer:data, ...buildActivity(data)} : data;
+    startAgentTurnPhases(agentId, convoId, msgId, payload);
     let i = 0;
-    const tick = () => {
-      i += 3;
-      const done = i >= full.length;
-      setAgentConvos(ac => ({...ac, [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done, trace: done ? {...(m.trace || initialTrace()), status: 'done', completedAt: Date.now(), elapsedSeconds: traceElapsed(m.trace || initialTrace())} : m.trace} : m)} : cv)}));
-      if (!done) timers.current[msgId] = setTimeout(tick, 22);
+    const startAnswer = () => {
+      finishTurn(msgId);
+      const tick = () => {
+        i += 3;
+        const done = i >= payload.answer.length;
+        updateAgentTurn(agentId, convoId, msgId, m => ({
+          ...m,
+          text: payload.answer.slice(0, i),
+          phase: done ? 'done' : 'answering',
+          refShown:(m.refLines || []).length,
+          streaming: !done,
+        }));
+        if (!done) timers.current[msgId] = setTimeout(tick, 22);
+      };
+      tick();
     };
-    timers.current[msgId] = setTimeout(tick, 400);
+    turnCtl.current[msgId].startAnswer = startAnswer;
+    turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
   const updateAgentConvo = (agentId, convoId, mapper) => {
     setAgentConvos(ac => ({
@@ -3823,19 +3841,76 @@ const App = () => {
       await API.chat.stream(
         {message: routedMessage, thread_id: convoId, model: selModel, store: true},
         {
-          trace: trace => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, trace, sources: trace.sources || m.sources || [], tools: trace.tools || m.tools || [], streaming: true} : m)})),
-          activity: (activity, tools) => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, activity, tools, streaming: true} : m)})),
-          sources: sources => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, sources, streaming: true} : m)})),
-          delta: text => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text, streaming: true} : m)})),
-          error: error => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, trace: m.trace || errorTrace(error), streaming: false} : m)})),
-          done: final => updateAgentConvo(agent.id, convoId, cv => ({
-            ...cv,
-            messages: cv.messages.map(m => m.id === assistantId ? {...m, text: final.text || m.text || 'No response.', sources: final.sources || m.sources || [], tools: final.tools || m.tools || [], activity: final.activity || m.activity || [], streaming: false} : m),
+          trace: trace => {
+            const liveSources = normalizeSources(trace.sources || []);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              tools: trace.tools || m.tools || [],
+              phase: m.phase === 'thinking' ? 'refs' : m.phase,
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          activity: (activity, tools) => updateAgentTurn(agent.id, convoId, assistantId, m => ({
+            ...m,
+            activity,
+            tools,
+            steps: stepsFromActivity(activity, m.steps),
+            refLines: refLinesFromActivity(activity, m.refLines),
+            phase: m.phase === 'thinking' ? 'refs' : m.phase,
+            refShown: Math.max(m.refShown || 0, 1),
+            streaming: true,
           })),
+          sources: sources => {
+            const liveSources = normalizeSources(sources);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              phase: 'refs',
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          delta: text => {
+            finishTurn(assistantId);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              text,
+              phase: 'answering',
+              refShown:(m.refLines || []).length,
+              streaming: true,
+            }));
+          },
+          error: error => {
+            finishTurn(assistantId);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend error: ' + error, phase:'done', streaming: false}));
+          },
+          done: final => {
+            finishTurn(assistantId);
+            const liveSources = normalizeSources(final.sources || []);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              text: final.text || m.text || 'No response.',
+              sources: liveSources.length ? liveSources : m.sources || [],
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              tools: final.tools || m.tools || [],
+              activity: final.activity || m.activity || [],
+              phase: 'done',
+              refShown:(m.refLines || []).length,
+              streaming: false,
+            }));
+          },
         }
       );
     } catch (err) {
-      updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', trace: m.trace || errorTrace('Backend unreachable'), streaming: false} : m)}));
+      finishTurn(assistantId);
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach) => {
@@ -3843,7 +3918,8 @@ const App = () => {
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: [], tools: [], trace: initialTrace()};
+    const act = buildActivity(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
     let cid = activeConvo[ag.id];
     if (!cid) {
       cid = uid();
@@ -3853,8 +3929,12 @@ const App = () => {
     } else {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
-    if (FEATURE_FLAGS.realChat) streamBackendAgentReply(ag, cid, aMsg.id, text);
-    else streamAgentReply(ag.id, cid, aMsg.id, reply);
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startAgentTurnPhases(ag.id, cid, aMsg.id, act), 0);
+      streamBackendAgentReply(ag, cid, aMsg.id, text);
+    } else {
+      streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
+    }
   };
   const regenAgent = (msgId) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
@@ -3865,9 +3945,14 @@ const App = () => {
     const idx = convo.messages.findIndex(m => m.id === msgId);
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const reply = agentReply(ag, prevUser ? prevUser.text : '');
-    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, trace: initialTrace()} : m)} : cv)}));
-    if (FEATURE_FLAGS.realChat) streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
-    else streamAgentReply(ag.id, cid, msgId, reply);
+    const act = buildActivity(prevUser ? prevUser.text : '');
+    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startAgentTurnPhases(ag.id, cid, msgId, act), 0);
+      streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
+    } else {
+      streamAgentReply(ag.id, cid, msgId, {...act, answer: reply});
+    }
   };
 
   const chatMenuAction = (id, action) => {
@@ -4017,6 +4102,25 @@ const App = () => {
       {kind:'done', title:'Worked with live context', text:'Done'},
     ];
   };
+  const activityKind = item => {
+    if (!item) return 'eval';
+    if (item.type === 'tool_call' || item.type === 'subagent_call' || item.type === 'source') return 'search';
+    if (item.type === 'answer' || item.status === 'completed' || item.status === 'done') return 'done';
+    return 'eval';
+  };
+  const stepsFromActivity = (items, fallbackSteps) => {
+    const visible = (items || []).filter(item => item && (item.label || item.title || item.name));
+    if (!visible.length) return fallbackSteps || [];
+    const steps = visible.slice(-6).map(item => ({
+      kind: activityKind(item),
+      title: item.label || item.title || item.name || 'Agent activity',
+      text: item.detail || item.text || '',
+      chips: [],
+      more: 0,
+    }));
+    if (!steps.some(step => step.kind === 'done')) steps.push({kind:'done', title:'Worked with live activity', text:'Done'});
+    return steps;
+  };
   const refLinesFromSources = (sources, fallback) => {
     if (!sources.length) return fallback || [];
     const names = sources.slice(0, 3).map(s => s.dom.replace(/^www\./, '')).join(', ');
@@ -4026,10 +4130,19 @@ const App = () => {
       sources[1] ? 'Cross-checking ' + sources[1].dom.replace(/^www\./, '') : 'Checking source details',
     ];
   };
+  const refLinesFromActivity = (items, fallback) => {
+    const visible = (items || []).filter(item => item && (item.label || item.title || item.name));
+    if (!visible.length) return fallback || [];
+    return visible.slice(-3).map(item => item.label || item.title || ('Using ' + item.name));
+  };
   const updateTurn = (chatId, msgId, mapper, persist = false) => updateChat(chatId, c => ({
     ...c,
     messages: c.messages.map(m => m.id === msgId ? mapper(m) : m),
   }), persist);
+  const updateAgentTurn = (agentId, convoId, msgId, mapper) => updateAgentConvo(agentId, convoId, cv => ({
+    ...cv,
+    messages: cv.messages.map(m => m.id === msgId ? mapper(m) : m),
+  }));
   const clearTurnTimers = msgId => {
     const ctl = turnCtl.current[msgId];
     if (ctl) (ctl.timers || []).forEach(clearTimeout);
@@ -4047,11 +4160,21 @@ const App = () => {
     ];
     turnCtl.current[msgId] = {chatId, timers: timersForTurn};
   };
+  const startAgentTurnPhases = (agentId, convoId, msgId, act) => {
+    finishTurn(msgId);
+    const timersForTurn = [
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+    ];
+    turnCtl.current[msgId] = {agentId, convoId, timers: timersForTurn};
+  };
   const answerNow = msgId => {
     const ctl = turnCtl.current[msgId];
     if (!ctl) return;
     clearTurnTimers(msgId);
-    updateTurn(ctl.chatId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
+    if (ctl.chatId) updateTurn(ctl.chatId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
+    else updateAgentTurn(ctl.agentId, ctl.convoId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
     if (ctl.startAnswer) ctl.startAnswer();
   };
 
@@ -4095,8 +4218,8 @@ const App = () => {
             updateTurn(chatId, assistantId, m => ({
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
-              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
               tools: trace.tools || m.tools || [],
               phase: m.phase === 'thinking' ? 'refs' : m.phase,
               refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
@@ -4107,6 +4230,8 @@ const App = () => {
             ...m,
             activity,
             tools,
+            steps: stepsFromActivity(activity, m.steps),
+            refLines: refLinesFromActivity(activity, m.refLines),
             phase: m.phase === 'thinking' ? 'refs' : m.phase,
             refShown: Math.max(m.refShown || 0, 1),
             streaming: true,
@@ -4373,7 +4498,7 @@ const App = () => {
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
             {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
