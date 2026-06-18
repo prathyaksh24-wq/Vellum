@@ -457,15 +457,60 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .bubble-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
 .bubble{max-width:78%;background:var(--bubble);border:1px solid var(--line);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:16px;padding:9px 14px;font-size:13.5px;color:var(--txt2);white-space:pre-wrap;line-height:1.55}
 .areply{font-size:14px;line-height:1.7;color:var(--txt);white-space:pre-wrap}
-.msg-activity{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 4px}
-.msg-act{font-size:11.5px;color:var(--dim);border:1px solid var(--line);border-radius:12px;padding:3px 8px;background:var(--glass)}
-.msg-sources{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0 2px}
-.msg-src{display:inline-flex;align-items:center;gap:6px;max-width:210px;border:1px solid var(--line);border-radius:12px;padding:3px 8px;color:var(--txt);text-decoration:none;background:var(--glass);font-size:11.5px}
-.msg-src img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
-.msg-src span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .shimmer{background:linear-gradient(90deg,var(--dim) 0%,var(--txt2) 18%,var(--ember) 38%,var(--txt2) 58%,var(--dim) 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;color:transparent;animation:sh 2.4s linear infinite;filter:drop-shadow(0 0 8px var(--glow))}
 @keyframes sh{to{background-position:-240% center}}
 [data-theme="light"] .shimmer{background:none;-webkit-background-clip:initial;background-clip:initial;color:var(--txt);-webkit-text-fill-color:var(--txt);animation:none;filter:none}
+[data-theme="light"] .shimmer{opacity:.62}
+/* agentic streaming turn */
+.turn{display:flex;flex-direction:column;gap:10px}
+.think-line{font-size:15px;font-weight:500;width:fit-content;letter-spacing:.01em}
+.turn-lead{font-size:15px;line-height:1.7;color:var(--txt)}
+.ref-list{display:flex;flex-direction:column;gap:9px}
+.ref-list.inset{margin:2px 0 4px;padding:10px 12px;border-left:2px solid var(--line2);background:var(--panel);border-radius:0 10px 10px 0}
+.ref-line{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--dim);line-height:1.5}
+.ref-line .ref-ic{display:flex;flex-shrink:0;color:var(--dim)}
+.ref-line.shimmer .ref-ic{color:var(--ember)}
+.ref-line.done{color:var(--dim2)}
+.ref-line.under{margin-top:2px}
+.ref-txt{flex:1;min-width:0}
+.ref-line.shimmer .ref-txt{font-size:13.5px}
+.answer-now{flex-shrink:0;margin-left:auto;background:none;border:none;color:var(--txt2);font:inherit;font-size:13px;cursor:pointer;text-decoration:underline;text-underline-offset:3px;padding:2px 4px}
+.answer-now:hover{color:var(--ember)}
+.worked-for{display:inline-flex;align-items:center;gap:5px;width:fit-content;background:none;border:none;color:var(--dim);font:inherit;font-size:13px;cursor:pointer;padding:2px 0}
+.worked-for:hover{color:var(--txt2)}
+.worked-for svg{transition:transform .2s}
+.worked-for.open svg{transform:rotate(180deg)}
+.turn-foot{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
+.sources-btn{display:flex;align-items:center;gap:7px;height:28px;padding:0 12px 0 8px;border-radius:14px;border:1px solid var(--line2);background:none;color:var(--dim);font:inherit;font-size:12.5px;cursor:pointer;transition:background .15s,color .15s}
+.sources-btn:hover{background:var(--hover);color:var(--txt2)}
+.src-favs{display:flex}
+.src-favs .favicon{margin-right:-5px;box-shadow:0 0 0 1.5px var(--modal)}
+.favicon{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:700;flex-shrink:0;line-height:1;background:var(--input);object-fit:cover}
+/* activity panel */
+.activity-panel{width:340px}
+.act-head{gap:9px}
+.act-head .act-dur{flex:0;color:var(--dim);font-size:13px;font-weight:400;font-family:var(--font-ui);margin-left:-4px}
+.act-head .tbtn{margin-left:auto}
+.act-scroll{flex:1;overflow-y:auto;padding:6px 16px 24px}
+.act-sec-h{font-family:var(--font-d);font-size:15px;font-weight:600;color:var(--txt2);margin:16px 0 12px}
+.act-sources-h{padding-top:14px;border-top:1px solid var(--line)}
+.act-step{display:flex;gap:11px;padding-bottom:18px;position:relative}
+.act-step::before{content:"";position:absolute;left:9px;top:22px;bottom:0;width:1.5px;background:var(--line)}
+.act-step:last-of-type::before{display:none}
+.act-step-ic{display:flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--input);color:var(--dim);flex-shrink:0;z-index:1}
+.act-step-ic.done{color:#34a853}
+.act-step-body{flex:1;min-width:0}
+.act-step-title{font-size:13.5px;color:var(--txt2);font-weight:500;line-height:1.45}
+.act-step-text{font-size:12.5px;color:var(--dim);line-height:1.55;margin-top:5px}
+.act-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.act-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 4px;border-radius:13px;border:1px solid var(--line2);background:var(--input);color:var(--txt);font-size:11.5px;text-decoration:none;max-width:100%}
+.act-chip:hover{background:var(--hover)}
+.act-chip.more{color:var(--dim)}
+.act-source{display:block;padding:11px 0;border-bottom:1px solid var(--line);text-decoration:none}
+.act-source:hover .act-src-title{color:var(--ember)}
+.act-src-pub{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim)}
+.act-src-title{font-size:13.5px;color:var(--txt2);font-weight:500;margin-top:4px;line-height:1.4}
+.act-src-snip{font-size:12px;color:var(--dim);line-height:1.5;margin-top:4px}
 .act-row{display:flex;gap:2px;margin-top:2px}
 .act-btn{width:28px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--dim);border-radius:6px;cursor:pointer;background:none;border:none}
 .act-btn:hover{background:var(--hover);color:var(--txt2)}
@@ -813,6 +858,109 @@ body{font-size:14px}
 .agent-off-t{font-family:var(--font-d);font-size:14.5px;font-weight:600;color:var(--txt2)}
 .agent-off-s{font-size:12.5px;color:var(--dim);margin-top:2px}
 .agent-row.disabled-agent{opacity:.42}
+
+/* X connect gate + pill */
+.xgate{display:flex;align-items:center;gap:14px;margin:20px 0 24px;padding:18px 20px;border:1px solid var(--line2);border-radius:16px;background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.xgate-ic{display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:13px;background:#000;color:#fff;flex-shrink:0}
+[data-theme="light"] .xgate-ic{background:#000;color:#fff}
+.xgate-txt{flex:1;min-width:0}
+.xgate-t{font-family:var(--font-d);font-size:15px;font-weight:600;color:var(--txt2)}
+.xgate-s{font-size:12.5px;color:var(--dim);margin-top:3px;line-height:1.5;max-width:420px}
+.xgate-btn{flex-shrink:0;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.x-connpill{display:flex;align-items:center;gap:7px;height:30px;padding:0 6px 0 11px;border-radius:15px;border:1px solid color-mix(in srgb,var(--ember) 40%,var(--line2));background:color-mix(in srgb,var(--ember) 9%,transparent);color:var(--txt2);font:inherit;font-size:12.5px;cursor:pointer;transition:background .15s}
+.x-connpill:hover{background:color-mix(in srgb,var(--ember) 16%,transparent)}
+.x-connpill-dot{width:7px;height:7px;border-radius:50%;background:#1d9bf0;box-shadow:0 0 7px rgba(29,155,240,.6)}
+.x-connpill-x{display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;color:var(--dim)}
+.x-connpill-x:hover{background:var(--hover);color:var(--txt2)}
+
+/* X OAuth browser popup */
+.xc-backdrop{z-index:80}
+.xc-win{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:82;width:440px;max-width:94vw;max-height:92vh;display:flex;flex-direction:column;background:var(--modal);border:1px solid var(--line2);border-radius:14px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.6);animation:xcIn .2s cubic-bezier(.2,.8,.3,1)}
+@keyframes xcIn{from{opacity:0;transform:translate(-50%,-46%) scale(.97)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.xc-bar{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--glass-bar);border-bottom:1px solid var(--line);flex-shrink:0}
+.xc-dots{display:flex;gap:6px;flex-shrink:0}
+.xc-dot{width:11px;height:11px;border-radius:50%}
+.xc-dot.r{background:#ff5f57;cursor:pointer}.xc-dot.y{background:#febc2e}.xc-dot.g{background:#28c840}
+.xc-url{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:26px;border-radius:8px;background:var(--input);border:1px solid var(--line);color:var(--txt2);font-size:12px;font-family:var(--font-m,monospace)}
+.xc-url-path{color:var(--dim)}
+.xc-close{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;background:none;color:var(--dim);border-radius:7px;cursor:pointer;flex-shrink:0}
+.xc-close:hover{background:var(--hover);color:var(--txt2)}
+.xc-body{background:#000;color:#e7e9ea;overflow-y:auto;min-height:0}
+[data-theme="light"] .xc-body{background:#fff;color:#0f1419}
+.xc-page{display:flex;flex-direction:column;align-items:center;padding:34px 40px 30px;text-align:center}
+.xc-logo{color:#fff;margin-bottom:18px}
+[data-theme="light"] .xc-logo{color:#000}
+.xc-h{font-size:22px;font-weight:700;letter-spacing:-.01em;color:inherit}
+.xc-sub{font-size:13.5px;color:#71767b;margin-top:5px}
+.xc-field{width:100%;display:flex;flex-direction:column;gap:6px;margin-top:16px;text-align:left;font-size:12px;color:#71767b}
+.xc-field input{width:100%;background:transparent;border:1px solid #333639;border-radius:8px;padding:13px 12px;color:inherit;font:inherit;font-size:14px;outline:none}
+.xc-field input:focus{border-color:#1d9bf0}
+[data-theme="light"] .xc-field input{border-color:#cfd9de}
+.xc-btn{width:100%;margin-top:20px;background:#fff;color:#0f1419;border:none;border-radius:22px;padding:13px;font:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.xc-btn:hover{opacity:.88}
+[data-theme="light"] .xc-btn{background:#0f1419;color:#fff}
+.xc-cancel{width:100%;margin-top:10px;background:transparent;color:inherit;border:1px solid #536471;border-radius:22px;padding:12px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.xc-cancel:hover{background:rgba(239,243,244,.1)}
+.xc-note{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;font-size:11.5px;color:#71767b;margin-top:18px;line-height:1.5}
+.xc-note b{color:#e7e9ea;font-weight:600}
+[data-theme="light"] .xc-note b{color:#0f1419}
+.xc-note-sm{margin-top:14px;font-size:11px}
+.xc-acct{display:flex;align-items:center;gap:11px;width:100%;padding:12px;margin-top:18px;border:1px solid #333639;border-radius:12px;text-align:left}
+[data-theme="light"] .xc-acct{border-color:#cfd9de}
+.xc-acct-ava{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#1d9bf0,#0a6cb0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0}
+.xc-acct-handle{font-size:14px;font-weight:700;color:inherit}
+.xc-acct-plan{display:flex;align-items:center;gap:5px;font-size:12px;color:#00ba7c;margin-top:2px}
+.xc-plan-dot{width:6px;height:6px;border-radius:50%;background:#00ba7c}
+.xc-perm-title{align-self:flex-start;font-size:12.5px;color:#71767b;margin-top:18px}
+.xc-perms{width:100%;display:flex;flex-direction:column;gap:9px;margin-top:9px}
+.xc-perm{display:flex;align-items:center;gap:9px;font-size:13px;color:inherit;text-align:left}
+.xc-perm svg{color:#1d9bf0;flex-shrink:0}
+.xc-connecting{padding:50px 40px;gap:8px}
+.xc-spin{width:34px;height:34px;border-radius:50%;border:3px solid #333639;border-top-color:#1d9bf0;animation:xcspin .8s linear infinite;margin-bottom:12px}
+@keyframes xcspin{to{transform:rotate(360deg)}}
+
+/* YouTube / Google OAuth popup */
+.yt-gate-ic{background:#FF0000!important;color:#fff!important}
+.yt-connpill{border-color:color-mix(in srgb,#FF0000 45%,var(--line2))!important;background:color-mix(in srgb,#FF0000 9%,transparent)!important}
+.yt-connpill:hover{background:color-mix(in srgb,#FF0000 16%,transparent)!important}
+.yt-dot{background:#FF0000!important;box-shadow:0 0 7px rgba(255,0,0,.55)!important}
+.gc-body{background:#fff!important;color:#202124;overflow-y:auto;min-height:0}
+.gc-page{display:flex;flex-direction:column;align-items:center;padding:32px 40px 28px;text-align:center}
+.gc-logo{margin-bottom:14px}
+.gc-h{font-size:21px;font-weight:400;color:#202124;line-height:1.3}
+.gc-sub{font-size:13.5px;color:#5f6368;margin-top:8px;line-height:1.55;max-width:368px}
+.gc-sub b{font-weight:500;color:#202124}
+.gc-steps{text-align:left;align-self:stretch;margin:18px 0 4px;padding-left:20px;display:flex;flex-direction:column;gap:9px;font-size:13px;color:#3c4043;line-height:1.5}
+.gc-steps li::marker{color:#5f6368;font-weight:600}
+.gc-steps b{font-weight:600;color:#202124}
+.gc-field{width:100%;display:flex;flex-direction:column;gap:6px;margin-top:14px;text-align:left;font-size:12px;color:#5f6368}
+.gc-field input{width:100%;border:1px solid #dadce0;border-radius:8px;padding:13px 14px;color:#202124;font:inherit;font-size:14px;outline:none;background:#fff}
+.gc-field input:focus{border-color:#1a73e8;box-shadow:inset 0 0 0 1px #1a73e8}
+.gc-field input::placeholder{color:#80868b}
+.gc-btn{background:#1a73e8;color:#fff;border:none;border-radius:8px;padding:11px 24px;font:inherit;font-size:14px;font-weight:500;cursor:pointer;transition:background .15s,box-shadow .15s}
+.gc-btn:hover{background:#1b66c9;box-shadow:0 1px 3px rgba(60,64,67,.3)}
+.gc-btn-full{width:100%;margin-top:20px}
+.gc-actions{display:flex;align-items:center;justify-content:space-between;width:100%;margin-top:24px;gap:10px}
+.gc-link{color:#1a73e8;font-size:14px;font-weight:500;text-decoration:none;cursor:pointer;padding:8px 10px;border-radius:6px}
+.gc-link:hover{background:rgba(26,115,232,.06);text-decoration:none}
+.gc-link-left{align-self:flex-start;color:#1a73e8;font-size:13px;font-weight:500;text-decoration:none;margin-top:10px}
+.gc-link-left:hover{text-decoration:underline}
+.gc-guest{align-self:flex-start;font-size:12.5px;color:#5f6368;margin-top:16px;line-height:1.5}
+.gc-note{font-size:12px;color:#5f6368;margin-top:18px;line-height:1.5}
+.gc-note a,.gc-steps a,.gc-trust a{color:#1a73e8;text-decoration:none;font-weight:500}
+.gc-note a:hover,.gc-steps a:hover,.gc-trust a:hover{text-decoration:underline}
+.gc-acct{display:flex;align-items:center;gap:9px;margin-top:14px;padding:6px 15px 6px 6px;border:1px solid #dadce0;border-radius:30px}
+.gc-acct-ava{width:30px;height:30px;border-radius:50%;background:#1a73e8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:500;font-size:14px}
+.gc-acct-email{font-size:13.5px;color:#202124}
+.gc-perm-title{align-self:flex-start;font-size:13.5px;color:#3c4043;margin-top:20px}
+.gc-perms{width:100%;display:flex;flex-direction:column;gap:11px;margin-top:12px}
+.gc-perm{display:flex;align-items:center;gap:11px;font-size:13.5px;color:#3c4043;text-align:left}
+.gc-perm svg{flex-shrink:0}
+.gc-trust{font-size:12px;color:#5f6368;margin-top:20px;line-height:1.5;text-align:left;align-self:stretch}
+.gc-cancel{background:none;border:none;color:#1a73e8;font:inherit;font-size:14px;font-weight:500;cursor:pointer;padding:10px 14px;border-radius:6px}
+.gc-cancel:hover{background:rgba(26,115,232,.06)}
+.gc-connecting{padding:50px 40px;gap:8px}
+.gc-spin{width:34px;height:34px;border-radius:50%;border:3px solid #e0e0e0;border-top-color:#1a73e8;animation:xcspin .8s linear infinite;margin-bottom:12px}
 
 .slash-tag{margin-left:auto;font-size:9px;color:var(--dim2);border:1px solid var(--line2);border-radius:5px;padding:1px 6px;text-transform:uppercase;letter-spacing:.06em}
 .sb-kbd{margin-left:auto;display:none;flex-shrink:0}
@@ -1891,32 +2039,218 @@ const MsgActions = ({msg, onRegen}) => {
   );
 };
 
-const MessageMeta = ({msg}) => (
+function sourceName(s) {
+  if (!s) return 'source';
+  const domain = (s.domain || s.dom || '').replace(/^www\./, '');
+  return s.provider_label || s.pub || prettyProvider(domain) || s.title || s.url || 'source';
+}
+
+function sourceFavicon(s) {
+  if (!s) return '';
+  if (s.favicon_url || s.logo_url) return s.favicon_url || s.logo_url;
+  const domain = s.domain || s.dom || (s.url || '').replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+  return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : '';
+}
+
+function prettyProvider(domain) {
+  const clean = (domain || '').toLowerCase().replace(/^www\./, '');
+  const labels = {
+    'bbc.com': 'BBC',
+    'espn.com': 'ESPN',
+    'fifa.com': 'FIFA',
+    'formula1.com': 'Formula 1',
+    'foxsports.com': 'FOX Sports',
+    'instagram.com': 'Instagram',
+    'nba.com': 'NBA',
+    'nbcsports.com': 'NBC Sports',
+    'reddit.com': 'Reddit',
+    'skysports.com': 'Sky Sports',
+    'theguardian.com': 'The Guardian',
+    'usatoday.com': 'USA Today',
+    'x.com': 'X',
+    'twitter.com': 'X',
+    'sports.yahoo.com': 'Yahoo Sports',
+    'yahoo.com': 'Yahoo',
+    'youtube.com': 'YouTube',
+  };
+  if (labels[clean]) return labels[clean];
+  if (clean.endsWith('.espn.com')) return 'ESPN';
+  if (clean.endsWith('.yahoo.com')) return 'Yahoo';
+  if (clean.endsWith('.youtube.com')) return 'YouTube';
+  return clean || '';
+}
+
+function traceElapsed(trace) {
+  if (!trace) return 0;
+  if (typeof trace.elapsedSeconds === 'number') return trace.elapsedSeconds;
+  const start = trace.startedAt || Date.now();
+  const end = trace.completedAt || Date.now();
+  return Math.max(0, Math.round((end - start) / 1000));
+}
+
+function initialTrace() {
+  const now = Date.now();
+  return {
+    status: 'thinking',
+    startedAt: now,
+    completedAt: null,
+    elapsedSeconds: 0,
+    steps: [{id: 'thinking', type: 'thinking', label: 'Thinking', detail: '', status: 'in_progress', at: now}],
+    sources: [],
+    tools: [],
+  };
+}
+
+function errorTrace(message) {
+  const now = Date.now();
+  return {
+    status: 'error',
+    startedAt: now,
+    completedAt: now,
+    elapsedSeconds: 0,
+    steps: [
+      {id: 'thinking', type: 'thinking', label: 'Thinking', detail: '', status: 'completed', at: now},
+      {id: 'error', type: 'error', label: 'Stream error', detail: message, status: 'failed', at: now},
+    ],
+    sources: [],
+    tools: [],
+  };
+}
+
+const TraceIcon = ({type, status}) => {
+  if (type === 'source') return <IcGlobe size={15}/>;
+  if (type === 'error' || status === 'failed') return <IcInfo size={15}/>;
+  if (type === 'subagent_call') return <IcBrain size={15}/>;
+  if (type === 'tool_call') return <IcSearch size={15}/>;
+  return <IcGlobe size={15}/>;
+};
+
+const MessageTraceInline = ({msg, onOpenActivity}) => {
+  const trace = msg.trace;
+  const sources = (trace && trace.sources && trace.sources.length ? trace.sources : msg.sources) || [];
+  const steps = (trace && trace.steps) || [];
+  const visibleSteps = steps.filter(s => s.label && s.id !== 'thinking').slice(-3);
+  const canOpen = onOpenActivity && (trace || sources.length || (msg.activity && msg.activity.length));
+  const open = () => canOpen && onOpenActivity(msg.id);
+  if (!trace && !sources.length && !(msg.activity && msg.activity.length)) return null;
+  return (
+    <div className="turn-trace">
+      {trace && (
+        <button className="turn-thinking" onClick={open} title="Open activity">
+          <span className={msg.streaming ? 'trace-glow' : ''}>{msg.streaming ? 'Thinking' : `Worked for ${traceElapsed(trace)}s`}</span>
+          {!msg.streaming && <IcChevD size={12}/>}
+        </button>
+      )}
+      {visibleSteps.map((step, i) => (
+        <div key={step.id || i} className={'turn-line' + (msg.streaming && i === visibleSteps.length - 1 ? ' active' : '')}>
+          <TraceIcon type={step.type} status={step.status}/>
+          <span className={msg.streaming && i === visibleSteps.length - 1 ? 'turn-label trace-glow' : 'turn-label'}>{step.label}</span>
+        </div>
+      ))}
+      {sources.length > 0 && (
+        <div className="turn-source-row">
+          {sources.slice(0, 4).map((s, i) => (
+            <button key={s.url || i} className="source-pill" onClick={open} title={s.title || s.url}>
+              {sourceFavicon(s) && <img src={sourceFavicon(s)} alt=""/>}
+              <span>{sourceName(s)}</span>
+            </button>
+          ))}
+          {sources.length > 4 && <button className="source-pill" onClick={open}>+{sources.length - 4} more</button>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MessageMeta = ({msg, onOpenActivity}) => (
   <React.Fragment>
-    {msg.activity && msg.activity.length > 0 && (
+    <MessageTraceInline msg={msg} onOpenActivity={onOpenActivity}/>
+    {!msg.trace && msg.activity && msg.activity.length > 0 && (
       <div className="msg-activity">
         {msg.activity.slice(0, 4).map((a, i) => <span key={i} className="msg-act">{a.label || a.name || 'Agent activity'}</span>)}
       </div>
     )}
-    {msg.sources && msg.sources.length > 0 && (
+    {!msg.trace && msg.sources && msg.sources.length > 0 && (
       <div className="msg-sources">
         {msg.sources.slice(0, 6).map((s, i) => (
-          <a key={i} className="msg-src" href={s.url} target="_blank" rel="noreferrer" title={s.title || s.url}>
-            {s.favicon_url && <img src={s.favicon_url} alt=""/>}
-            <span>{s.provider_label || s.domain || s.title || s.url}</span>
-          </a>
+          <button key={i} className="msg-src" onClick={() => onOpenActivity ? onOpenActivity(msg.id) : window.open(s.url, '_blank', 'noopener')} title={s.title || s.url}>
+            {sourceFavicon(s) && <img src={sourceFavicon(s)} alt=""/>}
+            <span>{sourceName(s)}</span>
+          </button>
         ))}
       </div>
     )}
   </React.Fragment>
 );
 
+const ActivityDrawer = ({msg, onClose}) => {
+  if (!msg) return null;
+  const trace = msg.trace || {status: msg.streaming ? 'thinking' : 'done', steps: msg.activity || [], sources: msg.sources || [], tools: msg.tools || [], elapsedSeconds: 0};
+  const sources = (trace.sources && trace.sources.length ? trace.sources : msg.sources) || [];
+  const steps = (trace.steps || []).filter(s => s.label);
+  return (
+    <div className="activity-drawer">
+      <div className="activity-head">
+        <span className="activity-title">Activity</span>
+        <span className="activity-dot">-</span>
+        <span className="activity-time">{trace.status === 'done' ? `Worked for ${traceElapsed(trace)}s` : `${traceElapsed(trace)}s`}</span>
+        <button className="tbtn activity-close" title="Close activity" onClick={onClose}><IcX size={15}/></button>
+      </div>
+      <div className="activity-body">
+        <section>
+          <div className="activity-section-title">{trace.status === 'done' ? 'Done' : 'Thinking'}</div>
+          <div className="activity-timeline">
+            {steps.map((step, i) => (
+              <div key={step.id || i} className="activity-step">
+                <span className="activity-step-ic"><TraceIcon type={step.type} status={step.status}/></span>
+                <div className="activity-step-main">
+                  <div className="activity-step-label">{step.label}</div>
+                  {step.detail && <div className="activity-step-detail">{step.detail}</div>}
+                  {step.source && (
+                    <div className="activity-source-chips">
+                      <a className="activity-src-mini" href={step.source.url} target="_blank" rel="noreferrer">
+                        {sourceFavicon(step.source) && <img src={sourceFavicon(step.source)} alt=""/>}
+                        <span>{sourceName(step.source)}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section>
+          <div className="activity-section-title">Sources - {sources.length}</div>
+          <div className="activity-sources">
+            {sources.length === 0 && <div className="activity-step-detail">No external sources were used in this turn.</div>}
+            {sources.map((s, i) => (
+              <a key={s.url || i} className="activity-source-card" href={s.url} target="_blank" rel="noreferrer">
+                {sourceFavicon(s) ? <img src={sourceFavicon(s)} alt=""/> : <IcGlobe size={17}/>}
+                <div>
+                  <div className="activity-source-domain">{sourceName(s)}</div>
+                  <div className="activity-source-title">{s.title || s.url}</div>
+                  {s.snippet && <div className="activity-source-snippet">{s.snippet}</div>}
+                </div>
+              </a>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
 const Timeline = ({userMsgs}) => {
   const [open, setOpen] = useState(false);
   if (userMsgs.length < 2) return null;
   const jump = id => {
     const el = document.getElementById('m-' + id);
-    if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+    const box = el && el.closest('.msgs');
+    if (!el || !box) return;
+    const top = el.offsetTop - 20;
+    const bot = top + el.offsetHeight;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
   };
   return (
     <div className="timeline" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
@@ -1979,14 +2313,22 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras}) => {
+const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const Icon = agent.icon;
+  const needsX = agent.id === 'x' && !xConnected;
+  const needsYT = agent.id === 'youtube' && !ytConnected;
+  const needsConnect = needsX || needsYT;
   const convo = convos.find(c => c.id === activeConvoId);
   const msgs = convo ? convo.messages : [];
   const busy = msgs.some(m => m.streaming);
-  useEffect(() => { if (endRef.current) endRef.current.scrollIntoView({behavior: 'smooth'}); }, [msgs.map(m => m.text).join('|')]);
+  useEffect(() => {
+    const box = endRef.current && endRef.current.closest('.msgs');
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+    if (nearBottom) box.scrollTop = box.scrollHeight;
+  }, [msgs.map(m => (m.text||'') + (m.phase||'') + (m.refShown||0)).join('|')]);
   if (!convo) {
     return (
       <div className="page">
@@ -1996,11 +2338,27 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
             <span className="proj-name">{agent.name}</span>
             <span className="proj-mem">{agent.tag}</span>
             <div className="agent-head-acts">
+              {agent.id === 'x' && xConnected && <button className="x-connpill" onClick={onDisconnectX} title="Disconnect X account"><span className="x-connpill-dot"/>{xHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
+              {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onDisconnectYT} title="Disconnect YouTube account"><span className="x-connpill-dot yt-dot"/>{ytHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
               <button className={'agent-status' + (enabled ? ' on' : '')} onClick={onToggleEnabled} title={enabled ? 'Turn agent off' : 'Turn agent on'}><span className="agent-status-dot"/>{enabled ? 'On' : 'Off'}</button>
               <button className="tbtn" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
             </div>
           </div>
-          {enabled ? (
+          {needsConnect ? (
+            agent.id === 'youtube' ? (
+            <div className="xgate">
+              <div className="xgate-ic yt-gate-ic"><YTLogo size={22}/></div>
+              <div className="xgate-txt"><div className="xgate-t">Connect your YouTube account</div><div className="xgate-s">Sign in with Google to activate the {agent.name}. Uses <b>Google OAuth 2.0 for installed apps</b> — Vellum walks you through creating credentials in the Google Cloud Console.</div></div>
+              <button className="btn primary xgate-btn" onClick={onConnectYT}><GLogo size={15}/>Connect with Google</button>
+            </div>
+            ) : (
+            <div className="xgate">
+              <div className="xgate-ic"><XLogo size={20}/></div>
+              <div className="xgate-txt"><div className="xgate-t">Connect your X account</div><div className="xgate-s">Sign in with X to activate the {agent.name}. Requires an active <b>SuperGrok</b> or <b>X Premium+</b> subscription — no API key needed.</div></div>
+              <button className="btn primary xgate-btn" onClick={onConnectX}><XLogo size={14}/>Connect X account</button>
+            </div>
+            )
+          ) : enabled ? (
             <div className="proj-comp">
               <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={false} ph={'Message ' + agent.name + '\u2026'} drop="down" onViewImage={onViewImage} {...composerExtras}/>
             </div>
@@ -2059,12 +2417,14 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
             <div className="bubble">{m.text}</div>
           </div>
         ) : (
-          <div key={m.id}><div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '\u2026'}</div><MessageMeta msg={m}/>{!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}</div>
+          <div key={m.id} id={'m-' + m.id}>
+            <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
+          </div>
         ))}
         <div ref={endRef}/>
       </div></div>
       <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
-    </div></div>
+    </div>{activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}</div>
   );
 };
 
@@ -2104,12 +2464,337 @@ const AgentSettingsModal = ({agent, cfg, onSave, onClose}) => {
   );
 };
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu}) => {
+const XLogo = ({size=22}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+);
+const XConnectModal = ({onClose, onConnected}) => {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const api = window.VellumApi;
+  const loadStatus = async () => {
+    try {
+      const next = await api.client.request('/api/x/oauth/status');
+      setStatus(next);
+    } catch (err) {
+      setError(err.message || 'Could not read X connection status.');
+    }
+  };
+  useEffect(() => {
+    loadStatus();
+    const id = setInterval(loadStatus, 2200);
+    return () => clearInterval(id);
+  }, []);
+  const start = async (provider) => {
+    setBusy(provider);
+    setError('');
+    try {
+      const out = await api.client.request('/api/x/oauth/start', api.client.jsonOptions('POST', {provider}));
+      window.open(out.authorize_url, 'vellum_x_oauth_' + provider, 'popup,width=620,height=760');
+    } catch (err) {
+      setError(err.message || 'Could not start OAuth.');
+    } finally {
+      setBusy('');
+      setTimeout(loadStatus, 1200);
+    }
+  };
+  const xaiOk = status && status.xai_connected;
+  const xapiOk = status && status.x_api_connected;
+  const xapiConfigured = status && status.x_api_configured;
+  return (
+    <React.Fragment>
+      <div className="backdrop dim xc-backdrop" onClick={onClose}/>
+      <div className="xc-win" role="dialog" aria-label="Connect X">
+        <div className="xc-bar">
+          <div className="xc-dots"><span className="xc-dot r" onClick={onClose} title="Close"/><span className="xc-dot y"/><span className="xc-dot g"/></div>
+          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>accounts.x.ai<span className="xc-url-path">/oauth</span></div>
+          <button className="xc-close" onClick={onClose} aria-label="Close"><IcX size={15}/></button>
+        </div>
+        <div className="xc-body">
+          <div className="xc-page">
+            <div className="xc-logo"><XLogo size={30}/></div>
+            <div className="xc-h">Connect X Agent</div>
+            <div className="xc-sub">Use the real browser OAuth popup. Vellum saves refreshable tokens locally and never asks for your X password.</div>
+            <div className="xc-perms" style={{marginTop:18}}>
+              <div className="xc-perm"><IcCheck size={14}/>{xaiOk ? 'SuperGrok / xAI search connected' : 'Connect SuperGrok / xAI search for live X search'}</div>
+              <div className="xc-perm"><IcCheck size={14}/>{xapiOk ? 'X API account actions connected' : 'Connect X API for posting, bookmarks, account reads, and media upload'}</div>
+            </div>
+            <button className="xc-btn" disabled={busy === 'xai' || xaiOk} onClick={() => start('xai')}>{xaiOk ? 'SuperGrok connected' : busy === 'xai' ? 'Opening SuperGrok OAuth...' : 'Connect SuperGrok'}</button>
+            <button className="xc-cancel" disabled={!xapiConfigured || busy === 'xapi' || xapiOk} onClick={() => start('xapi')}>{xapiOk ? 'X account actions connected' : busy === 'xapi' ? 'Opening X OAuth...' : 'Connect X account actions'}</button>
+            {!xapiConfigured && <div className="xc-note xc-note-sm">Set <b>X_API_CLIENT_ID</b> in .env to enable posting, bookmarks, and account actions. SuperGrok search can still connect above.</div>}
+            {status && !status.private_reads_enabled && <div className="xc-note xc-note-sm">Private reads also require <b>X_TOOL_ALLOW_PRIVATE_READS=true</b>.</div>}
+            {status && !status.posting_enabled && <div className="xc-note xc-note-sm">Posting also requires <b>X_TOOL_ALLOW_POSTS=true</b> plus per-action confirmation.</div>}
+            {error && <div className="xc-note xc-note-sm" style={{color:'#ff7b72'}}>{error}</div>}
+            <button className="xc-btn" style={{marginTop:12}} onClick={loadStatus}>Refresh status</button>
+            {(xaiOk || xapiOk) && <button className="xc-cancel" onClick={() => onConnected(xapiOk ? 'X account connected' : 'SuperGrok connected')}>Use connected account</button>}
+          </div>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const GLogo = ({size=22}) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+const YTLogo = ({size=22}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
+);
+const YT_DOCS = {
+  register: 'https://developers.google.com/youtube/registering_an_application',
+  installed: 'https://developers.google.com/youtube/v3/guides/auth/installed-apps',
+  native: 'https://developers.google.com/identity/protocols/oauth2/native-app',
+  console: 'https://console.cloud.google.com/apis/credentials',
+};
+const YouTubeConnectModal = ({onClose, onConnected}) => {
+  const [step, setStep] = useState('setup'); // setup | signin | consent | connecting
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+  const [email, setEmail] = useState('');
+  const cleanEmail = (email || 'pratyakksh@gmail.com').trim() || 'pratyakksh@gmail.com';
+  const authorize = () => { setStep('connecting'); setTimeout(() => onConnected(cleanEmail), 1400); };
+  const urls = { setup: 'console.cloud.google.com', signin: 'accounts.google.com', consent: 'accounts.google.com', connecting: 'accounts.google.com' };
+  const paths = { setup: '/apis/credentials', signin: '/signin/oauth', consent: '/o/oauth2/auth', connecting: '/o/oauth2/auth' };
+  return (
+    <React.Fragment>
+      <div className="backdrop dim xc-backdrop" onClick={onClose}/>
+      <div className="xc-win gc-win" role="dialog" aria-label="Connect YouTube">
+        <div className="xc-bar">
+          <div className="xc-dots"><span className="xc-dot r" onClick={onClose} title="Close"/><span className="xc-dot y"/><span className="xc-dot g"/></div>
+          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>{urls[step]}<span className="xc-url-path">{paths[step]}</span></div>
+          <button className="xc-close" onClick={onClose} aria-label="Close"><IcX size={15}/></button>
+        </div>
+        <div className="xc-body gc-body">
+          {step === 'setup' && (
+            <div className="gc-page">
+              <div className="gc-logo"><GLogo size={28}/></div>
+              <div className="gc-h">Set up YouTube access</div>
+              <div className="gc-sub">Vellum connects to YouTube using <b>Google OAuth 2.0 for installed apps</b>. First create OAuth credentials in the Google Cloud Console — it only takes a few minutes.</div>
+              <ol className="gc-steps">
+                <li><a href={YT_DOCS.register} target="_blank" rel="noopener">Register an application</a> and create a Google Cloud project.</li>
+                <li>Enable the <b>YouTube Data API v3</b> and configure an <a href={YT_DOCS.installed} target="_blank" rel="noopener">OAuth client for installed apps</a>.</li>
+                <li>Copy your <b>Client ID</b> and <b>secret</b> from the <a href={YT_DOCS.console} target="_blank" rel="noopener">Credentials page</a>.</li>
+              </ol>
+              <label className="gc-field"><span>OAuth Client ID</span><input autoFocus value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com"/></label>
+              <label className="gc-field"><span>Client secret</span><input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="GOCSPX-…"/></label>
+              <button className="gc-btn gc-btn-full" onClick={() => setStep('signin')}>Continue with Google</button>
+              <div className="gc-note">New to this? Follow Google's <a href={YT_DOCS.native} target="_blank" rel="noopener">OAuth for native apps guide</a>.</div>
+            </div>
+          )}
+          {step === 'signin' && (
+            <div className="gc-page">
+              <div className="gc-logo"><GLogo size={28}/></div>
+              <div className="gc-h">Sign in</div>
+              <div className="gc-sub">to continue to <b>Vellum</b></div>
+              <label className="gc-field"><span>Email or phone</span><input autoFocus value={email} onChange={e => setEmail(e.target.value)} placeholder="you@gmail.com"/></label>
+              <a className="gc-link-left" href={YT_DOCS.console} target="_blank" rel="noopener">Forgot email?</a>
+              <div className="gc-guest">Not your computer? Use Guest mode to sign in privately.</div>
+              <div className="gc-actions"><a className="gc-link" href={YT_DOCS.register} target="_blank" rel="noopener">Create account</a><button className="gc-btn" onClick={() => setStep('consent')}>Next</button></div>
+            </div>
+          )}
+          {step === 'consent' && (
+            <div className="gc-page">
+              <div className="gc-logo"><GLogo size={28}/></div>
+              <div className="gc-h">Vellum wants to access your Google Account</div>
+              <div className="gc-acct"><span className="gc-acct-ava">{cleanEmail.slice(0,1).toUpperCase()}</span><span className="gc-acct-email">{cleanEmail}</span></div>
+              <div className="gc-perm-title">This will allow Vellum to:</div>
+              <div className="gc-perms">
+                <div className="gc-perm"><YTLogo size={16}/>View your YouTube account and channel</div>
+                <div className="gc-perm"><YTLogo size={16}/>Read subscriptions, playlists, and video transcripts</div>
+                <div className="gc-perm"><YTLogo size={16}/>Manage videos and drafts on your behalf</div>
+              </div>
+              <div className="gc-trust">Make sure you trust Vellum. You can remove access anytime in your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Account</a>.</div>
+              <div className="gc-actions"><button className="gc-cancel" onClick={onClose}>Cancel</button><button className="gc-btn" onClick={authorize}>Allow</button></div>
+            </div>
+          )}
+          {step === 'connecting' && (
+            <div className="gc-page gc-connecting">
+              <div className="gc-spin"/>
+              <div className="gc-h">Completing sign-in…</div>
+              <div className="gc-sub">Redirecting back to Vellum</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const SRC_DOMAINS = [
+  {pub:'Google for Developers', dom:'developers.google.com'},
+  {pub:'Stack Overflow', dom:'stackoverflow.com'},
+  {pub:'RFC Editor', dom:'www.rfc-editor.org'},
+  {pub:'MDN Web Docs', dom:'developer.mozilla.org'},
+  {pub:'GitHub', dom:'github.com'},
+  {pub:'Auth0 Docs', dom:'auth0.com'},
+  {pub:'OAuth.net', dom:'oauth.net'},
+  {pub:'Microsoft Learn', dom:'learn.microsoft.com'},
+  {pub:'Hacker News', dom:'news.ycombinator.com'},
+  {pub:'Reddit', dom:'www.reddit.com'},
+  {pub:'Medium', dom:'medium.com'},
+  {pub:'Dev.to', dom:'dev.to'},
+  {pub:'web.dev', dom:'web.dev'},
+  {pub:'Smashing Magazine', dom:'www.smashingmagazine.com'},
+];
+const TITLE_TPL = [
+  'A practical guide to {q}',
+  '{Q}: patterns, pitfalls, and best practices',
+  'How modern apps approach {q}',
+  'Understanding {q} end to end',
+  '{Q} — a deep dive',
+  'Implementing {q} the right way',
+  'What you need to know about {q}',
+  '{Q}: official reference',
+];
+const SNIP_TPL = [
+  'This document explains how applications handle {q} across platforms, with examples…',
+  'A thorough walkthrough covering setup, edge cases, and security considerations for {q}…',
+  'Community answers and accepted solutions discussing {q} in production…',
+  'The canonical specification and recommended flow for {q}, including diagrams…',
+  'Notes from engineers who shipped {q} at scale, with trade-offs…',
+];
+const DATES = ['2 days ago','5 days ago','1 week ago','3 weeks ago','last month','7 days ago','yesterday','2 weeks ago'];
+const cap = (x) => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
+const STOPW = ['does','what','when','where','which','this','that','with','from','your','about','into','have','will','would','should','could','their','there','here','make','like','want','need','using','use'];
+const inferLeadIn = (kw, q) => {
+  const lower = (q || '').toLowerCase();
+  if (/(latest|today|now|current|live|next|when|score|standings|injur|upload|posted|news)/.test(lower)) {
+    return 'I am checking the latest available context for ' + kw + ' before answering.';
+  }
+  if (/(compare|difference|versus| vs |better|best)/.test(lower)) {
+    return 'I am comparing the most relevant context around ' + kw + ' before giving you a clear answer.';
+  }
+  if (/(how|why|explain|what is|what are)/.test(lower)) {
+    return 'I am working through the relevant context for ' + kw + ' so the answer is grounded and direct.';
+  }
+  return 'I am gathering the relevant context for ' + kw + ' before answering.';
+};
+const buildActivity = (text) => {
+  const q = (text||'').trim().replace(/\s+/g,' ');
+  const big = q.replace(/[^\w\s]/g,'').split(' ').filter(w => w.length > 3 && !STOPW.includes(w.toLowerCase()));
+  const kw = big.slice(0,4).join(' ') || 'this topic';
+  const short = big.slice(0,2).join(' ') || 'the topic';
+  const dur = 13 + Math.floor(Math.random()*13);
+  const refLines = [
+    'Understanding the request around ' + short,
+    'Waiting for live tool and source results',
+    'Preparing an answer from the gathered context',
+  ];
+  const steps = [
+    {kind:'search', title:'Checking live context for ' + kw, chips: [], more: 0},
+    {kind:'eval', title:'Evaluating the request', text:'Waiting for backend tools, sub-agent routing, and source events before finalizing the answer.'},
+    {kind:'done', title:'Worked for ' + dur + 's', text:'Done'},
+  ];
+  const leadIn = inferLeadIn(kw, q);
+  return {refLines, steps, sources: [], duration: dur, leadIn};
+};
+
+const Favicon = ({dom, src, source, size=14}) => {
+  const [failed, setFailed] = useState(false);
+  const candidate = src || sourceFavicon(source || {domain: dom, dom});
+  const clean = (dom||'?').replace(/^www\./,'');
+  const letter = clean.charAt(0).toUpperCase();
+  const hue = [...clean].reduce((a,c)=>a+c.charCodeAt(0),0) % 360;
+  if (candidate && !failed) {
+    return <img className="favicon" src={candidate} alt="" width={size+5} height={size+5} style={{width:size+5, height:size+5}} onError={() => setFailed(true)}/>;
+  }
+  return <span className="favicon" style={{width:size+5, height:size+5, background:'hsl('+hue+' 52% 42%)', fontSize:size-2}}>{letter}</span>;
+};
+
+const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
+  const [openWork, setOpenWork] = useState(false);
+  const phase = msg.phase || (msg.streaming ? 'answering' : 'done');
+  const refs = msg.refLines || [];
+  const shown = refs.slice(0, msg.refShown || 0);
+  if (phase === 'thinking') {
+    return <div className="turn"><div className="shimmer think-line">Thinking</div></div>;
+  }
+  if (phase === 'refs') {
+    return (
+      <div className="turn">
+        {msg.leadIn && <div className="turn-lead">{msg.leadIn}</div>}
+        <div className="ref-list">
+          {shown.map((r,i) => (
+            <div key={i} className={'ref-line' + (i === shown.length-1 ? ' shimmer' : ' done')}>
+              <span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{r}</span>
+              {i === shown.length-1 && <button className="answer-now" onClick={onAnswerNow}>Answer now</button>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="turn">
+      {refs.length > 0 && (
+        <button className={'worked-for' + (openWork ? ' open' : '')} onClick={() => setOpenWork(o => !o)}>
+          {msg.streaming ? 'Working' : 'Worked for ' + (msg.duration||16) + 's'}<IcChevD size={12}/>
+        </button>
+      )}
+      {openWork && <div className="ref-list inset">{refs.map((r,i) => (<div key={i} className="ref-line done"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{r}</span></div>))}</div>}
+      {msg.leadIn && <div className="turn-lead">{msg.leadIn}</div>}
+      <div className={'areply' + (msg.streaming ? ' shimmer' : '')}>{msg.text || '\u2026'}</div>
+      {!msg.streaming && refs[0] && <div className="ref-line under"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{refs[0]}</span></div>}
+      {!msg.streaming && (
+        <div className="turn-foot">
+          <MsgActions msg={msg} onRegen={onRegen}/>
+          {(msg.sources||[]).length > 0 && (
+            <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View sources & activity">
+              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} source={sc} size={12}/>)}</span>Sources
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ActivityPanel = ({msg, onClose}) => (
+  <div className="files-panel activity-panel">
+    <div className="fp-head act-head">
+      <span>Activity</span><span className="act-dur">{(msg.duration||16)}s</span>
+      <button className="tbtn" title="Close" onClick={onClose}><IcX size={15}/></button>
+    </div>
+    <div className="act-scroll">
+      <div className="act-sec-h">Thinking</div>
+      {(msg.steps||[]).map((st,i) => (
+        <div key={i} className="act-step">
+          <span className={'act-step-ic ' + st.kind}>{st.kind==='search' ? <IcGlobe size={15}/> : st.kind==='eval' ? <IcChat size={15}/> : <IcCheck size={15}/>}</span>
+          <div className="act-step-body">
+            <div className="act-step-title">{st.title}</div>
+            {st.chips && <div className="act-chips">{st.chips.map((c,j) => (<a key={j} className="act-chip" href={'https://'+c.dom} target="_blank" rel="noopener"><Favicon dom={c.dom} source={c} size={12}/>{c.dom.replace(/^www\./,'')}</a>))}{st.more > 0 && <span className="act-chip more"><Favicon dom={'source'} size={12}/>{st.more} more</span>}</div>}
+            {st.text && <div className="act-step-text">{st.text}</div>}
+          </div>
+        </div>
+      ))}
+      <div className="act-sec-h act-sources-h">Sources · {(msg.sources||[]).length}</div>
+      {(msg.sources||[]).map((sc,i) => (
+        <a key={i} className="act-source" href={sc.url} target="_blank" rel="noopener">
+          <div className="act-src-pub"><Favicon dom={sc.dom} source={sc} size={13}/>{sc.pub}</div>
+          <div className="act-src-title">{sc.title}</div>
+          <div className="act-src-snip">{sc.date} — {sc.snippet}</div>
+        </a>
+      ))}
+    </div>
+  </div>
+);
+
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
   const busy = msgs.some(m => m.streaming);
-  useEffect(() => { if (endRef.current) endRef.current.scrollIntoView({behavior: 'smooth'}); }, [msgs.map(m => m.text).join('|')]);
+  useEffect(() => {
+    const box = endRef.current && endRef.current.closest('.msgs');
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 160;
+    if (nearBottom) box.scrollTop = box.scrollHeight;
+  }, [msgs.map(m => (m.text||'') + (m.phase||'') + (m.refShown||0)).join('|')]);
 
   if (msgs.length === 0) {
     return (
@@ -2144,10 +2829,8 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRe
               <div className="bubble">{m.text}</div>
             </div>
           ) : (
-            <div key={m.id}>
-              <div className={'areply' + (m.streaming ? ' shimmer' : '')}>{m.text || '…'}</div>
-              <MessageMeta msg={m}/>
-              {!m.streaming && <MsgActions msg={m} onRegen={() => onRegen(m.id)}/>}
+            <div key={m.id} id={'m-' + m.id}>
+              <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
             </div>
           ))}
           <div ref={endRef}/>
@@ -2157,7 +2840,8 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRe
         <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
       </div>
       </div>
-      {filesOpen && <FilesPanel files={chatFiles} onViewImage={onViewImage} onClose={onCloseFiles}/>}
+      {activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}
+      {filesOpen && !activity && <FilesPanel files={chatFiles} onViewImage={onViewImage} onClose={onCloseFiles}/>}
     </div>
   );
 };
@@ -3057,6 +3741,13 @@ const App = () => {
   const [subagents, setSubagents] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [activityMsg, setActivityMsg] = useState(null);
+  const [xConn, setXConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-xconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
+  useEffect(() => { try { localStorage.setItem('vellum-xconn', JSON.stringify(xConn)); } catch {} }, [xConn]);
+  const [xConnectOpen, setXConnectOpen] = useState(false);
+  const [ytConn, setYtConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-ytconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
+  useEffect(() => { try { localStorage.setItem('vellum-ytconn', JSON.stringify(ytConn)); } catch {} }, [ytConn]);
+  const [ytConnectOpen, setYtConnectOpen] = useState(false);
   const threadRef = useRef({});
   const pendingMoveRef = useRef(null);
   const [navTick, setNavTick] = useState(0);
@@ -3146,27 +3837,40 @@ const App = () => {
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setShortcutsOpen(false); setCustomInstrOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); };
-  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); };
-  const nav = v => { setView(v); setMenu(null); };
-  const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); };
+  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); setActivityMsg(null); };
+  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); setActivityMsg(null); };
+  const nav = v => { setView(v); setMenu(null); setActivityMsg(null); };
+  const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
-  const streamAgentReply = (agentId, convoId, msgId, full) => {
+  const streamAgentReply = (agentId, convoId, msgId, data) => {
+    const payload = typeof data === 'string' ? {answer:data, ...buildActivity(data)} : data;
+    startAgentTurnPhases(agentId, convoId, msgId, payload);
     let i = 0;
-    const tick = () => {
-      i += 3;
-      const done = i >= full.length;
-      setAgentConvos(ac => ({...ac, [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done} : m)} : cv)}));
-      if (!done) timers.current[msgId] = setTimeout(tick, 22);
+    const startAnswer = () => {
+      finishTurn(msgId);
+      const tick = () => {
+        i += 3;
+        const done = i >= payload.answer.length;
+        updateAgentTurn(agentId, convoId, msgId, m => ({
+          ...m,
+          text: payload.answer.slice(0, i),
+          phase: done ? 'done' : 'answering',
+          refShown:(m.refLines || []).length,
+          streaming: !done,
+        }));
+        if (!done) timers.current[msgId] = setTimeout(tick, 22);
+      };
+      tick();
     };
-    timers.current[msgId] = setTimeout(tick, 400);
+    turnCtl.current[msgId].startAnswer = startAnswer;
+    turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
   const updateAgentConvo = (agentId, convoId, mapper) => {
     setAgentConvos(ac => ({
@@ -3180,18 +3884,76 @@ const App = () => {
       await API.chat.stream(
         {message: routedMessage, thread_id: convoId, model: selModel, store: true},
         {
-          activity: (activity, tools) => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, activity, tools, streaming: true} : m)})),
-          sources: sources => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, sources, streaming: true} : m)})),
-          delta: text => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text, streaming: true} : m)})),
-          error: error => updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, streaming: false} : m)})),
-          done: final => updateAgentConvo(agent.id, convoId, cv => ({
-            ...cv,
-            messages: cv.messages.map(m => m.id === assistantId ? {...m, text: final.text || m.text || 'No response.', sources: final.sources || m.sources || [], tools: final.tools || m.tools || [], activity: final.activity || m.activity || [], streaming: false} : m),
+          trace: trace => {
+            const liveSources = normalizeSources(trace.sources || []);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              tools: trace.tools || m.tools || [],
+              phase: m.phase === 'thinking' ? 'refs' : m.phase,
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          activity: (activity, tools) => updateAgentTurn(agent.id, convoId, assistantId, m => ({
+            ...m,
+            activity,
+            tools,
+            steps: stepsFromActivity(activity, m.steps),
+            refLines: refLinesFromActivity(activity, m.refLines),
+            phase: m.phase === 'thinking' ? 'refs' : m.phase,
+            refShown: Math.max(m.refShown || 0, 1),
+            streaming: true,
           })),
+          sources: sources => {
+            const liveSources = normalizeSources(sources);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              phase: 'refs',
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          delta: text => {
+            finishTurn(assistantId);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              text,
+              phase: 'answering',
+              refShown:(m.refLines || []).length,
+              streaming: true,
+            }));
+          },
+          error: error => {
+            finishTurn(assistantId);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend error: ' + error, phase:'done', streaming: false}));
+          },
+          done: final => {
+            finishTurn(assistantId);
+            const liveSources = normalizeSources(final.sources || []);
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              text: final.text || m.text || 'No response.',
+              sources: liveSources.length ? liveSources : m.sources || [],
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              tools: final.tools || m.tools || [],
+              activity: final.activity || m.activity || [],
+              phase: 'done',
+              refShown:(m.refLines || []).length,
+              streaming: false,
+            }));
+          },
         }
       );
     } catch (err) {
-      updateAgentConvo(agent.id, convoId, cv => ({...cv, messages: cv.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', streaming: false} : m)}));
+      finishTurn(assistantId);
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach) => {
@@ -3199,7 +3961,8 @@ const App = () => {
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: [], tools: []};
+    const act = buildActivity(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
     let cid = activeConvo[ag.id];
     if (!cid) {
       cid = uid();
@@ -3209,8 +3972,12 @@ const App = () => {
     } else {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
-    if (FEATURE_FLAGS.realChat) streamBackendAgentReply(ag, cid, aMsg.id, text);
-    else streamAgentReply(ag.id, cid, aMsg.id, reply);
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startAgentTurnPhases(ag.id, cid, aMsg.id, act), 0);
+      streamBackendAgentReply(ag, cid, aMsg.id, text);
+    } else {
+      streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
+    }
   };
   const regenAgent = (msgId) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
@@ -3221,9 +3988,14 @@ const App = () => {
     const idx = convo.messages.findIndex(m => m.id === msgId);
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const reply = agentReply(ag, prevUser ? prevUser.text : '');
-    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true} : m)} : cv)}));
-    if (FEATURE_FLAGS.realChat) streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
-    else streamAgentReply(ag.id, cid, msgId, reply);
+    const act = buildActivity(prevUser ? prevUser.text : '');
+    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startAgentTurnPhases(ag.id, cid, msgId, act), 0);
+      streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
+    } else {
+      streamAgentReply(ag.id, cid, msgId, {...act, answer: reply});
+    }
   };
 
   const chatMenuAction = (id, action) => {
@@ -3329,20 +4101,11 @@ const App = () => {
   };
 
   const timers = useRef({});
-  useEffect(() => () => Object.values(timers.current).forEach(clearTimeout), []);
-
-  const streamReply = (chatId, msgId, full) => {
-    let i = 0;
-    const tick = () => {
-      i += 3;
-      const done = i >= full.length;
-      setChats(cs => cs.map(c => c.id === chatId
-        ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: full.slice(0, i), streaming: !done} : m)}
-        : c));
-      if (!done) timers.current[msgId] = setTimeout(tick, 22);
-    };
-    timers.current[msgId] = setTimeout(tick, 400);
-  };
+  const turnCtl = useRef({});
+  useEffect(() => () => {
+    Object.values(timers.current).forEach(clearTimeout);
+    Object.values(turnCtl.current).forEach(c => (c.timers || []).forEach(clearTimeout));
+  }, []);
 
   const saveConversation = conversation => {
     if (!FEATURE_FLAGS.realConversations || !conversation) return;
@@ -3358,6 +4121,131 @@ const App = () => {
     }));
   };
 
+  const sourceDomain = src => {
+    try { return new URL(src.url || src.link || '').hostname; }
+    catch { return String(src.domain || src.provider || src.url || 'source').replace(/^https?:\/\//, '').split('/')[0] || 'source'; }
+  };
+  const sourceTitle = src => src.title || src.name || src.url || src.link || 'Source';
+  const normalizeSources = sources => (sources || []).filter(Boolean).map(src => {
+    const dom = src.domain || sourceDomain(src);
+    return {
+      pub: src.provider_label || src.provider || src.publisher || prettyProvider(dom) || dom.replace(/^www\./, ''),
+      dom,
+      url: src.url || src.link || ('https://' + dom),
+      title: sourceTitle(src),
+      date: src.date || src.published || src.published_at || '',
+      snippet: src.snippet || src.summary || src.description || '',
+      favicon_url: src.favicon_url || src.logo_url || (dom ? `https://www.google.com/s2/favicons?domain=${dom}&sz=64` : ''),
+    };
+  });
+  const activityFromSources = (sources, fallbackSteps) => {
+    if (!sources.length) return fallbackSteps || [];
+    return [
+      {kind:'search', title:'Searching live sources', chips:sources.slice(0,3).map(s => ({dom:s.dom, favicon_url:s.favicon_url})), more: Math.max(0, sources.length - 3)},
+      {kind:'eval', title:'Evaluating sources for the answer', text:'Checking the live results and using the most relevant source details in the final response.'},
+      {kind:'done', title:'Worked with live context', text:'Done'},
+    ];
+  };
+  const activityKind = item => {
+    if (!item) return 'eval';
+    if (item.type === 'tool_call' || item.type === 'subagent_call' || item.type === 'source') return 'search';
+    if (item.type === 'answer' || item.status === 'completed' || item.status === 'done') return 'done';
+    return 'eval';
+  };
+  const stepsFromActivity = (items, fallbackSteps) => {
+    const visible = (items || []).filter(item => item && (item.label || item.title || item.name));
+    if (!visible.length) return fallbackSteps || [];
+    const steps = visible.slice(-6).map(item => ({
+      kind: activityKind(item),
+      title: item.label || item.title || item.name || 'Agent activity',
+      text: item.detail || item.text || '',
+      chips: [],
+      more: 0,
+    }));
+    if (!steps.some(step => step.kind === 'done')) steps.push({kind:'done', title:'Worked with live activity', text:'Done'});
+    return steps;
+  };
+  const refLinesFromSources = (sources, fallback) => {
+    if (!sources.length) return fallback || [];
+    const names = sources.slice(0, 3).map(s => s.dom.replace(/^www\./, '')).join(', ');
+    return [
+      'Browsed live sources including ' + names,
+      'Reading ' + sources[0].dom.replace(/^www\./, ''),
+      sources[1] ? 'Cross-checking ' + sources[1].dom.replace(/^www\./, '') : 'Checking source details',
+    ];
+  };
+  const refLinesFromActivity = (items, fallback) => {
+    const visible = (items || []).filter(item => item && (item.label || item.title || item.name));
+    if (!visible.length) return fallback || [];
+    return visible.slice(-3).map(item => item.label || item.title || ('Using ' + item.name));
+  };
+  const updateTurn = (chatId, msgId, mapper, persist = false) => updateChat(chatId, c => ({
+    ...c,
+    messages: c.messages.map(m => m.id === msgId ? mapper(m) : m),
+  }), persist);
+  const updateAgentTurn = (agentId, convoId, msgId, mapper) => updateAgentConvo(agentId, convoId, cv => ({
+    ...cv,
+    messages: cv.messages.map(m => m.id === msgId ? mapper(m) : m),
+  }));
+  const clearTurnTimers = msgId => {
+    const ctl = turnCtl.current[msgId];
+    if (ctl) (ctl.timers || []).forEach(clearTimeout);
+  };
+  const finishTurn = msgId => {
+    clearTurnTimers(msgId);
+    delete turnCtl.current[msgId];
+  };
+  const startTurnPhases = (chatId, msgId, act) => {
+    finishTurn(msgId);
+    const timersForTurn = [
+      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
+      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
+      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+    ];
+    turnCtl.current[msgId] = {chatId, timers: timersForTurn};
+  };
+  const startAgentTurnPhases = (agentId, convoId, msgId, act) => {
+    finishTurn(msgId);
+    const timersForTurn = [
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+    ];
+    turnCtl.current[msgId] = {agentId, convoId, timers: timersForTurn};
+  };
+  const answerNow = msgId => {
+    const ctl = turnCtl.current[msgId];
+    if (!ctl) return;
+    clearTurnTimers(msgId);
+    if (ctl.chatId) updateTurn(ctl.chatId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
+    else updateAgentTurn(ctl.agentId, ctl.convoId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
+    if (ctl.startAnswer) ctl.startAnswer();
+  };
+
+  const streamReply = (chatId, msgId, data) => {
+    const payload = typeof data === 'string' ? {answer:data, ...buildActivity(data)} : data;
+    startTurnPhases(chatId, msgId, payload);
+    let i = 0;
+    const startAnswer = () => {
+      finishTurn(msgId);
+      const tick = () => {
+        i += 3;
+        const done = i >= payload.answer.length;
+        updateTurn(chatId, msgId, m => ({
+          ...m,
+          text: payload.answer.slice(0, i),
+          phase: done ? 'done' : 'answering',
+          refShown:(m.refLines || []).length,
+          streaming: !done,
+        }), done);
+        if (!done) timers.current[msgId] = setTimeout(tick, 22);
+      };
+      tick();
+    };
+    turnCtl.current[msgId].startAnswer = startAnswer;
+    turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
+  };
+
   const streamBackendReply = async (chatId, assistantId, message, threadId) => {
     try {
       await API.chat.stream(
@@ -3369,41 +4257,80 @@ const App = () => {
               updateChat(chatId, c => ({...c, thread_id: meta.thread_id}));
             }
           },
-          activity: (activity, tools) => updateChat(chatId, c => ({
-            ...c,
-            messages: c.messages.map(m => m.id === assistantId ? {...m, activity, tools, streaming: true} : m),
-          })),
-          sources: sources => updateChat(chatId, c => ({
-            ...c,
-            messages: c.messages.map(m => m.id === assistantId ? {...m, sources, streaming: true} : m),
-          })),
-          delta: text => updateChat(chatId, c => ({
-            ...c,
-            messages: c.messages.map(m => m.id === assistantId ? {...m, text, streaming: true} : m),
-          })),
-          error: error => updateChat(chatId, c => ({
-            ...c,
-            messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend error: ' + error, streaming: false} : m),
-          }), true),
-          done: final => updateChat(chatId, c => ({
-            ...c,
-            thread_id: final.thread_id || threadRef.current[chatId] || c.thread_id || chatId,
-            messages: c.messages.map(m => m.id === assistantId ? {
+          trace: trace => {
+            const liveSources = normalizeSources(trace.sources || []);
+            updateTurn(chatId, assistantId, m => ({
               ...m,
-              text: final.text || m.text || 'No response.',
-              sources: final.sources || m.sources || [],
-              tools: final.tools || m.tools || [],
-              activity: final.activity || m.activity || [],
-              streaming: false,
-            } : m),
-          }), true),
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              tools: trace.tools || m.tools || [],
+              phase: m.phase === 'thinking' ? 'refs' : m.phase,
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          activity: (activity, tools) => updateTurn(chatId, assistantId, m => ({
+            ...m,
+            activity,
+            tools,
+            steps: stepsFromActivity(activity, m.steps),
+            refLines: refLinesFromActivity(activity, m.refLines),
+            phase: m.phase === 'thinking' ? 'refs' : m.phase,
+            refShown: Math.max(m.refShown || 0, 1),
+            streaming: true,
+          })),
+          sources: sources => {
+            const liveSources = normalizeSources(sources);
+            updateTurn(chatId, assistantId, m => ({
+              ...m,
+              sources: liveSources.length ? liveSources : m.sources,
+              steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              phase: 'refs',
+              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              streaming: true,
+            }));
+          },
+          delta: text => {
+            finishTurn(assistantId);
+            updateTurn(chatId, assistantId, m => ({
+              ...m,
+              text,
+              phase: 'answering',
+              refShown:(m.refLines || []).length,
+              streaming: true,
+            }));
+          },
+          error: error => {
+            finishTurn(assistantId);
+            updateTurn(chatId, assistantId, m => ({...m, text: 'Backend error: ' + error, phase:'done', streaming: false}), true);
+          },
+          done: final => {
+            finishTurn(assistantId);
+            const liveSources = normalizeSources(final.sources || []);
+            updateChat(chatId, c => ({
+              ...c,
+              thread_id: final.thread_id || threadRef.current[chatId] || c.thread_id || chatId,
+              messages: c.messages.map(m => m.id === assistantId ? {
+                ...m,
+                text: final.text || m.text || 'No response.',
+                sources: liveSources.length ? liveSources : m.sources || [],
+                steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
+                refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+                tools: final.tools || m.tools || [],
+                activity: final.activity || m.activity || [],
+                phase: 'done',
+                refShown:(m.refLines || []).length,
+                streaming: false,
+              } : m),
+            }), true);
+          },
         }
       );
     } catch (err) {
-      updateChat(chatId, c => ({
-        ...c,
-        messages: c.messages.map(m => m.id === assistantId ? {...m, text: 'Backend unreachable. Start the Vellum API and try again.', streaming: false} : m),
-      }), true);
+      finishTurn(assistantId);
+      updateTurn(chatId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
     }
   };
 
@@ -3411,7 +4338,8 @@ const App = () => {
     let chatId = opts.forceNew ? null : activeChatId;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true};
+    const act = buildActivity(text);
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
       setLibrary(lib => [
@@ -3430,8 +4358,12 @@ const App = () => {
     } else {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
     }
-    if (FEATURE_FLAGS.realChat) streamBackendReply(chatId, aMsg.id, text, threadRef.current[chatId]);
-    else streamReply(chatId, aMsg.id, reply);
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startTurnPhases(chatId, aMsg.id, act), 0);
+      streamBackendReply(chatId, aMsg.id, text, threadRef.current[chatId]);
+    } else {
+      streamReply(chatId, aMsg.id, {...act, answer: reply});
+    }
   };
 
   const sendInProject = projId => (text, attach) => {
@@ -3447,11 +4379,16 @@ const App = () => {
     const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const old = chat.messages[idx];
     const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
+    const act = buildActivity(prevUser ? prevUser.text : '');
     setChats(cs => cs.map(c => c.id === chat.id
-      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true} : m)}
+      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)}
       : c));
-    if (FEATURE_FLAGS.realChat) streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
-    else streamReply(chat.id, msgId, reply);
+    if (FEATURE_FLAGS.realChat) {
+      setTimeout(() => startTurnPhases(chat.id, msgId, act), 0);
+      streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
+    } else {
+      streamReply(chat.id, msgId, {...act, answer: reply});
+    }
   };
 
   useEffect(() => {
@@ -3462,6 +4399,8 @@ const App = () => {
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
   const activeChat = chats.find(c => c.id === activeChatId) || null;
+  const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
+  const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
 
   const pushToast = msg => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2200); };
   const selectModel = async id => {
@@ -3583,6 +4522,10 @@ const App = () => {
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onRegen={regenerate}
               onViewImage={setViewer}
               filesOpen={filesOpen} onCloseFiles={() => setFilesOpen(false)}
+              onOpenActivity={setActivityMsg}
+              onAnswerNow={answerNow}
+              activity={activityMsg}
+              onCloseActivity={() => setActivityMsg(null)}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
@@ -3599,7 +4542,7 @@ const App = () => {
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
             {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={AGENTS.find(a => a.id === activeAgentId)} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
@@ -3634,6 +4577,8 @@ const App = () => {
           onClose={() => setEditProfileOpen(false)}/>}
         {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)}/>}
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
+        {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
+        {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={(h) => { setYtConn({connected:true, handle:h}); setYtConnectOpen(false); pushToast('YouTube account connected'); }}/>}
         {toast && <div className="toast">{toast}</div>}
       </div>
     </div>

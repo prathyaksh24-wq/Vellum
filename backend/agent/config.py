@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -9,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Vellum repo root: this file lives at <repo>/backend/agent/config.py,
 # so parents[2] is the repo root regardless of how Python was invoked.
 REPO_ROOT = Path(__file__).resolve().parents[2]
+os.environ.setdefault("HF_HOME", str(REPO_ROOT / "data" / "cache" / "huggingface"))
+os.environ.setdefault("TRANSFORMERS_CACHE", str(REPO_ROOT / "data" / "cache" / "huggingface" / "transformers"))
 
 
 def _resolve_against_repo(p: Path) -> Path:
@@ -89,6 +92,8 @@ class Settings(BaseSettings):
     git_tool_allow_writes: bool = Field(default=False, alias="GIT_TOOL_ALLOW_WRITES")
     x_tool_allow_private_reads: bool = Field(default=False, alias="X_TOOL_ALLOW_PRIVATE_READS")
     x_tool_allow_posts: bool = Field(default=False, alias="X_TOOL_ALLOW_POSTS")
+    x_api_client_id: str = Field(default="", alias="X_API_CLIENT_ID")
+    x_api_client_secret: str = Field(default="", alias="X_API_CLIENT_SECRET")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")

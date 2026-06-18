@@ -256,6 +256,41 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
     assert response.sources[0].path_or_url == "https://www.nba.com/schedule"
 
 
+def test_sports_agent_uses_structured_serpapi_sources_for_complex_live_query(tmp_path):
+    vault_root = tmp_path / "Vault"
+    search_result = {
+        "text": "The next F1 race is the Austrian Grand Prix, scheduled for June 26-28, 2026.",
+        "sources": [
+            {
+                "title": "F1 Austrian GP",
+                "url": "https://www.formula1.com/en/racing/2026/Austria.html",
+                "snippet": "The Austrian Grand Prix is next on the calendar.",
+                "domain": "formula1.com",
+            },
+            {
+                "title": "FIA 2026 calendar",
+                "url": "https://www.fia.com/events/fia-formula-one-world-championship/season-2026/calendar",
+                "snippet": "Official 2026 calendar.",
+                "domain": "fia.com",
+            },
+            {
+                "title": "Autosport preview",
+                "url": "https://www.autosport.com/f1/news/austrian-gp-preview",
+                "snippet": "Weekend preview and analysis.",
+                "domain": "autosport.com",
+            },
+        ],
+    }
+    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race? use multiple sources")
+
+    assert response.status == "answered"
+    assert "Austrian Grand Prix" in response.summary
+    assert len(response.sources) == 3
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026/Austria.html"
+
+
 def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_path):
     search_output = (
         "**Last F1 race result**\n"

@@ -11,10 +11,13 @@ data/memory/audit_log.jsonl
 data/x-api-oauth.json
 data/xai-oauth.json
 data/logs/
+data/cache/
 data/embeddings/
 data/models/
 backend/data/
 backend/.test-data/
+backend/*.log
+design/Velllum/uploads/*.log
 ui-dist/
 .ui-runtime/
 .api-runtime/

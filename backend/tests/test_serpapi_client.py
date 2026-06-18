@@ -162,6 +162,60 @@ def test_serpapi_ai_mode_text_blocks_and_references_are_extractable(monkeypatch,
     assert "https://www.fifa.com/fixtures" in text
 
 
+def test_serpapi_fresh_google_search_accumulates_sources_across_engines(monkeypatch, tmp_path):
+    calls = []
+    responses = [
+        {
+            "search_metadata": {"id": "ai-ok", "status": "Success"},
+            "answer": "The next F1 race is the Austrian Grand Prix.",
+            "references": [
+                {
+                    "title": "F1 schedule",
+                    "link": "https://www.formula1.com/en/racing/2026/Austria.html",
+                    "snippet": "Austria is next on the calendar.",
+                    "source": "Formula 1",
+                    "favicon": "https://www.formula1.com/favicon.ico",
+                }
+            ],
+        },
+        {
+            "search_metadata": {"id": "light-ok", "status": "Success"},
+            "organic_results": [
+                {
+                    "title": "FIA calendar",
+                    "link": "https://www.fia.com/events/fia-formula-one-world-championship/season-2026/calendar",
+                    "snippet": "Official calendar listing.",
+                },
+                {
+                    "title": "Autosport Austrian GP",
+                    "link": "https://www.autosport.com/f1/news/austrian-gp-preview",
+                    "snippet": "Austrian GP preview.",
+                },
+            ],
+        },
+    ]
+
+    def fake_urlopen(request, timeout):
+        query = parse_qs(urlparse(request.full_url).query)
+        calls.append(query["engine"][0])
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("agent.tools.serpapi.urllib.request.urlopen", fake_urlopen)
+    client = SerpApiClient(api_key="secret-token", log_path=tmp_path / "serpapi.jsonl")
+
+    out = client.fresh_google_search("next f1 race", num=3, min_sources=3)
+
+    assert calls == ["google_ai_mode", "google_light"]
+    assert "Austrian Grand Prix" in out["text"]
+    assert [source["url"] for source in out["sources"]] == [
+        "https://www.formula1.com/en/racing/2026/Austria.html",
+        "https://www.fia.com/events/fia-formula-one-world-championship/season-2026/calendar",
+        "https://www.autosport.com/f1/news/austrian-gp-preview",
+    ]
+    assert out["sources"][0]["provider_label"] == "Formula 1"
+    assert out["sources"][0]["favicon_url"] == "https://www.formula1.com/favicon.ico"
+
+
 def test_serpapi_youtube_search_and_transcript_normalize_results(monkeypatch, tmp_path):
     responses = [
         {
