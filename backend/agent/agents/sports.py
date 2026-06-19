@@ -225,6 +225,10 @@ class SportsAgent:
     def _normalize_search_result(self, search_result: WebSearchResult) -> tuple[str, list[dict[str, Any]]]:
         if isinstance(search_result, dict):
             text = str(search_result.get("text") or "")
+            raw_facts = search_result.get("facts")
+            facts = [str(item) for item in raw_facts if str(item).strip()] if isinstance(raw_facts, list) else []
+            if facts:
+                text = "\n".join(facts)
             raw_sources = search_result.get("sources")
             sources = [dict(source) for source in raw_sources if isinstance(source, dict)] if isinstance(raw_sources, list) else []
             if sources:
@@ -326,7 +330,12 @@ class SportsAgent:
 
     def _compose_answer(self, query: str, sources: list[dict], search_output: str) -> str:
         snapshot = (
-            self._formula_one_schedule_answer(query, sources, search_output)
+            self._snapshot_from_search_output(search_output)
+            if self._looks_like_rich_markdown(search_output)
+            else self._formula_one_schedule_answer(query, sources, search_output)
+        )
+        snapshot = (
+            snapshot
             or self._snapshot_from_search_output(search_output)
             or self._snapshot_from_sources(query, sources)
         )
@@ -374,6 +383,8 @@ class SportsAgent:
     def _snapshot_from_search_output(self, search_output: str) -> str:
         if not search_output:
             return ""
+        if self._looks_like_rich_markdown(search_output):
+            return search_output
         first_block = search_output.split("\n\n---\n\n", 1)[0]
         clean_lines = [
             line.strip().strip("*").strip()
@@ -384,6 +395,13 @@ class SportsAgent:
         if self._is_low_value_snapshot(snapshot):
             return ""
         return snapshot[:1200]
+
+    def _looks_like_rich_markdown(self, text: str) -> bool:
+        return bool(
+            re.search(r"(?m)^#{1,6}\s+\S", text)
+            or re.search(r"(?m)^\|.+\|$", text)
+            or re.search(r"(?m)^-\s+\S", text)
+        )
 
     def _is_low_value_snapshot(self, snapshot: str) -> bool:
         lowered = snapshot.lower()

@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from agent.tools import web
 from agent.tools.web import extract_web_sources
 
 
@@ -41,3 +44,38 @@ def test_extract_web_sources_truncates_long_snippets():
     assert len(sources) == 1
     assert sources[0]["domain"] == "example.com"
     assert len(sources[0]["snippet"]) <= 300
+
+
+def test_web_search_prefers_serpapi_markdown_when_configured(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakeSerpApiClient:
+        def __init__(self, **kwargs):
+            calls["init"] = kwargs
+
+        def fresh_google_search(self, query, *, num=5, min_sources=3):
+            calls["query"] = query
+            return {
+                "text": "# Search Answer\n\n- Preserved full markdown.",
+                "answer_mode": "full_markdown_answer",
+                "sources": [
+                    {
+                        "title": "Source",
+                        "url": "https://example.com/source",
+                        "domain": "example.com",
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(
+        web,
+        "get_settings",
+        lambda: SimpleNamespace(serpapi_api_key="serp", serpapi_log_path=tmp_path / "serp.jsonl"),
+    )
+    monkeypatch.setattr(web, "SerpApiClient", FakeSerpApiClient)
+
+    result = web.web_search.invoke({"query": "current AI news"})
+
+    assert calls["query"] == "current AI news"
+    assert result.startswith("# Search Answer")
+    assert "Preserved full markdown" in result

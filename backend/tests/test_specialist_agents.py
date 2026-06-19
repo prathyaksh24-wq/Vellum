@@ -250,6 +250,99 @@ def test_sports_agent_answer_uses_serpapi_answer_without_inline_source_list(tmp_
     assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
 
 
+def test_sports_agent_prefers_serpapi_compact_facts_over_raw_text(tmp_path):
+    search_result = {
+        "text": "**Old World Cup scorers page**\nMiroslav Klose leads with 16 goals.\nhttps://example.com/old",
+        "facts": [
+            "Lionel Messi and Miroslav Klose are tied for the men's FIFA World Cup career goals record with 16 goals each.",
+            "sports_results: rank: T1 | player: Lionel Messi | country: Argentina | goals: 16",
+            "sports_results: rank: T1 | player: Miroslav Klose | country: Germany | goals: 16",
+        ],
+        "sources": [
+            {
+                "title": "FIFA World Cup all-time scorers",
+                "url": "https://www.fifa.com/worldcup/scorers",
+                "snippet": "Lionel Messi and Miroslav Klose are tied on 16.",
+                "domain": "fifa.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("who leads the fifa world cup career goals all time")
+
+    assert response.summary.startswith("Lionel Messi and Miroslav Klose are tied")
+    assert "Old World Cup scorers page" not in response.summary
+
+
+def test_sports_agent_preserves_serpapi_full_markdown_answer(tmp_path):
+    markdown = (
+        "# Ronaldo vs DR Congo\n\n"
+        "Portugal drew **1-1** with DR Congo.\n\n"
+        "## Match Summary\n\n"
+        "- Ronaldo played 90 minutes.\n"
+        "- He recorded 3 shots and 0 on target.\n\n"
+        "## Team Lineups\n\n"
+        "| Portugal | DR Congo |\n"
+        "| --- | --- |\n"
+        "| C. Ronaldo | Y. Wissa |\n\n"
+        "## Injury News\n\n"
+        "No major injuries were reported after the match.\n\n"
+        + ("Detailed tactical note. " * 120)
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "Portugal vs DR Congo report",
+                "url": "https://www.espn.com/soccer/report/_/gameId/760435",
+                "domain": "espn.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("tell me about ronaldo performance against congo yesterday")
+
+    assert response.summary == markdown
+    assert "| Portugal | DR Congo |" in response.summary
+    assert "Injury News" in response.summary
+    assert len(response.summary) > 1200
+
+
+def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
+    markdown = (
+        "The next F1 race is the Austrian Grand Prix, scheduled for June 26-28, 2026.\n\n"
+        "### 2026 F1 Calendar Details\n\n"
+        "| Round | Grand Prix | Circuit / Location | Race Date |\n"
+        "| --- | --- | --- | --- |\n"
+        "| R08 | Austrian Grand Prix | Red Bull Ring, Spielberg | June 28 |\n"
+        "| R09 | British Grand Prix | Silverstone Circuit | July 5 |\n\n"
+        "### References\n\n"
+        "[0] [Official F1 Calendar](https://www.formula1.com/en/racing/2026)\n"
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race and show the calendar details")
+
+    assert response.summary == markdown
+    assert "| R09 | British Grand Prix |" in response.summary
+
+
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
     agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
 
