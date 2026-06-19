@@ -1,4 +1,4 @@
-"""Privacy-gated web search tool."""
+"""Privacy-gated DuckDuckGo web search tool."""
 
 import logging
 from urllib.parse import urlparse
@@ -13,6 +13,7 @@ from agent.tools.serpapi import SerpApiClient
 logger = logging.getLogger(__name__)
 
 WEB_RESULT_SEPARATOR = "\n\n---\n\n"
+PUBLIC_WEB_ENTITY_LABELS = {"PERSON", "LOCATION", "ORGANIZATION", "DATE_TIME"}
 _WEB_ERROR_PREFIXES = (
     "Web search blocked",
     "Web search is unavailable",
@@ -29,18 +30,20 @@ def web_search(query: str) -> str:
     if data_class == DataClass.RED:
         return f"Web search blocked for privacy: {reason}"
 
-    clean_query, _ = PrivacyScrubber().scrub(query)
+    clean_query = public_web_search_query(query)
     settings = get_settings()
-    if settings.serpapi_api_key:
+    if getattr(settings, "serpapi_api_key", ""):
         try:
             result = SerpApiClient(
                 api_key=settings.serpapi_api_key,
                 log_path=settings.serpapi_log_path,
-            ).fresh_google_search_text(clean_query, num=5)
-            if result and not result.startswith("No web results"):
-                return result
+            ).fresh_google_search(clean_query, num=8, min_sources=3)
+            text = str(result.get("text") or "")
+            text_for_check = text.strip()
+            if text_for_check and text_for_check != "No web results found.":
+                return text
         except Exception as exc:
-            logger.error("[TOOL:web] SerpAPI error: %s", exc)
+            logger.warning("[TOOL:web] SerpAPI search failed; falling back to DuckDuckGo: %s", exc)
 
     try:
         from duckduckgo_search import DDGS
@@ -61,6 +64,26 @@ def web_search(query: str) -> str:
         f"**{item.get('title', '')}**\n{item.get('body', '')}\n{item.get('href', '')}"
         for item in results
     )
+
+
+def public_web_search_query(query: str) -> str:
+    """Preserve public entities in live search while still redacting private identifiers.
+
+    Sports, YouTube, X, and general web questions often contain names, teams,
+    locations, and relative dates. Redacting those makes search useless. Keep
+    those public-entity labels intact; scrub only when private-contact or
+    identifier labels are mixed into the query.
+    """
+
+    raw_query = query.strip()
+    scrubber = PrivacyScrubber()
+    detections = scrubber.analyze(raw_query)
+    if not detections:
+        return raw_query
+    labels = {item.label for item in detections}
+    if labels <= PUBLIC_WEB_ENTITY_LABELS:
+        return raw_query
+    return scrubber.scrub(raw_query)[0]
 
 
 def extract_web_sources(tool_output: str) -> list[dict]:

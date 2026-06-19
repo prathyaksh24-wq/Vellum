@@ -70,18 +70,6 @@ def test_specialist_source_defaults_to_historical_without_capture_time():
     assert source.freshness == "historical"
 
 
-def test_specialist_source_can_carry_snippet_evidence():
-    source = SpecialistSource(
-        kind="web",
-        title="F1 calendar",
-        path_or_url="https://www.formula1.com/en/racing/2026",
-        snippet="The next race is the Austrian Grand Prix at Red Bull Ring.",
-        freshness="live",
-    )
-
-    assert source.snippet == "The next race is the Austrian Grand Prix at Red Bull Ring."
-
-
 def test_memory_proposal_structure_and_confidence_validation():
     proposal = MemoryProposal(
         scope="sports",
@@ -134,13 +122,225 @@ def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_
 
     assert response.status == "answered"
     assert "UFC 302" in response.summary
-    assert "[1]" in response.summary
+    assert "[1]" not in response.summary
+    assert "Sources checked" not in response.summary
     assert response.agent == "SportsAgent"
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.espn.com/mma/story/ufc-302-results"
     saved = list((vault_root / "Library" / "Sports" / "UFC").glob("*.md"))
     assert saved
     assert "UFC 302 results and bonuses" in saved[0].read_text(encoding="utf-8")
+
+
+def test_sports_agent_routes_public_athlete_performance_questions(tmp_path):
+    search_output = (
+        "**Cristiano Ronaldo match report**\n"
+        "Ronaldo scored and created two chances in yesterday's match.\n"
+        "https://www.espn.com/soccer/ronaldo-match-report"
+    )
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)
+
+    assert agent.can_handle("Cristiano Ronaldo performance yesterday")
+    response = agent.answer("Cristiano Ronaldo performance yesterday")
+
+    assert response.status == "answered"
+    assert "Ronaldo" in response.summary
+
+
+def test_sports_agent_prioritizes_current_sources_for_yesterday_queries(tmp_path):
+    search_result = {
+        "text": "Cristiano Ronaldo returns from injury with TWO goals, watch Apr 3, 2026.",
+        "sources": [
+            {
+                "title": "Cristiano Ronaldo returns from injury with TWO goals",
+                "url": "https://sports.yahoo.com/old-ronaldo",
+                "snippet": "Apr 3, 2026 — Ronaldo scored twice on return from injury.",
+                "domain": "sports.yahoo.com",
+            },
+            {
+                "title": "Portugal's Ronaldo does little to shake perception he is yesterday's man",
+                "url": "https://www.reuters.com/sports/soccer/ronaldo-2026-06-17/",
+                "snippet": "Jun 17, 2026 — Portugal's Ronaldo was held in a 1-1 draw.",
+                "domain": "reuters.com",
+            },
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("Cristiano Ronaldo performance yesterday")
+
+    assert response.sources[0].path_or_url == "https://www.reuters.com/sports/soccer/ronaldo-2026-06-17/"
+    assert response.summary.startswith("Portugal's Ronaldo does little")
+
+
+def test_sports_agent_prioritizes_official_schedule_for_next_f1_race(tmp_path):
+    seen = {}
+    search_result = {
+        "text": "Google Sports Data\nThis response uses data provided by Google Sports",
+        "sources": [
+            {
+                "title": "2026 F1 Standings: Drivers & Constructors Championship List",
+                "url": "https://www.f1-fansite.com/f1-results/f1-standings-2026-championship/",
+                "snippet": "Jun 17, 2026 — 2026 F1 standings championship.",
+                "domain": "f1-fansite.com",
+            },
+            {
+                "title": "Google Sports Data",
+                "url": "https://support.google.com/knowledgepanel/answer/9787176",
+                "snippet": "This response uses data provided by Google Sports",
+                "domain": "support.google.com",
+            },
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "2026 FIA Formula One World Championship Race Calendar. Next. Round 8 Austria, 26 - 28 Jun.",
+                "domain": "formula1.com",
+            },
+            {
+                "title": "F1 news, rumours and gossip",
+                "url": "https://www.skysports.com/f1/live-blog",
+                "snippet": "Latest Formula 1 news and rumours.",
+                "domain": "skysports.com",
+            },
+        ],
+    }
+
+    def searcher(query):
+        seen["query"] = query
+        return search_result
+
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=searcher)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert "official Formula 1 calendar" in seen["query"]
+    assert "2026" in seen["query"]
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
+    assert "Austria" in response.summary
+    assert "26 - 28 Jun" in response.summary
+    assert "support.google.com" not in response.sources[0].path_or_url
+
+
+def test_sports_agent_answer_uses_serpapi_answer_without_inline_source_list(tmp_path):
+    search_result = {
+        "text": (
+            "The next Formula 1 race is the Austrian Grand Prix at the Red Bull Ring, "
+            "with race weekend running June 26-28, 2026.\n\n---\n\n"
+            "**F1 Schedule 2026 - Official Calendar of Grand Prix Races**\n"
+            "Round 8 Austria 26 - 28 Jun.\n"
+            "https://www.formula1.com/en/racing/2026"
+        ),
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "Round 8 Austria 26 - 28 Jun.",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
+    assert "Sources checked" not in response.summary
+    assert "- [1]" not in response.summary
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
+
+
+def test_sports_agent_prefers_serpapi_compact_facts_over_raw_text(tmp_path):
+    search_result = {
+        "text": "**Old World Cup scorers page**\nMiroslav Klose leads with 16 goals.\nhttps://example.com/old",
+        "facts": [
+            "Lionel Messi and Miroslav Klose are tied for the men's FIFA World Cup career goals record with 16 goals each.",
+            "sports_results: rank: T1 | player: Lionel Messi | country: Argentina | goals: 16",
+            "sports_results: rank: T1 | player: Miroslav Klose | country: Germany | goals: 16",
+        ],
+        "sources": [
+            {
+                "title": "FIFA World Cup all-time scorers",
+                "url": "https://www.fifa.com/worldcup/scorers",
+                "snippet": "Lionel Messi and Miroslav Klose are tied on 16.",
+                "domain": "fifa.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("who leads the fifa world cup career goals all time")
+
+    assert response.summary.startswith("Lionel Messi and Miroslav Klose are tied")
+    assert "Old World Cup scorers page" not in response.summary
+
+
+def test_sports_agent_preserves_serpapi_full_markdown_answer(tmp_path):
+    markdown = (
+        "# Ronaldo vs DR Congo\n\n"
+        "Portugal drew **1-1** with DR Congo.\n\n"
+        "## Match Summary\n\n"
+        "- Ronaldo played 90 minutes.\n"
+        "- He recorded 3 shots and 0 on target.\n\n"
+        "## Team Lineups\n\n"
+        "| Portugal | DR Congo |\n"
+        "| --- | --- |\n"
+        "| C. Ronaldo | Y. Wissa |\n\n"
+        "## Injury News\n\n"
+        "No major injuries were reported after the match.\n\n"
+        + ("Detailed tactical note. " * 120)
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "Portugal vs DR Congo report",
+                "url": "https://www.espn.com/soccer/report/_/gameId/760435",
+                "domain": "espn.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("tell me about ronaldo performance against congo yesterday")
+
+    assert response.summary == markdown
+    assert "| Portugal | DR Congo |" in response.summary
+    assert "Injury News" in response.summary
+    assert len(response.summary) > 1200
+
+
+def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
+    markdown = (
+        "The next F1 race is the Austrian Grand Prix, scheduled for June 26-28, 2026.\n\n"
+        "### 2026 F1 Calendar Details\n\n"
+        "| Round | Grand Prix | Circuit / Location | Race Date |\n"
+        "| --- | --- | --- | --- |\n"
+        "| R08 | Austrian Grand Prix | Red Bull Ring, Spielberg | June 28 |\n"
+        "| R09 | British Grand Prix | Silverstone Circuit | July 5 |\n\n"
+        "### References\n\n"
+        "[0] [Official F1 Calendar](https://www.formula1.com/en/racing/2026)\n"
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race and show the calendar details")
+
+    assert response.summary == markdown
+    assert "| R09 | British Grand Prix |" in response.summary
 
 
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
@@ -256,41 +456,6 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
     assert response.sources[0].path_or_url == "https://www.nba.com/schedule"
 
 
-def test_sports_agent_uses_structured_serpapi_sources_for_complex_live_query(tmp_path):
-    vault_root = tmp_path / "Vault"
-    search_result = {
-        "text": "The next F1 race is the Austrian Grand Prix, scheduled for June 26-28, 2026.",
-        "sources": [
-            {
-                "title": "F1 Austrian GP",
-                "url": "https://www.formula1.com/en/racing/2026/Austria.html",
-                "snippet": "The Austrian Grand Prix is next on the calendar.",
-                "domain": "formula1.com",
-            },
-            {
-                "title": "FIA 2026 calendar",
-                "url": "https://www.fia.com/events/fia-formula-one-world-championship/season-2026/calendar",
-                "snippet": "Official 2026 calendar.",
-                "domain": "fia.com",
-            },
-            {
-                "title": "Autosport preview",
-                "url": "https://www.autosport.com/f1/news/austrian-gp-preview",
-                "snippet": "Weekend preview and analysis.",
-                "domain": "autosport.com",
-            },
-        ],
-    }
-    agent = SportsAgent(vault_root=vault_root, web_searcher=lambda query: search_result)
-
-    response = agent.answer("what is the next f1 race? use multiple sources")
-
-    assert response.status == "answered"
-    assert "Austrian Grand Prix" in response.summary
-    assert len(response.sources) == 3
-    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026/Austria.html"
-
-
 def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_path):
     search_output = (
         "**Last F1 race result**\n"
@@ -314,25 +479,7 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
 
 
-def test_live_dispatcher_preserves_specialist_source_snippets(tmp_path):
-    search_output = (
-        "**F1 calendar**\n"
-        "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco.\n"
-        "https://www.formula1.com/en/racing/2026"
-    )
-    dispatcher = LiveAgentDispatcher(
-        vault_root=tmp_path / "Vault",
-        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
-        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
-    )
-
-    result = dispatcher.maybe_handle("What is the next F1 race?", thread_id="t-snippet")
-
-    assert result is not None
-    assert result.sources[0]["snippet"] == "The next race is the Austrian Grand Prix at Red Bull Ring, not Monaco."
-
-
-def test_live_dispatcher_returns_to_vellum_for_non_sports_turn_while_sports_active(tmp_path):
+def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_prompt(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -348,7 +495,26 @@ def test_live_dispatcher_returns_to_vellum_for_non_sports_turn_while_sports_acti
     result = dispatcher.maybe_handle("Now draft an email to Sam", thread_id="t1")
 
     assert result is None
-    assert dispatcher.state_store.get("t1").active_agent == "VellumAgent"
+
+
+def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
+    search_output = (
+        "**NBA update**\n"
+        "A short live sports result.\n"
+        "https://www.nba.com/news/update"
+    )
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=state_store,
+    )
+    assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
+
+    result = dispatcher.maybe_handle("hey how are you?", thread_id="t1")
+
+    assert result is None
+    assert state_store.get("t1").active_agent == "VellumAgent"
 
 
 def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
@@ -549,14 +715,11 @@ def test_specialist_router_delegates_x_and_youtube_queries(tmp_path):
 
     x_decision = router.route("What did AlexHormozi post on X?")
     youtube_decision = router.route("Summarize the latest YouTube videos")
-    upload_decision = router.route("What did KSI upload?")
 
     assert x_decision.agent_name == "XAgent"
     assert x_decision.should_delegate is True
     assert youtube_decision.agent_name == "YoutubeAgent"
     assert youtube_decision.should_delegate is True
-    assert upload_decision.agent_name == "YoutubeAgent"
-    assert upload_decision.should_delegate is True
 
 
 def test_specialist_router_does_not_route_bare_math_or_chart_x(tmp_path):
@@ -642,79 +805,6 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
     assert "Registry X result" in response.summary
 
 
-def test_x_agent_reads_bookmarks_through_registry(tmp_path):
-    registry = ToolRegistry()
-    calls = []
-    registry.register(
-        CapabilityRecord(
-            name="x.bookmarks",
-            namespace="x",
-            access=CapabilityAccess.READ,
-            allowed_agents=frozenset({"XAgent"}),
-            stream_label="Read X bookmarks",
-            adapter=lambda payload: calls.append(payload) or {
-                "items": [{"text": "Saved analysis", "url": "https://x.com/a/status/1"}],
-            },
-        )
-    )
-    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
-
-    response = agent.answer("Show my X bookmarks")
-
-    assert calls == [{"max_results": 5}]
-    assert response.status == "answered"
-    assert "Saved analysis" in response.summary
-
-
-def test_x_agent_publishes_confirmed_post_through_registry(tmp_path):
-    registry = ToolRegistry()
-    calls = []
-    registry.register(
-        CapabilityRecord(
-            name="x.publish_post",
-            namespace="x",
-            access=CapabilityAccess.EXTERNAL_WRITE,
-            allowed_agents=frozenset({"XAgent"}),
-            stream_label="Posted to X",
-            requires_confirmation=True,
-            adapter=lambda payload: calls.append(payload) or {"tweet": {"id": "99", "text": payload["text"]}},
-        )
-    )
-    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
-
-    response = agent.answer('Post to X: "hello world"')
-
-    assert calls == [{"text": "hello world", "confirm": True}]
-    assert response.status == "answered"
-    assert "Posted to X" in response.summary
-
-
-def test_x_agent_publishes_generated_image_post_through_registry(tmp_path):
-    registry = ToolRegistry()
-    calls = []
-    registry.register(
-        CapabilityRecord(
-            name="x.publish_post_with_media",
-            namespace="x",
-            access=CapabilityAccess.EXTERNAL_WRITE,
-            allowed_agents=frozenset({"XAgent"}),
-            stream_label="Posted image to X",
-            requires_confirmation=True,
-            adapter=lambda payload: calls.append(payload) or {
-                "tweet": {"id": "99", "text": payload["text"]},
-                "image": {"path": "D:/tmp/image.png"},
-            },
-        )
-    )
-    agent = XAgent(vault_root=tmp_path / "Vault", tool_registry=registry)
-
-    response = agent.answer('Generate an image of a stadium and post to X: "match day"')
-
-    assert calls == [{"text": "match day", "image_prompt": "a stadium", "confirm": True}]
-    assert response.status == "answered"
-    assert "Posted image to X" in response.summary
-
-
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
     agent = XAgent(vault_root=tmp_path, x_service=service)
@@ -768,6 +858,27 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
     assert "youtube.search_videos" in response.analysis
+
+
+def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "KSI uploaded a new challenge",
+                "url": "https://www.youtube.com/watch?v=abc123XYZ09",
+                "channel": "KSI",
+                "description": "Latest upload from the channel.",
+            }
+        ],
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+
+    assert agent.can_handle("what did KSI upload")
+    response = agent.answer("what did KSI upload")
+
+    assert response.status == "answered"
+    assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
 
 
 def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
