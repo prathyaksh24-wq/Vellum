@@ -148,12 +148,13 @@ class SetActiveModelRequest(BaseModel):
 
 
 class XOAuthStartRequest(BaseModel):
-    provider: str = "xapi"
+    provider: str = "xai"
 
 
 class XOAuthStatusResponse(BaseModel):
     x_api_configured: bool
     x_api_connected: bool
+    xai_oauth_connected: bool = False
     private_reads_enabled: bool
     posting_enabled: bool
     setup_running: bool = False
@@ -259,6 +260,10 @@ router = APIRouter(prefix="/api")
 
 def _x_api_oauth_file() -> Path:
     return REPO_ROOT / "data" / "x-api-oauth.json"
+
+
+def _xai_oauth_file() -> Path:
+    return REPO_ROOT / "data" / "xai-oauth.json"
 
 
 def _x_oauth_setup_running() -> bool:
@@ -720,6 +725,7 @@ async def x_oauth_status() -> XOAuthStatusResponse:
     return XOAuthStatusResponse(
         x_api_configured=bool(settings.x_api_client_id.strip()),
         x_api_connected=_x_api_oauth_file().exists(),
+        xai_oauth_connected=_xai_oauth_file().exists(),
         private_reads_enabled=bool(settings.x_tool_allow_private_reads),
         posting_enabled=bool(settings.x_tool_allow_posts),
         setup_running=_x_oauth_setup_running(),
@@ -731,19 +737,16 @@ async def x_oauth_start(_request: XOAuthStartRequest) -> dict[str, Any]:
     global _x_oauth_process
 
     settings = get_settings()
-    client_id = settings.x_api_client_id.strip()
-    if not client_id:
-        raise HTTPException(status_code=409, detail="Set X_API_CLIENT_ID in .env before starting X OAuth.")
     if _x_oauth_setup_running():
         return {
             "status": "already_running",
-            "message": "X sign-in is already waiting in the external browser.",
-            "callback_url": "http://127.0.0.1:56122/callback",
+            "message": "xAI/X sign-in is already waiting in the external browser.",
+            "callback_url": "http://127.0.0.1:56121/callback",
         }
 
-    setup_script = REPO_ROOT / "scripts" / "setup_x_api_oauth.py"
+    setup_script = REPO_ROOT / "scripts" / "setup_xai_oauth.py"
     if not setup_script.exists():
-        raise HTTPException(status_code=500, detail="X OAuth setup script is missing.")
+        raise HTTPException(status_code=500, detail="xAI OAuth setup script is missing.")
 
     runtime_dir = REPO_ROOT / ".api-runtime"
     runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -751,7 +754,7 @@ async def x_oauth_start(_request: XOAuthStartRequest) -> dict[str, Any]:
     stderr_path = runtime_dir / "x-oauth.err.log"
     env = {
         **os.environ,
-        "X_API_CLIENT_ID": client_id,
+        "X_API_CLIENT_ID": settings.x_api_client_id.strip(),
         "X_API_CLIENT_SECRET": settings.x_api_client_secret.strip(),
     }
     creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
@@ -774,8 +777,8 @@ async def x_oauth_start(_request: XOAuthStartRequest) -> dict[str, Any]:
 
     return {
         "status": "started",
-        "message": "Opened the external browser for X sign-in. Complete the login there, then return to Vellum.",
-        "callback_url": "http://127.0.0.1:56122/callback",
+        "message": "Opened the external browser for xAI/X sign-in. Complete the login there, then return to Vellum.",
+        "callback_url": "http://127.0.0.1:56121/callback",
     }
 
 
@@ -944,6 +947,15 @@ def _stream_id(prefix: str) -> str:
 
 def _stream_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _agent_stream_timeout_seconds() -> float:
+    raw = os.getenv("AGENT_STREAM_TIMEOUT_SECONDS", "90").strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 90.0
+    return max(5.0, value)
 
 
 def _response_event(
@@ -1281,79 +1293,84 @@ async def _stream_agent_turn(
                 config=_thread_config(active_thread_id),
                 version="v2",
             )
-            async for event in stream:
-                kind = event.get("event")
-                if kind == "on_chat_model_stream":
-                    text = _chunk_text(event.get("data", {}).get("chunk"))
-                    if text:
-                        answer_parts.append(text)
-                        if not message_item_started:
-                            yield _response_output_item_added(
-                                response_id=response_id,
-                                thread_id=active_thread_id,
-                                item=message_item,
-                            )
-                            message_item_started = True
-                        yield _response_output_text_delta(
-                            response_id=response_id,
+            timeout_seconds = _agent_stream_timeout_seconds()
+            try:
+                async with asyncio.timeout(timeout_seconds):
+                    async for event in stream:
+                        kind = event.get("event")
+                        if kind == "on_chat_model_stream":
+                            text = _chunk_text(event.get("data", {}).get("chunk"))
+                            if text:
+                                answer_parts.append(text)
+                                if not message_item_started:
+                                    yield _response_output_item_added(
+                                        response_id=response_id,
+                                        thread_id=active_thread_id,
+                                        item=message_item,
+                                    )
+                                    message_item_started = True
+                                yield _response_output_text_delta(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item_id=message_item_id,
+                                    delta=text,
+                                )
+                                yield _sse("token", {"text": text})
+                        elif kind == "on_tool_start":
+                            name = event.get("name") or ""
+                            if name:
+                                tool_names.append(str(name))
+                                label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
+                                item = {
+                                    "id": _stream_id("item"),
+                                    "type": "tool_call",
+                                    "name": str(name),
+                                    "status": "in_progress",
+                                    "label": label,
+                                    "detail": detail,
+                                }
+                                active_tool_items[str(name)] = item
+                                yield _response_output_item_added(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item=item,
+                                )
+                                yield _sse("tool", {"name": name})
+                                yield _sse("activity", {"label": label, "detail": detail})
+                        elif kind == "on_tool_end":
+                            if (event.get("name") or "") == "web_search":
+                                output_text = _tool_output_text(event.get("data", {}).get("output"))
+                                for record in extract_web_sources(output_text):
+                                    if record["url"] in seen_urls:
+                                        continue
+                                    seen_urls.add(record["url"])
+                                    record = {**record, "fetched_at": _now_iso()}
+                                    sources.append(record)
+                                    source_item = {
+                                        "id": _stream_id("item"),
+                                        "type": "source",
+                                        "status": "completed",
+                                        "source": record,
+                                    }
+                                    yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
+                                    yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
+                                    yield _sse("source", record)
+                            done_item = active_tool_items.pop(str(event.get("name") or ""), None)
+                            if done_item:
+                                yield _response_output_item_done(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item=done_item,
+                                )
+                        capture_from_stream_event(
+                            ledger=_api_ledger,
+                            event=event,
                             thread_id=active_thread_id,
-                            item_id=message_item_id,
-                            delta=text,
+                            fallback_model=get_settings().primary_model,
+                            source="api",
                         )
-                        yield _sse("token", {"text": text})
-                elif kind == "on_tool_start":
-                    name = event.get("name") or ""
-                    if name:
-                        tool_names.append(str(name))
-                        label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
-                        item = {
-                            "id": _stream_id("item"),
-                            "type": "tool_call",
-                            "name": str(name),
-                            "status": "in_progress",
-                            "label": label,
-                            "detail": detail,
-                        }
-                        active_tool_items[str(name)] = item
-                        yield _response_output_item_added(
-                            response_id=response_id,
-                            thread_id=active_thread_id,
-                            item=item,
-                        )
-                        yield _sse("tool", {"name": name})
-                        yield _sse("activity", {"label": label, "detail": detail})
-                elif kind == "on_tool_end":
-                    if (event.get("name") or "") == "web_search":
-                        output_text = _tool_output_text(event.get("data", {}).get("output"))
-                        for record in extract_web_sources(output_text):
-                            if record["url"] in seen_urls:
-                                continue
-                            seen_urls.add(record["url"])
-                            record = {**record, "fetched_at": _now_iso()}
-                            sources.append(record)
-                            source_item = {
-                                "id": _stream_id("item"),
-                                "type": "source",
-                                "status": "completed",
-                                "source": record,
-                            }
-                            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
-                            yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
-                            yield _sse("source", record)
-                    done_item = active_tool_items.pop(str(event.get("name") or ""), None)
-                    if done_item:
-                        yield _response_output_item_done(
-                            response_id=response_id,
-                            thread_id=active_thread_id,
-                            item=done_item,
-                        )
-                capture_from_stream_event(
-                    ledger=_api_ledger,
-                    event=event,
-                    thread_id=active_thread_id,
-                    fallback_model=get_settings().primary_model,
-                    source="api",
-                )
+            except TimeoutError as exc:
+                raise RuntimeError(f"Provider timed out after {timeout_seconds:g} seconds.") from exc
             answer = "".join(answer_parts).strip() or "No response."
             source_models = [Source(**record) for record in sources]
             if voice:
@@ -1384,8 +1401,30 @@ async def _stream_agent_turn(
             raise
         except Exception as exc:
             await _repair_incomplete_tool_history(active_thread_id)
+            error_answer = f"Backend error: {exc}"
+            for item in list(active_tool_items.values()):
+                yield _response_output_item_done(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    item=item,
+                    status="failed",
+                )
+            if message_item_started:
+                yield _response_output_item_done(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    item=message_item,
+                    status="failed",
+                )
             yield _response_error(response_id=response_id, thread_id=active_thread_id, message=str(exc))
             yield _sse("error", {"error": str(exc)})
+            yield _response_completed(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                answer=error_answer,
+                tools=tool_names,
+                sources=sources,
+            )
 
 
 async def _synthesize_audio_event(text: str):

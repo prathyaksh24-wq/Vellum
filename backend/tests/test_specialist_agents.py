@@ -122,7 +122,8 @@ def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_
 
     assert response.status == "answered"
     assert "UFC 302" in response.summary
-    assert "[1]" in response.summary
+    assert "[1]" not in response.summary
+    assert "Sources checked" not in response.summary
     assert response.agent == "SportsAgent"
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.espn.com/mma/story/ufc-302-results"
@@ -215,9 +216,38 @@ def test_sports_agent_prioritizes_official_schedule_for_next_f1_race(tmp_path):
     assert "official Formula 1 calendar" in seen["query"]
     assert "2026" in seen["query"]
     assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
-    assert response.summary.startswith("F1 Schedule 2026")
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
     assert "Austria" in response.summary
+    assert "26 - 28 Jun" in response.summary
     assert "support.google.com" not in response.sources[0].path_or_url
+
+
+def test_sports_agent_answer_uses_serpapi_answer_without_inline_source_list(tmp_path):
+    search_result = {
+        "text": (
+            "The next Formula 1 race is the Austrian Grand Prix at the Red Bull Ring, "
+            "with race weekend running June 26-28, 2026.\n\n---\n\n"
+            "**F1 Schedule 2026 - Official Calendar of Grand Prix Races**\n"
+            "Round 8 Austria 26 - 28 Jun.\n"
+            "https://www.formula1.com/en/racing/2026"
+        ),
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "Round 8 Austria 26 - 28 Jun.",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
+    assert "Sources checked" not in response.summary
+    assert "- [1]" not in response.summary
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
 
 
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
@@ -356,7 +386,7 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
 
 
-def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(tmp_path):
+def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_prompt(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -371,9 +401,27 @@ def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(t
 
     result = dispatcher.maybe_handle("Now draft an email to Sam", thread_id="t1")
 
-    assert result is not None
-    assert result.agent_name == "SportsAgent"
-    assert "route this back to Vellum" in result.answer
+    assert result is None
+
+
+def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
+    search_output = (
+        "**NBA update**\n"
+        "A short live sports result.\n"
+        "https://www.nba.com/news/update"
+    )
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=state_store,
+    )
+    assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
+
+    result = dispatcher.maybe_handle("hey how are you?", thread_id="t1")
+
+    assert result is None
+    assert state_store.get("t1").active_agent == "VellumAgent"
 
 
 def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):

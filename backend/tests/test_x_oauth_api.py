@@ -23,17 +23,20 @@ class _Process:
 
 
 def test_x_oauth_status_reports_config_and_token_file(monkeypatch, tmp_path):
-    oauth_file = tmp_path / "x-api-oauth.json"
-    oauth_file.write_text("{}", encoding="utf-8")
+    xai_oauth_file = tmp_path / "xai-oauth.json"
+    x_api_oauth_file = tmp_path / "x-api-oauth.json"
+    xai_oauth_file.write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr(api, "get_settings", lambda: _settings())
-    monkeypatch.setattr(api, "_x_api_oauth_file", lambda: oauth_file)
+    monkeypatch.setattr(api, "_xai_oauth_file", lambda: xai_oauth_file)
+    monkeypatch.setattr(api, "_x_api_oauth_file", lambda: x_api_oauth_file)
     monkeypatch.setattr(api, "_x_oauth_process", None)
 
     status = asyncio.run(api.x_oauth_status())
 
     assert status.x_api_configured is True
-    assert status.x_api_connected is True
+    assert status.x_api_connected is False
+    assert status.xai_oauth_connected is True
     assert status.private_reads_enabled is True
     assert status.posting_enabled is True
     assert status.setup_running is False
@@ -49,9 +52,9 @@ def test_x_oauth_start_rejects_missing_client_id(monkeypatch):
     assert "X_API_CLIENT_ID" in exc.value.detail
 
 
-def test_x_oauth_start_launches_browser_setup_script(monkeypatch, tmp_path):
+def test_x_oauth_start_launches_xai_browser_setup_script(monkeypatch, tmp_path):
     calls = {}
-    setup_script = tmp_path / "scripts" / "setup_x_api_oauth.py"
+    setup_script = tmp_path / "scripts" / "setup_xai_oauth.py"
     setup_script.parent.mkdir()
     setup_script.write_text("print('setup')", encoding="utf-8")
 

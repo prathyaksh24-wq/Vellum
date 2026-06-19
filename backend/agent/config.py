@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -53,6 +54,7 @@ class Settings(BaseSettings):
 
     # Vector store (embedded ChromaDB)
     chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
+    huggingface_cache_dir: Path = Field(default=Path("data/hf-cache"), alias="HUGGINGFACE_CACHE_DIR")
 
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")
@@ -136,6 +138,7 @@ class Settings(BaseSettings):
         "obsidian_vault_path",
         "filesystem_mcp_path",
         "chroma_path",
+        "huggingface_cache_dir",
         "voice_model_dir",
         "computer_use_screenshot_dir",
         mode="before",
@@ -156,6 +159,16 @@ class Settings(BaseSettings):
         self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.chroma_path is not None:
             self.chroma_path = _resolve_against_repo(self.chroma_path)
+        self.huggingface_cache_dir = _resolve_against_repo(self.huggingface_cache_dir)
+        self.huggingface_cache_dir.mkdir(parents=True, exist_ok=True)
+        sentence_cache = self.huggingface_cache_dir / "sentence-transformers"
+        hub_cache = self.huggingface_cache_dir / "hub"
+        sentence_cache.mkdir(parents=True, exist_ok=True)
+        hub_cache.mkdir(parents=True, exist_ok=True)
+        os.environ["HF_HOME"] = str(self.huggingface_cache_dir)
+        os.environ["HF_HUB_CACHE"] = str(hub_cache)
+        os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(sentence_cache)
+        os.environ.setdefault("TRANSFORMERS_CACHE", str(self.huggingface_cache_dir / "transformers"))
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
 

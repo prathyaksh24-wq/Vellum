@@ -2491,7 +2491,7 @@ const XConnectModalReal = ({onClose, onConnected}) => {
     try {
       const next = await api.client.request('/api/x/oauth/status');
       setStatus(next);
-      if (next.x_api_connected) {
+      if (next.xai_oauth_connected || next.x_api_connected) {
         setStep('connected');
         if (pollRef.current) clearInterval(pollRef.current);
         onConnected('@connected');
@@ -2512,7 +2512,7 @@ const XConnectModalReal = ({onClose, onConnected}) => {
     setBusy(true);
     setError('');
     try {
-      await api.client.request('/api/x/oauth/start', api.client.jsonOptions('POST', {provider: 'xapi'}));
+      await api.client.request('/api/x/oauth/start', api.client.jsonOptions('POST', {provider: 'xai'}));
       setStep('connecting');
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(refresh, 2500);
@@ -2523,8 +2523,7 @@ const XConnectModalReal = ({onClose, onConnected}) => {
       setBusy(false);
     }
   };
-  const configured = !!(status && status.x_api_configured);
-  const connected = !!(status && status.x_api_connected);
+  const connected = !!(status && (status.xai_oauth_connected || status.x_api_connected));
   return (
     <React.Fragment>
       <div className="backdrop dim xc-backdrop" onClick={onClose}/>
@@ -2539,17 +2538,16 @@ const XConnectModalReal = ({onClose, onConnected}) => {
             <div className="xc-page">
               <div className="xc-logo"><XLogo size={30}/></div>
               <div className="xc-h">Connect your X account</div>
-              <div className="xc-sub">Vellum opens the real X OAuth flow in your external browser. Sign in there, authorize access, then return here.</div>
+              <div className="xc-sub">Vellum opens the real xAI/Grok OAuth flow in your external browser. Sign in there, authorize access, then return here.</div>
               <div className="xc-perm-title">Vellum will be able to</div>
               <div className="xc-perms">
                 <div className="xc-perm"><IcCheck size={14}/>Use Grok models on your subscription</div>
-                <div className="xc-perm"><IcCheck size={14}/>Read posts, threads, bookmarks, and trends where allowed</div>
-                <div className="xc-perm"><IcCheck size={14}/>Post or draft posts when posting is enabled</div>
+                <div className="xc-perm"><IcCheck size={14}/>Search posts, threads, and trends through xAI X Search</div>
+                <div className="xc-perm"><IcCheck size={14}/>Use xAI tools where your subscription/API tier allows</div>
               </div>
-              {!configured && <div className="xc-note xc-note-sm">X_API_CLIENT_ID is missing. Add it to the backend .env, then restart the API.</div>}
               {error && <div className="xc-note xc-note-sm" style={{color:'var(--danger)'}}>{error}</div>}
               {step === 'connecting' && <div className="xc-note"><span className="xc-spin" style={{width:14,height:14}}/>Waiting for browser authorization...</div>}
-              <button className="xc-btn" disabled={!configured || busy || connected} onClick={start}>{busy ? 'Opening...' : 'Open X sign-in'}</button>
+              <button className="xc-btn" disabled={busy || connected} onClick={start}>{busy ? 'Opening...' : 'Open xAI sign-in'}</button>
               <button className="xc-cancel" onClick={onClose}>Cancel</button>
               <div className="xc-note xc-note-sm">Requires an active SuperGrok or X Premium+ subscription on the account you authorize.</div>
             </div>

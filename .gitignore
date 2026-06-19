@@ -12,6 +12,7 @@ data/x-api-oauth.json
 data/xai-oauth.json
 data/logs/
 data/cache/
+data/hf-cache/
 data/embeddings/
 data/models/
 data/ui/

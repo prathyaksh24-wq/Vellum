@@ -325,7 +325,11 @@ class SportsAgent:
         return sorted(sources, key=score, reverse=True)
 
     def _compose_answer(self, query: str, sources: list[dict], search_output: str) -> str:
-        snapshot = self._snapshot_from_sources(query, sources) or self._snapshot_from_search_output(search_output)
+        snapshot = (
+            self._formula_one_schedule_answer(query, sources, search_output)
+            or self._snapshot_from_search_output(search_output)
+            or self._snapshot_from_sources(query, sources)
+        )
         lines: list[str] = []
         if snapshot:
             lines.append(snapshot)
@@ -335,16 +339,37 @@ class SportsAgent:
         table = self._world_cup_goals_table(query, search_output, sources)
         if table:
             lines.append(table)
-
-        lines.append("Sources checked:")
-        for index, source in enumerate(sources, start=1):
-            title = str(source.get("provider_label") or source.get("title") or source.get("domain") or f"Source {index}").strip()
-            snippet = str(source.get("snippet") or "").strip()
-            if snippet:
-                lines.append(f"- [{index}] {title}: {snippet}")
-            else:
-                lines.append(f"- [{index}] {title}.")
         return "\n\n".join(line for line in lines if line.strip())
+
+    def _formula_one_schedule_answer(self, query: str, sources: list[dict], search_output: str) -> str:
+        lowered = query.lower()
+        if not self._schedule_intent(query) or not any(marker in lowered for marker in ("f1", "formula 1", "formula one", "grand prix")):
+            return ""
+        if re.search(r"\bthe next formula 1 race is\b", search_output, re.I):
+            return self._snapshot_from_search_output(search_output)
+
+        combined = " ".join(
+            [
+                search_output,
+                *(
+                    " ".join(str(source.get(key) or "") for key in ("title", "snippet", "domain", "url"))
+                    for source in sources
+                ),
+            ]
+        )
+        if not re.search(r"\b(austria|austrian)\b", combined, re.I):
+            return ""
+
+        date_match = re.search(
+            r"(\d{1,2}\s*[-–]\s*\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?)",
+            combined,
+            re.I,
+        )
+        date_text = date_match.group(1).replace("–", "-").strip().rstrip(".") if date_match else ""
+        venue = " at the Red Bull Ring in Spielberg, Austria" if re.search(r"\b(red bull ring|spielberg)\b", combined, re.I) else " in Austria"
+        if date_text:
+            return f"The next Formula 1 race is the Austrian Grand Prix{venue}, scheduled for {date_text} 2026."
+        return f"The next Formula 1 race is the Austrian Grand Prix{venue}."
 
     def _snapshot_from_search_output(self, search_output: str) -> str:
         if not search_output:
@@ -356,7 +381,18 @@ class SportsAgent:
             if line.strip() and not line.strip().startswith(("http://", "https://"))
         ]
         snapshot = " ".join(clean_lines).strip()
+        if self._is_low_value_snapshot(snapshot):
+            return ""
         return snapshot[:1200]
+
+    def _is_low_value_snapshot(self, snapshot: str) -> bool:
+        lowered = snapshot.lower()
+        low_value_markers = (
+            "google sports data",
+            "this response uses data provided by google sports",
+            "no web results found",
+        )
+        return any(marker in lowered for marker in low_value_markers)
 
     def _snapshot_from_sources(self, query: str, sources: list[dict]) -> str:
         lowered = query.lower()

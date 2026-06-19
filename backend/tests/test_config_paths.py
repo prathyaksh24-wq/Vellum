@@ -43,3 +43,14 @@ def test_repo_root_points_at_vellum_repo() -> None:
     """REPO_ROOT should be the directory containing both backend/ and frontend/."""
     assert (REPO_ROOT / "backend").is_dir()
     assert (REPO_ROOT / "backend" / "agent" / "config.py").is_file()
+
+
+def test_huggingface_cache_env_is_repo_local() -> None:
+    """Embedding model downloads must not default to the C: user profile cache."""
+    from agent.config import get_settings
+
+    settings = get_settings()
+
+    assert settings.huggingface_cache_dir == (REPO_ROOT / "data" / "hf-cache").resolve()
+    assert Path(os.environ["HF_HOME"]) == settings.huggingface_cache_dir
+    assert Path(os.environ["SENTENCE_TRANSFORMERS_HOME"]) == settings.huggingface_cache_dir / "sentence-transformers"

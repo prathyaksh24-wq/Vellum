@@ -523,6 +523,70 @@ def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
     assert repaired_messages[0].tool_call_id == "call-close-tab"
 
 
+def test_stream_error_emits_terminal_completed_event(monkeypatch):
+    class FailingStreamAgent:
+        async def astream_events(self, *args, **kwargs):
+            raise RuntimeError("provider timed out")
+            yield
+
+    fake_agent = FailingStreamAgent()
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+
+    async def run_case():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="hello",
+            active_thread_id="frontend",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(run_case())
+
+    assert any("event: error" in chunk for chunk in chunks)
+    assert any("event: response.completed" in chunk for chunk in chunks)
+
+
+def test_stream_stalled_provider_times_out_with_terminal_event(monkeypatch):
+    class StalledStreamAgent:
+        async def astream_events(self, *args, **kwargs):
+            await asyncio.sleep(60)
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="late")}}
+
+    monkeypatch.setattr(api, "agent", StalledStreamAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+    monkeypatch.setattr(api, "_agent_stream_timeout_seconds", lambda: 0.01)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+
+    async def run_case():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="hello",
+            active_thread_id="frontend",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(asyncio.wait_for(run_case(), timeout=1))
+
+    assert any("provider timed out" in chunk.lower() for chunk in chunks)
+    assert any("event: response.completed" in chunk for chunk in chunks)
+
+
 def test_reindex_endpoint_returns_chunk_count(monkeypatch):
     class FakeIngester:
         def ingest(self, force=False):

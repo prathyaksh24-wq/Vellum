@@ -33,6 +33,7 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.cloud_escalation_enabled is True
     assert settings.chroma_path is not None
     assert settings.chroma_path.name == "chroma"
+    assert settings.huggingface_cache_dir.name == "hf-cache"
 
 
 def test_auto_gui_removed_from_dependency_files():
