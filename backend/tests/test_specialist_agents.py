@@ -343,6 +343,35 @@ def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
     assert "| R09 | British Grand Prix |" in response.summary
 
 
+def test_sports_agent_ranking_demotes_ticket_and_low_relevance_sources():
+    agent = SportsAgent(vault_root=Path("unused"))
+    sources = [
+        {
+            "title": "Portugal vs Argentina Tickets",
+            "url": "https://www.vividseats.com/portugal-vs-argentina-tickets",
+            "domain": "vividseats.com",
+            "snippet": "Buy tickets and compare prices.",
+        },
+        {
+            "title": "Portugal next fixtures - FIFA",
+            "url": "https://www.fifa.com/en/teams/portugal/fixtures",
+            "domain": "fifa.com",
+            "snippet": "Official fixtures and match dates for Portugal.",
+        },
+        {
+            "title": "SportBusy football gossip",
+            "url": "https://sportbusy.com/random-football-rumours",
+            "domain": "sportbusy.com",
+            "snippet": "Rumours and ticket chatter.",
+        },
+    ]
+
+    ranked = agent._rank_sources("when is the next Portugal vs Argentina match", sources)
+
+    assert ranked[0]["domain"] == "fifa.com"
+    assert ranked[-1]["domain"] in {"vividseats.com", "sportbusy.com"}
+
+
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
     agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "No web results found.")
 

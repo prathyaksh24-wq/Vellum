@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import asyncio
 import json
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 from langchain_core.messages import ToolMessage
@@ -134,6 +135,44 @@ def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
 
 
+def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tmp_path):
+    fake_agent = FakeAgent()
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+
+    def fake_create_task(coro):
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api.asyncio, "create_task", fake_create_task)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/chat",
+            json={
+                "message": "what can you see?",
+                "thread_id": "frontend-image",
+                "attachments": [
+                    {
+                        "name": "frame.png",
+                        "kind": "image",
+                        "mime_type": "image/png",
+                        "data_url": "data:image/png;base64,iVBORw0KGgo=",
+                    }
+                ],
+            },
+        )
+
+    assert response.status_code == 200
+    content = fake_agent.calls[0][0]["messages"][0]["content"]
+    assert content[0] == {"type": "text", "text": "what can you see?"}
+    assert content[1] == {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}
+
+
 def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
 
@@ -183,6 +222,71 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert any(item["id"] == "nightly-digest" for item in automations.json()["automations"])
     assert subagents.status_code == 200
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
+
+
+def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):
+    saved = {}
+
+    class FakeXApiOauthModule:
+        class secrets:
+            @staticmethod
+            def token_urlsafe(_length):
+                return "state-token"
+
+        @staticmethod
+        def make_pkce_pair():
+            return "verifier-token", "challenge-token"
+
+        @staticmethod
+        def build_authorize_url(client_id, redirect_uri, state, code_challenge):
+            return (
+                "https://x.com/i/oauth2/authorize"
+                f"?client_id={client_id}&redirect_uri={redirect_uri}"
+                f"&state={state}&code_challenge={code_challenge}"
+            )
+
+        @staticmethod
+        def exchange_authorization_code(client_id, client_secret, code, redirect_uri, code_verifier, timeout_secs):
+            saved["exchange"] = {
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+                "timeout_secs": timeout_secs,
+            }
+            return {"access_token": "access", "refresh_token": "refresh"}
+
+        @staticmethod
+        def save_oauth_file(path, client_id, tokens):
+            saved["path"] = path
+            saved["client_id"] = client_id
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"client_id": client_id, "tokens": tokens}), encoding="utf-8")
+
+    monkeypatch.setattr(api, "_load_script_module", lambda name: FakeXApiOauthModule)
+    monkeypatch.setattr(api, "get_settings", lambda: SimpleNamespace(
+        x_api_client_id="client-id",
+        x_api_client_secret="client-secret",
+        x_tool_allow_private_reads=True,
+        x_tool_allow_posts=True,
+    ))
+    monkeypatch.setattr(api, "_x_oauth_file", lambda provider: tmp_path / f"{provider}.json")
+    monkeypatch.setattr(api, "_x_oauth_flow_path", lambda provider: tmp_path / f"{provider}-flow.json")
+
+    with TestClient(api.app) as client:
+        start = client.post("/api/x/oauth/start", json={"provider": "xapi"})
+        assert start.status_code == 200
+        state = parse_qs(urlparse(start.json()["authorize_url"]).query)["state"][0]
+
+        api._oauth_flows.clear()
+        callback = client.get(f"/api/x/oauth/callback/xapi?code=auth-code&state={state}")
+
+    assert callback.status_code == 200
+    assert "X OAuth complete" in callback.text
+    assert saved["exchange"]["client_id"] == "client-id"
+    assert saved["exchange"]["code_verifier"] == "verifier-token"
+    assert (tmp_path / "xapi.json").exists()
 
 
 def test_computer_use_mode_endpoints_toggle_state(monkeypatch, tmp_path):

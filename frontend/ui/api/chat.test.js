@@ -62,4 +62,32 @@ describe("Vellum default chat stream trace", () => {
       tools: ["sports_agent"],
     });
   });
+
+  test("keeps final trace done when a late item completion arrives after response.completed", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: response.output_item.added\ndata: {"item":{"id":"tool-1","type":"tool_call","name":"web_search","label":"Searching web","status":"in_progress"}}\n\n',
+        'event: response.output_text.delta\ndata: {"delta":"Answer"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Answer","tools":["web_search"],"sources":[]}}\n\n',
+        'event: response.output_item.done\ndata: {"item":{"id":"tool-1","type":"tool_call","name":"web_search","status":"completed"}}\n\n',
+      ]),
+    }));
+    const traces = [];
+    const done = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "search", thread_id: "t1" },
+      {
+        trace: (trace) => traces.push(trace),
+        done: (final) => done.push(final),
+      },
+    );
+
+    expect(done).toHaveLength(1);
+    expect(traces.at(-1).status).toBe("done");
+    expect(traces.at(-1).completedAt).toEqual(expect.any(Number));
+  });
 });

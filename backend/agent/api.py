@@ -93,6 +93,15 @@ class ChatRequest(BaseModel):
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
+    attachments: list["ChatAttachment"] = Field(default_factory=list)
+
+
+class ChatAttachment(BaseModel):
+    name: str = ""
+    kind: str = ""
+    mime_type: str = ""
+    data_url: str | None = None
+    url: str | None = None
 
 
 class Source(BaseModel):
@@ -289,6 +298,46 @@ def _x_oauth_file(provider: str) -> Path:
     return REPO_ROOT / "data" / ("xai-oauth.json" if provider == "xai" else "x-api-oauth.json")
 
 
+def _x_oauth_flow_path(provider: str) -> Path:
+    return REPO_ROOT / "data" / "oauth-flows" / f"{provider}.json"
+
+
+def _save_x_oauth_flow(provider: str, flow: dict[str, Any]) -> None:
+    flow_path = _x_oauth_flow_path(provider)
+    flow_path.parent.mkdir(parents=True, exist_ok=True)
+    flow_path.write_text(json.dumps(flow, ensure_ascii=False, indent=2), encoding="utf-8")
+    _oauth_flows[provider] = flow
+
+
+def _load_x_oauth_flow(provider: str) -> dict[str, Any] | None:
+    flow = _oauth_flows.get(provider)
+    if flow:
+        return flow
+    flow_path = _x_oauth_flow_path(provider)
+    if not flow_path.exists():
+        return None
+    try:
+        loaded = json.loads(flow_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    created_at = float(loaded.get("created_at") or 0)
+    if not created_at or time.time() - created_at > 15 * 60:
+        _clear_x_oauth_flow(provider)
+        return None
+    if isinstance(loaded, dict):
+        _oauth_flows[provider] = loaded
+        return loaded
+    return None
+
+
+def _clear_x_oauth_flow(provider: str) -> None:
+    _oauth_flows.pop(provider, None)
+    try:
+        _x_oauth_flow_path(provider).unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _x_oauth_callback_url(provider: str) -> str:
     return f"http://127.0.0.1:8000/api/x/oauth/callback/{provider}"
 
@@ -331,14 +380,14 @@ async def x_oauth_start(request: XOAuthStartRequest) -> XOAuthStartResponse:
             nonce=nonce,
             code_challenge=challenge,
         )
-        _oauth_flows["xai"] = {
+        _save_x_oauth_flow("xai", {
             "state": state,
             "verifier": verifier,
             "challenge": challenge,
             "redirect_uri": redirect_uri,
             "discovery": discovery,
             "created_at": time.time(),
-        }
+        })
         return XOAuthStartResponse(provider="xai", authorize_url=authorize_url, status="started")
 
     settings = get_settings()
@@ -354,14 +403,13 @@ async def x_oauth_start(request: XOAuthStartRequest) -> XOAuthStartResponse:
         state=state,
         code_challenge=challenge,
     )
-    _oauth_flows["xapi"] = {
+    _save_x_oauth_flow("xapi", {
         "state": state,
         "verifier": verifier,
         "redirect_uri": redirect_uri,
         "client_id": settings.x_api_client_id,
-        "client_secret": settings.x_api_client_secret,
         "created_at": time.time(),
-    }
+    })
     return XOAuthStartResponse(provider="xapi", authorize_url=authorize_url, status="started")
 
 
@@ -372,7 +420,7 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
         raise HTTPException(status_code=404, detail="Unknown OAuth provider.")
     if error:
         return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{error_description or error}</p></body></html>", status_code=400)
-    flow = _oauth_flows.get(provider)
+    flow = _load_x_oauth_flow(provider)
     if not flow or state != flow.get("state"):
         return HTMLResponse("<html><body><h1>X OAuth failed</h1><p>State mismatch. Start the connection again from Vellum.</p></body></html>", status_code=400)
     if not code:
@@ -393,10 +441,11 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
             await asyncio.to_thread(mod.save_oauth_file, _x_oauth_file("xai"), tokens=tokens, discovery=flow["discovery"])
         else:
             mod = _load_script_module("setup_x_api_oauth")
+            settings = get_settings()
             tokens = await asyncio.to_thread(
                 mod.exchange_authorization_code,
                 client_id=flow["client_id"],
-                client_secret=flow.get("client_secret") or "",
+                client_secret=settings.x_api_client_secret or "",
                 code=code,
                 redirect_uri=flow["redirect_uri"],
                 code_verifier=flow["verifier"],
@@ -406,11 +455,17 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
     except Exception as exc:
         return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{str(exc)}</p></body></html>", status_code=500)
     finally:
-        _oauth_flows.pop(provider, None)
+        _clear_x_oauth_flow(provider)
 
     return HTMLResponse(
         "<html><body><h1>X OAuth complete</h1><p>You can close this tab and return to Vellum.</p>"
-        "<script>setTimeout(function(){ window.close(); }, 900);</script></body></html>"
+        "<script>"
+        "try {"
+        f"  localStorage.setItem('vellum:x-oauth-complete', JSON.stringify({{'provider':'{provider}','ok':true,'at':Date.now()}}));"
+        f"  if (window.opener) window.opener.postMessage({{'type':'vellum:x-oauth-complete','provider':'{provider}'}}, '*');"
+        "} catch (e) {}"
+        "setTimeout(function(){ window.close(); }, 900);"
+        "</script></body></html>"
     )
 
 
@@ -562,7 +617,12 @@ async def _ensure_model(model: str | None) -> str | None:
     return entry.id
 
 
-async def _run_agent(message: str, thread_id: str | None, model: str | None = None) -> ChatResponse:
+async def _run_agent(
+    message: str,
+    thread_id: str | None,
+    model: str | None = None,
+    attachments: list[ChatAttachment] | None = None,
+) -> ChatResponse:
     clean_message = message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
@@ -599,7 +659,7 @@ async def _run_agent(message: str, thread_id: str | None, model: str | None = No
         await _repair_incomplete_tool_history(active_thread_id)
         agent_message = _agent_message_for_runtime_mode(agent_input_message)
         result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": agent_message}]},
+            {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
             config=_thread_config(active_thread_id),
         )
     capture_from_invoke_result(
@@ -863,7 +923,7 @@ async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    return await _run_agent(request.message, request.thread_id, request.model)
+    return await _run_agent(request.message, request.thread_id, request.model, request.attachments)
 
 
 @router.get("/conversations")
@@ -1305,6 +1365,18 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
     )
 
 
+def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
+    image_parts: list[dict[str, Any]] = []
+    for attachment in attachments or []:
+        data_url = (attachment.data_url or "").strip()
+        mime_type = (attachment.mime_type or "").strip().lower()
+        if data_url.startswith("data:image/") or (mime_type.startswith("image/") and data_url.startswith("data:")):
+            image_parts.append({"type": "image_url", "image_url": {"url": data_url}})
+    if not image_parts:
+        return message
+    return [{"type": "text", "text": message}, *image_parts]
+
+
 def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, live_sources: list[dict[str, Any]]) -> str:
     source_lines = []
     for index, source in enumerate(live_sources, start=1):
@@ -1327,7 +1399,9 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
         "specialist result includes multiple sources, synthesize across them instead of relying on one. "
         "Keep citations/source references consistent with provided sources. Start with the direct answer "
         "in one or two sentences. Then, when useful, add source-labeled evidence blocks using the publisher "
-        "or domain name as a short label, for example 'The Guardian' or 'Yahoo Sports'. For rankings, "
+        "or domain name as a short label, for example 'The Guardian' or 'Yahoo Sports'. Do not include "
+        "raw URL lists or a 'Sources checked' section in the answer body; full URLs are already available "
+        "in the source/activity panel unless the user explicitly asks for URLs. For rankings, "
         "standings, schedules, scores, or statistical lists, include a compact markdown table when the "
         "source data contains enough structured facts. For broad live sports questions, include relevant "
         "latest news, match results, schedule, injury, or tactical context only when it appears in the "
@@ -1362,6 +1436,7 @@ async def _stream_agent_turn(
     voice: bool = False,
     synthesize_audio: bool = False,
     store: bool = True,
+    attachments: list[ChatAttachment] | None = None,
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
@@ -1449,7 +1524,7 @@ async def _stream_agent_turn(
                     )
             agent_message = _agent_message_for_runtime_mode(agent_input_message)
             stream = agent.astream_events(
-                {"messages": [{"role": "user", "content": agent_message}]},
+                {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
                 version="v2",
             )
@@ -1837,6 +1912,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             source="voice" if request.voice else "agent",
             voice=request.voice,
             store=request.store,
+            attachments=request.attachments,
         ),
         media_type="text/event-stream",
     )

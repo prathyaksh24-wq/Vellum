@@ -298,7 +298,14 @@ class SportsAgent:
             "premierleague.com",
         }
         schedule_terms = ("schedule", "calendar", "fixture", "fixtures", "race date", "grand prix", "next", "match")
-        low_value_domains = {"support.google.com"}
+        low_value_domains = {
+            "support.google.com",
+            "vividseats.com",
+            "stubhub.com",
+            "seatgeek.com",
+            "ticketmaster.com",
+            "sportbusy.com",
+        }
 
         def score(source: dict[str, Any]) -> int:
             text = " ".join(
@@ -324,11 +331,18 @@ class SportsAgent:
                     value -= 8
             if domain in low_value_domains:
                 value -= 50
+            if any(noise in text for noise in ("buy tickets", "ticket prices", "tickets for sale", "coupon", "promo code")):
+                value -= 30
             return value
 
         return sorted(sources, key=score, reverse=True)
 
     def _compose_answer(self, query: str, sources: list[dict], search_output: str) -> str:
+        ranked_source_snapshot = (
+            self._snapshot_from_sources(query, sources)
+            if self._should_prioritize_ranked_source_snapshot(query)
+            else ""
+        )
         snapshot = (
             self._snapshot_from_search_output(search_output)
             if self._looks_like_rich_markdown(search_output)
@@ -336,6 +350,7 @@ class SportsAgent:
         )
         snapshot = (
             snapshot
+            or ranked_source_snapshot
             or self._snapshot_from_search_output(search_output)
             or self._snapshot_from_sources(query, sources)
         )
@@ -349,6 +364,10 @@ class SportsAgent:
         if table:
             lines.append(table)
         return "\n\n".join(line for line in lines if line.strip())
+
+    def _should_prioritize_ranked_source_snapshot(self, query: str) -> bool:
+        lowered = query.lower()
+        return any(marker in lowered for marker in ("yesterday", "today", "performance"))
 
     def _formula_one_schedule_answer(self, query: str, sources: list[dict], search_output: str) -> str:
         lowered = query.lower()
