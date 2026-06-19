@@ -6,5 +6,8 @@
     setActiveModel: function (model) {
       return client.request("/api/settings/active-model", client.jsonOptions("POST", { model: model }));
     },
+    setProviderKey: function (provider, apiKey) {
+      return client.request("/api/settings/provider-key", client.jsonOptions("POST", { provider: provider, api_key: apiKey }));
+    },
   };
 })();

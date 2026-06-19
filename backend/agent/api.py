@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import importlib.util
 import inspect
 import json
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -171,6 +172,11 @@ class SetActiveModelRequest(BaseModel):
     model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
 
 
+class ProviderKeyRequest(BaseModel):
+    provider: str = Field(min_length=1)
+    api_key: str = Field(min_length=1)
+
+
 class XOAuthStartRequest(BaseModel):
     provider: str = Field(default="xai")
 
@@ -292,6 +298,45 @@ app.add_middleware(
 )
 
 router = APIRouter(prefix="/api")
+
+
+_PROVIDER_KEY_ENV = {
+    "openrouter": "OPENROUTER_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+}
+
+
+def _env_path() -> Path:
+    return REPO_ROOT / ".env"
+
+
+def _set_env_value(key: str, value: str) -> None:
+    path = _env_path()
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    prefix = f"{key}="
+    replacement = f"{key}={value.strip()}"
+    updated = False
+    next_lines: list[str] = []
+    for line in lines:
+        if line.startswith(prefix):
+            if not updated:
+                next_lines.append(replacement)
+                updated = True
+            continue
+        next_lines.append(line)
+    if not updated:
+        next_lines.append(replacement)
+    path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
+    os.environ[key] = value.strip()
+    get_settings.cache_clear()
+    try:
+        from agent.llm.providers import get_provider_registry
+
+        get_provider_registry.cache_clear()
+    except Exception:
+        pass
 
 
 def _x_oauth_file(provider: str) -> Path:
@@ -657,7 +702,7 @@ async def _run_agent(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         await _repair_incomplete_tool_history(active_thread_id)
-        agent_message = _agent_message_for_runtime_mode(agent_input_message)
+        agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
             config=_thread_config(active_thread_id),
@@ -1075,6 +1120,31 @@ def _chunk_text(chunk: Any) -> str:
     return str(content or "")
 
 
+def _chunk_tool_call_chunks(chunk: Any) -> list[dict[str, Any]]:
+    if chunk is None:
+        return []
+    raw = chunk.get("tool_call_chunks") if isinstance(chunk, dict) else getattr(chunk, "tool_call_chunks", None)
+    if not raw:
+        raw = (chunk.get("additional_kwargs", {}) if isinstance(chunk, dict) else getattr(chunk, "additional_kwargs", {}) or {}).get("tool_calls")
+    chunks: list[dict[str, Any]] = []
+    for index, item in enumerate(raw or []):
+        if not isinstance(item, dict):
+            continue
+        function = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(item.get("name") or function.get("name") or "")
+        args = item.get("args")
+        if args is None:
+            args = function.get("arguments")
+        call_id = str(item.get("id") or item.get("tool_call_id") or item.get("index") or index)
+        chunks.append({
+            "id": call_id,
+            "index": int(item.get("index") or index),
+            "name": name,
+            "delta": str(args or ""),
+        })
+    return chunks
+
+
 def _sse(event: str, payload: dict[str, Any] | str) -> str:
     data = payload if isinstance(payload, str) else json.dumps(payload)
     return f"event: {event}\ndata: {data}\n\n"
@@ -1156,6 +1226,42 @@ def _response_output_text_delta(
         output_index=output_index,
         content_index=content_index,
         delta=delta,
+    )
+
+
+def _response_function_call_arguments_delta(
+    *,
+    response_id: str,
+    thread_id: str,
+    item_id: str,
+    delta: str,
+    output_index: int = 0,
+) -> str:
+    return _response_event(
+        "response.function_call_arguments.delta",
+        response_id=response_id,
+        thread_id=thread_id,
+        item_id=item_id,
+        output_index=output_index,
+        delta=delta,
+    )
+
+
+def _response_function_call_arguments_done(
+    *,
+    response_id: str,
+    thread_id: str,
+    item_id: str,
+    arguments: str,
+    output_index: int = 0,
+) -> str:
+    return _response_event(
+        "response.function_call_arguments.done",
+        response_id=response_id,
+        thread_id=thread_id,
+        item_id=item_id,
+        output_index=output_index,
+        arguments=arguments,
     )
 
 
@@ -1365,6 +1471,44 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
     )
 
 
+def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
+    lowered = clean_message.lower()
+    if not any(marker in lowered for marker in ("conversation", "talked", "talk about", "we said", "you said", "i said", "today", "recent", "earlier")):
+        return ""
+    conversations = _read_ui_conversations()
+    if not conversations:
+        return ""
+    lines: list[str] = []
+    for conversation in conversations[:8]:
+        title = str(conversation.get("title") or "Untitled chat")
+        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
+        messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+        selected = messages[-8:]
+        if not selected:
+            continue
+        lines.append(f"Conversation: {title} (thread: {cid})")
+        for message in selected:
+            role = str(message.get("role") or "message") if isinstance(message, dict) else "message"
+            text = str(message.get("text") or "") if isinstance(message, dict) else ""
+            if text.strip():
+                lines.append(f"- {role}: {text.strip()[:700]}")
+    if not lines:
+        return ""
+    return (
+        "[Recent Vellum conversation context]\n"
+        "Use this when the user asks what you remember from today's or recent chat. "
+        "Summarize it naturally; do not claim this context is long-term memory unless it was stored there.\n"
+        + "\n".join(lines[:80])
+    )
+
+
+def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str:
+    context = _recent_conversation_context(clean_message, thread_id)
+    if not context:
+        return clean_message
+    return f"{clean_message}\n\n{context}"
+
+
 def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
     image_parts: list[dict[str, Any]] = []
     for attachment in attachments or []:
@@ -1502,6 +1646,8 @@ async def _stream_agent_turn(
         sources: list[dict] = list(live_sources)
         seen_urls: set[str] = {str(source.get("url") or "") for source in live_sources if source.get("url")}
         active_tool_items: dict[str, dict[str, Any]] = {}
+        function_stream_items: dict[str, dict[str, Any]] = {}
+        function_stream_args: dict[str, str] = {}
         message_item = {
             "id": message_item_id,
             "type": "message",
@@ -1522,7 +1668,7 @@ async def _stream_agent_turn(
                         tool="computer_use_session",
                         data={"thread_id": active_thread_id, "source": source},
                     )
-            agent_message = _agent_message_for_runtime_mode(agent_input_message)
+            agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
@@ -1537,7 +1683,44 @@ async def _stream_agent_turn(
                     break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
-                    text = _chunk_text(event.get("data", {}).get("chunk"))
+                    chunk = event.get("data", {}).get("chunk")
+                    for call_chunk in _chunk_tool_call_chunks(chunk):
+                        call_id = str(call_chunk.get("id") or call_chunk.get("index") or "0")
+                        delta = str(call_chunk.get("delta") or "")
+                        name = str(call_chunk.get("name") or "")
+                        item = function_stream_items.get(call_id)
+                        if item is None:
+                            item = {
+                                "id": _stream_id("item"),
+                                "type": "function_call",
+                                "call_id": call_id,
+                                "name": name or "function",
+                                "arguments": "",
+                                "status": "in_progress",
+                                "label": f"Preparing {name or 'function'}",
+                                "detail": "",
+                            }
+                            function_stream_items[call_id] = item
+                            function_stream_args[call_id] = ""
+                            yield _response_output_item_added(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                item=item,
+                            )
+                        if name and item.get("name") in {"", "function"}:
+                            item["name"] = name
+                            item["label"] = f"Preparing {name}"
+                        if delta:
+                            function_stream_args[call_id] = function_stream_args.get(call_id, "") + delta
+                            item["arguments"] = function_stream_args[call_id]
+                            item["detail"] = function_stream_args[call_id][-500:]
+                            yield _response_function_call_arguments_delta(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                item_id=str(item["id"]),
+                                delta=delta,
+                            )
+                    text = _chunk_text(chunk)
                     if text:
                         answer_parts.append(text)
                         if not message_item_started:
@@ -1557,6 +1740,20 @@ async def _stream_agent_turn(
                 elif kind == "on_tool_start":
                     name = event.get("name") or ""
                     if name:
+                        for call_id, item in list(function_stream_items.items()):
+                            if item.get("status") == "in_progress" and (not item.get("name") or item.get("name") in {"function", str(name)}):
+                                yield _response_function_call_arguments_done(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item_id=str(item["id"]),
+                                    arguments=function_stream_args.get(call_id, ""),
+                                )
+                                yield _response_output_item_done(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item=item,
+                                )
+                                item["status"] = "completed"
                         if str(name) not in tool_names:
                             tool_names.append(str(name))
                         label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
@@ -1611,6 +1808,20 @@ async def _stream_agent_turn(
                     fallback_model=get_settings().primary_model,
                     source="api",
                 )
+            for call_id, item in function_stream_items.items():
+                if item.get("status") == "in_progress":
+                    yield _response_function_call_arguments_done(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item_id=str(item["id"]),
+                        arguments=function_stream_args.get(call_id, ""),
+                    )
+                    yield _response_output_item_done(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item=item,
+                    )
+                    item["status"] = "completed"
             answer = "".join(answer_parts).strip() or "No response."
             source_models = [Source(**record) for record in sources]
             if voice:
@@ -2027,10 +2238,11 @@ async def privacy_classify(request: PrivacyClassifyRequest) -> dict[str, str]:
 @router.get("/models")
 async def list_models() -> dict[str, Any]:
     """Catalog the frontend reads on load to populate the model picker."""
-    from agent.llm.providers import get_provider_registry
+    from agent.llm.providers import configured_provider_keys, get_provider_registry
 
     registry = get_provider_registry()
     active = registry.current_model()
+    provider_keys = configured_provider_keys()
     return {
         "active": {
             "id": active.id,
@@ -2053,6 +2265,7 @@ async def list_models() -> dict[str, Any]:
             }
             for m in registry.list_models()
         ],
+        "provider_keys": provider_keys,
     }
 
 
@@ -2263,6 +2476,32 @@ async def public_settings() -> dict[str, Any]:
         "chroma_path": str(settings.chroma_path) if settings.chroma_path is not None else None,
         "enable_nightly_digest": settings.enable_nightly_digest,
         "enable_vault_watcher": settings.enable_vault_watcher,
+        "provider_keys": {
+            "openrouter": bool(settings.openrouter_api_key),
+            "openai": bool(settings.openai_api_key),
+            "anthropic": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "google": bool(os.environ.get("GOOGLE_API_KEY")),
+        },
+    }
+
+
+@router.post("/settings/provider-key")
+async def set_provider_key(request: ProviderKeyRequest) -> dict[str, Any]:
+    provider = request.provider.strip().lower().replace("-", "_")
+    if provider not in _PROVIDER_KEY_ENV:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {request.provider}")
+    api_key = request.api_key.strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="api_key cannot be empty")
+    _set_env_value(_PROVIDER_KEY_ENV[provider], api_key)
+    models = await list_models()
+    return {
+        "ok": True,
+        "provider": provider,
+        "configured": True,
+        "models": models["models"],
+        "active": models["active"],
+        "provider_keys": models.get("provider_keys", {}),
     }
 
 

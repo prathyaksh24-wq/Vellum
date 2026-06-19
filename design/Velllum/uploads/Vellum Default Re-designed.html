@@ -3551,14 +3551,29 @@ const SavedMemoriesCard = ({onClose}) => {
 };
 
 /* ─── settings modal ─── */
-const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], initialTab, onClose}) => {
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], initialTab, onProviderKey, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
+  const [savingKey, setSavingKey] = useState('');
+  const [keyStatus, setKeyStatus] = useState({});
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
   useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
   const setP = (k, v) => setPers(p => ({...p, [k]: v}));
   const [memCardOpen, setMemCardOpen] = useState(false);
   const [savedMemOpen, setSavedMemOpen] = useState(false);
+  useEffect(() => setKeyStatus((backendSettings && backendSettings.provider_keys) || {}), [backendSettings]);
+  const saveProviderKey = async (provider) => {
+    const value = (keys[provider] || '').trim();
+    if (!value || savingKey) return;
+    setSavingKey(provider);
+    try {
+      if (onProviderKey) await onProviderKey(provider, value);
+      setKeyStatus(s => ({...s, [provider]: true}));
+      setKeys(k => ({...k, [provider]: ''}));
+    } finally {
+      setSavingKey('');
+    }
+  };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
     {k: 'Personalization', ic: <IcPenLine size={14}/>},
@@ -3646,12 +3661,12 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
                 <div key={p.id} className="set-row">
                   <div>{p.name}<span className="sr-sub">{p.note}</span></div>
                   <span className="sr-end cfg-keywrap">
-                    <input type="password" className="cfg-key" placeholder="Paste key\u2026" value={keys[p.id] || ''} onChange={e => setKeys(k => ({...k, [p.id]: e.target.value}))}/>
-                    <span className={'cfg-dot' + ((keys[p.id] || '').trim() ? ' on' : '')} title={(keys[p.id] || '').trim() ? 'Saved' : 'Not set'}/>
+                    <input type="password" className="cfg-key" placeholder={keyStatus[p.id] ? 'Connected' : 'Paste key\u2026'} value={keys[p.id] || ''} onChange={e => setKeys(k => ({...k, [p.id]: e.target.value}))} onBlur={() => saveProviderKey(p.id)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveProviderKey(p.id); } }}/>
+                    <span className={'cfg-dot' + ((keyStatus[p.id] || (keys[p.id] || '').trim()) ? ' on' : '')} title={savingKey === p.id ? 'Saving' : keyStatus[p.id] ? 'Connected' : 'Not set'}/>
                   </span>
                 </div>
               ))}
-              <div className="set-note">Preview — keys are held in memory only, nothing is sent.</div>
+              <div className="set-note">Keys are saved locally in Vellum's .env. The model picker refreshes after a provider connects.</div>
             </React.Fragment>
           )}
           {tab === 'Reflections' && (
@@ -3864,6 +3879,10 @@ const App = () => {
         if (conv && Array.isArray(conv.conversations)) {
           setChats(conv.conversations);
           conv.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
+          try {
+            const lastChatId = localStorage.getItem('vellum-active-chat-id');
+            if (lastChatId && conv.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
+          } catch {}
         }
         if (modelData && Array.isArray(modelData.models)) {
           const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id}));
@@ -3895,8 +3914,8 @@ const App = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const newChat = () => { setView('chat'); setActiveChatId(null); setMenu(null); setActivityMsg(null); };
-  const openChat = id => { setView('chat'); setActiveChatId(id); setMenu(null); setActivityMsg(null); };
+  const newChat = () => { setView('chat'); setActiveChatId(null); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const openChat = id => { setView('chat'); setActiveChatId(id); try { localStorage.setItem('vellum-active-chat-id', id); } catch {} setMenu(null); setActivityMsg(null); };
   const nav = v => { setView(v); setMenu(null); setActivityMsg(null); };
   const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
@@ -4203,7 +4222,7 @@ const App = () => {
   };
   const activityKind = item => {
     if (!item) return 'eval';
-    if (item.type === 'tool_call' || item.type === 'subagent_call' || item.type === 'source') return 'search';
+    if (item.type === 'tool_call' || item.type === 'function_call' || item.type === 'subagent_call' || item.type === 'source') return 'search';
     if (item.type === 'answer' || item.status === 'completed' || item.status === 'done') return 'done';
     return 'eval';
   };
@@ -4447,8 +4466,15 @@ const App = () => {
       saveConversation(record);
       setDraftApps([]);
       setActiveChatId(chatId);
+      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     } else {
-      setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
+      setChats(cs => cs.map(c => {
+        if (c.id !== chatId) return c;
+        const next = {...c, messages: [...c.messages, userMsg, aMsg]};
+        setTimeout(() => saveConversation(next), 0);
+        return next;
+      }));
+      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
       streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach);
@@ -4498,6 +4524,20 @@ const App = () => {
     if (!FEATURE_FLAGS.realModels) return;
     try { await API.settings.setActiveModel(id); }
     catch (err) { pushToast('Model switch failed'); }
+  };
+  const saveProviderKey = async (provider, apiKey) => {
+    const result = await API.settings.setProviderKey(provider, apiKey);
+    if (Array.isArray(result.models)) {
+      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id}));
+      if (liveModels.length) {
+        MODELS = liveModels;
+        setModels(liveModels);
+      }
+    }
+    if (result.active && result.active.id) setSelModel(result.active.id);
+    const settingsData = await API.settings.get().catch(() => null);
+    if (settingsData) setBackendSettings(settingsData);
+    pushToast((provider || 'Provider') + ' connected');
   };
   const copyLastCodeBlock = () => {
     let msgs = [];
@@ -4657,7 +4697,7 @@ const App = () => {
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); setSettingsOpen(true); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} backendSettings={backendSettings} apps={apps} automations={automations}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onClose={() => setSettingsOpen(false)}/>}
