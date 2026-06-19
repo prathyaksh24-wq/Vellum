@@ -37,8 +37,12 @@ def web_search(query: str) -> str:
             result = SerpApiClient(
                 api_key=settings.serpapi_api_key,
                 log_path=settings.serpapi_log_path,
-            ).fresh_google_search(clean_query, num=8, min_sources=3)
-            text = str(result.get("text") or "")
+            )
+            if hasattr(result, "fresh_google_search"):
+                search_result = result.fresh_google_search(clean_query, num=8, min_sources=3)
+                text = str(search_result.get("text") or "")
+            else:
+                text = str(result.fresh_google_search_text(clean_query, num=5))
             text_for_check = text.strip()
             if text_for_check and text_for_check != "No web results found.":
                 return text

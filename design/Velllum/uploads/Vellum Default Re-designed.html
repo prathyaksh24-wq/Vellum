@@ -1921,12 +1921,26 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
         </div>
         <div className="crow crow-rel">
           <input ref={fileRef} type="file" multiple style={{display: 'none'}}
-            onChange={e => {
+            onChange={async e => {
               const files = [...(e.target.files || [])];
-              if (files.length) setAttach(at => [...at, ...files.map(f => ({
-                name: f.name, size: fmtSize(f.size), kind: kindOf(f.name),
-                url: f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : null, fresh: true,
-              }))]);
+              if (files.length) {
+                const items = await Promise.all(files.map(f => new Promise(resolve => {
+                  const base = {
+                    name: f.name,
+                    size: fmtSize(f.size),
+                    kind: kindOf(f.name),
+                    mime_type: f.type || '',
+                    url: f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+                    fresh: true,
+                  };
+                  if (!f.type || !f.type.startsWith('image/')) return resolve(base);
+                  const reader = new FileReader();
+                  reader.onload = () => resolve({...base, data_url: String(reader.result || '')});
+                  reader.onerror = () => resolve(base);
+                  reader.readAsDataURL(f);
+                })));
+                setAttach(at => [...at, ...items]);
+              }
               e.target.value = '';
             }}/>
           <button className="cbtn" title="Add" onClick={() => setPlusOpen(true)}><IcPlus/></button>
@@ -2471,31 +2485,60 @@ const XConnectModal = ({onClose, onConnected}) => {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const oauthStarted = useRef(false);
   const api = window.VellumApi;
   const loadStatus = async () => {
     try {
       const next = await api.client.request('/api/x/oauth/status');
       setStatus(next);
+      if (oauthStarted.current && (next.x_api_connected || next.xai_connected)) {
+        onConnected(next.x_api_connected ? 'X account connected' : 'SuperGrok connected');
+      }
+      return next;
     } catch (err) {
       setError(err.message || 'Could not read X connection status.');
+      return null;
     }
   };
   useEffect(() => {
     loadStatus();
     const id = setInterval(loadStatus, 2200);
-    return () => clearInterval(id);
+    const wake = () => loadStatus();
+    const onMessage = e => {
+      if (e.data && e.data.type === 'vellum:x-oauth-complete') loadStatus();
+    };
+    const onStorage = e => {
+      if (e.key === 'vellum:x-oauth-complete') loadStatus();
+    };
+    window.addEventListener('focus', wake);
+    window.addEventListener('message', onMessage);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', wake);
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
   const start = async (provider) => {
     setBusy(provider);
     setError('');
     try {
       const out = await api.client.request('/api/x/oauth/start', api.client.jsonOptions('POST', {provider}));
-      window.open(out.authorize_url, 'vellum_x_oauth_' + provider, 'popup,width=620,height=760');
+      oauthStarted.current = true;
+      const popup = window.open(out.authorize_url, 'vellum_x_oauth_' + provider, 'popup,width=620,height=760');
+      if (!popup) setError('Popup blocked. Allow popups for Vellum and try again.');
+      const startedAt = Date.now();
+      const poll = async () => {
+        const next = await loadStatus();
+        if (next && (next.x_api_connected || next.xai_connected)) return;
+        if (Date.now() - startedAt < 180000) setTimeout(poll, 1800);
+      };
+      setTimeout(poll, 1200);
     } catch (err) {
       setError(err.message || 'Could not start OAuth.');
     } finally {
       setBusy('');
-      setTimeout(loadStatus, 1200);
     }
   };
   const xaiOk = status && status.xai_connected;
@@ -2693,6 +2736,14 @@ const buildActivity = (text) => {
   const leadIn = inferLeadIn(kw, q);
   return {refLines, steps, sources: [], duration: dur, leadIn};
 };
+const realActivitySeed = () => ({
+  refLines: [],
+  steps: [{kind:'eval', title:'Thinking', text:''}],
+  sources: [],
+  duration: 0,
+  leadIn: '',
+});
+const activitySeedForMode = (text) => FEATURE_FLAGS.realChat ? realActivitySeed() : buildActivity(text);
 
 const Favicon = ({dom, src, source, size=14}) => {
   const [failed, setFailed] = useState(false);
@@ -2708,7 +2759,8 @@ const Favicon = ({dom, src, source, size=14}) => {
 
 const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
   const [openWork, setOpenWork] = useState(false);
-  const phase = msg.phase || (msg.streaming ? 'answering' : 'done');
+  const rawPhase = msg.phase || (msg.streaming ? 'answering' : 'done');
+  const phase = rawPhase === 'thinking' && !msg.streaming ? 'done' : rawPhase;
   const refs = msg.refLines || [];
   const shown = refs.slice(0, msg.refShown || 0);
   if (phase === 'thinking') {
@@ -3878,11 +3930,13 @@ const App = () => {
       [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? mapper(cv) : cv),
     }));
   };
-  const streamBackendAgentReply = async (agent, convoId, assistantId, message) => {
-    const routedMessage = agent && agent.name ? `${agent.name}: ${message}` : message;
+  const streamBackendAgentReply = async (agent, convoId, assistantId, message, attachments = []) => {
+    const routedMessage = agent && agent.name
+      ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
+      : message;
     try {
       await API.chat.stream(
-        {message: routedMessage, thread_id: convoId, model: selModel, store: true},
+        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments},
         {
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
@@ -3890,10 +3944,10 @@ const App = () => {
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines)),
               tools: trace.tools || m.tools || [],
-              phase: m.phase === 'thinking' ? 'refs' : m.phase,
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
               streaming: true,
             }));
           },
@@ -3902,9 +3956,9 @@ const App = () => {
             activity,
             tools,
             steps: stepsFromActivity(activity, m.steps),
-            refLines: refLinesFromActivity(activity, m.refLines),
-            phase: m.phase === 'thinking' ? 'refs' : m.phase,
-            refShown: Math.max(m.refShown || 0, 1),
+            refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
+            phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+            refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
             streaming: true,
           })),
           sources: sources => {
@@ -3913,9 +3967,9 @@ const App = () => {
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
-              phase: 'refs',
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
+              phase: FEATURE_FLAGS.realChat ? m.phase : 'refs',
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
               streaming: true,
             }));
           },
@@ -3925,7 +3979,9 @@ const App = () => {
               ...m,
               text,
               phase: 'answering',
-              refShown:(m.refLines || []).length,
+              refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
+              refLines: FEATURE_FLAGS.realChat ? [] : m.refLines,
+              leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
               streaming: true,
             }));
           },
@@ -3941,11 +3997,12 @@ const App = () => {
               text: final.text || m.text || 'No response.',
               sources: liveSources.length ? liveSources : m.sources || [],
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+              refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
               tools: final.tools || m.tools || [],
               activity: final.activity || m.activity || [],
               phase: 'done',
-              refShown:(m.refLines || []).length,
+              refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
+              leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
               streaming: false,
             }));
           },
@@ -3961,7 +4018,7 @@ const App = () => {
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
-    const act = buildActivity(text);
+    const act = activitySeedForMode(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
     let cid = activeConvo[ag.id];
     if (!cid) {
@@ -3973,8 +4030,7 @@ const App = () => {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
     if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startAgentTurnPhases(ag.id, cid, aMsg.id, act), 0);
-      streamBackendAgentReply(ag, cid, aMsg.id, text);
+      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach);
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
     }
@@ -3988,11 +4044,10 @@ const App = () => {
     const idx = convo.messages.findIndex(m => m.id === msgId);
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const reply = agentReply(ag, prevUser ? prevUser.text : '');
-    const act = buildActivity(prevUser ? prevUser.text : '');
+    const act = activitySeedForMode(prevUser ? prevUser.text : '');
     setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
     if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startAgentTurnPhases(ag.id, cid, msgId, act), 0);
-      streamBackendAgentReply(ag, cid, msgId, prevUser ? prevUser.text : '');
+      streamBackendAgentReply(ag, cid, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], convo), prevUser ? prevUser.attachments : []);
     } else {
       streamAgentReply(ag.id, cid, msgId, {...act, answer: reply});
     }
@@ -4179,6 +4234,38 @@ const App = () => {
     if (!visible.length) return fallback || [];
     return visible.slice(-3).map(item => item.label || item.title || ('Using ' + item.name));
   };
+  const priorSourceContext = (text, chat) => {
+    const lower = (text || '').toLowerCase();
+    if (!/(source|sources|citation|citations|url|urls|link|links|where did|where'd|from where|like .*source|same format)/.test(lower)) return '';
+    const prior = [...((chat && chat.messages) || [])].reverse().find(m => m.role === 'assistant' && (m.sources || []).length);
+    if (!prior) return '';
+    const lines = (prior.sources || []).slice(0, 12).map((s, i) => {
+      const label = s.pub || s.provider_label || s.title || s.dom || s.domain || 'Source';
+      const url = s.url || s.link || '';
+      const snippet = s.snippet ? ' - ' + s.snippet : '';
+      return '[' + (i + 1) + '] ' + label + ': ' + url + snippet;
+    });
+    return [
+      '[Conversation source context]',
+      'The user is asking about sources or source formatting from the previous assistant answer.',
+      'Use these exact prior-turn source URLs and keep the same topic. Do not switch topics because of an example format.',
+      ...lines,
+    ].join('\n');
+  };
+  const attachmentContext = (attachments) => {
+    const items = (attachments || []).filter(Boolean);
+    if (!items.length) return '';
+    const lines = items.map((a, i) => '[' + (i + 1) + '] ' + (a.name || 'attachment') + ' (' + (a.kind || kindOf(a.name || 'file')) + ', ' + (a.size || 'unknown size') + ')');
+    return [
+      '[Attachment context]',
+      'The user attached file(s) in the Vellum UI. If image bytes are unavailable to the backend, say that visual analysis is not wired yet instead of saying no image was attached.',
+      ...lines,
+    ].join('\n');
+  };
+  const messageForBackend = (text, attachments, chat) => {
+    const extra = [priorSourceContext(text, chat), attachmentContext(attachments)].filter(Boolean).join('\n\n');
+    return extra ? text + '\n\n' + extra : text;
+  };
   const updateTurn = (chatId, msgId, mapper, persist = false) => updateChat(chatId, c => ({
     ...c,
     messages: c.messages.map(m => m.id === msgId ? mapper(m) : m),
@@ -4198,18 +4285,18 @@ const App = () => {
   const startTurnPhases = (chatId, msgId, act) => {
     finishTurn(msgId);
     const timersForTurn = [
-      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
-      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
-      setTimeout(() => updateTurn(chatId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+      setTimeout(() => updateTurn(chatId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:1}) : m), 520),
+      setTimeout(() => updateTurn(chatId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)}) : m), 1180),
+      setTimeout(() => updateTurn(chatId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length}) : m), 1880),
     ];
     turnCtl.current[msgId] = {chatId, timers: timersForTurn};
   };
   const startAgentTurnPhases = (agentId, convoId, msgId, act) => {
     finishTurn(msgId);
     const timersForTurn = [
-      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:1})), 520),
-      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)})), 1180),
-      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length})), 1880),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:1}) : m), 520),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:Math.min(2, (m.refLines || []).length)}) : m), 1180),
+      setTimeout(() => updateAgentTurn(agentId, convoId, msgId, m => m.streaming ? ({...m, phase:'refs', refShown:(m.refLines || act.refLines || []).length}) : m), 1880),
     ];
     turnCtl.current[msgId] = {agentId, convoId, timers: timersForTurn};
   };
@@ -4246,10 +4333,10 @@ const App = () => {
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
-  const streamBackendReply = async (chatId, assistantId, message, threadId) => {
+  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = []) => {
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: selModel, store: true},
+        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments},
         {
           meta: meta => {
             if (meta.thread_id) {
@@ -4263,10 +4350,10 @@ const App = () => {
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : stepsFromActivity(trace.steps, m.steps),
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines),
+              refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : refLinesFromActivity(trace.steps, m.refLines)),
               tools: trace.tools || m.tools || [],
-              phase: m.phase === 'thinking' ? 'refs' : m.phase,
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
               streaming: true,
             }));
           },
@@ -4275,9 +4362,9 @@ const App = () => {
             activity,
             tools,
             steps: stepsFromActivity(activity, m.steps),
-            refLines: refLinesFromActivity(activity, m.refLines),
-            phase: m.phase === 'thinking' ? 'refs' : m.phase,
-            refShown: Math.max(m.refShown || 0, 1),
+            refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
+            phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+            refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
             streaming: true,
           })),
           sources: sources => {
@@ -4286,9 +4373,9 @@ const App = () => {
               ...m,
               sources: liveSources.length ? liveSources : m.sources,
               steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
-              refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
-              phase: 'refs',
-              refShown: Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
+              refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
+              phase: FEATURE_FLAGS.realChat ? m.phase : 'refs',
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
               streaming: true,
             }));
           },
@@ -4298,7 +4385,9 @@ const App = () => {
               ...m,
               text,
               phase: 'answering',
-              refShown:(m.refLines || []).length,
+              refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
+              refLines: FEATURE_FLAGS.realChat ? [] : m.refLines,
+              leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
               streaming: true,
             }));
           },
@@ -4317,11 +4406,12 @@ const App = () => {
                 text: final.text || m.text || 'No response.',
                 sources: liveSources.length ? liveSources : m.sources || [],
                 steps: liveSources.length ? activityFromSources(liveSources, m.steps) : m.steps,
-                refLines: liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines,
+                refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
                 tools: final.tools || m.tools || [],
                 activity: final.activity || m.activity || [],
                 phase: 'done',
-                refShown:(m.refLines || []).length,
+                refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
+                leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
                 streaming: false,
               } : m),
             }), true);
@@ -4336,10 +4426,12 @@ const App = () => {
 
   const sendMessage = (text, attach, opts = {}) => {
     let chatId = opts.forceNew ? null : activeChatId;
+    const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
-    const act = buildActivity(text);
+    const act = activitySeedForMode(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
+    const backendMessage = messageForBackend(text, attach, existingChat);
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
       setLibrary(lib => [
@@ -4359,8 +4451,7 @@ const App = () => {
       setChats(cs => cs.map(c => c.id === chatId ? {...c, messages: [...c.messages, userMsg, aMsg]} : c));
     }
     if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startTurnPhases(chatId, aMsg.id, act), 0);
-      streamBackendReply(chatId, aMsg.id, text, threadRef.current[chatId]);
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
@@ -4379,13 +4470,12 @@ const App = () => {
     const prevUser = [...chat.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const old = chat.messages[idx];
     const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
-    const act = buildActivity(prevUser ? prevUser.text : '');
+    const act = activitySeedForMode(prevUser ? prevUser.text : '');
     setChats(cs => cs.map(c => c.id === chat.id
       ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) {
-      setTimeout(() => startTurnPhases(chat.id, msgId, act), 0);
-      streamBackendReply(chat.id, msgId, prevUser ? prevUser.text : '', threadRef.current[chat.id] || chat.thread_id);
+      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : []);
     } else {
       streamReply(chat.id, msgId, {...act, answer: reply});
     }
