@@ -205,6 +205,76 @@ def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path
     assert deleted.json() == {"ok": True}
 
 
+def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatch, tmp_path):
+    fake_agent = FakeAgent()
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or object())
+    (tmp_path / "conversations.json").write_text(
+        json.dumps({
+            "conversations": [
+                {
+                    "id": "chat-1",
+                    "thread_id": "thread-1",
+                    "title": "Today",
+                    "messages": [
+                        {"role": "user", "text": "We fixed Vellum streaming and X OAuth today."},
+                        {"role": "assistant", "text": "Yes, the stream now completes correctly."},
+                    ],
+                }
+            ]
+        }),
+        encoding="utf-8",
+    )
+
+    response = asyncio.run(api._run_agent("what did we talk about today?", thread_id="thread-1", model=None, attachments=[]))
+
+    assert response.answer == "API fake answer"
+    content = fake_agent.calls[0][0]["messages"][0]["content"]
+    assert "Recent Vellum conversation context" in content
+    assert "We fixed Vellum streaming and X OAuth today" in content
+
+
+def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    api.get_settings.cache_clear()
+    from agent.llm.providers import get_provider_registry
+
+    get_provider_registry.cache_clear()
+
+    with TestClient(api.app) as client:
+        before = client.get("/api/models")
+        saved = client.post("/api/settings/provider-key", json={"provider": "openai", "api_key": "sk-test"})
+
+    assert before.status_code == 200
+    assert saved.status_code == 200
+    body = saved.json()
+    assert body["provider_keys"]["openai"] is True
+    assert any(item["provider"] == "openai" and not item["open_weights"] for item in body["models"])
+    assert "OPENAI_API_KEY=sk-test" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_model_catalog_filters_cloud_models_by_configured_keys(monkeypatch):
+    from agent.llm import providers
+
+    monkeypatch.setattr(
+        providers,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openrouter_api_key="",
+            openai_api_key="sk-openai",
+            primary_model="google/gemma-4-31b-it",
+        ),
+    )
+
+    models = providers.available_models()
+
+    assert any(item.provider == "openai" and not item.open_weights for item in models)
+    assert not any(item.provider == "anthropic" and not item.open_weights for item in models)
+
+
 def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(monkeypatch):
     monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": [{"name": "serpapi", "configured": True, "status": "probe_disabled"}]})
 

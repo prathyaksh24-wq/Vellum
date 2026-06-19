@@ -16,7 +16,7 @@
   function activityFromItem(item) {
     if (!item) return null;
     if (item.type === "subagent_call") return { id: item.id, type: item.type, label: item.label || ("Routed to " + (item.name || "subagent")), detail: item.detail || "", name: item.name, status: item.status };
-    if (item.type === "tool_call") return { id: item.id, type: item.type, label: item.label || ("Used " + (item.name || "tool")), detail: item.detail || "", name: item.name, status: item.status };
+    if (item.type === "tool_call" || item.type === "function_call") return { id: item.id, type: item.type, label: item.label || ("Used " + (item.name || "tool")), detail: item.detail || item.arguments || "", name: item.name, status: item.status };
     if (item.type === "reasoning") return { id: item.id, type: item.type, label: item.label || "Thinking", detail: item.detail || "", status: item.status };
     return null;
   }
@@ -137,6 +137,28 @@
               text += data.delta;
               if (handlers.delta) handlers.delta(text, data.delta);
             }
+          } else if (ev === "response.function_call_arguments.delta") {
+            var fnItemId = data.item_id || "function";
+            var foundFn = false;
+            activity = activity.map(function (item) {
+              if (item.id === fnItemId) {
+                foundFn = true;
+                return Object.assign({}, item, { detail: ((item.detail || "") + (data.delta || "")).slice(-500), status: "in_progress" });
+              }
+              return item;
+            });
+            if (!foundFn) activity.push({ id: fnItemId, type: "tool_call", label: "Preparing function call", detail: data.delta || "", status: "in_progress" });
+            upsertStep({ id: fnItemId, type: "tool_call", label: "Preparing function call", detail: data.delta || "", status: "in_progress" });
+            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
+            emitTrace("researching");
+          } else if (ev === "response.function_call_arguments.done") {
+            var doneFnId = data.item_id || "function";
+            activity = activity.map(function (item) {
+              return item.id === doneFnId ? Object.assign({}, item, { detail: data.arguments || item.detail || "", status: "completed" }) : item;
+            });
+            upsertStep({ id: doneFnId, type: "tool_call", label: "Prepared function call", detail: data.arguments || "", status: "completed" });
+            if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
+            emitTrace(trace.status);
           } else if (ev === "response.completed") {
             var finalResponse = data.response || {};
             if (finalResponse.thread_id && handlers.meta) handlers.meta({ thread_id: finalResponse.thread_id });

@@ -90,4 +90,28 @@ describe("Vellum default chat stream trace", () => {
     expect(traces.at(-1).status).toBe("done");
     expect(traces.at(-1).completedAt).toEqual(expect.any(Number));
   });
+
+  test("emits activity updates for streamed function call arguments", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: response.output_item.added\ndata: {"item":{"id":"fn-1","type":"function_call","name":"web_search","label":"Preparing web_search","status":"in_progress","arguments":""}}\n\n',
+        'event: response.function_call_arguments.delta\ndata: {"item_id":"fn-1","delta":"{\\"query\\":"}\n\n',
+        'event: response.function_call_arguments.delta\ndata: {"item_id":"fn-1","delta":"\\"f1\\"}"}\n\n',
+        'event: response.function_call_arguments.done\ndata: {"item_id":"fn-1","arguments":"{\\"query\\":\\"f1\\"}"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":["web_search"],"sources":[]}}\n\n',
+      ]),
+    }));
+    const activities = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "search", thread_id: "t1" },
+      { activity: (items) => activities.push(items) },
+    );
+
+    expect(activities.some((items) => items.some((item) => item.id === "fn-1" && item.detail.includes('"query"')))).toBe(true);
+    expect(activities.at(-1).some((item) => item.id === "fn-1" && item.status === "completed")).toBe(true);
+  });
 });

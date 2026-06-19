@@ -296,3 +296,66 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert response_source_by_url[URL_A]["source_index"] == 1
     assert response_source_by_url[URL_A]["source_type"] == "web"
     assert response_source_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
+
+
+def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):
+    class FunctionStreamingAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '{"query":'},
+                        ],
+                    )
+                },
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '"f1"}'},
+                        ],
+                    )
+                },
+            }
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="Done.")}}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(api, "agent", FunctionStreamingAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or SimpleNamespace())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="search f1",
+            active_thread_id="t-functions",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    names = [name for name, _ in events]
+    deltas = [json.loads(data) for name, data in events if name == "response.function_call_arguments.delta"]
+    done = [json.loads(data) for name, data in events if name == "response.function_call_arguments.done"]
+    added = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
+
+    assert any(item["type"] == "function_call" and item["name"] == "web_search" for item in added)
+    assert [item["delta"] for item in deltas] == ['{"query":', '"f1"}']
+    assert done[-1]["arguments"] == '{"query":"f1"}'
