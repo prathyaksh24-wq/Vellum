@@ -94,6 +94,7 @@ class ChatRequest(BaseModel):
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
+    force_web_search: bool = False
     attachments: list["ChatAttachment"] = Field(default_factory=list)
 
 
@@ -1540,6 +1541,14 @@ def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str
     return f"{clean_message}\n\n{context}"
 
 
+def _with_forced_web_search_context(clean_message: str) -> str:
+    return (
+        "[Vellum UI mode: Web search is enabled for this turn. Use web_search for public/current facts "
+        "before answering. Do not expose raw source lists in the answer body; sources are shown in the UI.]\n\n"
+        f"{clean_message}"
+    )
+
+
 def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
     image_parts: list[dict[str, Any]] = []
     for attachment in attachments or []:
@@ -1555,7 +1564,7 @@ def _agent_content_with_attachments(message: str, attachments: list[ChatAttachme
 def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, live_sources: list[dict[str, Any]]) -> str:
     source_lines = []
     for index, source in enumerate(live_sources, start=1):
-        title = str(source.get("title") or source.get("domain") or source.get("url") or "source")
+        title = str(source.get("provider_label") or source.get("title") or source.get("domain") or source.get("url") or "source")
         url = str(source.get("url") or "")
         snippet = str(source.get("snippet") or "").strip()
         line = f"[{index}] {title}: {url}" if url else f"[{index}] {title}"
@@ -1566,17 +1575,16 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
     return (
         "You are Vellum, the main agent. A specialist sub-agent was used as a tool. "
         "Do not expose raw tool dumps. Answer the user naturally and directly, like ChatGPT, "
-        "using the specialist result as evidence. Treat the specialist result and source snippets "
+        "using the specialist result as live context. Treat the specialist result and source snippets "
         "as authoritative for current/live facts. If they conflict with your prior knowledge, "
-        "follow the specialist evidence and say so briefly. Mention uncertainty when the specialist "
+        "follow the specialist result and say so briefly. Mention uncertainty when the specialist "
         "could not fully answer. Preserve exact names, dates, scores, standings, and event order from "
         "the specialist result. Do not replace a live snapshot with older model-memory facts. If the "
         "specialist result includes multiple sources, synthesize across them instead of relying on one. "
-        "Keep citations/source references consistent with provided sources. Start with the direct answer "
-        "in one or two sentences. Then, when useful, add source-labeled evidence blocks using the publisher "
-        "or domain name as a short label, for example 'The Guardian' or 'Yahoo Sports'. Do not include "
-        "raw URL lists or a 'Sources checked' section in the answer body; full URLs are already available "
-        "in the source/activity panel unless the user explicitly asks for URLs. For rankings, "
+        "Use sources internally for factual grounding, but do not add an 'Evidence', 'Sources', "
+        "'Sources checked', 'References', or citation-list section in the answer body unless the user "
+        "explicitly asks for sources or links. Full source URLs and favicons are already available through "
+        "the source/activity button in the UI. Start with the direct answer in one or two sentences. For rankings, "
         "standings, schedules, scores, or statistical lists, include a compact markdown table when the "
         "source data contains enough structured facts. For broad live sports questions, include relevant "
         "latest news, match results, schedule, injury, or tactical context only when it appears in the "
@@ -2274,6 +2282,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
+    if request.force_web_search:
+        clean_message = _with_forced_web_search_context(clean_message)
     active_thread_id = request.thread_id or get_settings().thread_id
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:

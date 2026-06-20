@@ -81,7 +81,7 @@ def test_activity_for_web_search_label_and_detail():
     assert api._activity_for("web_search", {"query": "x"}) == ("Searched the web", "x")
 
 
-def test_delegated_agent_prompt_requires_source_labeled_natural_answer():
+def test_delegated_agent_prompt_keeps_sources_out_of_answer_body_by_default():
     prompt = api._delegated_agent_message(
         "who leads the fifa career goals all time?",
         SimpleNamespace(
@@ -102,7 +102,8 @@ def test_delegated_agent_prompt_requires_source_labeled_natural_answer():
 
     assert "Do not expose raw tool dumps" in prompt
     assert "Start with the direct answer" in prompt
-    assert "source-labeled evidence blocks" in prompt
+    assert "do not add an 'Evidence'" in prompt
+    assert "Full source URLs and favicons are already available" in prompt
     assert "compact markdown table" in prompt
     assert "never invent extra fixtures" in prompt
     assert "The Guardian" in prompt

@@ -1843,13 +1843,15 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
   }, [text]);
   const slashOpen = hasSlash && !slashDismissed;
   const slashQ = hasSlash ? slashMatch[1].toLowerCase() : '';
-  const stripSlash = () => setText(t => t.replace(/\/\S*$/, ''));
+  const removeSlashToken = value => value.replace(/(?:^|\s)\/\S*$/, '').trimEnd();
+  const focusComposer = () => setTimeout(() => { if (taRef.current) taRef.current.focus(); }, 0);
+  const stripSlash = () => { setText(t => removeSlashToken(t)); focusComposer(); };
   const slashHits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(slashQ));
   const slashApps = (apps || []).filter(a => a.name.toLowerCase().includes(slashQ));
   const slashAgents = AGENTS.filter(a => a.name.toLowerCase().includes(slashQ));
   const slashProj = (!slashQ || 'projects'.includes(slashQ)) && (projects || []).length > 0;
   const slashFlat = [...slashHits.map(it => ({type: 'slash', it})), ...slashAgents.map(a => ({type: 'agent', a})), ...slashApps.map(a => ({type: 'app', a})), ...(slashProj ? [{type: 'proj'}] : [])];
-  const enableSearch = () => { setSearchMode(true); setText(''); setSlashDismissed(true); };
+  const enableSearch = () => { setSearchMode(true); setText(t => removeSlashToken(t)); setSlashDismissed(true); setSlashIdx(0); focusComposer(); };
   const runSlash = i => {
     const r = slashFlat[i]; if (!r) return;
     if (r.type === 'slash') { if (r.it.run === 'file') { stripSlash(); fileRef.current.click(); } else if (r.it.run === 'web') { enableSearch(); } else { setSlashDismissed(true); } }
@@ -1879,8 +1881,9 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
   }, [text]);
   const send = () => {
     if (!text.trim() || busy) return;
-    onSend(text.trim(), attach);
+    onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope});
     setText(''); setAttach([]);
+    setSearchMode(false);
   };
   return (
     <div className="composer-wrap">
@@ -4014,13 +4017,13 @@ const App = () => {
       [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? mapper(cv) : cv),
     }));
   };
-  const streamBackendAgentReply = async (agent, convoId, assistantId, message, attachments = []) => {
+  const streamBackendAgentReply = async (agent, convoId, assistantId, message, attachments = [], opts = {}) => {
     const routedMessage = agent && agent.name
       ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
       : message;
     try {
       await API.chat.stream(
-        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments},
+        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
@@ -4097,7 +4100,7 @@ const App = () => {
       updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
-  const sendToAgent = (text, attach) => {
+  const sendToAgent = (text, attach, opts = {}) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
@@ -4114,7 +4117,7 @@ const App = () => {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach);
+      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach, opts);
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
     }
@@ -4422,10 +4425,10 @@ const App = () => {
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
-  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = []) => {
+  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}) => {
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments},
+        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
           meta: meta => {
             if (meta.thread_id) {
@@ -4547,14 +4550,14 @@ const App = () => {
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach);
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, opts);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
   };
 
-  const sendInProject = projId => (text, attach) => {
-    sendMessage(text, attach, {forceNew: true, projectId: projId});
+  const sendInProject = projId => (text, attach, opts = {}) => {
+    sendMessage(text, attach, {...opts, forceNew: true, projectId: projId});
     setExpandedProj(e => ({...e, [projId]: true}));
     setView('chat');
   };

@@ -115,8 +115,8 @@ Rules:
 - Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
-- For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and cite sources.
-- Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search and cite sources instead of answering from model memory or refusing.
+- For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and answer from those sources.
+- Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 """

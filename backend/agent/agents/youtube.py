@@ -21,6 +21,11 @@ class YoutubeAgent:
         r"(?<!\w).+\s+latest\s+video(?:s)?(?!\w)",
         r"(?<!\w).+\s+new\s+video(?:s)?(?!\w)",
     )
+    _META_FEEDBACK_PATTERNS = (
+        r"\b(previous|last|earlier)\s+(response|answer|reply)\b",
+        r"\b(i\s+don'?t\s+need|don'?t\s+add|stop\s+adding|remove|hide)\s+.+\b(evidence|source|sources|format|section)\b",
+        r"\b(i\s+don'?t\s+like|i\s+like|prefer|feedback)\b.+\b(answer|response|format|evidence|source|sources)\b",
+    )
 
     def __init__(
         self,
@@ -36,6 +41,8 @@ class YoutubeAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
+        if self._is_meta_feedback(lowered):
+            return False
         return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS) or any(
             re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS
         )
@@ -109,6 +116,9 @@ class YoutubeAgent:
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
+
+    def _is_meta_feedback(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._META_FEEDBACK_PATTERNS)
 
     def _sanitize_error(self, exc: Exception) -> str:
         message = str(exc).replace("\r", " ").replace("\n", " ").strip()
