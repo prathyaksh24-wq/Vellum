@@ -2773,6 +2773,12 @@ const activityDomain = item => {
   return (src && (src.provider_label || src.domain || src.dom || src.title)) || item.name || '';
 };
 const activityIsDone = item => item && ['completed','done','failed'].includes(String(item.status||'').toLowerCase());
+const THINKING_ROTATION_LABELS = ['Thinking', 'One sec', 'Checking context', 'Working through it', 'Cooking up your answer'];
+const isThinkingActivity = item => {
+  const type = String(item && item.type || '').toLowerCase();
+  const label = String(item && item.label || '').toLowerCase();
+  return !item || type === 'thinking' || type === 'thinking_started' || label === 'thinking';
+};
 const activityItemsForMsg = msg => {
   const raw = (msg.activity && msg.activity.length ? msg.activity : msg.steps) || [];
   return raw.map((item, i) => ({
@@ -2797,8 +2803,18 @@ const sourcesForMsg = msg => {
   });
 };
 const ActivityStatus = ({item}) => {
+  const [thinkingIndex, setThinkingIndex] = useState(0);
+  const thinking = isThinkingActivity(item);
+  useEffect(() => {
+    if (!thinking) {
+      setThinkingIndex(0);
+      return undefined;
+    }
+    const id = setInterval(() => setThinkingIndex(i => (i + 1) % THINKING_ROTATION_LABELS.length), 1600);
+    return () => clearInterval(id);
+  }, [thinking]);
   if (!item) return null;
-  const label = (item.label || 'Thinking').replace(/\.+$/, '');
+  const label = (thinking ? THINKING_ROTATION_LABELS[thinkingIndex] : (item.label || 'Thinking')).replace(/\.+$/, '');
   return (
     <div className="activity-status" aria-live="polite">
       <span className="activity-icon"></span>

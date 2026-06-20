@@ -52,7 +52,7 @@ describe("Vellum default chat stream trace", () => {
       { trace: (trace) => traces.push(trace) },
     );
 
-    expect(["Thinking", "One sec", "Checking context", "Working through it", "Cooking up your answer"]).toContain(traces[0].steps[0].label);
+    expect(traces[0]).toMatchObject({ status: "thinking", steps: [{ label: "Thinking" }] });
     expect(traces.some((trace) => trace.steps.some((step) => step.label === "Routed to SportsAgent"))).toBe(true);
     expect(traces.some((trace) => trace.sources.some((source) => source.domain === "formula1.com"))).toBe(true);
     expect(traces.at(-1)).toMatchObject({

@@ -25,17 +25,6 @@
     return source && (source.provider_label || source.domain || source.title || source.url) || "source";
   }
 
-  var THINKING_LABELS = ["Thinking", "One sec", "Checking context", "Working through it", "Cooking up your answer"];
-  function hashText(text) {
-    var value = 0;
-    var input = String(text || "");
-    for (var i = 0; i < input.length; i++) value = ((value * 31) + input.charCodeAt(i)) >>> 0;
-    return value;
-  }
-  function thinkingLabel(seed) {
-    return THINKING_LABELS[hashText(seed) % THINKING_LABELS.length];
-  }
-
   function humanToolName(name) {
     var clean = String(name || "tool");
     var known = {
@@ -89,13 +78,13 @@
     return "";
   }
 
-  function normalizeAgentActivity(activity, fallbackSeed) {
+  function normalizeAgentActivity(activity) {
     if (!activity) return null;
     var source = activity.source || null;
     var type = activity.type || "activity";
     var name = activity.name || "";
     var label = type === "thinking_started"
-      ? thinkingLabel(activity.detail || activity.id || fallbackSeed)
+      ? "Thinking"
       : (activityLabel(type, name, source) || activity.label || "Agent activity");
     return {
       id: activity.id || (type + "-" + Date.now()),
@@ -129,7 +118,7 @@
       startedAt: Date.now(),
       completedAt: null,
       elapsedSeconds: 0,
-      steps: [{ id: "thinking", type: "thinking", label: thinkingLabel(payload && payload.message), detail: "", status: "in_progress", at: Date.now() }],
+      steps: [{ id: "thinking", type: "thinking", label: "Thinking", detail: "", status: "in_progress", at: Date.now() }],
       sources: [],
       tools: [],
     };
@@ -192,7 +181,7 @@
         var data = parsed.data;
         if (ev === "agent.activity") {
           semanticSeen = true;
-          var agentAct = normalizeAgentActivity(data.activity || data, payload && payload.message);
+          var agentAct = normalizeAgentActivity(data.activity || data);
           if (!agentAct) continue;
           var existingIndex = activity.findIndex(function (item) { return item.id && item.id === agentAct.id; });
           if (existingIndex >= 0) activity[existingIndex] = Object.assign({}, activity[existingIndex], agentAct);
