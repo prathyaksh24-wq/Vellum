@@ -340,6 +340,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .csend{width:34px;height:34px;border-radius:50%;border:none;background:var(--ember);color:var(--onember);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
 .csend:hover{filter:brightness(1.08)}
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
+.csend.stop-btn{background:var(--txt2);color:var(--bg);box-shadow:0 0 0 1px color-mix(in srgb,var(--txt2) 18%,transparent),0 6px 18px rgba(0,0,0,.24)}
 /* voice mode */
 .voice-status{position:absolute;left:0;right:0;bottom:calc(100% + 18px);text-align:center;font-family:var(--font-d);font-weight:500;font-size:19px;letter-spacing:-.01em;color:var(--txt2);opacity:1;pointer-events:none}
 @keyframes vsIn{from{opacity:.2;transform:translateY(7px)}to{opacity:1;transform:none}}
@@ -1137,6 +1138,7 @@ const IcFile = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 
 const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4.1-1L3 20l1-5.4A8.5 8.5 0 1 1 21 11.5z"/>;
 const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
 const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
+const IcStop = (p)=> <I {...p}><rect x="7" y="7" width="10" height="10" rx="2"/></I>;
 const IcBrain = (p)=> <I {...p}><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M6.4 8.1l3.5 2.4 M17.6 8.1l-3.5 2.4 M6.4 15.9l3.5-2.4 M17.6 15.9l-3.5-2.4"/></I>;
 
 /* closes on a document-level outside mousedown — no click-eating backdrop,
@@ -1152,6 +1154,15 @@ const Popover = ({className, style, onClose, children, portal}) => {
   }, []);
   const node = <div ref={ref} className={className} style={style}>{children}</div>;
   return portal ? ReactDOM.createPortal(node, document.body) : node;
+};
+
+const clampMenuPosition = (pos, width = 220, height = 220) => {
+  const x = Number(pos && pos.x) || 0;
+  const y = Number(pos && pos.y) || 0;
+  return {
+    left: Math.max(12, Math.min(x, window.innerWidth - width - 12)),
+    top: Math.max(12, Math.min(y, window.innerHeight - height - 12)),
+  };
 };
 
 const visibleChats = cs => {
@@ -1766,7 +1777,7 @@ const LibPickModal = ({library, onPick, onClose}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, appSel = [], onToggleSel, onConnectApp, onOpenAgent}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, appSel = [], onToggleSel, onConnectApp, onOpenAgent}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
   const [mic, setMic] = useState(false);
@@ -1880,7 +1891,11 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
     if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }
   }, [text]);
   const send = () => {
-    if (!text.trim() || busy) return;
+    if (busy) {
+      if (onStop) onStop();
+      return;
+    }
+    if (!text.trim()) return;
     onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope});
     setText(''); setAttach([]);
     setSearchMode(false);
@@ -2010,9 +2025,11 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
             ? <button className="model-pill" onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
             : <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
           <button className={'cbtn' + (mic ? ' mic-on' : '')} title={mic ? 'Stop dictation (Ctrl+Shift+D)' : 'Dictation (Ctrl+Shift+D)'} onClick={() => setMic(m => !m)}><IcMic/></button>
-          {voiceState === 'idle' && (text.trim()
-            ? <button className="csend" disabled={busy} title="Send" onClick={send}><IcSend size={15}/></button>
-            : <button className="csend voice-btn" title="Use Voice  ·  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
+          {voiceState === 'idle' && (busy
+            ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
+            : text.trim()
+              ? <button className="csend" title="Send" onClick={send}><IcSend size={15}/></button>
+              : <button className="csend voice-btn" title="Use Voice  ·  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
           {voiceState === 'connecting' && (
             <button className="voice-pill voice-pill-cancel" onClick={endVoice} title="Cancel"><span className="voice-spin"/>Cancel</button>)}
           {voiceState === 'listening' && (
@@ -2338,7 +2355,7 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onStop, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const Icon = agent.icon;
@@ -2448,7 +2465,7 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
         ))}
         <div ref={endRef}/>
       </div></div>
-      <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
+      <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
     </div>{activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}</div>
   );
 };
@@ -2774,6 +2791,12 @@ const activityDomain = item => {
 };
 const activityIsDone = item => item && ['completed','done','failed'].includes(String(item.status||'').toLowerCase());
 const THINKING_ROTATION_LABELS = ['Thinking', 'One sec', 'Checking context', 'Working through it', 'Cooking up your answer'];
+const nextThinkingIndex = current => {
+  if (THINKING_ROTATION_LABELS.length < 2) return 0;
+  let next = Math.floor(Math.random() * THINKING_ROTATION_LABELS.length);
+  if (next === current) next = (next + 1 + Math.floor(Math.random() * (THINKING_ROTATION_LABELS.length - 1))) % THINKING_ROTATION_LABELS.length;
+  return next;
+};
 const isThinkingActivity = item => {
   const type = String(item && item.type || '').toLowerCase();
   const label = String(item && item.label || '').toLowerCase();
@@ -2804,17 +2827,31 @@ const sourcesForMsg = msg => {
 };
 const ActivityStatus = ({item}) => {
   const [thinkingIndex, setThinkingIndex] = useState(0);
+  const [typingText, setTypingText] = useState(THINKING_ROTATION_LABELS[0]);
   const thinking = isThinkingActivity(item);
   useEffect(() => {
     if (!thinking) {
       setThinkingIndex(0);
+      setTypingText('');
       return undefined;
     }
-    const id = setInterval(() => setThinkingIndex(i => (i + 1) % THINKING_ROTATION_LABELS.length), 1600);
+    const id = setInterval(() => setThinkingIndex(i => nextThinkingIndex(i)), 2300);
     return () => clearInterval(id);
   }, [thinking]);
+  useEffect(() => {
+    if (!thinking) return undefined;
+    const typingLabel = THINKING_ROTATION_LABELS[thinkingIndex] || THINKING_ROTATION_LABELS[0];
+    setTypingText('');
+    let cursor = 0;
+    const id = setInterval(() => {
+      cursor += 1;
+      setTypingText(typingLabel.slice(0, cursor));
+      if (cursor >= typingLabel.length) clearInterval(id);
+    }, 42);
+    return () => clearInterval(id);
+  }, [thinking, thinkingIndex]);
   if (!item) return null;
-  const label = (thinking ? THINKING_ROTATION_LABELS[thinkingIndex] : (item.label || 'Thinking')).replace(/\.+$/, '');
+  const label = (thinking ? (typingText || THINKING_ROTATION_LABELS[thinkingIndex]) : (item.label || 'Thinking')).replace(/\.+$/, '');
   return (
     <div className="activity-status" aria-live="polite">
       <span className="activity-icon"></span>
@@ -2920,7 +2957,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -2937,7 +2974,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRe
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
         <TypingGreet/>
-        <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} drop="up" onViewImage={onViewImage} {...composerExtras}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} drop="up" onViewImage={onViewImage} {...composerExtras}/>
       </div>
     );
   }
@@ -2973,7 +3010,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onRe
         </div>
       </div>
       <div className="composer-dock">
-        <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
+        <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} onViewImage={onViewImage} {...composerExtras}/>
       </div>
       </div>
       {activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}
@@ -3363,7 +3400,7 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
 
 /* ─── context menu (chat row) ─── */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
-  <Popover portal className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 230), top: Math.min(pos.y, window.innerHeight - 260)}} onClose={onClose}>
+  <Popover portal className="ctx-menu" style={clampMenuPosition(pos, 230, 260)} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
     <div className="ctx-hint">sharing is not in this preview</div>
     <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
@@ -4041,6 +4078,13 @@ const App = () => {
       await API.chat.stream(
         {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
+          controller: controller => {
+            const ctl = turnCtl.current[assistantId] || {agentId: agent.id, convoId, timers: []};
+            ctl.agentId = agent.id;
+            ctl.convoId = convoId;
+            ctl.controller = controller;
+            turnCtl.current[assistantId] = ctl;
+          },
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
@@ -4113,7 +4157,8 @@ const App = () => {
       );
     } catch (err) {
       finishTurn(assistantId);
-      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
+      const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach, opts = {}) => {
@@ -4385,6 +4430,10 @@ const App = () => {
   const clearTurnTimers = msgId => {
     const ctl = turnCtl.current[msgId];
     if (ctl) (ctl.timers || []).forEach(clearTimeout);
+    if (timers.current[msgId]) {
+      clearTimeout(timers.current[msgId]);
+      delete timers.current[msgId];
+    }
   };
   const finishTurn = msgId => {
     clearTurnTimers(msgId);
@@ -4416,6 +4465,39 @@ const App = () => {
     else updateAgentTurn(ctl.agentId, ctl.convoId, msgId, m => ({...m, phase:'answering', refShown:(m.refLines || []).length}));
     if (ctl.startAnswer) ctl.startAnswer();
   };
+  const stopActiveTurn = (chatId = activeChatId) => {
+    const chat = chats.find(c => c.id === chatId);
+    const msg = chat && [...chat.messages].reverse().find(m => m.role === 'assistant' && m.streaming);
+    if (!chat || !msg) return;
+    const ctl = turnCtl.current[msg.id];
+    if (ctl && ctl.controller) {
+      try { ctl.controller.abort(); } catch {}
+    }
+    finishTurn(msg.id);
+    updateTurn(chat.id, msg.id, m => ({
+      ...m,
+      text: m.text || 'Stopped.',
+      phase: 'done',
+      streaming: false,
+    }), true);
+  };
+  const stopActiveAgentTurn = (agentId = activeAgentId) => {
+    const convoId = activeConvo[agentId];
+    const convo = ((agentConvos[agentId] || []).find(c => c.id === convoId));
+    const msg = convo && [...convo.messages].reverse().find(m => m.role === 'assistant' && m.streaming);
+    if (!convo || !msg) return;
+    const ctl = turnCtl.current[msg.id];
+    if (ctl && ctl.controller) {
+      try { ctl.controller.abort(); } catch {}
+    }
+    finishTurn(msg.id);
+    updateAgentTurn(agentId, convo.id, msg.id, m => ({
+      ...m,
+      text: m.text || 'Stopped.',
+      phase: 'done',
+      streaming: false,
+    }));
+  };
 
   const streamReply = (chatId, msgId, data) => {
     const payload = typeof data === 'string' ? {answer:data, ...buildActivity(data)} : data;
@@ -4446,6 +4528,12 @@ const App = () => {
       await API.chat.stream(
         {message, thread_id: threadId || chatId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
+          controller: controller => {
+            const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
+            ctl.chatId = chatId;
+            ctl.controller = controller;
+            turnCtl.current[assistantId] = ctl;
+          },
           meta: meta => {
             if (meta.thread_id) {
               threadRef.current[chatId] = meta.thread_id;
@@ -4528,7 +4616,8 @@ const App = () => {
       );
     } catch (err) {
       finishTurn(assistantId);
-      updateTurn(chatId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
+      const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
+      updateTurn(chatId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
     }
   };
 
@@ -4738,7 +4827,7 @@ const App = () => {
             onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}/>}
 
           <div className="main">
-            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onRegen={regenerate}
+            {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
               onViewImage={setViewer}
               filesOpen={filesOpen} onCloseFiles={() => setFilesOpen(false)}
               onOpenActivity={setActivityMsg}
@@ -4761,7 +4850,7 @@ const App = () => {
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
             {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>
         </div>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}

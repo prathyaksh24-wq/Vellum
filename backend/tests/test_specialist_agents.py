@@ -603,6 +603,37 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
     assert memory_result.tools == ["memory_agent"]
 
 
+def test_live_dispatcher_exposes_serpapi_tool_for_youtube_provider(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Mat Armstrong latest upload",
+                "url": "https://www.youtube.com/watch?v=mat123",
+                "channel": "Mat Armstrong",
+                "description": "Latest car rebuild video.",
+                "provider": "serpapi",
+            }
+        ],
+    )
+    registry = PupilRegistry(
+        {
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("did mat armstrong upload a new video?", thread_id="yt-serp")
+
+    assert result is not None
+    assert result.agent_name == "YoutubeAgent"
+    assert result.tools == ["youtube_agent", "web_search", "serpapi"]
+
+
 def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path):
     class SerpPupil:
         name = "ResearchAgent"

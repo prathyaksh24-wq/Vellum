@@ -63,6 +63,15 @@
     if (type === "source_discovered") return "Found " + sourceLabel(source);
     if (type === "source_reading") return "Reading " + sourceLabel(source);
     if (type === "final_answer_started" || type === "final_answer_delta") return "Writing answer";
+    if (type === "sub_agent_completed") return "Called " + humanToolName(name || "sub-agent");
+    if (type === "tool_call_completed") {
+      if (name === "serpapi") return "Searched with SerpAPI";
+      if (name === "web_search") return "Searched the web";
+      if (String(name || "").endsWith("_agent")) return "Called " + humanToolName(name);
+      if (name === "search_my_notes") return "Searched your notes";
+      if (name === "obsidian_api" || name === "obsidian_search") return "Read Obsidian";
+      return "Used " + humanToolName(name || "tool");
+    }
     if (type === "tool_call_started" || type === "tool_call_delta") {
       if (name === "serpapi") return "Searching with SerpAPI";
       if (name === "web_search") return "Searching the web";
@@ -101,6 +110,7 @@
 
   async function stream(payload, handlers) {
     var controller = new AbortController();
+    if (handlers && handlers.controller) handlers.controller(controller);
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
     if (!response.ok || !response.body) throw new Error("Backend stream failed: HTTP " + response.status);
     var reader = response.body.getReader();

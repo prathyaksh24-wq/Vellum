@@ -176,4 +176,25 @@ describe("Vellum default chat stream trace", () => {
     expect(labels).toContain("Searching your notes");
     expect(labels).toContain("Reading Obsidian");
   });
+
+  test("exposes stream abort controller to the UI", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const controllers = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "test abort controller", thread_id: "t1" },
+      { controller: (controller) => controllers.push(controller) },
+    );
+
+    expect(controllers).toHaveLength(1);
+    expect(controllers[0]).toBeInstanceOf(AbortController);
+    expect(fetchImpl.mock.calls[0][1].signal).toBe(controllers[0].signal);
+  });
 });
