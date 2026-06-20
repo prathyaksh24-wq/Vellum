@@ -73,7 +73,8 @@ class YoutubeCapabilityService:
             for item in self.search_backend(query, max_results)
         ]
         ranked_items = _rank_youtube_videos(query, items)
-        return {"action": "youtube.search_videos", "items": ranked_items[:max_results]}
+        providers = sorted({str(item.get("provider") or "") for item in ranked_items if item.get("provider")})
+        return {"action": "youtube.search_videos", "items": ranked_items[:max_results], "providers": providers}
 
     def fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = self.transcript_backend(payload)
@@ -99,7 +100,7 @@ class YoutubeCapabilityService:
             or item.get("id")
             or _video_id_from_url(url)
         )
-        return {
+        record = {
             "video_id": video_id,
             "title": _string(item.get("title") or item.get("name")),
             "url": url or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
@@ -108,6 +109,10 @@ class YoutubeCapabilityService:
             "description": _string(item.get("description") or item.get("snippet") or item.get("body")),
             "transcript": _string(item.get("transcript") or item.get("transcriptText")),
         }
+        provider = _string(item.get("provider"))
+        if provider:
+            record["provider"] = provider
+        return record
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:
@@ -116,8 +121,8 @@ class YoutubeCapabilityService:
             logger.warning("YouTube SerpAPI search failed; falling back to web search: %s", exc)
             serpapi_items = []
         if serpapi_items:
-            return serpapi_items[:max_results]
-        return self.web_search_backend(query, max_results)[:max_results]
+            return [{**item, "provider": str(item.get("provider") or "serpapi")} for item in serpapi_items[:max_results]]
+        return [{**item, "provider": str(item.get("provider") or "web_search")} for item in self.web_search_backend(query, max_results)[:max_results]]
 
     def _default_serpapi_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         settings = get_settings()

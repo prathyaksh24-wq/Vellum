@@ -59,6 +59,7 @@ class YoutubeAgent:
                 confidence=0.2,
             )
         items = result.get("items") or []
+        providers = {str(provider).strip().lower() for provider in (result.get("providers") or []) if str(provider).strip()}
         if not items:
             return SpecialistResponse(
                 agent=self.name,
@@ -103,6 +104,7 @@ class YoutubeAgent:
             summary="\n".join(lines),
             analysis=(
                 "Used youtube.search_videos through YoutubeCapabilityService"
+                + (" via SerpAPI" if "serpapi" in providers else "")
                 + (" with transcript snippets." if used_transcript else ".")
             ),
             sources=sources,

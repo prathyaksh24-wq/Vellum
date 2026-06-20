@@ -603,6 +603,40 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
     assert memory_result.tools == ["memory_agent"]
 
 
+def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path):
+    class SerpPupil:
+        name = "ResearchAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="SerpAPI-backed answer.",
+                analysis="Used SerpAPI Google AI Mode for this lookup.",
+                sources=[
+                    SpecialistSource(
+                        kind="web",
+                        title="Result",
+                        path_or_url="https://example.com/result",
+                    )
+                ],
+            )
+
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"ResearchAgent": SerpPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("research this", thread_id="serp-thread")
+
+    assert result is not None
+    assert result.tools == ["research_agent", "web_search", "serpapi"]
+
+
 def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_path):
     search_output = (
         "**NBA update**\n"

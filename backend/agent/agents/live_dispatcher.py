@@ -100,6 +100,8 @@ class LiveAgentDispatcher:
         tools = [self._tool_name(response.agent)]
         if any(source.kind == "web" for source in response.sources):
             tools.append("web_search")
+        if "serpapi" in response.analysis.casefold():
+            tools.append("serpapi")
         return LiveAgentResult(
             handled=True,
             agent_name=response.agent,
