@@ -213,6 +213,7 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert "response.output_text.delta" in names
     assert "response.output_item.done" in names
     assert "response.completed" in names
+    assert "agent.activity" in names
 
     response_created = json.loads(next(data for name, data in events if name == "response.created"))
     assert response_created["type"] == "response.created"
@@ -227,6 +228,31 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     response_delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
     assert response_delta["type"] == "response.output_text.delta"
     assert response_delta["delta"] == "Verstappen won the last race."
+
+    agent_activities = [
+        json.loads(data)["activity"] for name, data in events if name == "agent.activity"
+    ]
+    activity_types = [item["type"] for item in agent_activities]
+    assert "thinking_started" in activity_types
+    assert "tool_call_started" in activity_types
+    assert "tool_call_completed" in activity_types
+    assert "source_discovered" in activity_types
+    assert "source_reading" in activity_types
+    assert "final_answer_started" in activity_types
+    assert "final_answer_delta" in activity_types
+    assert "final_answer_completed" in activity_types
+    assert any(
+        item["type"] == "tool_call_started"
+        and item["name"] == "web_search"
+        and item["label"] == "Using web_search..."
+        for item in agent_activities
+    )
+    assert any(
+        item["type"] == "source_reading"
+        and item["label"] == "Reading Formula 1..."
+        and item["source"]["domain"] == "formula1.com"
+        for item in agent_activities
+    )
 
     response_done_items = [
         json.loads(data)["item"] for name, data in events if name == "response.output_item.done"
@@ -359,3 +385,63 @@ def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):
     assert any(item["type"] == "function_call" and item["name"] == "web_search" for item in added)
     assert [item["delta"] for item in deltas] == ['{"query":', '"f1"}']
     assert done[-1]["arguments"] == '{"query":"f1"}'
+
+
+def test_stream_agent_turn_emits_agent_activity_for_function_calls(monkeypatch):
+    class FunctionStreamingAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '{"query":'},
+                        ],
+                    )
+                },
+            }
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="Done.")}}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(api, "agent", FunctionStreamingAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or SimpleNamespace())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="search f1",
+            active_thread_id="t-functions",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    agent_activities = [
+        json.loads(data)["activity"] for name, data in events if name == "agent.activity"
+    ]
+
+    assert any(
+        item["type"] == "tool_call_started"
+        and item["name"] == "web_search"
+        and item["label"] == "Using web_search..."
+        for item in agent_activities
+    )
+    assert any(
+        item["type"] == "tool_call_delta"
+        and item["name"] == "web_search"
+        and item["detail"] == '{"query":'
+        for item in agent_activities
+    )

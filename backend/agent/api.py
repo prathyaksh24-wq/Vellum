@@ -1314,6 +1314,37 @@ def _response_error(*, response_id: str, thread_id: str, message: str) -> str:
     )
 
 
+def _agent_activity_event(
+    *,
+    response_id: str,
+    thread_id: str,
+    activity_type: str,
+    label: str,
+    detail: str = "",
+    status: str = "in_progress",
+    item_id: str = "",
+    name: str = "",
+    source: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    return _response_event(
+        "agent.activity",
+        response_id=response_id,
+        thread_id=thread_id,
+        activity={
+            "id": item_id or _stream_id("activity"),
+            "type": activity_type,
+            "label": label,
+            "detail": detail[:1000],
+            "status": status,
+            "name": name,
+            "source": source,
+            "metadata": metadata or {},
+            "at": _stream_now(),
+        },
+    )
+
+
 from agent.tools.web import extract_web_sources
 
 _ACTIVITY_LABELS = {
@@ -1591,6 +1622,13 @@ async def _stream_agent_turn(
     agent_input_message = clean_message
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
     yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
+    yield _agent_activity_event(
+        response_id=response_id,
+        thread_id=active_thread_id,
+        activity_type="thinking_started",
+        label="Thinking...",
+        detail=clean_message[:200],
+    )
     yield _sse("meta", {"thread_id": active_thread_id})
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
@@ -1604,6 +1642,15 @@ async def _stream_agent_turn(
             "label": f"Routed to {live_result.agent_name}",
             "detail": clean_message[:200],
         }
+        yield _agent_activity_event(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            activity_type="sub_agent_started",
+            label=f"Calling {live_result.agent_name}...",
+            detail=clean_message[:200],
+            item_id=str(subagent_item["id"]),
+            name=live_result.agent_name,
+        )
         yield _response_output_item_added(
             response_id=response_id,
             thread_id=active_thread_id,
@@ -1619,8 +1666,25 @@ async def _stream_agent_turn(
                 "label": f"Used {tool_name}",
                 "detail": "",
             }
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="tool_call_started",
+                label=f"Using {tool_name}...",
+                item_id=str(tool_item["id"]),
+                name=tool_name,
+            )
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=tool_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=tool_item)
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="tool_call_completed",
+                label=f"Used {tool_name}",
+                status="completed",
+                item_id=str(tool_item["id"]),
+                name=tool_name,
+            )
             yield _sse("tool", {"name": tool_name})
         for source_record in live_sources:
             source_item = {
@@ -1629,6 +1693,25 @@ async def _stream_agent_turn(
                 "status": "completed",
                 "source": source_record,
             }
+            source_label = str(source_record.get("provider_label") or source_record.get("domain") or "source")
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="source_discovered",
+                label=f"Found {source_label}",
+                status="completed",
+                item_id=str(source_item["id"]),
+                source=source_record,
+            )
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="source_reading",
+                label=f"Reading {source_label}...",
+                detail=str(source_record.get("title") or source_record.get("snippet") or ""),
+                item_id=str(source_item["id"]) + "-reading",
+                source=source_record,
+            )
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _sse("source", source_record)
@@ -1638,6 +1721,15 @@ async def _stream_agent_turn(
             thread_id=active_thread_id,
             item=subagent_item,
             status=subagent_status,
+        )
+        yield _agent_activity_event(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            activity_type="sub_agent_completed",
+            label=f"{live_result.agent_name} finished",
+            status=subagent_status,
+            item_id=str(subagent_item["id"]),
+            name=live_result.agent_name,
         )
 
     async with _agent_runtime_lock:
@@ -1655,6 +1747,7 @@ async def _stream_agent_turn(
             "status": "in_progress",
         }
         message_item_started = False
+        final_answer_started = False
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
@@ -1707,6 +1800,14 @@ async def _stream_agent_turn(
                                 thread_id=active_thread_id,
                                 item=item,
                             )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="tool_call_started",
+                                label=f"Using {name or 'function'}...",
+                                item_id=str(item["id"]),
+                                name=name or "function",
+                            )
                         if name and item.get("name") in {"", "function"}:
                             item["name"] = name
                             item["label"] = f"Preparing {name}"
@@ -1720,6 +1821,15 @@ async def _stream_agent_turn(
                                 item_id=str(item["id"]),
                                 delta=delta,
                             )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="tool_call_delta",
+                                label=f"Using {item.get('name') or 'function'}...",
+                                detail=function_stream_args[call_id][-500:],
+                                item_id=str(item["id"]),
+                                name=str(item.get("name") or "function"),
+                            )
                     text = _chunk_text(chunk)
                     if text:
                         answer_parts.append(text)
@@ -1730,11 +1840,28 @@ async def _stream_agent_turn(
                                 item=message_item,
                             )
                             message_item_started = True
+                        if not final_answer_started:
+                            final_answer_started = True
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="final_answer_started",
+                                label="Writing answer...",
+                                item_id=message_item_id,
+                            )
                         yield _response_output_text_delta(
                             response_id=response_id,
                             thread_id=active_thread_id,
                             item_id=message_item_id,
                             delta=text,
+                        )
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type="final_answer_delta",
+                            label="Writing answer...",
+                            detail=text,
+                            item_id=message_item_id,
                         )
                         yield _sse("token", {"text": text})
                 elif kind == "on_tool_start":
@@ -1753,6 +1880,15 @@ async def _stream_agent_turn(
                                     thread_id=active_thread_id,
                                     item=item,
                                 )
+                                yield _agent_activity_event(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    activity_type="tool_call_completed",
+                                    label=f"Used {item.get('name') or 'function'}",
+                                    status="completed",
+                                    item_id=str(item["id"]),
+                                    name=str(item.get("name") or "function"),
+                                )
                                 item["status"] = "completed"
                         if str(name) not in tool_names:
                             tool_names.append(str(name))
@@ -1766,6 +1902,17 @@ async def _stream_agent_turn(
                             "detail": detail,
                         }
                         active_tool_items[str(name)] = item
+                        lifecycle_type = "memory_retrieved" if str(name) in {"search_my_notes", "memory_search", "obsidian_search"} else "tool_call_started"
+                        lifecycle_label = "Using memory..." if lifecycle_type == "memory_retrieved" else f"Using {name}..."
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type=lifecycle_type,
+                            label=lifecycle_label,
+                            detail=detail,
+                            item_id=str(item["id"]),
+                            name=str(name),
+                        )
                         yield _response_output_item_added(
                             response_id=response_id,
                             thread_id=active_thread_id,
@@ -1791,6 +1938,25 @@ async def _stream_agent_turn(
                                 "status": "completed",
                                 "source": record,
                             }
+                            source_label = str(record.get("provider_label") or record.get("domain") or "source")
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="source_discovered",
+                                label=f"Found {source_label}",
+                                status="completed",
+                                item_id=str(source_item["id"]),
+                                source=record,
+                            )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="source_reading",
+                                label=f"Reading {source_label}...",
+                                detail=str(record.get("title") or record.get("snippet") or ""),
+                                item_id=str(source_item["id"]) + "-reading",
+                                source=record,
+                            )
                             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _sse("source", record)
@@ -1800,6 +1966,15 @@ async def _stream_agent_turn(
                             response_id=response_id,
                             thread_id=active_thread_id,
                             item=done_item,
+                        )
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type="tool_call_completed",
+                            label=f"Used {done_item.get('name') or 'tool'}",
+                            status="completed",
+                            item_id=str(done_item["id"]),
+                            name=str(done_item.get("name") or ""),
                         )
                 capture_from_stream_event(
                     ledger=_api_ledger,
@@ -1821,6 +1996,15 @@ async def _stream_agent_turn(
                         thread_id=active_thread_id,
                         item=item,
                     )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="tool_call_completed",
+                        label=f"Used {item.get('name') or 'function'}",
+                        status="completed",
+                        item_id=str(item["id"]),
+                        name=str(item.get("name") or "function"),
+                    )
                     item["status"] = "completed"
             answer = "".join(answer_parts).strip() or "No response."
             source_models = [Source(**record) for record in sources]
@@ -1837,6 +2021,14 @@ async def _stream_agent_turn(
                     thread_id=active_thread_id,
                     item=message_item,
                 )
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="final_answer_completed",
+                label="Answer written",
+                status="completed",
+                item_id=message_item_id,
+            )
             yield _response_completed(
                 response_id=response_id,
                 thread_id=active_thread_id,
