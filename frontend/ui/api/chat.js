@@ -25,21 +25,29 @@
     return source && (source.provider_label || source.domain || source.title || source.url) || "source";
   }
 
+  function activityLabel(type, name, source) {
+    if (type === "thinking_started") return "Thinking";
+    if (type === "memory_retrieved") return "Using memory";
+    if (type === "sub_agent_started") return "Calling " + (name || "sub-agent");
+    if (type === "source_discovered") return "Found " + sourceLabel(source);
+    if (type === "source_reading") return "Reading " + sourceLabel(source);
+    if (type === "final_answer_started" || type === "final_answer_delta") return "Writing answer";
+    if (type === "tool_call_started" || type === "tool_call_delta") {
+      if (name === "web_search") return "Searching the web";
+      if (name === "search_my_notes") return "Using memory";
+      if (name === "x_action") return "Using X Agent";
+      if (name === "youtube_search" || name === "youtube_agent") return "Calling YouTube Agent";
+      return "Using " + (name || "tool").replace(/_/g, " ");
+    }
+    return "";
+  }
+
   function normalizeAgentActivity(activity) {
     if (!activity) return null;
     var source = activity.source || null;
     var type = activity.type || "activity";
     var name = activity.name || "";
-    var label = activity.label || "";
-    if (!label) {
-      if (type === "thinking_started") label = "Thinking...";
-      else if (type === "memory_retrieved") label = "Using memory...";
-      else if (type === "sub_agent_started") label = "Calling " + (name || "sub-agent") + "...";
-      else if (type === "tool_call_started" || type === "tool_call_delta") label = "Using " + (name || "tool") + "...";
-      else if (type === "source_reading") label = "Reading " + sourceLabel(source) + "...";
-      else if (type === "final_answer_started" || type === "final_answer_delta") label = "Writing answer...";
-      else label = "Agent activity";
-    }
+    var label = activityLabel(type, name, source) || activity.label || "Agent activity";
     return {
       id: activity.id || (type + "-" + Date.now()),
       type: type,

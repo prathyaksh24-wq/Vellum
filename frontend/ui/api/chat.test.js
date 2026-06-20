@@ -143,8 +143,8 @@ describe("Vellum default chat stream trace", () => {
     );
 
     expect(deltas).toEqual([{ text: "Austria", delta: "Austria" }]);
-    expect(activities.some((items) => items.some((item) => item.type === "tool_call_started" && item.label === "Using web_search..."))).toBe(true);
+    expect(activities.some((items) => items.some((item) => item.type === "tool_call_started" && item.label === "Searching the web"))).toBe(true);
     expect(activities.some((items) => items.some((item) => item.type === "source_reading" && item.source.domain === "formula1.com"))).toBe(true);
-    expect(traces.some((trace) => trace.steps.some((step) => step.label === "Writing answer..."))).toBe(true);
+    expect(traces.some((trace) => trace.steps.some((step) => step.label === "Writing answer"))).toBe(true);
   });
 });
