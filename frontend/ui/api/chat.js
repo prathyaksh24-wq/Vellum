@@ -25,6 +25,42 @@
     return source && (source.provider_label || source.domain || source.title || source.url) || "source";
   }
 
+  function activityLabel(type, name, source) {
+    if (type === "thinking_started") return "Thinking";
+    if (type === "memory_retrieved") return "Using memory";
+    if (type === "sub_agent_started") return "Calling " + (name || "sub-agent");
+    if (type === "source_discovered") return "Found " + sourceLabel(source);
+    if (type === "source_reading") return "Reading " + sourceLabel(source);
+    if (type === "final_answer_started" || type === "final_answer_delta") return "Writing answer";
+    if (type === "tool_call_started" || type === "tool_call_delta") {
+      if (name === "web_search") return "Searching the web";
+      if (name === "search_my_notes") return "Using memory";
+      if (name === "x_action") return "Using X Agent";
+      if (name === "youtube_search" || name === "youtube_agent") return "Calling YouTube Agent";
+      return "Using " + (name || "tool").replace(/_/g, " ");
+    }
+    return "";
+  }
+
+  function normalizeAgentActivity(activity) {
+    if (!activity) return null;
+    var source = activity.source || null;
+    var type = activity.type || "activity";
+    var name = activity.name || "";
+    var label = activityLabel(type, name, source) || activity.label || "Agent activity";
+    return {
+      id: activity.id || (type + "-" + Date.now()),
+      type: type,
+      label: label,
+      detail: activity.detail || "",
+      name: name,
+      status: activity.status || "in_progress",
+      source: source,
+      metadata: activity.metadata || {},
+      at: activity.at || Date.now(),
+    };
+  }
+
   async function stream(payload, handlers) {
     var controller = new AbortController();
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
@@ -105,6 +141,26 @@
         if (!parsed) continue;
         var ev = parsed.event;
         var data = parsed.data;
+        if (ev === "agent.activity") {
+          semanticSeen = true;
+          var agentAct = normalizeAgentActivity(data.activity || data);
+          if (!agentAct) continue;
+          var existingIndex = activity.findIndex(function (item) { return item.id && item.id === agentAct.id; });
+          if (existingIndex >= 0) activity[existingIndex] = Object.assign({}, activity[existingIndex], agentAct);
+          else activity.push(agentAct);
+          if (agentAct.name) addTool(agentAct.name);
+          if (agentAct.source) {
+            addSource(agentAct.source);
+            if (handlers.sources) handlers.sources(sources.slice());
+          }
+          upsertStep(agentAct);
+          if (agentAct.type === "thinking_started") emitTrace("thinking");
+          else if (agentAct.type === "final_answer_started" || agentAct.type === "final_answer_delta") emitTrace("answering");
+          else if (agentAct.type === "final_answer_completed") emitTrace("done");
+          else emitTrace("researching");
+          if (handlers.activity) handlers.activity(activity.slice(), tools.slice());
+          continue;
+        }
         if (ev.indexOf("response.") === 0 || ev === "error") {
           semanticSeen = true;
           if ((ev === "response.created" || ev === "response.in_progress") && data.thread_id && handlers.meta) {

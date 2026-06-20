@@ -114,4 +114,37 @@ describe("Vellum default chat stream trace", () => {
     expect(activities.some((items) => items.some((item) => item.id === "fn-1" && item.detail.includes('"query"')))).toBe(true);
     expect(activities.at(-1).some((item) => item.id === "fn-1" && item.status === "completed")).toBe(true);
   });
+
+  test("routes agent activity lifecycle events to activity trace without changing text deltas", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"a1","type":"thinking_started","label":"Thinking...","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"a2","type":"tool_call_started","name":"web_search","label":"Using web_search...","detail":"f1 calendar","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"s1","type":"source_reading","label":"Reading Formula 1...","status":"in_progress","source":{"url":"https://www.formula1.com/en/racing/2026","domain":"formula1.com","provider_label":"Formula 1"}}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"a3","type":"final_answer_started","label":"Writing answer...","status":"in_progress"}}\n\n',
+        'event: response.output_text.delta\ndata: {"delta":"Austria"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Austria","tools":["web_search"],"sources":[{"url":"https://www.formula1.com/en/racing/2026","domain":"formula1.com"}]}}\n\n',
+      ]),
+    }));
+    const activities = [];
+    const traces = [];
+    const deltas = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "next f1 race", thread_id: "t1" },
+      {
+        activity: (items) => activities.push(items),
+        trace: (trace) => traces.push(trace),
+        delta: (text, delta) => deltas.push({ text, delta }),
+      },
+    );
+
+    expect(deltas).toEqual([{ text: "Austria", delta: "Austria" }]);
+    expect(activities.some((items) => items.some((item) => item.type === "tool_call_started" && item.label === "Searching the web"))).toBe(true);
+    expect(activities.some((items) => items.some((item) => item.type === "source_reading" && item.source.domain === "formula1.com"))).toBe(true);
+    expect(traces.some((trace) => trace.steps.some((step) => step.label === "Writing answer"))).toBe(true);
+  });
 });

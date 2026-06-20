@@ -910,6 +910,45 @@ def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
     assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
 
 
+def test_youtube_agent_does_not_route_meta_feedback_about_youtube(tmp_path):
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault")
+
+    assert not agent.can_handle("in your previous response regarding youtube i don't need the evidence section")
+    assert not agent.can_handle("stop adding the evidence section for YouTube searches")
+    assert not agent.can_handle("I don't like the youtube answer format")
+    assert agent.can_handle("can you see my channel on youtube?")
+    assert agent.can_handle("did mat armstrong upload a new video?")
+
+
+def test_live_dispatcher_keeps_youtube_feedback_with_vellum(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Should not be called",
+                "url": "https://www.youtube.com/watch?v=notcalled1",
+            }
+        ],
+    )
+    registry = PupilRegistry(
+        {
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle(
+        "in your previous response regarding youtube i don't need the evidence section",
+        thread_id="feedback-thread",
+    )
+
+    assert result is None
+
+
 def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
     registry = ToolRegistry()
     calls = []

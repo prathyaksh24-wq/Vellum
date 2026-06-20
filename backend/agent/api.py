@@ -94,6 +94,7 @@ class ChatRequest(BaseModel):
     model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
+    force_web_search: bool = False
     attachments: list["ChatAttachment"] = Field(default_factory=list)
 
 
@@ -1314,6 +1315,37 @@ def _response_error(*, response_id: str, thread_id: str, message: str) -> str:
     )
 
 
+def _agent_activity_event(
+    *,
+    response_id: str,
+    thread_id: str,
+    activity_type: str,
+    label: str,
+    detail: str = "",
+    status: str = "in_progress",
+    item_id: str = "",
+    name: str = "",
+    source: dict[str, Any] | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    return _response_event(
+        "agent.activity",
+        response_id=response_id,
+        thread_id=thread_id,
+        activity={
+            "id": item_id or _stream_id("activity"),
+            "type": activity_type,
+            "label": label,
+            "detail": detail[:1000],
+            "status": status,
+            "name": name,
+            "source": source,
+            "metadata": metadata or {},
+            "at": _stream_now(),
+        },
+    )
+
+
 from agent.tools.web import extract_web_sources
 
 _ACTIVITY_LABELS = {
@@ -1509,6 +1541,14 @@ def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str
     return f"{clean_message}\n\n{context}"
 
 
+def _with_forced_web_search_context(clean_message: str) -> str:
+    return (
+        "[Vellum UI mode: Web search is enabled for this turn. Use web_search for public/current facts "
+        "before answering. Do not expose raw source lists in the answer body; sources are shown in the UI.]\n\n"
+        f"{clean_message}"
+    )
+
+
 def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
     image_parts: list[dict[str, Any]] = []
     for attachment in attachments or []:
@@ -1524,7 +1564,7 @@ def _agent_content_with_attachments(message: str, attachments: list[ChatAttachme
 def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, live_sources: list[dict[str, Any]]) -> str:
     source_lines = []
     for index, source in enumerate(live_sources, start=1):
-        title = str(source.get("title") or source.get("domain") or source.get("url") or "source")
+        title = str(source.get("provider_label") or source.get("title") or source.get("domain") or source.get("url") or "source")
         url = str(source.get("url") or "")
         snippet = str(source.get("snippet") or "").strip()
         line = f"[{index}] {title}: {url}" if url else f"[{index}] {title}"
@@ -1535,17 +1575,16 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
     return (
         "You are Vellum, the main agent. A specialist sub-agent was used as a tool. "
         "Do not expose raw tool dumps. Answer the user naturally and directly, like ChatGPT, "
-        "using the specialist result as evidence. Treat the specialist result and source snippets "
+        "using the specialist result as live context. Treat the specialist result and source snippets "
         "as authoritative for current/live facts. If they conflict with your prior knowledge, "
-        "follow the specialist evidence and say so briefly. Mention uncertainty when the specialist "
+        "follow the specialist result and say so briefly. Mention uncertainty when the specialist "
         "could not fully answer. Preserve exact names, dates, scores, standings, and event order from "
         "the specialist result. Do not replace a live snapshot with older model-memory facts. If the "
         "specialist result includes multiple sources, synthesize across them instead of relying on one. "
-        "Keep citations/source references consistent with provided sources. Start with the direct answer "
-        "in one or two sentences. Then, when useful, add source-labeled evidence blocks using the publisher "
-        "or domain name as a short label, for example 'The Guardian' or 'Yahoo Sports'. Do not include "
-        "raw URL lists or a 'Sources checked' section in the answer body; full URLs are already available "
-        "in the source/activity panel unless the user explicitly asks for URLs. For rankings, "
+        "Use sources internally for factual grounding, but do not add an 'Evidence', 'Sources', "
+        "'Sources checked', 'References', or citation-list section in the answer body unless the user "
+        "explicitly asks for sources or links. Full source URLs and favicons are already available through "
+        "the source/activity button in the UI. Start with the direct answer in one or two sentences. For rankings, "
         "standings, schedules, scores, or statistical lists, include a compact markdown table when the "
         "source data contains enough structured facts. For broad live sports questions, include relevant "
         "latest news, match results, schedule, injury, or tactical context only when it appears in the "
@@ -1591,6 +1630,13 @@ async def _stream_agent_turn(
     agent_input_message = clean_message
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
     yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
+    yield _agent_activity_event(
+        response_id=response_id,
+        thread_id=active_thread_id,
+        activity_type="thinking_started",
+        label="Thinking...",
+        detail=clean_message[:200],
+    )
     yield _sse("meta", {"thread_id": active_thread_id})
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
@@ -1604,6 +1650,15 @@ async def _stream_agent_turn(
             "label": f"Routed to {live_result.agent_name}",
             "detail": clean_message[:200],
         }
+        yield _agent_activity_event(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            activity_type="sub_agent_started",
+            label=f"Calling {live_result.agent_name}...",
+            detail=clean_message[:200],
+            item_id=str(subagent_item["id"]),
+            name=live_result.agent_name,
+        )
         yield _response_output_item_added(
             response_id=response_id,
             thread_id=active_thread_id,
@@ -1619,8 +1674,25 @@ async def _stream_agent_turn(
                 "label": f"Used {tool_name}",
                 "detail": "",
             }
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="tool_call_started",
+                label=f"Using {tool_name}...",
+                item_id=str(tool_item["id"]),
+                name=tool_name,
+            )
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=tool_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=tool_item)
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="tool_call_completed",
+                label=f"Used {tool_name}",
+                status="completed",
+                item_id=str(tool_item["id"]),
+                name=tool_name,
+            )
             yield _sse("tool", {"name": tool_name})
         for source_record in live_sources:
             source_item = {
@@ -1629,6 +1701,25 @@ async def _stream_agent_turn(
                 "status": "completed",
                 "source": source_record,
             }
+            source_label = str(source_record.get("provider_label") or source_record.get("domain") or "source")
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="source_discovered",
+                label=f"Found {source_label}",
+                status="completed",
+                item_id=str(source_item["id"]),
+                source=source_record,
+            )
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="source_reading",
+                label=f"Reading {source_label}...",
+                detail=str(source_record.get("title") or source_record.get("snippet") or ""),
+                item_id=str(source_item["id"]) + "-reading",
+                source=source_record,
+            )
             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
             yield _sse("source", source_record)
@@ -1638,6 +1729,15 @@ async def _stream_agent_turn(
             thread_id=active_thread_id,
             item=subagent_item,
             status=subagent_status,
+        )
+        yield _agent_activity_event(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            activity_type="sub_agent_completed",
+            label=f"{live_result.agent_name} finished",
+            status=subagent_status,
+            item_id=str(subagent_item["id"]),
+            name=live_result.agent_name,
         )
 
     async with _agent_runtime_lock:
@@ -1655,6 +1755,7 @@ async def _stream_agent_turn(
             "status": "in_progress",
         }
         message_item_started = False
+        final_answer_started = False
         try:
             await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
@@ -1707,6 +1808,14 @@ async def _stream_agent_turn(
                                 thread_id=active_thread_id,
                                 item=item,
                             )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="tool_call_started",
+                                label=f"Using {name or 'function'}...",
+                                item_id=str(item["id"]),
+                                name=name or "function",
+                            )
                         if name and item.get("name") in {"", "function"}:
                             item["name"] = name
                             item["label"] = f"Preparing {name}"
@@ -1720,6 +1829,15 @@ async def _stream_agent_turn(
                                 item_id=str(item["id"]),
                                 delta=delta,
                             )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="tool_call_delta",
+                                label=f"Using {item.get('name') or 'function'}...",
+                                detail=function_stream_args[call_id][-500:],
+                                item_id=str(item["id"]),
+                                name=str(item.get("name") or "function"),
+                            )
                     text = _chunk_text(chunk)
                     if text:
                         answer_parts.append(text)
@@ -1730,11 +1848,28 @@ async def _stream_agent_turn(
                                 item=message_item,
                             )
                             message_item_started = True
+                        if not final_answer_started:
+                            final_answer_started = True
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="final_answer_started",
+                                label="Writing answer...",
+                                item_id=message_item_id,
+                            )
                         yield _response_output_text_delta(
                             response_id=response_id,
                             thread_id=active_thread_id,
                             item_id=message_item_id,
                             delta=text,
+                        )
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type="final_answer_delta",
+                            label="Writing answer...",
+                            detail=text,
+                            item_id=message_item_id,
                         )
                         yield _sse("token", {"text": text})
                 elif kind == "on_tool_start":
@@ -1753,6 +1888,15 @@ async def _stream_agent_turn(
                                     thread_id=active_thread_id,
                                     item=item,
                                 )
+                                yield _agent_activity_event(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    activity_type="tool_call_completed",
+                                    label=f"Used {item.get('name') or 'function'}",
+                                    status="completed",
+                                    item_id=str(item["id"]),
+                                    name=str(item.get("name") or "function"),
+                                )
                                 item["status"] = "completed"
                         if str(name) not in tool_names:
                             tool_names.append(str(name))
@@ -1766,6 +1910,17 @@ async def _stream_agent_turn(
                             "detail": detail,
                         }
                         active_tool_items[str(name)] = item
+                        lifecycle_type = "memory_retrieved" if str(name) in {"search_my_notes", "memory_search", "obsidian_search"} else "tool_call_started"
+                        lifecycle_label = "Using memory..." if lifecycle_type == "memory_retrieved" else f"Using {name}..."
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type=lifecycle_type,
+                            label=lifecycle_label,
+                            detail=detail,
+                            item_id=str(item["id"]),
+                            name=str(name),
+                        )
                         yield _response_output_item_added(
                             response_id=response_id,
                             thread_id=active_thread_id,
@@ -1791,6 +1946,25 @@ async def _stream_agent_turn(
                                 "status": "completed",
                                 "source": record,
                             }
+                            source_label = str(record.get("provider_label") or record.get("domain") or "source")
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="source_discovered",
+                                label=f"Found {source_label}",
+                                status="completed",
+                                item_id=str(source_item["id"]),
+                                source=record,
+                            )
+                            yield _agent_activity_event(
+                                response_id=response_id,
+                                thread_id=active_thread_id,
+                                activity_type="source_reading",
+                                label=f"Reading {source_label}...",
+                                detail=str(record.get("title") or record.get("snippet") or ""),
+                                item_id=str(source_item["id"]) + "-reading",
+                                source=record,
+                            )
                             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _sse("source", record)
@@ -1800,6 +1974,15 @@ async def _stream_agent_turn(
                             response_id=response_id,
                             thread_id=active_thread_id,
                             item=done_item,
+                        )
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type="tool_call_completed",
+                            label=f"Used {done_item.get('name') or 'tool'}",
+                            status="completed",
+                            item_id=str(done_item["id"]),
+                            name=str(done_item.get("name") or ""),
                         )
                 capture_from_stream_event(
                     ledger=_api_ledger,
@@ -1821,6 +2004,15 @@ async def _stream_agent_turn(
                         thread_id=active_thread_id,
                         item=item,
                     )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="tool_call_completed",
+                        label=f"Used {item.get('name') or 'function'}",
+                        status="completed",
+                        item_id=str(item["id"]),
+                        name=str(item.get("name") or "function"),
+                    )
                     item["status"] = "completed"
             answer = "".join(answer_parts).strip() or "No response."
             source_models = [Source(**record) for record in sources]
@@ -1837,6 +2029,14 @@ async def _stream_agent_turn(
                     thread_id=active_thread_id,
                     item=message_item,
                 )
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="final_answer_completed",
+                label="Answer written",
+                status="completed",
+                item_id=message_item_id,
+            )
             yield _response_completed(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -2082,6 +2282,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
+    if request.force_web_search:
+        clean_message = _with_forced_web_search_context(clean_message)
     active_thread_id = request.thread_id or get_settings().thread_id
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:

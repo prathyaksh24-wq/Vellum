@@ -464,6 +464,14 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 /* agentic streaming turn */
 .turn{display:flex;flex-direction:column;gap:10px}
 .think-line{font-size:15px;font-weight:500;width:fit-content;letter-spacing:.01em}
+.activity-inline{display:flex;align-items:center;margin:0 0 8px}
+.activity-status{display:inline-flex;align-items:center;gap:8px;width:fit-content;max-width:100%;font-size:14px;line-height:1.4;color:rgba(255,255,255,.68)}
+.activity-icon{width:8px;height:8px;border-radius:999px;background:currentColor;animation:vellumPulse 1.4s ease-in-out infinite;flex-shrink:0}
+.activity-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:vellumGlow 1.8s ease-in-out infinite}
+@keyframes vellumPulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+@keyframes vellumGlow{0%,100%{opacity:.55;filter:blur(0)}50%{opacity:1;text-shadow:0 0 10px rgba(255,255,255,.25)}}
+[data-theme="light"] .activity-status{color:rgba(0,0,0,.58)}
+[data-theme="light"] .activity-text{animation:none}
 .turn-lead{font-size:15px;line-height:1.7;color:var(--txt)}
 .ref-list{display:flex;flex-direction:column;gap:9px}
 .ref-list.inset{margin:2px 0 4px;padding:10px 12px;border-left:2px solid var(--line2);background:var(--panel);border-radius:0 10px 10px 0}
@@ -1835,13 +1843,15 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
   }, [text]);
   const slashOpen = hasSlash && !slashDismissed;
   const slashQ = hasSlash ? slashMatch[1].toLowerCase() : '';
-  const stripSlash = () => setText(t => t.replace(/\/\S*$/, ''));
+  const removeSlashToken = value => value.replace(/(?:^|\s)\/\S*$/, '').trimEnd();
+  const focusComposer = () => setTimeout(() => { if (taRef.current) taRef.current.focus(); }, 0);
+  const stripSlash = () => { setText(t => removeSlashToken(t)); focusComposer(); };
   const slashHits = SLASH_ITEMS.filter(it => it.label.toLowerCase().includes(slashQ));
   const slashApps = (apps || []).filter(a => a.name.toLowerCase().includes(slashQ));
   const slashAgents = AGENTS.filter(a => a.name.toLowerCase().includes(slashQ));
   const slashProj = (!slashQ || 'projects'.includes(slashQ)) && (projects || []).length > 0;
   const slashFlat = [...slashHits.map(it => ({type: 'slash', it})), ...slashAgents.map(a => ({type: 'agent', a})), ...slashApps.map(a => ({type: 'app', a})), ...(slashProj ? [{type: 'proj'}] : [])];
-  const enableSearch = () => { setSearchMode(true); setText(''); setSlashDismissed(true); };
+  const enableSearch = () => { setSearchMode(true); setText(t => removeSlashToken(t)); setSlashDismissed(true); setSlashIdx(0); focusComposer(); };
   const runSlash = i => {
     const r = slashFlat[i]; if (!r) return;
     if (r.type === 'slash') { if (r.it.run === 'file') { stripSlash(); fileRef.current.click(); } else if (r.it.run === 'web') { enableSearch(); } else { setSlashDismissed(true); } }
@@ -1871,8 +1881,9 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, busy
   }, [text]);
   const send = () => {
     if (!text.trim() || busy) return;
-    onSend(text.trim(), attach);
+    onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope});
     setText(''); setAttach([]);
+    setSearchMode(false);
   };
   return (
     <div className="composer-wrap">
@@ -2757,6 +2768,56 @@ const Favicon = ({dom, src, source, size=14}) => {
   return <span className="favicon" style={{width:size+5, height:size+5, background:'hsl('+hue+' 52% 42%)', fontSize:size-2}}>{letter}</span>;
 };
 
+const activityDomain = item => {
+  const src = item && item.source;
+  return (src && (src.provider_label || src.domain || src.dom || src.title)) || item.name || '';
+};
+const activityIsDone = item => item && ['completed','done','failed'].includes(String(item.status||'').toLowerCase());
+const activityItemsForMsg = msg => {
+  const raw = (msg.activity && msg.activity.length ? msg.activity : msg.steps) || [];
+  return raw.map((item, i) => ({
+    id: item.id || item.title || item.label || ('activity-'+i),
+    type: item.type || item.kind || 'activity',
+    label: item.label || item.title || item.name || 'Agent activity',
+    detail: item.detail || item.text || '',
+    status: item.status || (item.kind === 'done' ? 'completed' : 'in_progress'),
+    source: item.source || null,
+    name: item.name || '',
+  })).filter(item => item.label);
+};
+const sourcesForMsg = msg => {
+  const direct = Array.isArray(msg.sources) ? msg.sources : [];
+  const fromActivity = activityItemsForMsg(msg).map(item => item.source).filter(Boolean);
+  const seen = new Set();
+  return [...direct, ...fromActivity].filter(source => {
+    const key = source.url || source.domain || source.dom || source.title;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+const ActivityStatus = ({item}) => {
+  if (!item) return null;
+  const label = (item.label || 'Thinking').replace(/\.+$/, '');
+  return (
+    <div className="activity-status" aria-live="polite">
+      <span className="activity-icon"></span>
+      <span className="activity-text">{label}</span>
+    </div>
+  );
+};
+const ActivityTimeline = ({msg}) => {
+  if (!msg.streaming) return null;
+  const items = activityItemsForMsg(msg);
+  if (!items.length) return <div className="activity-inline"><ActivityStatus item={{label:'Thinking'}}/></div>;
+  const active = [...items].reverse().find(item => !activityIsDone(item)) || items[items.length - 1];
+  return (
+    <div className="activity-inline">
+      <ActivityStatus item={active}/>
+    </div>
+  );
+};
+
 const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
   const [openWork, setOpenWork] = useState(false);
   const rawPhase = msg.phase || (msg.streaming ? 'answering' : 'done');
@@ -2764,11 +2825,12 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
   const refs = msg.refLines || [];
   const shown = refs.slice(0, msg.refShown || 0);
   if (phase === 'thinking') {
-    return <div className="turn"><div className="shimmer think-line">Thinking</div></div>;
+    return <div className="turn"><ActivityTimeline msg={msg}/></div>;
   }
   if (phase === 'refs') {
     return (
       <div className="turn">
+        <ActivityTimeline msg={msg}/>
         {msg.leadIn && <div className="turn-lead">{msg.leadIn}</div>}
         <div className="ref-list">
           {shown.map((r,i) => (
@@ -2783,6 +2845,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
   }
   return (
     <div className="turn">
+      {msg.streaming && <ActivityTimeline msg={msg}/>}
       {refs.length > 0 && (
         <button className={'worked-for' + (openWork ? ' open' : '')} onClick={() => setOpenWork(o => !o)}>
           {msg.streaming ? 'Working' : 'Worked for ' + (msg.duration||16) + 's'}<IcChevD size={12}/>
@@ -2790,14 +2853,19 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
       )}
       {openWork && <div className="ref-list inset">{refs.map((r,i) => (<div key={i} className="ref-line done"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{r}</span></div>))}</div>}
       {msg.leadIn && <div className="turn-lead">{msg.leadIn}</div>}
-      <div className={'areply' + (msg.streaming ? ' shimmer' : '')}>{msg.text || '\u2026'}</div>
+      <div className="areply">{msg.text || '\u2026'}</div>
       {!msg.streaming && refs[0] && <div className="ref-line under"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{refs[0]}</span></div>}
       {!msg.streaming && (
         <div className="turn-foot">
           <MsgActions msg={msg} onRegen={onRegen}/>
-          {(msg.sources||[]).length > 0 && (
+          {sourcesForMsg(msg).length > 0 && (
             <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View sources & activity">
-              <span className="src-favs">{(msg.sources||[]).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom} source={sc} size={12}/>)}</span>Sources
+              <span className="src-favs">{sourcesForMsg(msg).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom || sc.domain} source={sc} size={12}/>)}</span>Sources
+            </button>
+          )}
+          {sourcesForMsg(msg).length === 0 && (msg.activity||[]).length > 0 && (
+            <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View activity">
+              <IcSparkle size={13}/>Activity
             </button>
           )}
         </div>
@@ -3949,13 +4017,13 @@ const App = () => {
       [agentId]: (ac[agentId] || []).map(cv => cv.id === convoId ? mapper(cv) : cv),
     }));
   };
-  const streamBackendAgentReply = async (agent, convoId, assistantId, message, attachments = []) => {
+  const streamBackendAgentReply = async (agent, convoId, assistantId, message, attachments = [], opts = {}) => {
     const routedMessage = agent && agent.name
       ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
       : message;
     try {
       await API.chat.stream(
-        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments},
+        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
           trace: trace => {
             const liveSources = normalizeSources(trace.sources || []);
@@ -4032,7 +4100,7 @@ const App = () => {
       updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
-  const sendToAgent = (text, attach) => {
+  const sendToAgent = (text, attach, opts = {}) => {
     const ag = AGENTS.find(a => a.id === activeAgentId);
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
@@ -4049,7 +4117,7 @@ const App = () => {
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach);
+      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach, opts);
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
     }
@@ -4222,14 +4290,19 @@ const App = () => {
   };
   const activityKind = item => {
     if (!item) return 'eval';
-    if (item.type === 'tool_call' || item.type === 'function_call' || item.type === 'subagent_call' || item.type === 'source') return 'search';
-    if (item.type === 'answer' || item.status === 'completed' || item.status === 'done') return 'done';
+    if (item.type === 'tool_call' || item.type === 'function_call' || item.type === 'subagent_call' || item.type === 'source' || item.type === 'tool_call_started' || item.type === 'tool_call_delta' || item.type === 'source_discovered' || item.type === 'source_reading' || item.type === 'sub_agent_started') return 'search';
+    if (item.type === 'answer' || item.type === 'final_answer_started' || item.type === 'final_answer_delta' || item.status === 'completed' || item.status === 'done') return 'done';
     return 'eval';
   };
   const stepsFromActivity = (items, fallbackSteps) => {
     const visible = (items || []).filter(item => item && (item.label || item.title || item.name));
     if (!visible.length) return fallbackSteps || [];
     const steps = visible.slice(-6).map(item => ({
+      id: item.id,
+      type: item.type,
+      name: item.name,
+      status: item.status,
+      source: item.source,
       kind: activityKind(item),
       title: item.label || item.title || item.name || 'Agent activity',
       text: item.detail || item.text || '',
@@ -4352,10 +4425,10 @@ const App = () => {
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
-  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = []) => {
+  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}) => {
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments},
+        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
           meta: meta => {
             if (meta.thread_id) {
@@ -4477,14 +4550,14 @@ const App = () => {
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach);
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, opts);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
   };
 
-  const sendInProject = projId => (text, attach) => {
-    sendMessage(text, attach, {forceNew: true, projectId: projId});
+  const sendInProject = projId => (text, attach, opts = {}) => {
+    sendMessage(text, attach, {...opts, forceNew: true, projectId: projId});
     setExpandedProj(e => ({...e, [projId]: true}));
     setView('chat');
   };
