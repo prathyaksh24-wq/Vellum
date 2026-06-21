@@ -24,6 +24,27 @@ def test_search_uses_xai_search_client(monkeypatch):
     assert seen["oauth_file"] == x_tool._xai_oauth_file()
 
 
+def test_search_prefers_agent_reach_when_ready(monkeypatch):
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            calls.append((query, max_results))
+            return [{"text": "agent reach result", "url": "https://x.com/a/status/1"}]
+
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    out = json.loads(x_tool.x_action.func(action="search", query="nba", max_results=3))
+
+    assert out["action"] == "search"
+    assert out["provider"] == "agent-reach"
+    assert out["items"][0]["text"] == "agent reach result"
+    assert calls == [("nba", 3)]
+
+
 def test_bookmarks_requires_private_read_gate(monkeypatch):
     monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=False, x_tool_allow_posts=False))
 
@@ -77,6 +98,28 @@ def test_post_when_allowed_calls_client(monkeypatch):
 
     assert out["action"] == "post"
     assert out["tweet"]["id"] == "99"
+
+
+def test_post_when_allowed_prefers_agent_reach(monkeypatch):
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def post_tweet(self, text):
+            calls.append(text)
+            return {"id": "agent-reach-99", "text": text}
+
+    monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=True))
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    out = json.loads(x_tool.x_action.func(action="post", text="hello", confirm=True))
+
+    assert out["action"] == "post"
+    assert out["provider"] == "agent-reach"
+    assert out["tweet"]["id"] == "agent-reach-99"
+    assert calls == ["hello"]
 
 
 def test_post_image_when_allowed_generates_uploads_and_posts(monkeypatch, tmp_path):
