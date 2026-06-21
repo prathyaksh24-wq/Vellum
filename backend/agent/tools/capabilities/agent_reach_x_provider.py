@@ -48,63 +48,66 @@ class AgentReachXProvider:
         return agent_reach_plugin_status(
             agent_reach_bin=self.agent_reach_bin,
             twitter_cli_bin=self.twitter_cli_bin,
-            timeout_seconds=min(self.timeout_seconds, 10.0),
+            timeout_seconds=min(self.timeout_seconds, 60.0),
         )
 
     def available(self) -> bool:
-        return self.status().status == "ready"
+        if shutil.which(self.agent_reach_bin) is None or shutil.which(self.twitter_cli_bin) is None:
+            return False
+        result = self._twitter_status(timeout_seconds=min(self.timeout_seconds, 8.0))
+        return result.returncode == 0
 
     def search(self, query: str, max_results: int = 10) -> list[dict[str, Any]]:
-        output = self._exec("search_tweets", query, "--limit", str(max_results))
+        output = self._exec("search", query, "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
     def read_tweet(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("read_tweet", tweet_id_or_url)
+        output = self._exec("tweet", tweet_id_or_url, "--json")
         posts = self._normalize_posts(output)
         return posts[0] if posts else self._normalize_object(output)
 
     def timeline(self, max_results: int = 20) -> list[dict[str, Any]]:
-        output = self._exec("timeline", "--limit", str(max_results))
+        output = self._exec("feed", "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
     def bookmarks(self, max_results: int = 20) -> list[dict[str, Any]]:
-        output = self._exec("bookmarks", "--limit", str(max_results))
+        output = self._exec("bookmarks", "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
     def profile(self, handle: str) -> dict[str, Any]:
-        output = self._exec("profile", handle)
+        output = self._exec("user", handle.lstrip("@"), "--json")
         return self._normalize_object(output)
 
     def user_posts(self, handle: str, max_results: int = 20) -> list[dict[str, Any]]:
-        output = self._exec("user_tweets", handle, "--limit", str(max_results))
+        output = self._exec("user-posts", handle.lstrip("@"), "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
     def post_tweet(self, text: str) -> dict[str, Any]:
-        output = self._exec("post_tweet", text)
+        output = self._exec("post", text, "--json")
         return self._normalize_object(output)
 
     def reply(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        output = self._exec("reply", tweet_id_or_url, text)
+        output = self._exec("reply", tweet_id_or_url, text, "--json")
         return self._normalize_object(output)
 
     def like(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("like", tweet_id_or_url)
+        output = self._exec("like", tweet_id_or_url, "--json")
         return self._normalize_object(output)
 
     def repost(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("repost", tweet_id_or_url)
+        output = self._exec("retweet", tweet_id_or_url, "--json")
         return self._normalize_object(output)
 
     def delete(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("delete", tweet_id_or_url)
+        output = self._exec("delete", tweet_id_or_url, "--json")
         return self._normalize_object(output)
 
     def _exec(self, command: str, *args: str) -> Any:
-        if shutil.which(self.agent_reach_bin) is None and self.runner is subprocess.run:
-            raise AgentReachUnavailableError("Install Agent-Reach before using the X connector.")
+        if shutil.which(self.twitter_cli_bin) is None and self.runner is subprocess.run:
+            raise AgentReachUnavailableError("Install twitter-cli before using the X connector.")
         try:
             completed = self.runner(
-                [self.agent_reach_bin, "exec", "twitter", "--", command, *[str(arg) for arg in args if str(arg)]],
+                [self.twitter_cli_bin, command, *[str(arg) for arg in args if str(arg)]],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout_seconds,
@@ -117,6 +120,18 @@ class AgentReachXProvider:
         if completed.returncode != 0:
             raise AgentReachCommandError(self._sanitize_error(completed.stderr or completed.stdout or "Agent-Reach command failed."))
         return self._parse_output(completed.stdout)
+
+    def _twitter_status(self, *, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
+        try:
+            return self.runner(
+                [self.twitter_cli_bin, "status", "--yaml"],
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return subprocess.CompletedProcess([self.twitter_cli_bin, "status", "--yaml"], 1, stdout="", stderr=str(exc))
 
     def _parse_output(self, stdout: str) -> Any:
         text = (stdout or "").strip()

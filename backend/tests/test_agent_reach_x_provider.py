@@ -25,7 +25,7 @@ def test_agent_reach_provider_search_command_success_normalizes_results():
 
     result = provider.search("hello", max_results=3)
 
-    assert calls[0][:5] == ["agent-reach", "exec", "twitter", "--", "search_tweets"]
+    assert calls[0] == ["twitter", "search", "hello", "--max", "3", "--json"]
     assert result[0]["text"] == "hello x"
     assert result[0]["url"] == "https://x.com/a/status/1"
     assert result[0]["handle"] == "a"
@@ -83,5 +83,5 @@ def test_agent_reach_provider_write_methods_use_agent_reach_commands():
 
     result = provider.post_tweet("hello")
 
-    assert calls[0] == ["agent-reach", "exec", "twitter", "--", "post_tweet", "hello"]
+    assert calls[0] == ["twitter", "post", "hello", "--json"]
     assert result["id"] == "tweet-1"
