@@ -31,6 +31,27 @@ def test_agent_reach_provider_search_command_success_normalizes_results():
     assert result[0]["handle"] == "a"
 
 
+def test_agent_reach_provider_normalizes_twitter_cli_schema_with_generated_url():
+    def fake_runner(args, **_kwargs):
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=(
+                '{"ok":true,"data":[{"id":"2065225362544726371","text":"Codex update",'
+                '"author":{"screenName":"OpenAI"},"createdAtISO":"2026-06-12T00:11:11+00:00"}]}'
+            ),
+            stderr="",
+        )
+
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    result = provider.search("from:OpenAI", max_results=1)
+
+    assert result[0]["handle"] == "OpenAI"
+    assert result[0]["url"] == "https://x.com/OpenAI/status/2065225362544726371"
+    assert result[0]["created_at"] == "2026-06-12T00:11:11+00:00"
+
+
 def test_agent_reach_provider_missing_binary_reports_setup(monkeypatch):
     monkeypatch.setattr("agent.tools.capabilities.agent_reach_x_provider.shutil.which", lambda _name: None)
 

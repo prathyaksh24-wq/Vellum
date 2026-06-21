@@ -172,13 +172,20 @@ class AgentReachXProvider:
 
     def _normalize_post(self, item: dict[str, Any]) -> dict[str, Any]:
         author = item.get("author")
-        handle = author.get("username") if isinstance(author, dict) else item.get("handle") or item.get("username")
+        handle = ""
+        if isinstance(author, dict):
+            handle = author.get("username") or author.get("screenName") or author.get("handle") or ""
+        handle = handle or item.get("handle") or item.get("username") or item.get("screenName") or ""
+        tweet_id = self._string(item.get("id") or item.get("tweet_id"))
+        url = self._string(item.get("url") or item.get("x_url") or item.get("tweet_url"))
+        if not url and tweet_id and handle:
+            url = f"https://x.com/{str(handle).lstrip('@')}/status/{tweet_id}"
         return {
-            "id": self._string(item.get("id") or item.get("tweet_id")),
+            "id": tweet_id,
             "text": self._string(item.get("text") or item.get("body") or item.get("content")),
-            "url": self._string(item.get("url") or item.get("x_url") or item.get("tweet_url")),
+            "url": url,
             "handle": self._string(handle),
-            "created_at": self._string(item.get("created_at") or item.get("date")),
+            "created_at": self._string(item.get("created_at") or item.get("createdAtISO") or item.get("createdAt") or item.get("date")),
         }
 
     def _sanitize_error(self, message: str) -> str:
