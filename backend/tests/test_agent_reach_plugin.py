@@ -5,8 +5,10 @@ from agent.plugins.agent_reach import agent_reach_plugin_status
 
 def test_agent_reach_plugin_status_ready_when_bins_exist_and_twitter_authenticated(monkeypatch):
     monkeypatch.setattr("agent.plugins.agent_reach.shutil.which", lambda name: f"C:/bin/{name}.exe")
+    calls = []
 
     def fake_run(args, **_kwargs):
+        calls.append(args)
         return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
 
     monkeypatch.setattr("agent.plugins.agent_reach.subprocess.run", fake_run)
@@ -17,6 +19,25 @@ def test_agent_reach_plugin_status_ready_when_bins_exist_and_twitter_authenticat
     assert status.status == "ready"
     assert status.configured is True
     assert "x.search" in status.capabilities
+    assert calls[0] == ["agent-reach", "health"]
+
+
+def test_agent_reach_plugin_status_falls_back_to_doctor_for_current_cli(monkeypatch):
+    monkeypatch.setattr("agent.plugins.agent_reach.shutil.which", lambda name: f"C:/bin/{name}.exe")
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        if args == ["agent-reach", "health"]:
+            return subprocess.CompletedProcess(args, 2, stdout="", stderr="invalid choice: 'health' (choose from 'doctor')")
+        return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("agent.plugins.agent_reach.subprocess.run", fake_run)
+
+    status = agent_reach_plugin_status(agent_reach_bin="agent-reach", twitter_cli_bin="twitter")
+
+    assert status.status == "ready"
+    assert ["agent-reach", "doctor"] in calls
 
 
 def test_agent_reach_plugin_status_reports_missing_agent_reach(monkeypatch):
