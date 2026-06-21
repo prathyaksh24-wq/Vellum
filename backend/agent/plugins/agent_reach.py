@@ -39,7 +39,7 @@ def agent_reach_plugin_status(
             notes="Install and configure twitter-cli so Agent-Reach can access X account actions.",
         )
 
-    agent_reach_check = _run_agent_reach_health(agent_reach_bin, timeout_seconds)
+    agent_reach_check = _run_health([agent_reach_bin, "--version"], timeout_seconds)
     if agent_reach_check.returncode != 0:
         return _status(
             configured=False,
@@ -71,16 +71,6 @@ def _run_health(args: list[str], timeout_seconds: float) -> subprocess.Completed
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return subprocess.CompletedProcess(args, 1, stdout="", stderr=str(exc))
-
-
-def _run_agent_reach_health(agent_reach_bin: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
-    result = _run_health([agent_reach_bin, "health"], timeout_seconds)
-    if result.returncode == 0:
-        return result
-    combined = f"{result.stdout}\n{result.stderr}".lower()
-    if "invalid choice" in combined and "doctor" in combined:
-        return _run_health([agent_reach_bin, "doctor"], timeout_seconds)
-    return result
 
 
 def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
