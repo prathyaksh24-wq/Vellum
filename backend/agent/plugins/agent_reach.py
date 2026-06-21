@@ -39,7 +39,7 @@ def agent_reach_plugin_status(
             notes="Install and configure twitter-cli so Agent-Reach can access X account actions.",
         )
 
-    agent_reach_check = _run_health([agent_reach_bin, "doctor"], timeout_seconds)
+    agent_reach_check = _run_health([agent_reach_bin, "health"], timeout_seconds)
     if agent_reach_check.returncode != 0:
         return _status(
             configured=False,
@@ -87,4 +87,3 @@ def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
 def _short_error(result: subprocess.CompletedProcess[str]) -> str:
     text = (result.stderr or result.stdout or "").replace("\r", " ").replace("\n", " ").strip()
     return text[:240] or f"exit code {result.returncode}"
-
