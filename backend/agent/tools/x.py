@@ -11,6 +11,7 @@ from typing import Any
 from langchain_core.tools import tool
 
 from agent.config import REPO_ROOT, get_settings
+from agent.tools.capabilities.agent_reach_x_provider import AgentReachError, AgentReachXProvider
 
 
 def _load_script(name: str):
@@ -32,6 +33,10 @@ def _x_api_client():
 
 def _image_client():
     return _load_script("openai_image_client")
+
+
+def _agent_reach_provider() -> AgentReachXProvider:
+    return AgentReachXProvider()
 
 
 def _json(payload: dict[str, Any]) -> str:
@@ -69,6 +74,16 @@ def x_action(
         if normalized == "search":
             if not query.strip():
                 return "X search requires query."
+            agent_reach = _agent_reach_provider()
+            if agent_reach.available():
+                try:
+                    return _json({
+                        "action": "search",
+                        "provider": "agent-reach",
+                        "items": agent_reach.search(query, max_results=max_results),
+                    })
+                except AgentReachError:
+                    pass
             client = _xai_client()
             now = datetime.now(timezone.utc).replace(microsecond=0)
             items = client.search_x(
@@ -110,6 +125,16 @@ def x_action(
                 return "Posting to X requires confirm=True in the tool call."
             if not settings.x_tool_allow_posts:
                 return "Posting to X requires X_TOOL_ALLOW_POSTS=true."
+            agent_reach = _agent_reach_provider()
+            if agent_reach.available():
+                try:
+                    return _json({
+                        "action": "post",
+                        "provider": "agent-reach",
+                        "tweet": agent_reach.post_tweet(text),
+                    })
+                except AgentReachError:
+                    pass
             client = _x_api_client()
             result = client.post_tweet(text=text, oauth_file=_oauth_file())
             return _json({"action": "post", "tweet": result.get("data", {})})

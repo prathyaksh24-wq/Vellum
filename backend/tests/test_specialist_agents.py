@@ -603,6 +603,71 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
     assert memory_result.tools == ["memory_agent"]
 
 
+def test_live_dispatcher_exposes_serpapi_tool_for_youtube_provider(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Mat Armstrong latest upload",
+                "url": "https://www.youtube.com/watch?v=mat123",
+                "channel": "Mat Armstrong",
+                "description": "Latest car rebuild video.",
+                "provider": "serpapi",
+            }
+        ],
+    )
+    registry = PupilRegistry(
+        {
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("did mat armstrong upload a new video?", thread_id="yt-serp")
+
+    assert result is not None
+    assert result.agent_name == "YoutubeAgent"
+    assert result.tools == ["youtube_agent", "web_search", "serpapi"]
+
+
+def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path):
+    class SerpPupil:
+        name = "ResearchAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="SerpAPI-backed answer.",
+                analysis="Used SerpAPI Google AI Mode for this lookup.",
+                sources=[
+                    SpecialistSource(
+                        kind="web",
+                        title="Result",
+                        path_or_url="https://example.com/result",
+                    )
+                ],
+            )
+
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"ResearchAgent": SerpPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("research this", thread_id="serp-thread")
+
+    assert result is not None
+    assert result.tools == ["research_agent", "web_search", "serpapi"]
+
+
 def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_path):
     search_output = (
         "**NBA update**\n"
@@ -844,6 +909,50 @@ def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     assert agent.can_handle("latest-50 tweets from AlexHormozi")
     assert response.status == "needs_fetch"
     assert response.summary == "XAgent did not find matching X posts."
+
+
+def test_x_agent_post_request_returns_confirmation_preview_without_publishing(tmp_path):
+    calls = []
+    service = XCapabilityService(post_backend=lambda text: calls.append(text) or {"id": "1"}, allow_posts=True)
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer('Post this to X: "Shipping the Agent-Reach connector today."')
+
+    assert calls == []
+    assert response.status == "blocked"
+    assert "Confirm before I post this to X" in response.summary
+    assert response.action_request["action"] == "x.publish_post"
+    assert response.action_request["payload"]["text"] == "Shipping the Agent-Reach connector today."
+    assert response.activity_events[0]["label"] == "Preparing post..."
+
+
+def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_path):
+    calls = []
+
+    class NoAgentReach:
+        def available(self):
+            return False
+
+    service = XCapabilityService(
+        post_backend=lambda text: calls.append(text) or {"id": "tweet-1", "text": text},
+        agent_reach_provider=NoAgentReach(),
+        allow_posts=True,
+    )
+    registry = PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)})
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path / "Vault", registry=registry, state_store=state_store)
+
+    preview = dispatcher.maybe_handle('Post this to X: "Hello from Vellum."', thread_id="thread-x")
+    confirmed = dispatcher.maybe_handle("yes, post it", thread_id="thread-x")
+
+    assert calls == ["Hello from Vellum."]
+    assert preview.status == "blocked"
+    assert "Confirm before I post this to X" in preview.answer
+    assert confirmed.status == "answered"
+    assert "Posted to X" in confirmed.answer
+    assert state_store.get_pending_action("thread-x") is None
+    assert any(event["label"] == "Posting to X..." for event in confirmed.activity_events)
+    assert any(event["label"] == "X action completed" for event in confirmed.activity_events)
 
 
 def test_x_agent_returns_structured_response_when_service_fails(tmp_path):

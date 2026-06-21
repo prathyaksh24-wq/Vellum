@@ -277,6 +277,22 @@ def test_model_catalog_filters_cloud_models_by_configured_keys(monkeypatch):
 
 def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(monkeypatch):
     monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": [{"name": "serpapi", "configured": True, "status": "probe_disabled"}]})
+    monkeypatch.setattr(
+        api,
+        "agent_reach_plugin_status",
+        lambda: SimpleNamespace(
+            model_dump=lambda: {
+                "id": "agent-reach",
+                "name": "Agent-Reach",
+                "type": "connector",
+                "category": "Connectors",
+                "configured": True,
+                "status": "ready",
+                "notes": "ready",
+                "capabilities": ["x.search"],
+            }
+        ),
+    )
 
     with TestClient(api.app) as client:
         plugins = client.get("/api/plugins")
@@ -285,7 +301,8 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
         subagents = client.get("/api/subagents")
 
     assert plugins.status_code == 200
-    assert plugins.json()["plugins"][0]["id"] == "serpapi"
+    plugin_ids = {item["id"] for item in plugins.json()["plugins"]}
+    assert {"agent-reach", "serpapi"} <= plugin_ids
     assert skills.status_code == 200
     assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
     assert automations.status_code == 200

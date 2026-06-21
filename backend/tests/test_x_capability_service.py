@@ -2,6 +2,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from agent.tools.capabilities import x_service
+from agent.tools.capabilities.agent_reach_x_provider import AgentReachCommandError
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.registry import ToolPermissionError
 
@@ -58,6 +59,98 @@ def test_x_service_default_search_backend_passes_window_to_script(monkeypatch):
     assert isinstance(calls["end"], datetime)
     assert calls["start"] < calls["end"]
     assert result["items"][0]["url"] == "https://x.com/arsenal/status/2"
+
+
+def test_x_service_prefers_agent_reach_for_search_when_ready():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            calls.append((query, max_results))
+            return [{"text": "Agent-Reach result", "url": "https://x.com/a/status/1", "handle": "a"}]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "xai fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+
+    result = service.search_posts({"query": "latest x posts", "max_results": 4})
+
+    assert calls == [("latest x posts", 4)]
+    assert result["provider"] == "agent-reach"
+    assert result["items"][0]["text"] == "Agent-Reach result"
+
+
+def test_x_service_falls_back_to_xai_search_when_agent_reach_unavailable():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return False
+
+        def search(self, query, max_results):
+            raise AssertionError("unavailable provider should not be called")
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: calls.append((query, max_results)) or [
+            {"text": "xAI fallback", "url": "https://x.com/fallback/status/1"}
+        ],
+        agent_reach_provider=FakeAgentReach(),
+    )
+
+    result = service.search_posts({"query": "latest x posts", "max_results": 2})
+
+    assert calls == [("latest x posts", 2)]
+    assert result["provider"] == "xai"
+    assert result["items"][0]["text"] == "xAI fallback"
+
+
+def test_x_service_falls_back_to_xai_search_when_agent_reach_command_fails():
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            raise AgentReachCommandError("twitter-cli failed")
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [
+            {"text": "xAI fallback", "url": "https://x.com/fallback/status/1"}
+        ],
+        agent_reach_provider=FakeAgentReach(),
+    )
+
+    result = service.search_posts({"query": "latest x posts", "max_results": 2})
+
+    assert result["provider"] == "xai"
+    assert "twitter-cli failed" in result["fallback_reason"]
+
+
+def test_x_service_prefers_agent_reach_for_text_post_when_ready_and_confirmed():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def post_tweet(self, text):
+            calls.append(text)
+            return {"id": "agent-reach-1", "text": text}
+
+    service = XCapabilityService(
+        post_backend=lambda text: {"id": "xapi-1", "text": text},
+        agent_reach_provider=FakeAgentReach(),
+        allow_posts=True,
+    )
+
+    result = service.publish_post({"text": "hello", "confirm": True})
+
+    assert calls == ["hello"]
+    assert result["provider"] == "agent-reach"
+    assert result["tweet"]["id"] == "agent-reach-1"
 
 
 def test_x_service_publish_post_requires_confirm_and_enabled_gate():

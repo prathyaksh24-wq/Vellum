@@ -126,6 +126,7 @@ class SportsAgent:
         league = self.resolve_league(query)
         source_budget = self._source_budget(query)
         search_result = self.web_searcher(self._search_query(query, league, source_budget))
+        provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
             return SpecialistResponse(
@@ -146,7 +147,11 @@ class SportsAgent:
             agent=self.name,
             status="answered",
             summary=summary,
-            analysis=f"Used on-demand public web research and saved the sports response to {relative_path}.",
+            analysis=(
+                "Used on-demand public web research"
+                + (" via SerpAPI" if provider.casefold() == "serpapi" else "")
+                + f" and saved the sports response to {relative_path}."
+            ),
             sources=[
                 SpecialistSource(
                     kind="web",
@@ -185,8 +190,13 @@ class SportsAgent:
                 )
                 min_sources = 5 if "official schedule standings news reports" in query else 3
                 if hasattr(client, "fresh_google_search"):
-                    return client.fresh_google_search(query, num=8, min_sources=min_sources)
-                return client.fresh_google_search_text(query, num=5)
+                    result = client.fresh_google_search(query, num=8, min_sources=min_sources)
+                    return {**result, "provider": "serpapi"} if isinstance(result, dict) else result
+                return {
+                    "text": client.fresh_google_search_text(query, num=5),
+                    "sources": [],
+                    "provider": "serpapi",
+                }
             except Exception:
                 pass
         return web_search.invoke({"query": query})

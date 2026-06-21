@@ -25,19 +25,65 @@
     return source && (source.provider_label || source.domain || source.title || source.url) || "source";
   }
 
+  function humanToolName(name) {
+    var clean = String(name || "tool");
+    var known = {
+      MemoryAgent: "Memory Agent",
+      SportsAgent: "Sports Agent",
+      XAgent: "X Agent",
+      YoutubeAgent: "YouTube Agent",
+      YouTubeAgent: "YouTube Agent",
+      ResearchAgent: "Research Agent",
+      serpapi: "SerpAPI",
+      web_search: "web",
+      search_my_notes: "your notes",
+      read_file: "a note",
+      list_files: "your vault",
+      obsidian_api: "Obsidian",
+      obsidian_search: "Obsidian",
+      context_mode: "Context Mode",
+    };
+    if (known[clean]) return known[clean];
+    return clean
+      .replace(/_/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/\bYoutube\b/g, "YouTube")
+      .replace(/\bApi\b/g, "API")
+      .replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+  }
+
   function activityLabel(type, name, source) {
-    if (type === "thinking_started") return "Thinking";
-    if (type === "memory_retrieved") return "Using memory";
-    if (type === "sub_agent_started") return "Calling " + (name || "sub-agent");
+    if (type === "thinking_started") return "";
+    if (String(name || "").indexOf("agent_reach_x_") === 0) return "";
+    if (type === "memory_retrieved") {
+      if (name === "search_my_notes") return "Searching your notes";
+      if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
+      return "Searching your memory";
+    }
+    if (type === "sub_agent_started") return "Calling " + humanToolName(name || "sub-agent");
     if (type === "source_discovered") return "Found " + sourceLabel(source);
     if (type === "source_reading") return "Reading " + sourceLabel(source);
     if (type === "final_answer_started" || type === "final_answer_delta") return "Writing answer";
+    if (type === "sub_agent_completed") return "Called " + humanToolName(name || "sub-agent");
+    if (type === "tool_call_completed") {
+      if (name === "serpapi") return "Searched with SerpAPI";
+      if (name === "web_search") return "Searched the web";
+      if (String(name || "").endsWith("_agent")) return "Called " + humanToolName(name);
+      if (name === "search_my_notes") return "Searched your notes";
+      if (name === "obsidian_api" || name === "obsidian_search") return "Read Obsidian";
+      return "Used " + humanToolName(name || "tool");
+    }
     if (type === "tool_call_started" || type === "tool_call_delta") {
+      if (name === "serpapi") return "Searching with SerpAPI";
       if (name === "web_search") return "Searching the web";
-      if (name === "search_my_notes") return "Using memory";
+      if (String(name || "").endsWith("_agent")) return "Calling " + humanToolName(name);
+      if (name === "search_my_notes") return "Searching your notes";
+      if (name === "read_file") return "Reading a note";
+      if (name === "list_files") return "Browsing your vault";
+      if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
       if (name === "x_action") return "Using X Agent";
-      if (name === "youtube_search" || name === "youtube_agent") return "Calling YouTube Agent";
-      return "Using " + (name || "tool").replace(/_/g, " ");
+      if (name === "youtube_search") return "Searching YouTube";
+      return "Using " + humanToolName(name || "tool");
     }
     return "";
   }
@@ -47,7 +93,9 @@
     var source = activity.source || null;
     var type = activity.type || "activity";
     var name = activity.name || "";
-    var label = activityLabel(type, name, source) || activity.label || "Agent activity";
+    var label = type === "thinking_started"
+      ? "Thinking"
+      : (activityLabel(type, name, source) || activity.label || "Agent activity");
     return {
       id: activity.id || (type + "-" + Date.now()),
       type: type,
@@ -63,6 +111,7 @@
 
   async function stream(payload, handlers) {
     var controller = new AbortController();
+    if (handlers && handlers.controller) handlers.controller(controller);
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
     if (!response.ok || !response.body) throw new Error("Backend stream failed: HTTP " + response.status);
     var reader = response.body.getReader();

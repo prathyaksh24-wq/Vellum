@@ -18,6 +18,7 @@ class XAgent:
         r"(?<!\w)x\s+feed(?:s)?(?!\w)",
         r"(?<!\w)x\s+post(?:s)?(?!\w)",
         r"(?<!\w)on\s+x(?!\w)",
+        r"^\s*(?:please\s+)?(?:post|publish|tweet)\s+(?:this\s+)?(?:to|on)\s+x(?!\w)",
     )
 
     def __init__(
@@ -153,6 +154,43 @@ class XAgent:
                 summary="XAgent needs the exact post text before publishing.",
                 confidence=0.4,
             )
+        return SpecialistResponse(
+            agent=self.name,
+            status="blocked",
+            summary=f'Confirm before I post this to X:\n\n"{text}"',
+            analysis="Prepared x.publish_post and is waiting for explicit confirmation.",
+            confidence=0.65,
+            action_request={
+                "action": "x.publish_post",
+                "payload": {"text": text},
+                "preview": text,
+            },
+            activity_events=[
+                {"type": "tool_call_started", "label": "Preparing post...", "name": "agent_reach_x_prepare_post"},
+            ],
+        )
+
+    def execute_action_request(self, action_request: dict) -> SpecialistResponse:
+        action = str(action_request.get("action") or "")
+        payload = action_request.get("payload") if isinstance(action_request.get("payload"), dict) else {}
+        if action == "x.publish_post":
+            return self._execute_publish_post(payload)
+        return SpecialistResponse(
+            agent=self.name,
+            status="blocked",
+            summary="XAgent cannot execute that pending X action.",
+            confidence=0.3,
+        )
+
+    def _execute_publish_post(self, payload: dict) -> SpecialistResponse:
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            return SpecialistResponse(
+                agent=self.name,
+                status="blocked",
+                summary="XAgent needs the exact post text before publishing.",
+                confidence=0.4,
+            )
         try:
             result = self._publish_post({"text": text, "confirm": True})
         except Exception as exc:
@@ -160,7 +198,17 @@ class XAgent:
         tweet = result.get("tweet", {})
         tweet_id = str(tweet.get("id") or "").strip()
         summary = f"Posted to X: {tweet_id}" if tweet_id else "Posted to X."
-        return SpecialistResponse(agent=self.name, status="answered", summary=summary, analysis="Used x.publish_post.", confidence=0.8)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=summary,
+            analysis="Used x.publish_post.",
+            confidence=0.8,
+            activity_events=[
+                {"type": "tool_call_started", "label": "Posting to X...", "name": "agent_reach_x_post"},
+                {"type": "tool_call_completed", "label": "X action completed", "name": "agent_reach_x_completed", "status": "completed"},
+            ],
+        )
 
     def _answer_image_post(self, query: str) -> SpecialistResponse:
         text = self._extract_quoted_text(query)

@@ -46,6 +46,7 @@ from agent.memory.honcho_client import HonchoMemory
 from agent.memory.project_context import ProjectContext
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
+from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -1665,6 +1666,23 @@ async def _stream_agent_turn(
             item=subagent_item,
         )
         yield _sse("activity", {"label": f"Routed to {live_result.agent_name}", "detail": clean_message[:200]})
+        for activity in live_result.activity_events:
+            label = str(activity.get("label") or "Agent activity")
+            activity_type = str(activity.get("type") or "tool_call_started")
+            name = str(activity.get("name") or "")
+            detail = str(activity.get("detail") or "")
+            status = str(activity.get("status") or "in_progress")
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type=activity_type,
+                label=label,
+                detail=detail,
+                status=status,
+                item_id=str(activity.get("id") or _stream_id("activity")),
+                name=name,
+                metadata=dict(activity.get("metadata") or {}),
+            )
         for tool_name in live_result.tools:
             tool_item = {
                 "id": _stream_id("item"),
@@ -2626,6 +2644,8 @@ async def list_plugins() -> dict[str, Any]:
         health_result = await health_result
     servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
     plugins = [
+        agent_reach_plugin_status().model_dump(),
+        *[
         {
             "id": str(server.get("name") or ""),
             "name": str(server.get("name") or "").replace("_", " ").title(),
@@ -2636,6 +2656,7 @@ async def list_plugins() -> dict[str, Any]:
         }
         for server in servers
         if server.get("name")
+        ],
     ]
     return {"plugins": plugins}
 

@@ -147,4 +147,54 @@ describe("Vellum default chat stream trace", () => {
     expect(activities.some((items) => items.some((item) => item.type === "source_reading" && item.source.domain === "formula1.com"))).toBe(true);
     expect(traces.some((trace) => trace.steps.some((step) => step.label === "Writing answer"))).toBe(true);
   });
+
+  test("normalizes sub-agent, SerpAPI, notes, and Obsidian activity labels", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"yt","type":"sub_agent_started","name":"YoutubeAgent","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"x","type":"sub_agent_started","name":"XAgent","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"serp","type":"tool_call_started","name":"serpapi","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"notes","type":"tool_call_started","name":"search_my_notes","status":"in_progress"}}\n\n',
+        'event: agent.activity\ndata: {"activity":{"id":"obs","type":"tool_call_started","name":"obsidian_api","status":"in_progress"}}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":["youtube_agent","x_agent","serpapi","search_my_notes","obsidian_api"],"sources":[]}}\n\n',
+      ]),
+    }));
+    const activities = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "test labels", thread_id: "t1" },
+      { activity: (items) => activities.push(items) },
+    );
+
+    const labels = activities.flat().map((item) => item.label);
+    expect(labels).toContain("Calling YouTube Agent");
+    expect(labels).toContain("Calling X Agent");
+    expect(labels).toContain("Searching with SerpAPI");
+    expect(labels).toContain("Searching your notes");
+    expect(labels).toContain("Reading Obsidian");
+  });
+
+  test("exposes stream abort controller to the UI", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Done","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const controllers = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "test abort controller", thread_id: "t1" },
+      { controller: (controller) => controllers.push(controller) },
+    );
+
+    expect(controllers).toHaveLength(1);
+    expect(controllers[0]).toBeInstanceOf(AbortController);
+    expect(fetchImpl.mock.calls[0][1].signal).toBe(controllers[0].signal);
+  });
 });
