@@ -13,6 +13,7 @@ import json
 from langchain_core.messages import ToolMessage
 
 from agent import api
+from agent.agents.live_dispatcher import LiveAgentResult
 from agent.tools.web import WEB_RESULT_SEPARATOR
 
 
@@ -323,6 +324,61 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert response_source_by_url[URL_A]["source_index"] == 1
     assert response_source_by_url[URL_A]["source_type"] == "web"
     assert response_source_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
+
+
+def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                answer="Posted to X: tweet-1",
+                status="answered",
+                tools=["x_agent"],
+                activity_events=[
+                    {"type": "tool_call_started", "label": "Posting to X...", "name": "agent_reach_x_post"},
+                    {
+                        "type": "tool_call_completed",
+                        "label": "X action completed",
+                        "name": "agent_reach_x_completed",
+                        "status": "completed",
+                    },
+                ],
+            )
+
+    class FakeAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": SimpleNamespace(content="Done.")},
+            }
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="yes, post it",
+            active_thread_id="x-thread",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    activities = [json.loads(data)["activity"] for name, data in events if name == "agent.activity"]
+
+    assert any(activity["label"] == "Posting to X..." for activity in activities)
+    assert any(activity["label"] == "X action completed" and activity["status"] == "completed" for activity in activities)
 
 
 def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):

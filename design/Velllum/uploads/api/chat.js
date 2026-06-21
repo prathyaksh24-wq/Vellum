@@ -54,6 +54,7 @@
 
   function activityLabel(type, name, source) {
     if (type === "thinking_started") return "";
+    if (String(name || "").indexOf("agent_reach_x_") === 0) return "";
     if (type === "memory_retrieved") {
       if (name === "search_my_notes") return "Searching your notes";
       if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";

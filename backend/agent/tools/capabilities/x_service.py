@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import REPO_ROOT, get_settings
+from agent.tools.capabilities.agent_reach_x_provider import AgentReachError, AgentReachXProvider
 from agent.tools.registry import (
     CapabilityAccess,
     CapabilityRecord,
@@ -43,6 +44,7 @@ class XCapabilityService:
         bookmarks_backend: BookmarksBackend | None = None,
         image_backend: ImageBackend | None = None,
         media_upload_backend: MediaUploadBackend | None = None,
+        agent_reach_provider: Any | None = None,
         allow_private_reads: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
@@ -52,6 +54,7 @@ class XCapabilityService:
         self.bookmarks_backend = bookmarks_backend or self._default_bookmarks
         self.image_backend = image_backend or self._default_generate_image
         self.media_upload_backend = media_upload_backend or self._default_upload_media
+        self.agent_reach_provider = agent_reach_provider or AgentReachXProvider()
         settings = get_settings()
         self.allow_private_reads = (
             bool(getattr(settings, "x_tool_allow_private_reads", False))
@@ -123,8 +126,18 @@ class XCapabilityService:
     def search_posts(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query", "")).strip()
         max_results = self._normalize_max_results(payload.get("max_results", 10))
+        fallback_reason = ""
+        if self._agent_reach_available():
+            try:
+                items = [self._normalize_post(item) for item in self.agent_reach_provider.search(query, max_results)]
+                return {"action": "x.search_posts", "items": items, "provider": "agent-reach"}
+            except AgentReachError as exc:
+                fallback_reason = self._safe_reason(exc)
         items = [self._normalize_post(item) for item in self.search_posts_backend(query, max_results)]
-        return {"action": "x.search_posts", "items": items}
+        result = {"action": "x.search_posts", "items": items, "provider": "xai"}
+        if fallback_reason:
+            result["fallback_reason"] = fallback_reason
+        return result
 
     def account(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_private_reads:
@@ -153,6 +166,15 @@ class XCapabilityService:
         if payload.get("confirm") is not True:
             raise ToolPermissionError("Posting to X requires confirm=True.")
         text = str(payload.get("text", ""))
+        if self._agent_reach_available():
+            try:
+                return {
+                    "action": "x.publish_post",
+                    "tweet": self.agent_reach_provider.post_tweet(text),
+                    "provider": "agent-reach",
+                }
+            except AgentReachError:
+                pass
         return {"action": "x.publish_post", "tweet": self.post_backend(text)}
 
     def publish_post_with_media(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -283,3 +305,12 @@ class XCapabilityService:
                 if value:
                     return str(value)
         return ""
+
+    def _agent_reach_available(self) -> bool:
+        try:
+            return bool(self.agent_reach_provider and self.agent_reach_provider.available())
+        except Exception:
+            return False
+
+    def _safe_reason(self, exc: Exception) -> str:
+        return str(exc).replace("\r", " ").replace("\n", " ")[:200]
