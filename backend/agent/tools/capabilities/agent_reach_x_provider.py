@@ -110,6 +110,8 @@ class AgentReachXProvider:
                 [self.twitter_cli_bin, command, *[str(arg) for arg in args if str(arg)]],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=self.timeout_seconds,
                 check=False,
             )
@@ -127,6 +129,8 @@ class AgentReachXProvider:
                 [self.twitter_cli_bin, "status", "--yaml"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout_seconds,
                 check=False,
             )
