@@ -7,6 +7,11 @@ from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.registry import ToolPermissionError
 
 
+class AgentReachUnavailable:
+    def available(self):
+        return False
+
+
 def test_x_service_search_posts_returns_structured_records():
     calls = {}
 
@@ -22,7 +27,7 @@ def test_x_service_search_posts_returns_structured_records():
             }
         ]
 
-    service = XCapabilityService(search_posts_backend=fake_search)
+    service = XCapabilityService(search_posts_backend=fake_search, agent_reach_provider=AgentReachUnavailable())
 
     result = service.search_posts({"query": "Arsenal", "max_results": 3})
 
@@ -48,7 +53,7 @@ def test_x_service_default_search_backend_passes_window_to_script(monkeypatch):
 
     monkeypatch.setattr(x_service, "_load_script", lambda name: SimpleNamespace(search_x=fake_search_x))
 
-    result = XCapabilityService(search_posts_backend=None, allow_posts=False).search_posts(
+    result = XCapabilityService(search_posts_backend=None, allow_posts=False, agent_reach_provider=AgentReachUnavailable()).search_posts(
         {"query": "Arsenal", "max_results": 5}
     )
 
@@ -175,7 +180,7 @@ def test_x_service_publish_post_requires_confirm_and_enabled_gate():
 
 def test_x_service_publish_post_uses_settings_when_allow_posts_omitted(monkeypatch):
     monkeypatch.setattr(x_service, "get_settings", lambda: SimpleNamespace(x_tool_allow_posts=True))
-    service = XCapabilityService(post_backend=lambda text: {"id": "1", "text": text})
+    service = XCapabilityService(post_backend=lambda text: {"id": "1", "text": text}, agent_reach_provider=AgentReachUnavailable())
 
     result = service.publish_post({"text": "hello", "confirm": True})
 
@@ -259,6 +264,7 @@ def test_x_service_account_and_bookmarks_use_oauth_backends():
     service = XCapabilityService(
         account_backend=fake_account,
         bookmarks_backend=fake_bookmarks,
+        agent_reach_provider=AgentReachUnavailable(),
         allow_private_reads=True,
     )
 
@@ -271,11 +277,126 @@ def test_x_service_account_and_bookmarks_use_oauth_backends():
     assert calls == {"account": True, "bookmarks": {"user_id": "42", "max_results": 3}}
 
 
+def test_x_service_prefers_agent_reach_for_bookmarks_timeline_likes_and_profile():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def bookmarks(self, max_results):
+            calls.append(("bookmarks", max_results))
+            return [{"text": "Saved post", "url": "https://x.com/a/status/1", "handle": "a"}]
+
+        def timeline(self, max_results):
+            calls.append(("timeline", max_results))
+            return [{"text": "Timeline post", "url": "https://x.com/b/status/2", "handle": "b"}]
+
+        def likes(self, handle, max_results):
+            calls.append(("likes", handle, max_results))
+            return [{"text": "Liked post", "url": "https://x.com/c/status/3", "handle": "c"}]
+
+        def profile(self, handle):
+            calls.append(("profile", handle))
+            return {"username": handle, "name": "Profile"}
+
+        def read_tweet(self, tweet_id_or_url):
+            calls.append(("read_tweet", tweet_id_or_url))
+            return {"text": "Tweet detail", "url": "https://x.com/d/status/4", "handle": "d"}
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach(), allow_private_reads=True)
+
+    assert service.bookmarks({"max_results": 4})["provider"] == "agent-reach"
+    assert service.timeline({"max_results": 3})["items"][0]["text"] == "Timeline post"
+    assert service.likes({"handle": "me", "max_results": 2})["items"][0]["text"] == "Liked post"
+    assert service.profile({"handle": "openai"})["profile"]["username"] == "openai"
+    assert service.read_tweet({"tweet_id": "4"})["tweet"]["text"] == "Tweet detail"
+    assert calls == [
+        ("bookmarks", 4),
+        ("timeline", 3),
+        ("likes", "me", 2),
+        ("profile", "openai"),
+        ("read_tweet", "4"),
+    ]
+
+
+def test_x_service_likes_defaults_to_me_for_private_reads():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def likes(self, handle, max_results):
+            calls.append((handle, max_results))
+            return [{"id": "9", "text": "Liked post", "handle": "openai", "url": "https://x.com/openai/status/9"}]
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach(), allow_private_reads=True)
+
+    result = service.likes({"max_results": 1})
+
+    assert calls == [("me", 1)]
+    assert result["items"][0]["url"] == "https://x.com/openai/status/9"
+
+
+def test_x_service_agent_reach_write_actions_require_confirm_and_call_provider():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def reply(self, tweet_id_or_url, text):
+            calls.append(("reply", tweet_id_or_url, text))
+            return {"ok": True}
+
+        def like(self, tweet_id_or_url):
+            calls.append(("like", tweet_id_or_url))
+            return {"ok": True}
+
+        def repost(self, tweet_id_or_url):
+            calls.append(("repost", tweet_id_or_url))
+            return {"ok": True}
+
+        def delete(self, tweet_id_or_url):
+            calls.append(("delete", tweet_id_or_url))
+            return {"ok": True}
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach(), allow_posts=True)
+
+    for action in (service.reply, service.like, service.repost, service.delete):
+        try:
+            action({"tweet_id": "123", "text": "hello"})
+        except ToolPermissionError as exc:
+            assert "confirm=True" in str(exc)
+        else:
+            raise AssertionError("write action should require confirm=True")
+
+    assert service.reply({"tweet_id": "123", "text": "hello", "confirm": True})["provider"] == "agent-reach"
+    assert service.like({"tweet_id": "123", "confirm": True})["provider"] == "agent-reach"
+    assert service.repost({"tweet_id": "123", "confirm": True})["provider"] == "agent-reach"
+    assert service.delete({"tweet_id": "123", "confirm": True})["provider"] == "agent-reach"
+    assert calls == [
+        ("reply", "123", "hello"),
+        ("like", "123"),
+        ("repost", "123"),
+        ("delete", "123"),
+    ]
+
+
 def test_x_service_registers_capabilities_with_tool_registry():
     service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
     registry = service.build_registry()
 
     assert "x.search_posts" in registry.names()
+    assert "x.timeline" in registry.names()
+    assert "x.likes" in registry.names()
+    assert "x.profile" in registry.names()
+    assert "x.read_tweet" in registry.names()
+    assert "x.reply" in registry.names()
+    assert "x.like" in registry.names()
+    assert "x.repost" in registry.names()
+    assert "x.delete" in registry.names()
     assert "x.publish_post" in registry.names()
     assert "x.publish_post_with_media" in registry.names()
     assert "x.account" in registry.names()

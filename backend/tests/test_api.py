@@ -8,6 +8,7 @@ from langchain_core.messages import ToolMessage
 import pytest
 
 from agent import api
+from agent.agents.live_dispatcher import LiveAgentResult
 from agent.computer_use_runtime import ComputerUseRuntime
 
 
@@ -133,6 +134,45 @@ def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     assert body["tools"] == ["search_my_notes"]
     assert fake_agent.calls[0][0]["messages"][0]["content"] == "hello"
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
+
+
+def test_chat_endpoint_passes_through_x_agent_result_without_model_rewrite(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                status="answered",
+                answer="[1] @openai: saved post\n    https://x.com/openai/status/1234567890123456789",
+                tools=["x_agent"],
+                sources=[
+                    {
+                        "url": "https://x.com/openai/status/1234567890123456789",
+                        "title": "@openai on X",
+                        "domain": "x.com",
+                    }
+                ],
+            )
+
+    class FailingAgent:
+        async def ainvoke(self, *args, **kwargs):
+            raise AssertionError("main model should not rewrite exact XAgent results")
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FailingAgent())
+    async def fake_background_learn(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/chat", json={"message": "show my X bookmarks", "thread_id": "x-pass"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "https://x.com/openai/status/1234567890123456789" in body["answer"]
+    assert body["tools"] == ["x_agent"]
+    assert body["sources"][0]["url"] == "https://x.com/openai/status/1234567890123456789"
 
 
 def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tmp_path):
@@ -765,6 +805,68 @@ def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
     repaired_messages = fake_agent.repairs[0]["messages"]
     assert isinstance(repaired_messages[0], ToolMessage)
     assert repaired_messages[0].tool_call_id == "call-close-tab"
+
+
+def test_chat_stream_passes_through_x_agent_result_without_model_rewrite(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                status="answered",
+                answer="[1] @openai: saved post\n    https://x.com/openai/status/1234567890123456789",
+                tools=["x_agent"],
+                sources=[
+                    {
+                        "url": "https://x.com/openai/status/1234567890123456789",
+                        "title": "@openai on X",
+                        "domain": "x.com",
+                    }
+                ],
+                activity_events=[
+                    {
+                        "type": "tool_call_started",
+                        "label": "Fetching X bookmarks with Agent-Reach...",
+                        "name": "agent_reach_x_bookmarks",
+                        "metadata": {"suppress_generic_tool": True},
+                    }
+                ],
+            )
+
+    class FailingStreamAgent:
+        async def astream_events(self, *args, **kwargs):
+            raise AssertionError("main model should not rewrite exact XAgent stream results")
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FailingStreamAgent())
+    async def fake_background_learn(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+
+    async def run_case():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="show my X bookmarks",
+            active_thread_id="x-stream-pass",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(run_case())
+    events = _parse_sse("".join(chunks))
+
+    text = "".join(
+        data.get("delta", "")
+        for event, data in events
+        if event == "response.output_text.delta"
+    )
+    assert "https://x.com/openai/status/1234567890123456789" in text
+    assert any(
+        event == "agent.activity" and data["activity"]["label"] == "Fetching X bookmarks with Agent-Reach..."
+        for event, data in events
+    )
 
 
 def test_reindex_endpoint_returns_chunk_count(monkeypatch):

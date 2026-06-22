@@ -35,6 +35,12 @@ if (Test-HttpReady $healthUrl) {
   $env:PYTHONPATH = Join-Path $Root "backend"
   $env:API_HOST = $HostName
   $env:API_PORT = [string]$Port
+  if (-not $env:TWITTER_AUTH_TOKEN) {
+    $env:TWITTER_AUTH_TOKEN = [Environment]::GetEnvironmentVariable("TWITTER_AUTH_TOKEN", "User")
+  }
+  if (-not $env:TWITTER_CT0) {
+    $env:TWITTER_CT0 = [Environment]::GetEnvironmentVariable("TWITTER_CT0", "User")
+  }
   $args = @("-m", "uvicorn", "agent.api:app", "--host", $HostName, "--port", [string]$Port)
   $process = Start-Process -FilePath $Python -ArgumentList $args -WorkingDirectory $Root -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogFile -RedirectStandardError $ErrFile
   Set-Content -Path $PidFile -Value $process.Id -Encoding ascii

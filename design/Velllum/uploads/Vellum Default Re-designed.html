@@ -537,7 +537,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .backdrop{position:fixed;inset:0;z-index:40}
 .backdrop.dim{background:rgba(0,0,0,.45)}
 [data-theme="light"] .backdrop.dim{background:rgba(60,50,35,.3)}
-.ctx-menu{position:fixed;z-index:50;background:var(--modal);border:1px solid var(--line2);border-radius:11px;padding:5px;min-width:190px;box-shadow:0 14px 50px rgba(0,0,0,.4);font-size:13px}
+.ctx-menu{position:fixed;z-index:1000;background:var(--modal);border:1px solid var(--line2);border-radius:11px;padding:5px;min-width:190px;box-shadow:0 14px 50px rgba(0,0,0,.4);font-size:13px}
 .ctx-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;color:var(--txt);cursor:pointer}
 .ctx-item:hover{background:var(--hover)}
 .ctx-item .sb-ic{color:var(--dim);display:flex}
@@ -2764,14 +2764,20 @@ const buildActivity = (text) => {
   const leadIn = inferLeadIn(kw, q);
   return {refLines, steps, sources: [], duration: dur, leadIn};
 };
-const realActivitySeed = () => ({
+const isCasualGreetingPrompt = text => {
+  const normalized = String(text || '').trim().toLowerCase().replace(/[!?.\s]+$/g, '').replace(/\s+/g, ' ');
+  if (!normalized || normalized.length > 42) return false;
+  return /^(hi|hey|hello|yo|sup|gm|good morning|good afternoon|good evening|how are you|how are you doing|what's up|whats up|you there|are you there)$/.test(normalized);
+};
+const realActivitySeed = (text) => ({
   refLines: [],
   steps: [{kind:'eval', title:'Thinking', text:''}],
   sources: [],
   duration: 0,
   leadIn: '',
+  suppressActivity: isCasualGreetingPrompt(text),
 });
-const activitySeedForMode = (text) => FEATURE_FLAGS.realChat ? realActivitySeed() : buildActivity(text);
+const activitySeedForMode = (text) => FEATURE_FLAGS.realChat ? realActivitySeed(text) : buildActivity(text);
 
 const Favicon = ({dom, src, source, size=14}) => {
   const [failed, setFailed] = useState(false);
@@ -2801,6 +2807,10 @@ const isThinkingActivity = item => {
   const type = String(item && item.type || '').toLowerCase();
   const label = String(item && item.label || '').toLowerCase();
   return !item || type === 'thinking' || type === 'thinking_started' || label === 'thinking';
+};
+const isQuietAnswerActivity = item => {
+  const type = String(item && item.type || '').toLowerCase();
+  return isThinkingActivity(item) || type === 'final_answer_started' || type === 'final_answer_delta' || type === 'final_answer_completed';
 };
 const activityItemsForMsg = msg => {
   const raw = (msg.activity && msg.activity.length ? msg.activity : msg.steps) || [];
@@ -2862,6 +2872,7 @@ const ActivityStatus = ({item}) => {
 const ActivityTimeline = ({msg}) => {
   if (!msg.streaming) return null;
   const items = activityItemsForMsg(msg);
+  if (msg.suppressActivity && (!items.length || items.every(isQuietAnswerActivity))) return null;
   if (!items.length) return <div className="activity-inline"><ActivityStatus item={{label:'Thinking'}}/></div>;
   const active = [...items].reverse().find(item => !activityIsDone(item)) || items[items.length - 1];
   return (
@@ -3589,8 +3600,37 @@ const SAVED_MEMORIES = [
   { id:"m8", text:"Is a student, stays at home, and is very curious about learning and growing in the AI space.", date:"Apr 21, 2025" },
 ];
 
-const MemorySummaryCard = ({onClose, onTurnOff}) => {
+const memoryEntryText = (entry) => String((entry && (entry.content || entry.text || entry.answer || entry.query)) || '').trim();
+const memoryEntryDate = (entry) => {
+  const raw = entry && (entry.created_at || entry.updated_at || entry.timestamp || entry.date);
+  if (!raw) return 'Saved memory';
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return String(raw);
+  return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
+};
+const liveSavedMemories = (memoryData) => {
+  const entries = (memoryData && Array.isArray(memoryData.entries)) ? memoryData.entries : [];
+  return entries.map((entry, i) => ({
+    id: String(entry.id || entry.rowid || entry.doc_id || ('memory-'+i)),
+    text: memoryEntryText(entry),
+    date: memoryEntryDate(entry),
+  })).filter(item => item.text);
+};
+const liveMemorySummarySections = (memoryData) => {
+  const facts = (memoryData && Array.isArray(memoryData.facts)) ? memoryData.facts.filter(Boolean) : [];
+  const saved = liveSavedMemories(memoryData);
+  if (!facts.length && !saved.length) {
+    return [{h:'Memory', text:'No saved memories were returned by the backend yet.'}];
+  }
+  const sections = [];
+  if (facts.length) sections.push({h:'Recent memory', text:facts.slice(0, 4).join(' ')});
+  if (saved.length) sections.push({h:'Saved memories', text:saved.slice(0, 4).map(item => item.text).join(' ')});
+  return sections;
+};
+
+const MemorySummaryCard = ({memoryData, onClose, onTurnOff}) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const sections = liveMemorySummarySections(memoryData);
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
@@ -3610,7 +3650,7 @@ const MemorySummaryCard = ({onClose, onTurnOff}) => {
           </div>
         </div>
         <div className="mem-card-body">
-          {MEMORY_SUMMARY.map(s => (
+          {sections.map(s => (
             <div key={s.h} className="mem-sec">
               <div className="mem-sec-h">{s.h}</div>
               <div className="mem-sec-t">{s.text}</div>
@@ -3626,12 +3666,13 @@ const MemorySummaryCard = ({onClose, onTurnOff}) => {
   );
 };
 
-const SavedMemoriesCard = ({onClose}) => {
+const SavedMemoriesCard = ({memoryData, onClose}) => {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(SAVED_MEMORIES);
+  const [items, setItems] = useState(() => liveSavedMemories(memoryData));
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
   const [rowMenu, setRowMenu] = useState(null);
+  useEffect(() => setItems(liveSavedMemories(memoryData)), [memoryData]);
   const filtered = items.filter(m => !q || m.text.toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
@@ -3672,7 +3713,7 @@ const SavedMemoriesCard = ({onClose}) => {
 };
 
 /* ─── settings modal ─── */
-const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], initialTab, onProviderKey, onClose}) => {
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, initialTab, onProviderKey, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
@@ -3886,8 +3927,8 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
           )}
         </div>
       </div>
-      {memCardOpen && <MemorySummaryCard onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
-      {savedMemOpen && <SavedMemoriesCard onClose={() => setSavedMemOpen(false)}/>}
+      {memCardOpen && <MemorySummaryCard memoryData={memoryData} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
+      {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onClose={() => setSavedMemOpen(false)}/>}
     </React.Fragment>
   );
 };
@@ -3924,6 +3965,7 @@ const App = () => {
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState(MODELS);
   const [backendSettings, setBackendSettings] = useState(null);
+  const [memoryData, setMemoryData] = useState({facts: [], entries: []});
   const [apps, setApps] = useState(SEED_APPS);
   const [automations, setAutomations] = useState([]);
   const [subagents, setSubagents] = useState([]);
@@ -3987,7 +4029,7 @@ const App = () => {
     let alive = true;
     (async () => {
       try {
-        const [conv, modelData, settingsData, pluginData, skillsData, automationData, subagentData] = await Promise.all([
+        const [conv, modelData, settingsData, pluginData, skillsData, automationData, subagentData, memoryRecentData, memoryEntriesData] = await Promise.all([
           API.conversations.list(),
           API.settings.models(),
           API.settings.get(),
@@ -3995,6 +4037,8 @@ const App = () => {
           API.plugins.skills(),
           API.automations.list(),
           API.runtimes.subagents(),
+          API.settings.memoryRecent().catch(() => ({facts: []})),
+          API.settings.memoryEntries().catch(() => ({entries: []})),
         ]);
         if (!alive) return;
         if (conv && Array.isArray(conv.conversations)) {
@@ -4020,6 +4064,10 @@ const App = () => {
         if (skillsData && skillsData.skills) setSkills(skillsData.skills);
         if (automationData && Array.isArray(automationData.automations)) setAutomations(automationData.automations);
         if (subagentData && Array.isArray(subagentData.subagents)) setSubagents(subagentData.subagents);
+        setMemoryData({
+          facts: (memoryRecentData && Array.isArray(memoryRecentData.facts)) ? memoryRecentData.facts : [],
+          entries: (memoryEntriesData && Array.isArray(memoryEntriesData.entries)) ? memoryEntriesData.entries : [],
+        });
       } catch (err) {
         console.warn('Vellum backend metadata load failed', err);
       }
@@ -4167,7 +4215,7 @@ const App = () => {
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
     const act = activitySeedForMode(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     let cid = activeConvo[ag.id];
     if (!cid) {
       cid = uid();
@@ -4193,7 +4241,7 @@ const App = () => {
     const prevUser = [...convo.messages.slice(0, idx)].reverse().find(m => m.role === 'user');
     const reply = agentReply(ag, prevUser ? prevUser.text : '');
     const act = activitySeedForMode(prevUser ? prevUser.text : '');
-    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)} : cv)}));
+    setAgentConvos(ac => ({...ac, [ag.id]: ac[ag.id].map(cv => cv.id === cid ? {...cv, messages: cv.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity} : m)} : cv)}));
     if (FEATURE_FLAGS.realChat) {
       streamBackendAgentReply(ag, cid, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], convo), prevUser ? prevUser.attachments : []);
     } else {
@@ -4627,7 +4675,7 @@ const App = () => {
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const act = activitySeedForMode(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn};
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     const backendMessage = messageForBackend(text, attach, existingChat);
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
@@ -4676,7 +4724,7 @@ const App = () => {
     const reply = vellumReply(prevUser ? prevUser.text : '', old.full);
     const act = activitySeedForMode(prevUser ? prevUser.text : '');
     setChats(cs => cs.map(c => c.id === chat.id
-      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn} : m)}
+      ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) {
       streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : []);
@@ -4875,7 +4923,7 @@ const App = () => {
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); setSettingsOpen(true); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onClose={() => setSettingsOpen(false)}/>}
