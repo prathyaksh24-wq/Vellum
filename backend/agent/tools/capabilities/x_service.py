@@ -101,6 +101,46 @@ class XCapabilityService:
         )
         registry.register(
             CapabilityRecord(
+                name="x.timeline",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Fetched X timeline",
+                adapter=self.timeline,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="x.likes",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Fetched X likes",
+                adapter=self.likes,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="x.profile",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Read X profile",
+                adapter=self.profile,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="x.read_tweet",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Read tweet",
+                adapter=self.read_tweet,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
                 name="x.publish_post",
                 namespace="x",
                 access=CapabilityAccess.EXTERNAL_WRITE,
@@ -121,6 +161,23 @@ class XCapabilityService:
                 adapter=self.publish_post_with_media,
             )
         )
+        for name, label, adapter in (
+            ("x.reply", "Replied on X", self.reply),
+            ("x.like", "Liked on X", self.like),
+            ("x.repost", "Reposted on X", self.repost),
+            ("x.delete", "Deleted X post", self.delete),
+        ):
+            registry.register(
+                CapabilityRecord(
+                    name=name,
+                    namespace="x",
+                    access=CapabilityAccess.EXTERNAL_WRITE,
+                    allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                    stream_label=label,
+                    requires_confirmation=True,
+                    adapter=adapter,
+                )
+            )
         return registry
 
     def search_posts(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -148,6 +205,12 @@ class XCapabilityService:
         if not self.allow_private_reads:
             raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
         max_results = self._normalize_max_results(payload.get("max_results", 10))
+        if self._agent_reach_available():
+            try:
+                items = [self._normalize_post(item) for item in self.agent_reach_provider.bookmarks(max_results)]
+                return {"action": "x.bookmarks", "items": items, "provider": "agent-reach"}
+            except AgentReachError:
+                pass
         account = self.account_backend()
         user_id = str(account.get("id") or "").strip()
         if not user_id:
@@ -159,6 +222,35 @@ class XCapabilityService:
             "items": result.get("data", []),
             "meta": result.get("meta", {}),
         }
+
+    def timeline(self, payload: dict[str, Any]) -> dict[str, Any]:
+        max_results = self._normalize_max_results(payload.get("max_results", 10))
+        self._require_agent_reach()
+        items = [self._normalize_post(item) for item in self.agent_reach_provider.timeline(max_results)]
+        return {"action": "x.timeline", "items": items, "provider": "agent-reach"}
+
+    def likes(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not self.allow_private_reads:
+            raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
+        handle = str(payload.get("handle") or payload.get("username") or "").strip().lstrip("@")
+        if not handle:
+            raise ToolPermissionError("X likes require handle.")
+        max_results = self._normalize_max_results(payload.get("max_results", 10))
+        self._require_agent_reach()
+        items = [self._normalize_post(item) for item in self.agent_reach_provider.likes(handle, max_results)]
+        return {"action": "x.likes", "items": items, "provider": "agent-reach"}
+
+    def profile(self, payload: dict[str, Any]) -> dict[str, Any]:
+        handle = str(payload.get("handle") or payload.get("username") or "").strip().lstrip("@")
+        if not handle:
+            raise ToolPermissionError("X profile requires handle.")
+        self._require_agent_reach()
+        return {"action": "x.profile", "profile": self.agent_reach_provider.profile(handle), "provider": "agent-reach"}
+
+    def read_tweet(self, payload: dict[str, Any]) -> dict[str, Any]:
+        tweet_id = self._tweet_id(payload)
+        self._require_agent_reach()
+        return {"action": "x.read_tweet", "tweet": self.agent_reach_provider.read_tweet(tweet_id), "provider": "agent-reach"}
 
     def publish_post(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_posts:
@@ -203,6 +295,45 @@ class XCapabilityService:
             "tweet": tweet,
             "image": image,
             "media": uploaded,
+        }
+
+    def reply(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_confirmed_write(payload, "Replying to X requires")
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            raise ToolPermissionError("X reply requires text.")
+        self._require_agent_reach()
+        return {
+            "action": "x.reply",
+            "result": self.agent_reach_provider.reply(self._tweet_id(payload), text),
+            "provider": "agent-reach",
+        }
+
+    def like(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_confirmed_write(payload, "Liking on X requires")
+        self._require_agent_reach()
+        return {
+            "action": "x.like",
+            "result": self.agent_reach_provider.like(self._tweet_id(payload)),
+            "provider": "agent-reach",
+        }
+
+    def repost(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_confirmed_write(payload, "Reposting on X requires")
+        self._require_agent_reach()
+        return {
+            "action": "x.repost",
+            "result": self.agent_reach_provider.repost(self._tweet_id(payload)),
+            "provider": "agent-reach",
+        }
+
+    def delete(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_confirmed_write(payload, "Deleting an X post requires")
+        self._require_agent_reach()
+        return {
+            "action": "x.delete",
+            "result": self.agent_reach_provider.delete(self._tweet_id(payload)),
+            "provider": "agent-reach",
         }
 
     @staticmethod
@@ -311,6 +442,22 @@ class XCapabilityService:
             return bool(self.agent_reach_provider and self.agent_reach_provider.available())
         except Exception:
             return False
+
+    def _require_agent_reach(self) -> None:
+        if not self._agent_reach_available():
+            raise ToolPermissionError("Agent-Reach X connector is not ready.")
+
+    def _require_confirmed_write(self, payload: dict[str, Any], prefix: str) -> None:
+        if not self.allow_posts:
+            raise ToolPermissionError(f"{prefix} X_TOOL_ALLOW_POSTS=true.")
+        if payload.get("confirm") is not True:
+            raise ToolPermissionError(f"{prefix} confirm=True.")
+
+    def _tweet_id(self, payload: dict[str, Any]) -> str:
+        tweet_id = str(payload.get("tweet_id") or payload.get("url") or payload.get("tweet_url") or "").strip()
+        if not tweet_id:
+            raise ToolPermissionError("X action requires tweet_id or tweet URL.")
+        return tweet_id
 
     def _safe_reason(self, exc: Exception) -> str:
         return str(exc).replace("\r", " ").replace("\n", " ")[:200]
