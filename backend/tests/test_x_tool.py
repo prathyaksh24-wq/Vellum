@@ -97,12 +97,67 @@ def test_bookmarks_fetches_me_then_bookmarks_when_allowed(monkeypatch):
 
     monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=False))
     monkeypatch.setattr(x_tool, "_x_api_client", lambda: FakeClient)
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: AgentReachUnavailable())
 
     out = json.loads(x_tool.x_action.func(action="bookmarks", max_results=5))
 
     assert out["action"] == "bookmarks"
     assert out["account"]["username"] == "me"
     assert out["items"][0]["text"] == "Saved"
+
+
+def test_bookmarks_prefer_agent_reach_when_ready(monkeypatch):
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def bookmarks(self, max_results):
+            calls.append(max_results)
+            return [{"text": "Agent-Reach saved", "url": "https://x.com/a/status/1"}]
+
+    monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=False))
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    out = json.loads(x_tool.x_action.func(action="bookmarks", max_results=4))
+
+    assert out["provider"] == "agent-reach"
+    assert out["items"][0]["text"] == "Agent-Reach saved"
+    assert calls == [4]
+
+
+def test_agent_reach_read_actions(monkeypatch):
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def timeline(self, max_results):
+            calls.append(("timeline", max_results))
+            return [{"text": "Timeline"}]
+
+        def likes(self, handle, max_results):
+            calls.append(("likes", handle, max_results))
+            return [{"text": "Liked"}]
+
+        def profile(self, handle):
+            calls.append(("profile", handle))
+            return {"username": handle}
+
+        def read_tweet(self, tweet_id_or_url):
+            calls.append(("read", tweet_id_or_url))
+            return {"text": "Tweet"}
+
+    monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=False))
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    assert json.loads(x_tool.x_action.func(action="timeline", max_results=2))["items"][0]["text"] == "Timeline"
+    assert json.loads(x_tool.x_action.func(action="likes", query="@me", max_results=3))["items"][0]["text"] == "Liked"
+    assert json.loads(x_tool.x_action.func(action="profile", query="@openai"))["profile"]["username"] == "openai"
+    assert json.loads(x_tool.x_action.func(action="read_tweet", query="123"))["tweet"]["text"] == "Tweet"
+    assert calls == [("timeline", 2), ("likes", "me", 3), ("profile", "openai"), ("read", "123")]
 
 
 def test_post_requires_confirm_and_write_gate(monkeypatch):
@@ -152,6 +207,55 @@ def test_post_when_allowed_prefers_agent_reach(monkeypatch):
     assert out["provider"] == "agent-reach"
     assert out["tweet"]["id"] == "agent-reach-99"
     assert calls == ["hello"]
+
+
+def test_agent_reach_write_actions_require_confirm(monkeypatch):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def delete(self, tweet_id):
+            return {"deleted": tweet_id}
+
+    monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=True))
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    no_confirm = x_tool.x_action.func(action="delete", query="123", confirm=False)
+
+    assert "confirm=True" in no_confirm
+
+
+def test_agent_reach_confirmed_write_actions(monkeypatch):
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def reply(self, tweet_id, text):
+            calls.append(("reply", tweet_id, text))
+            return {"ok": True}
+
+        def like(self, tweet_id):
+            calls.append(("like", tweet_id))
+            return {"ok": True}
+
+        def repost(self, tweet_id):
+            calls.append(("repost", tweet_id))
+            return {"ok": True}
+
+        def delete(self, tweet_id):
+            calls.append(("delete", tweet_id))
+            return {"ok": True}
+
+    monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=True))
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    assert json.loads(x_tool.x_action.func(action="reply", query="123", text="hello", confirm=True))["provider"] == "agent-reach"
+    assert json.loads(x_tool.x_action.func(action="like", query="123", confirm=True))["provider"] == "agent-reach"
+    assert json.loads(x_tool.x_action.func(action="repost", query="123", confirm=True))["provider"] == "agent-reach"
+    assert json.loads(x_tool.x_action.func(action="delete", query="123", confirm=True))["provider"] == "agent-reach"
+    assert calls == [("reply", "123", "hello"), ("like", "123"), ("repost", "123"), ("delete", "123")]
 
 
 def test_post_image_when_allowed_generates_uploads_and_posts(monkeypatch, tmp_path):

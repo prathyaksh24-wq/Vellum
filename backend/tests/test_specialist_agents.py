@@ -989,6 +989,47 @@ def test_x_agent_post_request_returns_confirmation_preview_without_publishing(tm
     assert response.activity_events[0]["label"] == "Preparing post..."
 
 
+def test_x_agent_reads_bookmarks_and_timeline_with_agent_reach_activity(tmp_path):
+    class FakeXService:
+        def bookmarks(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Saved X post", "handle": "a", "url": "https://x.com/a/status/1"}],
+            }
+
+        def timeline(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Timeline X post", "handle": "b", "url": "https://x.com/b/status/2"}],
+            }
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    bookmarks = agent.answer("show my X bookmarks")
+    timeline = agent.answer("show my X timeline")
+
+    assert "Saved X post" in bookmarks.summary
+    assert "Timeline X post" in timeline.summary
+    assert any(event["label"] == "Fetching X bookmarks with Agent-Reach..." for event in bookmarks.activity_events)
+    assert any(event["label"] == "Fetching X timeline with Agent-Reach..." for event in timeline.activity_events)
+
+
+def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tmp_path):
+    calls = []
+    service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
+    service.delete = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer("delete this X post https://x.com/me/status/123")
+
+    assert calls == []
+    assert response.status == "blocked"
+    assert response.action_request["action"] == "x.delete"
+    assert response.action_request["payload"]["tweet_id"] == "https://x.com/me/status/123"
+    assert "Confirm before I delete" in response.summary
+    assert any(event["label"] == "Preparing X delete..." for event in response.activity_events)
+
+
 def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_path):
     calls = []
 

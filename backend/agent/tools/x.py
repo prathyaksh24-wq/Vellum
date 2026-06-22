@@ -61,12 +61,12 @@ def x_action(
     max_results: int = 10,
     confirm: bool = False,
 ) -> str:
-    """Run controlled X actions: status, search, me, bookmarks, post, post_image.
+    """Run controlled X actions: status, search, me, bookmarks, timeline, likes, profile, read_tweet, post, reply, like, repost, delete, post_image.
 
     status reports Agent-Reach/X connector availability. Search prefers
     Agent-Reach when ready and falls back to xAI X Search. me/bookmarks use
     official X API OAuth and require X_TOOL_ALLOW_PRIVATE_READS=true.
-    post/post_image require confirm=True and X_TOOL_ALLOW_POSTS=true.
+    write actions require confirm=True and X_TOOL_ALLOW_POSTS=true.
     """
     normalized = action.strip().casefold().replace("-", "_")
     settings = get_settings()
@@ -118,6 +118,16 @@ def x_action(
             return _json({"action": "me", "account": client.get_me(oauth_file=_oauth_file()).get("data", {})})
 
         if normalized == "bookmarks":
+            agent_reach = _agent_reach_provider()
+            if agent_reach.available():
+                try:
+                    return _json({
+                        "action": "bookmarks",
+                        "provider": "agent-reach",
+                        "items": agent_reach.bookmarks(max_results=max_results),
+                    })
+                except AgentReachError:
+                    pass
             client = _x_api_client()
             me = client.get_me(oauth_file=_oauth_file()).get("data", {})
             user_id = str(me.get("id") or "")
@@ -133,6 +143,57 @@ def x_action(
                 "account": me,
                 "items": bookmarks.get("data", []),
                 "meta": bookmarks.get("meta", {}),
+            })
+
+        if normalized in {"timeline", "feed"}:
+            agent_reach = _agent_reach_provider()
+            if not agent_reach.available():
+                return "Agent-Reach X connector is not ready."
+            return _json({
+                "action": "timeline",
+                "provider": "agent-reach",
+                "items": agent_reach.timeline(max_results=max_results),
+            })
+
+        if normalized == "likes":
+            if not settings.x_tool_allow_private_reads:
+                return "X private reads require X_TOOL_ALLOW_PRIVATE_READS=true."
+            handle = (query or text).strip().lstrip("@")
+            if not handle:
+                return "X likes requires a handle."
+            agent_reach = _agent_reach_provider()
+            if not agent_reach.available():
+                return "Agent-Reach X connector is not ready."
+            return _json({
+                "action": "likes",
+                "provider": "agent-reach",
+                "items": agent_reach.likes(handle, max_results=max_results),
+            })
+
+        if normalized in {"profile", "user"}:
+            handle = (query or text).strip().lstrip("@")
+            if not handle:
+                return "X profile requires a handle."
+            agent_reach = _agent_reach_provider()
+            if not agent_reach.available():
+                return "Agent-Reach X connector is not ready."
+            return _json({
+                "action": "profile",
+                "provider": "agent-reach",
+                "profile": agent_reach.profile(handle),
+            })
+
+        if normalized in {"read_tweet", "tweet", "read"}:
+            tweet_id = (query or text).strip()
+            if not tweet_id:
+                return "X read_tweet requires a tweet id or URL."
+            agent_reach = _agent_reach_provider()
+            if not agent_reach.available():
+                return "Agent-Reach X connector is not ready."
+            return _json({
+                "action": "read_tweet",
+                "provider": "agent-reach",
+                "tweet": agent_reach.read_tweet(tweet_id),
             })
 
         if normalized == "post":
@@ -153,6 +214,29 @@ def x_action(
             client = _x_api_client()
             result = client.post_tweet(text=text, oauth_file=_oauth_file())
             return _json({"action": "post", "tweet": result.get("data", {})})
+
+        if normalized in {"reply", "like", "repost", "retweet", "delete"}:
+            if not confirm:
+                return "X write actions require confirm=True in the tool call."
+            if not settings.x_tool_allow_posts:
+                return "X write actions require X_TOOL_ALLOW_POSTS=true."
+            tweet_id = query.strip()
+            if not tweet_id:
+                return "X write actions require query to contain a tweet id or URL."
+            agent_reach = _agent_reach_provider()
+            if not agent_reach.available():
+                return "Agent-Reach X connector is not ready."
+            if normalized == "reply":
+                if not text.strip():
+                    return "X reply requires text."
+                result = agent_reach.reply(tweet_id, text)
+            elif normalized == "like":
+                result = agent_reach.like(tweet_id)
+            elif normalized in {"repost", "retweet"}:
+                result = agent_reach.repost(tweet_id)
+            else:
+                result = agent_reach.delete(tweet_id)
+            return _json({"action": normalized, "provider": "agent-reach", "result": result})
 
         if normalized in {"post_image", "post_with_image", "image_post"}:
             if not confirm:
