@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,6 +42,12 @@ def _agent_reach_provider() -> AgentReachXProvider:
 
 def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _normalize_tweet_id(value: str) -> str:
+    text = str(value or "").strip()
+    match = re.search(r"(?:/status/|^)(\d{8,})(?:\D|$)", text)
+    return match.group(1) if match else text
 
 
 def _oauth_file() -> Path:
@@ -158,9 +165,7 @@ def x_action(
         if normalized == "likes":
             if not settings.x_tool_allow_private_reads:
                 return "X private reads require X_TOOL_ALLOW_PRIVATE_READS=true."
-            handle = (query or text).strip().lstrip("@")
-            if not handle:
-                return "X likes requires a handle."
+            handle = ((query or text).strip() or "me").lstrip("@")
             agent_reach = _agent_reach_provider()
             if not agent_reach.available():
                 return "Agent-Reach X connector is not ready."
@@ -220,7 +225,7 @@ def x_action(
                 return "X write actions require confirm=True in the tool call."
             if not settings.x_tool_allow_posts:
                 return "X write actions require X_TOOL_ALLOW_POSTS=true."
-            tweet_id = query.strip()
+            tweet_id = _normalize_tweet_id(query.strip())
             if not tweet_id:
                 return "X write actions require query to contain a tweet id or URL."
             agent_reach = _agent_reach_provider()

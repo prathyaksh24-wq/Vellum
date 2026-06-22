@@ -54,6 +54,8 @@ class XAgent:
             return self._answer_bookmarks()
         if self._is_timeline_query(lowered):
             return self._answer_timeline()
+        if self._is_likes_query(lowered):
+            return self._answer_likes()
         if self._is_write_action_query(lowered):
             return self._answer_write_action(query, lowered)
         if self._is_account_query(lowered):
@@ -135,6 +137,11 @@ class XAgent:
             return self.tool_registry.invoke("x.timeline", payload, agent_name=self.name)
         return self.x_service.timeline(payload)
 
+    def _likes(self, payload: dict) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("x.likes", payload, agent_name=self.name)
+        return self.x_service.likes(payload)
+
     def _publish_post(self, payload: dict) -> dict:
         if self.tool_registry is not None:
             return self.tool_registry.invoke("x.publish_post", payload, agent_name=self.name)
@@ -197,6 +204,32 @@ class XAgent:
             sources=sources,
             confidence=0.75,
             activity_events=self._read_activity_events("timeline", str(result.get("provider") or "")),
+        )
+
+    def _answer_likes(self) -> SpecialistResponse:
+        try:
+            result = self._likes({"handle": "me", "max_results": 5})
+        except Exception as exc:
+            return self._error("XAgent could not read X likes right now.", exc)
+        items = result.get("items", [])
+        provider = str(result.get("provider") or "")
+        if not items:
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="XAgent did not find X likes.",
+                confidence=0.35,
+                activity_events=self._read_activity_events("likes", provider),
+            )
+        lines, sources = self._format_posts(items)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary="\n".join(lines),
+            analysis="Used x.likes through the shared X capability service.",
+            sources=sources,
+            confidence=0.75,
+            activity_events=self._read_activity_events("likes", provider),
         )
 
     def _answer_post(self, query: str) -> SpecialistResponse:
@@ -317,8 +350,15 @@ class XAgent:
         )
 
     def _execute_write_action(self, action: str, payload: dict) -> SpecialistResponse:
+        normalized_payload = dict(payload)
+        if "tweet_id" in normalized_payload or "url" in normalized_payload or "tweet_url" in normalized_payload:
+            normalized_payload["tweet_id"] = self._normalize_tweet_id_or_url(
+                str(normalized_payload.get("tweet_id") or normalized_payload.get("url") or normalized_payload.get("tweet_url") or "")
+            )
+            normalized_payload.pop("url", None)
+            normalized_payload.pop("tweet_url", None)
         try:
-            result = self._x_write_action(action, {**payload, "confirm": True})
+            result = self._x_write_action(action, {**normalized_payload, "confirm": True})
         except Exception as exc:
             return self._error(f"XAgent could not complete {action}.", exc)
         verb = action.split(".")[-1]
@@ -384,7 +424,10 @@ class XAgent:
             text = str(item.get("text") or "").strip()
             handle = str(item.get("handle") or "x").strip()
             url = str(item.get("url") or "").strip()
-            lines.append(f"[{index}] @{handle}: {text}" if handle else f"[{index}] {text}")
+            line = f"[{index}] @{handle}: {text}" if handle else f"[{index}] {text}"
+            if url:
+                line = f"{line}\n    {url}"
+            lines.append(line)
             if url:
                 sources.append(
                     SpecialistSource(
@@ -435,6 +478,7 @@ class XAgent:
         label = {
             "bookmarks": "Fetching X bookmarks with Agent-Reach...",
             "timeline": "Fetching X timeline with Agent-Reach...",
+            "likes": "Fetching X likes with Agent-Reach...",
         }.get(read_type, "Reading X with Agent-Reach...")
         return [
             {"type": "tool_call_started", "label": label, "name": f"agent_reach_x_{read_type}", "metadata": metadata},
@@ -461,6 +505,14 @@ class XAgent:
 
     def _is_timeline_query(self, lowered_query: str) -> bool:
         return bool(re.search(r"(?<!\w)(timeline|feed|home feed|following feed)\b", lowered_query))
+
+    def _is_likes_query(self, lowered_query: str) -> bool:
+        return bool(
+            re.search(
+                r"(?<!\w)(?:my\s+)?(?:latest|recent|last)?\s*(?:liked\s+posts?|likes?|x\s+likes?)\b",
+                lowered_query,
+            )
+        ) and not re.search(r"(?<!\w)(?:like|favorite)\s+(?:this|that|the)\b", lowered_query)
 
     def _is_write_action_query(self, lowered_query: str) -> bool:
         return self._write_action_from_query(lowered_query) != ""
@@ -507,6 +559,10 @@ class XAgent:
             return url_match.group(0)
         id_match = re.search(r"\b\d{8,}\b", query)
         return id_match.group(0) if id_match else ""
+
+    def _normalize_tweet_id_or_url(self, value: str) -> str:
+        match = re.search(r"(?:/status/|^)(\d{8,})(?:\D|$)", value.strip())
+        return match.group(1) if match else value.strip()
 
     def _write_action_label(self, verb: str) -> str:
         return {"delete": "delete", "repost": "repost", "like": "like", "reply": "reply to"}.get(verb, verb)

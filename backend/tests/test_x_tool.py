@@ -155,9 +155,10 @@ def test_agent_reach_read_actions(monkeypatch):
 
     assert json.loads(x_tool.x_action.func(action="timeline", max_results=2))["items"][0]["text"] == "Timeline"
     assert json.loads(x_tool.x_action.func(action="likes", query="@me", max_results=3))["items"][0]["text"] == "Liked"
+    assert json.loads(x_tool.x_action.func(action="likes", max_results=1))["items"][0]["text"] == "Liked"
     assert json.loads(x_tool.x_action.func(action="profile", query="@openai"))["profile"]["username"] == "openai"
     assert json.loads(x_tool.x_action.func(action="read_tweet", query="123"))["tweet"]["text"] == "Tweet"
-    assert calls == [("timeline", 2), ("likes", "me", 3), ("profile", "openai"), ("read", "123")]
+    assert calls == [("timeline", 2), ("likes", "me", 3), ("likes", "me", 1), ("profile", "openai"), ("read", "123")]
 
 
 def test_post_requires_confirm_and_write_gate(monkeypatch):
@@ -253,9 +254,14 @@ def test_agent_reach_confirmed_write_actions(monkeypatch):
 
     assert json.loads(x_tool.x_action.func(action="reply", query="123", text="hello", confirm=True))["provider"] == "agent-reach"
     assert json.loads(x_tool.x_action.func(action="like", query="123", confirm=True))["provider"] == "agent-reach"
-    assert json.loads(x_tool.x_action.func(action="repost", query="123", confirm=True))["provider"] == "agent-reach"
-    assert json.loads(x_tool.x_action.func(action="delete", query="123", confirm=True))["provider"] == "agent-reach"
-    assert calls == [("reply", "123", "hello"), ("like", "123"), ("repost", "123"), ("delete", "123")]
+    assert json.loads(x_tool.x_action.func(action="repost", query="https://x.com/openai/status/1234567890123456789", confirm=True))["provider"] == "agent-reach"
+    assert json.loads(x_tool.x_action.func(action="delete", query="https://twitter.com/openai/status/1234567890123456789?s=20", confirm=True))["provider"] == "agent-reach"
+    assert calls == [
+        ("reply", "123", "hello"),
+        ("like", "123"),
+        ("repost", "1234567890123456789"),
+        ("delete", "1234567890123456789"),
+    ]
 
 
 def test_post_image_when_allowed_generates_uploads_and_posts(monkeypatch, tmp_path):

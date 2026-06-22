@@ -62,7 +62,7 @@ class AgentReachXProvider:
         return self._normalize_posts(output)
 
     def read_tweet(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("tweet", tweet_id_or_url, "--json")
+        output = self._exec("tweet", self._normalize_tweet_id(tweet_id_or_url), "--json")
         posts = self._normalize_posts(output)
         return posts[0] if posts else self._normalize_object(output)
 
@@ -91,19 +91,19 @@ class AgentReachXProvider:
         return self._normalize_object(output)
 
     def reply(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        output = self._exec("reply", tweet_id_or_url, text, "--json")
+        output = self._exec("reply", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
         return self._normalize_object(output)
 
     def like(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("like", tweet_id_or_url, "--json")
+        output = self._exec("like", self._normalize_tweet_id(tweet_id_or_url), "--json")
         return self._normalize_object(output)
 
     def repost(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("retweet", tweet_id_or_url, "--json")
+        output = self._exec("retweet", self._normalize_tweet_id(tweet_id_or_url), "--json")
         return self._normalize_object(output)
 
     def delete(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("delete", tweet_id_or_url, "--yes", "--json")
+        output = self._exec("delete", self._normalize_tweet_id(tweet_id_or_url), "--yes", "--json")
         return self._normalize_object(output)
 
     def _exec(self, command: str, *args: str) -> Any:
@@ -206,3 +206,9 @@ class AgentReachXProvider:
     @staticmethod
     def _string(value: Any) -> str:
         return "" if value is None else str(value)
+
+    @staticmethod
+    def _normalize_tweet_id(value: str) -> str:
+        text = str(value or "").strip()
+        match = re.search(r"(?:/status/|^)(\d{8,})(?:\D|$)", text)
+        return match.group(1) if match else text

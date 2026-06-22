@@ -1022,15 +1022,27 @@ def test_x_agent_reads_bookmarks_and_timeline_with_agent_reach_activity(tmp_path
                 "items": [{"text": "Timeline X post", "handle": "b", "url": "https://x.com/b/status/2"}],
             }
 
+        def likes(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Liked X post", "handle": "c", "url": "https://x.com/c/status/3"}],
+            }
+
     agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
 
     bookmarks = agent.answer("show my X bookmarks")
     timeline = agent.answer("show my X timeline")
+    likes = agent.answer("what is my latest like on X?")
 
     assert "Saved X post" in bookmarks.summary
+    assert "https://x.com/a/status/1" in bookmarks.summary
     assert "Timeline X post" in timeline.summary
+    assert "https://x.com/b/status/2" in timeline.summary
+    assert "Liked X post" in likes.summary
+    assert "https://x.com/c/status/3" in likes.summary
     assert any(event["label"] == "Fetching X bookmarks with Agent-Reach..." for event in bookmarks.activity_events)
     assert any(event["label"] == "Fetching X timeline with Agent-Reach..." for event in timeline.activity_events)
+    assert any(event["label"] == "Fetching X likes with Agent-Reach..." for event in likes.activity_events)
 
 
 def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tmp_path):
@@ -1048,6 +1060,35 @@ def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tm
     assert "Confirm before I delete" in response.summary
     assert any(event["label"] == "Preparing X delete..." for event in response.activity_events)
     assert any(event["metadata"].get("suppress_generic_tool") is True for event in response.activity_events)
+
+
+def test_x_agent_confirmed_repost_uses_normalized_numeric_tweet_id(tmp_path):
+    calls = []
+    service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
+    service.repost = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.execute_action_request(
+        {"action": "x.repost", "payload": {"tweet_id": "https://x.com/openai/status/1234567890123456789"}}
+    )
+
+    assert response.status == "answered"
+    assert calls == [{"tweet_id": "1234567890123456789", "confirm": True}]
+
+
+def test_x_agent_empty_likes_preserves_agent_reach_activity(tmp_path):
+    class FakeXService:
+        def likes(self, payload):
+            return {"provider": "agent-reach", "items": []}
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    response = agent.answer("what is my latest like on X?")
+
+    assert response.status == "needs_fetch"
+    assert response.summary == "XAgent did not find X likes."
+    assert any(event["label"] == "Fetching X likes with Agent-Reach..." for event in response.activity_events)
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in response.activity_events)
 
 
 def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_path):

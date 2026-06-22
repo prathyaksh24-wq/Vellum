@@ -695,6 +695,11 @@ async def _run_agent(
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
         delegated_sources = [Source(**source) for source in live_sources]
+        if _should_passthrough_live_result(live_result):
+            answer = live_result.answer or "No response."
+            if answer and "blocked for privacy" not in answer.casefold():
+                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent"))
+            return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
         agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
 
     async with _agent_runtime_lock:
@@ -1599,6 +1604,14 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
     )
 
 
+def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool:
+    if live_result is None or not live_result.handled:
+        return False
+    if live_result.agent_name != "XAgent":
+        return False
+    return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
+
+
 async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
     try:
         return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
@@ -1764,6 +1777,68 @@ async def _stream_agent_turn(
             item_id=str(subagent_item["id"]),
             name=live_result.agent_name,
         )
+        if _should_passthrough_live_result(live_result):
+            answer = live_result.answer or "No response."
+            message_item = {
+                "id": message_item_id,
+                "type": "message",
+                "role": "assistant",
+                "status": "in_progress",
+            }
+            yield _response_output_item_added(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                item=message_item,
+            )
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="final_answer_started",
+                label="Writing answer...",
+                item_id=message_item_id,
+            )
+            if answer:
+                yield _response_output_text_delta(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    item_id=message_item_id,
+                    delta=answer,
+                )
+                yield _agent_activity_event(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    activity_type="final_answer_delta",
+                    label="Writing answer...",
+                    detail=answer[:1000],
+                    item_id=message_item_id,
+                )
+                yield _sse("token", {"text": answer})
+            yield _response_output_item_done(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                item=message_item,
+            )
+            source_models = [Source(**source) for source in live_sources]
+            response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=source_models)
+            if answer and "blocked for privacy" not in answer.casefold():
+                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent")) if store else _audit_memory_off(active_thread_id, "x_agent"))
+            yield _agent_activity_event(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                activity_type="final_answer_completed",
+                label="Answer written",
+                status="completed",
+                item_id=message_item_id,
+            )
+            yield _response_completed(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                answer=answer,
+                tools=delegated_tools,
+                sources=live_sources,
+            )
+            yield _sse("final", response.model_dump_json())
+            return
 
     async with _agent_runtime_lock:
         answer_parts: list[str] = []

@@ -149,3 +149,19 @@ def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_fl
     assert calls[1] == ["twitter", "like", "123", "--json"]
     assert calls[2] == ["twitter", "retweet", "123", "--json"]
     assert calls[3] == ["twitter", "delete", "123", "--yes", "--json"]
+
+
+def test_agent_reach_provider_normalizes_status_urls_for_write_commands():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"1234567890123456789"}', stderr="")
+
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    provider.repost("https://x.com/openai/status/1234567890123456789?s=20")
+    provider.delete("https://twitter.com/openai/status/1234567890123456789")
+
+    assert calls[0] == ["twitter", "retweet", "1234567890123456789", "--json"]
+    assert calls[1] == ["twitter", "delete", "1234567890123456789", "--yes", "--json"]

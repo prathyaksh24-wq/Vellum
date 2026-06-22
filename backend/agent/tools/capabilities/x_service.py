@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -232,9 +233,7 @@ class XCapabilityService:
     def likes(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_private_reads:
             raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
-        handle = str(payload.get("handle") or payload.get("username") or "").strip().lstrip("@")
-        if not handle:
-            raise ToolPermissionError("X likes require handle.")
+        handle = str(payload.get("handle") or payload.get("username") or "me").strip().lstrip("@")
         max_results = self._normalize_max_results(payload.get("max_results", 10))
         self._require_agent_reach()
         items = [self._normalize_post(item) for item in self.agent_reach_provider.likes(handle, max_results)]
@@ -457,7 +456,8 @@ class XCapabilityService:
         tweet_id = str(payload.get("tweet_id") or payload.get("url") or payload.get("tweet_url") or "").strip()
         if not tweet_id:
             raise ToolPermissionError("X action requires tweet_id or tweet URL.")
-        return tweet_id
+        match = re.search(r"(?:/status/|^)(\d{8,})(?:\D|$)", tweet_id)
+        return match.group(1) if match else tweet_id
 
     def _safe_reason(self, exc: Exception) -> str:
         return str(exc).replace("\r", " ").replace("\n", " ")[:200]

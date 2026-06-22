@@ -320,6 +320,25 @@ def test_x_service_prefers_agent_reach_for_bookmarks_timeline_likes_and_profile(
     ]
 
 
+def test_x_service_likes_defaults_to_me_for_private_reads():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def likes(self, handle, max_results):
+            calls.append((handle, max_results))
+            return [{"id": "9", "text": "Liked post", "handle": "openai", "url": "https://x.com/openai/status/9"}]
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach(), allow_private_reads=True)
+
+    result = service.likes({"max_results": 1})
+
+    assert calls == [("me", 1)]
+    assert result["items"][0]["url"] == "https://x.com/openai/status/9"
+
+
 def test_x_service_agent_reach_write_actions_require_confirm_and_call_provider():
     calls = []
 
