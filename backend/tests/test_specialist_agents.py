@@ -29,6 +29,11 @@ from agent.agents.base import (
 )
 
 
+class AgentReachUnavailable:
+    def available(self):
+        return False
+
+
 def test_specialist_response_defaults_are_empty_and_bounded():
     response = SpecialistResponse(
         agent="SportsAgent",
@@ -555,7 +560,8 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
                 "author": {"username": "nba"},
                 "created_at": "2026-05-31T12:00:00Z",
             }
-        ]
+        ],
+        agent_reach_provider=AgentReachUnavailable(),
     )
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
@@ -675,7 +681,7 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
         "https://www.nba.com/news/update"
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
     registry = PupilRegistry(
         {
             "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
@@ -864,7 +870,8 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
                 "author": {"username": "naval"},
                 "created_at": "2026-05-31T12:00:00Z",
             }
-        ]
+        ],
+        agent_reach_provider=AgentReachUnavailable(),
     )
     agent = XAgent(vault_root=tmp_path, x_service=service)
 
@@ -874,6 +881,62 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
     assert "Naval posted about leverage" in response.summary
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://x.com/naval/status/1"
+
+
+def test_x_agent_search_with_agent_reach_emits_visible_activity(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [
+                {
+                    "text": "OpenAI posted a research update.",
+                    "url": "https://x.com/openai/status/1",
+                    "handle": "OpenAI",
+                    "created_at": "2026-06-21T12:00:00Z",
+                }
+            ]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer("What did OpenAI post on X?")
+
+    assert response.status == "answered"
+    assert "OpenAI posted a research update" in response.summary
+    assert response.analysis == "Used Agent-Reach through the shared X capability service."
+    assert any(event["label"] == "Searching X with Agent-Reach..." for event in response.activity_events)
+    assert any(event["label"] == "Reading X results..." for event in response.activity_events)
+    assert any(event["label"] == "X action completed" for event in response.activity_events)
+
+
+def test_live_dispatcher_does_not_label_agent_reach_x_sources_as_web_search(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [{"text": "Agent-Reach X result", "url": "https://x.com/openai/status/1", "handle": "OpenAI"}]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("What did OpenAI post on X?", thread_id="x-agent-reach")
+
+    assert result is not None
+    assert result.tools == ["x_agent"]
+    assert any(event["label"] == "Searching X with Agent-Reach..." for event in result.activity_events)
 
 
 def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
@@ -900,7 +963,7 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
 
 
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
-    service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
     agent = XAgent(vault_root=tmp_path, x_service=service)
 
     response = agent.answer("What did AlexHormozi post on X?")

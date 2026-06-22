@@ -65,6 +65,13 @@ class XAgent:
                 summary="XAgent did not find matching X posts.",
                 confidence=0.35,
             )
+        provider = str(result.get("provider") or "").strip()
+        activity_events = self._search_activity_events(provider) if provider else []
+        analysis = (
+            "Used Agent-Reach through the shared X capability service."
+            if provider == "agent-reach"
+            else "Used x.search_posts through the shared X capability service."
+        )
         lines = []
         sources = []
         for index, item in enumerate(items[:5], start=1):
@@ -87,9 +94,10 @@ class XAgent:
             agent=self.name,
             status="answered",
             summary="\n".join(lines),
-            analysis="Used x.search_posts through the shared X capability service.",
+            analysis=analysis,
             sources=sources,
             confidence=0.75,
+            activity_events=activity_events,
         )
 
     def _search_posts(self, payload: dict) -> dict:
@@ -261,6 +269,25 @@ class XAgent:
                     )
                 )
         return lines, sources
+
+    def _search_activity_events(self, provider: str) -> list[dict]:
+        if provider == "agent-reach":
+            return [
+                {"type": "tool_call_started", "label": "Searching X with Agent-Reach...", "name": "agent_reach_x_search"},
+                {"type": "source_reading", "label": "Reading X results...", "name": "agent_reach_x_reading"},
+                {
+                    "type": "tool_call_completed",
+                    "label": "X action completed",
+                    "name": "agent_reach_x_completed",
+                    "status": "completed",
+                },
+            ]
+        if provider == "xai":
+            return [
+                {"type": "tool_call_started", "label": "Searching X with xAI...", "name": "xai_x_search"},
+                {"type": "tool_call_completed", "label": "X search completed", "name": "xai_x_search", "status": "completed"},
+            ]
+        return []
 
     def _error(self, summary: str, exc: Exception) -> SpecialistResponse:
         return SpecialistResponse(

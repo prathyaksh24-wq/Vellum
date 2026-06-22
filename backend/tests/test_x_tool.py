@@ -4,6 +4,11 @@ from types import SimpleNamespace
 from agent.tools import x as x_tool
 
 
+class AgentReachUnavailable:
+    def available(self):
+        return False
+
+
 def test_search_uses_xai_search_client(monkeypatch):
     seen = {}
 
@@ -14,6 +19,7 @@ def test_search_uses_xai_search_client(monkeypatch):
             return [{"id": "1", "text": "hello", "url": "https://x.com/a/status/1"}]
 
     monkeypatch.setattr(x_tool, "_xai_client", lambda: FakeSearchClient)
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: AgentReachUnavailable())
 
     out = json.loads(x_tool.x_action.func(action="search", query="nba", max_results=3))
 
@@ -43,6 +49,31 @@ def test_search_prefers_agent_reach_when_ready(monkeypatch):
     assert out["provider"] == "agent-reach"
     assert out["items"][0]["text"] == "agent reach result"
     assert calls == [("nba", 3)]
+
+
+def test_status_reports_agent_reach_connector(monkeypatch):
+    class FakeStatus:
+        configured = True
+        status = "ready"
+        notes = "Agent-Reach X connector is ready."
+
+        def model_dump(self):
+            return {"configured": self.configured, "status": self.status, "notes": self.notes}
+
+    class FakeAgentReach:
+        def status(self):
+            return FakeStatus()
+
+        def available(self):
+            return True
+
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: FakeAgentReach())
+
+    out = json.loads(x_tool.x_action.func(action="status"))
+
+    assert out["action"] == "status"
+    assert out["agent_reach"]["status"] == "ready"
+    assert out["agent_reach"]["configured"] is True
 
 
 def test_bookmarks_requires_private_read_gate(monkeypatch):
@@ -93,6 +124,7 @@ def test_post_when_allowed_calls_client(monkeypatch):
 
     monkeypatch.setattr(x_tool, "get_settings", lambda: SimpleNamespace(x_tool_allow_private_reads=True, x_tool_allow_posts=True))
     monkeypatch.setattr(x_tool, "_x_api_client", lambda: FakeClient)
+    monkeypatch.setattr(x_tool, "_agent_reach_provider", lambda: AgentReachUnavailable())
 
     out = json.loads(x_tool.x_action.func(action="post", text="hello", confirm=True))
 

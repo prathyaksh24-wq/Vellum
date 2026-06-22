@@ -133,7 +133,10 @@ class LiveAgentDispatcher:
 
     def _result_from_response(self, response: SpecialistResponse) -> LiveAgentResult:
         tools = [self._tool_name(response.agent)]
-        if any(source.kind == "web" for source in response.sources):
+        uses_agent_reach = "agent-reach" in response.analysis.casefold() or any(
+            str(event.get("name") or "").startswith("agent_reach_x_") for event in response.activity_events
+        )
+        if any(source.kind == "web" for source in response.sources) and not uses_agent_reach:
             tools.append("web_search")
         if "serpapi" in response.analysis.casefold():
             tools.append("serpapi")

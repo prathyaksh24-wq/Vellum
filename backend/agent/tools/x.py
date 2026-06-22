@@ -61,16 +61,31 @@ def x_action(
     max_results: int = 10,
     confirm: bool = False,
 ) -> str:
-    """Run controlled X actions: search, me, bookmarks, post, post_image.
+    """Run controlled X actions: status, search, me, bookmarks, post, post_image.
 
-    search uses xAI X Search. me/bookmarks use official X API OAuth and require
-    X_TOOL_ALLOW_PRIVATE_READS=true. post/post_image require confirm=True and
-    X_TOOL_ALLOW_POSTS=true.
+    status reports Agent-Reach/X connector availability. Search prefers
+    Agent-Reach when ready and falls back to xAI X Search. me/bookmarks use
+    official X API OAuth and require X_TOOL_ALLOW_PRIVATE_READS=true.
+    post/post_image require confirm=True and X_TOOL_ALLOW_POSTS=true.
     """
     normalized = action.strip().casefold().replace("-", "_")
     settings = get_settings()
 
     try:
+        if normalized == "status":
+            agent_reach = _agent_reach_provider()
+            agent_reach_status = agent_reach.status().model_dump()
+            return _json(
+                {
+                    "action": "status",
+                    "agent_reach": agent_reach_status,
+                    "agent_reach_available": bool(agent_reach_status.get("configured"))
+                    and agent_reach_status.get("status") == "ready",
+                    "x_private_reads_enabled": bool(settings.x_tool_allow_private_reads),
+                    "x_posts_enabled": bool(settings.x_tool_allow_posts),
+                }
+            )
+
         if normalized == "search":
             if not query.strip():
                 return "X search requires query."

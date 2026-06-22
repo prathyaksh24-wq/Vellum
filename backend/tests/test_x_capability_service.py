@@ -7,6 +7,11 @@ from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.registry import ToolPermissionError
 
 
+class AgentReachUnavailable:
+    def available(self):
+        return False
+
+
 def test_x_service_search_posts_returns_structured_records():
     calls = {}
 
@@ -22,7 +27,7 @@ def test_x_service_search_posts_returns_structured_records():
             }
         ]
 
-    service = XCapabilityService(search_posts_backend=fake_search)
+    service = XCapabilityService(search_posts_backend=fake_search, agent_reach_provider=AgentReachUnavailable())
 
     result = service.search_posts({"query": "Arsenal", "max_results": 3})
 
@@ -48,7 +53,7 @@ def test_x_service_default_search_backend_passes_window_to_script(monkeypatch):
 
     monkeypatch.setattr(x_service, "_load_script", lambda name: SimpleNamespace(search_x=fake_search_x))
 
-    result = XCapabilityService(search_posts_backend=None, allow_posts=False).search_posts(
+    result = XCapabilityService(search_posts_backend=None, allow_posts=False, agent_reach_provider=AgentReachUnavailable()).search_posts(
         {"query": "Arsenal", "max_results": 5}
     )
 

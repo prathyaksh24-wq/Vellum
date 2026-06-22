@@ -34,5 +34,25 @@ describe("Vellum default activity status", () => {
     expect(html).toContain("Math.max(12");
     expect(html).toContain("Math.min(x");
     expect(html).toContain("clampMenuPosition(pos, 230, 260)");
+    expect(html).toContain(".ctx-menu{position:fixed;z-index:1000");
+    expect(html).toContain("portal className=\"ctx-menu\"");
+  });
+
+  test("casual greetings suppress the full activity ceremony until a real tool runs", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+
+    expect(html).toContain("isCasualGreetingPrompt");
+    expect(html).toContain("suppressActivity");
+    expect(html).toContain("isQuietAnswerActivity");
+    expect(html).toContain("items.every(isQuietAnswerActivity)");
+  });
+
+  test("settings memory surfaces load live backend memory instead of static-only data", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+
+    expect(html).toContain("memoryData");
+    expect(html).toContain("API.settings.memoryEntries()");
+    expect(html).toContain("MemorySummaryCard");
+    expect(html).toContain("SavedMemoriesCard");
   });
 });
