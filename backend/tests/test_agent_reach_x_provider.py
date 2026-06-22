@@ -106,3 +106,46 @@ def test_agent_reach_provider_write_methods_use_agent_reach_commands():
 
     assert calls[0] == ["twitter", "post", "hello", "--json"]
     assert result["id"] == "tweet-1"
+
+
+def test_agent_reach_provider_read_private_and_timeline_commands():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout='{"data":[{"id":"1","text":"saved","author":{"screenName":"me"}}]}',
+            stderr="",
+        )
+
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    assert provider.bookmarks(max_results=4)[0]["text"] == "saved"
+    assert provider.timeline(max_results=3)[0]["text"] == "saved"
+    assert provider.likes("me", max_results=2)[0]["text"] == "saved"
+
+    assert calls[0] == ["twitter", "bookmarks", "--max", "4", "--json"]
+    assert calls[1] == ["twitter", "feed", "--max", "3", "--json"]
+    assert calls[2] == ["twitter", "likes", "me", "--max", "2", "--json"]
+
+
+def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_flags():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"123"}', stderr="")
+
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    provider.reply("123", "reply text")
+    provider.like("123")
+    provider.repost("123")
+    provider.delete("123")
+
+    assert calls[0] == ["twitter", "reply", "123", "reply text", "--json"]
+    assert calls[1] == ["twitter", "like", "123", "--json"]
+    assert calls[2] == ["twitter", "retweet", "123", "--json"]
+    assert calls[3] == ["twitter", "delete", "123", "--yes", "--json"]

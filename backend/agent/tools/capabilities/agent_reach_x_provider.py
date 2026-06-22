@@ -74,6 +74,10 @@ class AgentReachXProvider:
         output = self._exec("bookmarks", "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
+    def likes(self, handle: str, max_results: int = 20) -> list[dict[str, Any]]:
+        output = self._exec("likes", handle.lstrip("@"), "--max", str(max_results), "--json")
+        return self._normalize_posts(output)
+
     def profile(self, handle: str) -> dict[str, Any]:
         output = self._exec("user", handle.lstrip("@"), "--json")
         return self._normalize_object(output)
@@ -99,7 +103,7 @@ class AgentReachXProvider:
         return self._normalize_object(output)
 
     def delete(self, tweet_id_or_url: str) -> dict[str, Any]:
-        output = self._exec("delete", tweet_id_or_url, "--json")
+        output = self._exec("delete", tweet_id_or_url, "--yes", "--json")
         return self._normalize_object(output)
 
     def _exec(self, command: str, *args: str) -> Any:
