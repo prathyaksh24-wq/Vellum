@@ -376,14 +376,26 @@ class XAgent:
 
     def _search_activity_events(self, provider: str) -> list[dict]:
         if provider == "agent-reach":
+            metadata = {"suppress_generic_tool": True}
             return [
-                {"type": "tool_call_started", "label": "Searching X with Agent-Reach...", "name": "agent_reach_x_search"},
-                {"type": "source_reading", "label": "Reading X results...", "name": "agent_reach_x_reading"},
+                {
+                    "type": "tool_call_started",
+                    "label": "Searching X with Agent-Reach...",
+                    "name": "agent_reach_x_search",
+                    "metadata": metadata,
+                },
+                {
+                    "type": "source_reading",
+                    "label": "Reading X results...",
+                    "name": "agent_reach_x_reading",
+                    "metadata": metadata,
+                },
                 {
                     "type": "tool_call_completed",
                     "label": "X action completed",
                     "name": "agent_reach_x_completed",
                     "status": "completed",
+                    "metadata": metadata,
                 },
             ]
         if provider == "xai":
@@ -396,13 +408,20 @@ class XAgent:
     def _read_activity_events(self, read_type: str, provider: str) -> list[dict]:
         if provider != "agent-reach":
             return []
+        metadata = {"suppress_generic_tool": True}
         label = {
             "bookmarks": "Fetching X bookmarks with Agent-Reach...",
             "timeline": "Fetching X timeline with Agent-Reach...",
         }.get(read_type, "Reading X with Agent-Reach...")
         return [
-            {"type": "tool_call_started", "label": label, "name": f"agent_reach_x_{read_type}"},
-            {"type": "tool_call_completed", "label": "X action completed", "name": "agent_reach_x_completed", "status": "completed"},
+            {"type": "tool_call_started", "label": label, "name": f"agent_reach_x_{read_type}", "metadata": metadata},
+            {
+                "type": "tool_call_completed",
+                "label": "X action completed",
+                "name": "agent_reach_x_completed",
+                "status": "completed",
+                "metadata": metadata,
+            },
         ]
 
     def _error(self, summary: str, exc: Exception) -> SpecialistResponse:

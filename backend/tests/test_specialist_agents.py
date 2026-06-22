@@ -939,6 +939,25 @@ def test_live_dispatcher_does_not_label_agent_reach_x_sources_as_web_search(tmp_
     assert any(event["label"] == "Searching X with Agent-Reach..." for event in result.activity_events)
 
 
+def test_agent_reach_activity_marks_generic_tool_events_suppressible(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [{"text": "Agent-Reach X result", "url": "https://x.com/openai/status/1", "handle": "OpenAI"}]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", x_service=service)
+
+    response = agent.answer("What did OpenAI post on X?")
+
+    assert any(event["metadata"].get("suppress_generic_tool") is True for event in response.activity_events)
+
+
 def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
     registry = ToolRegistry()
     calls = []

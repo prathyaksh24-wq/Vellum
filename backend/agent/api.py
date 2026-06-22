@@ -1683,7 +1683,14 @@ async def _stream_agent_turn(
                 name=name,
                 metadata=dict(activity.get("metadata") or {}),
             )
+        suppress_generic_tool_activity = any(
+            bool((activity.get("metadata") or {}).get("suppress_generic_tool"))
+            for activity in live_result.activity_events
+        )
         for tool_name in live_result.tools:
+            if suppress_generic_tool_activity:
+                yield _sse("tool", {"name": tool_name})
+                continue
             tool_item = {
                 "id": _stream_id("item"),
                 "type": "tool_call",
