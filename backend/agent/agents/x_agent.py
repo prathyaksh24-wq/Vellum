@@ -261,8 +261,19 @@ class XAgent:
             analysis="Used x.publish_post.",
             confidence=0.8,
             activity_events=[
-                {"type": "tool_call_started", "label": "Posting to X...", "name": "agent_reach_x_post"},
-                {"type": "tool_call_completed", "label": "X action completed", "name": "agent_reach_x_completed", "status": "completed"},
+                {
+                    "type": "tool_call_started",
+                    "label": "Posting to X...",
+                    "name": "agent_reach_x_post",
+                    "metadata": {"suppress_generic_tool": True},
+                },
+                {
+                    "type": "tool_call_completed",
+                    "label": "X action completed",
+                    "name": "agent_reach_x_completed",
+                    "status": "completed",
+                    "metadata": {"suppress_generic_tool": True},
+                },
             ],
         )
 
@@ -300,6 +311,7 @@ class XAgent:
                     "type": "tool_call_started",
                     "label": f"Preparing X {verb}...",
                     "name": f"agent_reach_x_prepare_{verb}",
+                    "metadata": {"suppress_generic_tool": True},
                 },
             ],
         )
@@ -317,8 +329,19 @@ class XAgent:
             analysis=f"Used {action}.",
             confidence=0.8,
             activity_events=[
-                {"type": "tool_call_started", "label": self._write_action_activity_label(verb), "name": f"agent_reach_x_{verb}"},
-                {"type": "tool_call_completed", "label": "X action completed", "name": "agent_reach_x_completed", "status": "completed"},
+                {
+                    "type": "tool_call_started",
+                    "label": self._write_action_activity_label(verb),
+                    "name": f"agent_reach_x_{verb}",
+                    "metadata": {"suppress_generic_tool": True},
+                },
+                {
+                    "type": "tool_call_completed",
+                    "label": "X action completed",
+                    "name": "agent_reach_x_completed",
+                    "status": "completed",
+                    "metadata": {"suppress_generic_tool": True},
+                },
             ],
         )
 

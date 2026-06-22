@@ -955,7 +955,7 @@ def test_agent_reach_activity_marks_generic_tool_events_suppressible(tmp_path):
 
     response = agent.answer("What did OpenAI post on X?")
 
-    assert any(event["metadata"].get("suppress_generic_tool") is True for event in response.activity_events)
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in response.activity_events)
 
 
 def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
@@ -1047,6 +1047,7 @@ def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tm
     assert response.action_request["payload"]["tweet_id"] == "https://x.com/me/status/123"
     assert "Confirm before I delete" in response.summary
     assert any(event["label"] == "Preparing X delete..." for event in response.activity_events)
+    assert any(event["metadata"].get("suppress_generic_tool") is True for event in response.activity_events)
 
 
 def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_path):
@@ -1076,6 +1077,7 @@ def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_pat
     assert state_store.get_pending_action("thread-x") is None
     assert any(event["label"] == "Posting to X..." for event in confirmed.activity_events)
     assert any(event["label"] == "X action completed" for event in confirmed.activity_events)
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in confirmed.activity_events)
 
 
 def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
