@@ -135,3 +135,30 @@ def test_honcho_memory_is_local_noop_when_sdk_missing(monkeypatch):
 def test_default_memory_paths_match_new_architecture():
     assert FTS5_DB_PATH.as_posix() == "data/memory/fts5.db"
     assert RESOLVED_DB_PATH.as_posix() == "data/memory/resolved.db"
+
+
+def test_memory_context_block_includes_orchestrator_packet(monkeypatch):
+    from agent.memory import memory_context
+
+    class FakeOrchestrator:
+        def build_memory_packet(self, **kwargs):
+            assert kwargs["thread_id"] == "thread-1"
+            assert kwargs["query"] == "What do you know about my Vellum project?"
+            return {
+                "global_summary": "User is building Vellum.",
+                "saved_memories": [{"text": "User prefers concise answers."}],
+                "honcho_context": "User cares about reliable agents.",
+                "project_context": "Vellum uses sub-agents.",
+                "recent_context": "Recent chat discussed memory orchestration.",
+            }
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", FakeOrchestrator())
+
+    block = memory_context.build_memory_block("thread-1", query="What do you know about my Vellum project?")
+
+    assert "# Memory packet" in block
+    assert "User is building Vellum." in block
+    assert "User prefers concise answers." in block
+    assert "Vellum uses sub-agents." in block
