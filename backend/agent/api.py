@@ -775,6 +775,12 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
 
 async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
     try:
+        memory_store = getattr(_memory_orchestrator, "store", None)
+        memory_settings = memory_store.get_settings() if memory_store is not None else {}
+        if memory_settings and (
+            not memory_settings.get("memory_enabled", True) or not memory_settings.get("save_new_memories", True)
+        ):
+            return
         data_class, _reason = classify(query)
         if data_class == DataClass.RED:
             return
@@ -806,7 +812,7 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
             assistant_message=clean_answer,
             agent_name="VellumAgent",
         )
-        if pending:
+        if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
         # Hermes-style: refresh the cached user model (Honcho dialectic) on a
         # cadence so the next turn's prompt reflects a deeper understanding.
@@ -850,6 +856,12 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
     try:
         pending_count = len(store.list_pending())
     except Exception:
+        return False
+    try:
+        settings = store.get_settings()
+    except Exception:
+        settings = {}
+    if not force and not settings.get("dreaming_enabled", True):
         return False
     if not force and pending_count < _DREAMING_MIN_PENDING:
         return False
@@ -2626,6 +2638,15 @@ class UpdateMemoryRequest(BaseModel):
     kind: str | None = None
 
 
+class MemorySettingsRequest(BaseModel):
+    memory_enabled: bool | None = None
+    dreaming_enabled: bool | None = None
+    reference_history_enabled: bool | None = None
+    save_new_memories: bool | None = None
+    auto_archive_enabled: bool | None = None
+    use_archived_memories: bool | None = None
+
+
 @router.get("/memory/summary")
 async def memory_summary() -> dict[str, Any]:
     store = _memory_orchestrator.store
@@ -2650,6 +2671,23 @@ async def saved_memories() -> dict[str, list[dict[str, Any]]]:
 async def archived_memories() -> dict[str, list[dict[str, Any]]]:
     store = _memory_orchestrator.store
     return {"memories": store.list_archived() if store is not None else []}
+
+
+@router.get("/memory/settings")
+async def memory_settings() -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    return {"settings": await asyncio.to_thread(store.get_settings)}
+
+
+@router.post("/memory/settings")
+async def update_memory_settings(request: MemorySettingsRequest) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    patch = request.model_dump(exclude_none=True)
+    return {"settings": await asyncio.to_thread(store.update_settings, patch)}
 
 
 @router.get("/memory/dreaming/status")

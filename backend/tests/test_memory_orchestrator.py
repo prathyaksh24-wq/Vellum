@@ -129,6 +129,36 @@ def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
     assert packet["scopes"] == ["global", "user_profile", "agent:YoutubeAgent"]
 
 
+def test_memory_settings_can_disable_recent_context_without_disabling_saved_memory(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        honcho=FakeHoncho(),
+    )
+    store.save_memory(
+        kind="preference",
+        text="User prefers concise answers.",
+        source_thread_id="t1",
+        confidence=0.9,
+        scope="global",
+    )
+    orchestrator.record_turn(
+        thread_id="t1",
+        query="What did Neymar do at PSG?",
+        answer="Neymar played for PSG and won domestic titles.",
+        confidence=0.4,
+    )
+    store.update_settings({"reference_history_enabled": False})
+
+    packet = orchestrator.build_memory_packet(thread_id="t2", query="What do you remember?", agent_name="VellumAgent")
+
+    assert packet["saved_memories"][0]["text"] == "User prefers concise answers."
+    assert packet["recent_context"] == ""
+
+
 def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(

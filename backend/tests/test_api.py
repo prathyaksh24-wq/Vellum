@@ -311,6 +311,49 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
     assert status.json()["status"] in {"idle", "completed"}
 
 
+def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+
+    with TestClient(api.app) as client:
+        before = client.get("/api/memory/settings")
+        updated = client.post(
+            "/api/memory/settings",
+            json={"memory_enabled": False, "dreaming_enabled": False, "reference_history_enabled": False},
+        )
+
+    assert before.status_code == 200
+    assert before.json()["settings"]["memory_enabled"] is True
+    assert updated.status_code == 200
+    assert updated.json()["settings"]["memory_enabled"] is False
+    assert updated.json()["settings"]["dreaming_enabled"] is False
+    assert updated.json()["settings"]["reference_history_enabled"] is False
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer concise answers.",
+            "I will remember that.",
+            thread_id="memory-off",
+            source="api",
+        )
+    )
+
+    assert store.list_pending() == []
+    assert store.list_saved() == []
+
+
 def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore

@@ -39,6 +39,15 @@ _LIVE_HINTS = {
     "yesterday",
 }
 
+DEFAULT_MEMORY_SETTINGS = {
+    "memory_enabled": True,
+    "dreaming_enabled": True,
+    "reference_history_enabled": True,
+    "save_new_memories": True,
+    "auto_archive_enabled": True,
+    "use_archived_memories": False,
+}
+
 
 class SQLiteMemoryStore:
     """Small orchestration layer over Vellum's existing local SQLite memory DB."""
@@ -92,6 +101,15 @@ class SQLiteMemoryStore:
                     memory_id INTEGER,
                     detail TEXT NOT NULL,
                     created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
                 )
                 """
             )
@@ -334,6 +352,37 @@ class SQLiteMemoryStore:
             ).fetchall()
         return [_row_dict(row) for row in rows]
 
+    def get_settings(self) -> dict[str, bool]:
+        settings = dict(DEFAULT_MEMORY_SETTINGS)
+        with self._connect() as conn:
+            rows = conn.execute("SELECT key, value FROM memory_settings").fetchall()
+        for row in rows:
+            if row["key"] not in settings:
+                continue
+            try:
+                settings[row["key"]] = bool(json.loads(row["value"]))
+            except json.JSONDecodeError:
+                settings[row["key"]] = row["value"].lower() == "true"
+        return settings
+
+    def update_settings(self, patch: dict[str, Any]) -> dict[str, bool]:
+        allowed = set(DEFAULT_MEMORY_SETTINGS)
+        now = self._now()
+        with self._connect() as conn:
+            for key, value in patch.items():
+                if key not in allowed:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO memory_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    """,
+                    (key, json.dumps(bool(value)), now),
+                )
+        self.audit("settings_updated", None, json.dumps({k: bool(v) for k, v in patch.items() if k in allowed}, sort_keys=True))
+        return self.get_settings()
+
 
 @dataclass(slots=True)
 class MemoryOrchestrator:
@@ -418,20 +467,31 @@ class MemoryOrchestrator:
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = _packet_scopes(agent_name=agent_name, active_project=active_project)
+        settings = self.store.get_settings() if self.store is not None else dict(DEFAULT_MEMORY_SETTINGS)
+        if not settings.get("memory_enabled", True):
+            return {
+                "global_summary": "",
+                "saved_memories": [],
+                "honcho_context": "",
+                "project_context": "",
+                "recent_context": "",
+                "scopes": scopes,
+                "settings": settings,
+            }
         saved: list[dict[str, Any]] = []
         if self.store is not None:
             baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
             baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
             matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
             saved = _dedupe_memories([*baseline, *matched])[:8]
-        docs = self.fts5.search(_memory_search_query(clean_query), limit=5)
+        docs = self.fts5.search(_memory_search_query(clean_query), limit=5) if settings.get("reference_history_enabled", True) else []
         honcho_context = ""
         if self.honcho is not None:
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
                 honcho_context = ""
-        docs = docs or self.fts5.recent_documents(limit=5)
+        docs = docs or (self.fts5.recent_documents(limit=5) if settings.get("reference_history_enabled", True) else [])
         packet = {
             "global_summary": self.store.global_summary() if self.store is not None else "",
             "saved_memories": saved,
@@ -439,6 +499,7 @@ class MemoryOrchestrator:
             "project_context": self.store.project_summary(active_project) if self.store is not None else "",
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "scopes": scopes,
+            "settings": settings,
         }
         if cloud_safe:
             packet = _scrub_packet(packet)
@@ -485,6 +546,9 @@ class MemoryOrchestrator:
         agent_name: str = "VellumAgent",
     ) -> list[dict[str, Any]]:
         if self.store is None:
+            return []
+        settings = self.store.get_settings()
+        if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
             return []
         candidates = _extract_candidates(user_message, assistant_message)
         stored: list[dict[str, Any]] = []
