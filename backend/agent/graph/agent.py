@@ -36,6 +36,7 @@ from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
 from agent.tools.library_docs import library_docs
+from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
@@ -69,6 +70,7 @@ Tools:
 19. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
+22. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -119,6 +121,7 @@ Rules:
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Use x_action for explicit X requests and Agent-Reach/X capability questions. For "do you have Agent-Reach/X access" or similar status questions, call x_action with action='status' before answering. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
+- Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
 """
 
 _prompt_project_ctx: ProjectContext | None = None
@@ -312,6 +315,7 @@ def build_agent(model: str | None = None):
             git_action,
             obsidian_api,
             library_docs,
+            memory_orchestrator,
             repo_docs,
             context_mode,
             web_research,
@@ -353,6 +357,7 @@ async def build_async_agent(model: str | None = None):
             git_action,
             obsidian_api,
             library_docs,
+            memory_orchestrator,
             repo_docs,
             context_mode,
             web_research,

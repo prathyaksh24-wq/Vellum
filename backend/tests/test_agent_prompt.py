@@ -106,6 +106,7 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
 
@@ -131,6 +132,7 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
 
 
 def test_agent_prompt_documents_tavily_and_firecrawl_tools():
@@ -158,3 +160,11 @@ def test_agent_prompt_forbids_live_access_refusal_when_tools_exist():
 
     assert "Do not tell the user you lack live information access" in prompt
     assert "use web_search" in prompt
+
+
+def test_agent_prompt_documents_memory_orchestrator_tool():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "memory_orchestrator" in prompt
+    assert "Dreaming status" in prompt
+    assert "Do not infer Dreaming" in prompt
