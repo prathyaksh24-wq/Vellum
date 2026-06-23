@@ -161,7 +161,7 @@ def vellum_prompt(state, config=None):
     try:
         from agent.memory.memory_context import build_memory_block
 
-        memory_block = build_memory_block(thread_id)
+        memory_block = build_memory_block(thread_id, query=_latest_user_query(state))
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("memory context load failed: %s", exc)
@@ -181,6 +181,24 @@ def vellum_prompt(state, config=None):
         system_body = f"{memory_block}\n\n{system_body}"
     system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
+
+
+def _latest_user_query(state) -> str:
+    messages = list((state or {}).get("messages", []))
+    for message in reversed(messages):
+        role = getattr(message, "type", "") or getattr(message, "role", "")
+        if role not in {"human", "user"}:
+            continue
+        content = getattr(message, "content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") in {"text", "input_text"}:
+                    parts.append(str(item.get("text") or ""))
+            return "\n".join(part for part in parts if part)
+    return ""
 
 
 CHECKPOINT_DB = Path("data/memory/checkpoints.db")
