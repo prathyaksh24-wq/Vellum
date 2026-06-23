@@ -340,6 +340,41 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
     assert "Remember that I prefer" in orchestrator.fts5.recent_documents(limit=1)[0]["content"]
 
 
+def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "_DREAMING_MIN_PENDING", 1)
+    monkeypatch.setattr(api, "_DREAMING_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    api._dreaming_status.clear()
+    api._dreaming_status.update({"status": "idle", "last_run": None, "last_result": None})
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer concise Vellum demo answers.",
+            "I will keep Vellum demo answers concise.",
+            thread_id="thread-auto-dream",
+            source="api",
+        )
+    )
+
+    assert store.list_pending() == []
+    assert any("concise Vellum demo answers" in item["text"] for item in store.list_saved())
+    assert api._dreaming_status["status"] == "completed"
+    assert api._dreaming_status["last_result"]["new_memories"]
+
+
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
