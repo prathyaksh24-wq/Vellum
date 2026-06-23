@@ -443,6 +443,11 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert plugins.status_code == 200
     plugin_ids = {item["id"] for item in plugins.json()["plugins"]}
     assert {"agent-reach", "serpapi"} <= plugin_ids
+    memory_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "memory-orchestrator")
+    assert memory_plugin["type"] == "system"
+    assert memory_plugin["category"] == "Memory"
+    assert memory_plugin["required"] is True
+    assert "memory.run_dreaming" in memory_plugin["capabilities"]
     assert skills.status_code == 200
     assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
     assert automations.status_code == 200

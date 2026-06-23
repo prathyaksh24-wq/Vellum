@@ -49,6 +49,7 @@ from agent.memory.resolved import ResolvedQuestionsCache
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
+from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -2928,6 +2929,7 @@ async def list_plugins() -> dict[str, Any]:
         health_result = await health_result
     servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
     plugins = [
+        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
         *[
         {
