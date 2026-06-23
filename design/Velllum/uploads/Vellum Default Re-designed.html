@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Vellum — Default Mode (preview)</title>
+<title>Vellum - Default Mode (preview)</title>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
@@ -67,7 +67,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .wc:hover{background:var(--hover)}.wc.close:hover{background:#c0392b;color:#fff}
 /* body */
 .body{flex:1;display:flex;min-height:0;position:relative}
-/* sidebar — expanded */
+/* sidebar ? expanded */
 .sidebar{width:260px;background:var(--glass-side);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px;overflow:hidden}
 .sidebar.overlay{position:absolute;top:0;left:0;height:100%;z-index:120;transform:translateX(-102%);transition:transform .24s cubic-bezier(.4,0,.2,1);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);box-shadow:0 30px 70px rgba(0,0,0,.55)}
 .sidebar.overlay.open{transform:translateX(0)}
@@ -136,6 +136,95 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .btn.primary:disabled{background:var(--line2);border-color:var(--line2);color:var(--dim);cursor:not-allowed;filter:none}
 /* ledger */
 .led-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.cb-flame{color:#e0794a!important}
+.cb-badge{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 38%,var(--line2));border-radius:20px;padding:1px 7px;margin-left:4px}
+.cb-export{display:flex;gap:6px;flex-shrink:0}
+.cb-exp-btn{border:1px solid var(--line2);background:var(--input);color:var(--txt2);font:inherit;font-size:11.5px;padding:5px 11px;border-radius:7px;cursor:pointer}
+.cb-exp-btn:hover{background:var(--hover)}
+.cb-periods{display:flex;gap:6px;margin:14px 0 16px;flex-wrap:wrap}
+.cb-period{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--input);color:var(--dim);font:inherit;font-size:12.5px;padding:7px 13px;border-radius:9px;cursor:pointer;transition:background .14s,color .14s,border-color .14s}
+.cb-period:hover{color:var(--txt2)}
+.cb-period.on{background:color-mix(in srgb,var(--ember) 14%,transparent);color:var(--txt2);border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
+.cb-pnum{display:flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:var(--line2);color:var(--dim);font-size:9.5px}
+.cb-period.on .cb-pnum{background:var(--ember);color:var(--onember)}
+.cb-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:14px}
+.cb-stat{border:1px solid var(--line2);border-radius:12px;background:var(--glass);padding:13px 14px}
+.cb-stat-v{font-size:21px;color:var(--txt2);letter-spacing:-.02em;font-weight:500}
+.cb-stat-v.cb-cost{color:#e0794a}
+.cb-stat-k{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.cb-panel{border:1px solid var(--line2);border-radius:13px;background:var(--glass);padding:15px 16px;margin-bottom:12px}
+.cb-panel-h{font-size:12.5px;color:var(--txt2);font-weight:500;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.cb-panel-sub{font-size:10.5px;color:var(--dim2);font-weight:400}
+.cb-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cb-chart{display:flex;align-items:flex-end;gap:8px;height:120px;padding-top:6px}
+.cb-bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%}
+.cb-bar-wrap{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.cb-bar{width:60%;max-width:34px;min-height:4px;border-radius:5px 5px 0 0;background:linear-gradient(0deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%);background-size:100% 96px;background-position:center bottom;background-repeat:no-repeat}
+.cb-bar-lbl{font-size:10.5px;color:var(--dim)}
+.cb-row{display:flex;align-items:center;gap:10px;padding:6px 0;font-size:12.5px}
+.cb-row.sm{padding:5px 0;font-size:12px}
+.cb-row-nm{width:104px;flex-shrink:0;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cb-mcp-nm{display:flex;align-items:center;gap:6px}
+.cb-mcp-nm .conn-logo-img{border-radius:3px}
+.cb-row-bar{position:relative;flex:1;height:8px;border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
+.cb-row-mask{position:absolute;top:0;right:0;bottom:0;background:var(--input)}
+
+.cb-row-v{width:84px;flex-shrink:0;text-align:right;color:var(--txt2);display:flex;flex-direction:column;line-height:1.25}
+.cb-row-v small{font-size:10px;color:var(--dim2)}
+.cb-act-head{display:grid;grid-template-columns:1fr 1fr 64px 52px;gap:10px;font-size:10px;color:var(--dim2);text-transform:uppercase;letter-spacing:.05em;padding-bottom:8px;border-bottom:1px solid var(--line)}
+.cb-act-row{display:grid;grid-template-columns:1fr 1fr 64px 52px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.cb-act-row:last-child{border-bottom:none}
+.cb-act-nm{color:var(--txt2)}
+.cb-act-bar{position:relative;height:8px;border-radius:4px;overflow:hidden;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
+.cb-act-mask{position:absolute;top:0;right:0;bottom:0;background:var(--input)}
+.cb-act-cost{text-align:right;color:var(--txt2)}
+.cb-act-os{text-align:right;color:#6fae84;font-variant-numeric:tabular-nums}
+.cb-act-os.low{color:#d98a8a}
+.cb-empty{font-size:12px;color:var(--dim2);padding:8px 0}
+/* knowledge graph */
+.kg-ic{color:var(--ember)!important}
+.kg-legend{display:flex;gap:6px;flex-shrink:0}
+.kg-stat{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:20px;padding:3px 10px}
+.kg-sub-note{text-transform:none;letter-spacing:0;color:var(--dim2);font-size:10.5px}
+.kg-empty{font-size:12.5px;color:var(--dim2);padding:6px 0}
+/* memory architecture */
+.km-sech{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin:22px 0 11px;display:flex;align-items:center;gap:8px}
+.km-layers{display:flex;flex-direction:column;gap:8px}
+.km-layer{display:grid;grid-template-columns:34px 1fr 16px;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid var(--line2);border-radius:12px;background:var(--glass);padding:12px 14px;cursor:pointer;font:inherit;transition:border-color .15s,background .15s}
+.km-layer:hover{border-color:color-mix(in srgb,var(--ember) 40%,var(--line2))}
+.km-layer.on{border-color:color-mix(in srgb,var(--ember) 55%,var(--line2))}
+.km-layer-ic{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ember) 12%,var(--input));color:var(--ember)}
+.km-layer-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.km-layer-name{font-size:14px;font-weight:600;color:var(--txt2)}
+.km-layer-role{font-size:12px;color:var(--dim)}
+.km-layer-chev{display:flex;color:var(--dim);transition:transform .2s}
+.km-layer.on .km-layer-chev{transform:rotate(180deg)}
+.km-layer-detail{grid-column:2 / -1;font-size:12.5px;color:var(--txt);line-height:1.55;padding-top:4px}
+/* ingestion flow */
+.km-flow{display:flex;align-items:stretch;gap:6px;overflow-x:auto;padding-bottom:4px}
+.km-stage{flex:1;min-width:120px;border:1px solid var(--line2);border-radius:12px;background:var(--glass);padding:12px}
+.km-stage-n{width:20px;height:20px;border-radius:50%;background:var(--ember);color:var(--onember);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.km-stage-k{font-size:13px;font-weight:600;color:var(--txt2);margin:8px 0 4px}
+.km-stage-d{font-size:11.5px;color:var(--dim);line-height:1.5}
+.km-arrow{display:flex;align-items:center;color:var(--dim2);flex-shrink:0}
+/* durable cards */
+.km-cards{display:flex;flex-direction:column;gap:11px}
+.km-card{border:1px solid var(--line2);border-radius:13px;background:var(--glass);padding:14px 15px}
+.km-card-top{display:flex;align-items:flex-start;gap:9px}
+.km-card-text{flex:1;font-size:14px;color:var(--txt2);font-weight:500;line-height:1.45}
+.km-card-pin{color:var(--ember);display:flex;margin-top:2px}
+.km-card-x{border:none;background:none;color:var(--dim2);cursor:pointer;display:flex;padding:2px;border-radius:5px;flex-shrink:0}
+.km-card-x:hover{background:var(--hover);color:var(--danger)}
+.km-card-ev{font-size:12.5px;color:var(--dim);line-height:1.55;margin-top:8px}
+.km-k{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dim2);font-weight:600;margin-right:8px}
+.km-card-meta{display:flex;flex-wrap:wrap;gap:16px;margin-top:9px;font-size:12px;color:var(--dim)}
+.km-conf{display:flex;align-items:center;gap:6px}
+.km-conf-dot{width:8px;height:8px;border-radius:50%}
+.km-card-vis{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.km-vis-chip{font-size:11px;color:var(--txt);background:var(--input);border:1px solid var(--line2);border-radius:20px;padding:2px 9px}
+.cb-legend{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;color:var(--dim2);font-weight:400;text-transform:none;letter-spacing:0}
+.cb-leg-grad{width:80px;height:8px;border-radius:4px;display:inline-block;background:linear-gradient(90deg,#4a90e2 0%,#4ec9d6 22%,#7ec86a 42%,#e8c14a 62%,#e8954a 80%,#d65a3a 100%)}
+.set-modal:focus,.set-modal:focus-visible{outline:none}
 .led-card{border:1px solid var(--line);border-radius:13px;padding:16px}
 .led-k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
 .led-v{font-size:21px;color:var(--txt2);letter-spacing:-.02em}
@@ -277,6 +366,155 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sm-empty{padding:40px;text-align:center;color:var(--dim2);font-size:13px}
 .cu-pill{font-size:11.5px;border:1px solid var(--line2);border-radius:14px;padding:3px 11px;color:var(--dim)}
 .cu-pill.on{border-color:var(--ember);color:var(--ember);background:color-mix(in srgb,var(--ember) 9%,transparent)}
+/* Dreaming */
+.dream-block{margin:6px 0 22px;padding:14px 14px 8px;border:1px solid color-mix(in srgb,var(--ember) 22%,var(--line2));border-radius:14px;background:color-mix(in srgb,var(--ember) 5%,transparent)}
+.dream-hd{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.dream-badge{display:inline-flex;align-items:center;gap:6px;width:fit-content;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ember);background:color-mix(in srgb,var(--ember) 12%,transparent);border-radius:20px;padding:3px 10px}
+.dream-sub{font-size:12px;color:var(--dim);line-height:1.5}
+.dream-card{display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-top:1px solid color-mix(in srgb,var(--ember) 12%,var(--line))}
+.dream-card:first-of-type{border-top:none}
+.dream-ic{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:color-mix(in srgb,var(--ember) 12%,transparent);color:var(--ember);flex-shrink:0;margin-top:1px}
+.dream-main{flex:1;min-width:0}
+.dream-text{font-size:13.5px;color:var(--txt2);line-height:1.5}
+.dream-from{font-size:11.5px;color:var(--dim);margin-top:4px;font-style:italic}
+.dream-tag{font-size:11px;color:var(--ember);font-weight:500;margin-bottom:5px}
+.dream-was{font-size:12.5px;color:var(--dim);text-decoration:line-through;line-height:1.45}
+.dream-now{display:flex;align-items:flex-start;gap:5px;font-size:13.5px;color:var(--txt2);line-height:1.5;margin-top:4px}
+.dream-now svg{flex-shrink:0;margin-top:3px;color:#34a853}
+.dream-acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.dream-keep{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-radius:8px;border:1px solid color-mix(in srgb,var(--ember) 40%,var(--line2));background:none;color:var(--txt2);font:inherit;font-size:12.5px;cursor:pointer;transition:background .15s}
+.dream-keep:hover{background:color-mix(in srgb,var(--ember) 12%,transparent)}
+.dream-drop,.dream-ok{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;border:1px solid var(--line2);background:none;color:var(--dim);cursor:pointer;flex-shrink:0;transition:background .15s,color .15s}
+.dream-drop:hover{background:var(--hover);color:var(--txt2)}
+.dream-ok{color:#34a853;border-color:color-mix(in srgb,#34a853 36%,var(--line2))}
+.dream-ok:hover{background:color-mix(in srgb,#34a853 14%,transparent)}
+.dream-label{display:inline-flex;align-items:center;gap:7px;color:var(--txt)}
+.dream-label svg{color:var(--ember)}
+.mem-sec{margin-bottom:22px}
+.mem-sec-h{font-family:var(--font-d);font-size:16px;font-weight:600;color:var(--txt2);margin-bottom:8px}
+.mem-sec-t{font-size:14px;line-height:1.7;color:var(--txt)}
+.mem-card-foot{padding:12px 18px 18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.mem-add-input{flex:1;background:var(--input);border:1px solid var(--line2);border-radius:22px;padding:12px 16px;color:var(--txt2);font:inherit;font-size:14px;outline:none}
+.mem-add-input:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
+.mem-add-btn{width:36px;height:36px;border-radius:50%;border:none;background:var(--ember);color:var(--onember);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:filter .15s}
+.mem-add-btn:hover{filter:brightness(1.1)}
+.sm-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 8px}
+.sm-title{font-family:var(--font-d);font-size:18px;font-weight:600;color:var(--txt2)}
+.sm-toolbar{display:flex;align-items:center;gap:8px;padding:8px 20px 12px;position:relative}
+.sm-search{flex:1;display:flex;align-items:center;gap:9px;background:var(--input);border:1px solid var(--line2);border-radius:22px;padding:9px 14px;color:var(--dim)}
+.sm-search input{flex:1;background:none;border:none;outline:none;color:var(--txt2);font:inherit;font-size:13.5px}
+.sm-tool{width:34px;height:34px;border-radius:8px;border:none;background:none;color:var(--dim);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s}
+.sm-tool:hover{background:var(--hover);color:var(--txt2)}
+.sm-tool-wrap{position:relative;display:flex}
+.sm-menu{position:absolute;top:calc(100% + 6px);right:0;width:232px;background:var(--menu-solid);border:1px solid var(--line2);border-radius:12px;padding:6px;z-index:6;box-shadow:0 16px 50px rgba(0,0,0,.5)}
+.sm-menu-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;font-size:13.5px;color:var(--txt2)}
+.sm-menu-item{padding:9px 11px;border-radius:8px;font-size:13.5px;color:var(--txt);cursor:pointer}
+.sm-menu-item:hover{background:var(--hover);color:var(--txt2)}
+.sm-menu-item.danger{color:var(--danger)}
+.sm-menu-item.danger:hover{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.sm-list{flex:1;overflow-y:auto;padding:0 8px 12px}
+.sm-item{position:relative;display:flex;align-items:flex-start;gap:10px;padding:15px 12px;border-bottom:1px solid var(--line);font-size:13.5px;line-height:1.55;color:var(--txt)}
+.sm-item-text{flex:1;min-width:0}
+.sm-item-menu-wrap{position:relative;flex-shrink:0}
+.sm-item-dots{width:28px;height:28px;border-radius:7px;border:none;background:none;color:var(--dim);display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .12s,background .15s,color .15s}
+.sm-item:hover .sm-item-dots,.sm-item.menu-open .sm-item-dots{opacity:1}
+.sm-item-dots:hover{background:var(--hover);color:var(--txt2)}
+.sm-row-menu{position:absolute;top:calc(100% + 4px);right:0;width:238px;background:var(--menu-solid);border:1px solid var(--line2);border-radius:12px;padding:6px;z-index:8;box-shadow:0 16px 50px rgba(0,0,0,.5)}
+.sm-row-del{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:13.5px;color:var(--danger);cursor:pointer}
+.sm-row-del:hover{background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.sm-row-div{height:1px;background:var(--line);margin:5px 4px}
+.sm-row-meta{padding:7px 11px 8px;font-size:12px;color:var(--dim);line-height:1.5}
+.sm-row-chat{color:var(--ember);text-decoration:underline;cursor:pointer}
+.sm-empty{padding:40px;text-align:center;color:var(--dim2);font-size:13px}
+/* Honcho Memory Console */
+.hc-card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:80;width:860px;max-width:95vw;height:min(640px,90vh);background:var(--modal);border:1px solid var(--line2);border-radius:18px;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden}
+.hc-page-wrap{height:100%;display:flex;flex-direction:column;overflow:hidden;padding:0}
+.hc-card-page{position:static;transform:none;left:auto;top:auto;width:100%;max-width:none;height:100%;border:none;border-radius:0;box-shadow:none;background:transparent}
+.hc-card-page .hc-hd{padding:20px 26px 14px}
+.hc-card-page .hc-tabs{padding:0 26px}
+.hc-card-page .hc-body{padding:18px 26px 40px}
+.hc-card-page .hc-peers{max-width:880px}
+.hc-card-page .hc-concl-row,.hc-card-page .hc-session,.hc-card-page .hc-dream-cta,.hc-card-page .hc-dream-row{max-width:880px}
+.hc-hd{display:flex;align-items:center;gap:14px;padding:16px 18px 12px}
+.hc-title{display:flex;align-items:center;gap:9px;font-family:var(--font-d);font-size:17px;font-weight:600;color:var(--txt2)}
+.hc-logo{display:flex;color:var(--ember)}
+.hc-back{display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--line2);background:var(--hover);color:var(--txt2);cursor:pointer;margin-right:4px;transition:background .14s}
+.hc-back:hover{background:var(--active)}
+.hc-badge{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ember);background:color-mix(in srgb,var(--ember) 14%,transparent);border-radius:20px;padding:2px 9px}
+.hc-status{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--dim);margin-left:6px}
+.hc-status b{color:var(--txt2);font-weight:500}
+.hc-dot{width:7px;height:7px;border-radius:50%;background:var(--dim2)}
+.hc-dot.ok{background:#34a853}
+.hc-sdiv{width:1px;height:12px;background:var(--line2)}
+.hc-queue{color:var(--dim2)}
+.hc-hd .mem-iconbtn{margin-left:auto}
+.hc-tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--line);flex-shrink:0}
+.hc-tab{display:flex;align-items:center;gap:7px;border:none;background:none;color:var(--dim);font:inherit;font-size:13px;padding:9px 13px;border-bottom:2px solid transparent;cursor:pointer;margin-bottom:-1px;transition:color .15s,border-color .15s}
+.hc-tab:hover{color:var(--txt2)}
+.hc-tab.on{color:var(--txt2);border-bottom-color:var(--ember)}
+.hc-body{flex:1;overflow-y:auto;padding:16px 18px}
+.hc-peers{display:grid;grid-template-columns:218px 1fr;gap:16px;min-height:0}
+.hc-peer-list{display:flex;flex-direction:column;gap:4px}
+.hc-peer-item{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;border:1px solid transparent;background:none;border-radius:10px;padding:9px 11px;cursor:pointer;transition:background .14s,border-color .14s}
+.hc-peer-item:hover{background:var(--hover)}
+.hc-peer-item.on{background:var(--active);border-color:var(--line2)}
+.hc-peer-name{font-size:13px;color:var(--txt2);font-family:var(--font-mono,monospace)}
+.hc-peer-sub{font-size:11px;color:var(--dim)}
+.hc-peer-card{background:var(--input);border:1px solid var(--line2);border-radius:13px;padding:14px 15px;margin-bottom:16px}
+.hc-pc-hd{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
+.hc-pc-name{font-size:15px;color:var(--txt2);font-weight:600}
+.hc-pc-tag{font-size:11px;color:var(--dim2);text-transform:uppercase;letter-spacing:.04em}
+.hc-pc-stats{display:flex;gap:26px}
+.hc-pc-stat{display:flex;flex-direction:column;gap:2px}
+.hc-pc-stat b{font-size:20px;font-family:var(--font-d);color:var(--txt2);font-weight:600}
+.hc-pc-stat span{font-size:11px;color:var(--dim)}
+.hc-pc-rep-h{font-size:13px;color:var(--txt2);font-weight:500;margin-bottom:10px;display:flex;align-items:baseline;gap:8px}
+.hc-pc-rep-sub{font-size:11px;color:var(--dim);font-weight:400}
+.hc-rep-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt);line-height:1.5}
+.hc-rep-row:last-child{border-bottom:none}
+.hc-rep-bullet{width:6px;height:6px;border-radius:50%;background:var(--ember);margin-top:7px;flex-shrink:0}
+.hc-session{padding:13px 0;border-bottom:1px solid var(--line)}
+.hc-ss-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:5px}
+.hc-ss-title{font-size:13.5px;color:var(--txt2);font-weight:500}
+.hc-ss-peer{font-size:11px;color:var(--ember);font-family:monospace;background:color-mix(in srgb,var(--ember) 10%,transparent);border-radius:6px;padding:2px 8px}
+.hc-ss-summary{font-size:12.5px;color:var(--txt);line-height:1.55}
+.hc-ss-meta{font-size:11px;color:var(--dim);margin-top:6px}
+.hc-search{display:flex;align-items:center;gap:9px;background:var(--input);border:1px solid var(--line2);border-radius:22px;padding:9px 14px;color:var(--dim);margin-bottom:12px}
+.hc-search input{flex:1;background:none;border:none;outline:none;color:var(--txt2);font:inherit;font-size:13px}
+.hc-concl-row{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;margin-bottom:9px}
+.hc-concl-row.pinned{border-color:color-mix(in srgb,var(--ember) 35%,var(--line2));background:color-mix(in srgb,var(--ember) 5%,transparent)}
+.hc-concl-main{flex:1;min-width:0}
+.hc-concl-obs{display:flex;align-items:center;gap:7px;margin-bottom:5px;flex-wrap:wrap}
+.hc-obs{font-size:11.5px;color:var(--txt2);font-family:monospace}
+.hc-arrow{color:var(--dim2)}
+.hc-subj{font-size:11.5px;color:var(--dim);font-family:monospace}
+.hc-tag-pin{display:inline-flex;align-items:center;gap:3px;font-size:10px;color:var(--ember);background:color-mix(in srgb,var(--ember) 12%,transparent);border-radius:5px;padding:1px 6px}
+.hc-tag-priv{font-size:10px;color:var(--dim);border:1px solid var(--line2);border-radius:5px;padding:1px 6px}
+.hc-concl-text{font-size:13px;color:var(--txt);line-height:1.5}
+.hc-concl-meta{font-size:11px;color:var(--dim);margin-top:5px}
+.hc-concl-acts{display:flex;gap:4px;flex-shrink:0}
+.hc-act{width:30px;height:30px;border-radius:8px;border:none;background:none;color:var(--dim);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .14s,color .14s}
+.hc-act:hover{background:var(--hover);color:var(--txt2)}
+.hc-act.danger:hover{background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger)}
+.hc-empty{padding:40px;text-align:center;color:var(--dim2);font-size:13px}
+.hc-dream-cta{display:flex;align-items:center;gap:16px;padding:15px;background:color-mix(in srgb,var(--ember) 6%,var(--input));border:1px solid color-mix(in srgb,var(--ember) 22%,var(--line2));border-radius:13px;margin-bottom:16px}
+.hc-dream-cta-l{flex:1;display:flex;flex-direction:column;gap:4px}
+.hc-dream-sub{font-size:12px;color:var(--dim);line-height:1.5}
+.hc-dream-btn{flex-shrink:0;display:flex;align-items:center;gap:7px}
+.hc-dream-btn.running{opacity:.8}
+.hc-spin{width:13px;height:13px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:vspin .7s linear infinite}
+.hc-dream-row{display:flex;align-items:flex-start;gap:12px;padding:13px 0;border-bottom:1px solid var(--line)}
+.hc-dream-row:last-child{border-bottom:none}
+.hc-dream-ic{width:30px;height:30px;border-radius:9px;background:color-mix(in srgb,var(--ember) 12%,transparent);color:var(--ember);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hc-dream-main{flex:1;min-width:0}
+.hc-dream-top{display:flex;align-items:center;gap:9px;margin-bottom:4px}
+.hc-dream-when{font-size:12.5px;color:var(--txt2);font-weight:500}
+.hc-dream-status{font-size:10.5px;color:#34a853;text-transform:uppercase;letter-spacing:.04em}
+.hc-dream-note{font-size:12.5px;color:var(--txt);line-height:1.55}
+.hc-dream-stats{display:flex;gap:14px;margin-top:7px;font-size:11px;color:var(--dim);font-family:monospace}
+@media (max-width:720px){ .hc-peers{grid-template-columns:1fr} }
+.cu-pill{font-size:11.5px;border:1px solid var(--line2);border-radius:14px;padding:3px 11px;color:var(--dim)}
+.cu-pill.on{border-color:var(--ember);color:var(--ember);background:color-mix(in srgb,var(--ember) 9%,transparent)}
 /* profile row */
 .profile-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:14px;cursor:pointer;margin:8px 4px 2px;border:1px solid var(--line);background:var(--glass-side);backdrop-filter:blur(12px) saturate(150%);-webkit-backdrop-filter:blur(12px) saturate(150%);box-shadow:0 4px 18px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.05);transition:border-color .28s,background .28s,box-shadow .28s,transform .28s cubic-bezier(.34,1.4,.64,1)}
 .profile-row:hover{background:var(--hover);border-color:color-mix(in srgb,var(--ember) 30%,var(--line2));transform:translateY(-1px);box-shadow:0 9px 28px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.07)}
@@ -289,7 +527,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .p-name{font-size:12.5px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .p-plan{font-size:11px;color:var(--dim)}
 .p-edit{color:var(--dim);display:flex}
-/* sidebar — rail */
+/* sidebar ? rail */
 .rail{width:52px;background:var(--glass-side);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;flex-shrink:0;padding:10px 0 10px;gap:8px;overflow:hidden}
 .rail-scroll{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:2px;overflow-y:auto;overflow-x:hidden;scrollbar-width:none}
 .rail-scroll::-webkit-scrollbar{width:0;height:0}
@@ -395,7 +633,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .cpill > .ta-wrap{width:100%;padding:2px 8px 0}
 .cspace{flex:1}
 .plus-menu.down,.apps-drop.down,.model-drop.down{bottom:auto;top:46px}
-/* slash menu — compact, scrollable, never clips */
+/* slash menu ? compact, scrollable, never clips */
 .slash-menu{position:absolute;left:34px;bottom:46px;z-index:50;width:232px;max-height:300px;overflow-y:auto;border:1px solid var(--line2);border-radius:14px;padding:4px;background:var(--modal);box-shadow:0 14px 50px rgba(0,0,0,.4)}
 .slash-menu.down{bottom:auto;top:46px}
 .slash-menu .plus-item{padding:7px 10px;font-size:13px;gap:9px}
@@ -623,7 +861,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:var(--onember)}
 .btn.primary:hover{filter:brightness(1.08)}
-/* ── modern visual system (addendum E) ── */
+/* â”€â”€ modern visual system (addendum E) â”€â”€ */
 .wordmark{font-family:var(--font-d);font-weight:600;font-size:17px}
 .wordmark em{font-style:normal}
 .land-mark{font-family:var(--font-d);font-weight:600;font-size:42px;letter-spacing:-.03em;background:linear-gradient(105deg,var(--txt2) 16%,var(--ember) 50%,var(--accent2) 84%);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -677,7 +915,7 @@ body{font-size:14px}
 .mem-row{font-size:13.5px}
 .arc-row{font-size:13.5px}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
-/* ── motion (addendum H) ── */
+/* â”€â”€ motion (addendum H) â”€â”€ */
 @media (prefers-reduced-motion:no-preference){
   .landing > *{animation:landRise .6s cubic-bezier(.2,.7,.2,1) both}
   .landing > *:nth-child(1){animation-delay:.04s}
@@ -776,7 +1014,7 @@ body{font-size:14px}
 .agent-seg button.on{background:var(--grad);color:#fff}
 .agent-ta{width:100%;background:var(--input);border:1px solid var(--line2);border-radius:10px;color:var(--txt2);font:inherit;font-size:13px;padding:10px 12px;resize:vertical;outline:none;min-height:64px}
 .agent-ta:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-/* ── agent conversation history handle (addendum L) ── */
+/* â”€â”€ agent conversation history handle (addendum L) â”€â”€ */
 .agent-bar-acts{display:flex;gap:4px;align-items:center}
 .agent-hist{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:42;display:flex;align-items:center}
 .agent-hist-handle{display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:15px 10px;cursor:pointer;background:var(--glass);border:1px solid var(--line2);border-right:none;border-radius:13px 0 0 13px;backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);box-shadow:-6px 0 22px rgba(0,0,0,.20);transition:background .2s,box-shadow .2s,padding-right .2s}
@@ -803,7 +1041,7 @@ body{font-size:14px}
 .ahp-title{flex:1;min-width:0;font-size:12.5px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ahp-when{font-size:10.5px;color:var(--dim2);flex-shrink:0}
 
-/* ── agent: hover avatar -> back (addendum M) ── */
+/* â”€â”€ agent: hover avatar -> back (addendum M) â”€â”€ */
 .agent-back{position:relative;width:28px;height:28px;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0}
 .agent-back .agent-back-ava{transition:opacity .18s,transform .18s}
 .agent-back-ic{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--hover);color:var(--txt2);opacity:0;transform:scale(.82);transition:opacity .18s cubic-bezier(.2,.7,.2,1),transform .18s cubic-bezier(.34,1.56,.64,1)}
@@ -814,7 +1052,7 @@ body{font-size:14px}
 .agent-head-set{margin-left:auto}
 .agent-bar .agent-id-meta{min-width:0}
 
-/* ── keyboard shortcuts + toast + dev mode (addendum N) ── */
+/* â”€â”€ keyboard shortcuts + toast + dev mode (addendum N) â”€â”€ */
 .menu-help{cursor:pointer;border-radius:5px;padding:1px 5px;transition:background .15s,color .15s}
 .menu-help:hover{background:var(--hover);color:var(--txt2)}
 .dev-badge{font-family:var(--font-m);font-size:9.5px;letter-spacing:.12em;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 45%,var(--line2));border-radius:5px;padding:1px 6px;align-self:center;margin-right:4px}
@@ -1001,7 +1239,7 @@ const FEATURE_FLAGS = {
   mockPlugins: true,
 };
 
-/* ─── icons ─── */
+/* â”€â”€â”€ icons â”€â”€â”€ */
 const I = ({d, size=17, sw=1.5, children}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d?<path d={d}/>:children}</svg>
 );
@@ -1025,6 +1263,8 @@ const IcArchive = (p)=> <I {...p}><rect x="3" y="4" width="18" height="5" rx="1"
 const IcTrash = (p)=> <I {...p} d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6"/>;
 const IcShare = (p)=> <I {...p} d="M12 3v13 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>;
 const IcPlus = (p)=> <I {...p} d="M12 5v14 M5 12h14"/>;
+const IcShield = (p)=> <I {...p} d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z M9.5 12l2 2 3.5-4"/>;
+const IcKey2 = (p)=> <I {...p}><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M16 7l3 3M13 10l2 2"/></I>;
 const IcMic = (p)=> <I {...p}><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0 M12 18v4"/></I>;
 const IcVoice = (p)=> <I {...p} sw={0}><rect x="4" y="9" width="2.4" height="6" rx="1.2" fill="currentColor"/><rect x="8.6" y="5" width="2.4" height="14" rx="1.2" fill="currentColor"/><rect x="13.2" y="8" width="2.4" height="8" rx="1.2" fill="currentColor"/><rect x="17.8" y="10" width="2.4" height="4" rx="1.2" fill="currentColor"/></I>;
 const IcSend = (p)=> <I {...p} d="M12 19V5 M5 12l7-7 7 7"/>;
@@ -1046,6 +1286,7 @@ const IcLinear = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M7.5 12
 const IcBox = (p)=> <I {...p} d="M21 8l-9-5-9 5v8l9 5 9-5V8z M3 8l9 5 9-5 M12 13v8"/>;
 const IcDropbox = (p)=> <I {...p} d="M7 3l5 3.5L7 10 2 6.5 7 3z M17 3l5 3.5L17 10l-5-3.5L17 3z M7 10l5 3.5L7 17l-5-3.5L7 10z M17 10l5 3.5L17 17l-5-3.5 5-3.5z M8.5 18.5l3.5 2.5 3.5-2.5"/>;
 const IcGmail = (p)=> <I {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></I>;
+const IcGCal = (p)=> <I {...p}><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v3M16 3v3M8 13h3v3H8z"/></I>;
 const APP_ICONS = { airtable: IcAirtable, github: IcGitHub, linear: IcLinear, box: IcBox, dropbox: IcDropbox, gmail: IcGmail };
 
 const SEED_APPS = [
@@ -1084,7 +1325,7 @@ const GitHubPanel = ({drop, onClose}) => {
   const [q, setQ] = useState('');
   return (
     <Popover className={'apps-drop' + (drop === 'down' ? ' down' : '')} style={{width: 290}} onClose={onClose}>
-      <input className="model-search" autoFocus placeholder="Search repositories…" value={q} onChange={e => setQ(e.target.value)}/>
+      <input className="model-search" autoFocus placeholder="Search repositories?" value={q} onChange={e => setQ(e.target.value)}/>
       <div className="s-none" style={{textAlign: 'left', padding: '8px 13px'}}>No repositories found</div>
       <div className="plus-div"/>
       <div className="plus-item dim" title="Not in this preview">Configure Repositories<span className="p-arr"><IcShare size={13}/></span></div>
@@ -1140,8 +1381,11 @@ const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
 const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
 const IcStop = (p)=> <I {...p}><rect x="7" y="7" width="10" height="10" rx="2"/></I>;
 const IcBrain = (p)=> <I {...p}><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M6.4 8.1l3.5 2.4 M17.6 8.1l-3.5 2.4 M6.4 15.9l3.5-2.4 M17.6 15.9l-3.5-2.4"/></I>;
-
-/* closes on a document-level outside mousedown — no click-eating backdrop,
+const IcMcp = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></I>;
+const IcFlame = (p)=> <I {...p} d="M12 2c1 3.5-1.5 5-1.5 7.5A3.5 3.5 0 0 0 14 13c0-2 2-3 2-3 .5 4 2 5 2 7a6 6 0 1 1-12 0c0-3 2.5-4 2.5-7 0-1.5-.5-2.5-.5-2.5S10 6 12 2z"/>;
+const IcEye = (p)=> <I {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></I>;
+const IcGraph = (p)=> <I {...p}><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="8" r="2.4"/><circle cx="9" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.8 7.2l8.4 0.6 M7.4 7.9l1.4 8 M10.9 17.4l5.4 0.5 M17.4 10.2l-7.2 5.9"/></I>;
+/* closes on a document-level outside mousedown ? no click-eating backdrop,
    so one click both dismisses the open menu and lands on the next target */
 const Popover = ({className, style, onClose, children, portal}) => {
   const ref = useRef(null);
@@ -1170,7 +1414,7 @@ const visibleChats = cs => {
   return [...v.filter(c => c.pinned), ...v.filter(c => !c.pinned)];
 };
 
-/* ─── data ─── */
+/* â”€â”€â”€ data â”€â”€â”€ */
 const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -1189,13 +1433,13 @@ const SEED_LIBRARY = [
   { id: 'l4', name: 'Bank_Instrument_Request_Letter.pdf',   kind: 'pdf', size: '295 KB',  modified: '03/06' },
   { id: 'l5', name: 'vellum_ui_patch.diff',           kind: 'diff',  size: '44.8 KB', modified: '02/06' },
   { id: 'l6', name: 'vellum_preview.png',             kind: 'image', size: '137 KB',  modified: '02/06' },
-  { id: 'l7', name: 'reading list — winter',          kind: 'note',  size: '1.1 KB',  modified: '28/05' },
+  { id: 'l7', name: 'reading list ? winter',          kind: 'note',  size: '1.1 KB',  modified: '28/05' },
   { id: 'l8', name: 'on stillness',                   kind: 'note',  size: '0.8 KB',  modified: '21/05' },
 ];
 
 const SEED_PROJECTS = [
   { id: 'p1', name: 'Vellum Desktop',         updated: 'Monday', memory: 'default',      sources: [] },
-  { id: 'p2', name: 'Reading — Meditations',  updated: '04/06',  memory: 'project-only', sources: [] },
+  { id: 'p2', name: 'Reading ? Meditations',  updated: '04/06',  memory: 'project-only', sources: [] },
   { id: 'p3', name: 'Sports daemon',          updated: '28/05',  memory: 'default',      sources: [] },
 ];
 
@@ -1206,15 +1450,15 @@ const PROFILE_DEFAULT = {
 
 const SEED_SKILLS = {
   proposed: [
-    { id: 's1', name: 'Book summary in my voice', trigger: 'summarize · book · what does X say', note: 'Drafted from 4 similar asks this month.' },
-    { id: 's2', name: 'Sports snapshot brief', trigger: 'score · fixture · standings', note: 'Drafted from your match-day questions.' },
+    { id: 's1', name: 'Book summary in my voice', trigger: 'summarize ? book ? what does X say', note: 'Drafted from 4 similar asks this month.' },
+    { id: 's2', name: 'Sports snapshot brief', trigger: 'score ? fixture ? standings', note: 'Drafted from your match-day questions.' },
   ],
   active: [
-    { id: 's3', name: 'Citations as roman footnotes', trigger: 'cite · footnote', uses: 14, last: '01/06' },
+    { id: 's3', name: 'Citations as roman footnotes', trigger: 'cite ? footnote', uses: 14, last: '01/06' },
     { id: 's4', name: 'Short answers after 22:00', trigger: 'late-night register', uses: 9, last: '08/06' },
   ],
   retired: [
-    { id: 's5', name: 'Daily news digest', trigger: 'news · today', uses: 3, last: '12/05' },
+    { id: 's5', name: 'Daily news digest', trigger: 'news ? today', uses: 3, last: '12/05' },
   ],
 };
 
@@ -1241,17 +1485,17 @@ const SEED_REFLECTIONS = [
 ];
 
 const SEED_SAVED = [
-  { id: 'v1', date: '04/06', text: 'On attention — what you give it to, you become. Filed from a late thread.' },
+  { id: 'v1', date: '04/06', text: 'On attention ? what you give it to, you become. Filed from a late thread.' },
   { id: 'v2', date: '28/05', text: 'The sports daemon plan, condensed to five lines.' },
 ];
 
 const SEED_FEEDS = [
-  { id: 'f1', name: 'X',       sub: 'Quotes from your handles · last filed 09/06', on: true },
-  { id: 'f2', name: 'YouTube', sub: 'Transcripts from subscriptions · last filed 08/06', on: true },
-  { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots · last filed 07/06', on: false },
+  { id: 'f1', name: 'X',       sub: 'Quotes from your handles ? last filed 09/06', on: true },
+  { id: 'f2', name: 'YouTube', sub: 'Transcripts from subscriptions ? last filed 08/06', on: true },
+  { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots ? last filed 07/06', on: false },
 ];
 
-/* ─── sidebar ─── */
+/* â”€â”€â”€ sidebar â”€â”€â”€ */
 const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => {
   const [draft, setDraft] = useState(chat.title);
   useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
@@ -1306,17 +1550,19 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
   return (
     <div className="sidebar">
       <div className="sb-head">
-        <span className="wordmark" title="Home — Ctrl+Shift+H" style={{cursor: 'pointer'}} onClick={onNewChat}><em>v</em>ellum</span>
+        <span className="wordmark" title="Home ? Ctrl+Shift+H" style={{cursor: 'pointer'}} onClick={onNewChat}><em>v</em>ellum</span>
         <button className="tbtn" title="Hide sidebar" onClick={onTogglePin}><IcPanel/></button>
       </div>
       <div className="sb-scroll">
-        <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat<span className="sb-kbd"><kbd>Ctrl ⇧ O</kbd></span></button>
+        <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat<span className="sb-kbd"><kbd>Ctrl ? O</kbd></span></button>
         <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
-        <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library<span className="sb-kbd"><kbd>Ctrl ⇧ L</kbd></span></button>
+        <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library<span className="sb-kbd"><kbd>Ctrl ? L</kbd></span></button>
         <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
-        <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger<span className="sb-kbd"><kbd>Ctrl ⇧ G</kbd></span></button>
-        <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills<span className="sb-kbd"><kbd>Ctrl ⇧ K</kbd></span></button>
-        <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory<span className="sb-kbd"><kbd>Ctrl ⇧ E</kbd></span></button>
+        <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger<span className="sb-kbd"><kbd>Ctrl ? G</kbd></span></button>
+        <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
+        <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
+        <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills<span className="sb-kbd"><kbd>Ctrl ? K</kbd></span></button>
+        <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory<span className="sb-kbd"><kbd>Ctrl+Shift+E</kbd></span></button>
         <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
         <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('agents')}>
           Agents
@@ -1422,11 +1668,11 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
   const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
   return (
     <div className="rail">
-      <div className="rail-logo" title="Home — Ctrl+Shift+H" onClick={onNewChat}><div className="rail-dot"/></div>
+      <div className="rail-logo" title="Home ? Ctrl+Shift+H" onClick={onNewChat}><div className="rail-dot"/></div>
       <div className="rail-scroll">
-      <button className="rail-btn" title="Expand sidebar — Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
-      <button className="rail-btn" title="New chat — Ctrl+Shift+O" onClick={onNewChat}><IcPencilSq size={17}/></button>
-      <button className="rail-btn" title="Search chats — Ctrl+K" onClick={onSearch}><IcSearch size={17}/></button>
+      <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
+      <button className="rail-btn" title="New chat ? Ctrl+Shift+O" onClick={onNewChat}><IcPencilSq size={17}/></button>
+      <button className="rail-btn" title="Search chats ? Ctrl+K" onClick={onSearch}><IcSearch size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className="rail-btn" title="Recent chats"><IcChat size={17}/></button>}>
         <div className="fly-head">Recents</div>
         {recents.length === 0 && <div className="sb-empty">No chats yet.</div>}
@@ -1448,11 +1694,13 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
           </div>
         ))}
       </RailFly>
-      <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library — Ctrl+Shift+L" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
-      <button className="rail-btn" title="Coding — opens the workspace" onClick={() => window.location.assign('vellum-workspace.html')}><IcTerminal size={17}/></button>
-      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger — Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
-      <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills — Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
-      <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory — Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
+      <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library ? Ctrl+Shift+L" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
+      <button className="rail-btn" title="Coding ? opens the workspace" onClick={() => window.location.assign('vellum-workspace.html')}><IcTerminal size={17}/></button>
+      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger ? Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
+      <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcGrid size={17}/></button>
+      <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
+      <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
+      <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
       <RailFly btn={<button className={'rail-btn' + (view === 'agent' ? ' active' : '')} title="Agents"><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={17}/></button>}>
         <div className="fly-head">Agents</div>
         {AGENTS.map(a => (
@@ -1484,7 +1732,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
   );
 };
 
-/* ─── project menu ─── */
+/* â”€â”€â”€ project menu â”€â”€â”€ */
 const ProjectMenu = ({pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
@@ -1494,7 +1742,7 @@ const ProjectMenu = ({pos, onAction, onClose}) => (
   </Popover>
 );
 
-/* ─── chat ─── */
+/* â”€â”€â”€ chat â”€â”€â”€ */
 const KIND_BY_EXT = { png:'image', jpg:'image', jpeg:'image', gif:'image', webp:'image', svg:'image',
   pdf:'pdf', diff:'diff', patch:'diff', html:'code', js:'code', jsx:'code', ts:'code', py:'code', css:'code', json:'code', mjs:'code' };
 const kindOf = (name) => KIND_BY_EXT[(name.split('.').pop() || '').toLowerCase()] || 'note';
@@ -1502,20 +1750,20 @@ const fmtSize = (b) => b >= 1048576 ? (b/1048576).toFixed(1) + ' MB' : (b/1024).
 
 const REPLY_BUCKETS = [
   { test: /read|book|library|novel|author|essay/i, variants: [
-    'Your library has a few threads on this. "{q}" sits close to what you marked in Meditations — the passages on attention. Start there, then the winter reading list.',
+    'Your library has a few threads on this. "{q}" sits close to what you marked in Meditations ? the passages on attention. Start there, then the winter reading list.',
     'Two notes in your library touch this. The nearer one is filed under on stillness. Read it once more before adding anything new.',
   ]},
   { test: /code|build|bug|app|feature|deploy|ship/i, variants: [
-    'Building belongs in the coding room — that preview has the full bench. Briefly: "{q}" is one slice, not three. Cut it to the part that ships today.',
+    'Building belongs in the coding room ? that preview has the full bench. Briefly: "{q}" is one slice, not three. Cut it to the part that ships today.',
     'The coding mode handles this better. For now: name the smallest change that makes "{q}" true, and do only that.',
   ]},
   { test: /./, variants: [
-    'On "{q}" — a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.',
+    'On "{q}" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.',
     '"{q}" has two halves: the part you can act on this week, and the part that is weather. Keep the first. File the second.',
   ]},
 ];
 const AGENTS = [
-  { id:'x',        name:'X Agent',        icon: IcX,       tag:'Posts, threads & trends',    blurb:'I live on X — drafting posts, distilling threads, and tracking what\u2019s breaking.' },
+  { id:'x',        name:'X Agent',        icon: IcX,       tag:'Posts, threads & trends',    blurb:'I live on X ? drafting posts, distilling threads, and tracking what\u2019s breaking.' },
   { id:'youtube',  name:'YouTube Agent',  icon: IcYoutube, tag:'Videos, scripts & channels', blurb:'I work YouTube end to end \u2014 pulling transcripts, drafting scripts, and watching channels.' },
   { id:'books',    name:'Books Agent',    icon: IcBook,    tag:'Reading, notes & summaries', blurb:'I\u2019m your reading companion \u2014 chapter summaries, reading lists, and notes from your shelf.' },
   { id:'memory',   name:'Memory Agent',   icon: IcBrain,   tag:'Recall & personal context',  blurb:'I keep the long thread \u2014 recalling what you\u2019ve told me and holding context steady.' },
@@ -1578,9 +1826,9 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
     </Popover>
   );
 };
-const PLACEHOLDERS = ['Ask anything…', 'Search your library…', 'Draft something new…', 'Think out loud…', 'Plan the week…'];
+const PLACEHOLDERS = ['Ask anything?', 'Search your library?', 'Draft something new?', 'Think out loud?', 'Plan the week?'];
 
-/* models — curated list ported from vellum-workspace.html */
+/* models ? curated list ported from vellum-workspace.html */
 let MODELS = [
   { id: 'deepseek/deepseek-chat',         label: 'DeepSeek V4 Pro' },
   { id: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V4 Flash' },
@@ -2029,7 +2277,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
             : text.trim()
               ? <button className="csend" title="Send" onClick={send}><IcSend size={15}/></button>
-              : <button className="csend voice-btn" title="Use Voice  ·  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
+              : <button className="csend voice-btn" title="Use Voice  ?  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
           {voiceState === 'connecting' && (
             <button className="voice-pill voice-pill-cancel" onClick={endVoice} title="Cancel"><span className="voice-spin"/>Cancel</button>)}
           {voiceState === 'listening' && (
@@ -2075,7 +2323,7 @@ const MsgActions = ({msg, onRegen}) => {
       {copied && <span className="copied">copied</span>}
       <button className={'act-btn' + (vote === 'up' ? ' on' : '')} title="Good" onClick={() => setVote(v => v === 'up' ? null : 'up')}><IcThumbUp size={14}/></button>
       <button className={'act-btn' + (vote === 'down' ? ' on' : '')} title="Not right" onClick={() => setVote(v => v === 'down' ? null : 'down')}><IcThumbDown size={14}/></button>
-      <button className="act-btn" title="Share — not in this preview"><IcShare size={14}/></button>
+      <button className="act-btn" title="Share ? not in this preview"><IcShare size={14}/></button>
       <button className="act-btn" title="Regenerate" onClick={onRegen}><IcRefresh size={14}/></button>
     </div>
   );
@@ -2305,7 +2553,7 @@ const Timeline = ({userMsgs}) => {
           <div className="tl-head">From the beginning</div>
           {userMsgs.map(m => (
             <div key={m.id} className="tl-row" onClick={() => jump(m.id)}>
-              {m.text.length > 44 ? m.text.slice(0, 44).trimEnd() + '…' : m.text}
+              {m.text.length > 44 ? m.text.slice(0, 44).trimEnd() + '?' : m.text}
             </div>
           ))}
         </div>
@@ -2390,13 +2638,13 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
             agent.id === 'youtube' ? (
             <div className="xgate">
               <div className="xgate-ic yt-gate-ic"><YTLogo size={22}/></div>
-              <div className="xgate-txt"><div className="xgate-t">Connect your YouTube account</div><div className="xgate-s">Sign in with Google to activate the {agent.name}. Uses <b>Google OAuth 2.0 for installed apps</b> — Vellum walks you through creating credentials in the Google Cloud Console.</div></div>
+              <div className="xgate-txt"><div className="xgate-t">Connect your YouTube account</div><div className="xgate-s">Sign in with Google to activate the {agent.name}. Uses <b>Google OAuth 2.0 for installed apps</b> ? Vellum walks you through creating credentials in the Google Cloud Console.</div></div>
               <button className="btn primary xgate-btn" onClick={onConnectYT}><GLogo size={15}/>Connect with Google</button>
             </div>
             ) : (
             <div className="xgate">
               <div className="xgate-ic"><XLogo size={20}/></div>
-              <div className="xgate-txt"><div className="xgate-t">Connect your X account</div><div className="xgate-s">Sign in with X to activate the {agent.name}. Requires an active <b>SuperGrok</b> or <b>X Premium+</b> subscription — no API key needed.</div></div>
+              <div className="xgate-txt"><div className="xgate-t">Connect your X account</div><div className="xgate-s">Sign in with X to activate the {agent.name}. Requires an active <b>SuperGrok</b> or <b>X Premium+</b> subscription ? no API key needed.</div></div>
               <button className="btn primary xgate-btn" onClick={onConnectX}><XLogo size={14}/>Connect X account</button>
             </div>
             )
@@ -2645,14 +2893,14 @@ const YouTubeConnectModal = ({onClose, onConnected}) => {
             <div className="gc-page">
               <div className="gc-logo"><GLogo size={28}/></div>
               <div className="gc-h">Set up YouTube access</div>
-              <div className="gc-sub">Vellum connects to YouTube using <b>Google OAuth 2.0 for installed apps</b>. First create OAuth credentials in the Google Cloud Console — it only takes a few minutes.</div>
+              <div className="gc-sub">Vellum connects to YouTube using <b>Google OAuth 2.0 for installed apps</b>. First create OAuth credentials in the Google Cloud Console ? it only takes a few minutes.</div>
               <ol className="gc-steps">
                 <li><a href={YT_DOCS.register} target="_blank" rel="noopener">Register an application</a> and create a Google Cloud project.</li>
                 <li>Enable the <b>YouTube Data API v3</b> and configure an <a href={YT_DOCS.installed} target="_blank" rel="noopener">OAuth client for installed apps</a>.</li>
                 <li>Copy your <b>Client ID</b> and <b>secret</b> from the <a href={YT_DOCS.console} target="_blank" rel="noopener">Credentials page</a>.</li>
               </ol>
               <label className="gc-field"><span>OAuth Client ID</span><input autoFocus value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com"/></label>
-              <label className="gc-field"><span>Client secret</span><input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="GOCSPX-…"/></label>
+              <label className="gc-field"><span>Client secret</span><input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="GOCSPX-?"/></label>
               <button className="gc-btn gc-btn-full" onClick={() => setStep('signin')}>Continue with Google</button>
               <div className="gc-note">New to this? Follow Google's <a href={YT_DOCS.native} target="_blank" rel="noopener">OAuth for native apps guide</a>.</div>
             </div>
@@ -2686,7 +2934,7 @@ const YouTubeConnectModal = ({onClose, onConnected}) => {
           {step === 'connecting' && (
             <div className="gc-page gc-connecting">
               <div className="gc-spin"/>
-              <div className="gc-h">Completing sign-in…</div>
+              <div className="gc-h">Completing sign-in?</div>
               <div className="gc-sub">Redirecting back to Vellum</div>
             </div>
           )}
@@ -2717,17 +2965,17 @@ const TITLE_TPL = [
   '{Q}: patterns, pitfalls, and best practices',
   'How modern apps approach {q}',
   'Understanding {q} end to end',
-  '{Q} — a deep dive',
+  '{Q} ? a deep dive',
   'Implementing {q} the right way',
   'What you need to know about {q}',
   '{Q}: official reference',
 ];
 const SNIP_TPL = [
-  'This document explains how applications handle {q} across platforms, with examples…',
-  'A thorough walkthrough covering setup, edge cases, and security considerations for {q}…',
-  'Community answers and accepted solutions discussing {q} in production…',
-  'The canonical specification and recommended flow for {q}, including diagrams…',
-  'Notes from engineers who shipped {q} at scale, with trade-offs…',
+  'This document explains how applications handle {q} across platforms, with examples?',
+  'A thorough walkthrough covering setup, edge cases, and security considerations for {q}?',
+  'Community answers and accepted solutions discussing {q} in production?',
+  'The canonical specification and recommended flow for {q}, including diagrams?',
+  'Notes from engineers who shipped {q} at scale, with trade-offs?',
 ];
 const DATES = ['2 days ago','5 days ago','1 week ago','3 weeks ago','last month','7 days ago','yesterday','2 weeks ago'];
 const cap = (x) => x ? x.charAt(0).toUpperCase() + x.slice(1) : x;
@@ -2956,12 +3204,12 @@ const ActivityPanel = ({msg, onClose}) => (
           </div>
         </div>
       ))}
-      <div className="act-sec-h act-sources-h">Sources · {(msg.sources||[]).length}</div>
+      <div className="act-sec-h act-sources-h">Sources ? {(msg.sources||[]).length}</div>
       {(msg.sources||[]).map((sc,i) => (
         <a key={i} className="act-source" href={sc.url} target="_blank" rel="noopener">
           <div className="act-src-pub"><Favicon dom={sc.dom} source={sc} size={13}/>{sc.pub}</div>
           <div className="act-src-title">{sc.title}</div>
-          <div className="act-src-snip">{sc.date} — {sc.snippet}</div>
+          <div className="act-src-snip">{sc.date} ? {sc.snippet}</div>
         </a>
       ))}
     </div>
@@ -3030,7 +3278,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
   );
 };
 
-/* ─── search overlay ─── */
+/* â”€â”€â”€ search overlay â”€â”€â”€ */
 const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
   const [q, setQ] = useState('');
   const hits = chats.filter(c => !c.archived && c.title.toLowerCase().includes(q.toLowerCase()));
@@ -3038,7 +3286,7 @@ const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
     <React.Fragment>
       <div className="backdrop dim" onClick={onClose}/>
       <div className="search-card">
-        <input className="search-input" autoFocus placeholder="Search chats…" value={q}
+        <input className="search-input" autoFocus placeholder="Search chats?" value={q}
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && hits.length) onOpenChat(hits[0].id); }}/>
         <div className="s-list">
@@ -3055,7 +3303,7 @@ const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
   );
 };
 
-/* ─── library ─── */
+/* â”€â”€â”€ library â”€â”€â”€ */
 const KIND_ICONS = {
   image: IcImage, pdf: IcPdf, code: IcCode, diff: IcDiffFile, note: IcNote,
 };
@@ -3135,7 +3383,7 @@ const LibraryView = ({library, setLibrary}) => {
             <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t}</button>
           ))}
           <div className="tab-spacer"/>
-          <button className="icon-tgl" title="Filter — not in this preview"><IcFilter size={15}/></button>
+          <button className="icon-tgl" title="Filter ? not in this preview"><IcFilter size={15}/></button>
           <button className={'icon-tgl' + (mode === 'grid' ? ' on' : '')} title="Grid view" onClick={() => setMode('grid')}><IcGrid size={15}/></button>
           <button className={'icon-tgl' + (mode === 'list' ? ' on' : '')} title="List view" onClick={() => setMode('list')}><IcList size={15}/></button>
         </div>
@@ -3166,7 +3414,7 @@ const LibraryView = ({library, setLibrary}) => {
               <div key={it.id} className="ltile">
                 <KindIcon kind={it.kind}/>
                 <div className="t-name">{it.name}</div>
-                <div className="t-mod">{it.modified} · {it.size}</div>
+                <div className="t-mod">{it.modified} ? {it.size}</div>
               </div>
             ))}
             {items.length === 0 && <div className="s-none">Nothing here.</div>}
@@ -3178,7 +3426,7 @@ const LibraryView = ({library, setLibrary}) => {
   );
 };
 
-/* ─── projects ─── */
+/* â”€â”€â”€ projects â”€â”€â”€ */
 const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   <div className="page">
     <div className="page-inner">
@@ -3193,7 +3441,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
             <div key={p.id} className="pcard" onClick={() => onOpenProject(p.id)}>
               <span className="sb-ic"><IcFolder size={18}/></span>
               <h3>{p.name}</h3>
-              <p>{n} {n === 1 ? 'chat' : 'chats'} · {p.updated}</p>
+              <p>{n} {n === 1 ? 'chat' : 'chats'} ? {p.updated}</p>
             </div>
           );
         })}
@@ -3202,7 +3450,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   </div>
 );
 
-/* ─── project page ─── */
+/* â”€â”€â”€ project page â”€â”€â”€ */
 const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
@@ -3274,7 +3522,7 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
                   <div key={s.id} className="src-row">
                     <KindIcon kind={s.kind}/>
                     <span>{s.name}</span>
-                    <span className="lt-dim">{s.modified} · {s.size}</span>
+                    <span className="lt-dim">{s.modified} ? {s.size}</span>
                   </div>
                 ))}
                 <div style={{marginTop: 14}}>
@@ -3289,28 +3537,106 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
   );
 };
 
-/* ─── ledger ─── */
-const LedgerView = () => (
-  <div className="page">
-    <div className="page-inner" style={{maxWidth: 700}}>
-      <div className="page-head"><div className="page-title">Ledger</div></div>
-      <div className="led-grid">
-        <div className="led-card"><div className="led-k">Today</div><div className="led-v">18.4k<small>tokens · $0.62</small></div></div>
-        <div className="led-card"><div className="led-k">This thread</div><div className="led-v">2.1k<small>tokens</small></div></div>
-        <div className="led-card" style={{gridColumn: '1 / -1'}}>
-          <div className="led-k">Recent models</div>
-          <div className="led-row"><span className="rn">i.</span>gemma-4-31b<span className="lv">9.2k tokens · deep work</span></div>
-          <div className="led-row"><span className="rn">ii.</span>qwen-3.5-35b<span className="lv">5.1k tokens · fallback</span></div>
-          <div className="led-row"><span className="rn">iii.</span>gemma-4-12b<span className="lv">4.1k tokens · quick tasks</span></div>
+/* â”€â”€â”€ ledger â”€â”€â”€ */
+const CB_PERIODS = [['today','Today'],['7d','7 Days'],['30d','30 Days'],['month','Month'],['all','All Time']];
+const CB_DATA = {
+  today: { cost:0.62, calls:84, sessions:3, cache:0.86, days:[['',0.62]],
+    models:[['Opus 4.6',0.41,9200],['Sonnet 4.6',0.16,18400],['Haiku 4.2',0.05,12100]],
+    acts:[['Coding',0.28,0.90],['Debugging',0.16,0.62],['Feature Dev',0.11,0.74],['Exploration',0.07,null]],
+    projects:[['vellum',0.44,2],['vellum-workspace',0.18,1]],
+    tools:[['Edit',61],['Read',128],['Bash',44],['Grep',37]],
+    mcp:[['github',12],['filesystem',8]] },
+  '7d': { cost:3.40, calls:512, sessions:19, cache:0.83, days:[['Mon',0.31],['Tue',0.58],['Wed',0.44],['Thu',0.72],['Fri',0.39],['Sat',0.34],['Sun',0.62]],
+    models:[['Opus 4.6',2.10,58400],['Sonnet 4.6',0.92,121000],['Haiku 4.2',0.38,74000]],
+    acts:[['Coding',1.42,0.88],['Debugging',0.71,0.59],['Feature Dev',0.58,0.71],['Refactoring',0.31,0.81],['Exploration',0.22,null],['Testing',0.16,0.66]],
+    projects:[['vellum',2.31,11],['vellum-workspace',0.74,5],['scripts',0.35,3]],
+    tools:[['Edit',342],['Read',810],['Bash',265],['Grep',198],['Write',88]],
+    mcp:[['github',71],['filesystem',54],['postgres',9]] },
+  '30d': { cost:14.82, calls:2240, sessions:78, cache:0.81, days:[['W1',3.1],['W2',4.4],['W3',3.9],['W4',3.42]],
+    models:[['Opus 4.6',9.1,248000],['Sonnet 4.6',4.0,520000],['Haiku 4.2',1.72,310000]],
+    acts:[['Coding',6.2,0.86],['Debugging',3.1,0.57],['Feature Dev',2.4,0.69],['Refactoring',1.3,0.79],['Testing',0.9,0.64],['Git Ops',0.5,0.93],['Exploration',0.42,null]],
+    projects:[['vellum',9.8,44],['vellum-workspace',3.2,22],['scripts',1.1,8],['sandbox',0.72,4]],
+    tools:[['Edit',1420],['Read',3380],['Bash',1110],['Grep',840],['Write',360]],
+    mcp:[['github',290],['filesystem',220],['postgres',41],['brave',12]] },
+  month: { cost:12.10, calls:1880, sessions:64, cache:0.82, days:[['W1',3.1],['W2',4.4],['W3',3.9],['W4',0.7]],
+    models:[['Opus 4.6',7.4,198000],['Sonnet 4.6',3.4,430000],['Haiku 4.2',1.3,260000]],
+    acts:[['Coding',5.1,0.87],['Debugging',2.5,0.58],['Feature Dev',2.0,0.70],['Refactoring',1.1,0.80],['Testing',0.8,0.65],['Exploration',0.6,null]],
+    projects:[['vellum',8.0,36],['vellum-workspace',2.7,18],['scripts',0.9,6]],
+    tools:[['Edit',1180],['Read',2810],['Bash',920],['Grep',690],['Write',300]],
+    mcp:[['github',240],['filesystem',180],['postgres',33]] },
+  all: { cost:58.40, calls:9120, sessions:312, cache:0.80, days:[['Jan',9.2],['Feb',11.1],['Mar',14.8],['Apr',12.1],['May',11.2]],
+    models:[['Opus 4.6',34.2,980000],['Sonnet 4.6',16.4,2100000],['Haiku 4.2',7.8,1240000]],
+    acts:[['Coding',24.1,0.85],['Debugging',12.4,0.56],['Feature Dev',9.8,0.68],['Refactoring',5.1,0.78],['Testing',3.6,0.63],['Git Ops',2.0,0.92],['Exploration',1.4,null]],
+    projects:[['vellum',38.2,176],['vellum-workspace',12.9,82],['scripts',4.4,32],['sandbox',2.9,22]],
+    tools:[['Edit',5600],['Read',13400],['Bash',4420],['Grep',3310],['Write',1450]],
+    mcp:[['github',1140],['filesystem',880],['postgres',162],['brave',54]] },
+};
+const cbMoney = v => '$' + v.toFixed(2);
+const cbTok = n => n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(1)+'k' : ''+n;
+// Heat scale by intensity: far/low = blue, middle = yellow, close = orange, too close = red.
+const CB_HEAT = [[0,[74,143,217]],[0.34,[232,193,74]],[0.62,[224,121,74]],[0.85,[209,74,58]],[1,[183,42,42]]];
+function cbHeat(r){ r = Math.max(0, Math.min(1, r||0));
+  for(let i=1;i<CB_HEAT.length;i++){ if(r<=CB_HEAT[i][0]){ const a=CB_HEAT[i-1],b=CB_HEAT[i]; const t=(r-a[0])/((b[0]-a[0])||1);
+    const c=a[1].map((v,j)=>Math.round(v+(b[1][j]-v)*t)); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; } }
+  return 'rgb(183,42,42)';
+}
+const LedgerView = () => {
+  const [period, setPeriod] = useState('7d');
+  const d = CB_DATA[period];
+  const maxDay = Math.max(...d.days.map(x => x[1]), 0.01);
+  const maxModel = Math.max(...d.models.map(x => x[1]), 0.01);
+  const maxAct = Math.max(...d.acts.map(x => x[1]), 0.01);
+  const maxTool = Math.max(...d.tools.map(x => x[1]), 1);
+  const avgSess = d.cost / Math.max(d.sessions, 1);
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 860}}>
+        <div className="page-head"><span className="page-head-ic cb-flame"><IcFlame size={18}/></span><div style={{flex:1}}><div className="page-title">Ledger</div><div className="page-sub">Token &amp; cost observability ? see where your AI coding spend goes. <span className="cb-badge">CodeBurn</span></div></div>
+          <div className="cb-export"><button className="cb-exp-btn">CSV</button><button className="cb-exp-btn">JSON</button></div></div>
+        <div className="cb-periods">{CB_PERIODS.map(([k,l],i) => (<button key={k} className={'cb-period'+(period===k?' on':'')} onClick={()=>setPeriod(k)}><span className="cb-pnum">{i+1}</span>{l}</button>))}</div>
+        <div className="cb-stats">
+          <div className="cb-stat"><div className="cb-stat-v cb-cost">{cbMoney(d.cost)}</div><div className="cb-stat-k">Total cost</div></div>
+          <div className="cb-stat"><div className="cb-stat-v">{d.calls.toLocaleString()}</div><div className="cb-stat-k">API calls</div></div>
+          <div className="cb-stat"><div className="cb-stat-v">{d.sessions}</div><div className="cb-stat-k">Sessions</div></div>
+          <div className="cb-stat"><div className="cb-stat-v">{Math.round(d.cache*100)}%</div><div className="cb-stat-k">Cache hit</div></div>
+          <div className="cb-stat"><div className="cb-stat-v">{cbMoney(avgSess)}</div><div className="cb-stat-k">Avg / session</div></div>
         </div>
-        <div className="led-card" style={{gridColumn: '1 / -1'}}><div className="led-k">This week</div><div className="led-v">96k<small>tokens · $3.40</small></div></div>
+        <div className="cb-panel">
+          <div className="cb-panel-h">Cost over time<span className="cb-legend">low<span className="cb-leg-grad"/>high</span></div>
+          <div className="cb-chart">{d.days.map(([lbl,v],i) => (<div key={i} className="cb-bar-col"><div className="cb-bar-wrap"><div className="cb-bar" style={{height: Math.max(4, v/maxDay*100)+'%'}} title={cbMoney(v)}/></div><div className="cb-bar-lbl">{lbl||'\u2014'}</div></div>))}</div>
+        </div>
+        <div className="cb-cols">
+          <div className="cb-panel">
+            <div className="cb-panel-h">By model</div>
+            {d.models.map(([nm,cost,tok],i) => (<div key={i} className="cb-row"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-cost/maxModel*100)+'%'}}/></div><span className="cb-row-v">{cbMoney(cost)}<small>{cbTok(tok)}</small></span></div>))}
+          </div>
+          <div className="cb-panel">
+            <div className="cb-panel-h">By project</div>
+            {d.projects.map(([nm,cost,sess],i) => (<div key={i} className="cb-row"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-cost/d.projects[0][1]*100)+'%'}}/></div><span className="cb-row-v">{cbMoney(cost)}<small>{sess} sess</small></span></div>))}
+          </div>
+        </div>
+        <div className="cb-panel">
+          <div className="cb-panel-h">By activity <span className="cb-panel-sub">1-shot = succeeded without retry</span></div>
+          <div className="cb-act-head"><span>Category</span><span>Cost</span><span>1-shot</span></div>
+          {d.acts.map(([nm,cost,os],i) => (<div key={i} className="cb-act-row"><span className="cb-act-nm">{nm}</span><div className="cb-act-bar"><div className="cb-act-mask" style={{width: (100-cost/maxAct*100)+'%'}}/></div><span className="cb-act-cost">{cbMoney(cost)}</span><span className={'cb-act-os'+(os!=null && os<0.6?' low':'')}>{os!=null ? Math.round(os*100)+'%' : '\u2014'}</span></div>))}
+        </div>
+        <div className="cb-cols">
+          <div className="cb-panel">
+            <div className="cb-panel-h">Core tools</div>
+            {d.tools.map(([nm,n],i) => (<div key={i} className="cb-row sm"><span className="cb-row-nm">{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-n/maxTool*100)+'%'}}/></div><span className="cb-row-v">{n.toLocaleString()}</span></div>))}
+          </div>
+          <div className="cb-panel">
+            <div className="cb-panel-h">MCP servers</div>
+            {d.mcp.length ? d.mcp.map(([nm,n],i) => (<div key={i} className="cb-row sm"><span className="cb-row-nm cb-mcp-nm"><ConnLogo c={{id:nm}} size={13}/>{nm}</span><div className="cb-row-bar"><div className="cb-row-mask" style={{width: (100-n/d.mcp[0][1]*100)+'%'}}/></div><span className="cb-row-v">{n}</span></div>)) : <div className="cb-empty">No MCP usage in this window.</div>}
+          </div>
+        </div>
+        <div className="quiet-foot">Read locally from session data on disk. No wrapper, no proxy, no API keys. Pricing via LiteLLM.</div>
       </div>
-      <div className="quiet-foot">Filed locally. Nothing sent.</div>
     </div>
-  </div>
-);
+  );
+};
 
-/* ─── skills ─── */
+/* â”€â”€â”€ skills â”€â”€â”€ */
 const SkillsView = ({skills, onApprove, onRetire}) => {
   const [tab, setTab] = useState('Proposed');
   const lists = { Proposed: skills.proposed, Active: skills.active, Retired: skills.retired };
@@ -3340,7 +3666,7 @@ const SkillsView = ({skills, onApprove, onRetire}) => {
   );
 };
 
-/* ─── memory ─── */
+/* â”€â”€â”€ memory â”€â”€â”€ */
 const MEM_SOURCES = [{ id: 'vellum', name: 'Vellum', icon: IcBrain }].concat(AGENTS.map(a => ({ id: a.id, name: a.name, icon: a.icon })));
 
 const MemoryView = ({memory, onForget}) => {
@@ -3353,7 +3679,7 @@ const MemoryView = ({memory, onForget}) => {
     <div className="page">
       <div className="page-inner" style={{maxWidth: 768}}>
         <div className="page-head"><div className="page-title">Memory</div></div>
-        <div className="mem-sub">What Vellum and your agents have learned about you, kept in one place. Held on this machine — forgetting is immediate.</div>
+        <div className="mem-sub">What Vellum and your agents have learned about you, kept in one place. Held on this machine ? forgetting is immediate.</div>
         <div className="mem-stat-row">
           <div className="mem-stat"><div className="ms-n">{memory.length}</div><div className="ms-l">facts held</div></div>
           <div className="mem-stat"><div className="ms-n">{liveSources.length}</div><div className="ms-l">sources</div></div>
@@ -3387,7 +3713,258 @@ const MemoryView = ({memory, onForget}) => {
   );
 };
 
-/* ─── archive ─── */
+/* â”€â”€â”€ archive â”€â”€â”€ */
+const APP_BLURB = { airtable:'Bases, tables and records.', github:'Repos, issues and pull requests.', linear:'Issues, projects and cycles.', box:'Cloud files and folders.', dropbox:'Cloud files and folders.', gmail:'Email, drafts and threads.' };
+
+// 1) Local connector registry ? normalized MCP server descriptors.
+const CONNECTOR_ICONS = { github:IcGitHub, gmail:IcGmail, gcal:IcGCal, slack:IcGrid, notion:IcBook, linear:IcLinear, filesystem:IcFolder, postgres:IcGrid, brave:IcGlobe, sentry:IcGrid, stripe:IcGrid, obsidian:IcBook, todoist:IcCheck, puppeteer:IcGlobe, memory:IcBrain, youtube:IcGlobe, 'agent-reach':IcXCircle };
+// Real brand logos via logo service, keyed by domain. Falls back to hand-drawn icon if a logo fails.
+const CONNECTOR_DOMAINS = { github:'github.com', gmail:'gmail.com', gcal:'calendar.google.com', slack:'slack.com', notion:'notion.so', linear:'linear.app', filesystem:'', postgres:'postgresql.org', brave:'brave.com', sentry:'sentry.io', stripe:'stripe.com', obsidian:'obsidian.md', todoist:'todoist.com', puppeteer:'pptr.dev', memory:'', youtube:'youtube.com', 'agent-reach':'x.com', figma:'figma.com', jira:'atlassian.com', discord:'discord.com', cloudflare:'cloudflare.com', supabase:'supabase.com', vercel:'vercel.com', mongodb:'mongodb.com', airtable:'airtable.com', asana:'asana.com', hubspot:'hubspot.com', shopify:'shopify.com' };
+const ConnLogo = ({c, size=20}) => {
+  const dom = (c && CONNECTOR_DOMAINS[c.id]) || (c && c.domain) || '';
+  const Fallback = (c && (CONNECTOR_ICONS[c.id])) || IcMcp;
+  const [failed, setFailed] = useState(false);
+  if (!dom || failed) return <Fallback size={size}/>;
+  return <img className="conn-logo-img" src={'https://www.google.com/s2/favicons?sz=64&domain=' + encodeURIComponent(dom)} alt="" width={size} height={size} onError={() => setFailed(true)}/>;
+};
+function mcp(o){ return Object.assign({ source:'official', category:'Other', authType:'None', install:'npm', trust:'community', tools:[], state:'available' }, o); }
+const REQUIRED_CONNECTORS = [
+  mcp({ id:'github', name:'GitHub', source:'official', category:'Developer', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-github', trust:'verified', description:'Read and write GitHub repositories, issues, and pull requests on your behalf.', tools:['list_repos','get_repo','search_code','create_issue','comment_issue','list_pull_requests','get_pull_request'] }),
+  mcp({ id:'gmail', name:'Gmail', source:'official', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-gmail', trust:'verified', description:'Search, read, draft, and send email from your Gmail account.', tools:['search_messages','read_message','list_threads','create_draft','send_email'] }),
+  mcp({ id:'gcal', name:'Google Calendar', source:'official', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-gcal', trust:'verified', description:'View your schedule and create or update calendar events.', tools:['list_events','get_event','create_event','update_event','find_free_time'] }),
+];
+
+// 2) MCP registry adapter interface ? async search(query) -> normalized descriptors.
+//    Seeded catalogs because a sandboxed page cannot reach these registries; the desktop build proxies them live.
+function makeRegistryAdapter({ id, label, color, catalog }){
+  return { id, label, color, async search(query){
+    const q = (query||'').trim().toLowerCase();
+    await new Promise(r=>setTimeout(r, 260 + Math.random()*320));
+    const rows = catalog.map(c=>mcp({...c, source:id}));
+    if(!q) return rows;
+    return rows.filter(c=> (c.name+' '+c.description+' '+c.category+' '+(c.tools||[]).join(' ')).toLowerCase().includes(q));
+  } };
+}
+// 3) External sources
+const MCP_SOURCES = [
+  makeRegistryAdapter({ id:'official', label:'Official MCP Registry', color:'#5b8def', catalog:[
+    ...REQUIRED_CONNECTORS,
+    { id:'slack', name:'Slack', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-slack', trust:'verified', description:'Post messages and read channels in your Slack workspace.', tools:['list_channels','post_message','read_channel','search_messages'] },
+    { id:'filesystem', name:'Filesystem', category:'Developer', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-filesystem', trust:'verified', description:'Read and write files within an allow-listed directory.', tools:['read_file','write_file','list_dir','search_files'] },
+    { id:'postgres', name:'Postgres', category:'Data', authType:'API key', install:'docker', image:'mcp/postgres:latest', trust:'verified', description:'Run read-only SQL queries against a Postgres database.', tools:['query','list_tables','describe_table'] },
+    { id:'puppeteer', name:'Puppeteer', category:'Web', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-puppeteer', trust:'community', description:'Drive a headless browser to navigate and scrape pages.', tools:['navigate','screenshot','extract_text','click'] },
+  ]}),
+  makeRegistryAdapter({ id:'smithery', label:'Smithery', color:'#e0a030', catalog:[
+    { id:'notion', name:'Notion', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@smithery/notion', trust:'verified', description:'Search pages and append content to your Notion workspace.', tools:['search','get_page','append_block','create_page'] },
+    { id:'linear', name:'Linear', category:'Developer', authType:'API key', install:'npm', pkg:'@smithery/linear', trust:'verified', description:'Create and track issues, projects, and cycles in Linear.', tools:['create_issue','list_issues','update_issue','list_projects'] },
+    { id:'brave', name:'Brave Search', category:'Web', authType:'API key', install:'npm', pkg:'@smithery/brave-search', trust:'community', description:'Privacy-first web and local search.', tools:['web_search','local_search'] },
+    { id:'sentry', name:'Sentry', category:'Developer', authType:'API key', install:'docker', image:'smithery/sentry:latest', trust:'community', description:'Inspect errors, issues, and releases in Sentry.', tools:['list_issues','get_issue','resolve_issue'] },
+    { id:'stripe', name:'Stripe', category:'Data', authType:'API key', install:'npm', pkg:'@smithery/stripe', trust:'community', description:'Read charges, customers, and invoices from Stripe.', tools:['list_charges','get_customer','list_invoices'] },
+  ]}),
+  makeRegistryAdapter({ id:'glama', label:'Glama', color:'#8abf9a', catalog:[
+    { id:'obsidian', name:'Obsidian', category:'Productivity', authType:'None', install:'local', cmd:'npx obsidian-mcp /vault', trust:'community', description:'Search and edit notes in a local Obsidian vault.', tools:['search_notes','read_note','append_note'] },
+    { id:'todoist', name:'Todoist', category:'Productivity', authType:'API key', install:'npm', pkg:'@glama/todoist', trust:'community', description:'Manage tasks and projects in Todoist.', tools:['list_tasks','create_task','complete_task'] },
+    { id:'memory', name:'Memory', category:'Other', authType:'None', install:'npm', pkg:'@glama/memory', trust:'community', description:'Persistent knowledge-graph memory across sessions.', tools:['store','recall','search_graph'] },
+    { id:'youtube', name:'YouTube Transcript', category:'Web', authType:'None', install:'npm', pkg:'@glama/youtube-transcript', trust:'unverified', description:'Fetch transcripts and metadata for YouTube videos.', tools:['get_transcript','get_metadata'] },
+  ]}),
+];
+const TRUST_META = { verified:{label:'Verified', cls:'verified'}, community:{label:'Community', cls:'community'}, unverified:{label:'Unverified', cls:'unverified'} };
+const INSTALL_LABEL = { npm:'npm', docker:'Docker', local:'Local' };
+function installCommand(c){ if(c.install==='docker') return 'docker run -i --rm ' + (c.image||('mcp/'+c.id)); if(c.install==='local') return c.cmd || ('npx '+c.id+'-mcp'); return 'npm install -g ' + (c.pkg||('@modelcontextprotocol/server-'+c.id)); }
+const MKT_LS = 'vellum-connectors-v1';
+function loadConnState(){ try{ return JSON.parse(localStorage.getItem(MKT_LS)) || {installed:{}, audit:[]}; }catch(e){ return {installed:{}, audit:[]}; } }
+function saveConnState(s){ try{ localStorage.setItem(MKT_LS, JSON.stringify(s)); window.dispatchEvent(new Event('vellum-connectors-changed')); }catch(e){} }
+
+const AppsView = ({apps, onConnect, onDisconnect}) => {
+  const [tab, setTab] = useState('marketplace');
+  const [query, setQuery] = useState('');
+  const [srcFilter, setSrcFilter] = useState('all');
+  const [discovering, setDiscovering] = useState(true);
+  const [catalog, setCatalog] = useState([]);
+  const [persisted, setPersisted] = useState(loadConnState);
+  const [wizard, setWizard] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [custom, setCustom] = useState({ name:'', description:'', category:'Other', authType:'None', install:'npm', pkg:'', tools:'' });
+  const installed = persisted.installed; const audit = persisted.audit;
+  const update = (next)=>{ setPersisted(next); saveConnState(next); };
+  const mkAudit = (action, c, detail)=>({ t: Date.now(), action, id:c.id, name:c.name, source:c.source, detail: detail||'' });
+  useEffect(()=>{ let cancelled=false; setDiscovering(true);
+    Promise.all(MCP_SOURCES.map(s=> s.search(query).catch(()=>[]))).then(results=>{
+      if(cancelled) return; const seen={}; const merged=[];
+      results.forEach(rows=> rows.forEach(r=>{ const k=r.source+':'+r.id; if(!seen[k]){ seen[k]=1; merged.push(r); } }));
+      setCatalog(merged); setDiscovering(false);
+    });
+    return ()=>{ cancelled=true; };
+  }, [query]);
+  const visible = catalog.filter(c=> srcFilter==='all' || c.source===srcFilter);
+  const installedList = Object.values(installed);
+  function startInstall(c){ setWizard({connector:c, step:'metadata'}); setTimeout(()=> setWizard(w=> w&&w.connector.id===c.id ? {...w, step:'permissions'} : w), 650); }
+  function approveInstall(){ const c=wizard.connector; setWizard(w=>({...w, step:'installing'})); setTimeout(()=> setWizard(w=> w?{...w, step:(c.authType==='None'?'register':'auth')}:w), 1100); }
+  function completeAuth(){ setWizard(w=>({...w, step:'keychain'})); setTimeout(()=> setWizard(w=> w?{...w, step:'register'}:w), 900); }
+  function finishInstall(){ const c=wizard.connector; const entry={...c, state:'ready', installedAt:Date.now()};
+    update({ installed:{...installed,[c.id]:entry}, audit:[mkAudit('installed', c, INSTALL_LABEL[c.install]+' ? '+c.authType), ...audit].slice(0,200) });
+    setWizard(null); if((apps||[]).some(a=>a.id===c.id) && onConnect) onConnect(c.id); }
+  function uninstall(c){ update({ installed:Object.fromEntries(Object.entries(installed).filter(([k])=>k!==c.id)), audit:[mkAudit('uninstalled', c), ...audit].slice(0,200) }); if((apps||[]).some(a=>a.id===c.id) && onDisconnect) onDisconnect(c.id); }
+  function toggleEnable(c){ const cur=installed[c.id]; const on=cur.state==='ready'; update({ installed:{...installed,[c.id]:{...cur,state:on?'disabled':'ready'}}, audit:[mkAudit(on?'disabled':'enabled', c), ...audit].slice(0,200) }); }
+  function submitCustom(e){ e && e.preventDefault(); const id = (custom.name||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || ('mcp-'+Date.now());
+    const c = { id, name:custom.name.trim()||'Custom MCP server', description:custom.description.trim()||'User-added MCP server.', category:custom.category, authType:custom.authType, install:custom.install, pkg:custom.pkg.trim(), source:'custom', trust:'unverified', tools:(custom.tools||'').split(',').map(t=>t.trim()).filter(Boolean), domain:'' };
+    setShowAdd(false); setCustom({ name:'', description:'', category:'Other', authType:'None', install:'npm', pkg:'', tools:'' }); startInstall(c); }
+  const Card = (c)=>{ const tm=TRUST_META[c.trust]||TRUST_META.community; const srcObj=MCP_SOURCES.find(s=>s.id===c.source); const inst=installed[c.id];
+    return (
+      <div key={c.source+':'+c.id} className="conn-card">
+        <div className="conn-card-top"><span className="conn-ic"><ConnLogo c={c} size={20}/></span>
+          <div className="conn-card-head"><div className="conn-name">{c.name}<span className={'conn-trust '+tm.cls} title={'Trust: '+tm.label}><IcShield size={11}/>{tm.label}</span></div>
+            <div className="conn-meta">{c.category} ? {c.authType} ? {INSTALL_LABEL[c.install]}{srcObj && <span className="conn-src" style={{color:srcObj.color}}> ? {srcObj.label}</span>}</div></div></div>
+        <div className="conn-desc">{c.description}</div>
+        <div className="conn-tools">{(c.tools||[]).slice(0,4).map(t=> <span key={t} className="conn-tool">{t}</span>)}{(c.tools||[]).length>4 && <span className="conn-tool more">+{c.tools.length-4}</span>}</div>
+        <div className="conn-actions">{inst ? <span className="conn-installed"><IcCheck size={13}/>{inst.state==='disabled'?'Disabled':'Installed'}</span> : <button className="conn-install-btn" onClick={()=>startInstall(c)}>Install</button>}</div>
+      </div>
+    ); };
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 880}}>
+        <div className="page-head"><span className="page-head-ic"><IcGrid/></span><div><div className="page-title">Connectors</div><div className="page-sub">Browse MCP servers from external registries and install them into Vellum.</div></div></div>
+        <div className="conn-tabs">{[['marketplace','Marketplace'],['installed','Installed ? '+installedList.length],['audit','Audit log']].map(([k,l])=>(<button key={k} className={'conn-tab'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>))}</div>
+        {tab==='marketplace' && <React.Fragment>
+          <div className="conn-toolbar"><div className="conn-search"><IcSearch size={15}/><input placeholder="Search connectors and tools" value={query} onChange={e=>setQuery(e.target.value)}/></div><button className="conn-addcustom" onClick={()=>setShowAdd(true)}><IcPlus size={15}/>Add custom MCP server</button></div>
+          <div className="conn-srcfilter"><button className={'conn-srcchip'+(srcFilter==='all'?' on':'')} onClick={()=>setSrcFilter('all')}>All sources</button>{MCP_SOURCES.map(s=> <button key={s.id} className={'conn-srcchip'+(srcFilter===s.id?' on':'')} onClick={()=>setSrcFilter(s.id)}><span className="conn-srcdot" style={{background:s.color}}/>{s.label}</button>)}</div>
+          {discovering ? <div className="conn-discovering"><span className="conn-spin"/>Discovering MCP servers across {MCP_SOURCES.length} registries?</div> : <div className="conn-grid">{visible.length ? visible.map(Card) : <div className="apps-empty">No connectors match your search.</div>}</div>}
+        </React.Fragment>}
+        {tab==='installed' && (installedList.length===0 ? <div className="apps-empty">No connectors installed yet. Browse the Marketplace to add one.</div> : <div className="conn-list">{installedList.map(c=>{ const on=c.state!=='disabled'; return (
+          <div key={c.id} className="conn-inst-row"><span className="conn-ic"><ConnLogo c={c} size={18}/></span><div className="conn-inst-main"><div className="conn-name">{c.name}</div><div className="conn-meta">{(c.tools||[]).length} tools ? {c.authType} ? {INSTALL_LABEL[c.install]}</div></div>
+            <button className={'conn-toggle'+(on?' on':'')} onClick={()=>toggleEnable(c)}>{on?'Enabled':'Disabled'}</button><button className="conn-uninstall" onClick={()=>uninstall(c)}><IcTrash size={14}/>Uninstall</button></div>
+          ); })}</div>)}
+        {tab==='audit' && (audit.length===0 ? <div className="apps-empty">No connector activity yet.</div> : <div className="conn-audit">{audit.map((a,i)=>(<div key={i} className="conn-audit-row"><span className={'conn-audit-act '+a.action}>{a.action}</span><span className="conn-audit-name">{a.name}</span>{a.detail && <span className="conn-audit-detail">{a.detail}</span>}<span className="conn-audit-time">{new Date(a.t).toLocaleString()}</span></div>))}</div>)}
+      </div>
+      {wizard && <InstallWizard wizard={wizard} onApprove={approveInstall} onAuth={completeAuth} onFinish={finishInstall} onCancel={()=>setWizard(null)}/>}
+      {showAdd && (
+        <div className="iw-overlay" onClick={()=>setShowAdd(false)}>
+          <form className="iw-modal conn-add-modal" onClick={e=>e.stopPropagation()} onSubmit={submitCustom}>
+            <div className="iw-head"><span className="conn-ic"><IcMcp size={20}/></span><div><div className="conn-name">Add custom MCP server</div><div className="conn-meta">Register an MCP server by package or command. You'll review permissions before it installs.</div></div></div>
+            <div className="iw-body conn-add-body">
+              <label className="conn-add-field"><span>Name</span><input value={custom.name} onChange={e=>setCustom({...custom,name:e.target.value})} placeholder="e.g. Jira" required/></label>
+              <label className="conn-add-field"><span>Description</span><input value={custom.description} onChange={e=>setCustom({...custom,description:e.target.value})} placeholder="What does it do?"/></label>
+              <div className="conn-add-row">
+                <label className="conn-add-field"><span>Category</span><select value={custom.category} onChange={e=>setCustom({...custom,category:e.target.value})}>{['Developer','Productivity','Data','Web','Communication','Other'].map(o=><option key={o}>{o}</option>)}</select></label>
+                <label className="conn-add-field"><span>Auth</span><select value={custom.authType} onChange={e=>setCustom({...custom,authType:e.target.value})}>{['None','API key','OAuth'].map(o=><option key={o}>{o}</option>)}</select></label>
+                <label className="conn-add-field"><span>Install</span><select value={custom.install} onChange={e=>setCustom({...custom,install:e.target.value})}>{['npm','docker','local'].map(o=><option key={o}>{o}</option>)}</select></label>
+              </div>
+              <label className="conn-add-field"><span>{custom.install==='docker'?'Image':custom.install==='local'?'Command':'Package'}</span><input value={custom.pkg} onChange={e=>setCustom({...custom,pkg:e.target.value})} placeholder={custom.install==='docker'?'mcp/my-server':custom.install==='local'?'npx my-mcp-server':'@scope/server-name'}/></label>
+              <label className="conn-add-field"><span>Tools exposed <em>(comma-separated)</em></span><input value={custom.tools} onChange={e=>setCustom({...custom,tools:e.target.value})} placeholder="search, create_issue, list"/></label>
+            </div>
+            <div className="iw-foot"><button type="button" className="iw-cancel" onClick={()=>setShowAdd(false)}>Cancel</button><button type="submit" className="iw-approve">Review &amp; install</button></div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const InstallWizard = ({wizard, onApprove, onAuth, onFinish, onCancel}) => {
+  const c=wizard.connector; const step=wizard.step; const tm=TRUST_META[c.trust]||TRUST_META.community;
+  const [apiKey, setApiKey] = useState('');
+  return (
+    <div className="iw-overlay" onClick={onCancel}>
+      <div className="iw-modal" onClick={e=>e.stopPropagation()}>
+        <div className="iw-head"><span className="conn-ic"><ConnLogo c={c} size={20}/></span><div><div className="conn-name">{c.name}<span className={'conn-trust '+tm.cls}><IcShield size={11}/>{tm.label}</span></div><div className="conn-meta">{c.category} ? {c.authType} ? {INSTALL_LABEL[c.install]}</div></div><button className="iw-x" onClick={onCancel}><I d="M6 6l12 12M18 6L6 18" size={15}/></button></div>
+        {step==='metadata' && <div className="iw-body"><div className="iw-fetch"><span className="conn-spin"/>Fetching metadata from {(MCP_SOURCES.find(x=>x.id===c.source)||{}).label}?</div></div>}
+        {step==='permissions' && <div className="iw-body">
+          <div className="iw-h">This connector will be able to:</div>
+          <div className="iw-perms">{(c.tools||[]).map(t=> <div key={t} className="iw-perm"><IcKey2 size={13}/>{t}</div>)}</div>
+          <div className="iw-auth-note">Authentication: <b>{c.authType}</b> ? Install: <b>{INSTALL_LABEL[c.install]}</b></div>
+          <div className="iw-cmd"><span className="iw-cmd-label">Install command</span><code>{installCommand(c)}</code></div>
+          <div className="iw-warn"><IcShield size={13}/>Only install connectors you trust. Vellum never installs MCP servers without your approval.</div>
+          <div className="iw-acts"><button className="iw-cancel" onClick={onCancel}>Cancel</button><button className="iw-approve" onClick={onApprove}>Approve &amp; install</button></div>
+        </div>}
+        {step==='installing' && <div className="iw-body"><div className="iw-fetch"><span className="conn-spin"/>Running <code>{installCommand(c)}</code>?</div></div>}
+        {step==='auth' && <div className="iw-body">{c.authType==='OAuth'
+          ? <React.Fragment><div className="iw-h">Authorize {c.name}</div><div className="iw-auth-note">You'll be redirected to {c.name} to grant access. Vellum receives a scoped token, never your password.</div><div className="iw-acts"><button className="iw-cancel" onClick={onCancel}>Cancel</button><button className="iw-approve" onClick={onAuth}>Authorize with {c.name}</button></div></React.Fragment>
+          : <React.Fragment><div className="iw-h">Enter your {c.name} API key</div><input className="iw-key" type="password" placeholder="sk-?" value={apiKey} onChange={e=>setApiKey(e.target.value)}/><div className="iw-acts"><button className="iw-cancel" onClick={onCancel}>Cancel</button><button className="iw-approve" disabled={!apiKey.trim()} onClick={onAuth}>Save key</button></div></React.Fragment>}</div>}
+        {step==='keychain' && <div className="iw-body"><div className="iw-fetch"><span className="conn-spin"/>Storing credentials in your OS keychain?</div></div>}
+        {step==='register' && <div className="iw-body"><div className="iw-done-ic"><IcCheck size={26}/></div><div className="iw-h" style={{textAlign:'center'}}>Registering {(c.tools||[]).length} tools with Vellum</div><div className="iw-perms">{(c.tools||[]).map(t=> <div key={t} className="iw-perm done"><IcCheck size={12}/>{t}</div>)}</div><div className="iw-acts"><button className="iw-approve" onClick={onFinish}>Done</button></div></div>}
+      </div>
+    </div>
+  );
+};
+
+/* â”€â”€â”€ archive â”€â”€â”€ */
+const CONNECTOR_STATUS_LABELS = {
+  ready: 'Ready',
+  missing_agent_reach: 'Install Agent-Reach',
+  missing_twitter_cli: 'Install twitter-cli',
+  not_authenticated: 'Authenticate X',
+  error: 'Error',
+  off: 'Not configured',
+};
+function connectorStatus(app){
+  if (!app) return 'off';
+  if (app.status) return app.status;
+  return app.state === 'ready' || app.configured ? 'ready' : 'off';
+}
+function connectorSetupNote(app){
+  const st = connectorStatus(app);
+  if (st === 'missing_agent_reach') return 'Install Agent-Reach locally, then restart Vellum or refresh plugin health.';
+  if (st === 'missing_twitter_cli') return 'Install and configure twitter-cli so Agent-Reach can use your local X session.';
+  if (st === 'not_authenticated') return 'Authenticate the local X CLI session. Vellum will not use Grok OAuth for Agent-Reach actions.';
+  if (st === 'error') return app.notes || 'The backend reported a connector error. Check the API logs for the sanitized reason.';
+  if (st === 'ready') return app.notes || 'Ready for agent routing and tool use.';
+  return app.notes || 'Connector is detected by the backend but is not configured yet.';
+}
+const BackendConnectorsView = ({apps = []}) => {
+  const [query, setQuery] = useState('');
+  const rows = (apps || []).map(a => ({
+    ...a,
+    type: a.type || (a.id === 'agent-reach' ? 'connector' : 'mcp'),
+    category: a.category || (a.id === 'agent-reach' ? 'Connectors' : 'MCP'),
+    capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
+  })).filter(a => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (a.name + ' ' + a.id + ' ' + a.type + ' ' + a.category + ' ' + a.capabilities.join(' ')).toLowerCase().includes(q);
+  });
+  const ready = rows.filter(a => connectorStatus(a) === 'ready').length;
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 880}}>
+        <div className="page-head">
+          <span className="page-head-ic"><IcGrid/></span>
+          <div style={{flex: 1}}>
+            <div className="page-title">Connectors</div>
+            <div className="page-sub">Live connector and MCP plugin status from the Vellum backend.</div>
+          </div>
+          <span className="cu-pill">{ready}/{rows.length} ready</span>
+        </div>
+        <div className="conn-toolbar">
+          <div className="conn-search"><IcSearch size={15}/><input placeholder="Search connectors, MCP tools, and capabilities" value={query} onChange={e => setQuery(e.target.value)}/></div>
+        </div>
+        <div className="conn-grid">
+          {rows.length ? rows.map(app => {
+            const st = connectorStatus(app);
+            const readyState = st === 'ready';
+            const statusText = CONNECTOR_STATUS_LABELS[st] || st;
+            return (
+              <div key={app.id} className="conn-card">
+                <div className="conn-card-top">
+                  <span className="conn-ic"><ConnLogo c={app} size={20}/></span>
+                  <div className="conn-card-head">
+                    <div className="conn-name">{app.name || app.id}<span className={'conn-trust ' + (readyState ? 'verified' : st === 'error' ? 'unverified' : 'community')}><IcShield size={11}/>{statusText}</span></div>
+                    <div className="conn-meta">{app.category} · {app.type} · {app.id}</div>
+                  </div>
+                </div>
+                <div className="conn-desc">{connectorSetupNote(app)}</div>
+                <div className="conn-tools">
+                  {app.capabilities.length ? app.capabilities.slice(0, 8).map(t => <span key={t} className="conn-tool">{t}</span>) : <span className="conn-tool">No capabilities reported</span>}
+                  {app.capabilities.length > 8 && <span className="conn-tool more">+{app.capabilities.length - 8}</span>}
+                </div>
+              </div>
+            );
+          }) : <div className="apps-empty">No backend connectors reported. Start the Vellum API, then refresh this page.</div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ArchiveView = ({chats, onRestore, onDelete}) => {
   const archived = chats.filter(c => c.archived);
   return (
@@ -3409,7 +3986,7 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
   );
 };
 
-/* ─── context menu (chat row) ─── */
+/* â”€â”€â”€ context menu (chat row) â”€â”€â”€ */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={clampMenuPosition(pos, 230, 260)} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
@@ -3427,7 +4004,7 @@ const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   </Popover>
 );
 
-/* ─── create project modal ─── */
+/* â”€â”€â”€ create project modal â”€â”€â”€ */
 const CreateProjectModal = ({onCreate, onClose}) => {
   const [name, setName] = useState('');
   const [mem, setMem] = useState('default');
@@ -3474,7 +4051,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
   );
 };
 
-/* ─── profile ─── */
+/* â”€â”€â”€ profile â”€â”€â”€ */
 const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalization, onAddAccount, onClose}) => {
   const [acctOpen, setAcctOpen] = useState(false);
   const Row = ({icon, label, hint}) => (
@@ -3562,7 +4139,7 @@ const PERS_CHARS = [
   {v:'default', label:'Default', sub:'Preset for this trait'},
   {v:'less', label:'Less', sub:'More professional and factual'},
 ];
-const DEFAULT_PERS = { baseStyle:'default', warm:'default', enthusiastic:'default', headers:'default', emoji:'default', fastAnswers:true, custom:'', nickname:'', occupation:'', about:'', memory:true, recordHist:true, webSearch:true, canvas:true, voice:true, advVoice:true, connector:true };
+const DEFAULT_PERS = { baseStyle:'default', warm:'default', enthusiastic:'default', headers:'default', emoji:'default', fastAnswers:true, custom:'', nickname:'', occupation:'', about:'', memory:true, dreaming:true, refHistory:true, recordHist:true, webSearch:true, canvas:true, voice:true, advVoice:true, connector:true };
 const PDrop = ({value, options, onChange, width=214}) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -3584,7 +4161,7 @@ const PDrop = ({value, options, onChange, width=214}) => {
 };
 
 const MEMORY_SUMMARY = [
-  { h:"Overview", text:"You are focused on building AI products and developer tools, with Vellum currently being the most active long-term project. Your work spans coding assistants, computer-use agents, orchestration, and memory systems. You favour local-first architectures and self-hosted infrastructure, and prefer practical execution over chasing the newest model — often combining different tools based on what works best for the task." },
+  { h:"Overview", text:"You are focused on building AI products and developer tools, with Vellum currently being the most active long-term project. Your work spans coding assistants, computer-use agents, orchestration, and memory systems. You favour local-first architectures and self-hosted infrastructure, and prefer practical execution over chasing the newest model ? often combining different tools based on what works best for the task." },
   { h:"Vellum", text:"Vellum is your flagship project: a desktop AI assistant that combines personal assistance, coding assistance, orchestration, and computer-use capabilities. It is a downloadable desktop application for macOS and Windows that opens into a chat-style interface by default while also supporting workspace-oriented modes inspired by developer tools. You describe Vellum as a self-learning personal assistant that primarily uses local models, while also supporting open-source and cloud models through user-provided API keys. A core principle is that users retain control of their data, with privacy protections even when cloud models are involved." },
   { h:"Agent Systems", text:"Vellum is designed around multiple specialized sub-agents with delegation, shared memory, orchestration, and several computer-use modes that users can choose from. You think about how agents hand work off to one another and how to keep their context coherent across a long session." },
   { h:"Working Style", text:"You move fast and iterate, validating ideas with working prototypes before polishing. You care about data ownership, privacy, and giving users explicit control over what the assistant can do." },
@@ -3608,14 +4185,16 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-const liveSavedMemories = (memoryData) => {
-  const entries = (memoryData && Array.isArray(memoryData.entries)) ? memoryData.entries : [];
+const liveMemoryEntries = (memoryData, key) => {
+  const entries = (memoryData && Array.isArray(memoryData[key])) ? memoryData[key] : [];
   return entries.map((entry, i) => ({
     id: String(entry.id || entry.rowid || entry.doc_id || ('memory-'+i)),
     text: memoryEntryText(entry),
     date: memoryEntryDate(entry),
   })).filter(item => item.text);
 };
+const liveSavedMemories = (memoryData) => liveMemoryEntries(memoryData, 'entries');
+const liveArchivedMemories = (memoryData) => liveMemoryEntries(memoryData, 'archived');
 const liveMemorySummarySections = (memoryData) => {
   const facts = (memoryData && Array.isArray(memoryData.facts)) ? memoryData.facts.filter(Boolean) : [];
   const saved = liveSavedMemories(memoryData);
@@ -3628,9 +4207,293 @@ const liveMemorySummarySections = (memoryData) => {
   return sections;
 };
 
-const MemorySummaryCard = ({memoryData, onClose, onTurnOff}) => {
+// Dreaming ? memories Vellum curated on its own from chat history (no explicit "remember this")
+const DREAM_NEW = [
+  { id:"d1", text:"Prefers concise, execution-focused answers and dislikes filler or hedging.", from:"inferred from 9 chats this week" },
+  { id:"d2", text:"Is weighing local vs. cloud model trade-offs for Vellum's default agent.", from:"inferred from 4 recent chats" },
+  { id:"d3", text:"Tends to validate ideas with a working prototype before committing to a direction.", from:"inferred from your working style" },
+];
+// Staying current ? memories Vellum updated as time passed
+const DREAM_UPDATED = [
+  { id:"u1", was:"Planning a trip to Singapore in July.", now:"Visited Singapore in July 2025; interested in a follow-up trip.", when:"updated 3 days ago" },
+  { id:"u2", was:"Learning the basics of building AI agents.", now:"Comfortable building voice and text agents; now focused on orchestration.", when:"updated last week" },
+];
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Honcho-style Memory Console (OpenConcho) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const HONCHO_PEERS = [
+  { id:'main-agent',    name:'main-agent',    label:'Main assistant', facts:42, sessions:128, conclusions:64, derived:[
+      'Builds AI products and developer tools; Vellum is the active long-term project.',
+      'Prefers local-first architecture and self-hosted infrastructure.',
+      'Communicates tersely; wants execution over hedging.' ] },
+  { id:'coding-agent',  name:'coding-agent',  label:'Coding', facts:31, sessions:74, conclusions:48, derived:[
+      'Works primarily in React + vanilla JS for prototypes.',
+      'Validates with a working prototype before polishing.',
+      'Dislikes unrequested redesigns; change only what was asked.' ] },
+  { id:'youtube-agent', name:'youtube-agent', label:'YouTube', facts:12, sessions:19, conclusions:14, derived:[
+      'Connected a YouTube account via OAuth for transcripts and scripts.',
+      'Favors concise script drafts with clear hooks.' ] },
+  { id:'x-agent',       name:'x-agent',       label:'X / social', facts:9, sessions:16, conclusions:11, derived:[
+      'Connected an X account (SuperGrok) to activate posting.',
+      'Tracks breaking trends; drafts threads in a candid voice.' ] },
+  { id:'books-agent',   name:'books-agent',   label:'Reading', facts:7, sessions:11, conclusions:8, derived:[
+      'Keeps a reading list and chapter summaries.',
+      'Interested in AI, systems design, and product strategy.' ] },
+];
+const HONCHO_SESSIONS = [
+  { id:'s1', peer:'main-agent',  title:'Vellum memory architecture', msgs:38, when:'2h ago', summary:'Discussed Honcho peers per sub-agent, dream consolidation, and review controls. Concluded each sub-agent should be its own peer with shared workspace.' },
+  { id:'s2', peer:'coding-agent', title:'Streaming + stop button', msgs:24, when:'Yesterday', summary:'Implemented interruptible streaming and a stop control. Learned user wants to send while busy and force-stop generation.' },
+  { id:'s3', peer:'youtube-agent', title:'Script: local-first AI', msgs:16, when:'2 days ago', summary:'Drafted a 6-minute script. User prefers a strong cold open and no filler.' },
+  { id:'s4', peer:'main-agent',  title:'Personalization + Dreaming', msgs:29, when:'3 days ago', summary:'Added Dreaming toggle and memory summary review. User reviews curated memories rather than auto-accepting.' },
+  { id:'s5', peer:'x-agent',     title:'Thread on agent memory', msgs:12, when:'5 days ago', summary:'Distilled a thread into 5 posts. Candid tone, no hashtags.' },
+];
+const HONCHO_CONCLUSIONS = [
+  { id:'c1', observer:'main-agent',  subject:'user', text:'Prefers concise, execution-focused answers and dislikes filler.', conf:0.94, when:'2h ago', private:false, pinned:true },
+  { id:'c2', observer:'coding-agent', subject:'user', text:'Wants to send follow-up messages while a response is still streaming.', conf:0.88, when:'Yesterday', private:false, pinned:false },
+  { id:'c3', observer:'main-agent',  subject:'user', text:'Values data ownership and privacy; favors local models with user-provided keys.', conf:0.91, when:'3 days ago', private:false, pinned:false },
+  { id:'c4', observer:'youtube-agent', subject:'user', text:'Prefers script openings with a strong hook; cut throat-clearing intros.', conf:0.82, when:'2 days ago', private:false, pinned:false },
+  { id:'c5', observer:'memory-agent', subject:'user', text:'Reviews curated memories manually rather than auto-accepting them.', conf:0.86, when:'4 days ago', private:true, pinned:false },
+  { id:'c6', observer:'x-agent',     subject:'user', text:'Writes in a candid voice, avoids hashtags and corporate phrasing.', conf:0.79, when:'5 days ago', private:false, pinned:false },
+];
+const HONCHO_DREAMS = [
+  { id:'d1', when:'8 hours ago', status:'complete', merged:14, created:3, updated:5, note:'Consolidated 14 raw observations into 3 new conclusions and refreshed 5 that drifted (e.g. "planning Singapore trip" ? "visited Singapore").' },
+  { id:'d2', when:'Yesterday', status:'complete', merged:9, created:2, updated:2, note:'Merged duplicate facts about model preferences across coding-agent and main-agent peers.' },
+  { id:'d3', when:'3 days ago', status:'complete', merged:21, created:4, updated:7, note:'First full pass after enabling Dreaming. Built initial peer cards for all sub-agents.' },
+];
+const MEM_LAYERS = [
+  { id:'honcho',  name:'Honcho',      role:'User model / evolving profile',          icon:IcBrain,  detail:'Maintains the long-term theory-of-mind: who you are, how you work, what you prefer. Conclusions sharpen as evidence accrues.' },
+  { id:'chroma',  name:'ChromaDB',    role:'Semantic retrieval',                     icon:IcSparkle,detail:'Vector store for meaning-based recall. Finds relevant memories by similarity, not keywords.' },
+  { id:'fts5',    name:'FTS5',        role:'Exact chat + note search',               icon:IcSearch, detail:'SQLite full-text index for precise lookups across every message and note.' },
+  { id:'obsidian',name:'Obsidian',    role:'Durable memory cards / inspectable vault',icon:IcNote,   detail:'Human-readable markdown vault. Every durable belief is a card you can open, edit, or delete.' },
+  { id:'sqlite',  name:'SQLite',      role:'Sessions, conversations, retention',     icon:IcLedger, detail:'System of record for raw history and retention metadata. The source the other layers build on.' },
+  { id:'agent',   name:'MemoryAgent', role:'Specialist interface',                   icon:IcChat,   detail:'The agent that reads and writes across all layers ? the single front door to memory for the rest of Vellum.' },
+];
+const INGEST_FLOW = [
+  { k:'Capture',  d:'Chats, notes & files land in SQLite' },
+  { k:'Index',    d:'FTS5 + ChromaDB build search indexes' },
+  { k:'Distill',  d:'MemoryAgent extracts candidate beliefs' },
+  { k:'Model',    d:'Honcho updates the evolving user profile' },
+  { k:'Persist',  d:'Durable cards written to the Obsidian vault' },
+];
+const DURABLE_CARDS = [
+  { id:'c1', text:'User prefers direct, implementation-first answers.', evidence:'Multiple corrections in Vellum UI debugging sessions.', conf:'high', seen:'2026-06-22', visible:['VellumAgent','MemoryAgent','CodingAgent'], pinned:true },
+  { id:'c2', text:'Local-first by default; cloud models only with explicit opt-in.', evidence:'Repeated emphasis on self-hosted infra and privacy.', conf:'high', seen:'2026-06-20', visible:['VellumAgent','MemoryAgent'] },
+  { id:'c3', text:'Wants sources cited inline and claims cross-checked first.', evidence:'Asked to remove canned lead-ins and show real URLs.', conf:'medium', seen:'2026-06-23', visible:['VellumAgent','ResearchAgent','MemoryAgent'] },
+  { id:'c4', text:'Iterates fast ? ships rough, refines in place.', evidence:'High edit cadence across UI sessions, prefers live tweaks.', conf:'medium', seen:'2026-06-18', visible:['VellumAgent','MemoryAgent','CodingAgent'] },
+  { id:'c5', text:'Follows one football side and the tennis majors.', evidence:'Sports queries: scores over punditry.', conf:'low', seen:'2026-06-11', visible:['SportsAgent','MemoryAgent'] },
+];
+function KnowledgeGraphView({ onBack }){
+  const [openLayer, setOpenLayer] = useState(null);
+  const [cards, setCards] = useState(DURABLE_CARDS);
+  const confDot = c => c==='high' ? '#3fb950' : c==='medium' ? '#d6a635' : 'var(--dim)';
+  return (
+    <div className="page">
+      <div className="page-inner" style={{maxWidth: 880}}>
+        <div className="page-head"><span className="page-head-ic kg-ic"><IcGraph size={18}/></span><div style={{flex:1}}><div className="page-title">Knowledge graph</div><div className="page-sub">Vellum's memory system ? how knowledge is captured, modelled, and made durable.</div></div>
+          <div className="kg-legend"><span className="kg-stat">6 layers</span><span className="kg-stat">{cards.length} durable cards</span></div></div>
+
+        <div className="km-sech">Memory architecture</div>
+        <div className="km-layers">
+          {MEM_LAYERS.map(l => (
+            <button key={l.id} className={'km-layer'+(openLayer===l.id?' on':'')} onClick={()=>setOpenLayer(o=>o===l.id?null:l.id)}>
+              <span className="km-layer-ic"><l.icon size={17}/></span>
+              <span className="km-layer-main"><span className="km-layer-name">{l.name}</span><span className="km-layer-role">{l.role}</span></span>
+              <span className="km-layer-chev"><IcChevD size={13}/></span>
+              {openLayer===l.id && <span className="km-layer-detail">{l.detail}</span>}
+            </button>
+          ))}
+        </div>
+
+        <div className="km-sech">Knowledge ingestion</div>
+        <div className="km-flow">
+          {INGEST_FLOW.map((st,i) => (
+            <React.Fragment key={st.k}>
+              <div className="km-stage">
+                <div className="km-stage-n">{i+1}</div>
+                <div className="km-stage-k">{st.k}</div>
+                <div className="km-stage-d">{st.d}</div>
+              </div>
+              {i < INGEST_FLOW.length-1 && <div className="km-arrow"><IcChevR size={15}/></div>}
+            </React.Fragment>
+          ))}
+        </div>
+
+        <div className="km-sech">Durable memory cards <span className="kg-sub-note">written to the Obsidian vault</span></div>
+        <div className="km-cards">
+          {cards.map(c => (
+            <div key={c.id} className="km-card">
+              <div className="km-card-top">
+                <span className="km-card-text">{c.text}</span>
+                {c.pinned && <span className="km-card-pin" title="Pinned"><IcPin size={12}/></span>}
+                <button className="km-card-x" title="Forget this card" onClick={()=>setCards(cs=>cs.filter(x=>x.id!==c.id))}><IcX size={13}/></button>
+              </div>
+              <div className="km-card-ev"><span className="km-k">Evidence</span>{c.evidence}</div>
+              <div className="km-card-meta">
+                <span className="km-conf"><span className="km-conf-dot" style={{background:confDot(c.conf)}}/>Confidence: {c.conf}</span>
+                <span className="km-seen">Last seen: {c.seen}</span>
+              </div>
+              <div className="km-card-vis"><span className="km-k">Visible to</span>{c.visible.map(v => <span key={v} className="km-vis-chip">{v}</span>)}</div>
+            </div>
+          ))}
+          {cards.length===0 && <div className="kg-empty">No durable cards. They appear as Vellum learns and consolidates.</div>}
+        </div>
+
+        <div className="quiet-foot">Built locally. Honcho models you, ChromaDB + FTS5 retrieve, Obsidian keeps the inspectable vault, SQLite is the source of record.</div>
+      </div>
+    </div>
+  );
+}
+function HonchoConsole({ onClose, onBack, page, onDreamComplete }){
+  const [tab, setTab] = useState('peers');
+  const [activePeer, setActivePeer] = useState(HONCHO_PEERS[0].id);
+  const [q, setQ] = useState('');
+  const [concl, setConcl] = useState(HONCHO_CONCLUSIONS);
+  const [dreams, setDreams] = useState(HONCHO_DREAMS);
+  const [dreaming, setDreaming] = useState(false);
+  const [dreamError, setDreamError] = useState('');
+  const peer = HONCHO_PEERS.find(p => p.id === activePeer) || HONCHO_PEERS[0];
+  const peerSessions = HONCHO_SESSIONS.filter(s => tab !== 'sessions' || true);
+  const filteredConcl = concl.filter(c => !q || c.text.toLowerCase().includes(q.toLowerCase()) || c.observer.includes(q.toLowerCase()));
+  const togglePin = id => setConcl(cs => cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c));
+  const togglePriv = id => setConcl(cs => cs.map(c => c.id === id ? {...c, private: !c.private} : c));
+  const delConcl = id => setConcl(cs => cs.filter(c => c.id !== id));
+  const scheduleDream = async () => {
+    if (dreaming) return;
+    setDreaming(true);
+    setDreamError('');
+    try {
+      const result = await API.settings.memoryDreamingRun();
+      const created = Array.isArray(result && result.new_memories) ? result.new_memories.length : 0;
+      const updated = Array.isArray(result && result.updated_memories) ? result.updated_memories.length : 0;
+      const archived = Array.isArray(result && result.archived_memories) ? result.archived_memories.length : 0;
+      const contradictions = Array.isArray(result && result.contradictions) ? result.contradictions.length : 0;
+      setDreams(ds => [{
+        id:'d'+Date.now(),
+        when:'just now',
+        status:'complete',
+        merged: created + updated + archived,
+        created,
+        updated,
+        note:'Promoted '+created+' memories, updated '+updated+', archived '+archived+(contradictions ? ', flagged '+contradictions+' contradiction(s).' : '.')
+      }, ...ds]);
+      if (onDreamComplete) onDreamComplete(result);
+    } catch (err) {
+      setDreamError((err && err.message) || 'Dreaming failed.');
+    } finally {
+      setDreaming(false);
+    }
+  };
+  const TABS = [['peers','Peers',IcBrain],['sessions','Sessions',IcChat],['conclusions','Conclusions',IcSearch],['dream','Dream',IcMoon]];
+  const totalConcl = HONCHO_PEERS.reduce((a,p)=>a+p.conclusions,0);
+  const totalSess = HONCHO_PEERS.reduce((a,p)=>a+p.sessions,0);
+  const inner = (
+      <div className={page ? "hc-card hc-card-page" : "hc-card"}>
+        <div className="hc-hd">
+          <div className="hc-title">{page && <button className="hc-back" title="Back to chat" onClick={onBack}><I d="M15 18l-6-6 6-6" size={18}/></button>}<span className="hc-logo"><IcBrain size={17}/></span>Memory Console <span className="hc-badge">Honcho</span></div>
+          <div className="hc-status">
+            <span className="hc-dot ok"/><span>workspace <b>vellum</b></span>
+            <span className="hc-sdiv"/><span>{HONCHO_PEERS.length} peers</span>
+            <span className="hc-sdiv"/><span>{totalConcl} conclusions</span>
+            <span className="hc-sdiv"/><span className="hc-queue">queue idle</span>
+          </div>
+          {!page && <button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button>}
+        </div>
+        <div className="hc-tabs">
+          {TABS.map(([k,lbl,Ic]) => (
+            <button key={k} className={'hc-tab'+(tab===k?' on':'')} onClick={()=>setTab(k)}><Ic size={14}/>{lbl}</button>
+          ))}
+        </div>
+        <div className="hc-body">
+          {tab === 'peers' && (
+            <div className="hc-peers">
+              <div className="hc-peer-list">
+                {HONCHO_PEERS.map(p => (
+                  <button key={p.id} className={'hc-peer-item'+(activePeer===p.id?' on':'')} onClick={()=>setActivePeer(p.id)}>
+                    <span className="hc-peer-name">{p.name}</span>
+                    <span className="hc-peer-sub">{p.label} ? {p.facts} facts</span>
+                  </button>
+                ))}
+              </div>
+              <div className="hc-peer-detail">
+                <div className="hc-peer-card">
+                  <div className="hc-pc-hd"><span className="hc-pc-name">{peer.name}</span><span className="hc-pc-tag">peer card</span></div>
+                  <div className="hc-pc-stats">
+                    <div className="hc-pc-stat"><b>{peer.facts}</b><span>facts</span></div>
+                    <div className="hc-pc-stat"><b>{peer.sessions}</b><span>sessions</span></div>
+                    <div className="hc-pc-stat"><b>{peer.conclusions}</b><span>conclusions</span></div>
+                  </div>
+                </div>
+                <div className="hc-pc-rep-h">Representation <span className="hc-pc-rep-sub">what this peer believes about the user</span></div>
+                {peer.derived.map((d,i) => (
+                  <div key={i} className="hc-rep-row"><span className="hc-rep-bullet"/><span>{d}</span></div>
+                ))}
+              </div>
+            </div>
+          )}
+          {tab === 'sessions' && (
+            <div className="hc-sessions">
+              {HONCHO_SESSIONS.map(s => (
+                <div key={s.id} className="hc-session">
+                  <div className="hc-ss-top"><span className="hc-ss-title">{s.title}</span><span className="hc-ss-peer">{s.peer}</span></div>
+                  <div className="hc-ss-summary">{s.summary}</div>
+                  <div className="hc-ss-meta">{s.msgs} messages ? {s.when}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab === 'conclusions' && (
+            <div className="hc-concl">
+              <div className="hc-search"><IcSearch size={15}/><input placeholder="Semantic search across conclusions" value={q} onChange={e=>setQ(e.target.value)}/></div>
+              {filteredConcl.map(c => (
+                <div key={c.id} className={'hc-concl-row'+(c.pinned?' pinned':'')}>
+                  <div className="hc-concl-main">
+                    <div className="hc-concl-obs"><span className="hc-obs">{c.observer}</span><span className="hc-arrow">?</span><span className="hc-subj">{c.subject}</span>{c.pinned && <span className="hc-tag-pin"><IcPin size={11}/>pinned</span>}{c.private && <span className="hc-tag-priv">private</span>}</div>
+                    <div className="hc-concl-text">{c.text}</div>
+                    <div className="hc-concl-meta">confidence {Math.round(c.conf*100)}% ? {c.when}</div>
+                  </div>
+                  <div className="hc-concl-acts">
+                    <button className="hc-act" title={c.pinned?'Unpin':'Pin'} onClick={()=>togglePin(c.id)}><IcPin size={14}/></button>
+                    <button className="hc-act" title={c.private?'Make shared':'Mark private'} onClick={()=>togglePriv(c.id)}><IcEye size={14}/></button>
+                    <button className="hc-act danger" title="Delete" onClick={()=>delConcl(c.id)}><IcTrash size={14}/></button>
+                  </div>
+                </div>
+              ))}
+              {filteredConcl.length===0 && <div className="hc-empty">No conclusions match.</div>}
+            </div>
+          )}
+          {tab === 'dream' && (
+            <div className="hc-dream">
+              <div className="hc-dream-cta">
+                <div className="hc-dream-cta-l"><span className="dream-label"><IcMoon size={15}/>Dream / consolidation</span><span className="hc-dream-sub">Trigger Honcho's consolidation pass to merge raw observations into durable conclusions and refresh peer cards.</span></div>
+                <button className={'btn primary hc-dream-btn'+(dreaming?' running':'')} onClick={scheduleDream} disabled={dreaming}>{dreaming ? <React.Fragment><span className="hc-spin"/>Dreaming...</React.Fragment> : <React.Fragment><IcMoon size={14}/>Schedule dream</React.Fragment>}</button>
+              </div>
+              {dreamError && <div className="hc-empty" style={{color:'var(--danger)'}}>{dreamError}</div>}
+              {dreams.map(d => (
+                <div key={d.id} className="hc-dream-row">
+                  <div className="hc-dream-ic"><IcMoon size={15}/></div>
+                  <div className="hc-dream-main">
+                    <div className="hc-dream-top"><span className="hc-dream-when">{d.when}</span><span className="hc-dream-status">{d.status}</span></div>
+                    <div className="hc-dream-note">{d.note}</div>
+                    <div className="hc-dream-stats"><span>{d.merged} merged</span><span>{d.created} created</span><span>{d.updated} updated</span></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+  );
+  if (page) return <div className="page hc-page-wrap">{inner}</div>;
+  return (<React.Fragment><div className="backdrop dim mem-backdrop" onClick={onClose}/>{inner}</React.Fragment>);
+}
+
+const MemorySummaryCard = ({memoryData, dreaming, onClose, onTurnOff}) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dnew, setDnew] = useState(DREAM_NEW);
+  const [dupd, setDupd] = useState(DREAM_UPDATED);
   const sections = liveMemorySummarySections(memoryData);
+  const keepNew = id => setDnew(xs => xs.filter(x => x.id !== id));
+  const dropNew = id => setDnew(xs => xs.filter(x => x.id !== id));
+  const ackUpd = id => setDupd(xs => xs.filter(x => x.id !== id));
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
@@ -3650,6 +4513,35 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff}) => {
           </div>
         </div>
         <div className="mem-card-body">
+          {dreaming && (dnew.length > 0 || dupd.length > 0) && (
+            <div className="dream-block">
+              <div className="dream-hd"><span className="dream-badge"><IcMoon size={13}/>Dreaming</span><span className="dream-sub">Vellum curated these on its own from your recent chats. Review and keep what's right.</span></div>
+              {dupd.map(u => (
+                <div key={u.id} className="dream-card dream-updated">
+                  <div className="dream-ic"><IcRefresh size={15}/></div>
+                  <div className="dream-main">
+                    <div className="dream-tag">Stayed current · {u.when}</div>
+                    <div className="dream-was">{u.was}</div>
+                    <div className="dream-now"><IcArrowUp size={12} style={{transform:'rotate(90deg)'}}/>{u.now}</div>
+                  </div>
+                  <button className="dream-ok" onClick={() => ackUpd(u.id)} title="Got it"><IcCheck size={15}/></button>
+                </div>
+              ))}
+              {dnew.map(d => (
+                <div key={d.id} className="dream-card">
+                  <div className="dream-ic"><IcSparkle size={15}/></div>
+                  <div className="dream-main">
+                    <div className="dream-text">{d.text}</div>
+                    <div className="dream-from">{d.from}</div>
+                  </div>
+                  <div className="dream-acts">
+                    <button className="dream-keep" onClick={() => keepNew(d.id)} title="Keep this memory"><IcCheck size={14}/>Keep</button>
+                    <button className="dream-drop" onClick={() => dropNew(d.id)} title="Dismiss"><IcX size={14}/></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {sections.map(s => (
             <div key={s.h} className="mem-sec">
               <div className="mem-sec-h">{s.h}</div>
@@ -3668,17 +4560,17 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff}) => {
 
 const SavedMemoriesCard = ({memoryData, onClose}) => {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(() => liveSavedMemories(memoryData));
+  const [items, setItems] = useState(() => liveArchivedMemories(memoryData));
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
   const [rowMenu, setRowMenu] = useState(null);
-  useEffect(() => setItems(liveSavedMemories(memoryData)), [memoryData]);
+  useEffect(() => setItems(liveArchivedMemories(memoryData)), [memoryData]);
   const filtered = items.filter(m => !q || m.text.toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
       <div className="sm-card" onClick={() => { setMenuOpen(false); setRowMenu(null); }}>
-        <div className="sm-hd"><div className="sm-title">Saved memories</div><button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button></div>
+        <div className="sm-hd"><div className="sm-title">Old saved memories</div><button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button></div>
         <div className="sm-toolbar" onClick={e => e.stopPropagation()}>
           <div className="sm-search"><IcSearch size={15}/><input placeholder="Search memories" value={q} onChange={e => setQ(e.target.value)}/></div>
           <button className="sm-tool" title="Sort"><IcSort size={16}/></button>
@@ -3705,19 +4597,65 @@ const SavedMemoriesCard = ({memoryData, onClose}) => {
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <div className="sm-empty">No saved memories.</div>}
+          {filtered.length === 0 && <div className="sm-empty">No archived memories.</div>}
         </div>
       </div>
     </React.Fragment>
   );
 };
 
-/* ─── settings modal ─── */
+/* â”€â”€â”€ settings modal â”€â”€â”€ */
+const ACCENTS = [
+  { id:'default', name:'Vellum', accent:'#988686', accent2:'#5c4e4e', swatch:['#988686','#b4a39f','#5c4e4e','#3a3433'] },
+  { id:'blue-eclipse', name:'Blue eclipse', accent:'#505081', accent2:'#272757', swatch:['#272757','#8686AC','#505081','#0F0E47'] },
+  { id:'winter-chill', name:'Winter chill', accent:'#4F7C82', accent2:'#0B2E33', swatch:['#B8E3E9','#93B1B5','#4F7C82','#0B2E33'] },
+  { id:'autumn-leaves', name:'Autumn leaves', accent:'#DB9A39', accent2:'#614419', swatch:['#FFB343','#DB9A39','#B37E2E','#614419'] },
+  { id:'eucalyptus', name:'Eucalyptus grove', accent:'#4B6E48', accent2:'#898989', swatch:['#B2AC88','#898989','#F2F0EF','#4B6E48'] },
+  { id:'frozen-lake', name:'Frozen lake', accent:'#6D8196', accent2:'#000080', swatch:['#6D8196','#ADD8E6','#FFFAFA','#000080'] },
+  { id:'siltstone', name:'Siltstone', accent:'#FFB16E', accent2:'#CCA25A', swatch:['#CBBD93','#FFF5B8','#FFB16E','#CCA25A'] },
+  { id:'moonlight', name:'Under the moonlight', accent:'#5C5C99', accent2:'#292966', swatch:['#CCCCFF','#A3A3CC','#5C5C99','#292966'] },
+  { id:'quiet-luxury', name:'Quiet luxury', accent:'#AD9C8E', accent2:'#D9BBB0', swatch:['#F7E6CA','#E8D59E','#D9BBB0','#AD9C8E'] },
+  { id:'neon-noir', name:'Neon noir', accent:'#2CFF05', accent2:'#BF00FF', swatch:['#000000','#2CFF05','#BF00FF','#2D2D2D'] },
+  { id:'cool-revival', name:'Cool revival', accent:'#00AEFF', accent2:'#00DE94', swatch:['#00FFFF','#00AEFF','#00DE94','#00FF52'] },
+  { id:'matrix', name:'The matrix', accent:'#18e699', accent2:'#10540e', swatch:['#18e699','#1bbc68','#148526','#14250d'] },
+];
+function hexRgb(h){ h = (h || '#000000').replace('#',''); if (h.length === 3) h = h.split('').map(x=>x+x).join(''); const n = parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function relLum(h){ const [r,g,b] = hexRgb(h).map(v=>{ v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4); }); return 0.2126*r + 0.7152*g + 0.0722*b; }
+function accentOn(h){ return relLum(h) > 0.5 ? '#14100f' : '#ffffff'; }
+function accentRgba(h,a){ const [r,g,b] = hexRgb(h); return 'rgba('+r+','+g+','+b+','+a+')'; }
+function applyAccent(id){
+  const st = document.documentElement.style;
+  const props = ['--ember','--accent2','--glow','--glow-soft','--grad','--onember','--accent-faded','--accent-deep','--accent-bg','--stage'];
+  const a = ACCENTS.find(x=>x.id===id);
+  if (!a || a.id === 'default') { props.forEach(p => st.removeProperty(p)); return; }
+  const sorted = [...a.swatch].sort((x,y)=>relLum(y)-relLum(x));
+  const bright = a.accent;
+  const faded = sorted[1] || a.accent2;
+  const deep = a.accent2;
+  const back = sorted[sorted.length - 1] || a.accent2;
+  st.setProperty('--ember', bright);
+  st.setProperty('--accent2', deep);
+  st.setProperty('--accent-faded', faded);
+  st.setProperty('--accent-deep', deep);
+  st.setProperty('--accent-bg', back);
+  st.setProperty('--glow', accentRgba(bright, 0.34));
+  st.setProperty('--glow-soft', accentRgba(bright, 0.15));
+  st.setProperty('--grad', 'linear-gradient(135deg,'+bright+','+faded+')');
+  st.setProperty('--onember', accentOn(bright));
+  st.setProperty('--stage',
+    'radial-gradient(1100px 740px at 13% -8%,'+accentRgba(faded,0.18)+',transparent 56%),' +
+    'radial-gradient(1050px 720px at 93% 5%,'+accentRgba(deep,0.24)+',transparent 56%),' +
+    'radial-gradient(900px 720px at 60% 112%,'+accentRgba(bright,0.10)+',transparent 60%),' +
+    'linear-gradient(155deg,'+accentRgba(back,0.60)+' 0%,var(--bg) 58%,'+accentRgba(back,0.45)+' 100%)');
+}
+
 const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, initialTab, onProviderKey, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
+  const [accent, setAccentState] = useState(() => { try { return localStorage.getItem('vellum-accent') || 'default'; } catch { return 'default'; } });
+  const setAccent = id => { setAccentState(id); try { localStorage.setItem('vellum-accent', id); } catch {} applyAccent(id); };
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
   useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
   const setP = (k, v) => setPers(p => ({...p, [k]: v}));
@@ -3738,6 +4676,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
+    {k: 'Appearance', ic: <IcSun size={14}/>},
     {k: 'Personalization', ic: <IcPenLine size={14}/>},
     {k: 'Configuration', ic: <I d="M12 2l8 4.6v8.8L12 20 4 15.4V6.6z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6" size={14}/>},
     {k: 'Reflections', ic: <IcNote size={14}/>},
@@ -3775,6 +4714,31 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               {backendSettings && <div className="set-row">Backend<span className="sr-end"><span style={{color: 'var(--dim)', fontSize: 12}}>{backendSettings.thread_id || 'connected'}</span></span></div>}
             </React.Fragment>
           )}
+          {tab === 'Appearance' && (
+            <React.Fragment>
+              <div className="set-h">Appearance</div>
+              <div className="cfg-note">Choose light or dark, then pick an accent palette. The accent applies across the whole app.</div>
+              <div className="set-row">Theme
+                <span className="sr-end">
+                  <div className="ap-seg">
+                    <button className={'ap-seg-b' + (theme === 'light' ? ' on' : '')} onClick={() => { if (theme !== 'light') onTheme(); }}><IcSun size={13}/>Light</button>
+                    <button className={'ap-seg-b' + (theme === 'dark' ? ' on' : '')} onClick={() => { if (theme !== 'dark') onTheme(); }}><IcMoon size={13}/>Dark</button>
+                  </div>
+                </span>
+              </div>
+              <div className="cfg-sec">Accent palette</div>
+              <div className="ap-grid">
+                {ACCENTS.map(a => (
+                  <button key={a.id} className={'ap-card' + (accent === a.id ? ' on' : '')} onClick={() => setAccent(a.id)}>
+                    <span className="ap-sw">{a.swatch.map((c, i) => <span key={i} className="ap-sw-c" style={{background: c}}/>)}</span>
+                    <span className="ap-name">{a.name}{a.id === 'default' && <span className="ap-def">Default</span>}</span>
+                    {accent === a.id && <span className="ap-check"><IcCheck size={13}/></span>}
+                  </button>
+                ))}
+              </div>
+              <div className="quiet-foot">Saved on this device. Accent recolors buttons, highlights, and glows everywhere.</div>
+            </React.Fragment>
+          )}
           {tab === 'Personalization' && (
             <React.Fragment>
               <div className="set-h">Personalization</div>
@@ -3799,7 +4763,9 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
 
               <div className="pers-h">Memory</div>
               <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setP('memory', !pers.memory)}/></span></div>
-              <div className="set-row"><div>Memory summary<span className="sr-sub">View a brief overview of what Vellum has learned about you. You can still view your <span className="mem-link" onClick={() => setSavedMemOpen(true)}>old saved memories</span> from earlier chats with dates.</span></div><span className="sr-end"><button className="btn" onClick={() => setMemCardOpen(true)}>Manage</button></span></div>
+              <div className="set-row"><div>Reference chat history<span className="sr-sub">Let Vellum draw on your past conversations so it carries context forward, even when you didn't ask it to remember.</span></div><span className="sr-end"><div className={'sw' + (pers.refHistory ? ' on' : '')} role="switch" aria-checked={pers.refHistory} onClick={() => setP('refHistory', !pers.refHistory)}/></span></div>
+              <div className="set-row dream-row"><div><span className="dream-label"><IcMoon size={14}/>Dreaming</span><span className="sr-sub">Vellum reflects in the background to synthesize new memories from your chats and keep existing ones current over time. You review and keep what's right in the memory summary.</span></div><span className="sr-end"><div className={'sw' + (pers.dreaming ? ' on' : '')} role="switch" aria-checked={pers.dreaming} onClick={() => setP('dreaming', !pers.dreaming)}/></span></div>
+              <div className="set-row"><div>Memory summary<span className="sr-sub">View a brief overview of what Vellum has learned about you, including what it curated through <b>Dreaming</b>. You can still view your <span className="mem-link" onClick={() => setSavedMemOpen(true)}>old saved memories</span> from earlier chats with dates.</span></div><span className="sr-end"><button className="btn" onClick={() => setMemCardOpen(true)}>Manage</button></span></div>
 
               <div className="pers-h">Record mode</div>
               <div className="set-row"><div>Reference record history<span className="sr-sub">Let Vellum reference all previous recording transcripts and notes when responding.</span></div><span className="sr-end"><div className={'sw' + (pers.recordHist ? ' on' : '')} role="switch" aria-checked={pers.recordHist} onClick={() => setP('recordHist', !pers.recordHist)}/></span></div>
@@ -3836,7 +4802,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="set-h">Reflections</div>
               {SEED_REFLECTIONS.map(r => (
                 <div key={r.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.kind} · {r.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.text}</span></div>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.kind} ? {r.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.text}</span></div>
                 </div>
               ))}
               <div className="set-note">Written at 2:00. Read when you like.</div>
@@ -3864,7 +4830,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
                   </span>
                 </div>
               ))}
-              <div className="set-note">Preview — switches hold state, nothing is fetched.</div>
+              <div className="set-note">Preview ? switches hold state, nothing is fetched.</div>
             </React.Fragment>
           )}
           {tab === 'Plugins' && (
@@ -3884,7 +4850,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="set-h">Automations</div>
               {(automations || []).map(a => (
                 <div key={a.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div>{a.name}<span className="sr-sub">{a.schedule} · {a.description}</span></div>
+                  <div>{a.name}<span className="sr-sub">{a.schedule} ? {a.description}</span></div>
                   <span className="sr-end"><span className="cu-pill">{a.status || 'template'}</span></span>
                 </div>
               ))}
@@ -3896,7 +4862,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="set-h">Computer use</div>
               <div className="set-row">Session
                 <span className="sr-end">
-                  <span className={'cu-pill' + (cu ? ' on' : '')}>{cu ? 'active · Ctrl+Alt+Esc to stop' : 'standing down'}</span>
+                  <span className={'cu-pill' + (cu ? ' on' : '')}>{cu ? 'active ? Ctrl+Alt+Esc to stop' : 'standing down'}</span>
                 </span>
               </div>
               <div className="set-row">
@@ -3905,7 +4871,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
                   <button className="btn" disabled={!cu} onClick={() => onCu(false)}>Stand down</button>
                 </span>
               </div>
-              <div className="set-note">Preview — no real session starts. The desktop glow belongs to the Tauri shell.</div>
+              <div className="set-note">Preview ? no real session starts. The desktop glow belongs to the Tauri shell.</div>
             </React.Fragment>
           )}
           {tab === 'Shortcuts' && (
@@ -3927,13 +4893,13 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
           )}
         </div>
       </div>
-      {memCardOpen && <MemorySummaryCard memoryData={memoryData} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
+      {memCardOpen && <MemorySummaryCard memoryData={memoryData} dreaming={pers.dreaming} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
       {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onClose={() => setSavedMemOpen(false)}/>}
     </React.Fragment>
   );
 };
 
-/* ─── app ─── */
+/* â”€â”€â”€ app â”€â”€â”€ */
 const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
@@ -3942,6 +4908,7 @@ const App = () => {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem('vellum-theme', theme); } catch {}
   }, [theme]);
+  useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
 
   const [sidebarPinned, setSidebarPinned] = useState(() => { try { const v = localStorage.getItem('vellum-sb-open'); return v === null ? true : v === '1'; } catch { return true; } });
   const [sidebarHover, setSidebarHover] = useState(false);
@@ -3965,7 +4932,7 @@ const App = () => {
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState(MODELS);
   const [backendSettings, setBackendSettings] = useState(null);
-  const [memoryData, setMemoryData] = useState({facts: [], entries: []});
+  const [memoryData, setMemoryData] = useState({facts: [], entries: [], archived: [], summary: null});
   const [apps, setApps] = useState(SEED_APPS);
   const [automations, setAutomations] = useState([]);
   const [subagents, setSubagents] = useState([]);
@@ -4025,11 +4992,39 @@ const App = () => {
   const toastTimer = useRef(null);
   const shortcutRef = useRef(null);
 
+  async function refreshMemoryData() {
+    const [memoryRecentData, memoryEntriesData] = await Promise.all([
+      API.settings.memoryRecent().catch(() => ({facts: [], entries: [], summary: null})),
+      API.settings.memoryEntries().catch(() => ({entries: []})),
+    ]);
+    setMemoryData({
+      facts: (memoryRecentData && Array.isArray(memoryRecentData.facts)) ? memoryRecentData.facts : [],
+      entries: (memoryRecentData && Array.isArray(memoryRecentData.entries)) ? memoryRecentData.entries : [],
+      archived: (memoryEntriesData && Array.isArray(memoryEntriesData.entries)) ? memoryEntriesData.entries : [],
+      summary: (memoryRecentData && memoryRecentData.summary) ? memoryRecentData.summary : null,
+    });
+  }
+
+  async function maybeRunDreaming() {
+    try {
+      const pers = {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})};
+      if (!pers.memory || !pers.dreaming) return;
+      const last = Number(localStorage.getItem('vellum-last-dreaming-run') || 0);
+      const sixHours = 6 * 60 * 60 * 1000;
+      if (last && Date.now() - last < sixHours) return;
+      localStorage.setItem('vellum-last-dreaming-run', String(Date.now()));
+      await API.settings.memoryDreamingRun();
+      await refreshMemoryData();
+    } catch (err) {
+      console.warn('Vellum dreaming refresh failed', err);
+    }
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const [conv, modelData, settingsData, pluginData, skillsData, automationData, subagentData, memoryRecentData, memoryEntriesData] = await Promise.all([
+        const [conv, modelData, settingsData, pluginData, skillsData, automationData, subagentData] = await Promise.all([
           API.conversations.list(),
           API.settings.models(),
           API.settings.get(),
@@ -4037,8 +5032,6 @@ const App = () => {
           API.plugins.skills(),
           API.automations.list(),
           API.runtimes.subagents(),
-          API.settings.memoryRecent().catch(() => ({facts: []})),
-          API.settings.memoryEntries().catch(() => ({entries: []})),
         ]);
         if (!alive) return;
         if (conv && Array.isArray(conv.conversations)) {
@@ -4059,15 +5052,13 @@ const App = () => {
         }
         if (settingsData) setBackendSettings(settingsData);
         if (pluginData && Array.isArray(pluginData.plugins)) {
-          setApps(pluginData.plugins.map(p => ({id: p.id, name: p.name, state: p.configured ? 'ready' : 'off', note: p.notes || p.status})));
+          setApps(pluginData.plugins.map(p => ({...p, state: p.configured ? 'ready' : 'off', note: p.notes || p.status})));
         }
         if (skillsData && skillsData.skills) setSkills(skillsData.skills);
         if (automationData && Array.isArray(automationData.automations)) setAutomations(automationData.automations);
         if (subagentData && Array.isArray(subagentData.subagents)) setSubagents(subagentData.subagents);
-        setMemoryData({
-          facts: (memoryRecentData && Array.isArray(memoryRecentData.facts)) ? memoryRecentData.facts : [],
-          entries: (memoryEntriesData && Array.isArray(memoryEntriesData.entries)) ? memoryEntriesData.entries : [],
-        });
+        await refreshMemoryData();
+        if (alive) maybeRunDreaming();
       } catch (err) {
         console.warn('Vellum backend metadata load failed', err);
       }
@@ -4686,7 +5677,7 @@ const App = () => {
     }
     if (!chatId) {
       chatId = uid();
-      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '…' : text;
+      const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
       const record = {id: chatId, thread_id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
       saveConversation(record);
@@ -4810,7 +5801,7 @@ const App = () => {
     else if (c === 'BracketRight') { e.preventDefault(); if (canFwd) navGo(1); }
   };
 
-  // per-chat app selection — landing/new-chat and project composers draw on a draft pool
+  // per-chat app selection ? landing/new-chat and project composers draw on a draft pool
   const selTargetIsChat = view === 'chat' && !!activeChat;
   const currentSel = selTargetIsChat ? (activeChat.appIds || []) : draftApps;
   const toggleSel = id => {
@@ -4827,6 +5818,9 @@ const App = () => {
   const connectApp = id => {
     setApps(as => as.map(a => a.id === id ? {...a, state: 'ready'} : a));
     if (!currentSel.includes(id)) toggleSel(id);
+  };
+  const disconnectApp = id => {
+    if (currentSel.includes(id)) toggleSel(id);
   };
   const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
@@ -4896,7 +5890,9 @@ const App = () => {
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
-            {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
+            {view === 'apps' && <BackendConnectorsView apps={apps}/>}
+            {view === 'memory' && <HonchoConsole page onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
+            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>

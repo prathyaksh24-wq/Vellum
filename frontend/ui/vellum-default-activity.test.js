@@ -55,4 +55,12 @@ describe("Vellum default activity status", () => {
     expect(html).toContain("MemorySummaryCard");
     expect(html).toContain("SavedMemoriesCard");
   });
+
+  test("dreaming console triggers the backend consolidation job", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+
+    expect(html).toContain("API.settings.memoryDreamingRun()");
+    expect(html).toContain("refreshMemoryData");
+    expect(html).not.toContain("setTimeout(() => {\n      setDreams");
+  });
 });
