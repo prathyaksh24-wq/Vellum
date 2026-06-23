@@ -51,4 +51,24 @@ describe("Vellum settings API memory endpoints", () => {
     await expect(api.memoryEntries()).resolves.toEqual({ entries: [{ id: 2, text: "Old memory." }] });
     await expect(api.memoryDreamingRun()).resolves.toMatchObject({ global_summary: "Updated." });
   });
+
+  test("reads and updates memory settings", async () => {
+    const fetchImpl = vi.fn(async (path, options) => {
+      if (path === "/api/memory/settings" && !options) {
+        return { settings: { memory_enabled: true, dreaming_enabled: true } };
+      }
+      if (path === "/api/memory/settings") {
+        expect(options.method).toBe("POST");
+        expect(JSON.parse(options.body)).toEqual({ dreaming_enabled: false });
+        return { settings: { memory_enabled: true, dreaming_enabled: false } };
+      }
+      throw new Error("unexpected path " + path);
+    });
+    const api = await loadSettingsApi(fetchImpl);
+
+    await expect(api.memorySettings()).resolves.toEqual({ settings: { memory_enabled: true, dreaming_enabled: true } });
+    await expect(api.updateMemorySettings({ dreaming_enabled: false })).resolves.toEqual({
+      settings: { memory_enabled: true, dreaming_enabled: false },
+    });
+  });
 });

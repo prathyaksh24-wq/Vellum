@@ -20,6 +20,8 @@
     },
     memoryDreamingStatus: function () { return client.request("/api/memory/dreaming/status"); },
     memoryDreamingRun: function () { return client.request("/api/memory/dreaming/run", client.jsonOptions("POST")); },
+    memorySettings: function () { return client.request("/api/memory/settings"); },
+    updateMemorySettings: function (patch) { return client.request("/api/memory/settings", client.jsonOptions("POST", patch)); },
     setActiveModel: function (model) {
       return client.request("/api/settings/active-model", client.jsonOptions("POST", { model: model }));
     },

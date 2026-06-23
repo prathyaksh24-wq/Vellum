@@ -4659,6 +4659,25 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
   useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
   const setP = (k, v) => setPers(p => ({...p, [k]: v}));
+  const applyMemorySettings = (settings) => {
+    if (!settings) return;
+    setPers(p => ({
+      ...p,
+      memory: settings.memory_enabled !== undefined ? !!settings.memory_enabled : p.memory,
+      dreaming: settings.dreaming_enabled !== undefined ? !!settings.dreaming_enabled : p.dreaming,
+      refHistory: settings.reference_history_enabled !== undefined ? !!settings.reference_history_enabled : p.refHistory,
+    }));
+  };
+  useEffect(() => applyMemorySettings(memoryData && memoryData.settings), [memoryData && memoryData.settings]);
+  const setMemoryToggle = async (persKey, settingsKey, value) => {
+    setP(persKey, value);
+    try {
+      const result = await API.settings.updateMemorySettings({[settingsKey]: value});
+      applyMemorySettings(result && result.settings);
+    } catch (err) {
+      setP(persKey, !value);
+    }
+  };
   const [memCardOpen, setMemCardOpen] = useState(false);
   const [savedMemOpen, setSavedMemOpen] = useState(false);
   useEffect(() => setKeyStatus((backendSettings && backendSettings.provider_keys) || {}), [backendSettings]);
@@ -4762,9 +4781,9 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="pers-field"><label>More about you</label><input value={pers.about} onChange={e => setP('about', e.target.value)} placeholder="Interests, values, or preferences to keep in mind"/></div>
 
               <div className="pers-h">Memory</div>
-              <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setP('memory', !pers.memory)}/></span></div>
-              <div className="set-row"><div>Reference chat history<span className="sr-sub">Let Vellum draw on your past conversations so it carries context forward, even when you didn't ask it to remember.</span></div><span className="sr-end"><div className={'sw' + (pers.refHistory ? ' on' : '')} role="switch" aria-checked={pers.refHistory} onClick={() => setP('refHistory', !pers.refHistory)}/></span></div>
-              <div className="set-row dream-row"><div><span className="dream-label"><IcMoon size={14}/>Dreaming</span><span className="sr-sub">Vellum reflects in the background to synthesize new memories from your chats and keep existing ones current over time. You review and keep what's right in the memory summary.</span></div><span className="sr-end"><div className={'sw' + (pers.dreaming ? ' on' : '')} role="switch" aria-checked={pers.dreaming} onClick={() => setP('dreaming', !pers.dreaming)}/></span></div>
+              <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setMemoryToggle('memory', 'memory_enabled', !pers.memory)}/></span></div>
+              <div className="set-row"><div>Reference chat history<span className="sr-sub">Let Vellum draw on your past conversations so it carries context forward, even when you didn't ask it to remember.</span></div><span className="sr-end"><div className={'sw' + (pers.refHistory ? ' on' : '')} role="switch" aria-checked={pers.refHistory} onClick={() => setMemoryToggle('refHistory', 'reference_history_enabled', !pers.refHistory)}/></span></div>
+              <div className="set-row dream-row"><div><span className="dream-label"><IcMoon size={14}/>Dreaming</span><span className="sr-sub">Vellum reflects in the background to synthesize new memories from your chats and keep existing ones current over time. You review and keep what's right in the memory summary.</span></div><span className="sr-end"><div className={'sw' + (pers.dreaming ? ' on' : '')} role="switch" aria-checked={pers.dreaming} onClick={() => setMemoryToggle('dreaming', 'dreaming_enabled', !pers.dreaming)}/></span></div>
               <div className="set-row"><div>Memory summary<span className="sr-sub">View a brief overview of what Vellum has learned about you, including what it curated through <b>Dreaming</b>. You can still view your <span className="mem-link" onClick={() => setSavedMemOpen(true)}>old saved memories</span> from earlier chats with dates.</span></div><span className="sr-end"><button className="btn" onClick={() => setMemCardOpen(true)}>Manage</button></span></div>
 
               <div className="pers-h">Record mode</div>
@@ -4993,22 +5012,25 @@ const App = () => {
   const shortcutRef = useRef(null);
 
   async function refreshMemoryData() {
-    const [memoryRecentData, memoryEntriesData] = await Promise.all([
+    const [memoryRecentData, memoryEntriesData, memorySettingsData] = await Promise.all([
       API.settings.memoryRecent().catch(() => ({facts: [], entries: [], summary: null})),
       API.settings.memoryEntries().catch(() => ({entries: []})),
+      API.settings.memorySettings().catch(() => ({settings: null})),
     ]);
     setMemoryData({
       facts: (memoryRecentData && Array.isArray(memoryRecentData.facts)) ? memoryRecentData.facts : [],
       entries: (memoryRecentData && Array.isArray(memoryRecentData.entries)) ? memoryRecentData.entries : [],
       archived: (memoryEntriesData && Array.isArray(memoryEntriesData.entries)) ? memoryEntriesData.entries : [],
       summary: (memoryRecentData && memoryRecentData.summary) ? memoryRecentData.summary : null,
+      settings: (memorySettingsData && memorySettingsData.settings) ? memorySettingsData.settings : null,
     });
   }
 
   async function maybeRunDreaming() {
     try {
-      const pers = {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})};
-      if (!pers.memory || !pers.dreaming) return;
+      const memorySettings = await API.settings.memorySettings().catch(() => ({settings: null}));
+      const settings = memorySettings && memorySettings.settings;
+      if (settings && (!settings.memory_enabled || !settings.dreaming_enabled)) return;
       const last = Number(localStorage.getItem('vellum-last-dreaming-run') || 0);
       const sixHours = 6 * 60 * 60 * 1000;
       if (last && Date.now() - last < sixHours) return;
