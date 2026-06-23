@@ -59,6 +59,7 @@ class SQLiteMemoryStore:
                 """
                 CREATE TABLE IF NOT EXISTS memory_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scope TEXT NOT NULL DEFAULT 'global',
                     kind TEXT NOT NULL,
                     text TEXT NOT NULL,
                     status TEXT NOT NULL,
@@ -71,6 +72,9 @@ class SQLiteMemoryStore:
                 )
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(memory_items)").fetchall()}
+            if "scope" not in columns:
+                conn.execute("ALTER TABLE memory_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS memory_summaries (
@@ -96,8 +100,17 @@ class SQLiteMemoryStore:
     def _now() -> str:
         return datetime.now(UTC).isoformat()
 
-    def add_pending(self, *, kind: str, text: str, source_thread_id: str, confidence: float) -> int:
+    def add_pending(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> int:
         return self._insert_memory(
+            scope=scope,
             kind=kind,
             text=text,
             status="pending",
@@ -105,8 +118,17 @@ class SQLiteMemoryStore:
             confidence=confidence,
         )
 
-    def save_memory(self, *, kind: str, text: str, source_thread_id: str, confidence: float) -> int:
+    def save_memory(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> int:
         memory_id = self._insert_memory(
+            scope=scope,
             kind=kind,
             text=text,
             status="saved",
@@ -116,46 +138,70 @@ class SQLiteMemoryStore:
         self.audit("saved", memory_id, text)
         return memory_id
 
-    def _insert_memory(self, *, kind: str, text: str, status: str, source_thread_id: str, confidence: float) -> int:
+    def _insert_memory(
+        self,
+        *,
+        scope: str,
+        kind: str,
+        text: str,
+        status: str,
+        source_thread_id: str,
+        confidence: float,
+    ) -> int:
         now = self._now()
+        clean_scope = _normalize_scope(scope)
         with self._connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO memory_items (
-                    kind, text, status, source_thread_id, confidence, created_at, updated_at
+                    scope, kind, text, status, source_thread_id, confidence, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (kind, text, status, source_thread_id, float(confidence), now, now),
+                (clean_scope, kind, text, status, source_thread_id, float(confidence), now, now),
             )
             return int(cursor.lastrowid)
 
-    def list_pending(self) -> list[dict[str, Any]]:
-        return self._list("pending")
+    def list_pending(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("pending", scopes=scopes)
 
-    def list_saved(self) -> list[dict[str, Any]]:
-        return self._list("saved")
+    def list_saved(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("saved", scopes=scopes)
 
-    def list_archived(self) -> list[dict[str, Any]]:
-        return self._list("archived")
+    def list_archived(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("archived", scopes=scopes)
 
-    def _list(self, status: str) -> list[dict[str, Any]]:
+    def _list(self, status: str, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        clean_scopes = [_normalize_scope(scope) for scope in scopes or []]
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM memory_items
-                WHERE status = ?
-                ORDER BY pinned DESC, updated_at DESC, id DESC
-                """,
-                (status,),
-            ).fetchall()
+            if clean_scopes:
+                placeholders = ",".join("?" for _ in clean_scopes)
+                rows = conn.execute(
+                    f"""
+                    SELECT * FROM memory_items
+                    WHERE status = ? AND scope IN ({placeholders})
+                    ORDER BY pinned DESC, updated_at DESC, id DESC
+                    """,
+                    (status, *clean_scopes),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM memory_items
+                    WHERE status = ?
+                    ORDER BY pinned DESC, updated_at DESC, id DESC
+                    """,
+                    (status,),
+                ).fetchall()
         return [_row_dict(row) for row in rows]
 
-    def search_saved(self, query: str, *, limit: int = 8) -> list[dict[str, Any]]:
+    def search_saved(self, query: str, *, limit: int = 8, scopes: list[str] | None = None) -> list[dict[str, Any]]:
         terms = _terms(query)
-        rows = self.list_saved()
+        rows = self.list_saved(scopes=scopes)
         if terms:
-            rows = [row for row in rows if terms.intersection(_terms(row["text"]))]
+            matched = [row for row in rows if terms.intersection(_terms(row["text"]))]
+            if matched:
+                rows = matched
         return rows[: max(0, int(limit))]
 
     def get_memory(self, memory_id: int) -> dict[str, Any]:
@@ -371,7 +417,13 @@ class MemoryOrchestrator:
         cloud_safe: bool = False,
     ) -> dict[str, Any]:
         clean_query = query.strip()
-        saved = self.store.search_saved(clean_query, limit=8) if self.store is not None else []
+        scopes = _packet_scopes(agent_name=agent_name, active_project=active_project)
+        saved: list[dict[str, Any]] = []
+        if self.store is not None:
+            baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
+            baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
+            matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
+            saved = _dedupe_memories([*baseline, *matched])[:8]
         docs = self.fts5.search(_memory_search_query(clean_query), limit=5)
         honcho_context = ""
         if self.honcho is not None:
@@ -386,6 +438,7 @@ class MemoryOrchestrator:
             "honcho_context": honcho_context,
             "project_context": self.store.project_summary(active_project) if self.store is not None else "",
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
+            "scopes": scopes,
         }
         if cloud_safe:
             packet = _scrub_packet(packet)
@@ -435,6 +488,7 @@ class MemoryOrchestrator:
             return []
         candidates = _extract_candidates(user_message, assistant_message)
         stored: list[dict[str, Any]] = []
+        scope = _scope_for_agent(agent_name)
         for candidate in candidates:
             data_class, _reason = classify(candidate["text"])
             if data_class == DataClass.RED and not _explicit_remember(user_message):
@@ -444,6 +498,7 @@ class MemoryOrchestrator:
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
+                scope=scope,
             )
             item = self.store.get_memory(memory_id)
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
@@ -611,6 +666,18 @@ def _dedupe_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     return out
 
 
+def _dedupe_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[int | str] = set()
+    for memory in memories:
+        key: int | str = int(memory["id"]) if str(memory.get("id", "")).isdigit() else _norm(str(memory.get("text") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(memory)
+    return out
+
+
 def _explicit_remember(text: str) -> bool:
     return bool(re.search(r"\b(?:remember|memorize|note|keep in mind)\b", text, re.I))
 
@@ -688,9 +755,26 @@ def _empty_dream() -> dict[str, Any]:
     }
 
 
+def _normalize_scope(scope: str | None) -> str:
+    clean = re.sub(r"\s+", "_", str(scope or "global").strip())
+    return clean or "global"
+
+
+def _agent_scope(agent_name: str) -> str:
+    clean = re.sub(r"[^A-Za-z0-9_-]+", "", str(agent_name or "").strip()) or "VellumAgent"
+    return f"agent:{clean}"
+
+
+def _packet_scopes(*, agent_name: str, active_project: str | None = None) -> list[str]:
+    scopes = ["global", "user_profile"]
+    if active_project:
+        scopes.append(f"project:{_normalize_scope(active_project)}")
+    scopes.append(_agent_scope(agent_name))
+    return list(dict.fromkeys(scopes))
+
+
 def _scope_for_agent(agent_name: str) -> str:
-    normalized = agent_name.removesuffix("Agent").casefold()
-    return normalized if normalized and normalized != "vellum" else "shared"
+    return _agent_scope(agent_name)
 
 
 def _card_title(query: str) -> str:

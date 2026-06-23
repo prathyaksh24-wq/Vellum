@@ -77,6 +77,58 @@ def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Pa
     assert "Messi scored a hat-trick" in packet["recent_context"]
 
 
+def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        honcho=FakeHoncho(),
+    )
+    store.save_memory(
+        kind="preference",
+        text="User prefers source details in the UI drawer instead of Evidence sections.",
+        source_thread_id="t-global",
+        confidence=0.9,
+        scope="global",
+    )
+    store.save_memory(
+        kind="profile",
+        text="User is building Vellum for an enterprise demo.",
+        source_thread_id="t-profile",
+        confidence=0.9,
+        scope="user_profile",
+    )
+    store.save_memory(
+        kind="preference",
+        text="For YouTube answers, include channel name and video link when available.",
+        source_thread_id="t-youtube",
+        confidence=0.86,
+        scope="agent:YoutubeAgent",
+    )
+    store.save_memory(
+        kind="preference",
+        text="For sports answers, include standings when relevant.",
+        source_thread_id="t-sports",
+        confidence=0.86,
+        scope="agent:SportsAgent",
+    )
+
+    packet = orchestrator.build_memory_packet(
+        thread_id="t-new",
+        query="How should I answer a YouTube upload question?",
+        agent_name="YoutubeAgent",
+    )
+    texts = "\n".join(item["text"] for item in packet["saved_memories"])
+
+    assert "source details in the UI drawer" in texts
+    assert "enterprise demo" in texts
+    assert "channel name and video link" in texts
+    assert "standings" not in texts
+    assert packet["scopes"] == ["global", "user_profile", "agent:YoutubeAgent"]
+
+
 def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(
