@@ -275,6 +275,71 @@ def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatc
     assert "We fixed Vellum streaming and X OAuth today" in content
 
 
+def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+    store.update_global_summary("User is building Vellum.")
+    saved_id = store.save_memory(kind="preference", text="User prefers concise answers.", source_thread_id="t1", confidence=0.9)
+    archived_id = store.save_memory(kind="project", text="Old project memory.", source_thread_id="t1", confidence=0.7)
+    store.archive(archived_id)
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+
+    with TestClient(api.app) as client:
+        summary = client.get("/api/memory/summary")
+        saved = client.get("/api/memory/saved")
+        archived = client.get("/api/memory/archived")
+        pinned = client.post(f"/api/memory/{saved_id}/pin", json={"pinned": True})
+        dream = client.post("/api/memory/dreaming/run")
+        status = client.get("/api/memory/dreaming/status")
+
+    assert summary.status_code == 200
+    assert summary.json()["global_summary"] == "User is building Vellum."
+    assert saved.json()["memories"][0]["text"] == "User prefers concise answers."
+    assert archived.json()["memories"][0]["id"] == archived_id
+    assert pinned.json()["memory"]["pinned"] is True
+    assert dream.json()["global_summary"]
+    assert status.json()["status"] in {"idle", "completed"}
+
+
+def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer YouTube answers without Evidence sections.",
+            "Understood.",
+            thread_id="thread-1",
+            source="api",
+        )
+    )
+
+    assert "Evidence sections" in store.list_pending()[0]["text"]
+    assert "Remember that I prefer" in orchestrator.fts5.recent_documents(limit=1)[0]["content"]
+
+
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")

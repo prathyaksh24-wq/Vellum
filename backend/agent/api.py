@@ -43,7 +43,9 @@ from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
+from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.project_context import ProjectContext
+from agent.memory.resolved import ResolvedQuestionsCache
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
@@ -55,12 +57,20 @@ from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
+from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.obsidian_write import store_qa_pair
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
+_memory_orchestrator = MemoryOrchestrator(
+    fts5=_fts5_memory,
+    resolved_cache=ResolvedQuestionsCache(),
+    memory_service=MemoryCapabilityService(vault_root=get_settings().obsidian_vault_path, sessions_db=Path("data/memory/sessions.db")),
+    store=SQLiteMemoryStore(Path("data/memory/sessions.db")),
+)
+_dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
@@ -768,16 +778,30 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
         await asyncio.to_thread(store_qa_pair, clean_query, clean_answer, source)
-        await asyncio.to_thread(_fts5_memory.add_qa_pair, query=clean_query, answer=clean_answer, thread_id=thread_id, source_paths=[])
         settings = get_settings()
         honcho = HonchoMemory(
             base_url=settings.honcho_base_url,
             app_id=settings.honcho_app_id,
             user_id=settings.honcho_user_id,
         )
-        session_id = await asyncio.to_thread(honcho.get_or_create_session, thread_id)
-        await asyncio.to_thread(honcho.add_message, session_id, content=clean_query, role="user")
-        await asyncio.to_thread(honcho.add_message, session_id, content=clean_answer, role="assistant")
+        _memory_orchestrator.honcho = honcho
+        await asyncio.to_thread(
+            _memory_orchestrator.record_turn,
+            thread_id=thread_id,
+            query=clean_query,
+            answer=clean_answer,
+            tools=[],
+            sources=[],
+            confidence=0.7,
+            agent_name="VellumAgent",
+        )
+        await asyncio.to_thread(
+            _memory_orchestrator.extract_memory_candidates,
+            thread_id=thread_id,
+            user_message=clean_query,
+            assistant_message=clean_answer,
+            agent_name="VellumAgent",
+        )
         # Hermes-style: refresh the cached user model (Honcho dialectic) on a
         # cadence so the next turn's prompt reflects a deeper understanding.
         try:
@@ -2525,6 +2549,114 @@ async def recent_memory(limit: int = 15) -> dict[str, list[str]]:
 async def recent_memory_entries(limit: int = 30) -> dict[str, list[dict[str, Any]]]:
     entries = await asyncio.to_thread(_fts5_memory.recent_documents, limit=limit)
     return {"entries": entries}
+
+
+class PinMemoryRequest(BaseModel):
+    pinned: bool = True
+
+
+class UpdateMemoryRequest(BaseModel):
+    text: str | None = None
+    kind: str | None = None
+
+
+@router.get("/memory/summary")
+async def memory_summary() -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        return {"global_summary": "", "saved_memories": [], "archived_memories": [], "pending_count": 0, "audit_log": []}
+    return {
+        "global_summary": store.global_summary(),
+        "saved_memories": store.list_saved(),
+        "archived_memories": store.list_archived(),
+        "pending_count": len(store.list_pending()),
+        "audit_log": store.audit_log(limit=25),
+    }
+
+
+@router.get("/memory/saved")
+async def saved_memories() -> dict[str, list[dict[str, Any]]]:
+    store = _memory_orchestrator.store
+    return {"memories": store.list_saved() if store is not None else []}
+
+
+@router.get("/memory/archived")
+async def archived_memories() -> dict[str, list[dict[str, Any]]]:
+    store = _memory_orchestrator.store
+    return {"memories": store.list_archived() if store is not None else []}
+
+
+@router.get("/memory/dreaming/status")
+async def dreaming_status() -> dict[str, Any]:
+    return dict(_dreaming_status)
+
+
+@router.post("/memory/dreaming/run")
+async def run_dreaming() -> dict[str, Any]:
+    _dreaming_status["status"] = "running"
+    try:
+        result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
+    except Exception as exc:
+        _dreaming_status.update({"status": "error", "last_run": datetime.now(timezone.utc).isoformat(), "error": str(exc)})
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    _dreaming_status.update({"status": "completed", "last_run": datetime.now(timezone.utc).isoformat(), "last_result": result})
+    return result
+
+
+@router.post("/memory/{memory_id}/archive")
+async def archive_memory(memory_id: int) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    try:
+        return {"memory": await asyncio.to_thread(store.archive, memory_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="memory not found") from exc
+
+
+@router.post("/memory/{memory_id}/delete")
+async def delete_memory(memory_id: int) -> dict[str, bool]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    try:
+        await asyncio.to_thread(store.delete, memory_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="memory not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"ok": True}
+
+
+@router.post("/memory/{memory_id}/pin")
+async def pin_memory(memory_id: int, request: PinMemoryRequest) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    try:
+        return {"memory": await asyncio.to_thread(store.pin, memory_id, request.pinned)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="memory not found") from exc
+
+
+@router.post("/memory/{memory_id}/update")
+async def update_memory(memory_id: int, request: UpdateMemoryRequest) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    try:
+        return {
+            "memory": await asyncio.to_thread(
+                store.update,
+                memory_id,
+                text=request.text,
+                kind=request.kind,
+            )
+        }
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="memory not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 class PrivacyClassifyRequest(BaseModel):
