@@ -159,6 +159,33 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
     assert packet["recent_context"] == ""
 
 
+def test_import_obsidian_memories_adds_existing_memory_cards_once(tmp_path: Path) -> None:
+    vault = tmp_path / "Vault"
+    memories = vault / "Agent" / "Memories"
+    memories.mkdir(parents=True)
+    (memories / "retention-policy.md").write_text(
+        "---\ntype: memory\n---\n# Retention policy\n\nUser wants old memories archived before deletion.",
+        encoding="utf-8",
+    )
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+
+    first = orchestrator.import_obsidian_memories(vault)
+    second = orchestrator.import_obsidian_memories(vault)
+
+    assert first["imported_count"] == 1
+    assert second["imported_count"] == 0
+    saved = store.list_saved()
+    assert saved[0]["scope"] == "global"
+    assert saved[0]["source_thread_id"].endswith("Agent/Memories/retention-policy.md")
+    assert "archived before deletion" in saved[0]["text"]
+
+
 def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(

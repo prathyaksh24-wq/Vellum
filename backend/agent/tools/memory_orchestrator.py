@@ -139,6 +139,9 @@ def memory_orchestrator(
     if normalized == "run_dreaming":
         return _json({"action": normalized, "ok": True, **orchestrator.run_dreaming()})
 
+    if normalized == "import_obsidian":
+        return _json({"action": normalized, "ok": True, **orchestrator.import_obsidian_memories(get_settings().obsidian_vault_path)})
+
     if normalized == "list_saved":
         return _json({"action": normalized, "ok": True, "memories": store.list_saved(scopes=[scope] if scope else None)})
 

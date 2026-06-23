@@ -2712,6 +2712,11 @@ async def run_dreaming() -> dict[str, Any]:
     return result
 
 
+@router.post("/memory/import-obsidian")
+async def import_obsidian_memories() -> dict[str, Any]:
+    return await asyncio.to_thread(_memory_orchestrator.import_obsidian_memories, get_settings().obsidian_vault_path)
+
+
 @router.post("/memory/{memory_id}/archive")
 async def archive_memory(memory_id: int) -> dict[str, Any]:
     store = _memory_orchestrator.store
