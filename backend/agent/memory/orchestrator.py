@@ -391,10 +391,12 @@ class MemoryOrchestrator:
     memory_service: MemoryCapabilityService
     store: SQLiteMemoryStore | None = None
     honcho: Any | None = None
+    memory_dir: Path = Path("data/memory")
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = SQLiteMemoryStore()
+        self.memory_dir = Path(self.memory_dir)
 
     def record_turn(
         self,
@@ -602,6 +604,7 @@ class MemoryOrchestrator:
 
         global_summary = _summarize_memories(self.store.list_saved())
         self.store.update_global_summary(global_summary)
+        context_files = self.sync_context_files()
         audit_log = self.store.audit_log(limit=50)
         return {
             "new_memories": new_memories,
@@ -610,8 +613,28 @@ class MemoryOrchestrator:
             "contradictions": contradictions,
             "global_summary": global_summary,
             "project_summaries": _project_summaries(self.store.list_saved()),
+            "context_files": context_files,
             "audit_log": audit_log,
         }
+
+    def sync_context_files(self) -> dict[str, str]:
+        """Write Hermes-style bounded context files from the orchestrator state."""
+        if self.store is None:
+            return {"user_path": "", "memory_path": ""}
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+        saved = self.store.list_saved()
+        user_text = _render_user_md(saved, self.store.summary("user_profile"))
+        memory_text = _render_memory_md(
+            saved,
+            global_summary=self.store.global_summary(),
+            project_summaries=_project_summaries(saved),
+        )
+        user_path = self.memory_dir / "USER.md"
+        memory_path = self.memory_dir / "MEMORY.md"
+        user_path.write_text(user_text, encoding="utf-8")
+        memory_path.write_text(memory_text, encoding="utf-8")
+        self.store.audit("context_files_synced", None, f"{user_path}; {memory_path}")
+        return {"user_path": str(user_path), "memory_path": str(memory_path)}
 
     def import_obsidian_memories(self, vault_root: str | Path) -> dict[str, Any]:
         if self.store is None:
@@ -845,6 +868,72 @@ def _project_summaries(memories: list[dict[str, Any]]) -> dict[str, str]:
     if not project_items:
         return {}
     return {"Vellum": "\n".join(f"- {item['text']}" for item in project_items[:8])}
+
+
+def _render_user_md(memories: list[dict[str, Any]], profile_summary: str = "") -> str:
+    lines = [
+        "# User Profile",
+        "",
+        "Curated by Vellum Memory Orchestrator. Edit carefully; Dreaming may sync generated content.",
+        "",
+    ]
+    if profile_summary.strip():
+        lines.extend(["## Summary", profile_summary.strip(), ""])
+    user_items = [
+        item
+        for item in memories
+        if item.get("scope") == "user_profile" or str(item.get("kind") or "") in {"profile", "preference"}
+    ]
+    if user_items:
+        lines.append("## Entries")
+        for item in user_items:
+            lines.append(f"- {str(item.get('text') or '').strip()}")
+    return _bounded_markdown(lines, limit=1375)
+
+
+def _render_memory_md(
+    memories: list[dict[str, Any]],
+    *,
+    global_summary: str = "",
+    project_summaries: dict[str, str] | None = None,
+) -> str:
+    lines = [
+        "# Agent Memory",
+        "",
+        "Curated by Vellum Memory Orchestrator from saved memories, tool-backed answers, and Dreaming.",
+        "",
+    ]
+    if global_summary.strip():
+        lines.extend(["## Global Summary", global_summary.strip(), ""])
+    project_summaries = project_summaries or {}
+    if project_summaries:
+        lines.append("## Projects")
+        for project, summary in sorted(project_summaries.items()):
+            lines.append(f"### {project}")
+            lines.append(summary.strip())
+        lines.append("")
+    agent_items = [
+        item
+        for item in memories
+        if item.get("scope") != "user_profile" and str(item.get("kind") or "") not in {"profile", "preference"}
+    ]
+    if agent_items:
+        lines.append("## Entries")
+        for item in agent_items:
+            scope = str(item.get("scope") or "global")
+            text = str(item.get("text") or "").strip()
+            lines.append(f"- [{scope}] {text}")
+    return _bounded_markdown(lines, limit=2200)
+
+
+def _bounded_markdown(lines: list[str], *, limit: int) -> str:
+    out = ""
+    for line in lines:
+        next_out = f"{out}\n{line}" if out else line
+        if len(next_out) > limit:
+            break
+        out = next_out
+    return out[:limit].rstrip() + "\n"
 
 
 def _scrub_packet(packet: dict[str, Any]) -> dict[str, Any]:

@@ -261,6 +261,77 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
     assert dream["audit_log"]
 
 
+def test_dreaming_writes_hermes_style_user_and_memory_files(tmp_path: Path) -> None:
+    memory_dir = tmp_path / "memory-files"
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    store.save_memory(
+        kind="profile",
+        text="User is Pratyakksh and is building Vellum for an enterprise demo.",
+        source_thread_id="profile",
+        confidence=0.91,
+        scope="user_profile",
+    )
+    store.save_memory(
+        kind="preference",
+        text="User prefers direct, production-focused engineering answers.",
+        source_thread_id="pref",
+        confidence=0.9,
+        scope="global",
+    )
+    store.save_memory(
+        kind="project",
+        text="Vellum uses a Memory Orchestrator with Honcho, SQLite, FTS5, Chroma, and Obsidian.",
+        source_thread_id="project",
+        confidence=0.88,
+        scope="project:Vellum",
+    )
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=memory_dir,
+    )
+
+    dream = orchestrator.run_dreaming()
+
+    user_md = memory_dir / "USER.md"
+    memory_md = memory_dir / "MEMORY.md"
+    assert user_md.exists()
+    assert memory_md.exists()
+    assert "User Profile" in user_md.read_text(encoding="utf-8")
+    assert "Pratyakksh" in user_md.read_text(encoding="utf-8")
+    assert "Agent Memory" in memory_md.read_text(encoding="utf-8")
+    assert "Memory Orchestrator" in memory_md.read_text(encoding="utf-8")
+    assert dream["context_files"]["user_path"] == str(user_md)
+    assert dream["context_files"]["memory_path"] == str(memory_md)
+
+
+def test_memory_context_files_are_bounded(tmp_path: Path) -> None:
+    memory_dir = tmp_path / "memory-files"
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    for index in range(60):
+        store.save_memory(
+            kind="fact",
+            text=f"Durable memory item {index} with extra detail about Vellum architecture and workflows.",
+            source_thread_id=f"t{index}",
+            confidence=0.8,
+            scope="global",
+        )
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=memory_dir,
+    )
+
+    files = orchestrator.sync_context_files()
+
+    assert len(Path(files["user_path"]).read_text(encoding="utf-8")) <= 1375
+    assert len(Path(files["memory_path"]).read_text(encoding="utf-8")) <= 2200
+
+
 def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     stale_id = store.save_memory(kind="project", text="Old unpinned memory", source_thread_id="t1", confidence=0.8)
