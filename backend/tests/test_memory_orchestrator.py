@@ -35,6 +35,7 @@ def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Pa
         memory_service=service,
         store=store,
         honcho=honcho,
+        memory_dir=tmp_path / "memory-files",
     )
     store.update_global_summary("User is building Vellum and prefers direct engineering answers.")
     store.update_project_summary("Vellum", "Vellum is moving toward a ChatGPT-style memory and dreaming system.")
@@ -84,6 +85,7 @@ def test_tool_backed_answer_can_be_reused_by_related_question_in_new_chat(tmp_pa
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
 
     orchestrator.record_turn(
@@ -130,6 +132,7 @@ def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
+        memory_dir=tmp_path / "memory-files",
     )
     store.save_memory(
         kind="preference",
@@ -182,6 +185,7 @@ def test_memory_settings_can_disable_recent_context_without_disabling_saved_memo
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
+        memory_dir=tmp_path / "memory-files",
     )
     store.save_memory(
         kind="preference",
@@ -218,6 +222,7 @@ def test_import_obsidian_memories_adds_existing_memory_cards_once(tmp_path: Path
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
 
     first = orchestrator.import_obsidian_memories(vault)
@@ -239,6 +244,7 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
+        memory_dir=tmp_path / "memory-files",
     )
 
     candidates = orchestrator.extract_memory_candidates(
@@ -343,6 +349,7 @@ def test_dreaming_archives_stale_unpinned_memories_but_keeps_pinned(tmp_path: Pa
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
         honcho=FakeHoncho(),
+        memory_dir=tmp_path / "memory-files",
     )
 
     dream = orchestrator.run_dreaming(stale_days=0)

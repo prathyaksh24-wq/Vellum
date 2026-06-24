@@ -14,6 +14,7 @@ def test_memory_orchestrator_tool_reports_status_and_runs_dreaming(monkeypatch, 
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     store.add_pending(
         kind="preference",
@@ -40,6 +41,7 @@ def test_memory_orchestrator_tool_updates_settings(monkeypatch, tmp_path):
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(memory_tool, "_default_orchestrator", lambda: orchestrator)
 
