@@ -712,7 +712,18 @@ async def _run_agent(
         if _should_passthrough_live_result(live_result):
             answer = live_result.answer or "No response."
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent"))
+                asyncio.create_task(
+                    _background_learn(
+                        clean_message,
+                        answer,
+                        active_thread_id,
+                        source="x_agent",
+                        tools=_memory_tools_from_names(delegated_tools),
+                        sources=_memory_source_urls(live_sources),
+                        confidence=_memory_confidence(delegated_tools, live_sources),
+                        agent_name=str(live_result.agent_name or "VellumAgent"),
+                    )
+                )
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
         agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
 
@@ -748,7 +759,16 @@ async def _run_agent(
         sources.append(source)
 
     if answer and "blocked for privacy" not in answer.casefold():
-        asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
+        asyncio.create_task(
+            _background_learn(
+                clean_message,
+                answer,
+                active_thread_id,
+                tools=_memory_tools_from_names(tools),
+                sources=_memory_source_urls(sources),
+                confidence=_memory_confidence(tools, sources),
+            )
+        )
 
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
 
@@ -773,7 +793,17 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
         pass
 
 
-async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
+async def _background_learn(
+    query: str,
+    answer: str,
+    thread_id: str = "default",
+    source: str = "agent",
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    sources: list[str] | None = None,
+    confidence: float | None = None,
+    agent_name: str = "VellumAgent",
+) -> None:
     try:
         memory_store = getattr(_memory_orchestrator, "store", None)
         memory_settings = memory_store.get_settings() if memory_store is not None else {}
@@ -800,10 +830,10 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
             thread_id=thread_id,
             query=clean_query,
             answer=clean_answer,
-            tools=[],
-            sources=[],
-            confidence=0.7,
-            agent_name="VellumAgent",
+            tools=tools or [],
+            sources=sources or [],
+            confidence=float(confidence if confidence is not None else _memory_confidence([], [])),
+            agent_name=agent_name,
         )
         pending = await asyncio.to_thread(
             _memory_orchestrator.extract_memory_candidates,
@@ -1598,6 +1628,43 @@ def _sources_from_messages(messages: list) -> list[Source]:
     return collected
 
 
+def _memory_tools_from_names(tool_names: list[str] | tuple[str, ...] | None) -> list[dict[str, Any]]:
+    tools: list[dict[str, Any]] = []
+    for name in tool_names or []:
+        clean = str(name or "").strip()
+        if not clean:
+            continue
+        tools.append({"name": clean, "output": {"summary": f"{clean} was used during this answer."}})
+    return tools
+
+
+def _memory_source_urls(source_records: list[Any] | tuple[Any, ...] | None) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for record in source_records or []:
+        url = ""
+        if isinstance(record, dict):
+            url = str(record.get("url") or "")
+        else:
+            url = str(getattr(record, "url", "") or "")
+        url = url.strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def _memory_confidence(tool_names: list[Any] | tuple[Any, ...] | None, source_records: list[Any] | tuple[Any, ...] | None) -> float:
+    names = {str(name or "").strip() for name in tool_names or [] if str(name or "").strip()}
+    has_sources = bool(_memory_source_urls(source_records))
+    if has_sources and names:
+        return 0.92
+    if has_sources or names.intersection({"web_search", "search_my_notes", "memory_orchestrator", "x_action"}):
+        return 0.88
+    return 0.7
+
+
 def _agent_message_for_runtime_mode(clean_message: str) -> str:
     status = computer_use_runtime.status()
     if not status.get("enabled") or status.get("paused"):
@@ -1923,7 +1990,22 @@ async def _stream_agent_turn(
             source_models = [Source(**source) for source in live_sources]
             response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent")) if store else _audit_memory_off(active_thread_id, "x_agent"))
+                (
+                    asyncio.create_task(
+                        _background_learn(
+                            clean_message,
+                            answer,
+                            active_thread_id,
+                            source="x_agent",
+                            tools=_memory_tools_from_names(delegated_tools),
+                            sources=_memory_source_urls(live_sources),
+                            confidence=_memory_confidence(delegated_tools, live_sources),
+                            agent_name=str(live_result.agent_name or "VellumAgent"),
+                        )
+                    )
+                    if store
+                    else _audit_memory_off(active_thread_id, "x_agent")
+                )
             yield _agent_activity_event(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -2223,7 +2305,21 @@ async def _stream_agent_turn(
             else:
                 response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
+                (
+                    asyncio.create_task(
+                        _background_learn(
+                            clean_message,
+                            answer,
+                            active_thread_id,
+                            source=source,
+                            tools=_memory_tools_from_names(tool_names),
+                            sources=_memory_source_urls(sources),
+                            confidence=_memory_confidence(tool_names, sources),
+                        )
+                    )
+                    if store
+                    else _audit_memory_off(active_thread_id, source)
+                )
             yield _sse("final", response.model_dump_json())
             if message_item_started:
                 yield _response_output_item_done(

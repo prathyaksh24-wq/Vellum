@@ -369,6 +369,16 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
 
     asyncio.run(
         api._background_learn(
@@ -381,6 +391,56 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
 
     assert "Evidence sections" in store.list_pending()[0]["text"]
     assert "Remember that I prefer" in orchestrator.fts5.recent_documents(limit=1)[0]["content"]
+
+
+def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    resolved = ResolvedQuestionsCache(tmp_path / "resolved.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=resolved,
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(
+        api,
+        "_project_context",
+        lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None),
+    )
+
+    asyncio.run(
+        api._background_learn(
+            "What happened in the Giannis trade to Miami?",
+            "Milwaukee received Tyler Herro, Nikola Jovic, Jaime Jaquez Jr., and two first-round picks.",
+            thread_id="trade-thread",
+            source="api",
+            tools=[{"name": "web_search", "output": {"answer": "Giannis trade package details"}}],
+            sources=["https://example.com/giannis-miami"],
+            confidence=0.93,
+            agent_name="SportsAgent",
+        )
+    )
+
+    related = resolved.find_related("Who were the players traded for Giannis?")
+
+    assert related is not None
+    assert "Tyler Herro" in related["answer_summary"]
 
 
 def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
