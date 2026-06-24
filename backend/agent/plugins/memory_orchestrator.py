@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent.memory.provider_extensions import build_default_memory_provider_extensions
 from agent.plugins.models import PluginStatus
 
 
@@ -69,7 +70,10 @@ def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
         notes=notes,
         capabilities=list(MEMORY_ORCHESTRATOR_CAPABILITIES),
         required=True,
-        metadata={"providers": _provider_statuses()},
+        metadata={
+            "providers": _provider_statuses(),
+            "external_extensions": build_default_memory_provider_extensions().statuses(),
+        },
     )
 
 
