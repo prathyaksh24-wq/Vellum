@@ -39,6 +39,8 @@ class MemoryProviderExtension(Protocol):
         metadata: dict[str, Any] | None = None,
     ) -> None: ...
 
+    def shutdown(self) -> None: ...
+
 
 @dataclass(slots=True)
 class ConfiguredMemoryProviderExtension:
@@ -77,6 +79,9 @@ class ConfiguredMemoryProviderExtension:
     ) -> None:
         return None
 
+    def shutdown(self) -> None:
+        return None
+
 
 class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
     def __init__(self, client: Any | None = None) -> None:
@@ -96,7 +101,7 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         client = self._client()
         if client is None or not query.strip():
             return ""
-        result = client.recall(query, bank_id=self.bank_id, budget=self.budget)
+        result = client.recall(self.bank_id, query, budget=self.budget)
         return _format_hindsight_recall(result)
 
     def sync_turn(
@@ -115,9 +120,9 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
             return
         next_metadata = {"session_id": session_id, **(metadata or {})}
         if hasattr(client, "retain"):
-            client.retain(content, bank_id=self.bank_id, metadata=next_metadata)
+            client.retain(self.bank_id, content, metadata=next_metadata)
         elif hasattr(client, "add"):
-            client.add(content, bank_id=self.bank_id, metadata=next_metadata)
+            client.add(self.bank_id, content, metadata=next_metadata)
 
     def _client(self) -> Any | None:
         if self.client is not None:
@@ -135,6 +140,10 @@ class HindsightProviderExtension(ConfiguredMemoryProviderExtension):
         except Exception:
             self.client = None
         return self.client
+
+    def shutdown(self) -> None:
+        _close_client(self.client)
+        self.client = None
 
 
 class SupermemoryProviderExtension(ConfiguredMemoryProviderExtension):
@@ -183,6 +192,11 @@ class SupermemoryProviderExtension(ConfiguredMemoryProviderExtension):
         except Exception:
             self.client = None
         return self.client
+
+    def shutdown(self) -> None:
+        target = getattr(self.client, "client", self.client)
+        _close_client(target)
+        self.client = None
 
 
 class _SupermemorySdkAdapter:
@@ -320,6 +334,13 @@ class MemoryProviderExtensionManager:
                 results.append({"provider": provider.id, "status": "error", "error": str(exc)[:240]})
         return results
 
+    def shutdown(self) -> None:
+        for provider in self.providers:
+            try:
+                provider.shutdown()
+            except Exception:
+                continue
+
 
 def build_default_memory_provider_extensions() -> MemoryProviderExtensionManager:
     return MemoryProviderExtensionManager(
@@ -415,3 +436,23 @@ def _safe_json(value: dict[str, Any]) -> str:
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     except Exception:
         return "{}"
+
+
+def _close_client(client: Any | None) -> None:
+    if client is None:
+        return
+    close = getattr(client, "close", None)
+    if callable(close):
+        try:
+            close()
+            return
+        except Exception:
+            pass
+    aclose = getattr(client, "aclose", None)
+    if callable(aclose):
+        try:
+            import asyncio
+
+            asyncio.run(aclose())
+        except Exception:
+            pass
