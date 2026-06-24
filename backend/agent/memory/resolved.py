@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import hashlib
 import json
 from pathlib import Path
+import re
 import sqlite3
 
 DB_PATH = Path("data/memory/resolved.db")
@@ -115,3 +116,103 @@ class ResolvedQuestionsCache:
         data["sources"] = json.loads(data.pop("sources_json") or "[]")
         data["access_count"] = int(data["access_count"]) + 1
         return data
+
+    def find_related(self, query: str, *, min_score: float = 0.28) -> dict | None:
+        """Return the best semantically related resolved answer using local lexical overlap.
+
+        This intentionally stays cheap and deterministic. The resolved cache is a
+        first-pass "did we already answer this?" layer before expensive tools.
+        FTS5/vector stores can still provide broader recall around the returned
+        answer.
+        """
+        query_terms = _expanded_terms(query)
+        if not query_terms:
+            return None
+        now = self._now().isoformat()
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM resolved_questions
+                WHERE expires_at > ?
+                ORDER BY timestamp DESC
+                LIMIT 200
+                """,
+                (now,),
+            ).fetchall()
+
+        best: tuple[float, sqlite3.Row] | None = None
+        for row in rows:
+            candidate_terms = _expanded_terms(f"{row['query']} {row['answer_summary']}")
+            if not candidate_terms:
+                continue
+            overlap = query_terms.intersection(candidate_terms)
+            if not overlap:
+                continue
+            score = (len(overlap) / max(1, len(query_terms))) * 0.7
+            if _has_named_anchor(query_terms, candidate_terms):
+                score += 0.25
+            if _has_topic_anchor(query_terms, candidate_terms):
+                score += 0.15
+            score = min(score, 1.0)
+            if best is None or score > best[0]:
+                best = (score, row)
+
+        if best is None or best[0] < min_score:
+            return None
+        data = dict(best[1])
+        data["sources"] = json.loads(data.pop("sources_json") or "[]")
+        data["access_count"] = int(data["access_count"])
+        data["related_score"] = round(best[0], 3)
+        data["match_type"] = "related"
+        return data
+
+
+_STOPWORDS = {
+    "about",
+    "after",
+    "answer",
+    "from",
+    "happen",
+    "happened",
+    "have",
+    "into",
+    "players",
+    "question",
+    "that",
+    "their",
+    "there",
+    "these",
+    "this",
+    "those",
+    "traded",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+}
+
+
+def _expanded_terms(text: str) -> set[str]:
+    terms: set[str] = set()
+    for raw in re.findall(r"[A-Za-z0-9]+", text.casefold()):
+        if len(raw) <= 2 or raw in _STOPWORDS:
+            continue
+        terms.add(raw)
+        if raw.endswith("ies") and len(raw) > 4:
+            terms.add(raw[:-3] + "y")
+        if raw.endswith("ed") and len(raw) > 4:
+            terms.add(raw[:-2])
+        if raw.endswith("s") and len(raw) > 4:
+            terms.add(raw[:-1])
+    return terms
+
+
+def _has_named_anchor(query_terms: set[str], candidate_terms: set[str]) -> bool:
+    return any(term in candidate_terms for term in query_terms if len(term) >= 6)
+
+
+def _has_topic_anchor(query_terms: set[str], candidate_terms: set[str]) -> bool:
+    return bool(query_terms.intersection(candidate_terms).intersection({"trade", "goal", "match", "upload", "video"}))

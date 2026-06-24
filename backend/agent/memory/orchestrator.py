@@ -507,7 +507,7 @@ class MemoryOrchestrator:
 
     def build_context_pack(self, *, thread_id: str, query: str, agent_name: str = "VellumAgent") -> dict[str, Any]:
         clean_query = query.strip()
-        resolved = self.resolved_cache.get(clean_query)
+        resolved = self.resolved_cache.get(clean_query) or self.resolved_cache.find_related(clean_query)
         docs = self.fts5.search(_memory_search_query(clean_query), limit=5)
         cards = self.memory_service.build_context_pack(
             {"query": clean_query, "thread_id": thread_id, "agent_name": agent_name}

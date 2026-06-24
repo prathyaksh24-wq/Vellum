@@ -77,6 +77,51 @@ def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Pa
     assert "Messi scored a hat-trick" in packet["recent_context"]
 
 
+def test_tool_backed_answer_can_be_reused_by_related_question_in_new_chat(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+    )
+
+    orchestrator.record_turn(
+        thread_id="chat-a",
+        query="What happened in the Giannis trade to Miami?",
+        answer=(
+            "The reported Giannis Antetokounmpo trade package sent Tyler Herro, Nikola Jovic, "
+            "Jaime Jaquez Jr., and two first-round picks from Miami to Milwaukee."
+        ),
+        tools=[
+            {
+                "name": "web_search",
+                "output": {
+                    "answer": (
+                        "Giannis Antetokounmpo to Miami; Milwaukee received Tyler Herro, Nikola Jovic, "
+                        "Jaime Jaquez Jr., and two first-round picks."
+                    )
+                },
+            }
+        ],
+        sources=["https://example.com/giannis-miami-trade"],
+        confidence=0.92,
+        agent_name="SportsAgent",
+    )
+
+    pack = orchestrator.build_context_pack(
+        thread_id="chat-b",
+        query="Who were the players traded for Giannis?",
+        agent_name="SportsAgent",
+    )
+
+    assert pack["should_answer_from_memory"] is True
+    assert pack["recommended_live_tools"] == []
+    assert pack["resolved"] is not None
+    assert "Tyler Herro" in pack["context"]
+    assert "Jaime Jaquez Jr." in pack["context"]
+
+
 def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
     store = SQLiteMemoryStore(tmp_path / "memory.db")
     orchestrator = MemoryOrchestrator(
