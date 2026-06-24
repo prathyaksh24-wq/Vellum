@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.memory.fts5 import FTS5Memory
+from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.memory.sessions import SESSIONS_DB
 from agent.privacy.classifier import DataClass, classify
@@ -37,6 +38,15 @@ _LIVE_HINTS = {
     "tonight",
     "upcoming",
     "yesterday",
+}
+
+DEFAULT_MEMORY_SETTINGS = {
+    "memory_enabled": True,
+    "dreaming_enabled": True,
+    "reference_history_enabled": True,
+    "save_new_memories": True,
+    "auto_archive_enabled": True,
+    "use_archived_memories": False,
 }
 
 
@@ -59,6 +69,7 @@ class SQLiteMemoryStore:
                 """
                 CREATE TABLE IF NOT EXISTS memory_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scope TEXT NOT NULL DEFAULT 'global',
                     kind TEXT NOT NULL,
                     text TEXT NOT NULL,
                     status TEXT NOT NULL,
@@ -71,6 +82,9 @@ class SQLiteMemoryStore:
                 )
                 """
             )
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(memory_items)").fetchall()}
+            if "scope" not in columns:
+                conn.execute("ALTER TABLE memory_items ADD COLUMN scope TEXT NOT NULL DEFAULT 'global'")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS memory_summaries (
@@ -91,13 +105,31 @@ class SQLiteMemoryStore:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     @staticmethod
     def _now() -> str:
         return datetime.now(UTC).isoformat()
 
-    def add_pending(self, *, kind: str, text: str, source_thread_id: str, confidence: float) -> int:
+    def add_pending(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> int:
         return self._insert_memory(
+            scope=scope,
             kind=kind,
             text=text,
             status="pending",
@@ -105,8 +137,17 @@ class SQLiteMemoryStore:
             confidence=confidence,
         )
 
-    def save_memory(self, *, kind: str, text: str, source_thread_id: str, confidence: float) -> int:
+    def save_memory(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> int:
         memory_id = self._insert_memory(
+            scope=scope,
             kind=kind,
             text=text,
             status="saved",
@@ -116,46 +157,70 @@ class SQLiteMemoryStore:
         self.audit("saved", memory_id, text)
         return memory_id
 
-    def _insert_memory(self, *, kind: str, text: str, status: str, source_thread_id: str, confidence: float) -> int:
+    def _insert_memory(
+        self,
+        *,
+        scope: str,
+        kind: str,
+        text: str,
+        status: str,
+        source_thread_id: str,
+        confidence: float,
+    ) -> int:
         now = self._now()
+        clean_scope = _normalize_scope(scope)
         with self._connect() as conn:
             cursor = conn.execute(
                 """
                 INSERT INTO memory_items (
-                    kind, text, status, source_thread_id, confidence, created_at, updated_at
+                    scope, kind, text, status, source_thread_id, confidence, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (kind, text, status, source_thread_id, float(confidence), now, now),
+                (clean_scope, kind, text, status, source_thread_id, float(confidence), now, now),
             )
             return int(cursor.lastrowid)
 
-    def list_pending(self) -> list[dict[str, Any]]:
-        return self._list("pending")
+    def list_pending(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("pending", scopes=scopes)
 
-    def list_saved(self) -> list[dict[str, Any]]:
-        return self._list("saved")
+    def list_saved(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("saved", scopes=scopes)
 
-    def list_archived(self) -> list[dict[str, Any]]:
-        return self._list("archived")
+    def list_archived(self, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        return self._list("archived", scopes=scopes)
 
-    def _list(self, status: str) -> list[dict[str, Any]]:
+    def _list(self, status: str, *, scopes: list[str] | None = None) -> list[dict[str, Any]]:
+        clean_scopes = [_normalize_scope(scope) for scope in scopes or []]
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT * FROM memory_items
-                WHERE status = ?
-                ORDER BY pinned DESC, updated_at DESC, id DESC
-                """,
-                (status,),
-            ).fetchall()
+            if clean_scopes:
+                placeholders = ",".join("?" for _ in clean_scopes)
+                rows = conn.execute(
+                    f"""
+                    SELECT * FROM memory_items
+                    WHERE status = ? AND scope IN ({placeholders})
+                    ORDER BY pinned DESC, updated_at DESC, id DESC
+                    """,
+                    (status, *clean_scopes),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM memory_items
+                    WHERE status = ?
+                    ORDER BY pinned DESC, updated_at DESC, id DESC
+                    """,
+                    (status,),
+                ).fetchall()
         return [_row_dict(row) for row in rows]
 
-    def search_saved(self, query: str, *, limit: int = 8) -> list[dict[str, Any]]:
+    def search_saved(self, query: str, *, limit: int = 8, scopes: list[str] | None = None) -> list[dict[str, Any]]:
         terms = _terms(query)
-        rows = self.list_saved()
+        rows = self.list_saved(scopes=scopes)
         if terms:
-            rows = [row for row in rows if terms.intersection(_terms(row["text"]))]
+            matched = [row for row in rows if terms.intersection(_terms(row["text"]))]
+            if matched:
+                rows = matched
         return rows[: max(0, int(limit))]
 
     def get_memory(self, memory_id: int) -> dict[str, Any]:
@@ -288,6 +353,37 @@ class SQLiteMemoryStore:
             ).fetchall()
         return [_row_dict(row) for row in rows]
 
+    def get_settings(self) -> dict[str, bool]:
+        settings = dict(DEFAULT_MEMORY_SETTINGS)
+        with self._connect() as conn:
+            rows = conn.execute("SELECT key, value FROM memory_settings").fetchall()
+        for row in rows:
+            if row["key"] not in settings:
+                continue
+            try:
+                settings[row["key"]] = bool(json.loads(row["value"]))
+            except json.JSONDecodeError:
+                settings[row["key"]] = row["value"].lower() == "true"
+        return settings
+
+    def update_settings(self, patch: dict[str, Any]) -> dict[str, bool]:
+        allowed = set(DEFAULT_MEMORY_SETTINGS)
+        now = self._now()
+        with self._connect() as conn:
+            for key, value in patch.items():
+                if key not in allowed:
+                    continue
+                conn.execute(
+                    """
+                    INSERT INTO memory_settings (key, value, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    """,
+                    (key, json.dumps(bool(value)), now),
+                )
+        self.audit("settings_updated", None, json.dumps({k: bool(v) for k, v in patch.items() if k in allowed}, sort_keys=True))
+        return self.get_settings()
+
 
 @dataclass(slots=True)
 class MemoryOrchestrator:
@@ -296,10 +392,15 @@ class MemoryOrchestrator:
     memory_service: MemoryCapabilityService
     store: SQLiteMemoryStore | None = None
     honcho: Any | None = None
+    memory_dir: Path = Path("data/memory")
+    provider_extensions: MemoryProviderExtensionManager | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = SQLiteMemoryStore()
+        self.memory_dir = Path(self.memory_dir)
+        if self.provider_extensions is None:
+            self.provider_extensions = build_default_memory_provider_extensions()
 
     def record_turn(
         self,
@@ -354,11 +455,26 @@ class MemoryOrchestrator:
             self.honcho.add_message(session_id, content=clean_query, role="user")
             self.honcho.add_message(session_id, content=clean_answer, role="assistant")
 
+        external_sync = []
+        if self.provider_extensions is not None:
+            external_sync = self.provider_extensions.sync_turn(
+                clean_query,
+                clean_answer,
+                session_id=thread_id,
+                metadata={
+                    "agent_name": agent_name,
+                    "tools": compact_tools,
+                    "sources": source_list,
+                    "confidence": confidence,
+                },
+            )
+
         return {
             "stored": True,
             "fts5_id": rowid,
             "resolved_cached": resolved_cached,
             "memory_card_path": memory_card_path,
+            "external_sync": external_sync,
         }
 
     def build_memory_packet(
@@ -371,21 +487,43 @@ class MemoryOrchestrator:
         cloud_safe: bool = False,
     ) -> dict[str, Any]:
         clean_query = query.strip()
-        saved = self.store.search_saved(clean_query, limit=8) if self.store is not None else []
-        docs = self.fts5.search(_memory_search_query(clean_query), limit=5)
+        scopes = _packet_scopes(agent_name=agent_name, active_project=active_project)
+        settings = self.store.get_settings() if self.store is not None else dict(DEFAULT_MEMORY_SETTINGS)
+        if not settings.get("memory_enabled", True):
+            return {
+                "global_summary": "",
+                "saved_memories": [],
+                "honcho_context": "",
+                "project_context": "",
+                "recent_context": "",
+                "scopes": scopes,
+                "settings": settings,
+            }
+        saved: list[dict[str, Any]] = []
+        if self.store is not None:
+            baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
+            baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
+            matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
+            saved = _dedupe_memories([*baseline, *matched])[:8]
+        docs = self.fts5.search(_memory_search_query(clean_query), limit=5) if settings.get("reference_history_enabled", True) else []
         honcho_context = ""
         if self.honcho is not None:
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
                 honcho_context = ""
-        docs = docs or self.fts5.recent_documents(limit=5)
+        docs = docs or (self.fts5.recent_documents(limit=5) if settings.get("reference_history_enabled", True) else [])
+        external_context = self.provider_extensions.prefetch(clean_query, session_id=thread_id) if self.provider_extensions else []
         packet = {
             "global_summary": self.store.global_summary() if self.store is not None else "",
             "saved_memories": saved,
             "honcho_context": honcho_context,
             "project_context": self.store.project_summary(active_project) if self.store is not None else "",
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
+            "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
+            "external_providers": external_context,
+            "scopes": scopes,
+            "settings": settings,
         }
         if cloud_safe:
             packet = _scrub_packet(packet)
@@ -393,7 +531,7 @@ class MemoryOrchestrator:
 
     def build_context_pack(self, *, thread_id: str, query: str, agent_name: str = "VellumAgent") -> dict[str, Any]:
         clean_query = query.strip()
-        resolved = self.resolved_cache.get(clean_query)
+        resolved = self.resolved_cache.get(clean_query) or self.resolved_cache.find_related(clean_query)
         docs = self.fts5.search(_memory_search_query(clean_query), limit=5)
         cards = self.memory_service.build_context_pack(
             {"query": clean_query, "thread_id": thread_id, "agent_name": agent_name}
@@ -433,8 +571,12 @@ class MemoryOrchestrator:
     ) -> list[dict[str, Any]]:
         if self.store is None:
             return []
+        settings = self.store.get_settings()
+        if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
+            return []
         candidates = _extract_candidates(user_message, assistant_message)
         stored: list[dict[str, Any]] = []
+        scope = _scope_for_agent(agent_name)
         for candidate in candidates:
             data_class, _reason = classify(candidate["text"])
             if data_class == DataClass.RED and not _explicit_remember(user_message):
@@ -444,6 +586,7 @@ class MemoryOrchestrator:
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
+                scope=scope,
             )
             item = self.store.get_memory(memory_id)
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
@@ -483,6 +626,7 @@ class MemoryOrchestrator:
 
         global_summary = _summarize_memories(self.store.list_saved())
         self.store.update_global_summary(global_summary)
+        context_files = self.sync_context_files()
         audit_log = self.store.audit_log(limit=50)
         return {
             "new_memories": new_memories,
@@ -491,8 +635,69 @@ class MemoryOrchestrator:
             "contradictions": contradictions,
             "global_summary": global_summary,
             "project_summaries": _project_summaries(self.store.list_saved()),
+            "context_files": context_files,
             "audit_log": audit_log,
         }
+
+    def sync_context_files(self) -> dict[str, str]:
+        """Write Hermes-style bounded context files from the orchestrator state."""
+        if self.store is None:
+            return {"user_path": "", "memory_path": ""}
+        self.memory_dir.mkdir(parents=True, exist_ok=True)
+        saved = self.store.list_saved()
+        user_text = _render_user_md(saved, self.store.summary("user_profile"))
+        memory_text = _render_memory_md(
+            saved,
+            global_summary=self.store.global_summary(),
+            project_summaries=_project_summaries(saved),
+        )
+        user_path = self.memory_dir / "USER.md"
+        memory_path = self.memory_dir / "MEMORY.md"
+        user_path.write_text(user_text, encoding="utf-8")
+        memory_path.write_text(memory_text, encoding="utf-8")
+        self.store.audit("context_files_synced", None, f"{user_path}; {memory_path}")
+        return {"user_path": str(user_path), "memory_path": str(memory_path)}
+
+    def import_obsidian_memories(self, vault_root: str | Path) -> dict[str, Any]:
+        if self.store is None:
+            return {"imported_count": 0, "skipped_count": 0, "memories": []}
+        root = Path(vault_root)
+        candidates: list[tuple[Path, str]] = []
+        for folder in ("Agent/Memories", "Agent/Saved"):
+            base = root / folder
+            if base.exists():
+                candidates.extend((path, folder) for path in sorted(base.rglob("*.md")) if path.is_file())
+
+        existing_sources = {str(item.get("source_thread_id") or "") for item in self.store.list_saved()}
+        existing_texts = {_norm(str(item.get("text") or "")) for item in self.store.list_saved()}
+        imported: list[dict[str, Any]] = []
+        skipped = 0
+        for path, folder in candidates:
+            rel = path.relative_to(root).as_posix()
+            if rel in existing_sources:
+                skipped += 1
+                continue
+            text = _memory_text_from_markdown(path)
+            if not text:
+                skipped += 1
+                continue
+            key = _norm(text)
+            if key in existing_texts:
+                skipped += 1
+                continue
+            memory_id = self.store.save_memory(
+                kind="imported",
+                text=text,
+                source_thread_id=rel,
+                confidence=0.82,
+                scope="global" if folder.endswith("Memories") else "user_profile",
+            )
+            item = self.store.get_memory(memory_id)
+            imported.append(item)
+            existing_texts.add(key)
+            existing_sources.add(rel)
+        self.store.audit("obsidian_import_completed", None, f"imported={len(imported)} skipped={skipped}")
+        return {"imported_count": len(imported), "skipped_count": skipped, "memories": imported}
 
 
 def _turn_document(
@@ -611,6 +816,33 @@ def _dedupe_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]
     return out
 
 
+def _dedupe_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen: set[int | str] = set()
+    for memory in memories:
+        key: int | str = int(memory["id"]) if str(memory.get("id", "")).isdigit() else _norm(str(memory.get("text") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(memory)
+    return out
+
+
+def _memory_text_from_markdown(path: Path) -> str:
+    try:
+        raw = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+    text = re.sub(r"\A---\s*.*?\s*---", "", raw, flags=re.DOTALL).strip()
+    lines = []
+    for line in text.splitlines():
+        clean = line.strip()
+        if not clean or clean.startswith("#"):
+            continue
+        lines.append(re.sub(r"^[-*]\s+", "", clean))
+    return _squash(" ".join(lines), limit=1200)
+
+
 def _explicit_remember(text: str) -> bool:
     return bool(re.search(r"\b(?:remember|memorize|note|keep in mind)\b", text, re.I))
 
@@ -660,6 +892,72 @@ def _project_summaries(memories: list[dict[str, Any]]) -> dict[str, str]:
     return {"Vellum": "\n".join(f"- {item['text']}" for item in project_items[:8])}
 
 
+def _render_user_md(memories: list[dict[str, Any]], profile_summary: str = "") -> str:
+    lines = [
+        "# User Profile",
+        "",
+        "Curated by Vellum Memory Orchestrator. Edit carefully; Dreaming may sync generated content.",
+        "",
+    ]
+    if profile_summary.strip():
+        lines.extend(["## Summary", profile_summary.strip(), ""])
+    user_items = [
+        item
+        for item in memories
+        if item.get("scope") == "user_profile" or str(item.get("kind") or "") in {"profile", "preference"}
+    ]
+    if user_items:
+        lines.append("## Entries")
+        for item in user_items:
+            lines.append(f"- {str(item.get('text') or '').strip()}")
+    return _bounded_markdown(lines, limit=1375)
+
+
+def _render_memory_md(
+    memories: list[dict[str, Any]],
+    *,
+    global_summary: str = "",
+    project_summaries: dict[str, str] | None = None,
+) -> str:
+    lines = [
+        "# Agent Memory",
+        "",
+        "Curated by Vellum Memory Orchestrator from saved memories, tool-backed answers, and Dreaming.",
+        "",
+    ]
+    if global_summary.strip():
+        lines.extend(["## Global Summary", global_summary.strip(), ""])
+    project_summaries = project_summaries or {}
+    if project_summaries:
+        lines.append("## Projects")
+        for project, summary in sorted(project_summaries.items()):
+            lines.append(f"### {project}")
+            lines.append(summary.strip())
+        lines.append("")
+    agent_items = [
+        item
+        for item in memories
+        if item.get("scope") != "user_profile" and str(item.get("kind") or "") not in {"profile", "preference"}
+    ]
+    if agent_items:
+        lines.append("## Entries")
+        for item in agent_items:
+            scope = str(item.get("scope") or "global")
+            text = str(item.get("text") or "").strip()
+            lines.append(f"- [{scope}] {text}")
+    return _bounded_markdown(lines, limit=2200)
+
+
+def _bounded_markdown(lines: list[str], *, limit: int) -> str:
+    out = ""
+    for line in lines:
+        next_out = f"{out}\n{line}" if out else line
+        if len(next_out) > limit:
+            break
+        out = next_out
+    return out[:limit].rstrip() + "\n"
+
+
 def _scrub_packet(packet: dict[str, Any]) -> dict[str, Any]:
     from agent.privacy.scrubber import PrivacyScrubber
 
@@ -688,9 +986,26 @@ def _empty_dream() -> dict[str, Any]:
     }
 
 
+def _normalize_scope(scope: str | None) -> str:
+    clean = re.sub(r"\s+", "_", str(scope or "global").strip())
+    return clean or "global"
+
+
+def _agent_scope(agent_name: str) -> str:
+    clean = re.sub(r"[^A-Za-z0-9_-]+", "", str(agent_name or "").strip()) or "VellumAgent"
+    return f"agent:{clean}"
+
+
+def _packet_scopes(*, agent_name: str, active_project: str | None = None) -> list[str]:
+    scopes = ["global", "user_profile"]
+    if active_project:
+        scopes.append(f"project:{_normalize_scope(active_project)}")
+    scopes.append(_agent_scope(agent_name))
+    return list(dict.fromkeys(scopes))
+
+
 def _scope_for_agent(agent_name: str) -> str:
-    normalized = agent_name.removesuffix("Agent").casefold()
-    return normalized if normalized and normalized != "vellum" else "shared"
+    return _agent_scope(agent_name)
 
 
 def _card_title(query: str) -> str:

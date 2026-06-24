@@ -162,3 +162,27 @@ def test_memory_context_block_includes_orchestrator_packet(monkeypatch):
     assert "User is building Vellum." in block
     assert "User prefers concise answers." in block
     assert "Vellum uses sub-agents." in block
+
+
+def test_memory_context_block_includes_hermes_style_context_files(monkeypatch, tmp_path):
+    from agent.memory import memory_context
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    (memory_dir / "USER.md").write_text("# User Profile\n\n- User prefers direct answers.", encoding="utf-8")
+    (memory_dir / "MEMORY.md").write_text("# Agent Memory\n\n- Vellum uses Memory Orchestrator.", encoding="utf-8")
+
+    class EmptyOrchestrator:
+        def build_memory_packet(self, **kwargs):
+            return {}
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", EmptyOrchestrator())
+    monkeypatch.setattr(memory_context, "_MEMORY_FILES_DIR", memory_dir)
+
+    block = memory_context.build_memory_block("thread-1", query="What do you know about me?")
+
+    assert "Hermes-style persistent memory" in block
+    assert "User prefers direct answers" in block
+    assert "Vellum uses Memory Orchestrator" in block

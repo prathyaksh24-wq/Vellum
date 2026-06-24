@@ -49,6 +49,7 @@ from agent.memory.resolved import ResolvedQuestionsCache
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
+from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -71,6 +72,9 @@ _memory_orchestrator = MemoryOrchestrator(
     store=SQLiteMemoryStore(Path("data/memory/sessions.db")),
 )
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
+_DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
+_DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SECONDS", "900")))
+_dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
@@ -708,7 +712,18 @@ async def _run_agent(
         if _should_passthrough_live_result(live_result):
             answer = live_result.answer or "No response."
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent"))
+                asyncio.create_task(
+                    _background_learn(
+                        clean_message,
+                        answer,
+                        active_thread_id,
+                        source="x_agent",
+                        tools=_memory_tools_from_names(delegated_tools),
+                        sources=_memory_source_urls(live_sources),
+                        confidence=_memory_confidence(delegated_tools, live_sources),
+                        agent_name=str(live_result.agent_name or "VellumAgent"),
+                    )
+                )
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
         agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
 
@@ -744,7 +759,16 @@ async def _run_agent(
         sources.append(source)
 
     if answer and "blocked for privacy" not in answer.casefold():
-        asyncio.create_task(_background_learn(clean_message, answer, active_thread_id))
+        asyncio.create_task(
+            _background_learn(
+                clean_message,
+                answer,
+                active_thread_id,
+                tools=_memory_tools_from_names(tools),
+                sources=_memory_source_urls(sources),
+                confidence=_memory_confidence(tools, sources),
+            )
+        )
 
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
 
@@ -769,8 +793,24 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
         pass
 
 
-async def _background_learn(query: str, answer: str, thread_id: str = "default", source: str = "agent") -> None:
+async def _background_learn(
+    query: str,
+    answer: str,
+    thread_id: str = "default",
+    source: str = "agent",
+    *,
+    tools: list[dict[str, Any]] | None = None,
+    sources: list[str] | None = None,
+    confidence: float | None = None,
+    agent_name: str = "VellumAgent",
+) -> None:
     try:
+        memory_store = getattr(_memory_orchestrator, "store", None)
+        memory_settings = memory_store.get_settings() if memory_store is not None else {}
+        if memory_settings and (
+            not memory_settings.get("memory_enabled", True) or not memory_settings.get("save_new_memories", True)
+        ):
+            return
         data_class, _reason = classify(query)
         if data_class == DataClass.RED:
             return
@@ -790,18 +830,20 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
             thread_id=thread_id,
             query=clean_query,
             answer=clean_answer,
-            tools=[],
-            sources=[],
-            confidence=0.7,
-            agent_name="VellumAgent",
+            tools=tools or [],
+            sources=sources or [],
+            confidence=float(confidence if confidence is not None else _memory_confidence([], [])),
+            agent_name=agent_name,
         )
-        await asyncio.to_thread(
+        pending = await asyncio.to_thread(
             _memory_orchestrator.extract_memory_candidates,
             thread_id=thread_id,
             user_message=clean_query,
             assistant_message=clean_answer,
             agent_name="VellumAgent",
         )
+        if pending and memory_settings.get("dreaming_enabled", True):
+            await _maybe_run_dreaming(reason="background_learn")
         # Hermes-style: refresh the cached user model (Honcho dialectic) on a
         # cadence so the next turn's prompt reflects a deeper understanding.
         try:
@@ -824,6 +866,72 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default",
             pass
     except Exception:
         return
+
+
+def _last_dreaming_run_at() -> datetime | None:
+    raw = _dreaming_status.get("last_run")
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> bool:
+    store = getattr(_memory_orchestrator, "store", None)
+    if store is None:
+        return False
+    try:
+        pending_count = len(store.list_pending())
+    except Exception:
+        return False
+    try:
+        settings = store.get_settings()
+    except Exception:
+        settings = {}
+    if not force and not settings.get("dreaming_enabled", True):
+        return False
+    if not force and pending_count < _DREAMING_MIN_PENDING:
+        return False
+    last_run = _last_dreaming_run_at()
+    if not force and last_run is not None:
+        elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
+        if elapsed < _DREAMING_COOLDOWN_SECONDS:
+            return False
+    if _dreaming_lock.locked():
+        return False
+    async with _dreaming_lock:
+        try:
+            pending_count = len(store.list_pending())
+        except Exception:
+            return False
+        if not force and pending_count < _DREAMING_MIN_PENDING:
+            return False
+        _dreaming_status.update({"status": "running", "reason": reason, "pending_count": pending_count})
+        try:
+            result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
+        except Exception as exc:
+            _dreaming_status.update(
+                {
+                    "status": "error",
+                    "last_run": datetime.now(timezone.utc).isoformat(),
+                    "reason": reason,
+                    "error": str(exc),
+                }
+            )
+            return False
+        _dreaming_status.update(
+            {
+                "status": "completed",
+                "last_run": datetime.now(timezone.utc).isoformat(),
+                "last_result": result,
+                "reason": reason,
+                "pending_count": pending_count,
+            }
+        )
+        return True
 
 
 def _vector_health() -> dict[str, Any]:
@@ -1520,6 +1628,43 @@ def _sources_from_messages(messages: list) -> list[Source]:
     return collected
 
 
+def _memory_tools_from_names(tool_names: list[str] | tuple[str, ...] | None) -> list[dict[str, Any]]:
+    tools: list[dict[str, Any]] = []
+    for name in tool_names or []:
+        clean = str(name or "").strip()
+        if not clean:
+            continue
+        tools.append({"name": clean, "output": {"summary": f"{clean} was used during this answer."}})
+    return tools
+
+
+def _memory_source_urls(source_records: list[Any] | tuple[Any, ...] | None) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for record in source_records or []:
+        url = ""
+        if isinstance(record, dict):
+            url = str(record.get("url") or "")
+        else:
+            url = str(getattr(record, "url", "") or "")
+        url = url.strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def _memory_confidence(tool_names: list[Any] | tuple[Any, ...] | None, source_records: list[Any] | tuple[Any, ...] | None) -> float:
+    names = {str(name or "").strip() for name in tool_names or [] if str(name or "").strip()}
+    has_sources = bool(_memory_source_urls(source_records))
+    if has_sources and names:
+        return 0.92
+    if has_sources or names.intersection({"web_search", "search_my_notes", "memory_orchestrator", "x_action"}):
+        return 0.88
+    return 0.7
+
+
 def _agent_message_for_runtime_mode(clean_message: str) -> str:
     status = computer_use_runtime.status()
     if not status.get("enabled") or status.get("paused"):
@@ -1845,7 +1990,22 @@ async def _stream_agent_turn(
             source_models = [Source(**source) for source in live_sources]
             response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source="x_agent")) if store else _audit_memory_off(active_thread_id, "x_agent"))
+                (
+                    asyncio.create_task(
+                        _background_learn(
+                            clean_message,
+                            answer,
+                            active_thread_id,
+                            source="x_agent",
+                            tools=_memory_tools_from_names(delegated_tools),
+                            sources=_memory_source_urls(live_sources),
+                            confidence=_memory_confidence(delegated_tools, live_sources),
+                            agent_name=str(live_result.agent_name or "VellumAgent"),
+                        )
+                    )
+                    if store
+                    else _audit_memory_off(active_thread_id, "x_agent")
+                )
             yield _agent_activity_event(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -2145,7 +2305,21 @@ async def _stream_agent_turn(
             else:
                 response = ChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
             if answer and "blocked for privacy" not in answer.casefold():
-                (asyncio.create_task(_background_learn(clean_message, answer, active_thread_id, source=source)) if store else _audit_memory_off(active_thread_id, source))
+                (
+                    asyncio.create_task(
+                        _background_learn(
+                            clean_message,
+                            answer,
+                            active_thread_id,
+                            source=source,
+                            tools=_memory_tools_from_names(tool_names),
+                            sources=_memory_source_urls(sources),
+                            confidence=_memory_confidence(tool_names, sources),
+                        )
+                    )
+                    if store
+                    else _audit_memory_off(active_thread_id, source)
+                )
             yield _sse("final", response.model_dump_json())
             if message_item_started:
                 yield _response_output_item_done(
@@ -2560,6 +2734,15 @@ class UpdateMemoryRequest(BaseModel):
     kind: str | None = None
 
 
+class MemorySettingsRequest(BaseModel):
+    memory_enabled: bool | None = None
+    dreaming_enabled: bool | None = None
+    reference_history_enabled: bool | None = None
+    save_new_memories: bool | None = None
+    auto_archive_enabled: bool | None = None
+    use_archived_memories: bool | None = None
+
+
 @router.get("/memory/summary")
 async def memory_summary() -> dict[str, Any]:
     store = _memory_orchestrator.store
@@ -2586,6 +2769,23 @@ async def archived_memories() -> dict[str, list[dict[str, Any]]]:
     return {"memories": store.list_archived() if store is not None else []}
 
 
+@router.get("/memory/settings")
+async def memory_settings() -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    return {"settings": await asyncio.to_thread(store.get_settings)}
+
+
+@router.post("/memory/settings")
+async def update_memory_settings(request: MemorySettingsRequest) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    patch = request.model_dump(exclude_none=True)
+    return {"settings": await asyncio.to_thread(store.update_settings, patch)}
+
+
 @router.get("/memory/dreaming/status")
 async def dreaming_status() -> dict[str, Any]:
     return dict(_dreaming_status)
@@ -2593,14 +2793,24 @@ async def dreaming_status() -> dict[str, Any]:
 
 @router.post("/memory/dreaming/run")
 async def run_dreaming() -> dict[str, Any]:
-    _dreaming_status["status"] = "running"
-    try:
-        result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
-    except Exception as exc:
-        _dreaming_status.update({"status": "error", "last_run": datetime.now(timezone.utc).isoformat(), "error": str(exc)})
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    _dreaming_status.update({"status": "completed", "last_run": datetime.now(timezone.utc).isoformat(), "last_result": result})
+    ok = await _maybe_run_dreaming(reason="manual", force=True)
+    if not ok and _dreaming_status.get("status") == "error":
+        raise HTTPException(status_code=500, detail=str(_dreaming_status.get("error") or "dreaming failed"))
+    result = _dreaming_status.get("last_result") or {
+        "new_memories": [],
+        "updated_memories": [],
+        "archived_memories": [],
+        "contradictions": [],
+        "global_summary": "",
+        "project_summaries": {},
+        "audit_log": [],
+    }
     return result
+
+
+@router.post("/memory/import-obsidian")
+async def import_obsidian_memories() -> dict[str, Any]:
+    return await asyncio.to_thread(_memory_orchestrator.import_obsidian_memories, get_settings().obsidian_vault_path)
 
 
 @router.post("/memory/{memory_id}/archive")
@@ -2858,6 +3068,7 @@ async def list_plugins() -> dict[str, Any]:
         health_result = await health_result
     servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
     plugins = [
+        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
         *[
         {

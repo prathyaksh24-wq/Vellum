@@ -287,6 +287,7 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     store.update_global_summary("User is building Vellum.")
     saved_id = store.save_memory(kind="preference", text="User prefers concise answers.", source_thread_id="t1", confidence=0.9)
@@ -311,6 +312,50 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
     assert status.json()["status"] in {"idle", "completed"}
 
 
+def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+
+    with TestClient(api.app) as client:
+        before = client.get("/api/memory/settings")
+        updated = client.post(
+            "/api/memory/settings",
+            json={"memory_enabled": False, "dreaming_enabled": False, "reference_history_enabled": False},
+        )
+
+    assert before.status_code == 200
+    assert before.json()["settings"]["memory_enabled"] is True
+    assert updated.status_code == 200
+    assert updated.json()["settings"]["memory_enabled"] is False
+    assert updated.json()["settings"]["dreaming_enabled"] is False
+    assert updated.json()["settings"]["reference_history_enabled"] is False
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer concise answers.",
+            "I will remember that.",
+            thread_id="memory-off",
+            source="api",
+        )
+    )
+
+    assert store.list_pending() == []
+    assert store.list_saved() == []
+
+
 def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
@@ -323,9 +368,20 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
 
     asyncio.run(
         api._background_learn(
@@ -338,6 +394,93 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
 
     assert "Evidence sections" in store.list_pending()[0]["text"]
     assert "Remember that I prefer" in orchestrator.fts5.recent_documents(limit=1)[0]["content"]
+
+
+def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    resolved = ResolvedQuestionsCache(tmp_path / "resolved.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=resolved,
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(
+        api,
+        "_project_context",
+        lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None),
+    )
+
+    asyncio.run(
+        api._background_learn(
+            "What happened in the Giannis trade to Miami?",
+            "Milwaukee received Tyler Herro, Nikola Jovic, Jaime Jaquez Jr., and two first-round picks.",
+            thread_id="trade-thread",
+            source="api",
+            tools=[{"name": "web_search", "output": {"answer": "Giannis trade package details"}}],
+            sources=["https://example.com/giannis-miami"],
+            confidence=0.93,
+            agent_name="SportsAgent",
+        )
+    )
+
+    related = resolved.find_related("Who were the players traded for Giannis?")
+
+    assert related is not None
+    assert "Tyler Herro" in related["answer_summary"]
+
+
+def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "_DREAMING_MIN_PENDING", 1)
+    monkeypatch.setattr(api, "_DREAMING_COOLDOWN_SECONDS", 0)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    api._dreaming_status.clear()
+    api._dreaming_status.update({"status": "idle", "last_run": None, "last_result": None})
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer concise Vellum demo answers.",
+            "I will keep Vellum demo answers concise.",
+            thread_id="thread-auto-dream",
+            source="api",
+        )
+    )
+
+    assert store.list_pending() == []
+    assert any("concise Vellum demo answers" in item["text"] for item in store.list_saved())
+    assert api._dreaming_status["status"] == "completed"
+    assert api._dreaming_status["last_result"]["new_memories"]
 
 
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
@@ -408,6 +551,11 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert plugins.status_code == 200
     plugin_ids = {item["id"] for item in plugins.json()["plugins"]}
     assert {"agent-reach", "serpapi"} <= plugin_ids
+    memory_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "memory-orchestrator")
+    assert memory_plugin["type"] == "system"
+    assert memory_plugin["category"] == "Memory"
+    assert memory_plugin["required"] is True
+    assert "memory.run_dreaming" in memory_plugin["capabilities"]
     assert skills.status_code == 200
     assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
     assert automations.status_code == 200
