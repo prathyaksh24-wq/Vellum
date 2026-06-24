@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.memory.fts5 import FTS5Memory
+from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.memory.sessions import SESSIONS_DB
 from agent.privacy.classifier import DataClass, classify
@@ -392,11 +393,14 @@ class MemoryOrchestrator:
     store: SQLiteMemoryStore | None = None
     honcho: Any | None = None
     memory_dir: Path = Path("data/memory")
+    provider_extensions: MemoryProviderExtensionManager | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = SQLiteMemoryStore()
         self.memory_dir = Path(self.memory_dir)
+        if self.provider_extensions is None:
+            self.provider_extensions = build_default_memory_provider_extensions()
 
     def record_turn(
         self,
@@ -451,11 +455,26 @@ class MemoryOrchestrator:
             self.honcho.add_message(session_id, content=clean_query, role="user")
             self.honcho.add_message(session_id, content=clean_answer, role="assistant")
 
+        external_sync = []
+        if self.provider_extensions is not None:
+            external_sync = self.provider_extensions.sync_turn(
+                clean_query,
+                clean_answer,
+                session_id=thread_id,
+                metadata={
+                    "agent_name": agent_name,
+                    "tools": compact_tools,
+                    "sources": source_list,
+                    "confidence": confidence,
+                },
+            )
+
         return {
             "stored": True,
             "fts5_id": rowid,
             "resolved_cached": resolved_cached,
             "memory_card_path": memory_card_path,
+            "external_sync": external_sync,
         }
 
     def build_memory_packet(
@@ -494,12 +513,15 @@ class MemoryOrchestrator:
             except Exception:
                 honcho_context = ""
         docs = docs or (self.fts5.recent_documents(limit=5) if settings.get("reference_history_enabled", True) else [])
+        external_context = self.provider_extensions.prefetch(clean_query, session_id=thread_id) if self.provider_extensions else []
         packet = {
             "global_summary": self.store.global_summary() if self.store is not None else "",
             "saved_memories": saved,
             "honcho_context": honcho_context,
             "project_context": self.store.project_summary(active_project) if self.store is not None else "",
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
+            "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
+            "external_providers": external_context,
             "scopes": scopes,
             "settings": settings,
         }

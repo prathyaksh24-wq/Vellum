@@ -24,6 +24,17 @@ class MemoryProviderExtension(Protocol):
 
     def setup_notes(self) -> str: ...
 
+    def prefetch(self, query: str, *, session_id: str = "") -> str: ...
+
+    def sync_turn(
+        self,
+        user_content: str,
+        assistant_content: str,
+        *,
+        session_id: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> None: ...
+
 
 @dataclass(slots=True)
 class ConfiguredMemoryProviderExtension:
@@ -48,6 +59,19 @@ class ConfiguredMemoryProviderExtension:
 
     def setup_notes(self) -> str:
         return self.notes or f"Set {self.env_key} and add {self.id} to MEMORY_EXTENSION_PROVIDERS."
+
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
+        return ""
+
+    def sync_turn(
+        self,
+        user_content: str,
+        assistant_content: str,
+        *,
+        session_id: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        return None
 
 
 class HolographicProviderExtension(ConfiguredMemoryProviderExtension):
@@ -74,6 +98,39 @@ class MemoryProviderExtensionManager:
 
     def active_provider_ids(self) -> list[str]:
         return [provider.id for provider in self.providers if provider.is_enabled() and provider.is_configured()]
+
+    def prefetch(self, query: str, *, session_id: str = "") -> list[dict[str, str]]:
+        contexts: list[dict[str, str]] = []
+        for provider in self.providers:
+            if not provider.is_enabled() or not provider.is_configured():
+                continue
+            try:
+                context = provider.prefetch(query, session_id=session_id)
+            except Exception as exc:
+                context = ""
+                contexts.append({"provider": provider.id, "context": "", "error": str(exc)[:240]})
+            if context:
+                contexts.append({"provider": provider.id, "context": str(context)})
+        return contexts
+
+    def sync_turn(
+        self,
+        user_content: str,
+        assistant_content: str,
+        *,
+        session_id: str = "",
+        metadata: dict[str, Any] | None = None,
+    ) -> list[dict[str, str]]:
+        results: list[dict[str, str]] = []
+        for provider in self.providers:
+            if not provider.is_enabled() or not provider.is_configured():
+                continue
+            try:
+                provider.sync_turn(user_content, assistant_content, session_id=session_id, metadata=metadata)
+                results.append({"provider": provider.id, "status": "synced"})
+            except Exception as exc:
+                results.append({"provider": provider.id, "status": "error", "error": str(exc)[:240]})
+        return results
 
 
 def build_default_memory_provider_extensions() -> MemoryProviderExtensionManager:

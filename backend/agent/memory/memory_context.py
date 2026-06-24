@@ -214,6 +214,9 @@ def _format_memory_packet(packet: dict[str, Any]) -> str:
     recent_context = str(packet.get("recent_context") or "").strip()
     if recent_context:
         sections.append("## Recent conversation context\n" + recent_context)
+    external_context = str(packet.get("external_context") or "").strip()
+    if external_context:
+        sections.append("## External memory provider context\n" + external_context)
     if not sections:
         return ""
     return (
