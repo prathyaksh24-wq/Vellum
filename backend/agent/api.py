@@ -50,6 +50,7 @@ from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
+from agent.plugins.portable import discover_portable_plugins
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -3083,7 +3084,29 @@ async def list_plugins() -> dict[str, Any]:
         if server.get("name")
         ],
     ]
+    _attach_portable_plugin_metadata(plugins)
     return {"plugins": plugins}
+
+
+def _attach_portable_plugin_metadata(plugins: list[dict[str, Any]]) -> None:
+    try:
+        manifests = {manifest.id: manifest for manifest in discover_portable_plugins(REPO_ROOT / "plugins")}
+    except Exception:
+        manifests = {}
+    for plugin in plugins:
+        manifest = manifests.get(str(plugin.get("id") or ""))
+        if manifest is None:
+            continue
+        metadata = plugin.setdefault("metadata", {})
+        metadata["portable_plugin"] = {
+            "id": manifest.id,
+            "name": manifest.name,
+            "type": manifest.type,
+            "category": manifest.category,
+            "version": manifest.version,
+            "path": manifest.path.as_posix(),
+            "capabilities": list(manifest.capabilities),
+        }
 
 
 @router.post("/settings/active-model", response_model=ActiveModelResponse)

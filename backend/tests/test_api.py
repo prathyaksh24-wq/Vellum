@@ -556,6 +556,9 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert memory_plugin["category"] == "Memory"
     assert memory_plugin["required"] is True
     assert "memory.run_dreaming" in memory_plugin["capabilities"]
+    assert memory_plugin["metadata"]["portable_plugin"]["path"].endswith("plugins/memory/vellum-memory-orchestrator")
+    agent_reach_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "agent-reach")
+    assert agent_reach_plugin["metadata"]["portable_plugin"]["path"].endswith("plugins/connectors/agent-reach")
     assert skills.status_code == 200
     assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
     assert automations.status_code == 200
