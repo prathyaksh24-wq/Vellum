@@ -1,6 +1,12 @@
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
-from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
+from agent.memory.provider_extensions import (
+    HindsightProviderExtension,
+    HolographicProviderExtension,
+    MemoryProviderExtensionManager,
+    SupermemoryProviderExtension,
+    build_default_memory_provider_extensions,
+)
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
@@ -118,3 +124,62 @@ def test_record_turn_syncs_to_active_external_provider(tmp_path):
     assert calls[0][1] == "hi"
     assert calls[0][2] == "t1"
     assert calls[0][3]["agent_name"] == "VellumAgent"
+
+
+def test_hindsight_provider_prefetch_and_sync_with_client(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        def recall(self, query, *, bank_id, budget):
+            return {"memories": [{"content": f"remembered {query}", "score": 0.9}]}
+
+        def retain(self, content, *, bank_id, metadata):
+            calls.append((content, bank_id, metadata))
+
+    monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "hindsight")
+    monkeypatch.setenv("HINDSIGHT_API_KEY", "test-key")
+    provider = HindsightProviderExtension(client=FakeClient())
+
+    assert "remembered Giannis" in provider.prefetch("Giannis", session_id="t1")
+    provider.sync_turn("user", "assistant", session_id="t1", metadata={"agent_name": "SportsAgent"})
+
+    assert calls
+    assert calls[0][1] == "vellum"
+    assert calls[0][2]["session_id"] == "t1"
+
+
+def test_supermemory_provider_prefetch_and_sync_with_client(monkeypatch):
+    calls = []
+
+    class FakeClient:
+        def profile(self, query):
+            return {"static": ["User builds Vellum."], "dynamic": [], "search_results": [{"memory": f"related {query}"}]}
+
+        def ingest_turn(self, session_id, user_content, assistant_content, metadata):
+            calls.append((session_id, user_content, assistant_content, metadata))
+
+    monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "supermemory")
+    monkeypatch.setenv("SUPERMEMORY_API_KEY", "test-key")
+    provider = SupermemoryProviderExtension(client=FakeClient())
+
+    assert "User builds Vellum" in provider.prefetch("memory", session_id="t1")
+    provider.sync_turn("user", "assistant", session_id="t1", metadata={"agent_name": "VellumAgent"})
+
+    assert calls[0][0] == "t1"
+
+
+def test_holographic_provider_stores_and_prefetches_local_facts(monkeypatch, tmp_path):
+    monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "holographic")
+    monkeypatch.setenv("HOLOGRAPHIC_MEMORY_ENABLED", "true")
+    provider = HolographicProviderExtension(db_path=tmp_path / "holographic.db")
+
+    provider.sync_turn(
+        "Remember that Vellum uses Hindsight for graph memory.",
+        "Stored.",
+        session_id="t1",
+        metadata={"agent_name": "MemoryAgent"},
+    )
+
+    context = provider.prefetch("What graph memory does Vellum use?", session_id="t2")
+
+    assert "Hindsight" in context
