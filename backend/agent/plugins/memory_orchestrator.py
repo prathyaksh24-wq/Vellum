@@ -16,6 +16,7 @@ MEMORY_ORCHESTRATOR_CAPABILITIES = [
     "memory.get_settings",
     "memory.update_settings",
     "memory.import_obsidian",
+    "memory.providers.status",
 ]
 
 
@@ -68,4 +69,46 @@ def _status(*, configured: bool, status: str, notes: str) -> PluginStatus:
         notes=notes,
         capabilities=list(MEMORY_ORCHESTRATOR_CAPABILITIES),
         required=True,
+        metadata={"providers": _provider_statuses()},
     )
+
+
+def _provider_statuses() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": "sqlite",
+            "name": "SQLite Memory Store",
+            "type": "system_of_record",
+            "status": "ready",
+            "capabilities": ["memory.write", "memory.saved", "memory.archived", "memory.settings"],
+        },
+        {
+            "id": "fts5",
+            "name": "FTS5 Session Search",
+            "type": "exact_search",
+            "status": "ready",
+            "capabilities": ["memory.search", "session.search", "recent_context"],
+        },
+        {
+            "id": "chroma",
+            "name": "Chroma Semantic Memory",
+            "type": "semantic",
+            "status": "ready",
+            "capabilities": ["semantic_recall", "rag_context"],
+        },
+        {
+            "id": "honcho",
+            "name": "Honcho User Model",
+            "type": "user_model",
+            "status": "degraded",
+            "capabilities": ["user_profile", "conversation_modeling"],
+            "notes": "Ready when Honcho is attached to the runtime process.",
+        },
+        {
+            "id": "obsidian",
+            "name": "Obsidian Memory Files",
+            "type": "human_readable",
+            "status": "ready",
+            "capabilities": ["memory_cards", "USER.md", "MEMORY.md", "vault_import"],
+        },
+    ]
