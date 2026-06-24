@@ -287,6 +287,7 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     store.update_global_summary("User is building Vellum.")
     saved_id = store.save_memory(kind="preference", text="User prefers concise answers.", source_thread_id="t1", confidence=0.9)
@@ -323,6 +324,7 @@ def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
@@ -366,6 +368,7 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
@@ -406,6 +409,7 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
         resolved_cache=resolved,
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
@@ -455,6 +459,7 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
         resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
         memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
         store=store,
+        memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "_DREAMING_MIN_PENDING", 1)
