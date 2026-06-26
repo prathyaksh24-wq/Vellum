@@ -11,6 +11,7 @@ import inspect
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import sys
 import time
@@ -258,6 +259,115 @@ def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
         json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+
+def _message_text(message: Any) -> str:
+    if not isinstance(message, dict):
+        return ""
+    return str(message.get("text") or message.get("content") or "").strip()
+
+
+def _message_role(message: Any) -> str:
+    if not isinstance(message, dict):
+        return "message"
+    return str(message.get("role") or "message").strip().lower()
+
+
+def _conversation_turns(conversation: dict[str, Any]) -> list[dict[str, Any]]:
+    messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+    turns: list[dict[str, Any]] = []
+    pending_user: dict[str, Any] | None = None
+    for index, message in enumerate(messages):
+        role = _message_role(message)
+        text = _message_text(message)
+        if not text:
+            continue
+        if role == "user":
+            pending_user = {"index": index, "text": text, "id": str(message.get("id") or index) if isinstance(message, dict) else str(index)}
+            continue
+        if role == "assistant" and pending_user is not None:
+            if text.lower() == "stopped.":
+                pending_user = None
+                continue
+            turns.append(
+                {
+                    "index": pending_user["index"],
+                    "user": pending_user["text"],
+                    "assistant": text,
+                    "message_id": pending_user["id"],
+                }
+            )
+            pending_user = None
+    return turns
+
+
+def _text_terms(text: str) -> set[str]:
+    stop_words = {
+        "about",
+        "after",
+        "again",
+        "answer",
+        "chat",
+        "conversation",
+        "does",
+        "earlier",
+        "from",
+        "have",
+        "know",
+        "many",
+        "previous",
+        "recent",
+        "remember",
+        "said",
+        "tell",
+        "that",
+        "there",
+        "this",
+        "what",
+        "when",
+        "where",
+        "which",
+        "with",
+    }
+    return {term for term in re.findall(r"[A-Za-z0-9]+", text.casefold()) if len(term) > 2 and term not in stop_words}
+
+
+def _conversation_relevance(conversation: dict[str, Any], query_terms: set[str]) -> int:
+    if not query_terms:
+        return 0
+    title = str(conversation.get("title") or "")
+    messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+    haystack = " ".join([title, *(_message_text(message) for message in messages)])
+    return len(query_terms.intersection(_text_terms(haystack)))
+
+
+def _import_ui_conversations_to_memory(limit: int | None = None) -> dict[str, int]:
+    conversations = _read_ui_conversations()
+    fts5 = getattr(_memory_orchestrator, "fts5", _fts5_memory)
+    indexed_turns = 0
+    skipped_turns = 0
+    scanned_turns = 0
+    max_turns = max(0, int(limit)) if limit is not None else None
+    for conversation in conversations:
+        cid = str(conversation.get("thread_id") or conversation.get("id") or "ui-chat")
+        title = str(conversation.get("title") or "Untitled chat")
+        for turn in _conversation_turns(conversation):
+            if max_turns is not None and scanned_turns >= max_turns:
+                return {"indexed_turns": indexed_turns, "skipped_turns": skipped_turns, "scanned_turns": scanned_turns}
+            scanned_turns += 1
+            source_id = f"ui-conversation:{cid}:{turn['message_id']}"
+            if hasattr(fts5, "source_path_exists") and fts5.source_path_exists(source_id):
+                skipped_turns += 1
+                continue
+            content = (
+                f"Conversation: {title}\n"
+                f"Thread: {cid}\n"
+                f"Q: {turn['user']}\n"
+                f"A: {turn['assistant']}"
+            )
+            fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
+            indexed_turns += 1
+    return {"indexed_turns": indexed_turns, "skipped_turns": skipped_turns, "scanned_turns": scanned_turns}
 
 
 def _conversation_timestamp() -> str:
@@ -912,7 +1022,10 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
             return False
         _dreaming_status.update({"status": "running", "reason": reason, "pending_count": pending_count})
         try:
+            import_result = await asyncio.to_thread(_import_ui_conversations_to_memory)
             result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
+            result = dict(result)
+            result["conversation_import"] = import_result
         except Exception as exc:
             _dreaming_status.update(
                 {
@@ -1681,23 +1794,66 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
 
 def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
     lowered = clean_message.lower()
-    if not any(marker in lowered for marker in ("conversation", "talked", "talk about", "we said", "you said", "i said", "today", "recent", "earlier")):
+    markers = (
+        "chat",
+        "conversation",
+        "discuss",
+        "earlier",
+        "first",
+        "fifth",
+        "last",
+        "old",
+        "older",
+        "previous",
+        "recall",
+        "remember",
+        "second",
+        "talk about",
+        "talked",
+        "today",
+        "we said",
+        "you said",
+        "i said",
+    )
+    if not any(marker in lowered for marker in markers):
         return ""
     conversations = _read_ui_conversations()
     if not conversations:
         return ""
+    query_terms = _text_terms(clean_message)
+    ranked: list[tuple[int, int, dict[str, Any]]] = []
+    for position, conversation in enumerate(conversations):
+        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
+        if cid and cid == thread_id:
+            continue
+        score = _conversation_relevance(conversation, query_terms)
+        if score or not query_terms:
+            ranked.append((score, position, conversation))
+
+    if not ranked:
+        ranked = [(0, position, conversation) for position, conversation in enumerate(conversations[:12])]
+
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    selected_conversations = [conversation for _score, _position, conversation in ranked[:8]]
     lines: list[str] = []
-    for conversation in conversations[:8]:
+    for conversation in selected_conversations:
         title = str(conversation.get("title") or "Untitled chat")
         cid = str(conversation.get("thread_id") or conversation.get("id") or "")
         messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
-        selected = messages[-8:]
+        selected = messages
+        if query_terms:
+            selected = [
+                message
+                for message in messages
+                if query_terms.intersection(_text_terms(_message_text(message)))
+            ] or messages[-12:]
+        selected = selected[-16:]
         if not selected:
             continue
         lines.append(f"Conversation: {title} (thread: {cid})")
         for message in selected:
-            role = str(message.get("role") or "message") if isinstance(message, dict) else "message"
-            text = str(message.get("text") or "") if isinstance(message, dict) else ""
+            role = _message_role(message)
+            text = _message_text(message)
             if text.strip():
                 lines.append(f"- {role}: {text.strip()[:700]}")
     if not lines:
@@ -2730,6 +2886,14 @@ class PinMemoryRequest(BaseModel):
     pinned: bool = True
 
 
+class CreateMemoryRequest(BaseModel):
+    text: str
+    kind: str = "fact"
+    scope: str = "global"
+    source_thread_id: str = "manual"
+    confidence: float = Field(default=0.95, ge=0, le=1)
+
+
 class UpdateMemoryRequest(BaseModel):
     text: str | None = None
     kind: str | None = None
@@ -2770,6 +2934,32 @@ async def archived_memories() -> dict[str, list[dict[str, Any]]]:
     return {"memories": store.list_archived() if store is not None else []}
 
 
+@router.post("/memory")
+async def create_memory(request: CreateMemoryRequest) -> dict[str, Any]:
+    store = _memory_orchestrator.store
+    if store is None:
+        raise HTTPException(status_code=503, detail="memory store unavailable")
+    clean_text = request.text.strip()
+    if not clean_text:
+        raise HTTPException(status_code=422, detail="memory text is required")
+    memory_id = await asyncio.to_thread(
+        store.save_memory,
+        kind=request.kind.strip() or "fact",
+        text=clean_text,
+        source_thread_id=request.source_thread_id.strip() or "manual",
+        confidence=request.confidence,
+        scope=request.scope.strip() or "global",
+    )
+    if getattr(_memory_orchestrator, "fts5", None) is not None:
+        await asyncio.to_thread(
+            _memory_orchestrator.fts5.add_document,
+            content=f"Saved memory: {clean_text}",
+            thread_id=request.source_thread_id.strip() or "manual",
+            source_paths=[f"memory:{memory_id}"],
+        )
+    return {"memory": store.get_memory(memory_id)}
+
+
 @router.get("/memory/settings")
 async def memory_settings() -> dict[str, Any]:
     store = _memory_orchestrator.store
@@ -2807,6 +2997,11 @@ async def run_dreaming() -> dict[str, Any]:
         "audit_log": [],
     }
     return result
+
+
+@router.post("/memory/import-conversations")
+async def import_conversation_memories(limit: int | None = None) -> dict[str, int]:
+    return await asyncio.to_thread(_import_ui_conversations_to_memory, limit)
 
 
 @router.post("/memory/import-obsidian")

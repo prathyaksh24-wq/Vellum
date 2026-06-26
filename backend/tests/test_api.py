@@ -483,6 +483,109 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
     assert api._dreaming_status["last_result"]["new_memories"]
 
 
+def test_recent_conversation_context_scans_older_chats(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations = []
+    for index in range(12):
+        messages = [
+            {"role": "user", "text": f"old question {index}"},
+            {"role": "assistant", "text": f"old answer {index}"},
+        ]
+        if index == 11:
+            messages = [
+                {"role": "user", "text": "Did Messi score a hat trick against Algeria?"},
+                {"role": "assistant", "text": "Yes. Messi scored a hat-trick against Algeria."},
+            ]
+        conversations.append({"id": f"chat-{index}", "title": f"Chat {index}", "messages": messages})
+    conversations_path.write_text(json.dumps({"conversations": conversations}), encoding="utf-8")
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    context = api._recent_conversation_context("what did we say earlier about Messi Algeria?", "new-chat")
+
+    assert "Chat 11" in context
+    assert "Messi scored a hat-trick against Algeria" in context
+
+
+def test_import_ui_conversations_indexes_older_chat_history(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "old-sports-chat",
+                        "title": "Messi Algeria",
+                        "messages": [
+                            {"role": "user", "text": "Tell me about Messi hat trick against Algeria."},
+                            {"role": "assistant", "text": "Messi scored a hat-trick against Algeria in a 3-0 Argentina win."},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+
+    imported = api._import_ui_conversations_to_memory()
+    pack = orchestrator.build_context_pack(
+        thread_id="new-chat",
+        query="what happened with Messi and Algeria?",
+        agent_name="SportsAgent",
+    )
+
+    assert imported["indexed_turns"] == 1
+    assert pack["should_answer_from_memory"] is True
+    assert "Messi scored a hat-trick against Algeria" in pack["context"]
+
+
+def test_memory_crud_endpoints_create_update_pin_archive_and_delete(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+
+    with TestClient(api.app) as client:
+        created = client.post("/api/memory", json={"text": "User prefers memory controls to be editable.", "kind": "preference"})
+        memory_id = created.json()["memory"]["id"]
+        updated = client.post(f"/api/memory/{memory_id}/update", json={"text": "User prefers editable memory controls."})
+        pinned = client.post(f"/api/memory/{memory_id}/pin", json={"pinned": True})
+        unpinned = client.post(f"/api/memory/{memory_id}/pin", json={"pinned": False})
+        archived = client.post(f"/api/memory/{memory_id}/archive")
+        deleted = client.post(f"/api/memory/{memory_id}/delete")
+
+    assert created.status_code == 200
+    assert updated.json()["memory"]["text"] == "User prefers editable memory controls."
+    assert pinned.json()["memory"]["pinned"] is True
+    assert unpinned.json()["memory"]["pinned"] is False
+    assert archived.json()["memory"]["status"] == "archived"
+    assert deleted.json()["ok"] is True
+
+
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
