@@ -878,7 +878,7 @@ const FEATURE_FLAGS = {
   realSettings: true,
   mockProjects: true,
   mockLibrary: true,
-  mockMemory: true,
+  mockMemory: false,
   mockAutomations: true,
   mockPlugins: true,
 };
@@ -2665,7 +2665,28 @@ const SkillsView = ({skills, onApprove, onRetire}) => {
 /* ─── memory ─── */
 const MEM_SOURCES = [{ id: 'vellum', name: 'Vellum', icon: IcBrain }].concat(AGENTS.map(a => ({ id: a.id, name: a.name, icon: a.icon })));
 
-const MemoryView = ({memory, onForget}) => {
+const memoryWhen = item => {
+  const value = item.updated_at || item.created_at || item.created || '';
+  if (!value) return 'saved';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 18);
+  return date.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
+};
+const memorySourceId = item => {
+  const scope = String(item.scope || 'global');
+  if (scope.startsWith('agent:')) return scope.slice(6).toLowerCase().replace(/\s+/g, '-');
+  return 'vellum';
+};
+const normalizeMemoryEntry = item => ({
+  id: item.id,
+  src: memorySourceId(item),
+  cat: item.kind || item.status || 'memory',
+  text: item.text || item.content || '',
+  when: memoryWhen(item),
+  raw: item,
+});
+
+const MemoryView = ({memory, archivedMemory = [], onForget, onRefresh}) => {
   const [filter, setFilter] = useState('all');
   const count = id => memory.filter(m => m.src === id).length;
   const shown = filter === 'all' ? memory : memory.filter(m => m.src === filter);
@@ -2679,8 +2700,11 @@ const MemoryView = ({memory, onForget}) => {
         <div className="mem-stat-row">
           <div className="mem-stat"><div className="ms-n">{memory.length}</div><div className="ms-l">facts held</div></div>
           <div className="mem-stat"><div className="ms-n">{liveSources.length}</div><div className="ms-l">sources</div></div>
-          <div className="mem-stat"><div className="ms-n">1,204</div><div className="ms-l">notes indexed</div></div>
+          <div className="mem-stat"><div className="ms-n">{archivedMemory.length}</div><div className="ms-l">archived</div></div>
           <div className="mem-stat"><div className="ms-n">local</div><div className="ms-l">portrait</div></div>
+        </div>
+        <div className="tab-row" style={{marginBottom: 16}}>
+          <button className="tab on" onClick={onRefresh}>Refresh memory</button>
         </div>
         <div className="mem-filters">
           <button className={'mem-fpill' + (filter === 'all' ? ' on' : '')} onClick={() => setFilter('all')}>All<span className="mf-c">{memory.length}</span></button>
@@ -2922,20 +2946,67 @@ const SAVED_MEMORIES = [
   { id:"m8", text:"Is a student, stays at home, and is very curious about learning and growing in the AI space.", date:"Apr 21, 2025" },
 ];
 
-const MemorySummaryCard = ({onClose, onTurnOff}) => {
+const MemorySummaryCard = ({onClose, onTurnOff, onChanged}) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setError('');
+    try {
+      const body = await API.settings.memoryRecent();
+      setSummary(body.summary || {});
+      onChanged && onChanged();
+    } catch (err) {
+      setError('Memory backend unavailable.');
+    }
+  };
+  useEffect(() => { load(); }, []);
+  const refresh = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await API.settings.memoryImportConversations();
+      await API.settings.memoryDreamingRun();
+      await load();
+    } catch (err) {
+      setError('Dreaming refresh failed.');
+    } finally {
+      setBusy(false);
+      setMenuOpen(false);
+    }
+  };
+  const addMemory = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setBusy(true);
+    setError('');
+    try {
+      await API.settings.createMemory({text, kind: 'manual', scope: 'global'});
+      setDraft('');
+      await load();
+    } catch (err) {
+      setError('Could not save memory.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const summaryText = summary && summary.global_summary ? summary.global_summary : '';
+  const saved = (summary && summary.saved_memories) || [];
+  const audit = (summary && summary.audit_log) || [];
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
       <div className="memsum-card">
         <div className="mem-card-hd">
-          <div className="mem-card-title">Memory summary <span className="mem-card-upd">Updated 8 hours ago</span></div>
+          <div className="mem-card-title">Memory summary <span className="mem-card-upd">{busy ? 'Updating...' : 'Live backend'}</span></div>
           <div className="mem-card-acts">
             <div className="mem-menu-wrap">
               <button className="mem-iconbtn" onClick={() => setMenuOpen(o => !o)}><IcDots size={18}/></button>
               {menuOpen && <div className="mem-menu" onClick={e => e.stopPropagation()}>
                 <div className="mem-menu-item" onClick={() => setMenuOpen(false)}><IcInfo size={16}/>About memory</div>
-                <div className="mem-menu-item" onClick={() => setMenuOpen(false)}><IcRefresh size={16}/>Refresh summary</div>
+                <div className="mem-menu-item" onClick={refresh}><IcRefresh size={16}/>Refresh summary</div>
                 <div className="mem-menu-item danger" onClick={() => { setMenuOpen(false); onTurnOff && onTurnOff(); }}><IcTrash size={16}/>Delete and turn off memory</div>
               </div>}
             </div>
@@ -2943,29 +3014,81 @@ const MemorySummaryCard = ({onClose, onTurnOff}) => {
           </div>
         </div>
         <div className="mem-card-body">
-          {MEMORY_SUMMARY.map(s => (
-            <div key={s.h} className="mem-sec">
-              <div className="mem-sec-h">{s.h}</div>
-              <div className="mem-sec-t">{s.text}</div>
-            </div>
-          ))}
+          {error && <div className="s-none">{error}</div>}
+          {!summary && !error && <div className="s-none">Loading memory...</div>}
+          {summary && (
+            <React.Fragment>
+              <div className="mem-sec">
+                <div className="mem-sec-h">Global summary</div>
+                <div className="mem-sec-t">{summaryText || 'No global summary yet. Run Dreaming or add memories to build one.'}</div>
+              </div>
+              <div className="mem-sec">
+                <div className="mem-sec-h">Saved memories</div>
+                {(saved || []).slice(0, 8).map(m => <div key={m.id} className="sm-item" style={{borderBottom: '1px solid var(--line)'}}><span className="sm-item-text">{m.text}</span></div>)}
+                {(!saved || saved.length === 0) && <div className="s-none">No saved memories yet.</div>}
+              </div>
+              <div className="mem-sec">
+                <div className="mem-sec-h">History</div>
+                {(audit || []).slice(0, 5).map(a => <div key={a.id} className="sm-row-meta">{a.event} - {a.detail}</div>)}
+                {(!audit || audit.length === 0) && <div className="s-none">No memory changes recorded yet.</div>}
+              </div>
+            </React.Fragment>
+          )}
         </div>
         <div className="mem-card-foot">
-          <input className="mem-add-input" placeholder="Add or update"/>
-          <button className="mem-add-btn"><IcArrowUp size={16}/></button>
+          <input className="mem-add-input" placeholder="Add or update" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if(e.key === 'Enter') addMemory(); }}/>
+          <button className="mem-add-btn" disabled={busy || !draft.trim()} onClick={addMemory}><IcArrowUp size={16}/></button>
         </div>
       </div>
     </React.Fragment>
   );
 };
 
-const SavedMemoriesCard = ({onClose}) => {
+const SavedMemoriesCard = ({onClose, onChanged}) => {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(SAVED_MEMORIES);
+  const [items, setItems] = useState([]);
+  const [archived, setArchived] = useState([]);
+  const [tab, setTab] = useState('saved');
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
   const [rowMenu, setRowMenu] = useState(null);
-  const filtered = items.filter(m => !q || m.text.toLowerCase().includes(q.toLowerCase()));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setError('');
+    try {
+      const [savedBody, archivedBody, summaryBody] = await Promise.all([
+        API.settings.memorySaved(),
+        API.settings.memoryEntries(),
+        API.settings.memoryRecent(),
+      ]);
+      setItems(savedBody.entries || []);
+      setArchived(archivedBody.entries || []);
+      setHistory((summaryBody.summary && summaryBody.summary.audit_log) || []);
+      onChanged && onChanged();
+    } catch (err) {
+      setError('Memory backend unavailable.');
+    }
+  };
+  useEffect(() => { load(); }, []);
+  const runAction = async action => {
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+      await load();
+    } catch (err) {
+      setError('Memory action failed.');
+    } finally {
+      setBusy(false);
+      setRowMenu(null);
+      setMenuOpen(false);
+    }
+  };
+  const activeItems = tab === 'archived' ? archived : items;
+  const filtered = activeItems.filter(m => !q || String(m.text || '').toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
@@ -2973,16 +3096,25 @@ const SavedMemoriesCard = ({onClose}) => {
         <div className="sm-hd"><div className="sm-title">Saved memories</div><button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button></div>
         <div className="sm-toolbar" onClick={e => e.stopPropagation()}>
           <div className="sm-search"><IcSearch size={15}/><input placeholder="Search memories" value={q} onChange={e => setQ(e.target.value)}/></div>
-          <button className="sm-tool" title="Sort"><IcSort size={16}/></button>
+          <button className="sm-tool" title="Refresh" disabled={busy} onClick={load}><IcRefresh size={16}/></button>
           <div className="sm-tool-wrap">
             <button className="sm-tool" onClick={() => setMenuOpen(o => !o)}><IcDots size={17}/></button>
             {menuOpen && <div className="sm-menu">
               <div className="sm-menu-row">Automatically manage<div className={'sw' + (autoManage ? ' on' : '')} role="switch" onClick={() => setAutoManage(a => !a)}/></div>
-              <div className="sm-menu-item" onClick={() => setMenuOpen(false)}>View history</div>
-              <div className="sm-menu-item danger" onClick={() => { setItems([]); setMenuOpen(false); }}>Delete all memories</div>
+              <div className="sm-menu-item" onClick={() => { setHistoryOpen(h => !h); setMenuOpen(false); }}>View history</div>
+              <div className="sm-menu-item" onClick={() => runAction(() => API.settings.memoryImportConversations())}>Import old chats</div>
             </div>}
           </div>
         </div>
+        <div className="tab-row" style={{padding: '0 20px 12px'}}>
+          <button className={'tab' + (tab === 'saved' ? ' on' : '')} onClick={() => setTab('saved')}>Saved ({items.length})</button>
+          <button className={'tab' + (tab === 'archived' ? ' on' : '')} onClick={() => setTab('archived')}>Old ({archived.length})</button>
+        </div>
+        {error && <div className="s-none">{error}</div>}
+        {historyOpen && <div className="sm-list" style={{maxHeight: 150, borderBottom: '1px solid var(--line)'}} onClick={e => e.stopPropagation()}>
+          {(history || []).slice(0, 10).map(h => <div key={h.id} className="sm-row-meta">{h.event} - {h.detail}</div>)}
+          {(!history || history.length === 0) && <div className="sm-empty">No memory history yet.</div>}
+        </div>}
         <div className="sm-list" onClick={e => e.stopPropagation()}>
           {filtered.map(m => (
             <div key={m.id} className={'sm-item' + (rowMenu === m.id ? ' menu-open' : '')}>
@@ -2990,14 +3122,20 @@ const SavedMemoriesCard = ({onClose}) => {
               <div className="sm-item-menu-wrap">
                 <button className="sm-item-dots" onClick={() => setRowMenu(rowMenu === m.id ? null : m.id)}><IcDots size={16}/></button>
                 {rowMenu === m.id && <div className="sm-row-menu" onClick={e => e.stopPropagation()}>
-                  <div className="sm-row-del" onClick={() => { setItems(items.filter(x => x.id !== m.id)); setRowMenu(null); }}><IcTrash size={15}/>Delete</div>
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => {
+                    const next = window.prompt('Update memory', m.text || '');
+                    if (next !== null) runAction(() => API.settings.updateMemory(m.id, {text: next}));
+                  }}><IcPenLine size={15}/>Edit</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.pinMemory(m.id, !m.pinned))}><IcCheck size={15}/>{m.pinned ? 'Unpin' : 'Pin'}</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.archiveMemory(m.id))}><IcArchive size={15}/>Archive</div>}
+                  <div className="sm-row-del" onClick={() => runAction(() => API.settings.deleteMemory(m.id))}><IcTrash size={15}/>Delete</div>
                   <div className="sm-row-div"/>
-                  <div className="sm-row-meta">Saved on {m.date} from a <span className="sm-row-chat">chat</span>.</div>
+                  <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : 'Saved'} on {memoryWhen(m)} from a <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
                 </div>}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <div className="sm-empty">No saved memories.</div>}
+          {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : 'saved'} memories.</div>}
         </div>
       </div>
     </React.Fragment>
@@ -3005,12 +3143,36 @@ const SavedMemoriesCard = ({onClose}) => {
 };
 
 /* ─── settings modal ─── */
-const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], initialTab, onClose}) => {
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], initialTab, onClose, onMemoryChanged}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
   useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
   const setP = (k, v) => setPers(p => ({...p, [k]: v}));
+  const [memSettings, setMemSettings] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    API.settings.memorySettings().then(body => {
+      if (!alive) return;
+      const settings = body.settings || {};
+      setMemSettings(settings);
+      setPers(p => ({
+        ...p,
+        memory: settings.memory_enabled !== false,
+        recordHist: settings.reference_history_enabled !== false,
+        dreaming: settings.dreaming_enabled !== false,
+      }));
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const setMemorySetting = async (key, value, persKey) => {
+    if (persKey) setP(persKey, value);
+    setMemSettings(s => ({...(s || {}), [key]: value}));
+    try {
+      const body = await API.settings.updateMemorySettings({[key]: value});
+      if (body && body.settings) setMemSettings(body.settings);
+    } catch (err) {}
+  };
   const [memCardOpen, setMemCardOpen] = useState(false);
   const [savedMemOpen, setSavedMemOpen] = useState(false);
   const SECTIONS = [
@@ -3075,11 +3237,12 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="pers-field"><label>More about you</label><input value={pers.about} onChange={e => setP('about', e.target.value)} placeholder="Interests, values, or preferences to keep in mind"/></div>
 
               <div className="pers-h">Memory</div>
-              <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setP('memory', !pers.memory)}/></span></div>
+              <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setMemorySetting('memory_enabled', !pers.memory, 'memory')}/></span></div>
+              <div className="set-row"><div>Dreaming<span className="sr-sub">Let Vellum consolidate recent chats into summaries and durable memories.</span></div><span className="sr-end"><div className={'sw' + (pers.dreaming !== false ? ' on' : '')} role="switch" aria-checked={pers.dreaming !== false} onClick={() => setMemorySetting('dreaming_enabled', !(pers.dreaming !== false), 'dreaming')}/></span></div>
               <div className="set-row"><div>Memory summary<span className="sr-sub">View a brief overview of what Vellum has learned about you. You can still view your <span className="mem-link" onClick={() => setSavedMemOpen(true)}>old saved memories</span> from earlier chats with dates.</span></div><span className="sr-end"><button className="btn" onClick={() => setMemCardOpen(true)}>Manage</button></span></div>
 
               <div className="pers-h">Record mode</div>
-              <div className="set-row"><div>Reference record history<span className="sr-sub">Let Vellum reference all previous recording transcripts and notes when responding.</span></div><span className="sr-end"><div className={'sw' + (pers.recordHist ? ' on' : '')} role="switch" aria-checked={pers.recordHist} onClick={() => setP('recordHist', !pers.recordHist)}/></span></div>
+              <div className="set-row"><div>Reference record history<span className="sr-sub">Let Vellum reference previous chats, recordings, transcripts, and notes when responding.</span></div><span className="sr-end"><div className={'sw' + (pers.recordHist ? ' on' : '')} role="switch" aria-checked={pers.recordHist} onClick={() => setMemorySetting('reference_history_enabled', !pers.recordHist, 'recordHist')}/></span></div>
 
               <div className="pers-h">Advanced</div>
               {[['webSearch','Web search','Let Vellum automatically search the web for answers.'],['canvas','Canvas','Collaborate with Vellum on text and code.'],['voice','Vellum Voice','Enable Voice in Vellum.'],['advVoice','Advanced voice','Have more natural conversations in Voice.'],['connector','Connector search','Let Vellum automatically search connected sources for answers.']].map(([k,lbl,sub]) => (
@@ -3204,8 +3367,8 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
           )}
         </div>
       </div>
-      {memCardOpen && <MemorySummaryCard onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
-      {savedMemOpen && <SavedMemoriesCard onClose={() => setSavedMemOpen(false)}/>}
+      {memCardOpen && <MemorySummaryCard onClose={() => setMemCardOpen(false)} onChanged={onMemoryChanged} onTurnOff={() => { setMemorySetting('memory_enabled', false, 'memory'); setMemCardOpen(false); }}/>}
+      {savedMemOpen && <SavedMemoriesCard onClose={() => setSavedMemOpen(false)} onChanged={onMemoryChanged}/>}
     </React.Fragment>
   );
 };
@@ -3237,7 +3400,8 @@ const App = () => {
   const [projects, setProjects] = useState([]);
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
   const [skills, setSkills] = useState(SEED_SKILLS);
-  const [memory, setMemory] = useState(SEED_MEMORY);
+  const [memory, setMemory] = useState(FEATURE_FLAGS.mockMemory ? SEED_MEMORY : []);
+  const [archivedMemory, setArchivedMemory] = useState([]);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState(MODELS);
@@ -3294,6 +3458,19 @@ const App = () => {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const shortcutRef = useRef(null);
+  const refreshMemory = async () => {
+    if (FEATURE_FLAGS.mockMemory) return;
+    try {
+      const [summaryBody, archivedBody] = await Promise.all([
+        API.settings.memoryRecent(),
+        API.settings.memoryEntries(),
+      ]);
+      setMemory(((summaryBody && summaryBody.entries) || []).map(normalizeMemoryEntry).filter(m => m.text));
+      setArchivedMemory(((archivedBody && archivedBody.entries) || []).map(normalizeMemoryEntry).filter(m => m.text));
+    } catch (err) {
+      console.warn('Vellum memory load failed', err);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -3328,6 +3505,7 @@ const App = () => {
         if (skillsData && skillsData.skills) setSkills(skillsData.skills);
         if (automationData && Array.isArray(automationData.automations)) setAutomations(automationData.automations);
         if (subagentData && Array.isArray(subagentData.subagents)) setSubagents(subagentData.subagents);
+        refreshMemory();
       } catch (err) {
         console.warn('Vellum backend metadata load failed', err);
       }
@@ -3495,7 +3673,18 @@ const App = () => {
     if (!s) return sk;
     return {...sk, active: sk.active.filter(x => x.id !== id), retired: [s, ...sk.retired]};
   });
-  const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
+  const forgetFact = async id => {
+    if (FEATURE_FLAGS.mockMemory) {
+      setMemory(ms => ms.filter(m => m.id !== id));
+      return;
+    }
+    try {
+      await API.settings.deleteMemory(id);
+      await refreshMemory();
+    } catch (err) {
+      pushToast('Memory delete failed');
+    }
+  };
   const restoreChat = id => {
     setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
     if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {archived: false}).catch(() => {});
@@ -3798,7 +3987,7 @@ const App = () => {
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
-            {view === 'memory' && <MemoryView memory={memory} onForget={forgetFact}/>}
+            {view === 'memory' && <MemoryView memory={memory} archivedMemory={archivedMemory} onForget={forgetFact} onRefresh={refreshMemory}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onOpenActivity={setActivityMsgId} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
             {activityMessage && <ActivityDrawer msg={activityMessage} onClose={() => setActivityMsgId(null)}/>}
@@ -3829,6 +4018,7 @@ const App = () => {
         {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} backendSettings={backendSettings} apps={apps} automations={automations}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
+          onMemoryChanged={refreshMemory}
           onClose={() => setSettingsOpen(false)}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
