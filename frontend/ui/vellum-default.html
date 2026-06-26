@@ -2994,6 +2994,7 @@ const MemorySummaryCard = ({onClose, onTurnOff, onChanged}) => {
   };
   const summaryText = summary && summary.global_summary ? summary.global_summary : '';
   const saved = (summary && summary.saved_memories) || [];
+  const recentContext = (summary && summary.recent_context) || [];
   const audit = (summary && summary.audit_log) || [];
   return (
     <React.Fragment>
@@ -3028,6 +3029,11 @@ const MemorySummaryCard = ({onClose, onTurnOff, onChanged}) => {
                 {(!saved || saved.length === 0) && <div className="s-none">No saved memories yet.</div>}
               </div>
               <div className="mem-sec">
+                <div className="mem-sec-h">Recent chat memory</div>
+                {(recentContext || []).slice(0, 8).map(m => <div key={m.id} className="sm-item" style={{borderBottom: '1px solid var(--line)'}}><span className="sm-item-text">{m.content}</span></div>)}
+                {(!recentContext || recentContext.length === 0) && <div className="s-none">No indexed chat memory yet.</div>}
+              </div>
+              <div className="mem-sec">
                 <div className="mem-sec-h">History</div>
                 {(audit || []).slice(0, 5).map(a => <div key={a.id} className="sm-row-meta">{a.event} - {a.detail}</div>)}
                 {(!audit || audit.length === 0) && <div className="s-none">No memory changes recorded yet.</div>}
@@ -3048,6 +3054,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
   const [q, setQ] = useState('');
   const [items, setItems] = useState([]);
   const [archived, setArchived] = useState([]);
+  const [recent, setRecent] = useState([]);
   const [tab, setTab] = useState('saved');
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
@@ -3066,6 +3073,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
       ]);
       setItems(savedBody.entries || []);
       setArchived(archivedBody.entries || []);
+      setRecent((summaryBody.entries || []).filter(item => item.kind === 'recent'));
       setHistory((summaryBody.summary && summaryBody.summary.audit_log) || []);
       onChanged && onChanged();
     } catch (err) {
@@ -3087,7 +3095,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
       setMenuOpen(false);
     }
   };
-  const activeItems = tab === 'archived' ? archived : items;
+  const activeItems = tab === 'archived' ? archived : (tab === 'recent' ? recent : items);
   const filtered = activeItems.filter(m => !q || String(m.text || '').toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
@@ -3109,6 +3117,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
         <div className="tab-row" style={{padding: '0 20px 12px'}}>
           <button className={'tab' + (tab === 'saved' ? ' on' : '')} onClick={() => setTab('saved')}>Saved ({items.length})</button>
           <button className={'tab' + (tab === 'archived' ? ' on' : '')} onClick={() => setTab('archived')}>Old ({archived.length})</button>
+          <button className={'tab' + (tab === 'recent' ? ' on' : '')} onClick={() => setTab('recent')}>Recent ({recent.length})</button>
         </div>
         {error && <div className="s-none">{error}</div>}
         {historyOpen && <div className="sm-list" style={{maxHeight: 150, borderBottom: '1px solid var(--line)'}} onClick={e => e.stopPropagation()}>
@@ -3128,14 +3137,14 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
                   }}><IcPenLine size={15}/>Edit</div>}
                   {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.pinMemory(m.id, !m.pinned))}><IcCheck size={15}/>{m.pinned ? 'Unpin' : 'Pin'}</div>}
                   {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.archiveMemory(m.id))}><IcArchive size={15}/>Archive</div>}
-                  <div className="sm-row-del" onClick={() => runAction(() => API.settings.deleteMemory(m.id))}><IcTrash size={15}/>Delete</div>
+                  {tab !== 'recent' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.deleteMemory(m.id))}><IcTrash size={15}/>Delete</div>}
                   <div className="sm-row-div"/>
-                  <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : 'Saved'} on {memoryWhen(m)} from a <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
+                  <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : (tab === 'recent' ? 'Indexed' : 'Saved')} on {memoryWhen(m)} from a <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
                 </div>}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : 'saved'} memories.</div>}
+          {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : (tab === 'recent' ? 'recent chat' : 'saved')} memories.</div>}
         </div>
       </div>
     </React.Fragment>

@@ -341,6 +341,91 @@ def _conversation_relevance(conversation: dict[str, Any], query_terms: set[str])
     return len(query_terms.intersection(_text_terms(haystack)))
 
 
+def _thread_user_messages(thread_id: str, *, limit: int = 6) -> list[str]:
+    if not thread_id:
+        return []
+    for conversation in _read_ui_conversations():
+        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
+        if cid != thread_id:
+            continue
+        messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+        user_messages = [_message_text(message) for message in messages if _message_role(message) == "user" and _message_text(message)]
+        return user_messages[-max(0, int(limit)) :]
+    return []
+
+
+def _is_short_correction(message: str) -> bool:
+    clean = message.strip()
+    if not clean:
+        return False
+    if clean.endswith("*"):
+        return True
+    terms = _text_terms(clean)
+    return 0 < len(clean) <= 18 and 0 < len(terms) <= 3
+
+
+def _has_memory_recall_language(message: str) -> bool:
+    lowered = message.casefold()
+    phrases = (
+        "from my chat",
+        "from my chats",
+        "from our chat",
+        "from our chats",
+        "from the chat",
+        "in my chat",
+        "in our chat",
+        "previous chat",
+        "previous chats",
+        "older chat",
+        "old chat",
+        "conversation history",
+        "chat history",
+        "our history",
+        "we spoke",
+        "we have spoken",
+        "we've spoken",
+        "spoken about",
+        "we speak",
+        "we talked",
+        "we discussed",
+        "did i ask",
+        "have i asked",
+        "what did i ask",
+        "what did we",
+        "pull them up",
+        "find it from memory",
+        "search my memory",
+        "search your memory",
+        "search my vault",
+        "from the vault",
+    )
+    return any(phrase in lowered for phrase in phrases)
+
+
+def _is_memory_recall_request(clean_message: str, thread_id: str) -> bool:
+    if _has_memory_recall_language(clean_message):
+        return True
+    if not _is_short_correction(clean_message):
+        return False
+    recent = _thread_user_messages(thread_id, limit=4)
+    previous = " ".join(recent[:-1] if recent and recent[-1].strip() == clean_message.strip() else recent)
+    return _has_memory_recall_language(previous)
+
+
+def _fts_recall_query(message: str) -> str:
+    terms = []
+    for term in re.findall(r"[A-Za-z0-9]+", message.casefold()):
+        if len(term) <= 1:
+            continue
+        if len(term) == 2 and not any(ch.isdigit() for ch in term):
+            continue
+        if term in {"the", "and", "for", "from", "chat", "chats", "what", "when", "where", "did", "does", "how", "many", "about"}:
+            continue
+        terms.append(term)
+    terms = list(dict.fromkeys(terms))[:8]
+    return " OR ".join(terms) if terms else message.strip()
+
+
 def _import_ui_conversations_to_memory(limit: int | None = None) -> dict[str, int]:
     conversations = _read_ui_conversations()
     fts5 = getattr(_memory_orchestrator, "fts5", _fts5_memory)
@@ -812,7 +897,8 @@ async def _run_agent(
             answer = f"⚠ {exc}"
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
 
-    live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id)
+    live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     delegated_tools: list[str] = []
     delegated_sources: list[Source] = []
     agent_input_message = clean_message
@@ -1815,11 +1901,10 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
         "you said",
         "i said",
     )
-    if not any(marker in lowered for marker in markers):
+    recall_intent = any(marker in lowered for marker in markers) or _is_memory_recall_request(clean_message, thread_id)
+    if not recall_intent:
         return ""
     conversations = _read_ui_conversations()
-    if not conversations:
-        return ""
     query_terms = _text_terms(clean_message)
     ranked: list[tuple[int, int, dict[str, Any]]] = []
     for position, conversation in enumerate(conversations):
@@ -1856,11 +1941,23 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
             text = _message_text(message)
             if text.strip():
                 lines.append(f"- {role}: {text.strip()[:700]}")
+
+    try:
+        docs = _memory_orchestrator.fts5.search(_fts_recall_query(clean_message), limit=8)
+    except Exception:
+        docs = []
+    if docs:
+        lines.append("Indexed memory hits:")
+        for doc in docs[:6]:
+            content = str(doc.get("content") or "").strip()
+            if content:
+                lines.append(f"- {content[:900]}")
     if not lines:
         return ""
     return (
         "[Recent Vellum conversation context]\n"
-        "Use this when the user asks what you remember from today's or recent chat. "
+        "This is private memory/chat-recall context. Use it before any public search. "
+        "If the user asks what happened in previous chats, answer from this context and do not use web_search, SerpAPI, SportsAgent, or public web tools unless the user explicitly asks for fresh/live/current public updates. "
         "Summarize it naturally; do not claim this context is long-term memory unless it was stored there.\n"
         + "\n".join(lines[:80])
     )
@@ -1963,7 +2060,8 @@ async def _stream_agent_turn(
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
-    live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id)
+    live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None

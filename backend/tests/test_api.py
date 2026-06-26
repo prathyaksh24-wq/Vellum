@@ -630,6 +630,89 @@ def test_memory_summary_includes_indexed_conversation_context(monkeypatch, tmp_p
     assert "Messi scored a hat-trick against Algeria" in body["recent_context"][0]["content"]
 
 
+def test_memory_recall_request_blocks_live_dispatch_for_chat_history(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "thread-memory",
+                        "thread_id": "thread-memory",
+                        "title": "Sports memory recall",
+                        "messages": [
+                            {"role": "user", "text": "no leave it i'm pretty sure we have spoken about fq as well"},
+                            {"role": "assistant", "text": "I do not see fq in memory."},
+                            {"role": "user", "text": "f1*"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    assert api._is_memory_recall_request("what about the f1 from my chats", "thread-memory") is True
+    assert api._is_memory_recall_request("f1*", "thread-memory") is True
+
+
+def test_recent_conversation_context_includes_indexed_memory_hits(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=SQLiteMemoryStore(tmp_path / "memory.db"),
+        memory_dir=tmp_path / "memory-files",
+    )
+    orchestrator.fts5.add_document(
+        content="Conversation: F1 recall\nQ: did i ask about f1?\nA: You asked who led Formula One standings.",
+        thread_id="old-f1-chat",
+        source_paths=["ui-conversation:old-f1-chat:1"],
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "missing.json")
+
+    context = api._recent_conversation_context("what about the f1 from my chats", "new-thread")
+
+    assert "private memory/chat-recall context" in context
+    assert "You asked who led Formula One standings" in context
+    assert "do not use web_search, SerpAPI, SportsAgent" in context
+
+
+def test_memory_orchestrator_search_returns_indexed_conversation_hits(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+    from agent.tools import memory_orchestrator as memory_tool
+
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=SQLiteMemoryStore(tmp_path / "memory.db"),
+        memory_dir=tmp_path / "memory-files",
+    )
+    orchestrator.fts5.add_document(
+        content="Conversation: F1 recall\nQ: Formula One\nA: User asked about F1 standings and next race.",
+        thread_id="old-f1-chat",
+        source_paths=["ui-conversation:old-f1-chat:1"],
+    )
+    monkeypatch.setattr(memory_tool, "_ORCHESTRATOR", orchestrator)
+
+    result = json.loads(memory_tool.memory_orchestrator.invoke({"action": "search", "query": "f1 from my chats"}))
+
+    assert result["ok"] is True
+    assert result["indexed_conversation_hits"]
+    assert "F1 standings" in result["indexed_conversation_hits"][0]["content"]
+
+
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
