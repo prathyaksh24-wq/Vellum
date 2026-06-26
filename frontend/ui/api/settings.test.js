@@ -39,6 +39,7 @@ describe("Vellum settings API memory endpoints", () => {
 
   test("reads archived memories and can trigger dreaming", async () => {
     const fetchImpl = vi.fn(async (path, options) => {
+      if (path === "/api/memory/saved") return { memories: [{ id: 1, text: "Saved memory." }] };
       if (path === "/api/memory/archived") return { memories: [{ id: 2, text: "Old memory." }] };
       if (path === "/api/memory/dreaming/run") {
         expect(options.method).toBe("POST");
@@ -48,8 +49,39 @@ describe("Vellum settings API memory endpoints", () => {
     });
     const api = await loadSettingsApi(fetchImpl);
 
+    await expect(api.memorySaved()).resolves.toEqual({ entries: [{ id: 1, text: "Saved memory." }] });
     await expect(api.memoryEntries()).resolves.toEqual({ entries: [{ id: 2, text: "Old memory." }] });
     await expect(api.memoryDreamingRun()).resolves.toMatchObject({ global_summary: "Updated." });
+  });
+
+  test("creates and mutates saved memories through backend endpoints", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (path, options) => {
+      calls.push([path, options && options.method, options && options.body]);
+      if (path === "/api/memory") return { memory: { id: 7, text: "Remember this." } };
+      if (path === "/api/memory/7/update") return { memory: { id: 7, text: "Updated." } };
+      if (path === "/api/memory/7/pin") return { memory: { id: 7, pinned: true } };
+      if (path === "/api/memory/7/archive") return { memory: { id: 7, status: "archived" } };
+      if (path === "/api/memory/7/delete") return { ok: true };
+      if (path === "/api/memory/import-conversations") return { indexed_turns: 3 };
+      throw new Error("unexpected path " + path);
+    });
+    const api = await loadSettingsApi(fetchImpl);
+
+    await expect(api.createMemory({ text: "Remember this." })).resolves.toMatchObject({ memory: { id: 7 } });
+    await expect(api.updateMemory(7, { text: "Updated." })).resolves.toMatchObject({ memory: { text: "Updated." } });
+    await expect(api.pinMemory(7, true)).resolves.toMatchObject({ memory: { pinned: true } });
+    await expect(api.archiveMemory(7)).resolves.toMatchObject({ memory: { status: "archived" } });
+    await expect(api.deleteMemory(7)).resolves.toEqual({ ok: true });
+    await expect(api.memoryImportConversations()).resolves.toEqual({ indexed_turns: 3 });
+    expect(calls).toEqual([
+      ["/api/memory", "POST", JSON.stringify({ text: "Remember this." })],
+      ["/api/memory/7/update", "POST", JSON.stringify({ text: "Updated." })],
+      ["/api/memory/7/pin", "POST", JSON.stringify({ pinned: true })],
+      ["/api/memory/7/archive", "POST", undefined],
+      ["/api/memory/7/delete", "POST", undefined],
+      ["/api/memory/import-conversations", "POST", undefined],
+    ]);
   });
 
   test("reads and updates memory settings", async () => {

@@ -13,6 +13,11 @@
         return { facts: facts, entries: body.saved_memories || [], summary: body };
       });
     },
+    memorySaved: function () {
+      return client.request("/api/memory/saved").then(function (body) {
+        return { entries: body.memories || [] };
+      });
+    },
     memoryEntries: function () {
       return client.request("/api/memory/archived").then(function (body) {
         return { entries: body.memories || [] };
@@ -20,6 +25,12 @@
     },
     memoryDreamingStatus: function () { return client.request("/api/memory/dreaming/status"); },
     memoryDreamingRun: function () { return client.request("/api/memory/dreaming/run", client.jsonOptions("POST")); },
+    memoryImportConversations: function () { return client.request("/api/memory/import-conversations", client.jsonOptions("POST")); },
+    createMemory: function (payload) { return client.request("/api/memory", client.jsonOptions("POST", payload)); },
+    updateMemory: function (id, payload) { return client.request("/api/memory/" + encodeURIComponent(id) + "/update", client.jsonOptions("POST", payload)); },
+    archiveMemory: function (id) { return client.request("/api/memory/" + encodeURIComponent(id) + "/archive", client.jsonOptions("POST")); },
+    deleteMemory: function (id) { return client.request("/api/memory/" + encodeURIComponent(id) + "/delete", client.jsonOptions("POST")); },
+    pinMemory: function (id, pinned) { return client.request("/api/memory/" + encodeURIComponent(id) + "/pin", client.jsonOptions("POST", { pinned: !!pinned })); },
     memorySettings: function () { return client.request("/api/memory/settings"); },
     updateMemorySettings: function (patch) { return client.request("/api/memory/settings", client.jsonOptions("POST", patch)); },
     setActiveModel: function (model) {
