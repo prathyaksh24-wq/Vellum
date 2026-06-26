@@ -2911,14 +2911,26 @@ class MemorySettingsRequest(BaseModel):
 @router.get("/memory/summary")
 async def memory_summary() -> dict[str, Any]:
     store = _memory_orchestrator.store
+    import_result = await asyncio.to_thread(_import_ui_conversations_to_memory, 500)
+    recent_context = await asyncio.to_thread(_memory_orchestrator.fts5.recent_documents, limit=25)
     if store is None:
-        return {"global_summary": "", "saved_memories": [], "archived_memories": [], "pending_count": 0, "audit_log": []}
+        return {
+            "global_summary": "",
+            "saved_memories": [],
+            "archived_memories": [],
+            "recent_context": recent_context,
+            "pending_count": 0,
+            "audit_log": [],
+            "conversation_import": import_result,
+        }
     return {
         "global_summary": store.global_summary(),
         "saved_memories": store.list_saved(),
         "archived_memories": store.list_archived(),
+        "recent_context": recent_context,
         "pending_count": len(store.list_pending()),
         "audit_log": store.audit_log(limit=25),
+        "conversation_import": import_result,
     }
 
 

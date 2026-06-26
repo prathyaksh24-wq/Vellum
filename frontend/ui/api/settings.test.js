@@ -27,6 +27,7 @@ describe("Vellum settings API memory endpoints", () => {
       return {
         global_summary: "User is building Vellum.",
         saved_memories: [{ id: 1, text: "User prefers concise answers." }],
+        recent_context: [{ id: 9, content: "Q: older chat\nA: remembered detail", created: "2026-06-26", thread_id: "old-chat" }],
       };
     });
     const api = await loadSettingsApi(fetchImpl);
@@ -34,7 +35,18 @@ describe("Vellum settings API memory endpoints", () => {
     const result = await api.memoryRecent();
 
     expect(result.facts).toEqual(["User is building Vellum.", "User prefers concise answers."]);
-    expect(result.entries).toEqual([{ id: 1, text: "User prefers concise answers." }]);
+    expect(result.entries).toEqual([
+      { id: 1, text: "User prefers concise answers." },
+      {
+        id: "recent-9",
+        kind: "recent",
+        scope: "global",
+        text: "Q: older chat\nA: remembered detail",
+        created_at: "2026-06-26",
+        updated_at: "2026-06-26",
+        source_thread_id: "old-chat",
+      },
+    ]);
   });
 
   test("reads archived memories and can trigger dreaming", async () => {

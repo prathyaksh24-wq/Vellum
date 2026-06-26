@@ -586,6 +586,50 @@ def test_memory_crud_endpoints_create_update_pin_archive_and_delete(monkeypatch,
     assert deleted.json()["ok"] is True
 
 
+def test_memory_summary_includes_indexed_conversation_context(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "older-chat",
+                        "title": "Messi Algeria",
+                        "messages": [
+                            {"role": "user", "text": "Did Messi score a hat trick against Algeria?"},
+                            {"role": "assistant", "text": "Messi scored a hat-trick against Algeria in Argentina's opener."},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=SQLiteMemoryStore(tmp_path / "memory.db"),
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    api._import_ui_conversations_to_memory()
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/memory/summary")
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["recent_context"]
+    assert "Messi scored a hat-trick against Algeria" in body["recent_context"][0]["content"]
+
+
 def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")

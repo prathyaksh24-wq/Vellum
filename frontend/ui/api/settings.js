@@ -10,7 +10,21 @@
         (body.saved_memories || []).forEach(function (item) {
           if (item && item.text) facts.push(item.text);
         });
-        return { facts: facts, entries: body.saved_memories || [], summary: body };
+        var entries = (body.saved_memories || []).slice();
+        (body.recent_context || []).forEach(function (item) {
+          if (item && item.content) {
+            entries.push({
+              id: "recent-" + (item.id || entries.length),
+              kind: "recent",
+              scope: "global",
+              text: item.content,
+              created_at: item.created,
+              updated_at: item.created,
+              source_thread_id: item.thread_id,
+            });
+          }
+        });
+        return { facts: facts, entries: entries, summary: body };
       });
     },
     memorySaved: function () {
