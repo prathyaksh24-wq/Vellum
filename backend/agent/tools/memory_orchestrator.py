@@ -117,12 +117,17 @@ def memory_orchestrator(
             ) and stripped not in {"what", "when", "where", "from", "chat", "chats", "previous", "about"}:
                 terms.append(stripped)
         fts_query = " OR ".join(dict.fromkeys(terms)) or clean_query
+        indexed_hits = [
+            hit
+            for hit in orchestrator.fts5.search(fts_query, limit=12)
+            if not thread_id or str(hit.get("thread_id") or "") != str(thread_id)
+        ][:8]
         return _json(
             {
                 "action": normalized,
                 "ok": True,
                 "memories": store.search_saved(clean_query, scopes=scopes, limit=8),
-                "indexed_conversation_hits": orchestrator.fts5.search(fts_query, limit=8),
+                "indexed_conversation_hits": indexed_hits,
             }
         )
 

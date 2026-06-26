@@ -1943,7 +1943,11 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
                 lines.append(f"- {role}: {text.strip()[:700]}")
 
     try:
-        docs = _memory_orchestrator.fts5.search(_fts_recall_query(clean_message), limit=8)
+        docs = [
+            doc
+            for doc in _memory_orchestrator.fts5.search(_fts_recall_query(clean_message), limit=12)
+            if str(doc.get("thread_id") or "") != str(thread_id)
+        ][:8]
     except Exception:
         docs = []
     if docs:

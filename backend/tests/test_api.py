@@ -675,6 +675,11 @@ def test_recent_conversation_context_includes_indexed_memory_hits(monkeypatch, t
         thread_id="old-f1-chat",
         source_paths=["ui-conversation:old-f1-chat:1"],
     )
+    orchestrator.fts5.add_document(
+        content="Conversation: current bad recall\nQ: what about f1 from my chats\nA: Since you're asking now, here is the current state from web search.",
+        thread_id="new-thread",
+        source_paths=["ui-conversation:new-thread:1"],
+    )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "missing.json")
 
@@ -682,6 +687,7 @@ def test_recent_conversation_context_includes_indexed_memory_hits(monkeypatch, t
 
     assert "private memory/chat-recall context" in context
     assert "You asked who led Formula One standings" in context
+    assert "current state from web search" not in context
     assert "do not use web_search, SerpAPI, SportsAgent" in context
 
 
