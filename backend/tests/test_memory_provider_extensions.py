@@ -130,10 +130,10 @@ def test_hindsight_provider_prefetch_and_sync_with_client(monkeypatch):
     calls = []
 
     class FakeClient:
-        def recall(self, query, *, bank_id, budget):
+        def recall(self, bank_id, query, *, budget):
             return {"memories": [{"content": f"remembered {query}", "score": 0.9}]}
 
-        def retain(self, content, *, bank_id, metadata):
+        def retain(self, bank_id, content, *, metadata):
             calls.append((content, bank_id, metadata))
 
     monkeypatch.setenv("MEMORY_EXTENSION_PROVIDERS", "hindsight")

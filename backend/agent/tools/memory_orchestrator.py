@@ -107,7 +107,29 @@ def memory_orchestrator(
 
     if normalized == "search":
         scopes = [scope] if scope else None
-        return _json({"action": normalized, "ok": True, "memories": store.search_saved(query or text, scopes=scopes, limit=8)})
+        clean_query = query or text
+        terms = []
+        for term in clean_query.casefold().replace("*", " ").split():
+            stripped = "".join(ch for ch in term if ch.isalnum())
+            if (
+                len(stripped) > 2
+                or (len(stripped) == 2 and any(ch.isdigit() for ch in stripped))
+            ) and stripped not in {"what", "when", "where", "from", "chat", "chats", "previous", "about"}:
+                terms.append(stripped)
+        fts_query = " OR ".join(dict.fromkeys(terms)) or clean_query
+        indexed_hits = [
+            hit
+            for hit in orchestrator.fts5.search(fts_query, limit=12)
+            if not thread_id or str(hit.get("thread_id") or "") != str(thread_id)
+        ][:8]
+        return _json(
+            {
+                "action": normalized,
+                "ok": True,
+                "memories": store.search_saved(clean_query, scopes=scopes, limit=8),
+                "indexed_conversation_hits": indexed_hits,
+            }
+        )
 
     if normalized == "build_packet":
         return _json(

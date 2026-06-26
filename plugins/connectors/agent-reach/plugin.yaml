@@ -1,0 +1,18 @@
+id: agent-reach
+name: Agent-Reach
+type: connector
+category: Connectors
+version: 0.1.0
+description: Portable Vellum connector wrapper for Agent-Reach X capabilities.
+capabilities:
+  - x.search
+  - x.read_tweet
+  - x.timeline
+  - x.profile
+  - x.bookmarks
+  - x.likes
+  - x.post
+  - x.reply
+  - x.like
+  - x.repost
+  - x.delete
