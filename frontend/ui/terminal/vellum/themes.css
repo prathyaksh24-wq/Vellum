@@ -1,0 +1,132 @@
+/* themes.css — LightTerm token palette
+   Phosphor is the default (green-on-charcoal CRT). The wizard
+   inherits every colour token from here; setup.css only adds
+   layout and OC-pattern chrome on top.
+*/
+
+:root,
+[data-theme="phosphor"] {
+  /* surfaces */
+  --bg:          #0c0e0c;
+  --bg-elev:     #131613;
+  --bg-elev-2:   #1b1f1b;
+  --bg-titlebar: #0a0c0a;
+
+  /* text */
+  --text:        #c8e6c8;
+  --text-dim:    #8aa68a;
+  --text-faint:  #4f6a4f;
+
+  /* borders */
+  --border:      #2a3a2a;
+  --border-soft: #1c2a1c;
+
+  /* accents (the wizard's semantic palette) */
+  --accent:  #6cf26c;   /* green — selection, confirmation, cursor */
+  --magenta: #d96cb3;   /* ◆ marker, vellum identity */
+  --cyan:    #6cd9e6;   /* section titles */
+  --amber:   #e6c46c;   /* questions, warnings */
+  --red:     #e66c6c;   /* won't-fit, errors */
+}
+
+[data-theme="amber"] {
+  --bg:          #0e0c08;
+  --bg-elev:     #161310;
+  --bg-elev-2:   #1f1b14;
+  --bg-titlebar: #0a0805;
+  --text:        #e6c890;
+  --text-dim:    #a6906a;
+  --text-faint:  #6a5a3e;
+  --border:      #3a2e1a;
+  --border-soft: #251d11;
+  --accent:  #ffb84d;
+  --magenta: #d97746;
+  --cyan:    #6cc4d9;
+  --amber:   #ffd76c;
+  --red:     #e66c6c;
+}
+
+[data-theme="nord"] {
+  --bg:          #2e3440;
+  --bg-elev:     #3b4252;
+  --bg-elev-2:   #434c5e;
+  --bg-titlebar: #242933;
+  --text:        #eceff4;
+  --text-dim:    #d8dee9;
+  --text-faint:  #8195a4;
+  --border:      #4c566a;
+  --border-soft: #3b4252;
+  --accent:  #a3be8c;
+  --magenta: #b48ead;
+  --cyan:    #88c0d0;
+  --amber:   #ebcb8b;
+  --red:     #bf616a;
+}
+
+[data-theme="tokyo"] {
+  --bg:          #1a1b26;
+  --bg-elev:     #24283b;
+  --bg-elev-2:   #2a2e42;
+  --bg-titlebar: #16161e;
+  --text:        #c0caf5;
+  --text-dim:    #a9b1d6;
+  --text-faint:  #565f89;
+  --border:      #414868;
+  --border-soft: #2a2e42;
+  --accent:  #9ece6a;
+  --magenta: #bb9af7;
+  --cyan:    #7dcfff;
+  --amber:   #e0af68;
+  --red:     #f7768e;
+}
+
+[data-theme="mocha"] {
+  --bg:          #1e1e2e;
+  --bg-elev:     #313244;
+  --bg-elev-2:   #45475a;
+  --bg-titlebar: #181825;
+  --text:        #cdd6f4;
+  --text-dim:    #bac2de;
+  --text-faint:  #6c7086;
+  --border:      #45475a;
+  --border-soft: #313244;
+  --accent:  #a6e3a1;
+  --magenta: #cba6f7;
+  --cyan:    #89dceb;
+  --amber:   #f9e2af;
+  --red:     #f38ba8;
+}
+
+[data-theme="gruvbox"] {
+  --bg:          #282828;
+  --bg-elev:     #32302f;
+  --bg-elev-2:   #3c3836;
+  --bg-titlebar: #1d2021;
+  --text:        #ebdbb2;
+  --text-dim:    #d5c4a1;
+  --text-faint:  #7c6f64;
+  --border:      #504945;
+  --border-soft: #3c3836;
+  --accent:  #b8bb26;
+  --magenta: #d3869b;
+  --cyan:    #83a598;
+  --amber:   #fabd2f;
+  --red:     #fb4934;
+}
+
+[data-theme="paper"] {
+  --bg:          #f5f1e8;
+  --bg-elev:     #eee8d8;
+  --bg-elev-2:   #e3dcc6;
+  --bg-titlebar: #ece6d2;
+  --text:        #1a1a1a;
+  --text-dim:    #4a4a4a;
+  --text-faint:  #8a8a7a;
+  --border:      #c8c2b0;
+  --border-soft: #d8d2c0;
+  --accent:  #2a7a4f;
+  --magenta: #9a3a7a;
+  --cyan:    #2a6a8a;
+  --amber:   #b86a1a;
+  --red:     #b83a3a;
+}

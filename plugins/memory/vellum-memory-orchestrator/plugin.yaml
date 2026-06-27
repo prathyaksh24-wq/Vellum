@@ -1,0 +1,18 @@
+id: memory-orchestrator
+name: Vellum Memory Orchestrator
+type: system
+category: Memory
+version: 0.1.0
+description: Portable wrapper for Vellum's core memory orchestration system.
+capabilities:
+  - memory.status
+  - memory.search
+  - memory.build_packet
+  - memory.save_candidate
+  - memory.run_dreaming
+  - memory.list_saved
+  - memory.list_archived
+  - memory.get_settings
+  - memory.update_settings
+  - memory.import_obsidian
+  - memory.providers.status

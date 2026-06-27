@@ -1,0 +1,53 @@
+:root {
+  --graphite: #0c0c0e;
+  --parchment: #ece6db;
+  --whisper: rgba(236, 230, 219, 0.46);
+  --ember: #d97746;
+  --line: rgba(244, 237, 226, 0.12);
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--graphite);
+  color: var(--parchment);
+  font-family: "Segoe UI", sans-serif;
+}
+
+.desktop-shell {
+  display: grid;
+  gap: 14px;
+  place-content: center;
+  min-height: 100vh;
+}
+
+.mark {
+  font-family: Georgia, serif;
+  font-size: 42px;
+  letter-spacing: 0;
+}
+
+.status {
+  color: var(--whisper);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--parchment);
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--ember);
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
