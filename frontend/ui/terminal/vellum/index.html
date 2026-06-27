@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8" />
+<title>vellum</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="themes.css" />
+<link rel="stylesheet" href="setup/setup.css" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --sans: "Inter", system-ui, sans-serif;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); overflow: hidden; }
+
+  /* tab title swap during handoff (matches Pass 4) */
+  .lt-tab.active .swap-out { transition: opacity 320ms ease-out; }
+  .lt-tab.active[data-handoff="true"] .swap-out { opacity: 0; display: none; }
+  .lt-tab.active[data-handoff="true"] .swap-in  { opacity: 1; }
+  .lt-tab .swap-in { display: none; opacity: 0; }
+  .lt-tab.active[data-handoff="true"] .swap-in { display: inline; }
+</style>
+</head>
+<body>
+
+<div class="lt-frame">
+  <div class="lt-titlebar">
+    <div class="lt-lights"><span></span><span></span><span></span></div>
+    <div class="center"><b>vellum</b></div>
+    <div class="right" id="title-right">SESSION · 00:00</div>
+  </div>
+
+  <div class="lt-tabs" id="tabs">
+    <div class="lt-tab active" id="setup-tab">
+      <span class="ico swap-out">◆</span>
+      <span class="ico swap-in" style="color: var(--magenta);">●</span>
+      <span class="swap-out">setup — vellum</span>
+      <span class="swap-in">vellum</span>
+      <span class="close">×</span>
+    </div>
+    <div class="lt-tab new">+</div>
+  </div>
+
+  <div id="root"></div>
+
+  <div class="lt-statusbar">
+    <span class="seg" id="sb-profile"><b>Setup</b></span>
+    <span class="seg" id="sb-cwd">~/.vellum/</span>
+    <span class="seg">utf-8</span>
+    <div class="right">
+      <span class="seg" id="sb-screen">screen — / 12</span>
+      <span class="seg">phosphor</span>
+      <span class="seg">no telemetry</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="setup/avatar.jsx"></script>
+<script type="text/babel" src="setup/setup-state.jsx"></script>
+<script type="text/babel" src="setup/setup-sidebar.jsx"></script>
+<script type="text/babel" src="setup/screen-gate.jsx"></script>
+<script type="text/babel" src="setup/slash-input.jsx"></script>
+<script type="text/babel" src="setup/screens/01-intro.jsx"></script>
+<script type="text/babel" src="setup/screens/02-mode.jsx"></script>
+<script type="text/babel" src="setup/screens/03-hardware.jsx"></script>
+<script type="text/babel" src="setup/screens/04-model.jsx"></script>
+<script type="text/babel" src="setup/screens/05-cloud.jsx"></script>
+<script type="text/babel" src="setup/screens/06-sovereignty.jsx"></script>
+<script type="text/babel" src="setup/screens/07-learning.jsx"></script>
+<script type="text/babel" src="setup/screens/08-skills.jsx"></script>
+<script type="text/babel" src="setup/screens/09-mcp.jsx"></script>
+<script type="text/babel" src="setup/screens/10-personalize.jsx"></script>
+<script type="text/babel" src="setup/screens/11-summary.jsx"></script>
+<script type="text/babel" src="setup/screens/12-handoff.jsx"></script>
+<script type="text/babel" src="setup/setup-pane.jsx"></script>
+
+<script type="text/babel">
+  // ── URL routing ─────────────────────────────────────────
+  // `?start=setup` (default)    → screen 1, fresh
+  // `?start=models`             → jump to screen 4 (local model)
+  // `?start=mcp`                → jump to screen 9 (mcp servers)
+  // `?start=skills`             → jump to screen 8 (skills)
+  // `?start=chat`               → jump to screen 12 (handoff/chat)
+  //
+  // The cursor is seeded into localStorage BEFORE React mounts so
+  // useReducer's initial read picks it up cleanly. If the backend
+  // already has a setup_state.json, it'll override on mount via the
+  // hydration effect inside useSetupState.
+  const START_TO_CURSOR = { setup: 1, models: 4, skills: 8, mcp: 9, chat: 12 };
+  const params = new URLSearchParams(location.search);
+  const start = params.get("start") || "setup";
+  const requested = START_TO_CURSOR[start];
+  if (requested && requested !== 1) {
+    try {
+      const existing = JSON.parse(localStorage.getItem("vellum.setupState") || "null") || {};
+      const seeded = { ...existing, cursor: requested, history: existing.history || [] };
+      localStorage.setItem("vellum.setupState", JSON.stringify(seeded));
+    } catch (e) {}
+  } else if (start === "setup" && !params.get("resume")) {
+    // Fresh setup unless ?resume=1 is provided.
+    try { localStorage.removeItem("vellum.setupState"); } catch (e) {}
+  }
+
+  // Point setup-state.jsx at the running FastAPI backend.
+  window.__VELLUM_API_BASE = location.origin;
+
+  function Mount() { return <window.SetupPane />; }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Mount />);
+
+  // ── status bar + handoff tab swap ───────────────────────
+  (function () {
+    const sbScreen = document.getElementById("sb-screen");
+    const sbProfile = document.getElementById("sb-profile");
+    const setupTab = document.getElementById("setup-tab");
+
+    const NAMES = {
+      1: "Intro", 2: "Setup mode", 3: "Hardware", 4: "Local model",
+      5: "Cloud augmentation", 6: "Data sovereignty",
+      7: "Learning sources", 8: "Skills", 9: "MCP servers",
+      10: "Personalization", 11: "Summary", 12: "Vellum",
+    };
+
+    window.addEventListener("vellum-setup-state", () => {
+      const s = window.__vellumSetupState;
+      if (!s) return;
+      sbScreen.textContent = "screen " + s.cursor + " / 12";
+      sbProfile.innerHTML = "<b>" + (s.cursor === 12 ? "Vellum" : "Setup · " + (NAMES[s.cursor] || "—")) + "</b>";
+      if (s.cursor === 12) setupTab.setAttribute("data-handoff", "true");
+      else setupTab.removeAttribute("data-handoff");
+    });
+
+    const titleRight = document.getElementById("title-right");
+    const t0 = Date.now();
+    setInterval(() => {
+      const dt = Math.floor((Date.now() - t0) / 1000);
+      const mm = String(Math.floor(dt / 60)).padStart(2, "0");
+      const ss = String(dt % 60).padStart(2, "0");
+      titleRight.textContent = "SESSION · " + mm + ":" + ss;
+    }, 1000);
+  })();
+</script>
+
+</body>
+</html>
