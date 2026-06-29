@@ -199,12 +199,61 @@ def test_serpapi_fresh_search_prioritizes_structured_fields_over_organic_results
 
     result = client.fresh_google_search("what is the next f1 race", num=3)
 
-    assert result["engines"] == ["google_ai_mode"]
+    assert result["engines"] == ["google_ai_mode", "google_light", "google"]
     assert result["facts"][0] == "The next Formula 1 race is the Austrian Grand Prix, 25-28 Jun 2026."
     assert any("sports_results" in fact and "Austrian Grand Prix" in fact for fact in result["facts"])
     assert "Austrian Grand Prix" in result["text"]
     assert "Monaco" not in result["text"].split("\n\n---\n\n", 1)[0]
     assert result["sources"][0]["url"] == "https://www.formula1.com/en/racing/2026/Austria.html"
+
+
+def test_serpapi_fresh_search_supplements_ai_answer_until_minimum_sources(monkeypatch, tmp_path):
+    calls = []
+    responses = {
+        "google_ai_mode": {
+            "search_metadata": {"id": "ai-answer", "status": "Success"},
+            "reconstructed_markdown": "## FIFA update\n\nCanada advanced after a 1-0 win.",
+            "references": [
+                {
+                    "title": "Google Sports data notice",
+                    "link": "https://support.google.com/knowledgepanel/answer/9787176",
+                    "source": "Google",
+                }
+            ],
+        },
+        "google_light": {
+            "search_metadata": {"id": "light-sources", "status": "Success"},
+            "organic_results": [
+                {
+                    "title": "World Cup fixtures",
+                    "link": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/scores-fixtures",
+                    "snippet": "Official fixtures and results.",
+                    "source": "FIFA",
+                },
+                {
+                    "title": "World Cup latest",
+                    "link": "https://www.bbc.com/sport/football/world-cup",
+                    "snippet": "Latest match reporting.",
+                    "source": "BBC",
+                },
+            ],
+        },
+    }
+
+    def fake_urlopen(request, timeout):
+        engine = parse_qs(urlparse(request.full_url).query)["engine"][0]
+        calls.append(engine)
+        return FakeResponse(responses[engine])
+
+    monkeypatch.setattr("agent.tools.serpapi.urllib.request.urlopen", fake_urlopen)
+    client = SerpApiClient(api_key="secret-token", log_path=tmp_path / "serpapi.jsonl")
+
+    result = client.fresh_google_search("anything new about fifa", num=5, min_sources=3)
+
+    assert calls == ["google_ai_mode", "google_light"]
+    assert result["text"].startswith("## FIFA update")
+    assert [source["provider_label"] for source in result["sources"]] == ["Google", "FIFA", "BBC"]
+    assert len(result["sources"]) == 3
 
 
 def test_serpapi_reconstructed_markdown_is_main_source_of_truth(monkeypatch, tmp_path):

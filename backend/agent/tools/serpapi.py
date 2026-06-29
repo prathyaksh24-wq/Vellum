@@ -76,8 +76,6 @@ class SerpApiClient:
                     continue
                 seen_urls.add(url)
                 sources.append({**source, "engine": engine})
-            if facts and text:
-                break
             if text and len(sources) >= min_sources:
                 break
         return {
