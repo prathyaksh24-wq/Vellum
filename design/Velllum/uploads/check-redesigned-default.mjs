@@ -19,7 +19,8 @@ const requiredScripts = [
 ];
 
 for (const src of requiredScripts) {
-  if (!html.includes(`src="${src}"`)) {
+  const escaped = src.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`src="${escaped}(?:\\?[^\"]*)?"`).test(html)) {
     console.error(`FAIL: missing API module script: ${src}`);
     process.exit(1);
   }

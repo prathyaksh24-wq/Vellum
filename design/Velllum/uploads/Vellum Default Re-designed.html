@@ -12,7 +12,7 @@
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="api/automations.js"></script>
-<script src="api/settings.js"></script>
+<script src="api/settings.js?v=20260629-memory-ui"></script>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1234,7 +1234,7 @@ const FEATURE_FLAGS = {
   realSettings: true,
   mockProjects: true,
   mockLibrary: true,
-  mockMemory: true,
+  mockMemory: false,
   mockAutomations: true,
   mockPlugins: true,
 };
@@ -1403,8 +1403,9 @@ const Popover = ({className, style, onClose, children, portal}) => {
 const clampMenuPosition = (pos, width = 220, height = 220) => {
   const x = Number(pos && pos.x) || 0;
   const y = Number(pos && pos.y) || 0;
+  const preferredX = pos && pos.preferLeft ? pos.x - width - 10 : x;
   return {
-    left: Math.max(12, Math.min(x, window.innerWidth - width - 12)),
+    left: Math.max(12, Math.min(preferredX, window.innerWidth - width - 12)),
     top: Math.max(12, Math.min(y, window.innerHeight - height - 12)),
   };
 };
@@ -4160,24 +4161,6 @@ const PDrop = ({value, options, onChange, width=214}) => {
   );
 };
 
-const MEMORY_SUMMARY = [
-  { h:"Overview", text:"You are focused on building AI products and developer tools, with Vellum currently being the most active long-term project. Your work spans coding assistants, computer-use agents, orchestration, and memory systems. You favour local-first architectures and self-hosted infrastructure, and prefer practical execution over chasing the newest model ? often combining different tools based on what works best for the task." },
-  { h:"Vellum", text:"Vellum is your flagship project: a desktop AI assistant that combines personal assistance, coding assistance, orchestration, and computer-use capabilities. It is a downloadable desktop application for macOS and Windows that opens into a chat-style interface by default while also supporting workspace-oriented modes inspired by developer tools. You describe Vellum as a self-learning personal assistant that primarily uses local models, while also supporting open-source and cloud models through user-provided API keys. A core principle is that users retain control of their data, with privacy protections even when cloud models are involved." },
-  { h:"Agent Systems", text:"Vellum is designed around multiple specialized sub-agents with delegation, shared memory, orchestration, and several computer-use modes that users can choose from. You think about how agents hand work off to one another and how to keep their context coherent across a long session." },
-  { h:"Working Style", text:"You move fast and iterate, validating ideas with working prototypes before polishing. You care about data ownership, privacy, and giving users explicit control over what the assistant can do." },
-];
-const SAVED_MEMORIES = [
-  { id:"m1", text:"Name is Pratyakksh.", date:"May 30, 2025" },
-  { id:"m2", text:"Is building a comprehensive knowledge base for a home service business, including services offered, pricing, service information, and real-time availability of service professionals.", date:"May 28, 2025" },
-  { id:"m3", text:"Sells AI services including AI agents, voice agents, and AI automations.", date:"May 22, 2025" },
-  { id:"m4", text:"Wants to create a real estate knowledge base containing all relevant information and details for property types, locations, pricing, etc.", date:"May 19, 2025" },
-  { id:"m5", text:"Is creating a knowledge base for a dental clinic including detailed FAQs, clinic timings, services, doctors available, location, and contact details.", date:"May 14, 2025" },
-  { id:"m6", text:"Wants a complete dental clinic knowledge base including full FAQs, clinic details (name, contact, doctors, etc.), and structured in a format usable for chatbot, document, or web.", date:"May 11, 2025" },
-  { id:"m7", text:"Has been in the AI space for 4 months and knows how to build chatbots and agents. Is currently building voice and text-based agents and using APIs to integrate with different third parties.", date:"Apr 30, 2025" },
-  { id:"m8", text:"Is a student, stays at home, and is very curious about learning and growing in the AI space.", date:"Apr 21, 2025" },
-];
-
-const memoryEntryText = (entry) => String((entry && (entry.content || entry.text || entry.answer || entry.query)) || '').trim();
 const memoryEntryDate = (entry) => {
   const raw = entry && (entry.created_at || entry.updated_at || entry.timestamp || entry.date);
   if (!raw) return 'Saved memory';
@@ -4185,40 +4168,6 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-const liveMemoryEntries = (memoryData, key) => {
-  const entries = (memoryData && Array.isArray(memoryData[key])) ? memoryData[key] : [];
-  return entries.map((entry, i) => ({
-    id: String(entry.id || entry.rowid || entry.doc_id || ('memory-'+i)),
-    text: memoryEntryText(entry),
-    date: memoryEntryDate(entry),
-  })).filter(item => item.text);
-};
-const liveSavedMemories = (memoryData) => liveMemoryEntries(memoryData, 'entries');
-const liveArchivedMemories = (memoryData) => liveMemoryEntries(memoryData, 'archived');
-const liveMemorySummarySections = (memoryData) => {
-  const facts = (memoryData && Array.isArray(memoryData.facts)) ? memoryData.facts.filter(Boolean) : [];
-  const saved = liveSavedMemories(memoryData);
-  if (!facts.length && !saved.length) {
-    return [{h:'Memory', text:'No saved memories were returned by the backend yet.'}];
-  }
-  const sections = [];
-  if (facts.length) sections.push({h:'Recent memory', text:facts.slice(0, 4).join(' ')});
-  if (saved.length) sections.push({h:'Saved memories', text:saved.slice(0, 4).map(item => item.text).join(' ')});
-  return sections;
-};
-
-// Dreaming ? memories Vellum curated on its own from chat history (no explicit "remember this")
-const DREAM_NEW = [
-  { id:"d1", text:"Prefers concise, execution-focused answers and dislikes filler or hedging.", from:"inferred from 9 chats this week" },
-  { id:"d2", text:"Is weighing local vs. cloud model trade-offs for Vellum's default agent.", from:"inferred from 4 recent chats" },
-  { id:"d3", text:"Tends to validate ideas with a working prototype before committing to a direction.", from:"inferred from your working style" },
-];
-// Staying current ? memories Vellum updated as time passed
-const DREAM_UPDATED = [
-  { id:"u1", was:"Planning a trip to Singapore in July.", now:"Visited Singapore in July 2025; interested in a follow-up trip.", when:"updated 3 days ago" },
-  { id:"u2", was:"Learning the basics of building AI agents.", now:"Comfortable building voice and text agents; now focused on orchestration.", when:"updated last week" },
-];
-
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Honcho-style Memory Console (OpenConcho) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const HONCHO_PEERS = [
   { id:'main-agent',    name:'main-agent',    label:'Main assistant', facts:42, sessions:128, conclusions:64, derived:[
@@ -4486,26 +4435,72 @@ function HonchoConsole({ onClose, onBack, page, onDreamComplete }){
   return (<React.Fragment><div className="backdrop dim mem-backdrop" onClick={onClose}/>{inner}</React.Fragment>);
 }
 
-const MemorySummaryCard = ({memoryData, dreaming, onClose, onTurnOff}) => {
+const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [dnew, setDnew] = useState(DREAM_NEW);
-  const [dupd, setDupd] = useState(DREAM_UPDATED);
-  const sections = liveMemorySummarySections(memoryData);
-  const keepNew = id => setDnew(xs => xs.filter(x => x.id !== id));
-  const dropNew = id => setDnew(xs => xs.filter(x => x.id !== id));
-  const ackUpd = id => setDupd(xs => xs.filter(x => x.id !== id));
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [summary, setSummary] = useState((memoryData && memoryData.summary) || null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (memoryData && memoryData.summary) setSummary(memoryData.summary);
+  }, [memoryData && memoryData.summary]);
+  const load = async () => {
+    setError('');
+    try {
+      const body = await API.settings.memoryRecent();
+      setSummary(body.summary || {});
+      if (onChanged) await onChanged();
+    } catch (err) {
+      setError('Memory backend unavailable.');
+    }
+  };
+  useEffect(() => { if (!summary) load(); }, []);
+  const refresh = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await API.settings.memoryImportConversations();
+      await API.settings.memoryDreamingRun();
+      await load();
+    } catch (err) {
+      setError('Memory refresh failed.');
+    } finally {
+      setBusy(false);
+      setMenuOpen(false);
+    }
+  };
+  const addMemory = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await API.settings.createMemory({text, kind: 'manual', scope: 'global'});
+      setDraft('');
+      await load();
+    } catch (err) {
+      setError('Could not save memory.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saved = (summary && summary.saved_memories) || [];
+  const recent = (summary && summary.recent_context) || [];
+  const audit = (summary && summary.audit_log) || [];
+  const lastUpdated = audit[0] && audit[0].created_at ? memoryEntryDate(audit[0]) : 'Live backend';
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
       <div className="memsum-card">
         <div className="mem-card-hd">
-          <div className="mem-card-title">Memory summary <span className="mem-card-upd">Updated 8 hours ago</span></div>
+          <div className="mem-card-title">Memory summary <span className="mem-card-upd">{busy ? 'Updating...' : lastUpdated}</span></div>
           <div className="mem-card-acts">
             <div className="mem-menu-wrap">
               <button className="mem-iconbtn" onClick={() => setMenuOpen(o => !o)}><IcDots size={18}/></button>
               {menuOpen && <div className="mem-menu" onClick={e => e.stopPropagation()}>
-                <div className="mem-menu-item" onClick={() => setMenuOpen(false)}><IcInfo size={16}/>About memory</div>
-                <div className="mem-menu-item" onClick={() => setMenuOpen(false)}><IcRefresh size={16}/>Refresh summary</div>
+                <div className="mem-menu-item" onClick={() => { setAboutOpen(a => !a); setMenuOpen(false); }}><IcInfo size={16}/>About memory</div>
+                <div className="mem-menu-item" onClick={refresh}><IcRefresh size={16}/>Refresh summary</div>
                 <div className="mem-menu-item danger" onClick={() => { setMenuOpen(false); onTurnOff && onTurnOff(); }}><IcTrash size={16}/>Delete and turn off memory</div>
               </div>}
             </div>
@@ -4513,76 +4508,119 @@ const MemorySummaryCard = ({memoryData, dreaming, onClose, onTurnOff}) => {
           </div>
         </div>
         <div className="mem-card-body">
-          {dreaming && (dnew.length > 0 || dupd.length > 0) && (
-            <div className="dream-block">
-              <div className="dream-hd"><span className="dream-badge"><IcMoon size={13}/>Dreaming</span><span className="dream-sub">Vellum curated these on its own from your recent chats. Review and keep what's right.</span></div>
-              {dupd.map(u => (
-                <div key={u.id} className="dream-card dream-updated">
-                  <div className="dream-ic"><IcRefresh size={15}/></div>
-                  <div className="dream-main">
-                    <div className="dream-tag">Stayed current · {u.when}</div>
-                    <div className="dream-was">{u.was}</div>
-                    <div className="dream-now"><IcArrowUp size={12} style={{transform:'rotate(90deg)'}}/>{u.now}</div>
-                  </div>
-                  <button className="dream-ok" onClick={() => ackUpd(u.id)} title="Got it"><IcCheck size={15}/></button>
-                </div>
-              ))}
-              {dnew.map(d => (
-                <div key={d.id} className="dream-card">
-                  <div className="dream-ic"><IcSparkle size={15}/></div>
-                  <div className="dream-main">
-                    <div className="dream-text">{d.text}</div>
-                    <div className="dream-from">{d.from}</div>
-                  </div>
-                  <div className="dream-acts">
-                    <button className="dream-keep" onClick={() => keepNew(d.id)} title="Keep this memory"><IcCheck size={14}/>Keep</button>
-                    <button className="dream-drop" onClick={() => dropNew(d.id)} title="Dismiss"><IcX size={14}/></button>
-                  </div>
-                </div>
-              ))}
+          {error && <div className="s-none">{error}</div>}
+          {!summary && !error && <div className="s-none">Loading memory...</div>}
+          {aboutOpen && <div className="mem-sec"><div className="mem-sec-h">About memory</div><div className="mem-sec-t">Vellum keeps durable facts separately from indexed chat history. Dreaming reviews recent conversations, promotes useful memories, merges duplicates, and archives stale items without editing pinned memories.</div></div>}
+          {summary && <React.Fragment>
+            <div className="mem-sec"><div className="mem-sec-h">Global summary</div><div className="mem-sec-t">{summary.global_summary || 'No global summary yet. Add a memory or run Dreaming to build one.'}</div></div>
+            <div className="mem-sec">
+              <div className="mem-sec-h">Saved memories</div>
+              {saved.slice(0, 8).map(m => <div key={m.id} className="sm-item"><span className="sm-item-text">{m.text}</span></div>)}
+              {saved.length === 0 && <div className="s-none">No durable memories have been promoted yet.</div>}
             </div>
-          )}
-          {sections.map(s => (
-            <div key={s.h} className="mem-sec">
-              <div className="mem-sec-h">{s.h}</div>
-              <div className="mem-sec-t">{s.text}</div>
+            <div className="mem-sec">
+              <div className="mem-sec-h">Recent chat memory</div>
+              {recent.slice(0, 12).map(m => <div key={m.id} className="sm-item"><span className="sm-item-text">{m.content}</span></div>)}
+              {recent.length === 0 && <div className="s-none">No indexed chat memory yet.</div>}
             </div>
-          ))}
+            <div className="mem-sec">
+              <div className="mem-sec-h">History</div>
+              {audit.slice(0, 8).map(a => <div key={a.id} className="sm-row-meta">{a.event} - {a.detail}</div>)}
+              {audit.length === 0 && <div className="s-none">No memory changes recorded yet.</div>}
+            </div>
+          </React.Fragment>}
         </div>
         <div className="mem-card-foot">
-          <input className="mem-add-input" placeholder="Add or update"/>
-          <button className="mem-add-btn"><IcArrowUp size={16}/></button>
+          <input className="mem-add-input" placeholder="Add or update" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addMemory(); }}/>
+          <button className="mem-add-btn" disabled={busy || !draft.trim()} onClick={addMemory}><IcArrowUp size={16}/></button>
         </div>
       </div>
     </React.Fragment>
   );
 };
 
-const SavedMemoriesCard = ({memoryData, onClose}) => {
+const SavedMemoriesCard = ({onClose, onChanged}) => {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(() => liveArchivedMemories(memoryData));
+  const [items, setItems] = useState([]);
+  const [archived, setArchived] = useState([]);
+  const [recent, setRecent] = useState([]);
+  const [tab, setTab] = useState('saved');
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
   const [rowMenu, setRowMenu] = useState(null);
-  useEffect(() => setItems(liveArchivedMemories(memoryData)), [memoryData]);
-  const filtered = items.filter(m => !q || m.text.toLowerCase().includes(q.toLowerCase()));
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const load = async () => {
+    setError('');
+    try {
+      const [savedBody, archivedBody, summaryBody, settingsBody] = await Promise.all([
+        API.settings.memorySaved(),
+        API.settings.memoryEntries(),
+        API.settings.memoryRecent(),
+        API.settings.memorySettings(),
+      ]);
+      setItems(savedBody.entries || []);
+      setArchived(archivedBody.entries || []);
+      setRecent((summaryBody.entries || []).filter(item => item.kind === 'recent'));
+      setHistory((summaryBody.summary && summaryBody.summary.audit_log) || []);
+      setAutoManage(!settingsBody.settings || settingsBody.settings.dreaming_enabled !== false);
+      if (onChanged) await onChanged();
+    } catch (err) {
+      setError('Memory backend unavailable.');
+    }
+  };
+  useEffect(() => { load(); }, []);
+  const runAction = async action => {
+    setBusy(true);
+    setError('');
+    try {
+      await action();
+      await load();
+    } catch (err) {
+      setError('Memory action failed.');
+    } finally {
+      setBusy(false);
+      setRowMenu(null);
+      setMenuOpen(false);
+    }
+  };
+  const toggleAutoManage = async () => {
+    const next = !autoManage;
+    setAutoManage(next);
+    try { await API.settings.updateMemorySettings({dreaming_enabled: next}); }
+    catch (err) { setAutoManage(!next); setError('Could not update automatic memory management.'); }
+  };
+  const activeItems = tab === 'archived' ? archived : (tab === 'recent' ? recent : items);
+  const filtered = activeItems.filter(m => !q || String(m.text || '').toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
       <div className="backdrop dim mem-backdrop" onClick={onClose}/>
       <div className="sm-card" onClick={() => { setMenuOpen(false); setRowMenu(null); }}>
-        <div className="sm-hd"><div className="sm-title">Old saved memories</div><button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button></div>
+        <div className="sm-hd"><div className="sm-title">Saved memories</div><button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button></div>
         <div className="sm-toolbar" onClick={e => e.stopPropagation()}>
           <div className="sm-search"><IcSearch size={15}/><input placeholder="Search memories" value={q} onChange={e => setQ(e.target.value)}/></div>
-          <button className="sm-tool" title="Sort"><IcSort size={16}/></button>
+          <button className="sm-tool" title="Refresh" disabled={busy} onClick={load}><IcRefresh size={16}/></button>
           <div className="sm-tool-wrap">
             <button className="sm-tool" onClick={() => setMenuOpen(o => !o)}><IcDots size={17}/></button>
             {menuOpen && <div className="sm-menu">
-              <div className="sm-menu-row">Automatically manage<div className={'sw' + (autoManage ? ' on' : '')} role="switch" onClick={() => setAutoManage(a => !a)}/></div>
-              <div className="sm-menu-item" onClick={() => setMenuOpen(false)}>View history</div>
-              <div className="sm-menu-item danger" onClick={() => { setItems([]); setMenuOpen(false); }}>Delete all memories</div>
+              <div className="sm-menu-row">Automatically manage<div className={'sw' + (autoManage ? ' on' : '')} role="switch" onClick={toggleAutoManage}/></div>
+              <div className="sm-menu-item" onClick={() => { setHistoryOpen(h => !h); setMenuOpen(false); }}>View history</div>
+              <div className="sm-menu-item" onClick={() => runAction(() => API.settings.memoryImportConversations())}>Import old chats</div>
             </div>}
           </div>
         </div>
+        <div className="tab-row" style={{padding: '0 20px 12px'}}>
+          <button className={'tab' + (tab === 'saved' ? ' on' : '')} onClick={() => setTab('saved')}>Saved ({items.length})</button>
+          <button className={'tab' + (tab === 'archived' ? ' on' : '')} onClick={() => setTab('archived')}>Old ({archived.length})</button>
+          <button className={'tab' + (tab === 'recent' ? ' on' : '')} onClick={() => setTab('recent')}>Recent ({recent.length})</button>
+        </div>
+        {error && <div className="s-none">{error}</div>}
+        {historyOpen && <div className="sm-list" style={{maxHeight: 150, borderBottom: '1px solid var(--line)'}} onClick={e => e.stopPropagation()}>
+          {history.slice(0, 12).map(h => <div key={h.id} className="sm-row-meta">{h.event} - {h.detail}</div>)}
+          {history.length === 0 && <div className="sm-empty">No memory history yet.</div>}
+        </div>}
         <div className="sm-list" onClick={e => e.stopPropagation()}>
           {filtered.map(m => (
             <div key={m.id} className={'sm-item' + (rowMenu === m.id ? ' menu-open' : '')}>
@@ -4590,14 +4628,20 @@ const SavedMemoriesCard = ({memoryData, onClose}) => {
               <div className="sm-item-menu-wrap">
                 <button className="sm-item-dots" onClick={() => setRowMenu(rowMenu === m.id ? null : m.id)}><IcDots size={16}/></button>
                 {rowMenu === m.id && <div className="sm-row-menu" onClick={e => e.stopPropagation()}>
-                  <div className="sm-row-del" onClick={() => { setItems(items.filter(x => x.id !== m.id)); setRowMenu(null); }}><IcTrash size={15}/>Delete</div>
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => {
+                    const next = window.prompt('Update memory', m.text || '');
+                    if (next !== null && next.trim()) runAction(() => API.settings.updateMemory(m.id, {text: next.trim()}));
+                  }}><IcPenLine size={15}/>Edit</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.pinMemory(m.id, !m.pinned))}><IcCheck size={15}/>{m.pinned ? 'Unpin' : 'Pin'}</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.archiveMemory(m.id))}><IcArchive size={15}/>Archive</div>}
+                  {tab !== 'recent' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.deleteMemory(m.id))}><IcTrash size={15}/>Delete</div>}
                   <div className="sm-row-div"/>
-                  <div className="sm-row-meta">Saved on {m.date} from a <span className="sm-row-chat">chat</span>.</div>
+                  <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : (tab === 'recent' ? 'Indexed' : 'Saved')} {memoryEntryDate(m)} from <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
                 </div>}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <div className="sm-empty">No archived memories.</div>}
+          {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : (tab === 'recent' ? 'recent chat' : 'saved')} memories.</div>}
         </div>
       </div>
     </React.Fragment>
@@ -4649,7 +4693,7 @@ function applyAccent(id){
     'linear-gradient(155deg,'+accentRgba(back,0.60)+' 0%,var(--bg) 58%,'+accentRgba(back,0.45)+' 100%)');
 }
 
-const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, initialTab, onProviderKey, onClose}) => {
+const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, initialTab, onProviderKey, onMemoryChanged, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
@@ -4912,8 +4956,8 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
           )}
         </div>
       </div>
-      {memCardOpen && <MemorySummaryCard memoryData={memoryData} dreaming={pers.dreaming} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setP('memory', false); setMemCardOpen(false); }}/>}
-      {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onClose={() => setSavedMemOpen(false)}/>}
+      {memCardOpen && <MemorySummaryCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setMemoryToggle('memory', 'memory_enabled', false); setMemCardOpen(false); }}/>} 
+      {savedMemOpen && <SavedMemoriesCard onChanged={onMemoryChanged} onClose={() => setSavedMemOpen(false)}/>} 
     </React.Fragment>
   );
 };
@@ -5885,7 +5929,7 @@ const App = () => {
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
             onExpand={() => setSidebarPinned(true)} onNewChat={newChat} onSearch={() => setSearchOpen(true)}
-            onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
+            onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={nav} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
             onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}/>}
@@ -5944,7 +5988,8 @@ const App = () => {
         {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
-          onClose={() => setSettingsOpen(false)}/>}
+          onMemoryChanged={refreshMemoryData}
+          onClose={() => setSettingsOpen(false)}/>} 
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
