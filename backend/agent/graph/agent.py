@@ -14,6 +14,7 @@ from langgraph.prebuilt import create_react_agent
 from agent.config import get_settings
 from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
+from agent.plugins.spotify_runtime import portable_agent_tools
 from agent.tools.apify import search_amazon
 from agent.tools.browser import (
     browser_action,
@@ -288,10 +289,8 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
     return saver
 
 
-def build_agent(model: str | None = None):
-    return create_react_agent(
-        model=build_llm(model),
-        tools=[
+def core_tools() -> list:
+    return [
             search_my_notes,
             web_search,
             search_amazon,
@@ -324,7 +323,13 @@ def build_agent(model: str | None = None):
             create_note,
             append_to_note,
             x_action,
-        ],
+        ]
+
+
+def build_agent(model: str | None = None):
+    return create_react_agent(
+        model=build_llm(model),
+        tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=build_checkpointer(),
         prompt=vellum_prompt,
     )
@@ -333,40 +338,7 @@ def build_agent(model: str | None = None):
 async def build_async_agent(model: str | None = None):
     return create_react_agent(
         model=build_llm(model),
-        tools=[
-            search_my_notes,
-            web_search,
-            search_amazon,
-            read_file,
-            list_files,
-            computer_use_route,
-            computer_use,
-            browser_navigate,
-            browser_snapshot,
-            browser_tabs,
-            browser_click,
-            browser_type,
-            browser_press_key,
-            browser_select_option,
-            browser_hover,
-            browser_wait,
-            browser_close,
-            browser_action,
-            github_read,
-            github_write,
-            git_action,
-            obsidian_api,
-            library_docs,
-            memory_orchestrator,
-            repo_docs,
-            context_mode,
-            web_research,
-            web_extract,
-            escalate_to_cloud,
-            create_note,
-            append_to_note,
-            x_action,
-        ],
+        tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=await build_async_checkpointer(),
         prompt=vellum_prompt,
     )
@@ -381,6 +353,10 @@ class LazyAgent:
         if self._agent is None:
             self._agent = build_agent()
         return self._agent
+
+    def invalidate(self) -> None:
+        self._agent = None
+        self._async_agent = None
 
     async def _aget(self):
         if self._async_agent is None:
