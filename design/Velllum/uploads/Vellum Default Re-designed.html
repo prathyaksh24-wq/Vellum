@@ -364,6 +364,24 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sm-row-meta{padding:7px 11px 8px;font-size:12px;color:var(--dim);line-height:1.5}
 .sm-row-chat{color:var(--ember);text-decoration:underline;cursor:pointer}
 .sm-empty{padding:40px;text-align:center;color:var(--dim2);font-size:13px}
+.mem-doc{max-width:720px;margin:0 auto;padding:4px 8px 28px}
+.mem-doc-section{padding:0 0 24px}
+.mem-doc-section+.mem-doc-section{padding-top:2px}
+.mem-doc-heading{font-family:var(--font-d);font-size:17px;font-weight:600;line-height:1.35;color:var(--txt2);margin:0 0 8px;letter-spacing:0}
+.mem-doc-paragraph{font-size:14px;line-height:1.72;color:var(--txt);margin:0 0 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+.mem-doc-paragraph:last-child{margin-bottom:0}
+.sm-item-copy{flex:1;min-width:0;padding:1px 0 2px}
+.sm-item-title{font-size:13.5px;font-weight:500;line-height:1.45;color:var(--txt2);margin-bottom:5px;overflow-wrap:anywhere}
+.sm-item-body{font-size:13px;line-height:1.62;color:var(--txt);white-space:pre-wrap;overflow-wrap:anywhere}
+.sm-item-answer{margin-top:8px;color:var(--dim)}
+.sm-item-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin-right:6px}
+.sm-item-date{font-size:11.5px;color:var(--dim2);margin-top:7px}
+.sm-item-details{margin-top:8px;color:var(--dim)}
+.sm-item-details summary{width:fit-content;cursor:pointer;list-style:none;font-size:12px;color:var(--dim);user-select:none}
+.sm-item-details summary::-webkit-details-marker{display:none}
+.sm-item-details summary::after{content:' +';color:var(--dim2)}
+.sm-item-details[open] summary::after{content:' -'}
+.sm-item-details .sm-item-body{margin-top:9px;color:var(--dim);padding-right:8px}
 .cu-pill{font-size:11.5px;border:1px solid var(--line2);border-radius:14px;padding:3px 11px;color:var(--dim)}
 .cu-pill.on{border-color:var(--ember);color:var(--ember);background:color-mix(in srgb,var(--ember) 9%,transparent)}
 /* Dreaming */
@@ -4435,6 +4453,140 @@ function HonchoConsole({ onClose, onBack, page, onDreamComplete }){
   return (<React.Fragment><div className="backdrop dim mem-backdrop" onClick={onClose}/>{inner}</React.Fragment>);
 }
 
+const cleanMemoryDisplayText = value => String(value || '')
+  .replace(/\r/g, '')
+  .replace(/\*\*/g, '')
+  .replace(/`([^`]+)`/g, '$1')
+  .replace(/\s+\|\s+/g, ' ')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
+const isMemoryOperationalNoise = value => {
+  const text = String(value || '').toLowerCase();
+  return !text ||
+    text.includes('[vellum ui context:') ||
+    text.includes('recency_hunger') ||
+    text.includes('stochastic_kick') ||
+    text.includes('below_threshold') ||
+    text.includes('| component | raw | weighted |') ||
+    (/^score:\s*\*?\*?\d/.test(text) && text.includes('season state')) ||
+    (text.length < 180 && text.endsWith('?'));
+};
+
+const memorySectionFor = (kind, value) => {
+  const text = String(value || '').toLowerCase();
+  if (/computer-use|computer use|browser automation|playwright|desktop control/.test(text)) return 'Computer use and safety';
+  if (/\bmodel\b|mcp server|langgraph|tool calling|multi-tool|orchestration/.test(text)) return 'Agent runtime';
+  if (/\bmemory\b|obsidian|honcho|chromadb|fts5|reusable skills|playbooks/.test(text)) return 'Memory and knowledge';
+  if (kind === 'project' || /\bproject\b|\bbuild(?:ing|s)?\b|\bdevelop(?:ing|ment)?\b|\bwork(?:ing|s)?\b/.test(text)) return 'Projects and work';
+  if (kind === 'preference' || /\bprefers?\b|\blikes?\b|\bdislikes?\b|\bwants?\b/.test(text)) return 'Preferences';
+  if (/\bgoal\b|\bplans?\b|\bpriority|\bdirection\b/.test(text)) return 'Goals and priorities';
+  return 'About you';
+};
+
+const splitMemoryParagraphs = value => {
+  const text = cleanMemoryDisplayText(value);
+  if (text.length <= 430) return text ? [text] : [];
+  const sentences = text.match(/[^.!?…]+(?:[.!?…]+|$)/g) || [text];
+  const paragraphs = [];
+  let current = '';
+  sentences.forEach(sentence => {
+    const next = (current + ' ' + sentence.trim()).trim();
+    if (current && next.length > 430) {
+      paragraphs.push(current);
+      current = sentence.trim();
+    } else {
+      current = next;
+    }
+  });
+  if (current) paragraphs.push(current);
+  return paragraphs;
+};
+
+const buildMemorySummarySections = summary => {
+  const raw = String((summary && summary.global_summary) || '').trim();
+  if (!raw) return [];
+  const markdownHeadings = raw.split(/\n(?=#{1,3}\s+)/).filter(Boolean);
+  if (markdownHeadings.length > 1 || /^#{1,3}\s+/.test(raw)) {
+    return markdownHeadings.map((block, index) => {
+      const lines = block.split('\n');
+      const headingMatch = lines[0].match(/^#{1,3}\s+(.+)$/);
+      return {
+        title: headingMatch ? cleanMemoryDisplayText(headingMatch[1]) : (index === 0 ? 'About you' : 'More context'),
+        paragraphs: cleanMemoryDisplayText(headingMatch ? lines.slice(1).join('\n') : block).split(/\n\n+/).flatMap(splitMemoryParagraphs).filter(Boolean),
+      };
+    }).filter(section => section.paragraphs.length);
+  }
+
+  const records = raw.split(/\n(?=-\s+[a-z_-]+:\s*)/i).map(line => {
+    const match = line.match(/^-\s+([a-z_-]+):\s*([\s\S]*)$/i);
+    return {kind: match ? match[1].toLowerCase() : 'fact', text: cleanMemoryDisplayText(match ? match[2] : line)};
+  }).filter(record => !isMemoryOperationalNoise(record.text));
+  const groups = new Map();
+  records.forEach(record => {
+    splitMemoryParagraphs(record.text).forEach(paragraph => {
+      const title = memorySectionFor(record.kind, paragraph);
+      const values = groups.get(title) || [];
+      if (!values.some(value => value.toLowerCase() === paragraph.toLowerCase())) values.push(paragraph);
+      groups.set(title, values);
+    });
+  });
+  const order = ['About you', 'Preferences', 'Goals and priorities', 'Projects and work', 'Computer use and safety', 'Agent runtime', 'Memory and knowledge'];
+  return [...groups.entries()].sort((a, b) => {
+    const ai = order.indexOf(a[0]);
+    const bi = order.indexOf(b[0]);
+    return (ai < 0 ? order.length : ai) - (bi < 0 ? order.length : bi);
+  }).map(([title, paragraphs]) => ({title, paragraphs}));
+};
+
+const parseRecentMemoryRecord = memory => {
+  const raw = String((memory && (memory.content || memory.text)) || '').replace(/\r/g, '');
+  const conversation = (raw.match(/^Conversation:\s*(.+)$/m) || [])[1];
+  const thread = (raw.match(/^Thread:\s*(.+)$/m) || [])[1];
+  const questionMatch = raw.match(/^Q:\s*([\s\S]*?)(?=^A:\s*|(?![\s\S]))/m);
+  const answerMatch = raw.match(/^A:\s*([\s\S]*?)(?=^Tools:\s*$|^Sources:\s*$|(?![\s\S]))/m);
+  return {
+    title: cleanMemoryDisplayText(conversation || (questionMatch && questionMatch[1]) || 'Recent conversation'),
+    question: cleanMemoryDisplayText(questionMatch && questionMatch[1]),
+    answer: cleanMemoryDisplayText(answerMatch && answerMatch[1]),
+    thread: cleanMemoryDisplayText(thread || (memory && memory.source_thread_id) || ''),
+  };
+};
+
+const MemorySummaryDocument = ({summary}) => {
+  const sections = buildMemorySummarySections(summary);
+  if (!sections.length) return <div className="s-none">No global summary yet. Add a memory or run Dreaming to build one.</div>;
+  return <div className="mem-doc" data-testid="memory-summary-document">
+    {sections.map(section => <section className="mem-doc-section" key={section.title}>
+      <h3 className="mem-doc-heading">{section.title}</h3>
+      {section.paragraphs.map((paragraph, index) => <p className="mem-doc-paragraph" key={section.title + '-' + index}>{paragraph}</p>)}
+    </section>)}
+  </div>;
+};
+
+const MemoryListRow = ({memory, tab, menuOpen, children}) => {
+  const recent = tab === 'recent' ? parseRecentMemoryRecord(memory) : null;
+  const body = cleanMemoryDisplayText((memory && memory.text) || '');
+  const leadMatch = !recent && body.length > 220 ? body.match(/^([\s\S]{1,220}?[.!?…])(?:\s+|$)/) : null;
+  const lead = leadMatch ? leadMatch[1].trim() : body;
+  const detail = leadMatch ? body.slice(leadMatch[0].length).trim() : '';
+  return <div className={'sm-item' + (menuOpen ? ' menu-open' : '')} data-memory-kind={tab}>
+    <div className="sm-item-copy">
+      {recent ? <React.Fragment>
+        <div className="sm-item-title">{recent.title}</div>
+        {recent.question && recent.question !== recent.title && <div className="sm-item-body"><span className="sm-item-label">You</span>{recent.question}</div>}
+        {recent.answer && <div className="sm-item-body sm-item-answer"><span className="sm-item-label">Vellum</span>{recent.answer}</div>}
+        <div className="sm-item-date">{memoryEntryDate(memory)}{recent.thread ? ' · ' + recent.thread : ''}</div>
+      </React.Fragment> : <React.Fragment>
+        <div className="sm-item-body">{lead}</div>
+        {detail && <details className="sm-item-details"><summary>Show details</summary><div className="sm-item-body">{detail}</div></details>}
+        <div className="sm-item-date">{tab === 'archived' ? 'Archived ' : 'Saved '}{memoryEntryDate(memory)}</div>
+      </React.Fragment>}
+    </div>
+    {children}
+  </div>;
+};
+
 const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -4485,8 +4637,6 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
       setBusy(false);
     }
   };
-  const saved = (summary && summary.saved_memories) || [];
-  const recent = (summary && summary.recent_context) || [];
   const audit = (summary && summary.audit_log) || [];
   const lastUpdated = audit[0] && audit[0].created_at ? memoryEntryDate(audit[0]) : 'Live backend';
   return (
@@ -4511,24 +4661,7 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
           {error && <div className="s-none">{error}</div>}
           {!summary && !error && <div className="s-none">Loading memory...</div>}
           {aboutOpen && <div className="mem-sec"><div className="mem-sec-h">About memory</div><div className="mem-sec-t">Vellum keeps durable facts separately from indexed chat history. Dreaming reviews recent conversations, promotes useful memories, merges duplicates, and archives stale items without editing pinned memories.</div></div>}
-          {summary && <React.Fragment>
-            <div className="mem-sec"><div className="mem-sec-h">Global summary</div><div className="mem-sec-t">{summary.global_summary || 'No global summary yet. Add a memory or run Dreaming to build one.'}</div></div>
-            <div className="mem-sec">
-              <div className="mem-sec-h">Saved memories</div>
-              {saved.slice(0, 8).map(m => <div key={m.id} className="sm-item"><span className="sm-item-text">{m.text}</span></div>)}
-              {saved.length === 0 && <div className="s-none">No durable memories have been promoted yet.</div>}
-            </div>
-            <div className="mem-sec">
-              <div className="mem-sec-h">Recent chat memory</div>
-              {recent.slice(0, 12).map(m => <div key={m.id} className="sm-item"><span className="sm-item-text">{m.content}</span></div>)}
-              {recent.length === 0 && <div className="s-none">No indexed chat memory yet.</div>}
-            </div>
-            <div className="mem-sec">
-              <div className="mem-sec-h">History</div>
-              {audit.slice(0, 8).map(a => <div key={a.id} className="sm-row-meta">{a.event} - {a.detail}</div>)}
-              {audit.length === 0 && <div className="s-none">No memory changes recorded yet.</div>}
-            </div>
-          </React.Fragment>}
+          {summary && <MemorySummaryDocument summary={summary}/>}
         </div>
         <div className="mem-card-foot">
           <input className="mem-add-input" placeholder="Add or update" value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addMemory(); }}/>
@@ -4592,7 +4725,10 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
     try { await API.settings.updateMemorySettings({dreaming_enabled: next}); }
     catch (err) { setAutoManage(!next); setError('Could not update automatic memory management.'); }
   };
-  const activeItems = tab === 'archived' ? archived : (tab === 'recent' ? recent : items);
+  const visibleSaved = items.filter(memory => !isMemoryOperationalNoise(memory && memory.text));
+  const visibleArchived = archived.filter(memory => !isMemoryOperationalNoise(memory && memory.text));
+  const visibleRecent = recent;
+  const activeItems = tab === 'archived' ? visibleArchived : (tab === 'recent' ? visibleRecent : visibleSaved);
   const filtered = activeItems.filter(m => !q || String(m.text || '').toLowerCase().includes(q.toLowerCase()));
   return (
     <React.Fragment>
@@ -4612,9 +4748,9 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
           </div>
         </div>
         <div className="tab-row" style={{padding: '0 20px 12px'}}>
-          <button className={'tab' + (tab === 'saved' ? ' on' : '')} onClick={() => setTab('saved')}>Saved ({items.length})</button>
-          <button className={'tab' + (tab === 'archived' ? ' on' : '')} onClick={() => setTab('archived')}>Old ({archived.length})</button>
-          <button className={'tab' + (tab === 'recent' ? ' on' : '')} onClick={() => setTab('recent')}>Recent ({recent.length})</button>
+          <button className={'tab' + (tab === 'saved' ? ' on' : '')} onClick={() => setTab('saved')}>Saved ({visibleSaved.length})</button>
+          <button className={'tab' + (tab === 'archived' ? ' on' : '')} onClick={() => setTab('archived')}>Old ({visibleArchived.length})</button>
+          <button className={'tab' + (tab === 'recent' ? ' on' : '')} onClick={() => setTab('recent')}>Recent ({visibleRecent.length})</button>
         </div>
         {error && <div className="s-none">{error}</div>}
         {historyOpen && <div className="sm-list" style={{maxHeight: 150, borderBottom: '1px solid var(--line)'}} onClick={e => e.stopPropagation()}>
@@ -4623,8 +4759,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
         </div>}
         <div className="sm-list" onClick={e => e.stopPropagation()}>
           {filtered.map(m => (
-            <div key={m.id} className={'sm-item' + (rowMenu === m.id ? ' menu-open' : '')}>
-              <span className="sm-item-text">{m.text}</span>
+            <MemoryListRow key={m.id} memory={m} tab={tab} menuOpen={rowMenu === m.id}>
               <div className="sm-item-menu-wrap">
                 <button className="sm-item-dots" onClick={() => setRowMenu(rowMenu === m.id ? null : m.id)}><IcDots size={16}/></button>
                 {rowMenu === m.id && <div className="sm-row-menu" onClick={e => e.stopPropagation()}>
@@ -4639,7 +4774,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
                   <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : (tab === 'recent' ? 'Indexed' : 'Saved')} {memoryEntryDate(m)} from <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
                 </div>}
               </div>
-            </div>
+            </MemoryListRow>
           ))}
           {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : (tab === 'recent' ? 'recent chat' : 'saved')} memories.</div>}
         </div>

@@ -86,6 +86,23 @@ describe("Vellum default activity status", () => {
     expect(settingsClient).toContain("recent_context");
   });
 
+  test("memory surfaces format backend records instead of dumping raw transcripts", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+
+    expect(html).toContain("buildMemorySummarySections");
+    expect(html).toContain("parseRecentMemoryRecord");
+    expect(html).toContain("MemorySummaryDocument");
+    expect(html).toContain("MemoryListRow");
+    expect(html).toContain('className="mem-doc-section"');
+    expect(html).toContain('className="sm-item-title"');
+    expect(html).toContain('className="sm-item-body"');
+    expect(html).toContain('className="sm-item-details"');
+    expect(html).toContain("visibleSaved");
+    expect(html).toContain("isMemoryOperationalNoise");
+    expect(html).not.toContain('<span className="sm-item-text">{m.content}</span>');
+    expect(html).not.toContain('<span className="sm-item-text">{m.text}</span>');
+  });
+
   test("collapsed sidebar chat menus open inward beside the flyout", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
