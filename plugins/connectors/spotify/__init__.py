@@ -1,0 +1,1 @@
+"""Spotify portable plugin package."""
