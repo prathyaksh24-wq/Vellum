@@ -146,9 +146,18 @@ def spotify_search(args: dict, **kwargs) -> str:
     if missing:
         return _invalid(*missing)
     service = _service(kwargs)
+    query = str(args["query"])
+    privacy_gate = kwargs.get("privacy_gate")
+    privacy_error = None
+    if callable(privacy_gate):
+        query, privacy_error = privacy_gate(query)
+    if privacy_error:
+        return json.dumps(
+            {"ok": False, "error": {"code": "privacy_blocked", "message": privacy_error}}
+        )
     types = args.get("types") or ["track"]
     params = {
-        "q": args["query"],
+        "q": query,
         "type": ",".join(types),
         "limit": int(args.get("limit") or 10),
         "offset": int(args.get("offset") or 0),

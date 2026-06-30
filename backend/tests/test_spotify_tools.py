@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from agent.plugins.portable import PortablePluginContext, load_portable_plugin
+from agent.plugins.spotify_runtime import spotify_catalog_query_gate
 from plugins.connectors.spotify.errors import SpotifyNoActiveDevice
 from plugins.connectors.spotify.tools import (
     spotify_albums,
@@ -132,6 +133,25 @@ def test_domain_errors_do_not_escape_or_leak_details():
         "ok": False,
         "error": {"code": "no_active_device", "message": "No active Spotify device found"},
     }
+
+
+def test_spotify_search_allows_public_artist_names():
+    service = FakeService()
+
+    result = json.loads(spotify_search({"query": "Miles Davis Kind of Blue"}, service=service, privacy_gate=spotify_catalog_query_gate))
+
+    assert result["ok"] is True
+    assert service.calls[-1][2]["params"]["q"] == "Miles Davis Kind of Blue"
+
+
+def test_spotify_search_blocks_secret_material_before_network_call():
+    service = FakeService()
+
+    result = json.loads(spotify_search({"query": "password=secret-value"}, service=service, privacy_gate=spotify_catalog_query_gate))
+
+    assert result["ok"] is False
+    assert result["error"]["code"] == "privacy_blocked"
+    assert service.calls == []
 
 
 def test_plugin_registers_all_seven_tools():

@@ -116,3 +116,16 @@ def test_get_player_normalizes_track_and_device(auth_store):
         "shuffle": True,
         "repeat": "context",
     }
+
+
+def test_raw_spotify_error_body_never_appears_in_exception(auth_store):
+    secret = "refresh_token=super-secret-value"
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(500, text=secret)
+    )
+
+    with pytest.raises(Exception) as caught:
+        SpotifyClient(auth_store=auth_store, transport=transport).request("GET", "/me/player")
+
+    assert "super-secret-value" not in str(caught.value)
+    assert secret not in repr(caught.value)
