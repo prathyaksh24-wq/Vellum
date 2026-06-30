@@ -6,6 +6,10 @@ class SpotifyAuthError(SpotifyError):
     code = "spotify_auth_error"
 
 
+class SpotifyAPIError(SpotifyError):
+    code = "spotify_api_error"
+
+
 class SpotifyPremiumRequired(SpotifyError):
     code = "premium_required"
 
