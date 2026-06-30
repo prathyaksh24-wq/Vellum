@@ -38,6 +38,12 @@ class FakeSpotifyClient:
     def get_player(self):
         return {"is_playing": False, "track": None, "device": None}
 
+    def get_devices(self):
+        return {"devices": [{"id": "device-1", "name": "Office"}]}
+
+    def get_queue(self):
+        return {"queue": [{"uri": "spotify:track:1", "name": "Blue in Green"}]}
+
     def request(self, method, path, **kwargs):
         self.calls.append((method, path, kwargs))
         return {}
@@ -158,6 +164,20 @@ def test_spotify_player_and_allowlisted_action_share_service(spotify_backend):
     assert action.status_code == 200
     assert spotify.calls[-1][:2] == ("PUT", "/me/player/pause")
     assert invalid.status_code == 422
+
+
+def test_spotify_player_details_include_devices_and_queue(spotify_backend):
+    store, _spotify, _invalidations = spotify_backend
+    store.save_tokens(
+        {"client_id": "c", "access_token": "a", "refresh_token": "r", "expires_at": time.time() + 3600}
+    )
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/plugins/spotify/player?details=true")
+
+    assert response.status_code == 200
+    assert response.json()["devices"] == [{"id": "device-1", "name": "Office"}]
+    assert response.json()["queue"] == [{"uri": "spotify:track:1", "name": "Blue in Green"}]
 
 
 def test_spotify_logout_removes_credentials_and_invalidates(spotify_backend):

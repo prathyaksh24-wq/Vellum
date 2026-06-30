@@ -918,11 +918,23 @@ def _spotify_result_or_http(result_text: str) -> dict:
 
 
 @router.get("/plugins/spotify/player")
-async def spotify_player() -> dict:
+async def spotify_player(details: bool = False) -> dict:
     if not _spotify_has_credentials():
         raise HTTPException(status_code=401, detail="Spotify is not connected")
     try:
-        return await asyncio.to_thread(_spotify_client().get_player)
+        service = _spotify_client()
+        player = await asyncio.to_thread(service.get_player)
+        if details:
+            devices_result, queue_result = await asyncio.gather(
+                asyncio.to_thread(service.get_devices),
+                asyncio.to_thread(service.get_queue),
+            )
+            player = {
+                **player,
+                "devices": devices_result.get("devices", []),
+                "queue": queue_result.get("queue", []),
+            }
+        return player
     except SpotifyRateLimited as exc:
         raise HTTPException(
             status_code=429,
