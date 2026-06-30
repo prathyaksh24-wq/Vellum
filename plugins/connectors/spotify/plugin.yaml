@@ -1,0 +1,22 @@
+id: spotify
+name: Spotify
+type: connector
+category: Connectors
+version: 1.0.0
+description: Full Spotify Web API control through a Hermes-compatible Vellum plugin.
+provides_tools:
+  - spotify_playback
+  - spotify_devices
+  - spotify_queue
+  - spotify_search
+  - spotify_playlists
+  - spotify_albums
+  - spotify_library
+capabilities:
+  - spotify.playback
+  - spotify.devices
+  - spotify.queue
+  - spotify.search
+  - spotify.playlists
+  - spotify.albums
+  - spotify.library

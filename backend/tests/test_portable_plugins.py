@@ -1,4 +1,5 @@
 from pathlib import Path
+import runpy
 
 import pytest
 
@@ -80,3 +81,49 @@ def test_register_tool_rejects_duplicate_names():
 
     with pytest.raises(ValueError, match="already registered"):
         ctx.register_tool(name="same", toolset="two", schema=schema, handler=lambda args: "{}")
+
+
+def test_spotify_manifest_declares_full_hermes_toolset():
+    manifests = {item.id: item for item in discover_portable_plugins(Path("plugins"))}
+
+    spotify = manifests["spotify"]
+
+    assert spotify.type == "connector"
+    assert spotify.category == "Connectors"
+    assert spotify.capabilities == [
+        "spotify.playback",
+        "spotify.devices",
+        "spotify.queue",
+        "spotify.search",
+        "spotify.playlists",
+        "spotify.albums",
+        "spotify.library",
+    ]
+
+
+def test_spotify_schemas_cover_expected_tools_and_playback_actions():
+    namespace = runpy.run_path("plugins/connectors/spotify/schemas.py")
+
+    schemas = namespace["ALL_SCHEMAS"]
+    assert [schema["name"] for schema in schemas] == [
+        "spotify_playback",
+        "spotify_devices",
+        "spotify_queue",
+        "spotify_search",
+        "spotify_playlists",
+        "spotify_albums",
+        "spotify_library",
+    ]
+    assert namespace["SPOTIFY_PLAYBACK"]["parameters"]["properties"]["action"]["enum"] == [
+        "get_state",
+        "get_currently_playing",
+        "play",
+        "pause",
+        "next",
+        "previous",
+        "seek",
+        "set_repeat",
+        "set_shuffle",
+        "set_volume",
+        "recently_played",
+    ]
