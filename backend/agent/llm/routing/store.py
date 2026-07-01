@@ -1,0 +1,268 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+import json
+from pathlib import Path
+import sqlite3
+
+from agent.llm.routing.models import (
+    CredentialRecord,
+    CredentialStatus,
+    FallbackTarget,
+    ProviderRoutingPolicy,
+    validate_fallback_chain,
+)
+
+
+SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA foreign_keys=ON;
+PRAGMA busy_timeout=5000;
+
+CREATE TABLE IF NOT EXISTS routing_policy (
+    scope TEXT PRIMARY KEY,
+    policy_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fallback_target (
+    position INTEGER PRIMARY KEY,
+    id TEXT NOT NULL UNIQUE,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credential (
+    id TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    label TEXT NOT NULL,
+    source TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    model_allowlist_json TEXT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    consecutive_429 INTEGER NOT NULL DEFAULT 0,
+    cooldown_until TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(provider, source)
+);
+
+CREATE INDEX IF NOT EXISTS idx_credential_provider_status
+ON credential(provider, status);
+
+PRAGMA user_version=1;
+"""
+
+
+class RoutingStore:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self._initialize()
+
+    def _connect(self) -> sqlite3.Connection:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(str(self.path), timeout=5.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=5000")
+        return connection
+
+    def _initialize(self) -> None:
+        with self._connect() as connection:
+            connection.executescript(SCHEMA)
+
+    @staticmethod
+    def _policy_scope(model_id: str | None) -> str:
+        return "global" if model_id is None else f"model:{model_id.strip()}"
+
+    def _set_policy(self, scope: str, policy: ProviderRoutingPolicy) -> None:
+        now = datetime.now(UTC).isoformat()
+        payload = policy.model_dump_json(exclude_none=True)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO routing_policy(scope, policy_json, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(scope) DO UPDATE SET
+                    policy_json=excluded.policy_json,
+                    updated_at=excluded.updated_at
+                """,
+                (scope, payload, now),
+            )
+
+    def _get_policy(self, scope: str) -> ProviderRoutingPolicy | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT policy_json FROM routing_policy WHERE scope = ?",
+                (scope,),
+            ).fetchone()
+        if row is None:
+            return None
+        return ProviderRoutingPolicy.model_validate_json(row["policy_json"])
+
+    def set_global_policy(self, policy: ProviderRoutingPolicy) -> None:
+        self._set_policy(self._policy_scope(None), policy)
+
+    def get_global_policy(self) -> ProviderRoutingPolicy:
+        return self._get_policy(self._policy_scope(None)) or ProviderRoutingPolicy(
+            require_parameters=True,
+            allow_fallbacks=True,
+        )
+
+    def set_model_policy(self, model_id: str, policy: ProviderRoutingPolicy) -> None:
+        normalized = model_id.strip()
+        if not normalized:
+            raise ValueError("model_id cannot be empty")
+        self._set_policy(self._policy_scope(normalized), policy)
+
+    def get_model_policy(self, model_id: str) -> ProviderRoutingPolicy | None:
+        return self._get_policy(self._policy_scope(model_id))
+
+    def delete_model_policy(self, model_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM routing_policy WHERE scope = ?",
+                (self._policy_scope(model_id),),
+            )
+        return cursor.rowcount > 0
+
+    def replace_fallbacks(self, targets: list[FallbackTarget]) -> None:
+        validated = validate_fallback_chain(targets)
+        with self._connect() as connection:
+            connection.execute("DELETE FROM fallback_target")
+            connection.executemany(
+                "INSERT INTO fallback_target(position, id, provider, model) VALUES (?, ?, ?, ?)",
+                [
+                    (position, target.id, target.provider, target.model)
+                    for position, target in enumerate(validated)
+                ],
+            )
+
+    def list_fallbacks(self) -> list[FallbackTarget]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id, provider, model FROM fallback_target ORDER BY position"
+            ).fetchall()
+        return [FallbackTarget(**dict(row)) for row in rows]
+
+    def upsert_credential(self, credential: CredentialRecord) -> CredentialRecord:
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id, created_at FROM credential WHERE provider = ? AND source = ?",
+                (credential.provider, credential.source),
+            ).fetchone()
+            credential_id = existing["id"] if existing is not None else credential.id
+            created_at = existing["created_at"] if existing is not None else credential.created_at.isoformat()
+            connection.execute(
+                """
+                INSERT INTO credential(
+                    id, provider, label, source, fingerprint, status, strategy,
+                    model_allowlist_json, request_count, consecutive_429,
+                    cooldown_until, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, source) DO UPDATE SET
+                    label=excluded.label,
+                    fingerprint=excluded.fingerprint,
+                    status=excluded.status,
+                    strategy=excluded.strategy,
+                    model_allowlist_json=excluded.model_allowlist_json,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    credential_id,
+                    credential.provider,
+                    credential.label,
+                    credential.source,
+                    credential.fingerprint,
+                    credential.status.value,
+                    credential.strategy.value,
+                    json.dumps(credential.model_allowlist),
+                    credential.request_count,
+                    credential.consecutive_429,
+                    credential.cooldown_until.isoformat() if credential.cooldown_until else None,
+                    created_at,
+                    now.isoformat(),
+                ),
+            )
+        saved = self.get_credential(credential_id)
+        if saved is None:
+            raise RuntimeError("credential upsert did not persist")
+        return saved
+
+    @staticmethod
+    def _credential_from_row(row: sqlite3.Row) -> CredentialRecord:
+        return CredentialRecord(
+            id=row["id"],
+            provider=row["provider"],
+            label=row["label"],
+            source=row["source"],
+            fingerprint=row["fingerprint"],
+            status=row["status"],
+            strategy=row["strategy"],
+            model_allowlist=json.loads(row["model_allowlist_json"]),
+            request_count=row["request_count"],
+            consecutive_429=row["consecutive_429"],
+            cooldown_until=row["cooldown_until"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def get_credential(self, credential_id: str) -> CredentialRecord | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM credential WHERE id = ?",
+                (credential_id,),
+            ).fetchone()
+        return self._credential_from_row(row) if row is not None else None
+
+    def list_credentials(self, provider: str | None = None) -> list[CredentialRecord]:
+        query = "SELECT * FROM credential"
+        parameters: tuple[str, ...] = ()
+        if provider is not None:
+            query += " WHERE provider = ?"
+            parameters = (provider,)
+        query += " ORDER BY created_at, id"
+        with self._connect() as connection:
+            rows = connection.execute(query, parameters).fetchall()
+        return [self._credential_from_row(row) for row in rows]
+
+    def set_credential_state(
+        self,
+        credential_id: str,
+        *,
+        status: CredentialStatus,
+        cooldown_until: datetime | None,
+        consecutive_429: int,
+    ) -> CredentialRecord:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE credential
+                SET status = ?, cooldown_until = ?, consecutive_429 = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    status.value,
+                    cooldown_until.isoformat() if cooldown_until else None,
+                    consecutive_429,
+                    datetime.now(UTC).isoformat(),
+                    credential_id,
+                ),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(credential_id)
+        saved = self.get_credential(credential_id)
+        if saved is None:
+            raise KeyError(credential_id)
+        return saved
+
+    def user_version(self) -> int:
+        with self._connect() as connection:
+            return int(connection.execute("PRAGMA user_version").fetchone()[0])
+
+    def journal_mode(self) -> str:
+        with self._connect() as connection:
+            return str(connection.execute("PRAGMA journal_mode").fetchone()[0])
