@@ -22,6 +22,7 @@ ui-dist/
 .ui-runtime/
 .api-runtime/
 .desktop-runtime/
+.worktrees/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml
