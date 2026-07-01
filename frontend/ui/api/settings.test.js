@@ -116,3 +116,40 @@ describe("Vellum settings API memory endpoints", () => {
     });
   });
 });
+
+describe("Vellum settings API routing endpoints", () => {
+  test("uses versioned routing management endpoints", async () => {
+    const calls = [];
+    const fetchImpl = vi.fn(async (path, options) => {
+      calls.push([path, options && options.method, options && options.body]);
+      return {};
+    });
+    const api = await loadSettingsApi(fetchImpl);
+
+    await api.routingStatus();
+    await api.routingPolicies();
+    await api.setGlobalRoutingPolicy({ sort: "price" });
+    await api.routingFallbacks();
+    await api.setFallbacks([{ provider: "openrouter", model: "qwen/fallback" }]);
+    await api.routingCredentials();
+    await api.addCredential({ provider: "openrouter", label: "backup", secret: "key" });
+    await api.removeCredential("cred-1");
+    await api.setCredentialStrategy("openrouter", "round_robin");
+    await api.resetCredentialPool("openrouter");
+    await api.routingAttempts(10, 5);
+
+    expect(calls).toEqual([
+      ["/api/llm-routing/status", undefined, undefined],
+      ["/api/llm-routing/policies", undefined, undefined],
+      ["/api/llm-routing/policies/global", "PUT", JSON.stringify({ sort: "price" })],
+      ["/api/llm-routing/fallbacks", undefined, undefined],
+      ["/api/llm-routing/fallbacks", "PUT", JSON.stringify({ targets: [{ provider: "openrouter", model: "qwen/fallback" }] })],
+      ["/api/llm-routing/credentials", undefined, undefined],
+      ["/api/llm-routing/credentials", "POST", JSON.stringify({ provider: "openrouter", label: "backup", secret: "key" })],
+      ["/api/llm-routing/credentials/cred-1", "DELETE", undefined],
+      ["/api/llm-routing/credentials/openrouter/strategy", "PUT", JSON.stringify({ strategy: "round_robin" })],
+      ["/api/llm-routing/credentials/openrouter/reset", "POST", undefined],
+      ["/api/llm-routing/attempts?limit=10&offset=5", undefined, undefined],
+    ]);
+  });
+});
