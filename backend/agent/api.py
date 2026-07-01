@@ -48,6 +48,8 @@ from agent.memory.honcho_client import HonchoMemory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.project_context import ProjectContext
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.llm.routing.api import router as llm_routing_router
+from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
@@ -3710,7 +3712,7 @@ async def public_settings() -> dict[str, Any]:
 
 
 @router.post("/settings/provider-key")
-async def set_provider_key(request: ProviderKeyRequest) -> dict[str, Any]:
+async def set_provider_key(request: ProviderKeyRequest, response: Response) -> dict[str, Any]:
     provider = request.provider.strip().lower().replace("-", "_")
     if provider not in _PROVIDER_KEY_ENV:
         raise HTTPException(status_code=400, detail=f"Unsupported provider: {request.provider}")
@@ -3718,6 +3720,9 @@ async def set_provider_key(request: ProviderKeyRequest) -> dict[str, Any]:
     if not api_key:
         raise HTTPException(status_code=400, detail="api_key cannot be empty")
     _set_env_value(_PROVIDER_KEY_ENV[provider], api_key)
+    reset_routing_runtime()
+    response.headers["Deprecation"] = "true"
+    response.headers["Sunset"] = "Thu, 01 Jul 2027 00:00:00 GMT"
     models = await list_models()
     return {
         "ok": True,
@@ -3989,6 +3994,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
             await terminal_session_manager.terminate(session.id)
 
 
+router.include_router(llm_routing_router)
 app.include_router(router)
 
 

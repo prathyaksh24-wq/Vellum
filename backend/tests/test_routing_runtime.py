@@ -65,3 +65,21 @@ def test_runtime_does_not_overwrite_explicit_fallback_chain(tmp_path) -> None:
     )
 
     assert rebuilt.store.list_fallbacks()[0].model == "custom/fallback"
+
+
+def test_runtime_does_not_reseed_fallback_after_explicit_clear(tmp_path) -> None:
+    settings = settings_for(tmp_path)
+    runtime = build_routing_runtime(
+        settings=settings,
+        keyring_backend=FakeKeyring(),
+        fingerprint_salt=b"test-salt",
+    )
+    runtime.store.replace_fallbacks([])
+
+    rebuilt = build_routing_runtime(
+        settings=settings,
+        keyring_backend=FakeKeyring(),
+        fingerprint_salt=b"test-salt",
+    )
+
+    assert rebuilt.store.list_fallbacks() == []

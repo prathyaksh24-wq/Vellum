@@ -12,6 +12,7 @@ from agent.llm.routing.models import (
     CredentialStatus,
     FallbackTarget,
     ProviderRoutingPolicy,
+    RoutingAttempt,
     validate_fallback_chain,
 )
 
@@ -25,6 +26,11 @@ CREATE TABLE IF NOT EXISTS routing_policy (
     scope TEXT PRIMARY KEY,
     policy_json TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS routing_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS fallback_target (
@@ -70,6 +76,30 @@ CREATE TABLE IF NOT EXISTS credential_lease (
 
 CREATE INDEX IF NOT EXISTS idx_credential_lease_expiry
 ON credential_lease(expires_at);
+
+CREATE TABLE IF NOT EXISTS routing_attempt (
+    row_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    correlation_id TEXT NOT NULL,
+    thread_id TEXT NOT NULL,
+    model TEXT NOT NULL,
+    api_provider TEXT NOT NULL,
+    inference_provider TEXT,
+    credential_fingerprint TEXT NOT NULL,
+    attempt_number INTEGER NOT NULL,
+    fallback_index INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    failure_kind TEXT,
+    status_code INTEGER,
+    latency_ms REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_routing_attempt_created
+ON routing_attempt(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_routing_attempt_correlation
+ON routing_attempt(correlation_id, attempt_number);
 
 PRAGMA user_version=1;
 """
@@ -147,6 +177,21 @@ class RoutingStore:
             )
         return cursor.rowcount > 0
 
+    def list_model_policies(self) -> dict[str, ProviderRoutingPolicy]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT scope, policy_json FROM routing_policy
+                WHERE scope LIKE 'model:%' ORDER BY scope
+                """
+            ).fetchall()
+        return {
+            row["scope"].removeprefix("model:"): ProviderRoutingPolicy.model_validate_json(
+                row["policy_json"]
+            )
+            for row in rows
+        }
+
     def replace_fallbacks(self, targets: list[FallbackTarget]) -> None:
         validated = validate_fallback_chain(targets)
         with self._connect() as connection:
@@ -158,6 +203,19 @@ class RoutingStore:
                     for position, target in enumerate(validated)
                 ],
             )
+            connection.execute(
+                """
+                INSERT INTO routing_metadata(key, value) VALUES ('fallbacks_initialized', '1')
+                ON CONFLICT(key) DO UPDATE SET value='1'
+                """
+            )
+
+    def fallbacks_initialized(self) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM routing_metadata WHERE key='fallbacks_initialized'"
+            ).fetchone()
+        return row is not None and row["value"] == "1"
 
     def list_fallbacks(self) -> list[FallbackTarget]:
         with self._connect() as connection:
@@ -236,6 +294,24 @@ class RoutingStore:
                 (credential_id,),
             ).fetchone()
         return self._credential_from_row(row) if row is not None else None
+
+    def has_active_leases(self, credential_id: str) -> bool:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM credential_lease WHERE credential_id = ? LIMIT 1",
+                (credential_id,),
+            ).fetchone()
+        return row is not None
+
+    def delete_credential(self, credential_id: str) -> bool:
+        if self.has_active_leases(credential_id):
+            raise RuntimeError("credential has active leases")
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM credential WHERE id = ?",
+                (credential_id,),
+            )
+        return cursor.rowcount > 0
 
     def list_credentials(self, provider: str | None = None) -> list[CredentialRecord]:
         query = "SELECT * FROM credential"
@@ -323,6 +399,55 @@ class RoutingStore:
                 (now.isoformat(),),
             )
         return cursor.rowcount
+
+    def record_attempt(self, attempt: RoutingAttempt) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO routing_attempt(
+                    id, correlation_id, thread_id, model, api_provider,
+                    inference_provider, credential_fingerprint, attempt_number,
+                    fallback_index, outcome, failure_kind, status_code,
+                    latency_ms, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    attempt.id,
+                    attempt.correlation_id,
+                    attempt.thread_id,
+                    attempt.model,
+                    attempt.api_provider,
+                    attempt.inference_provider,
+                    attempt.credential_fingerprint,
+                    attempt.attempt_number,
+                    attempt.fallback_index,
+                    attempt.outcome,
+                    attempt.failure_kind.value if attempt.failure_kind else None,
+                    attempt.status_code,
+                    attempt.latency_ms,
+                    attempt.created_at.isoformat(),
+                ),
+            )
+
+    def list_attempts(self, *, limit: int = 50, offset: int = 0) -> list[RoutingAttempt]:
+        if not 1 <= limit <= 500:
+            raise ValueError("limit must be between 1 and 500")
+        if offset < 0:
+            raise ValueError("offset cannot be negative")
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, correlation_id, thread_id, model, api_provider,
+                       inference_provider, credential_fingerprint, attempt_number,
+                       fallback_index, outcome, failure_kind, status_code,
+                       latency_ms, created_at
+                FROM routing_attempt
+                ORDER BY row_id
+                LIMIT ? OFFSET ?
+                """,
+                (limit, offset),
+            ).fetchall()
+        return [RoutingAttempt(**dict(row)) for row in rows]
 
     def set_credential_state(
         self,

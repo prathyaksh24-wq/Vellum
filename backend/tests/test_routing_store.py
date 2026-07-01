@@ -9,6 +9,7 @@ from agent.llm.routing.models import (
     CredentialStatus,
     FallbackTarget,
     ProviderRoutingPolicy,
+    RoutingAttempt,
 )
 from agent.llm.routing.store import RoutingStore
 
@@ -97,3 +98,28 @@ def test_store_uses_schema_version_one_and_wal(tmp_path) -> None:
 
     assert store.user_version() == 1
     assert store.journal_mode().casefold() == "wal"
+
+
+def test_content_free_routing_attempts_are_persisted_and_paginated(tmp_path) -> None:
+    store = RoutingStore(tmp_path / "routing.db")
+    store.record_attempt(
+        RoutingAttempt(
+            correlation_id="route-1",
+            thread_id="thread-1",
+            model="google/model",
+            api_provider="openrouter",
+            credential_fingerprint="hmac:abc",
+            attempt_number=1,
+            fallback_index=0,
+            outcome="success",
+            latency_ms=12.5,
+        )
+    )
+
+    rows = store.list_attempts(limit=10, offset=0)
+
+    assert len(rows) == 1
+    assert rows[0].correlation_id == "route-1"
+    assert rows[0].credential_fingerprint == "hmac:abc"
+    assert "prompt" not in rows[0].model_dump()
+    assert "response" not in rows[0].model_dump()

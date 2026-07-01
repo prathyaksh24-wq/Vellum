@@ -169,6 +169,20 @@ class SecretResolver:
             raise SecretUnavailable(f"credential {credential.id} is unavailable")
         return value
 
+    def remove_manual(self, credential_id: str) -> None:
+        credential = self.store.get_credential(credential_id)
+        if credential is None:
+            raise KeyError(credential_id)
+        if not credential.source.startswith("keyring:"):
+            raise ValueError("borrowed credentials must be removed at their source")
+        if self.store.has_active_leases(credential_id):
+            raise RuntimeError("credential has active leases")
+        try:
+            self.keyring.delete_password(self.service, credential_id)
+        except Exception as exc:
+            raise SecretUnavailable("credential could not be removed") from exc
+        self.store.delete_credential(credential_id)
+
     @staticmethod
     def public_record(credential: CredentialRecord) -> CredentialRecord:
         return credential.model_copy(deep=True)

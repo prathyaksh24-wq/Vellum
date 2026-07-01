@@ -734,6 +734,7 @@ def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tm
 
     assert before.status_code == 200
     assert saved.status_code == 200
+    assert saved.headers["Deprecation"] == "true"
     body = saved.json()
     assert body["provider_keys"]["openai"] is True
     assert any(item["provider"] == "openai" and not item["open_weights"] for item in body["models"])

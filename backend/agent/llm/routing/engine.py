@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 import asyncio
 from dataclasses import dataclass
+import time
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -13,6 +14,7 @@ from agent.llm.routing.models import (
     FallbackTarget,
     ProviderFailure,
     RoutingStreamInterrupted,
+    RoutingAttempt,
     RoutingTerminalError,
     merge_policy,
 )
@@ -46,6 +48,7 @@ class RoutingEngine:
         max_transient_retries: int = 2,
         async_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         jitter: Callable[[], float] = lambda: 0.0,
+        monotonic: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.store = store
         self.pool = pool
@@ -55,6 +58,13 @@ class RoutingEngine:
         self.max_transient_retries = max_transient_retries
         self.async_sleep = async_sleep
         self.jitter = jitter
+        self.monotonic = monotonic
+
+    def _record_attempt(self, attempt: RoutingAttempt) -> None:
+        try:
+            self.store.record_attempt(attempt)
+        except Exception:
+            pass
 
     def _primary_provider(self, model: str) -> str:
         if model.startswith("openai/"):
@@ -89,11 +99,11 @@ class RoutingEngine:
         thread_id: str = "background",
         **kwargs: Any,
     ):
-        del thread_id  # reserved for content-free attempt telemetry
         plan = self.build_plan(primary_model, primary_provider)
         failures: list[ProviderFailure] = []
+        attempt_number = 0
 
-        for target in plan.targets:
+        for fallback_index, target in enumerate(plan.targets):
             adapter = self.adapters.get(target.provider)
             if adapter is None:
                 failures.append(
@@ -135,6 +145,8 @@ class RoutingEngine:
                     )
                     break
 
+                attempt_number += 1
+                started = self.monotonic()
                 try:
                     secret = self.secret_resolver.resolve(credential)
                     policy = None
@@ -162,11 +174,40 @@ class RoutingEngine:
                         )
                     else:
                         await self.pool.mark_success(lease)
+                        self._record_attempt(
+                            RoutingAttempt(
+                                correlation_id=plan.correlation_id,
+                                thread_id=thread_id,
+                                model=target.model,
+                                api_provider=target.provider,
+                                inference_provider=str(getattr(result, "response_metadata", {}).get("provider") or "") or None,
+                                credential_fingerprint=credential.fingerprint,
+                                attempt_number=attempt_number,
+                                fallback_index=fallback_index,
+                                outcome="success",
+                                latency_ms=(self.monotonic() - started) * 1000,
+                            )
+                        )
                         return result
                 except Exception as exc:
                     failure = classify_provider_exception(exc)
 
                 failures.append(failure)
+                self._record_attempt(
+                    RoutingAttempt(
+                        correlation_id=plan.correlation_id,
+                        thread_id=thread_id,
+                        model=target.model,
+                        api_provider=target.provider,
+                        credential_fingerprint=credential.fingerprint,
+                        attempt_number=attempt_number,
+                        fallback_index=fallback_index,
+                        outcome="failure",
+                        failure_kind=failure.kind,
+                        status_code=failure.status_code,
+                        latency_ms=max(0.0, (self.monotonic() - started) * 1000),
+                    )
+                )
 
                 if failure.kind is FailureKind.auth:
                     await self.pool.mark_auth_invalid(lease)
@@ -239,11 +280,11 @@ class RoutingEngine:
         thread_id: str = "background",
         **kwargs: Any,
     ):
-        del thread_id
         plan = self.build_plan(primary_model, primary_provider)
         failures: list[ProviderFailure] = []
+        attempt_number = 0
 
-        for target in plan.targets:
+        for fallback_index, target in enumerate(plan.targets):
             adapter = self.adapters.get(target.provider)
             if adapter is None:
                 failures.append(
@@ -279,6 +320,9 @@ class RoutingEngine:
 
                 visible = False
                 buffered: list[Any] = []
+                last_chunk = None
+                attempt_number += 1
+                started = self.monotonic()
                 try:
                     secret = self.secret_resolver.resolve(credential)
                     policy = None
@@ -297,6 +341,7 @@ class RoutingEngine:
                     if tools:
                         model = model.bind_tools(list(tools))
                     async for chunk in model.astream(list(messages), **kwargs):
+                        last_chunk = chunk
                         if not visible and not self._visible_chunk(chunk):
                             buffered.append(chunk)
                             continue
@@ -313,13 +358,56 @@ class RoutingEngine:
                         )
                         await self.pool.release(lease)
                         failures.append(failure)
+                        self._record_attempt(
+                            RoutingAttempt(
+                                correlation_id=plan.correlation_id,
+                                thread_id=thread_id,
+                                model=target.model,
+                                api_provider=target.provider,
+                                credential_fingerprint=credential.fingerprint,
+                                attempt_number=attempt_number,
+                                fallback_index=fallback_index,
+                                outcome="failure",
+                                failure_kind=failure.kind,
+                                latency_ms=(self.monotonic() - started) * 1000,
+                            )
+                        )
                         break
                     await self.pool.mark_success(lease)
+                    self._record_attempt(
+                        RoutingAttempt(
+                            correlation_id=plan.correlation_id,
+                            thread_id=thread_id,
+                            model=target.model,
+                            api_provider=target.provider,
+                            inference_provider=str(getattr(last_chunk, "response_metadata", {}).get("provider") or "") or None,
+                            credential_fingerprint=credential.fingerprint,
+                            attempt_number=attempt_number,
+                            fallback_index=fallback_index,
+                            outcome="success",
+                            latency_ms=(self.monotonic() - started) * 1000,
+                        )
+                    )
                     return
                 except Exception as exc:
                     failure = classify_provider_exception(exc)
 
                 failures.append(failure)
+                self._record_attempt(
+                    RoutingAttempt(
+                        correlation_id=plan.correlation_id,
+                        thread_id=thread_id,
+                        model=target.model,
+                        api_provider=target.provider,
+                        credential_fingerprint=credential.fingerprint,
+                        attempt_number=attempt_number,
+                        fallback_index=fallback_index,
+                        outcome="interrupted" if visible else "failure",
+                        failure_kind=failure.kind,
+                        status_code=failure.status_code,
+                        latency_ms=(self.monotonic() - started) * 1000,
+                    )
+                )
                 if visible:
                     await self.pool.release(lease)
                     raise RoutingStreamInterrupted(

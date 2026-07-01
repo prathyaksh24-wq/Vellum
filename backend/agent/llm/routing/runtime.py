@@ -53,7 +53,7 @@ def build_routing_runtime(
         if value and not store.list_credentials(provider):
             resolver.reconcile_borrowed(provider, f"{provider.upper()}_API_KEY", value)
 
-    if not store.list_fallbacks() and getattr(settings, "fallback_model", ""):
+    if not store.fallbacks_initialized() and getattr(settings, "fallback_model", ""):
         store.replace_fallbacks(
             [FallbackTarget(provider="openrouter", model=settings.fallback_model)]
         )

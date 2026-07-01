@@ -167,6 +167,25 @@ class ProviderFailure(BaseModel):
     retry_after_seconds: float | None = Field(default=None, ge=0)
 
 
+class RoutingAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    correlation_id: str
+    thread_id: str
+    model: str
+    api_provider: ApiProvider
+    inference_provider: str | None = None
+    credential_fingerprint: str
+    attempt_number: int = Field(ge=1)
+    fallback_index: int = Field(ge=0)
+    outcome: Literal["success", "failure", "interrupted"]
+    failure_kind: FailureKind | None = None
+    status_code: int | None = None
+    latency_ms: float = Field(ge=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class RoutingTerminalError(RuntimeError):
     def __init__(self, *, correlation_id: str, failures: list[ProviderFailure]) -> None:
         self.correlation_id = correlation_id

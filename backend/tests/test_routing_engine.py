@@ -111,6 +111,10 @@ def test_pool_rotation_precedes_model_fallback(tmp_path) -> None:
             ("google/primary", "key-1"),
             ("google/primary", "key-2"),
         ]
+        attempts = store.list_attempts(limit=10, offset=0)
+        assert [attempt.outcome for attempt in attempts] == ["failure", "success"]
+        assert [attempt.fallback_index for attempt in attempts] == [0, 0]
+        assert attempts[0].failure_kind == "auth"
 
     asyncio.run(scenario())
 
@@ -248,6 +252,9 @@ def test_stream_falls_back_when_primary_fails_before_visible_chunk(tmp_path) -> 
 
         assert "".join(str(chunk.content) for chunk in chunks) == "fallback"
         assert fallback.calls == [("openai/fallback", "oa-key")]
+        attempts = store.list_attempts(limit=10, offset=0)
+        assert [attempt.outcome for attempt in attempts] == ["failure", "success"]
+        assert [attempt.fallback_index for attempt in attempts] == [0, 1]
 
     asyncio.run(scenario())
 
@@ -282,5 +289,8 @@ def test_stream_never_falls_back_after_visible_output(tmp_path) -> None:
 
         assert seen == ["partial"]
         assert fallback.calls == []
+        attempts = store.list_attempts(limit=10, offset=0)
+        assert attempts[-1].outcome == "interrupted"
+        assert attempts[-1].failure_kind == "server"
 
     asyncio.run(scenario())
