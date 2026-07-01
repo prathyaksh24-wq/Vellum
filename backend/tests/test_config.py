@@ -36,6 +36,11 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.cloud_escalation_enabled is True
     assert settings.chroma_path is not None
     assert settings.chroma_path.name == "chroma"
+    assert settings.llm_routing_db_path.is_absolute()
+    assert settings.llm_routing_db_path.name == "routing.db"
+    assert settings.llm_routing_keyring_service == "vellum.llm"
+    assert settings.llm_routing_max_targets == 4
+    assert settings.llm_routing_max_transient_retries == 2
 
 
 def test_auto_gui_removed_from_dependency_files():

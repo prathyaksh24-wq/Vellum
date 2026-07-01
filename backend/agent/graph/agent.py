@@ -14,6 +14,7 @@ from langgraph.prebuilt import create_react_agent
 from agent.config import get_settings
 from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
+from agent.llm.routing.runtime import get_routed_chat_model
 from agent.plugins.spotify_runtime import portable_agent_tools
 from agent.tools.apify import search_amazon
 from agent.tools.browser import (
@@ -209,63 +210,11 @@ CHECKPOINT_DB = Path("data/memory/checkpoints.db")
 
 
 def build_llm(model: str | None = None):
-    settings = get_settings()
-    try:
-        from langchain_openai import ChatOpenAI
-    except ImportError as exc:
-        raise RuntimeError("langchain-openai is required to build the ReAct agent.") from exc
-
-    registry = get_provider_registry()
-    active_entry, active_temp = registry.current()
-    resolved_id = model or active_entry.id
-
-    # Direct OpenAI path: if the model is an OpenAI vendor model and a native
-    # key is configured, skip OpenRouter. Trades OpenRouter's ZDR enforcement
-    # for OpenAI's own data-retention terms; intentional, user-configured.
-    if resolved_id.startswith("openai/") and settings.openai_api_key:
-        bare_id = resolved_id.split("/", 1)[1]
-        return ChatOpenAI(
-            model=bare_id,
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            temperature=active_temp,
-            max_tokens=2048,
-        )
-
-    provider_config: dict = {
-        "data_collection": "deny",
-        "zdr": settings.zdr_only,
-        "allow_fallbacks": True,
-    }
-    # Only constrain provider order for open-weights models hosted by multiple
-    # privacy-respecting upstreams. Vendor-hosted models (Anthropic, OpenAI,
-    # Gemini, Grok) have a single upstream — adding an order list would block
-    # routing.
-    entry = registry._find_by_id(resolved_id) or active_entry
-    if entry.open_weights:
-        provider_config["order"] = ["Fireworks", "Together", "DeepInfra"]
-
-    return ChatOpenAI(
-        model=resolved_id,
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
-        temperature=active_temp,
-        max_tokens=2048,
-        default_headers={
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "PersonalAgent",
-        },
-        extra_body={"provider": provider_config},
-    )
-
+    return get_routed_chat_model(model)
 
 def build_llm_with_fallback(model: str | None = None):
-    settings = get_settings()
-    primary = build_llm(model)
-    primary_model = model or get_provider_registry().current()[0].id
-    if primary_model == settings.fallback_model:
-        return primary
-    return primary.with_fallbacks([build_llm(settings.fallback_model)])
+    """Compatibility alias; fallback is handled by the routing engine."""
+    return get_routed_chat_model(model)
 
 
 def build_checkpointer() -> SqliteSaver:

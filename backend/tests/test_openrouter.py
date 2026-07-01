@@ -90,6 +90,35 @@ def test_openrouter_chat_uses_fallback_on_primary_http_error(monkeypatch, tmp_pa
     assert models == ["primary/test", openrouter.get_settings().fallback_model]
 
 
+def test_openrouter_chat_delegates_to_shared_runtime_without_injected_client(monkeypatch):
+    captured = {}
+
+    class FakeEngine:
+        async def ainvoke(self, **kwargs):
+            captured.update(kwargs)
+            from langchain_core.messages import AIMessage
+
+            return AIMessage(content="routed answer")
+
+    class FakeRuntime:
+        engine = FakeEngine()
+
+    monkeypatch.setattr(openrouter, "get_routing_runtime", lambda: FakeRuntime())
+
+    answer = asyncio.run(
+        openrouter.openrouter_chat(
+            system="system",
+            user="user",
+            model_override="primary/test",
+            session_id="thread-1",
+        )
+    )
+
+    assert answer == "routed answer"
+    assert captured["primary_model"] == "primary/test"
+    assert captured["thread_id"] == "thread-1"
+
+
 def test_openrouter_http_error_message_includes_provider_reason():
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(
@@ -102,22 +131,25 @@ def test_openrouter_http_error_message_includes_provider_reason():
     assert openrouter._http_error_message(exc) == "test/model is not a valid model ID (code: 400)"
 
 
-def test_langchain_openrouter_provider_policy_uses_extra_body():
-    llm = react_agent.build_llm()
+def test_langchain_agent_uses_shared_routed_model(monkeypatch):
+    sentinel = object()
+    captured = {}
 
-    assert llm.extra_body["provider"]["data_collection"] == "deny"
-    assert llm.extra_body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
-    assert llm.extra_body["provider"]["allow_fallbacks"] is True
-    assert llm.extra_body["provider"]["zdr"] is True
-    assert "provider" not in llm.model_kwargs
+    def fake_routed(model=None):
+        captured["model"] = model
+        return sentinel
+
+    monkeypatch.setattr(react_agent, "get_routed_chat_model", fake_routed)
+
+    assert react_agent.build_llm("primary/test") is sentinel
+    assert captured["model"] == "primary/test"
 
 
-def test_langchain_openrouter_agent_model_uses_configured_fallback():
-    wrapped = react_agent.build_llm_with_fallback("primary/test")
+def test_legacy_fallback_builder_is_alias_for_routed_model(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None: sentinel)
 
-    assert type(wrapped).__name__ == "RunnableWithFallbacks"
-    assert wrapped.runnable.model_name == "primary/test"
-    assert wrapped.fallbacks[0].model_name == react_agent.get_settings().fallback_model
+    assert react_agent.build_llm_with_fallback("primary/test") is sentinel
 
 
 def test_vellum_prompt_includes_active_model_for_self_reporting():

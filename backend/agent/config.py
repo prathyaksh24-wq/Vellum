@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     primary_model: str = Field(default="google/gemma-4-31b-it", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
+    llm_routing_db_path: Path = Field(
+        default=Path("data/llm-routing/routing.db"),
+        alias="LLM_ROUTING_DB_PATH",
+    )
+    llm_routing_keyring_service: str = Field(
+        default="vellum.llm",
+        alias="LLM_ROUTING_KEYRING_SERVICE",
+    )
+    llm_routing_max_targets: int = Field(default=4, alias="LLM_ROUTING_MAX_TARGETS")
+    llm_routing_max_transient_retries: int = Field(
+        default=2,
+        alias="LLM_ROUTING_MAX_TRANSIENT_RETRIES",
+    )
 
     # Obsidian
     obsidian_vault_path: Path = Field(alias="OBSIDIAN_VAULT_PATH")
@@ -147,6 +160,7 @@ class Settings(BaseSettings):
         "chroma_path",
         "voice_model_dir",
         "computer_use_screenshot_dir",
+        "llm_routing_db_path",
         mode="before",
     )
     @classmethod
@@ -167,6 +181,7 @@ class Settings(BaseSettings):
             self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
+        self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
@@ -186,6 +201,10 @@ class Settings(BaseSettings):
             raise ValueError("MAX_CONTEXT_CHUNKS must be at least 1.")
         if self.max_context_tokens < 1:
             raise ValueError("MAX_CONTEXT_TOKENS must be at least 1.")
+        if self.llm_routing_max_targets < 1:
+            raise ValueError("LLM_ROUTING_MAX_TARGETS must be at least 1.")
+        if self.llm_routing_max_transient_retries < 0:
+            raise ValueError("LLM_ROUTING_MAX_TRANSIENT_RETRIES cannot be negative.")
         if self.mcp_timeout_seconds < 1:
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
         if self.llm_stream_timeout_seconds <= 0:

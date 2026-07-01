@@ -53,5 +53,30 @@
     setProviderKey: function (provider, apiKey) {
       return client.request("/api/settings/provider-key", client.jsonOptions("POST", { provider: provider, api_key: apiKey }));
     },
+    routingStatus: function () { return client.request("/api/llm-routing/status"); },
+    routingPolicies: function () { return client.request("/api/llm-routing/policies"); },
+    setGlobalRoutingPolicy: function (policy) {
+      return client.request("/api/llm-routing/policies/global", client.jsonOptions("PUT", policy));
+    },
+    routingFallbacks: function () { return client.request("/api/llm-routing/fallbacks"); },
+    setFallbacks: function (targets) {
+      return client.request("/api/llm-routing/fallbacks", client.jsonOptions("PUT", { targets: targets }));
+    },
+    routingCredentials: function () { return client.request("/api/llm-routing/credentials"); },
+    addCredential: function (credential) {
+      return client.request("/api/llm-routing/credentials", client.jsonOptions("POST", credential));
+    },
+    removeCredential: function (credentialId) {
+      return client.request("/api/llm-routing/credentials/" + encodeURIComponent(credentialId), client.jsonOptions("DELETE"));
+    },
+    setCredentialStrategy: function (provider, strategy) {
+      return client.request("/api/llm-routing/credentials/" + encodeURIComponent(provider) + "/strategy", client.jsonOptions("PUT", { strategy: strategy }));
+    },
+    resetCredentialPool: function (provider) {
+      return client.request("/api/llm-routing/credentials/" + encodeURIComponent(provider) + "/reset", client.jsonOptions("POST"));
+    },
+    routingAttempts: function (limit, offset) {
+      return client.request("/api/llm-routing/attempts?limit=" + encodeURIComponent(limit == null ? 50 : limit) + "&offset=" + encodeURIComponent(offset == null ? 0 : offset));
+    },
   };
 })();
