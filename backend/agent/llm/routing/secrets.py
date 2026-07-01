@@ -39,6 +39,7 @@ class SecretResolver:
         self.keyring = keyring_backend
         self.service = service
         self._fingerprint_salt = fingerprint_salt
+        self._runtime_values: dict[str, str] = {}
 
     def _salt(self) -> bytes:
         if self._fingerprint_salt is not None:
@@ -124,6 +125,31 @@ class SecretResolver:
                 raise
             raise SecretUnavailable("credential could not be stored") from exc
 
+    def reconcile_borrowed(
+        self,
+        provider: str,
+        label: str,
+        secret: str,
+    ) -> CredentialRecord:
+        source = f"runtime:{label}"
+        existing = next(
+            (item for item in self.store.list_credentials(provider) if item.source == source),
+            None,
+        )
+        if existing is None:
+            record = CredentialRecord(
+                provider=provider,
+                label=label,
+                source=source,
+                fingerprint=self.fingerprint(secret),
+            )
+        else:
+            record = existing.model_copy(
+                update={"label": label, "fingerprint": self.fingerprint(secret)}
+            )
+        self._runtime_values[source] = secret
+        return self.store.upsert_credential(record)
+
     def resolve(self, credential: CredentialRecord) -> str:
         if credential.source.startswith("env:"):
             value = os.environ.get(credential.source.removeprefix("env:"))
@@ -135,6 +161,8 @@ class SecretResolver:
                 )
             except Exception as exc:
                 raise SecretUnavailable("OS credential storage is unavailable") from exc
+        elif credential.source.startswith("runtime:"):
+            value = self._runtime_values.get(credential.source)
         else:
             value = None
         if not value:

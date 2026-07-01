@@ -114,3 +114,16 @@ def test_environment_reconciliation_preserves_existing_cooldown(monkeypatch, tmp
     assert updated.status is CredentialStatus.cooldown
     assert updated.cooldown_until == cooldown
     assert updated.consecutive_429 == 2
+
+
+def test_borrowed_settings_secret_is_reference_only_and_resolves_in_memory(tmp_path) -> None:
+    secret = "settings-secret-sentinel"
+    store = RoutingStore(tmp_path / "routing.db")
+    resolver = SecretResolver(store, FakeKeyring(), fingerprint_salt=b"test-salt")
+
+    record = resolver.reconcile_borrowed("openrouter", "OPENROUTER_API_KEY", secret)
+
+    assert record.source == "runtime:OPENROUTER_API_KEY"
+    assert resolver.resolve(record) == secret
+    for database_file in tmp_path.glob("routing.db*"):
+        assert secret.encode() not in database_file.read_bytes()
