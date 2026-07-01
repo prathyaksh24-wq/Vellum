@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import asyncio
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from agent.llm.routing.engine import RoutingEngine
-from agent.llm.routing.models import CredentialRecord, FallbackTarget, RoutingTerminalError
+from agent.llm.routing.models import (
+    CredentialRecord,
+    FallbackTarget,
+    RoutingStreamInterrupted,
+    RoutingTerminalError,
+)
 from agent.llm.routing.pool import CredentialPool
 from agent.llm.routing.store import RoutingStore
 
@@ -35,6 +40,12 @@ class FakeModel:
         if isinstance(self.outcome, BaseException):
             raise self.outcome
         return self.outcome
+
+    async def astream(self, messages, **kwargs):
+        for item in self.outcome:
+            if isinstance(item, BaseException):
+                raise item
+            yield item
 
 
 class FakeAdapter:
@@ -210,5 +221,66 @@ def test_tools_are_bound_on_the_selected_attempt(tmp_path) -> None:
 
         assert result.tool_calls[0]["name"] == "lookup"
         assert adapter.bound_tools == tools
+
+    asyncio.run(scenario())
+
+
+def test_stream_falls_back_when_primary_fails_before_visible_chunk(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, _, fallback = build_engine(
+            tmp_path,
+            openrouter_outcomes=[[FakeStatusError(404, "missing")]],
+            openai_outcomes=[[AIMessageChunk(content="fallback")]],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+
+        chunks = [
+            chunk
+            async for chunk in engine.astream(
+                messages=[HumanMessage(content="hello")],
+                primary_model="google/primary",
+            )
+        ]
+
+        assert "".join(str(chunk.content) for chunk in chunks) == "fallback"
+        assert fallback.calls == [("openai/fallback", "oa-key")]
+
+    asyncio.run(scenario())
+
+
+def test_stream_never_falls_back_after_visible_output(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, _, fallback = build_engine(
+            tmp_path,
+            openrouter_outcomes=[[
+                AIMessageChunk(content="partial"),
+                FakeStatusError(503, "overloaded"),
+            ]],
+            openai_outcomes=[[AIMessageChunk(content="must not run")]],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+
+        seen = []
+        try:
+            async for chunk in engine.astream(
+                messages=[HumanMessage(content="hello")],
+                primary_model="google/primary",
+            ):
+                seen.append(chunk.content)
+        except RoutingStreamInterrupted as exc:
+            assert "route-" in exc.correlation_id
+        else:
+            raise AssertionError("visible streams must not fall back after failure")
+
+        assert seen == ["partial"]
+        assert fallback.calls == []
 
     asyncio.run(scenario())

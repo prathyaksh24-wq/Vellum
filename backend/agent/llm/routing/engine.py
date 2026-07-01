@@ -12,6 +12,7 @@ from agent.llm.routing.models import (
     FailureKind,
     FallbackTarget,
     ProviderFailure,
+    RoutingStreamInterrupted,
     RoutingTerminalError,
     merge_policy,
 )
@@ -211,6 +212,154 @@ class RoutingEngine:
                     break
 
                 await self.pool.release(lease)
+                break
+
+        raise RoutingTerminalError(
+            correlation_id=plan.correlation_id,
+            failures=failures,
+        )
+
+    @staticmethod
+    def _visible_chunk(chunk: Any) -> bool:
+        return bool(
+            getattr(chunk, "content", None)
+            or getattr(chunk, "tool_calls", None)
+            or getattr(chunk, "tool_call_chunks", None)
+        )
+
+    async def astream(
+        self,
+        *,
+        messages: Sequence[Any],
+        primary_model: str,
+        primary_provider: str | None = None,
+        tools: Sequence[Any] = (),
+        temperature: float = 0.3,
+        max_tokens: int = 2048,
+        thread_id: str = "background",
+        **kwargs: Any,
+    ):
+        del thread_id
+        plan = self.build_plan(primary_model, primary_provider)
+        failures: list[ProviderFailure] = []
+
+        for target in plan.targets:
+            adapter = self.adapters.get(target.provider)
+            if adapter is None:
+                failures.append(
+                    ProviderFailure(
+                        kind=FailureKind.model_unavailable,
+                        summary="provider adapter is unavailable",
+                    )
+                )
+                continue
+
+            preferred_id: str | None = None
+            transient_retries = 0
+            while True:
+                try:
+                    lease = await self.pool.lease(
+                        target.provider,
+                        target.model,
+                        preferred_id=preferred_id,
+                    )
+                except CredentialPoolExhausted:
+                    failures.append(
+                        ProviderFailure(
+                            kind=FailureKind.auth,
+                            summary="no healthy provider credentials",
+                        )
+                    )
+                    break
+
+                credential = self.store.get_credential(lease.credential_id)
+                if credential is None:
+                    await self.pool.release(lease)
+                    break
+
+                visible = False
+                buffered: list[Any] = []
+                try:
+                    secret = self.secret_resolver.resolve(credential)
+                    policy = None
+                    if target.provider == "openrouter":
+                        policy = merge_policy(
+                            self.store.get_global_policy(),
+                            self.store.get_model_policy(target.model),
+                        )
+                    model = adapter.build_model(
+                        target=target,
+                        secret=secret,
+                        temperature=temperature,
+                        policy=policy,
+                        max_tokens=max_tokens,
+                    )
+                    if tools:
+                        model = model.bind_tools(list(tools))
+                    async for chunk in model.astream(list(messages), **kwargs):
+                        if not visible and not self._visible_chunk(chunk):
+                            buffered.append(chunk)
+                            continue
+                        if not visible:
+                            visible = True
+                            for pending in buffered:
+                                yield pending
+                            buffered.clear()
+                        yield chunk
+                    if not visible:
+                        failure = ProviderFailure(
+                            kind=FailureKind.malformed_response,
+                            summary="provider returned an invalid response",
+                        )
+                        await self.pool.release(lease)
+                        failures.append(failure)
+                        break
+                    await self.pool.mark_success(lease)
+                    return
+                except Exception as exc:
+                    failure = classify_provider_exception(exc)
+
+                failures.append(failure)
+                if visible:
+                    await self.pool.release(lease)
+                    raise RoutingStreamInterrupted(
+                        correlation_id=plan.correlation_id,
+                        failure=failure,
+                    ) from None
+                if failure.kind is FailureKind.auth:
+                    await self.pool.mark_auth_invalid(lease)
+                    preferred_id = None
+                    continue
+                if failure.kind in {FailureKind.billing, FailureKind.plan_exhausted}:
+                    await self.pool.mark_billing_exhausted(lease)
+                    preferred_id = None
+                    continue
+                if failure.kind is FailureKind.rate_limit:
+                    rotate = await self.pool.mark_generic_429(lease)
+                    preferred_id = None if rotate else credential.id
+                    if not rotate and failure.retry_after_seconds:
+                        await self.async_sleep(failure.retry_after_seconds)
+                    continue
+                if failure.kind in {FailureKind.model_unavailable, FailureKind.invalid_request}:
+                    await self.pool.release(lease)
+                    if failure.kind is FailureKind.invalid_request:
+                        raise RoutingTerminalError(
+                            correlation_id=plan.correlation_id,
+                            failures=failures,
+                        )
+                    break
+                if failure.kind in {FailureKind.timeout, FailureKind.network, FailureKind.server}:
+                    await self.pool.release(lease)
+                    if transient_retries < self.max_transient_retries:
+                        delay = failure.retry_after_seconds
+                        if delay is None:
+                            delay = min(8.0, (2**transient_retries) + self.jitter())
+                        transient_retries += 1
+                        preferred_id = credential.id
+                        await self.async_sleep(delay)
+                        continue
+                else:
+                    await self.pool.release(lease)
                 break
 
         raise RoutingTerminalError(

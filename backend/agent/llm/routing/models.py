@@ -175,6 +175,13 @@ class RoutingTerminalError(RuntimeError):
         super().__init__(f"LLM routing failed ({correlation_id}): {summaries}")
 
 
+class RoutingStreamInterrupted(RuntimeError):
+    def __init__(self, *, correlation_id: str, failure: ProviderFailure) -> None:
+        self.correlation_id = correlation_id
+        self.failure = failure
+        super().__init__(f"LLM stream interrupted ({correlation_id}): {failure.summary}")
+
+
 def merge_policy(
     base: ProviderRoutingPolicy,
     override: ProviderRoutingPolicy | None,
