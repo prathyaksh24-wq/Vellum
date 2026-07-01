@@ -127,3 +127,4 @@ def test_spotify_schemas_cover_expected_tools_and_playback_actions():
         "set_volume",
         "recently_played",
     ]
+    assert "save_current" in namespace["SPOTIFY_LIBRARY"]["parameters"]["properties"]["action"]["enum"]

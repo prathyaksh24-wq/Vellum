@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from .auth import SpotifyAuthStore
 from .client import SpotifyClient
-from .errors import SpotifyError, SpotifyRateLimited
+from .errors import SpotifyError, SpotifyNoActiveDevice, SpotifyRateLimited
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -196,12 +196,12 @@ def spotify_playlists(args: dict, **kwargs) -> str:
         missing = _missing(args, "playlist_id", "uris")
         if missing:
             return _invalid(*missing)
-        path = f"/playlists/{args['playlist_id']}/tracks"
+        path = f"/playlists/{args['playlist_id']}/items"
         if action == "add_items":
             body = {"uris": args["uris"], **_params(args, "position")}
             return _result(lambda: service.request("POST", path, json_body=body))
         body = {
-            "tracks": [{"uri": uri} for uri in args["uris"]],
+            "items": [{"uri": uri} for uri in args["uris"]],
             **_params(args, "snapshot_id"),
         }
         return _result(lambda: service.request("DELETE", path, json_body=body))
@@ -254,12 +254,27 @@ def spotify_library(args: dict, **kwargs) -> str:
                 "GET", path, params=_params(args, "market", "limit", "offset") or None
             )
         )
-    if action in {"save", "remove"}:
-        ids = args.get("ids") or [uri.rsplit(":", 1)[-1] for uri in (args.get("uris") or [])]
-        if not ids:
+    if action in {"save", "remove", "save_current", "remove_current"}:
+        def mutate() -> dict:
+            uris = list(args.get("uris") or [])
+            if action in {"save_current", "remove_current"}:
+                current = service.request("GET", "/me/player/currently-playing")
+                item = current.get("item") if isinstance(current, dict) else None
+                uri = item.get("uri") if isinstance(item, dict) else None
+                if not uri or not str(uri).startswith("spotify:track:"):
+                    raise SpotifyNoActiveDevice("No Spotify track is currently playing")
+                uris = [str(uri)]
+            if not uris:
+                singular = "track" if kind == "tracks" else "album"
+                uris = [f"spotify:{singular}:{item_id}" for item_id in (args.get("ids") or [])]
+            if not uris:
+                raise ValueError("ids or uris")
+            method = "PUT" if action in {"save", "save_current"} else "DELETE"
+            return service.request(method, "/me/library", params={"uris": ",".join(uris)})
+
+        if action in {"save", "remove"} and not (args.get("ids") or args.get("uris")):
             return _invalid("ids or uris")
-        method = "PUT" if action == "save" else "DELETE"
-        return _result(lambda: service.request(method, path, json_body={"ids": ids}))
+        return _result(mutate)
     return _invalid("action")
 
 

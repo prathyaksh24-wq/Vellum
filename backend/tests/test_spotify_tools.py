@@ -104,6 +104,61 @@ def test_playlist_create_uses_current_user():
 
 
 @pytest.mark.parametrize(
+    ("action", "method"),
+    [("add_items", "POST"), ("remove_items", "DELETE")],
+)
+def test_playlist_mutations_use_current_items_endpoint(action, method):
+    service = FakeService()
+
+    result = json.loads(
+        spotify_playlists(
+            {"action": action, "playlist_id": "playlist-1", "uris": ["spotify:track:1"]},
+            service=service,
+        )
+    )
+
+    assert result["ok"] is True
+    assert service.calls[-1][0:2] == (method, "/playlists/playlist-1/items")
+
+
+@pytest.mark.parametrize(
+    ("kind", "action", "values", "method", "expected_uris"),
+    [
+        ("tracks", "save", {"ids": ["track-1"]}, "PUT", "spotify:track:track-1"),
+        ("albums", "remove", {"uris": ["spotify:album:album-1"]}, "DELETE", "spotify:album:album-1"),
+    ],
+)
+def test_library_mutations_use_unified_library_endpoint(kind, action, values, method, expected_uris):
+    service = FakeService()
+
+    result = json.loads(spotify_library({"kind": kind, "action": action, **values}, service=service))
+
+    assert result["ok"] is True
+    assert service.calls == [
+        (method, "/me/library", {"params": {"uris": expected_uris}}),
+    ]
+
+
+def test_library_can_save_the_currently_playing_track_in_one_action():
+    class CurrentlyPlayingService(FakeService):
+        def request(self, method, path, **kwargs):
+            self.calls.append((method, path, kwargs))
+            if (method, path) == ("GET", "/me/player/currently-playing"):
+                return {"item": {"type": "track", "uri": "spotify:track:current-1"}}
+            return {"method": method, "path": path}
+
+    service = CurrentlyPlayingService()
+
+    result = json.loads(spotify_library({"kind": "tracks", "action": "save_current"}, service=service))
+
+    assert result["ok"] is True
+    assert service.calls == [
+        ("GET", "/me/player/currently-playing", {}),
+        ("PUT", "/me/library", {"params": {"uris": "spotify:track:current-1"}}),
+    ]
+
+
+@pytest.mark.parametrize(
     ("handler", "args"),
     [
         (spotify_playback, {"action": "seek"}),

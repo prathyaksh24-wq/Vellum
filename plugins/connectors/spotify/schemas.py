@@ -124,12 +124,12 @@ SPOTIFY_ALBUMS = _tool(
 
 SPOTIFY_LIBRARY = _tool(
     "spotify_library",
-    "List, save, or remove tracks or albums in the user's Spotify library.",
+    "List, save, or remove tracks or albums in the user's Spotify library. Liked Songs is the track library, not a playlist. For 'like/save this song', use save_current so no separate playback lookup is needed.",
     {
         "kind": {"type": "string", "enum": ["tracks", "albums"]},
-        "action": {"type": "string", "enum": ["list", "save", "remove"]},
-        "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
-        "uris": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+        "action": {"type": "string", "enum": ["list", "save", "remove", "save_current", "remove_current"]},
+        "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
+        "uris": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "market": {"type": "string"},
         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         "offset": {"type": "integer", "minimum": 0},
