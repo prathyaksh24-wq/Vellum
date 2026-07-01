@@ -90,6 +90,35 @@ def test_openrouter_chat_uses_fallback_on_primary_http_error(monkeypatch, tmp_pa
     assert models == ["primary/test", openrouter.get_settings().fallback_model]
 
 
+def test_openrouter_chat_delegates_to_shared_runtime_without_injected_client(monkeypatch):
+    captured = {}
+
+    class FakeEngine:
+        async def ainvoke(self, **kwargs):
+            captured.update(kwargs)
+            from langchain_core.messages import AIMessage
+
+            return AIMessage(content="routed answer")
+
+    class FakeRuntime:
+        engine = FakeEngine()
+
+    monkeypatch.setattr(openrouter, "get_routing_runtime", lambda: FakeRuntime())
+
+    answer = asyncio.run(
+        openrouter.openrouter_chat(
+            system="system",
+            user="user",
+            model_override="primary/test",
+            session_id="thread-1",
+        )
+    )
+
+    assert answer == "routed answer"
+    assert captured["primary_model"] == "primary/test"
+    assert captured["thread_id"] == "thread-1"
+
+
 def test_openrouter_http_error_message_includes_provider_reason():
     request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
     response = httpx.Response(
