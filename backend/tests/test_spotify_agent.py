@@ -1,4 +1,7 @@
 import json
+from pathlib import Path
+import subprocess
+import sys
 
 from agent.plugins import spotify_runtime
 from agent.plugins.portable import PortablePluginContext, PortableRegisteredTool
@@ -53,3 +56,22 @@ def test_registered_spotify_context_contains_connector_and_tools():
     assert isinstance(ctx, PortablePluginContext)
     assert "spotify" in ctx.connectors
     assert len(ctx.tools) == 7
+
+
+def test_spotify_runtime_imports_from_backend_working_directory():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from agent.plugins import spotify_runtime; print(spotify_runtime.PLUGIN_DIR)",
+        ],
+        cwd=Path("backend"),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "plugins" in result.stdout
+    assert "spotify" in result.stdout

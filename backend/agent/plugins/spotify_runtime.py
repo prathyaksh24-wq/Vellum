@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 import re
 
@@ -20,11 +21,49 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "connectors" / "spotify"
 AUTH_DIR = REPO_ROOT / "data" / "plugins" / "spotify"
 
 
+@lru_cache(maxsize=1)
+def spotify_plugin():
+    return load_portable_plugin(PLUGIN_DIR)
+
+
+_spotify_module = spotify_plugin().module
+SpotifyAuthError = _spotify_module.auth.SpotifyAuthError
+SpotifyError = _spotify_module.tools.SpotifyError
+SpotifyRateLimited = _spotify_module.tools.SpotifyRateLimited
+
+
+def spotify_store():
+    return _spotify_module.auth.SpotifyAuthStore(AUTH_DIR)
+
+
+def spotify_client():
+    return _spotify_module.tools.get_spotify_service()
+
+
+def spotify_pkce_pair():
+    return _spotify_module.auth.new_pkce_pair()
+
+
+def spotify_authorization_url(**kwargs):
+    return _spotify_module.auth.authorization_url(**kwargs)
+
+
+def portable_spotify_status() -> dict:
+    return _spotify_module.spotify_status()
+
+
+def spotify_playback(args: dict, **kwargs) -> str:
+    return _spotify_module.tools.spotify_playback(args, **kwargs)
+
+
+def spotify_devices(args: dict, **kwargs) -> str:
+    return _spotify_module.tools.spotify_devices(args, **kwargs)
+
+
 def spotify_is_authenticated() -> bool:
-    from plugins.connectors.spotify.auth import SpotifyAuthStore
 
     try:
-        saved = SpotifyAuthStore(AUTH_DIR).load_tokens()
+        saved = spotify_store().load_tokens()
     except Exception:
         return False
     return bool(saved.get("access_token") and saved.get("refresh_token") and saved.get("client_id"))
@@ -32,7 +71,7 @@ def spotify_is_authenticated() -> bool:
 
 def registered_spotify_context() -> PortablePluginContext:
     context = PortablePluginContext()
-    load_portable_plugin(PLUGIN_DIR).register(context)
+    spotify_plugin().register(context)
     return context
 
 

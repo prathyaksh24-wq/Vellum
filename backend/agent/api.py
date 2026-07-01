@@ -53,6 +53,18 @@ from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.portable import discover_portable_plugins
+from agent.plugins.spotify_runtime import (
+    SpotifyAuthError,
+    SpotifyError,
+    SpotifyRateLimited,
+    portable_spotify_status,
+    spotify_authorization_url,
+    spotify_client as runtime_spotify_client,
+    spotify_devices,
+    spotify_pkce_pair,
+    spotify_playback,
+    spotify_store as runtime_spotify_store,
+)
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -65,15 +77,6 @@ from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.obsidian_write import store_qa_pair
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
-from plugins.connectors.spotify.auth import (
-    SpotifyAuthStore,
-    authorization_url as spotify_authorization_url,
-    new_pkce_pair as spotify_pkce_pair,
-)
-from plugins.connectors.spotify.client import SpotifyClient
-from plugins.connectors.spotify.errors import SpotifyAuthError, SpotifyError, SpotifyRateLimited
-from plugins.connectors.spotify import spotify_status as portable_spotify_status
-from plugins.connectors.spotify.tools import spotify_devices, spotify_playback
 
 _api_ledger = UsageLedger(Path("data/memory/usage.db"))
 _fts5_memory = FTS5Memory()
@@ -105,12 +108,12 @@ def _project_context() -> ProjectContext:
     return _project_context_singleton
 
 
-def _spotify_store() -> SpotifyAuthStore:
-    return SpotifyAuthStore(REPO_ROOT / "data" / "plugins" / "spotify")
+def _spotify_store():
+    return runtime_spotify_store()
 
 
-def _spotify_client() -> SpotifyClient:
-    return SpotifyClient(_spotify_store())
+def _spotify_client():
+    return runtime_spotify_client()
 
 
 def _load_script_module(name: str):
@@ -860,9 +863,16 @@ async def spotify_oauth_callback(
         )
     try:
         flow = _spotify_store().consume_flow(state)
-    except SpotifyAuthError as exc:
+    except Exception as exc:
+        # Portable plugins are loaded under an isolated module namespace. Tests and
+        # embedders may provide the same Spotify store through its package namespace,
+        # so matching only by exception class identity is too brittle here.
+        if getattr(exc, "code", "") != "spotify_auth_error":
+            raise
         return HTMLResponse(
-            f"<html><body><h1>Spotify connection failed</h1><p>{str(exc)}</p></body></html>",
+            "<html><body><h1>Spotify connection failed</h1>"
+            "<p>The authorization state is invalid or expired. Start the connection again.</p>"
+            "</body></html>",
             status_code=400,
         )
     try:
