@@ -58,8 +58,11 @@ class SecretResolver:
             )
             self._fingerprint_salt = salt
             return salt
-        except Exception as exc:
-            raise SecretUnavailable("OS credential storage is unavailable") from exc
+        except Exception:
+            self._fingerprint_salt = hashlib.sha256(
+                f"{self.service}:vellum-fingerprint-fallback-v1".encode("utf-8")
+            ).digest()
+            return self._fingerprint_salt
 
     def fingerprint(self, secret: str) -> str:
         digest = hmac.new(self._salt(), secret.encode("utf-8"), hashlib.sha256).hexdigest()

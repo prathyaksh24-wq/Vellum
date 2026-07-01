@@ -28,6 +28,8 @@ def settings_for(tmp_path):
         llm_routing_max_transient_retries=2,
         openrouter_base_url="https://openrouter.test/v1",
         openai_base_url="https://openai.test/v1",
+        openrouter_api_key=None,
+        openai_api_key=None,
         fallback_model="qwen/fallback",
     )
 
@@ -83,3 +85,27 @@ def test_runtime_does_not_reseed_fallback_after_explicit_clear(tmp_path) -> None
     )
 
     assert rebuilt.store.list_fallbacks() == []
+
+
+def test_runtime_refreshes_borrowed_settings_secret_after_rebuild(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    settings = settings_for(tmp_path)
+    settings.openrouter_api_key = "settings-key"
+
+    first = build_routing_runtime(
+        settings=settings,
+        keyring_backend=FakeKeyring(),
+        fingerprint_salt=b"test-salt",
+    )
+    first_record = first.store.list_credentials("openrouter")[0]
+    assert first.secrets.resolve(first_record) == "settings-key"
+
+    rebuilt = build_routing_runtime(
+        settings=settings,
+        keyring_backend=FakeKeyring(),
+        fingerprint_salt=b"test-salt",
+    )
+    rebuilt_record = rebuilt.store.list_credentials("openrouter")[0]
+
+    assert rebuilt.secrets.resolve(rebuilt_record) == "settings-key"
+    assert rebuilt_record.id == first_record.id

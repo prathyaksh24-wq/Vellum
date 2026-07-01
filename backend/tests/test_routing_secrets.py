@@ -21,6 +21,17 @@ class FakeKeyring:
         self.values.pop((service, username), None)
 
 
+class BrokenKeyring:
+    def get_password(self, service: str, username: str) -> str | None:
+        raise RuntimeError("backend unavailable")
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        raise RuntimeError("backend unavailable")
+
+    def delete_password(self, service: str, username: str) -> None:
+        raise RuntimeError("backend unavailable")
+
+
 def test_environment_secret_is_resolved_but_never_persisted(monkeypatch, tmp_path) -> None:
     secret = "routing-secret-sentinel-environment"
     monkeypatch.setenv("OPENROUTER_API_KEY", secret)
@@ -127,3 +138,13 @@ def test_borrowed_settings_secret_is_reference_only_and_resolves_in_memory(tmp_p
     assert resolver.resolve(record) == secret
     for database_file in tmp_path.glob("routing.db*"):
         assert secret.encode() not in database_file.read_bytes()
+
+
+def test_keyring_outage_does_not_disable_borrowed_runtime_credentials(tmp_path) -> None:
+    store = RoutingStore(tmp_path / "routing.db")
+    resolver = SecretResolver(store, BrokenKeyring())
+
+    record = resolver.reconcile_borrowed("openrouter", "OPENROUTER_API_KEY", "borrowed-key")
+
+    assert resolver.resolve(record) == "borrowed-key"
+    assert record.fingerprint.startswith("hmac-sha256:")

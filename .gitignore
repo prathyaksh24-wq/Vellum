@@ -8,6 +8,8 @@ __pycache__/
 data/memory/*.db
 data/memory/*.db-*
 data/memory/audit_log.jsonl
+data/llm-routing/*.db
+data/llm-routing/*.db-*
 data/x-api-oauth.json
 data/xai-oauth.json
 data/logs/

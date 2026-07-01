@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+import os
 from typing import Any
 
 from agent.config import get_settings
@@ -46,12 +47,13 @@ def build_routing_runtime(
     resolver.reconcile_environment(
         {"openrouter": "OPENROUTER_API_KEY", "openai": "OPENAI_API_KEY"}
     )
-    for provider, value in {
-        "openrouter": getattr(settings, "openrouter_api_key", None),
-        "openai": getattr(settings, "openai_api_key", None),
-    }.items():
-        if value and not store.list_credentials(provider):
-            resolver.reconcile_borrowed(provider, f"{provider.upper()}_API_KEY", value)
+    borrowed = {
+        "openrouter": ("OPENROUTER_API_KEY", getattr(settings, "openrouter_api_key", None)),
+        "openai": ("OPENAI_API_KEY", getattr(settings, "openai_api_key", None)),
+    }
+    for provider, (variable, value) in borrowed.items():
+        if value and not os.environ.get(variable):
+            resolver.reconcile_borrowed(provider, variable, value)
 
     if not store.fallbacks_initialized() and getattr(settings, "fallback_model", ""):
         store.replace_fallbacks(

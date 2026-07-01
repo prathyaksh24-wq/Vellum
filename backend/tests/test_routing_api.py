@@ -60,6 +60,17 @@ def test_add_credential_never_echoes_secret(monkeypatch, tmp_path, caplog) -> No
     assert response.json()["fingerprint"]
 
 
+def test_credential_request_model_excludes_secret_from_repr_and_dump() -> None:
+    body = routing_api.CredentialCreateBody(
+        provider="openrouter",
+        label="backup",
+        secret="request-secret-sentinel",
+    )
+
+    assert "request-secret-sentinel" not in repr(body)
+    assert "secret" not in body.model_dump()
+
+
 def test_invalid_fallback_chain_is_atomic(monkeypatch, tmp_path) -> None:
     client = make_client(monkeypatch, tmp_path)
     accepted = client.put(

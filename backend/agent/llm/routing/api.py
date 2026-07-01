@@ -29,7 +29,7 @@ class FallbackChainBody(StrictModel):
 class CredentialCreateBody(StrictModel):
     provider: Literal["openrouter", "openai"]
     label: str = Field(min_length=1, max_length=120)
-    secret: str = Field(min_length=1)
+    secret: str = Field(min_length=1, repr=False, exclude=True)
 
 
 class StrategyBody(StrictModel):
