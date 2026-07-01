@@ -7,6 +7,8 @@ import sqlite3
 
 from agent.llm.routing.models import (
     CredentialRecord,
+    CredentialLease,
+    CredentialStrategy,
     CredentialStatus,
     FallbackTarget,
     ProviderRoutingPolicy,
@@ -51,6 +53,23 @@ CREATE TABLE IF NOT EXISTS credential (
 
 CREATE INDEX IF NOT EXISTS idx_credential_provider_status
 ON credential(provider, status);
+
+CREATE TABLE IF NOT EXISTS pool_state (
+    provider TEXT PRIMARY KEY,
+    strategy TEXT NOT NULL,
+    cursor INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS credential_lease (
+    id TEXT PRIMARY KEY,
+    credential_id TEXT NOT NULL REFERENCES credential(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_credential_lease_expiry
+ON credential_lease(expires_at);
 
 PRAGMA user_version=1;
 """
@@ -228,6 +247,82 @@ class RoutingStore:
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return [self._credential_from_row(row) for row in rows]
+
+    def set_pool_strategy(self, provider: str, strategy: CredentialStrategy) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO pool_state(provider, strategy, cursor) VALUES (?, ?, 0)
+                ON CONFLICT(provider) DO UPDATE SET strategy=excluded.strategy
+                """,
+                (provider, strategy.value),
+            )
+
+    def get_pool_state(self, provider: str) -> tuple[CredentialStrategy, int]:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT strategy, cursor FROM pool_state WHERE provider = ?",
+                (provider,),
+            ).fetchone()
+        if row is None:
+            return CredentialStrategy.fill_first, 0
+        return CredentialStrategy(row["strategy"]), int(row["cursor"])
+
+    def set_pool_cursor(self, provider: str, cursor: int) -> None:
+        strategy, _ = self.get_pool_state(provider)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO pool_state(provider, strategy, cursor) VALUES (?, ?, ?)
+                ON CONFLICT(provider) DO UPDATE SET cursor=excluded.cursor
+                """,
+                (provider, strategy.value, cursor),
+            )
+
+    def increment_request_count(self, credential_id: str) -> None:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE credential
+                SET request_count=request_count + 1, updated_at=?
+                WHERE id=?
+                """,
+                (datetime.now(UTC).isoformat(), credential_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(credential_id)
+
+    def create_lease(self, lease: CredentialLease) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO credential_lease(id, credential_id, provider, model, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    lease.id,
+                    lease.credential_id,
+                    lease.provider,
+                    lease.model,
+                    lease.expires_at.isoformat(),
+                ),
+            )
+
+    def release_lease(self, lease_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM credential_lease WHERE id = ?",
+                (lease_id,),
+            )
+        return cursor.rowcount > 0
+
+    def reap_expired_leases(self, now: datetime) -> int:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM credential_lease WHERE expires_at <= ?",
+                (now.isoformat(),),
+            )
+        return cursor.rowcount
 
     def set_credential_state(
         self,

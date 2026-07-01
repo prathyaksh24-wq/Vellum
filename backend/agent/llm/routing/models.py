@@ -148,6 +148,16 @@ class CredentialRecord(BaseModel):
         return normalized
 
 
+class CredentialLease(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    credential_id: str
+    provider: ApiProvider
+    model: str
+    expires_at: datetime
+
+
 class ProviderFailure(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
