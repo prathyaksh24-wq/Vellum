@@ -12,10 +12,11 @@ import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import sys
 import time
-from typing import Any
+from typing import Any, Literal
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,6 +53,18 @@ from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.portable import discover_portable_plugins
+from agent.plugins.spotify_runtime import (
+    SpotifyAuthError,
+    SpotifyError,
+    SpotifyRateLimited,
+    portable_spotify_status,
+    spotify_authorization_url,
+    spotify_client as runtime_spotify_client,
+    spotify_devices,
+    spotify_pkce_pair,
+    spotify_playback,
+    spotify_store as runtime_spotify_store,
+)
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -82,6 +95,7 @@ coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
 _live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
 _oauth_flows: dict[str, dict[str, Any]] = {}
+SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
 _project_context_singleton: ProjectContext | None = None
 
@@ -92,6 +106,14 @@ def _project_context() -> ProjectContext:
         s = get_settings()
         _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
     return _project_context_singleton
+
+
+def _spotify_store():
+    return runtime_spotify_store()
+
+
+def _spotify_client():
+    return runtime_spotify_client()
 
 
 def _load_script_module(name: str):
@@ -212,6 +234,44 @@ class XOAuthStatusResponse(BaseModel):
     x_api_configured: bool
     private_reads_enabled: bool
     posting_enabled: bool
+
+
+class SpotifyOAuthStartRequest(BaseModel):
+    client_id: str = Field(min_length=1)
+
+
+class SpotifyOAuthStartResponse(BaseModel):
+    authorization_url: str
+    redirect_uri: str
+
+
+class SpotifyStatusResponse(BaseModel):
+    connected: bool
+    status: str
+    account_name: str = ""
+    product: str = ""
+    scopes: list[str] = Field(default_factory=list)
+    redirect_uri: str = SPOTIFY_REDIRECT_URI
+
+
+class SpotifyPlayerActionRequest(BaseModel):
+    action: Literal[
+        "play",
+        "pause",
+        "next",
+        "previous",
+        "seek",
+        "set_volume",
+        "set_shuffle",
+        "set_repeat",
+        "transfer",
+    ]
+    device_id: str | None = None
+    position_ms: int | None = Field(default=None, ge=0)
+    volume_percent: int | None = Field(default=None, ge=0, le=100)
+    shuffle: bool | None = None
+    state: Literal["track", "context", "off"] | None = None
+    play: bool = False
 
 
 class CodingSessionBody(BaseModel):
@@ -724,6 +784,189 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
         "setTimeout(function(){ window.close(); }, 900);"
         "</script></body></html>"
     )
+
+
+def _spotify_has_credentials() -> bool:
+    try:
+        saved = _spotify_store().load_tokens()
+    except SpotifyAuthError:
+        return False
+    return bool(saved.get("client_id") and saved.get("access_token") and saved.get("refresh_token"))
+
+
+@router.get("/plugins/spotify/status", response_model=SpotifyStatusResponse)
+async def spotify_oauth_status() -> SpotifyStatusResponse:
+    store = _spotify_store()
+    try:
+        saved = store.load_tokens()
+    except SpotifyAuthError:
+        return SpotifyStatusResponse(connected=False, status="not_configured")
+    try:
+        profile = await asyncio.to_thread(_spotify_client().get_profile)
+    except SpotifyAuthError:
+        return SpotifyStatusResponse(connected=False, status="reauth_required")
+    except SpotifyError:
+        return SpotifyStatusResponse(connected=True, status="unreachable")
+    scopes = str(saved.get("scope") or "").split()
+    return SpotifyStatusResponse(
+        connected=True,
+        status="ready",
+        account_name=str(profile.get("display_name") or profile.get("id") or ""),
+        product=str(profile.get("product") or ""),
+        scopes=scopes,
+    )
+
+
+@router.post("/plugins/spotify/oauth/start", response_model=SpotifyOAuthStartResponse)
+async def spotify_oauth_start(request: SpotifyOAuthStartRequest) -> SpotifyOAuthStartResponse:
+    client_id = request.client_id.strip()
+    if not client_id:
+        raise HTTPException(status_code=422, detail="Spotify Client ID is required")
+    verifier, challenge = spotify_pkce_pair()
+    state = secrets.token_urlsafe(32)
+    _spotify_store().save_flow(
+        {
+            "state": state,
+            "code_verifier": verifier,
+            "client_id": client_id,
+            "redirect_uri": SPOTIFY_REDIRECT_URI,
+            "created_at": time.time(),
+        }
+    )
+    return SpotifyOAuthStartResponse(
+        authorization_url=spotify_authorization_url(
+            client_id=client_id,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            state=state,
+            code_challenge=challenge,
+        ),
+        redirect_uri=SPOTIFY_REDIRECT_URI,
+    )
+
+
+@router.get("/plugins/spotify/oauth/callback")
+async def spotify_oauth_callback(
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+) -> HTMLResponse:
+    if error:
+        return HTMLResponse(
+            "<html><body><h1>Spotify connection failed</h1><p>Authorization was not completed.</p></body></html>",
+            status_code=400,
+        )
+    if not code:
+        return HTMLResponse(
+            "<html><body><h1>Spotify connection failed</h1><p>No authorization code was returned.</p></body></html>",
+            status_code=400,
+        )
+    try:
+        flow = _spotify_store().consume_flow(state)
+    except Exception as exc:
+        # Portable plugins are loaded under an isolated module namespace. Tests and
+        # embedders may provide the same Spotify store through its package namespace,
+        # so matching only by exception class identity is too brittle here.
+        if getattr(exc, "code", "") != "spotify_auth_error":
+            raise
+        return HTMLResponse(
+            "<html><body><h1>Spotify connection failed</h1>"
+            "<p>The authorization state is invalid or expired. Start the connection again.</p>"
+            "</body></html>",
+            status_code=400,
+        )
+    try:
+        await asyncio.to_thread(
+            _spotify_client().exchange_code,
+            client_id=flow["client_id"],
+            code=code,
+            code_verifier=flow["code_verifier"],
+            redirect_uri=flow["redirect_uri"],
+        )
+    except SpotifyError:
+        return HTMLResponse(
+            "<html><body><h1>Spotify connection failed</h1><p>Token exchange failed. Start again from Vellum.</p></body></html>",
+            status_code=400,
+        )
+    agent.invalidate()
+    return HTMLResponse(
+        "<html><body><h1>Spotify connected</h1><p>You can close this tab and return to Vellum.</p>"
+        "<script>try {"
+        "localStorage.setItem('vellum:spotify-oauth-complete', JSON.stringify({ok:true,at:Date.now()}));"
+        "if(window.opener)window.opener.postMessage({type:'vellum:spotify-oauth-complete'},'*');"
+        "} catch(e) {} setTimeout(function(){window.close();},900);</script></body></html>"
+    )
+
+
+@router.post("/plugins/spotify/logout")
+async def spotify_logout() -> dict[str, bool]:
+    _spotify_store().logout()
+    agent.invalidate()
+    return {"ok": True}
+
+
+def _spotify_result_or_http(result_text: str) -> dict:
+    try:
+        result = json.loads(result_text)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=503, detail="Unreachable.") from exc
+    if result.get("ok"):
+        return result.get("data") or {}
+    error = result.get("error") if isinstance(result.get("error"), dict) else {}
+    code = str(error.get("code") or "unreachable")
+    message = str(error.get("message") or "Unreachable.")
+    if code == "invalid_arguments":
+        raise HTTPException(status_code=422, detail=message)
+    if code == "spotify_auth_error":
+        raise HTTPException(status_code=401, detail=message)
+    if code == "rate_limited":
+        retry_after = max(1, int(error.get("retry_after") or 1))
+        raise HTTPException(status_code=429, detail=message, headers={"Retry-After": str(retry_after)})
+    if code in {"premium_required", "no_active_device"}:
+        raise HTTPException(status_code=403, detail=message)
+    raise HTTPException(status_code=503, detail="Unreachable.")
+
+
+@router.get("/plugins/spotify/player")
+async def spotify_player(details: bool = False) -> dict:
+    if not _spotify_has_credentials():
+        raise HTTPException(status_code=401, detail="Spotify is not connected")
+    try:
+        service = _spotify_client()
+        player = await asyncio.to_thread(service.get_player)
+        if details:
+            devices_result, queue_result = await asyncio.gather(
+                asyncio.to_thread(service.get_devices),
+                asyncio.to_thread(service.get_queue),
+            )
+            player = {
+                **player,
+                "devices": devices_result.get("devices", []),
+                "queue": queue_result.get("queue", []),
+            }
+        return player
+    except SpotifyRateLimited as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    except SpotifyAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except SpotifyError as exc:
+        raise HTTPException(status_code=503, detail="Unreachable.") from exc
+
+
+@router.post("/plugins/spotify/player/action")
+async def spotify_player_action(request: SpotifyPlayerActionRequest) -> dict:
+    if not _spotify_has_credentials():
+        raise HTTPException(status_code=401, detail="Spotify is not connected")
+    payload = request.model_dump(exclude_none=True)
+    if request.action == "transfer":
+        result = spotify_devices(payload, service=_spotify_client())
+    else:
+        result = spotify_playback(payload, service=_spotify_client())
+    return _spotify_result_or_http(result)
 
 
 def _thread_config(thread_id: str | None) -> dict[str, dict[str, str]]:
@@ -3380,6 +3623,7 @@ async def list_plugins() -> dict[str, Any]:
     plugins = [
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
+        portable_spotify_status(),
         *[
         {
             "id": str(server.get("name") or ""),

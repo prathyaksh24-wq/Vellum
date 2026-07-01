@@ -99,6 +99,8 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
+    spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
+    monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
 
     agent_graph.build_agent()
 
@@ -107,6 +109,7 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
 
@@ -124,6 +127,8 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
     monkeypatch.setattr(agent_graph, "build_async_checkpointer", fake_checkpointer)
+    spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
+    monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
 
     import asyncio
 
@@ -133,6 +138,7 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
 
 
 def test_agent_prompt_documents_tavily_and_firecrawl_tools():

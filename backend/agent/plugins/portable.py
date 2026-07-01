@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -47,6 +48,14 @@ class PortablePlugin:
         register(ctx)
 
 
+@dataclass(frozen=True)
+class PortableRegisteredTool:
+    name: str
+    toolset: str
+    schema: dict[str, Any]
+    handler: Callable[..., str]
+
+
 class PortablePluginContext:
     """Minimal Hermes-compatible registration context for Vellum wrappers."""
 
@@ -54,6 +63,7 @@ class PortablePluginContext:
         self.connectors: dict[str, dict[str, Any]] = {}
         self.system_plugins: dict[str, dict[str, Any]] = {}
         self.memory_providers: dict[str, dict[str, Any]] = {}
+        self.tools: dict[str, PortableRegisteredTool] = {}
 
     def register_connector(self, **kwargs: Any) -> None:
         self.connectors[str(kwargs["id"])] = dict(kwargs)
@@ -63,6 +73,25 @@ class PortablePluginContext:
 
     def register_memory_provider(self, **kwargs: Any) -> None:
         self.memory_providers[str(kwargs["id"])] = dict(kwargs)
+
+    def register_tool(
+        self,
+        *,
+        name: str,
+        toolset: str,
+        schema: dict[str, Any],
+        handler: Callable[..., str],
+    ) -> None:
+        if name in self.tools:
+            raise ValueError(f"{name} is already registered")
+        if schema.get("name") != name or not callable(handler):
+            raise ValueError(f"Invalid portable tool registration: {name}")
+        self.tools[name] = PortableRegisteredTool(
+            name=name,
+            toolset=toolset,
+            schema=dict(schema),
+            handler=handler,
+        )
 
 
 def discover_portable_plugins(root: str | Path) -> list[PortablePluginManifest]:
@@ -82,11 +111,20 @@ def load_portable_plugin(plugin_dir: str | Path) -> PortablePlugin:
     if not init_path.exists():
         raise FileNotFoundError(f"Portable plugin missing __init__.py: {init_path}")
     module_name = "vellum_portable_plugin_" + manifest.id.replace("-", "_")
-    spec = importlib.util.spec_from_file_location(module_name, init_path)
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        init_path,
+        submodule_search_locations=[str(plugin_dir)],
+    )
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load portable plugin: {plugin_dir}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return PortablePlugin(manifest=manifest, module=module)
 
 
