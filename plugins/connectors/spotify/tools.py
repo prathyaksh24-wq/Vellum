@@ -55,6 +55,54 @@ def _params(args: dict, *names: str) -> dict:
     return {name: args[name] for name in names if args.get(name) is not None}
 
 
+def _available_device_id(service: SpotifyClient) -> str:
+    payload = service.get_devices()
+    devices = payload.get("devices") if isinstance(payload, dict) else []
+    candidates = [
+        device
+        for device in (devices or [])
+        if isinstance(device, dict) and device.get("id") and not device.get("is_restricted")
+    ]
+    active = next((device for device in candidates if device.get("is_active")), None)
+    selected = active or (candidates[0] if candidates else None)
+    if not selected:
+        raise SpotifyNoActiveDevice("No available Spotify device found")
+    return str(selected["id"])
+
+
+def _player_request(
+    service: SpotifyClient,
+    *,
+    action: str,
+    method: str,
+    path: str,
+    device_id: str = "",
+    json_body: dict | None = None,
+) -> dict:
+    params = {"device_id": device_id} if device_id else None
+    request_kwargs: dict[str, Any] = {"params": params}
+    if json_body is not None:
+        request_kwargs["json_body"] = json_body
+    try:
+        return service.request(method, path, **request_kwargs)
+    except SpotifyNoActiveDevice:
+        if action == "pause":
+            return {"status": "already_paused"}
+        if device_id:
+            raise
+        selected_device = _available_device_id(service)
+        if action in {"next", "previous"}:
+            service.request(
+                "PUT",
+                "/me/player",
+                json_body={"device_ids": [selected_device], "play": True},
+            )
+        retry_kwargs: dict[str, Any] = {"params": {"device_id": selected_device}}
+        if json_body is not None:
+            retry_kwargs["json_body"] = json_body
+        return service.request(method, path, **retry_kwargs)
+
+
 def spotify_playback(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     action = args.get("action")
@@ -65,13 +113,46 @@ def spotify_playback(args: dict, **kwargs) -> str:
         return _result(lambda: service.request("GET", "/me/player/currently-playing"))
     if action == "play":
         body = _params(args, "context_uri", "uris", "offset", "position_ms")
-        return _result(lambda: service.request("PUT", "/me/player/play", params=device or None, json_body=body or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="play",
+                method="PUT",
+                path="/me/player/play",
+                device_id=str(args.get("device_id") or ""),
+                json_body=body or None,
+            )
+        )
     if action == "pause":
-        return _result(lambda: service.request("PUT", "/me/player/pause", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="pause",
+                method="PUT",
+                path="/me/player/pause",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "next":
-        return _result(lambda: service.request("POST", "/me/player/next", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="next",
+                method="POST",
+                path="/me/player/next",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "previous":
-        return _result(lambda: service.request("POST", "/me/player/previous", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="previous",
+                method="POST",
+                path="/me/player/previous",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "seek":
         missing = _missing(args, "position_ms")
         if missing:
