@@ -12,7 +12,7 @@
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="api/automations.js"></script>
-<script src="api/settings.js?v=20260629-memory-ui"></script>
+<script src="api/settings.js?v=20260702-llm-routing"></script>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,10 +49,11 @@
 html,body{height:100%}
 body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",Helvetica,system-ui,sans-serif;font-size:13.5px;-webkit-font-smoothing:antialiased;overflow:hidden}
 #root{height:100vh}
-.stage{height:100vh;padding:20px;background:var(--stage);position:relative;overflow:hidden}
+.stage{height:100vh;padding:0;background:var(--stage);position:relative;overflow:hidden;user-select:none;-webkit-user-select:none}
+.stage input,.stage textarea,.stage [contenteditable="true"],.stage .msg-body,.stage .code-block{user-select:text;-webkit-user-select:text}
 .stage::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:26px 26px;-webkit-mask-image:radial-gradient(circle at 50% 28%,#000 22%,transparent 78%);mask-image:radial-gradient(circle at 50% 28%,#000 22%,transparent 78%);opacity:.6}
 [data-theme="light"] .stage::after{background-image:radial-gradient(rgba(20,45,70,.07) 1px,transparent 1px)}
-.win{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;background:var(--glass-win);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);border:1px solid var(--winborder);border-radius:18px;overflow:hidden;box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.13)}
+.win{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;background:var(--glass-win);backdrop-filter:blur(40px) saturate(180%);-webkit-backdrop-filter:blur(40px) saturate(180%);border:0;border-radius:0;overflow:hidden;box-shadow:none}
 /* titlebar */
 .titlebar{position:relative;display:flex;align-items:center;height:38px;background:var(--glass-bar);border-bottom:1px solid var(--line);padding-left:12px;flex-shrink:0}
 .appmark{width:15px;height:15px;border-radius:5px;background:var(--grad);margin-right:10px;box-shadow:0 0 12px var(--glow)}
@@ -66,7 +67,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .wc{width:28px;height:22px;display:flex;align-items:center;justify-content:center;color:var(--dim);border-radius:5px;cursor:default}
 .wc:hover{background:var(--hover)}.wc.close:hover{background:#c0392b;color:#fff}
 /* body */
-.body{flex:1;display:flex;min-height:0;position:relative}
+.body{z-index:1;flex:1;display:flex;min-height:0;position:relative}
 /* sidebar ? expanded */
 .sidebar{width:260px;background:var(--glass-side);border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0;padding:10px 8px 8px;overflow:hidden}
 .sidebar.overlay{position:absolute;top:0;left:0;height:100%;z-index:120;transform:translateX(-102%);transition:transform .24s cubic-bezier(.4,0,.2,1);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);box-shadow:0 30px 70px rgba(0,0,0,.55)}
@@ -700,14 +701,12 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-drop{position:absolute;right:44px;bottom:44px;z-index:50;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
 .drop-lbl{font-size:10.5px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
-.model-sync{color:var(--ember);cursor:pointer;text-transform:none;letter-spacing:0}
 .model-search{width:calc(100% - 18px);margin:2px 9px 4px;background:var(--input);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--txt2);font:inherit;font-size:12px;outline:none}
 .model-search::placeholder{color:var(--dim2)}
 .model-list{max-height:240px;overflow-y:auto}
 .drop-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 13px;cursor:pointer;color:var(--txt);font-size:12.5px}
 .drop-item:hover{background:var(--hover);color:var(--txt2)}
 .drop-check{color:var(--ember);display:flex}
-.drop-item.manage{border-top:1px solid var(--line);color:var(--ember);margin-top:3px}
 /* thread */
 .msgs{flex:1;overflow-y:auto;padding:26px 24px 10px;display:flex;flex-direction:column;align-items:center}
 .msgs-inner{width:100%;max-width:680px;display:flex;flex-direction:column;gap:18px}
@@ -1027,6 +1026,50 @@ body{font-size:14px}
 .agent-bar-tag{font-size:11.5px;color:var(--dim)}
 .agent-modal-head{display:flex;align-items:center;gap:13px;margin-bottom:18px}
 .agent-select{background:var(--input);border:1px solid var(--line2);border-radius:8px;color:var(--txt2);font:inherit;font-size:12.5px;padding:6px 10px;cursor:pointer;outline:none}
+/* reusable Select */
+.v-select{position:relative;display:inline-block;min-width:150px;font:inherit;color:var(--txt2);isolation:isolate}
+.v-select.open{z-index:600}
+.v-select.agent-select-control{min-width:210px}
+.conn-add-field .v-select{display:block;width:100%;min-width:0}
+.v-select-trigger{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:34px;padding:6px 10px;border:1px solid var(--line2);border-radius:10px;background:var(--input);color:var(--txt2);font:inherit;font-size:12.5px;text-align:left;cursor:pointer;outline:none;transition:border-color .2s,background .2s,box-shadow .2s,border-radius .42s cubic-bezier(.22,1,.36,1)}
+.v-select-trigger:hover{background:var(--hover);border-color:color-mix(in srgb,var(--txt) 24%,var(--line2))}
+.v-select-trigger:focus-visible{border-color:color-mix(in srgb,var(--ember) 62%,var(--line2));box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 18%,transparent)}
+.v-select-trigger:disabled{cursor:default;opacity:.5}
+.v-select-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v-select-value.placeholder{color:var(--dim)}
+.v-select-chevron{display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--dim);transition:transform .4s cubic-bezier(.34,1.56,.64,1),color .2s}
+.v-select.open .v-select-chevron{transform:rotate(180deg);color:var(--txt2)}
+.v-select.bottom.open .v-select-trigger{border-bottom-left-radius:0;border-bottom-right-radius:0}
+.v-select.top.open .v-select-trigger{border-top-left-radius:0;border-top-right-radius:0}
+.v-select-content{position:absolute;left:0;right:0;z-index:500;min-width:max-content;overflow:hidden;border:1px solid var(--line2);border-radius:12px;background:var(--menu-solid);box-shadow:0 20px 55px rgba(0,0,0,.56),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);opacity:0;visibility:hidden;pointer-events:none;transform:translateY(-6px) scaleY(.96);transform-origin:top;transition:opacity .18s ease,transform .42s cubic-bezier(.22,1,.36,1),margin .55s cubic-bezier(.22,1,.36,1),visibility 0s linear .28s}
+.pdrop-select .v-select-content{left:auto;right:0}
+.v-select.bottom .v-select-content{top:100%;margin-top:0}
+.v-select.top .v-select-content{bottom:100%;margin-bottom:0;transform:translateY(6px) scaleY(.96);transform-origin:bottom}
+.v-select.open .v-select-content{opacity:1;visibility:visible;pointer-events:auto;transform:translateY(0) scaleY(1);transition-delay:0s}
+.v-select.bottom.open .v-select-content{margin-top:8px}
+.v-select.top.open .v-select-content{margin-bottom:8px}
+.v-select-list{display:grid;gap:2px;max-height:min(280px,42vh);overflow-y:auto;padding:4px}
+.v-select-option{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;min-width:140px;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--dim);font:inherit;font-size:12.5px;text-align:left;cursor:pointer;outline:none;opacity:0;filter:blur(3px);transform:translateY(-6px);transition:background .15s,color .15s,opacity .22s ease,filter .22s ease,transform .3s cubic-bezier(.22,1,.36,1)}
+.v-select.open .v-select-option{opacity:1;filter:none;transform:none}
+.v-select-option:hover,.v-select-option.active,.v-select-option:focus-visible{background:var(--hover);color:var(--txt2)}
+.v-select-option.selected{background:color-mix(in srgb,var(--ember) 13%,transparent);color:var(--txt2)}
+.v-select-option:disabled{cursor:default;opacity:.35!important}
+.v-select-check{display:flex;align-items:center;color:var(--ember);opacity:0;transform:scale(.72);transition:opacity .18s,transform .24s cubic-bezier(.34,1.56,.64,1)}
+.v-select-option.selected .v-select-check{opacity:1;transform:scale(1)}
+.v-select-option-copy{display:flex;min-width:0;flex-direction:column;gap:1px}
+.v-select-option-sub{font-size:11px;color:var(--dim)}
+.model-pill.select-open{background:var(--hover);color:var(--txt2)}
+.model-pill.select-open svg{transform:rotate(180deg)}
+.model-pill svg{transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+.select-motion{transform-origin:bottom right;animation:selectUnfoldUp .42s cubic-bezier(.22,1,.36,1)}
+.select-motion.down{transform-origin:top right;animation-name:selectUnfoldDown}
+.pop.select-motion{border-radius:12px;background:var(--menu-solid);box-shadow:0 20px 55px rgba(0,0,0,.56),inset 0 1px 0 rgba(255,255,255,.06)}
+@keyframes selectUnfoldUp{from{opacity:0;filter:blur(5px);transform:translateY(7px) scaleY(.94)}to{opacity:1;filter:none;transform:none}}
+@keyframes selectUnfoldDown{from{opacity:0;filter:blur(5px);transform:translateY(-7px) scaleY(.94)}to{opacity:1;filter:none;transform:none}}
+.shared-layout-pill{position:fixed;left:0;top:0;z-index:10000;pointer-events:none;border:1px solid color-mix(in srgb,var(--ember) 11%,transparent);border-radius:12px;background:color-mix(in srgb,var(--txt2) 6%,transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.025);opacity:0;filter:blur(6px);transform:translate3d(var(--sl-x,0),var(--sl-y,0),0);transform-origin:center;transition:transform .42s cubic-bezier(.22,1,.36,1),width .42s cubic-bezier(.22,1,.36,1),height .42s cubic-bezier(.22,1,.36,1),opacity .18s ease,filter .22s ease}
+.shared-layout-pill.visible{opacity:1;filter:blur(0)}
+@media (prefers-reduced-motion:reduce){.v-select *{animation:none!important;transition-duration:.01ms!important;transition-delay:0s!important}}
+@media (prefers-reduced-motion:reduce){.shared-layout-pill,.select-motion{animation:none!important;transition-duration:.01ms!important;filter:none!important}}
 .agent-seg{display:inline-flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
 .agent-seg button{border:none;background:none;color:var(--dim);font:inherit;font-size:12px;padding:6px 13px;cursor:pointer;transition:background .15s,color .15s}
 .agent-seg button.on{background:var(--grad);color:#fff}
@@ -1238,6 +1281,100 @@ body{font-size:14px}
 .cfg-key:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
 .cfg-dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex-shrink:0;transition:background .2s,box-shadow .2s}
 .cfg-dot.on{background:var(--ember);box-shadow:0 0 7px var(--glow)}
+
+/* reusable application backgrounds */
+.app-background{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+.app-background-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.galaxy-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;opacity:.72;mix-blend-mode:screen}
+.galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.58}}
+
+/* reusable edge dock + tooltip */
+.dock-layer{position:absolute;inset:0;z-index:52;pointer-events:none}
+.dock-reveal-zone{position:absolute;z-index:1;pointer-events:auto}
+.dock-reveal-zone.top{top:0;left:25%;right:25%;height:22px}
+.dock-reveal-zone.bottom{bottom:0;left:25%;right:25%;height:22px}
+.dock-reveal-zone.left{left:0;top:24%;bottom:24%;width:22px}
+.dock-reveal-zone.right{right:0;top:24%;bottom:24%;width:22px}
+.dock-handle{position:absolute;z-index:2;pointer-events:auto;border:0;background:transparent;opacity:.72;cursor:pointer;transition:opacity .18s,transform .3s cubic-bezier(.34,1.56,.64,1)}
+.dock-handle::after{content:"";position:absolute;background:color-mix(in srgb,var(--txt2) 46%,transparent);box-shadow:0 0 15px color-mix(in srgb,var(--ember) 28%,transparent);transition:background .18s}
+.dock-handle:hover{opacity:1}
+.dock-handle:hover::after{background:color-mix(in srgb,var(--txt2) 70%,transparent)}
+.dock-handle.top{top:0;left:50%;width:40px;height:18px;transform:translateX(-50%)}
+.dock-handle.top::after{left:3px;right:3px;top:5px;height:4px;border-radius:0 0 5px 5px}
+.dock-handle.bottom{bottom:0;left:50%;width:40px;height:18px;transform:translateX(-50%)}
+.dock-handle.bottom::after{left:3px;right:3px;bottom:5px;height:4px;border-radius:5px 5px 0 0}
+.dock-handle.left{left:0;top:50%;width:18px;height:40px;transform:translateY(-50%)}
+.dock-handle.left::after{left:5px;top:3px;bottom:3px;width:4px;border-radius:0 5px 5px 0}
+.dock-handle.right{right:0;top:50%;width:18px;height:40px;transform:translateY(-50%)}
+.dock-handle.right::after{right:5px;top:3px;bottom:3px;width:4px;border-radius:5px 0 0 5px}
+.dock-layer.open .dock-handle{opacity:0;pointer-events:none}
+.dock-shell{position:absolute;z-index:3;visibility:hidden;pointer-events:none;opacity:0;filter:blur(8px);transition:opacity .18s ease,filter .28s ease,transform .46s cubic-bezier(.22,1,.36,1),visibility 0s linear .46s}
+.dock-shell.top{top:24px;left:50%;transform:translate(-50%,-18px) scale(.94)}
+.dock-shell.bottom{bottom:26px;left:50%;transform:translate(-50%,18px) scale(.94)}
+.dock-shell.left{left:26px;top:50%;transform:translate(-18px,-50%) scale(.94)}
+.dock-shell.right{right:26px;top:50%;transform:translate(18px,-50%) scale(.94)}
+.dock-layer.open .dock-shell{visibility:visible;pointer-events:auto;opacity:1;filter:none;transition-delay:0s}
+.dock-layer.open .dock-shell.top,.dock-layer.open .dock-shell.bottom{transform:translate(-50%,0) scale(1)}
+.dock-layer.open .dock-shell.left,.dock-layer.open .dock-shell.right{transform:translate(0,-50%) scale(1)}
+.dock{display:inline-flex;align-items:flex-end;gap:6px;padding:5px 8px;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--modal) 78%,transparent);box-shadow:0 20px 55px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.08);backdrop-filter:blur(24px) saturate(170%);-webkit-backdrop-filter:blur(24px) saturate(170%)}
+.dock.vertical{flex-direction:column;align-items:center}
+.dock-item{position:relative;display:flex;align-items:center;justify-content:center;width:44px;height:44px;flex-shrink:0;border:0;border-radius:50%;background:transparent;color:var(--txt);cursor:pointer;outline:none;transition:color .16s,transform .24s cubic-bezier(.34,1.56,.64,1)}
+.dock-item:hover{color:var(--txt2);transform:translateY(-2px)}
+.dock.vertical .dock-item:hover{transform:translateX(-2px)}
+.dock-item:focus-visible{box-shadow:0 0 0 2px var(--ember),0 0 0 4px var(--bg)}
+.dock-item-pill{position:absolute;inset:2px;z-index:-1;border-radius:12px;background:color-mix(in srgb,var(--ember) 13%,transparent);border:1px solid color-mix(in srgb,var(--ember) 15%,transparent);animation:dockPillIn .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes dockPillIn{from{opacity:0;transform:scale(.76)}to{opacity:1;transform:none}}
+.dock-separator{display:block;width:1px;height:25px;align-self:center;margin:0 4px;background:var(--line2)}
+.dock.vertical .dock-separator{width:25px;height:1px;margin:4px 0}
+.dock-tooltip-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.dock-tooltip{position:absolute;z-index:7;display:block;white-space:nowrap;padding:5px 9px;border:1px solid var(--line2);border-radius:8px;background:color-mix(in srgb,var(--modal) 88%,transparent);color:var(--txt2);font-size:11.5px;font-weight:500;line-height:1.2;box-shadow:0 12px 35px rgba(0,0,0,.42);backdrop-filter:blur(18px) saturate(160%);-webkit-backdrop-filter:blur(18px) saturate(160%);pointer-events:none;opacity:0;filter:blur(7px);transform:scale(.86);animation:dockTipIn .3s cubic-bezier(.22,1,.36,1) forwards}
+.dock-tooltip.top{top:calc(100% + 9px);left:50%;transform-origin:center top;--tip-x:-50%;--tip-y:-7px}
+.dock-tooltip.bottom{bottom:calc(100% + 9px);left:50%;transform-origin:center bottom;--tip-x:-50%;--tip-y:7px}
+.dock-tooltip.left{left:calc(100% + 9px);top:50%;transform-origin:left center;--tip-x:-7px;--tip-y:-50%}
+.dock-tooltip.right{right:calc(100% + 9px);top:50%;transform-origin:right center;--tip-x:7px;--tip-y:-50%}
+@keyframes dockTipIn{from{opacity:0;filter:blur(7px);transform:translate(var(--tip-x,0),var(--tip-y,0)) scale(.86)}to{opacity:1;filter:none;transform:translate(var(--tip-x,0),var(--tip-y,0)) scale(1)}}
+.dock-flyout{position:absolute;z-index:6;width:230px;padding:6px;border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--modal) 94%,transparent);box-shadow:0 22px 60px rgba(0,0,0,.5);backdrop-filter:blur(24px) saturate(165%);-webkit-backdrop-filter:blur(24px) saturate(165%);animation:dockFlyIn .28s cubic-bezier(.22,1,.36,1)}
+.dock-flyout.top{top:calc(100% + 9px);left:50%;transform-origin:top center;--fly-x:-50%;--fly-y:-8px}
+.dock-flyout.bottom{bottom:calc(100% + 9px);left:50%;transform-origin:bottom center;--fly-x:-50%;--fly-y:8px}
+.dock-flyout.left{left:calc(100% + 9px);top:50%;transform-origin:left center;--fly-x:-8px;--fly-y:-50%}
+.dock-flyout.right{right:calc(100% + 9px);top:50%;transform-origin:right center;--fly-x:8px;--fly-y:-50%}
+@keyframes dockFlyIn{from{opacity:0;filter:blur(7px);transform:translate(var(--fly-x,0),var(--fly-y,0)) scale(.94)}to{opacity:1;filter:none;transform:translate(var(--fly-x,0),var(--fly-y,0)) scale(1)}}
+.dock-fly-head{padding:7px 9px 5px;color:var(--dim2);font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.dock-agent{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:0;border-radius:9px;background:transparent;color:var(--txt);font:inherit;font-size:12.5px;text-align:left;cursor:pointer}
+.dock-agent:hover,.dock-agent.active{background:var(--hover);color:var(--txt2)}
+.dock-agent .sb-ic{display:flex;color:var(--dim)}
+.dock-agent-check{display:flex;margin-left:auto;color:var(--ember)}
+.dock-pos-select{min-width:150px}
+@media (max-width:720px){.dock-item{width:40px;height:40px}.dock{gap:3px;padding:4px 6px}.dock-reveal-zone.top,.dock-reveal-zone.bottom{left:12%;right:12%}}
+@media (prefers-reduced-motion:reduce){.dock-shell,.dock-handle,.dock-item,.dock-tooltip,.dock-flyout,.dock-item-pill{animation:none!important;transition-duration:.01ms!important;filter:none!important}}
+/* Spotify connector */
+.spotify-mark{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#1ed760;color:#07140b;flex-shrink:0;font-weight:700;font-size:13px;box-shadow:0 0 18px rgba(30,215,96,.18)}
+.spotify-row{gap:12px}.spotify-row-main{display:flex;align-items:center;gap:11px;min-width:0}.spotify-row-copy{min-width:0}
+.spotify-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--dim)}
+.spotify-status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--dim2)}
+.spotify-status.connected::before{background:#1ed760;box-shadow:0 0 8px rgba(30,215,96,.55)}
+.spotify-connect-modal{width:min(520px,calc(100vw - 32px))}.spotify-steps{display:grid;gap:10px;margin:16px 0}
+.spotify-step{display:flex;gap:11px;align-items:flex-start;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--input)}
+.spotify-step-n{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:rgba(30,215,96,.14);color:#44de79;font-size:11px;font-weight:700;flex-shrink:0}
+.spotify-step-copy{font-size:12px;line-height:1.5;color:var(--dim)}.spotify-step-copy b{display:block;color:var(--txt2);font-weight:500;margin-bottom:2px}
+.spotify-uri{display:flex;align-items:center;gap:8px;margin-top:7px;padding:8px 10px;border-radius:7px;background:rgba(0,0,0,.22);font-family:var(--font-m);font-size:10.5px;color:var(--txt);word-break:break-all;user-select:text}
+.spotify-client-field{margin-top:12px}.spotify-client-field label{display:block;color:var(--txt2);font-size:12px;margin-bottom:6px}.spotify-client-field input{width:100%;background:var(--input);border:1px solid var(--line2);border-radius:9px;color:var(--txt2);font:inherit;padding:10px 11px;outline:none}.spotify-client-field input:focus{border-color:rgba(30,215,96,.55);box-shadow:0 0 0 3px rgba(30,215,96,.08)}
+.spotify-error{margin-top:10px;color:var(--danger);font-size:11.5px}.spotify-wait{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--dim);font-size:11.5px}.spotify-wait::before{content:"";width:10px;height:10px;border:2px solid var(--line2);border-top-color:#1ed760;border-radius:50%;animation:spin .8s linear infinite}
+.spotify-player-shell{position:fixed;z-index:118;display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}.spotify-player-shell.side-top{top:62px;right:18px}.spotify-player-shell.side-right{top:18px;right:72px}.spotify-player-shell.side-bottom{right:18px;bottom:72px}.spotify-player-shell.side-left{top:18px;left:72px;align-items:flex-start}
+.spotify-player-pill{pointer-events:auto;height:44px;max-width:310px;display:flex;align-items:center;gap:8px;padding:5px 7px 5px 5px;border:1px solid var(--line2);border-radius:13px;background:color-mix(in srgb,var(--menu-solid) 90%,transparent);backdrop-filter:blur(22px) saturate(150%);box-shadow:0 12px 38px rgba(0,0,0,.34);color:var(--txt);cursor:pointer}
+.spotify-art{width:34px;height:34px;border-radius:8px;object-fit:cover;background:rgba(30,215,96,.14);flex-shrink:0}.spotify-art-fallback{display:flex;align-items:center;justify-content:center;color:#1ed760}
+.spotify-now{min-width:0;width:132px}.spotify-now b,.spotify-now span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spotify-now b{font-size:11.5px;color:var(--txt2);font-weight:500}.spotify-now span{font-size:10px;color:var(--dim);margin-top:1px}
+.spotify-mini-btn,.spotify-control{border:0;background:transparent;color:var(--txt);display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex-shrink:0}.spotify-mini-btn{width:28px;height:28px}.spotify-mini-btn:hover,.spotify-control:hover{background:var(--hover);color:var(--txt2)}.spotify-mini-btn.primary,.spotify-control.primary{background:#1ed760;color:#07140b}.spotify-mini-btn.primary:hover,.spotify-control.primary:hover{filter:brightness(1.08)}
+.spotify-player-panel{pointer-events:auto;width:330px;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--menu-solid) 94%,transparent);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 22px 60px rgba(0,0,0,.46);padding:14px;color:var(--txt)}
+.spotify-panel-track{display:flex;gap:11px;align-items:center}.spotify-panel-track .spotify-art{width:52px;height:52px;border-radius:10px}.spotify-panel-copy{min-width:0}.spotify-panel-copy b,.spotify-panel-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spotify-panel-copy b{color:var(--txt2);font-size:13px;font-weight:500}.spotify-panel-copy span{color:var(--dim);font-size:11px;margin-top:3px}
+.spotify-progress{margin:13px 0 4px}.spotify-range{width:100%;height:3px;accent-color:#1ed760;cursor:pointer}.spotify-times{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim2);font-family:var(--font-m);margin-top:3px}
+.spotify-controls{display:flex;align-items:center;justify-content:center;gap:9px;margin:8px 0 13px}.spotify-control{width:32px;height:32px}.spotify-control.primary{width:38px;height:38px}.spotify-control.on{color:#1ed760;background:rgba(30,215,96,.09)}
+.spotify-setting{display:grid;grid-template-columns:18px 1fr;align-items:center;gap:8px;margin-top:9px;color:var(--dim)}.spotify-setting select{min-width:0;width:100%;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:10.5px;padding:7px 8px;outline:none}
+.spotify-queue{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}.spotify-queue-h{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2);margin-bottom:5px}.spotify-queue-row{display:flex;align-items:center;gap:7px;padding:5px 2px;min-width:0}.spotify-queue-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;color:var(--txt)}.spotify-queue-row i{font-style:normal;color:var(--dim2);font-size:9.5px;margin-left:auto;flex-shrink:0}
+.spotify-player-error{padding:8px 2px 2px;color:var(--danger);font-size:10.5px;line-height:1.4}.spotify-reconnect{margin-top:8px}
+@media(max-width:720px){.spotify-player-shell.side-top,.spotify-player-shell.side-right{top:58px;right:10px}.spotify-player-pill{max-width:178px}.spotify-now{display:none}.spotify-player-panel{width:min(310px,calc(100vw - 20px))}}
+@media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
 </style>
 </head>
 <body>
@@ -1245,6 +1382,13 @@ body{font-size:14px}
 <script type="text/babel" data-presets="react">
 const {useState, useRef, useEffect} = React;
 const API = window.VellumApi;
+const SpotifyAPI = {
+  status: () => API.client.request('/api/plugins/spotify/status'),
+  start: clientId => API.client.request('/api/plugins/spotify/oauth/start', API.client.jsonOptions('POST', {client_id: clientId})),
+  logout: () => API.client.request('/api/plugins/spotify/logout', API.client.jsonOptions('POST')),
+  player: (details=false) => API.client.request('/api/plugins/spotify/player' + (details ? '?details=true' : '')),
+  action: body => API.client.request('/api/plugins/spotify/player/action', API.client.jsonOptions('POST', body)),
+};
 const FEATURE_FLAGS = {
   realChat: true,
   realConversations: true,
@@ -1372,6 +1516,461 @@ const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
   </Popover>
 );
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
+const normalizeSelectOptions = options => options.map(option => typeof option === 'object'
+  ? {value: option.value, label: option.label ?? option.value, sub: option.sub, disabled: !!option.disabled}
+  : {value: option, label: option, sub: '', disabled: false});
+
+const VSelect = ({value, onValueChange, options, placeholder='Select', disabled=false, className='', ariaLabel='Select', menuWidth}) => {
+  const items = normalizeSelectOptions(options);
+  const rootRef = useRef(null);
+  const triggerRef = useRef(null);
+  const contentRef = useRef(null);
+  const optionRefs = useRef([]);
+  const focusOnOpen = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState('bottom');
+  const selectedIndex = Math.max(0, items.findIndex(item => item.value === value));
+  const [activeIndex, setActiveIndex] = useState(selectedIndex);
+  const selected = items.find(item => item.value === value);
+  const enabled = items.map((item, index) => item.disabled ? -1 : index).filter(index => index >= 0);
+
+  const move = (from, delta) => {
+    if (!enabled.length) return -1;
+    const current = enabled.indexOf(from);
+    if (current < 0) return delta > 0 ? enabled[0] : enabled[enabled.length - 1];
+    return enabled[(current + delta + enabled.length) % enabled.length];
+  };
+  const openMenu = (direction=0) => {
+    if (disabled) return;
+    const start = items[selectedIndex]?.disabled
+      ? (direction < 0 ? enabled[enabled.length - 1] : enabled[0])
+      : selectedIndex;
+    setActiveIndex(start);
+    focusOnOpen.current = direction !== 0;
+    setOpen(true);
+  };
+  const closeMenu = (restoreFocus=false) => {
+    setOpen(false);
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  const choose = index => {
+    const item = items[index];
+    if (!item || item.disabled) return;
+    onValueChange(item.value);
+    closeMenu(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = event => { if (!rootRef.current?.contains(event.target)) closeMenu(); };
+    const onEscape = event => { if (event.key === 'Escape') closeMenu(true); };
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onEscape);
+    return () => {
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [open]);
+
+  React.useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !contentRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const height = contentRef.current.scrollHeight;
+    const below = window.innerHeight - rect.bottom;
+    setPlacement(below < height + 16 && rect.top > below ? 'top' : 'bottom');
+  }, [open, items.length]);
+
+  useEffect(() => {
+    if (!open || !focusOnOpen.current) return;
+    focusOnOpen.current = false;
+    requestAnimationFrame(() => optionRefs.current[activeIndex]?.focus());
+  }, [open, activeIndex]);
+
+  const onTriggerKeyDown = event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openMenu(event.key === 'ArrowDown' ? 1 : -1);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open ? closeMenu() : openMenu();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu();
+    }
+  };
+  const onOptionKeyDown = (event, index) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = move(index, event.key === 'ArrowDown' ? 1 : -1);
+      setActiveIndex(next);
+      optionRefs.current[next]?.focus();
+    } else if (event.key === 'Home' || event.key === 'End') {
+      event.preventDefault();
+      const next = event.key === 'Home' ? enabled[0] : enabled[enabled.length - 1];
+      setActiveIndex(next);
+      optionRefs.current[next]?.focus();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMenu(true);
+    } else if (event.key === 'Tab') {
+      closeMenu();
+    }
+  };
+
+  return (
+    <div ref={rootRef} className={`v-select ${placement} ${open ? 'open' : ''} ${className}`.trim()}>
+      <button ref={triggerRef} type="button" role="combobox" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${ariaLabel.replace(/\s+/g,'-').toLowerCase()}-list`} aria-activedescendant={open ? `${ariaLabel.replace(/\s+/g,'-').toLowerCase()}-option-${activeIndex}` : undefined} disabled={disabled} className="v-select-trigger" onClick={() => open ? closeMenu() : openMenu()} onKeyDown={onTriggerKeyDown}>
+        <span className={`v-select-value ${selected ? '' : 'placeholder'}`}>{selected?.label ?? placeholder}</span>
+        <span className="v-select-chevron" aria-hidden="true"><IcChevD size={14}/></span>
+      </button>
+      <div ref={contentRef} id={`${ariaLabel.replace(/\s+/g,'-').toLowerCase()}-list`} role="listbox" aria-label={ariaLabel} aria-hidden={!open} className="v-select-content" style={menuWidth ? {width:menuWidth} : undefined}>
+        <div className="v-select-list">
+          {items.map((item, index) => (
+            <button key={item.value} ref={node => optionRefs.current[index] = node} id={`${ariaLabel.replace(/\s+/g,'-').toLowerCase()}-option-${index}`} type="button" role="option" aria-selected={item.value === value} disabled={item.disabled} tabIndex={open && index === activeIndex ? 0 : -1} className={`v-select-option ${item.value === value ? 'selected' : ''} ${index === activeIndex ? 'active' : ''}`} style={{transitionDelay: open ? `${Math.min(index, 5) * 35}ms` : '0ms'}} onMouseEnter={() => !item.disabled && setActiveIndex(index)} onClick={() => choose(index)} onKeyDown={event => onOptionKeyDown(event, index)}>
+              <span className="v-select-option-copy"><span>{item.label}</span>{item.sub && <span className="v-select-option-sub">{item.sub}</span>}</span><span className="v-select-check" aria-hidden="true"><IcCheck size={14}/></span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SHARED_LAYOUT_TARGETS = '.v-select-option,.sb-row,.chat-row,.project-row,.plus-item,.recent-row,.drop-item,.pdrop-item,.set-item,.ltr,.ltile,.tab,.ctx-item,.app-row,.pop-row';
+const SharedLayoutBg = ({selector=SHARED_LAYOUT_TARGETS, inset=0, className='', pillClassName=''}) => {
+  const targetRef = useRef(null);
+  const [pill, setPill] = useState({visible:false,x:0,y:0,width:0,height:0});
+  useEffect(() => {
+    const measure = target => {
+      if (!target || !target.isConnected) return;
+      const rect = target.getBoundingClientRect();
+      targetRef.current = target;
+      setPill({visible:true,x:rect.left-inset,y:rect.top,width:rect.width+inset*2,height:rect.height});
+    };
+    const find = target => target?.closest?.(selector);
+    const onOver = event => { const target = find(event.target); if (target) measure(target); };
+    const onOut = event => { if (!find(event.relatedTarget)) setPill(current => ({...current,visible:false})); };
+    const onFocus = event => { const target = find(event.target); if (target) measure(target); };
+    const onBlur = event => { if (!find(event.relatedTarget)) setPill(current => ({...current,visible:false})); };
+    const onViewport = () => targetRef.current && measure(targetRef.current);
+    document.addEventListener('pointerover', onOver);
+    document.addEventListener('pointerout', onOut);
+    document.addEventListener('focusin', onFocus);
+    document.addEventListener('focusout', onBlur);
+    window.addEventListener('resize', onViewport);
+    window.addEventListener('scroll', onViewport, true);
+    return () => {
+      document.removeEventListener('pointerover', onOver);
+      document.removeEventListener('pointerout', onOut);
+      document.removeEventListener('focusin', onFocus);
+      document.removeEventListener('focusout', onBlur);
+      window.removeEventListener('resize', onViewport);
+      window.removeEventListener('scroll', onViewport, true);
+    };
+  }, [selector,inset]);
+  return ReactDOM.createPortal(
+    <div aria-hidden="true" className={`shared-layout-pill ${pill.visible?'visible':''} ${pillClassName} ${className}`.trim()} style={{'--sl-x':`${pill.x}px`,'--sl-y':`${pill.y}px`,width:pill.width,height:pill.height}}/>,
+    document.body
+  );
+};
+
+const GALAXY_FOCAL = [0.5, 0.5];
+const GALAXY_ROTATION = [1, 0];
+const loadOgl = (() => {
+  let pending;
+  return () => pending || (pending = import('https://esm.sh/ogl@1.0.11'));
+})();
+
+const GALAXY_VERTEX_SHADER = `
+attribute vec2 uv;
+attribute vec2 position;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position, 0, 1);
+}
+`;
+
+const GALAXY_FRAGMENT_SHADER = `
+precision highp float;
+uniform float uTime;
+uniform vec3 uResolution;
+uniform vec2 uFocal;
+uniform vec2 uRotation;
+uniform float uStarSpeed;
+uniform float uDensity;
+uniform float uHueShift;
+uniform float uSpeed;
+uniform vec2 uMouse;
+uniform float uGlowIntensity;
+uniform float uSaturation;
+uniform bool uMouseRepulsion;
+uniform float uTwinkleIntensity;
+uniform float uRotationSpeed;
+uniform float uRepulsionStrength;
+uniform float uMouseActiveFactor;
+uniform float uAutoCenterRepulsion;
+uniform bool uTransparent;
+varying vec2 vUv;
+
+#define NUM_LAYER 4.0
+#define STAR_COLOR_CUTOFF 0.2
+#define MAT45 mat2(0.7071, -0.7071, 0.7071, 0.7071)
+#define PERIOD 3.0
+
+float Hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float tri(float x) { return abs(fract(x) * 2.0 - 1.0); }
+float tris(float x) {
+  float t = fract(x);
+  return 1.0 - smoothstep(0.0, 1.0, abs(2.0 * t - 1.0));
+}
+float trisn(float x) {
+  float t = fract(x);
+  return 2.0 * (1.0 - smoothstep(0.0, 1.0, abs(2.0 * t - 1.0))) - 1.0;
+}
+vec3 hsv2rgb(vec3 c) {
+  vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+float Star(vec2 uv, float flare) {
+  float d = length(uv);
+  float m = (0.05 * uGlowIntensity) / d;
+  float rays = smoothstep(0.0, 1.0, 1.0 - abs(uv.x * uv.y * 1000.0));
+  m += rays * flare * uGlowIntensity;
+  uv *= MAT45;
+  rays = smoothstep(0.0, 1.0, 1.0 - abs(uv.x * uv.y * 1000.0));
+  m += rays * 0.3 * flare * uGlowIntensity;
+  m *= smoothstep(1.0, 0.2, d);
+  return m;
+}
+vec3 StarLayer(vec2 uv) {
+  vec3 col = vec3(0.0);
+  vec2 gv = fract(uv) - 0.5;
+  vec2 id = floor(uv);
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 offset = vec2(float(x), float(y));
+      vec2 si = id + vec2(float(x), float(y));
+      float seed = Hash21(si);
+      float size = fract(seed * 345.32);
+      float glossLocal = tri(uStarSpeed / (PERIOD * seed + 1.0));
+      float flareSize = smoothstep(0.9, 1.0, size) * glossLocal;
+      float red = smoothstep(STAR_COLOR_CUTOFF, 1.0, Hash21(si + 1.0)) + STAR_COLOR_CUTOFF;
+      float blu = smoothstep(STAR_COLOR_CUTOFF, 1.0, Hash21(si + 3.0)) + STAR_COLOR_CUTOFF;
+      float grn = min(red, blu) * seed;
+      vec3 base = vec3(red, grn, blu);
+      float hue = atan(base.g - base.r, base.b - base.r) / (2.0 * 3.14159) + 0.5;
+      hue = fract(hue + uHueShift / 360.0);
+      float sat = length(base - vec3(dot(base, vec3(0.299, 0.587, 0.114)))) * uSaturation;
+      float val = max(max(base.r, base.g), base.b);
+      base = hsv2rgb(vec3(hue, sat, val));
+      vec2 pad = vec2(
+        tris(seed * 34.0 + uTime * uSpeed / 10.0),
+        tris(seed * 38.0 + uTime * uSpeed / 30.0)
+      ) - 0.5;
+      float star = Star(gv - offset - pad, flareSize);
+      float twinkle = trisn(uTime * uSpeed + seed * 6.2831) * 0.5 + 1.0;
+      twinkle = mix(1.0, twinkle, uTwinkleIntensity);
+      star *= twinkle;
+      col += star * size * base;
+    }
+  }
+  return col;
+}
+void main() {
+  vec2 focalPx = uFocal * uResolution.xy;
+  vec2 uv = (vUv * uResolution.xy - focalPx) / uResolution.y;
+  vec2 mouseNorm = uMouse - vec2(0.5);
+  if (uAutoCenterRepulsion > 0.0) {
+    vec2 centerUV = vec2(0.0, 0.0);
+    float centerDist = length(uv - centerUV);
+    vec2 repulsion = normalize(uv - centerUV) * (uAutoCenterRepulsion / (centerDist + 0.1));
+    uv += repulsion * 0.05;
+  } else if (uMouseRepulsion) {
+    vec2 mousePosUV = (uMouse * uResolution.xy - focalPx) / uResolution.y;
+    float mouseDist = length(uv - mousePosUV);
+    vec2 repulsion = normalize(uv - mousePosUV) * (uRepulsionStrength / (mouseDist + 0.1));
+    uv += repulsion * 0.05 * uMouseActiveFactor;
+  } else {
+    vec2 mouseOffset = mouseNorm * 0.1 * uMouseActiveFactor;
+    uv += mouseOffset;
+  }
+  float autoRotAngle = uTime * uRotationSpeed;
+  mat2 autoRot = mat2(cos(autoRotAngle), -sin(autoRotAngle), sin(autoRotAngle), cos(autoRotAngle));
+  uv = autoRot * uv;
+  uv = mat2(uRotation.x, -uRotation.y, uRotation.y, uRotation.x) * uv;
+  vec3 col = vec3(0.0);
+  for (float i = 0.0; i < 1.0; i += 1.0 / NUM_LAYER) {
+    float depth = fract(i + uStarSpeed * uSpeed);
+    float scale = mix(20.0 * uDensity, 0.5 * uDensity, depth);
+    float fade = depth * smoothstep(1.0, 0.9, depth);
+    col += StarLayer(uv * scale + i * 453.32) * fade;
+  }
+  if (uTransparent) {
+    float alpha = length(col);
+    alpha = smoothstep(0.0, 0.3, alpha);
+    alpha = min(alpha, 1.0);
+    gl_FragColor = vec4(col, alpha);
+  } else {
+    gl_FragColor = vec4(col, 1.0);
+  }
+}
+`;
+
+const GalaxyBackground = ({
+  focal=GALAXY_FOCAL,
+  rotation=GALAXY_ROTATION,
+  starSpeed=0.32,
+  density=0.82,
+  hueShift=140,
+  speed=0.55,
+  mouseInteraction=true,
+  glowIntensity=0.22,
+  saturation=0.16,
+  mouseRepulsion=true,
+  repulsionStrength=1.35,
+  twinkleIntensity=0.2,
+  rotationSpeed=0.025,
+  autoCenterRepulsion=0,
+  transparent=true
+}) => {
+  const ctnDom = useRef(null);
+  useEffect(() => {
+    let disposed = false;
+    let cleanup = () => {};
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    loadOgl().then(({Renderer, Program, Mesh, Color, Triangle}) => {
+      const ctn = ctnDom.current;
+      if (disposed || !ctn) return;
+      const renderer = new Renderer({alpha:transparent, premultipliedAlpha:false, dpr:Math.min(window.devicePixelRatio || 1, 1.5)});
+      const gl = renderer.gl;
+      if (transparent) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.clearColor(0, 0, 0, 0);
+      } else {
+        gl.clearColor(0, 0, 0, 1);
+      }
+
+      const targetMousePos = {x:0.5,y:0.5};
+      const smoothMousePos = {x:0.5,y:0.5};
+      let targetMouseActive = 0;
+      let smoothMouseActive = 0;
+      let program;
+      let animateId = 0;
+      const interactionRoot = ctn.closest('.stage') || ctn;
+
+      const resize = () => {
+        const width = Math.max(1, ctn.offsetWidth);
+        const height = Math.max(1, ctn.offsetHeight);
+        renderer.setSize(width, height);
+        if (program) program.uniforms.uResolution.value = new Color(gl.canvas.width, gl.canvas.height, gl.canvas.width / gl.canvas.height);
+      };
+      resize();
+      const geometry = new Triangle(gl);
+      program = new Program(gl, {
+        vertex:GALAXY_VERTEX_SHADER,
+        fragment:GALAXY_FRAGMENT_SHADER,
+        uniforms:{
+          uTime:{value:0},
+          uResolution:{value:new Color(gl.canvas.width,gl.canvas.height,gl.canvas.width/gl.canvas.height)},
+          uFocal:{value:new Float32Array(focal)},
+          uRotation:{value:new Float32Array(rotation)},
+          uStarSpeed:{value:starSpeed},
+          uDensity:{value:density},
+          uHueShift:{value:hueShift},
+          uSpeed:{value:speed},
+          uMouse:{value:new Float32Array([0.5,0.5])},
+          uGlowIntensity:{value:glowIntensity},
+          uSaturation:{value:saturation},
+          uMouseRepulsion:{value:mouseRepulsion},
+          uTwinkleIntensity:{value:twinkleIntensity},
+          uRotationSpeed:{value:rotationSpeed},
+          uRepulsionStrength:{value:repulsionStrength},
+          uMouseActiveFactor:{value:0},
+          uAutoCenterRepulsion:{value:autoCenterRepulsion},
+          uTransparent:{value:transparent}
+        }
+      });
+      const mesh = new Mesh(gl,{geometry,program});
+      gl.canvas.setAttribute('aria-hidden','true');
+      gl.canvas.setAttribute('role','presentation');
+      ctn.appendChild(gl.canvas);
+      ctn.dataset.galaxyStatus = 'ready';
+
+      const renderFrame = t => {
+        if (disposed) return;
+        program.uniforms.uTime.value = t * 0.001;
+        program.uniforms.uStarSpeed.value = (t * 0.001 * starSpeed) / 10;
+        smoothMousePos.x += (targetMousePos.x - smoothMousePos.x) * 0.05;
+        smoothMousePos.y += (targetMousePos.y - smoothMousePos.y) * 0.05;
+        smoothMouseActive += (targetMouseActive - smoothMouseActive) * 0.05;
+        program.uniforms.uMouse.value[0] = smoothMousePos.x;
+        program.uniforms.uMouse.value[1] = smoothMousePos.y;
+        program.uniforms.uMouseActiveFactor.value = smoothMouseActive;
+        renderer.render({scene:mesh});
+      };
+      const update = t => {
+        renderFrame(t);
+        animateId = requestAnimationFrame(update);
+      };
+      if (reducedMotion) renderer.render({scene:mesh});
+      else animateId = requestAnimationFrame(update);
+
+      const handleMouseMove = event => {
+        const rect = ctn.getBoundingClientRect();
+        targetMousePos.x = (event.clientX - rect.left) / rect.width;
+        targetMousePos.y = 1 - (event.clientY - rect.top) / rect.height;
+        targetMouseActive = 1;
+      };
+      const handleMouseLeave = () => { targetMouseActive = 0; };
+      if (mouseInteraction && !reducedMotion) {
+        interactionRoot.addEventListener('mousemove',handleMouseMove,{passive:true});
+        interactionRoot.addEventListener('mouseleave',handleMouseLeave,{passive:true});
+      }
+      const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
+      resizeObserver?.observe(ctn);
+      window.addEventListener('resize',resize,{passive:true});
+
+      cleanup = () => {
+        cancelAnimationFrame(animateId);
+        resizeObserver?.disconnect();
+        window.removeEventListener('resize',resize);
+        interactionRoot.removeEventListener('mousemove',handleMouseMove);
+        interactionRoot.removeEventListener('mouseleave',handleMouseLeave);
+        if (ctn.contains(gl.canvas)) ctn.removeChild(gl.canvas);
+        gl.getExtension('WEBGL_lose_context')?.loseContext();
+      };
+      if (disposed) cleanup();
+    }).catch(() => {
+      if (ctnDom.current) ctnDom.current.dataset.galaxyStatus = 'fallback';
+    });
+
+    return () => {
+      disposed = true;
+      cleanup();
+    };
+  }, [focal,rotation,starSpeed,density,hueShift,speed,mouseInteraction,glowIntensity,saturation,mouseRepulsion,repulsionStrength,twinkleIntensity,rotationSpeed,autoCenterRepulsion,transparent]);
+
+  return <div ref={ctnDom} className="galaxy-container" aria-hidden="true"/>;
+};
+
+const AmbientBackground = () => null;
+const BACKGROUND_REGISTRY = {
+  galaxy:{id:'galaxy',label:'Galaxy',render:props => <GalaxyBackground {...props}/>},
+  ambient:{id:'ambient',label:'Ambient',render:() => <AmbientBackground/>}
+};
+const resolveBackground = id => BACKGROUND_REGISTRY[id] || BACKGROUND_REGISTRY.galaxy;
+const AppBackground = ({backgroundId='galaxy'}) => {
+  const entry = resolveBackground(backgroundId);
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{entry.render({})}</div></div>;
+};
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
 const IcImage = (p)=> <I {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></I>;
@@ -1403,6 +2002,109 @@ const IcMcp = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6" rx="1.5"/>
 const IcFlame = (p)=> <I {...p} d="M12 2c1 3.5-1.5 5-1.5 7.5A3.5 3.5 0 0 0 14 13c0-2 2-3 2-3 .5 4 2 5 2 7a6 6 0 1 1-12 0c0-3 2.5-4 2.5-7 0-1.5-.5-2.5-.5-2.5S10 6 12 2z"/>;
 const IcEye = (p)=> <I {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></I>;
 const IcGraph = (p)=> <I {...p}><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="8" r="2.4"/><circle cx="9" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.8 7.2l8.4 0.6 M7.4 7.9l1.4 8 M10.9 17.4l5.4 0.5 M17.4 10.2l-7.2 5.9"/></I>;
+
+let dockLastHiddenAt = 0;
+const DockTooltip = ({content, side='top', children, delay=120}) => {
+  const [open, setOpen] = useState(false);
+  const timer = useRef(null);
+  const show = () => {
+    clearTimeout(timer.current);
+    const warm = Date.now() - dockLastHiddenAt < 300;
+    timer.current = setTimeout(() => setOpen(true), warm ? 0 : delay);
+  };
+  const hide = () => {
+    clearTimeout(timer.current);
+    if (open) dockLastHiddenAt = Date.now();
+    setOpen(false);
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return (
+    <span className="dock-tooltip-wrap" onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
+      {children}
+      {open && <span role="tooltip" className={`dock-tooltip ${side}`}>{content}</span>}
+    </span>
+  );
+};
+
+const Dock = ({children, side='top', size=44, className=''}) => (
+  <div className={`dock ${side === 'left' || side === 'right' ? 'vertical' : ''} ${className}`.trim()} style={{'--dock-size': `${size}px`}} role="toolbar" aria-label="Quick actions">
+    {children}
+  </div>
+);
+
+const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipSide='top'}) => {
+  const button = (
+    <button type="button" className="dock-item" onClick={onClick} aria-label={ariaLabel} aria-pressed={active || undefined}>
+      {active && <span className="dock-item-pill" aria-hidden="true"/>}
+      {children}
+    </button>
+  );
+  return tooltip ? <DockTooltip content={tooltip} side={tooltipSide}>{button}</DockTooltip> : button;
+};
+
+const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
+
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, onNewChat, onSearch, onNav, onOpenAgent, onSettings}) => {
+  const [near, setNear] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  const closeTimer = useRef(null);
+  const rootRef = useRef(null);
+  const wasLocked = useRef(locked);
+  const openDock = () => { clearTimeout(closeTimer.current); setNear(true); };
+  const closeDock = () => {
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => {
+      if (!locked && !agentsOpen) setNear(false);
+    }, 360);
+  };
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
+  useEffect(() => {
+    if (locked) {
+      clearTimeout(closeTimer.current);
+      setNear(true);
+    } else if (wasLocked.current && !rootRef.current?.matches(':hover')) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => setNear(false), 360);
+    }
+    wasLocked.current = locked;
+  }, [locked]);
+  useEffect(() => {
+    const closeAgents = event => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setAgentsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeAgents);
+    return () => document.removeEventListener('pointerdown', closeAgents);
+  }, []);
+  const visible = locked || near || agentsOpen;
+  const tooltipSide = side;
+  const run = action => { setAgentsOpen(false); action(); };
+  return (
+    <div ref={rootRef} className={`dock-layer ${visible ? 'open' : ''}`} data-dock-side={side} data-dock-locked={locked ? 'true' : 'false'}>
+      <div className={`dock-reveal-zone ${side}`} aria-hidden="true" onMouseEnter={openDock} onMouseLeave={closeDock}/>
+      <button type="button" className={`dock-handle ${side}`} aria-label="Show dock" onMouseEnter={openDock} onMouseLeave={closeDock} onFocus={openDock} onBlur={closeDock} onClick={openDock}/>
+      <div className={`dock-shell ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
+        <Dock side={side}>
+          <DockItem ariaLabel="New chat" tooltip="New chat" tooltipSide={tooltipSide} active={view === 'chat'} onClick={() => run(onNewChat)}><IcPencilSq size={18}/></DockItem>
+          <DockItem ariaLabel="Search chats" tooltip="Search" tooltipSide={tooltipSide} onClick={() => run(onSearch)}><IcSearch size={18}/></DockItem>
+          <DockItem ariaLabel="Library" tooltip="Library" tooltipSide={tooltipSide} active={view === 'library'} onClick={() => run(() => onNav('library'))}><IcLibrary size={18}/></DockItem>
+          <DockItem ariaLabel="Coding" tooltip="Coding" tooltipSide={tooltipSide} onClick={() => run(() => window.location.assign('vellum-workspace.html'))}><IcTerminal size={18}/></DockItem>
+          <DockSeparator/>
+          <span className="dock-tooltip-wrap">
+            <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
+            {agentsOpen && <div className={`dock-flyout ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
+              <div className="dock-fly-head">Agents</div>
+              {AGENTS.map(agent => <button type="button" key={agent.id} className={`dock-agent ${view === 'agent' && activeAgentId === agent.id ? 'active' : ''}`} onClick={() => run(() => onOpenAgent(agent.id))}>
+                <span className="sb-ic"><agent.icon size={15}/></span><span>{agent.name}</span>{view === 'agent' && activeAgentId === agent.id && <span className="dock-agent-check"><IcCheck size={13}/></span>}
+              </button>)}
+            </div>}
+          </span>
+          <DockItem ariaLabel="Settings" tooltip="Settings" tooltipSide={tooltipSide} active={settingsOpen} onClick={() => run(onSettings)}><IcSettings size={18}/></DockItem>
+          <DockItem ariaLabel={locked ? 'Auto-hide dock' : 'Keep dock visible'} tooltip={locked ? 'Auto-hide dock' : 'Keep dock visible'} tooltipSide={tooltipSide} active={locked} onClick={() => onLockedChange(!locked)}><IcPin size={17}/></DockItem>
+        </Dock>
+      </div>
+    </div>
+  );
+};
 /* closes on a document-level outside mousedown ? no click-eating backdrop,
    so one click both dismisses the open menu and lands on the next target */
 const Popover = ({className, style, onClose, children, portal}) => {
@@ -1573,29 +2275,12 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
         <button className="tbtn" title="Hide sidebar" onClick={onTogglePin}><IcPanel/></button>
       </div>
       <div className="sb-scroll">
-        <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat<span className="sb-kbd"><kbd>Ctrl ? O</kbd></span></button>
-        <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
-        <button className={'sb-row' + (view === 'library' ? ' active' : '')} onClick={() => onNav('library')}><span className="sb-ic"><IcLibrary/></span>Library<span className="sb-kbd"><kbd>Ctrl ? L</kbd></span></button>
-        <button className="sb-row" title="Opens the coding workspace" onClick={() => window.location.assign('vellum-workspace.html')}><span className="sb-ic"><IcTerminal/></span>Coding</button>
         <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger<span className="sb-kbd"><kbd>Ctrl ? G</kbd></span></button>
         <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
         <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
         <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills<span className="sb-kbd"><kbd>Ctrl ? K</kbd></span></button>
         <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory<span className="sb-kbd"><kbd>Ctrl+Shift+E</kbd></span></button>
         <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
-        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('agents')}>
-          Agents
-          <button className={'sec-chev' + (secOpen.agents ? '' : ' closed')} title={secOpen.agents ? 'Collapse' : 'Expand'} onClick={e => { e.stopPropagation(); onToggleSec('agents'); }}><IcChevD size={12}/></button>
-        </div>
-        {secOpen.agents && (
-          <div className="sb-list">
-            {AGENTS.map(a => (
-              <button key={a.id} className={'sb-row agent-row' + (view === 'agent' && activeAgentId === a.id ? ' active' : '')} onClick={() => onOpenAgent(a.id)}>
-                <span className="sb-ic agent-row-ic"><a.icon size={15}/></span>{a.name}
-              </button>
-            ))}
-          </div>
-        )}
         <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
           Projects
           <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
@@ -1690,8 +2375,6 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <div className="rail-logo" title="Home ? Ctrl+Shift+H" onClick={onNewChat}><div className="rail-dot"/></div>
       <div className="rail-scroll">
       <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
-      <button className="rail-btn" title="New chat ? Ctrl+Shift+O" onClick={onNewChat}><IcPencilSq size={17}/></button>
-      <button className="rail-btn" title="Search chats ? Ctrl+K" onClick={onSearch}><IcSearch size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className="rail-btn" title="Recent chats"><IcChat size={17}/></button>}>
         <div className="fly-head">Recents</div>
         {recents.length === 0 && <div className="sb-empty">No chats yet.</div>}
@@ -1713,23 +2396,11 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
           </div>
         ))}
       </RailFly>
-      <button className={'rail-btn' + (view === 'library' ? ' active' : '')} title="Library ? Ctrl+Shift+L" onClick={() => onNav('library')}><IcLibrary size={17}/></button>
-      <button className="rail-btn" title="Coding ? opens the workspace" onClick={() => window.location.assign('vellum-workspace.html')}><IcTerminal size={17}/></button>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger ? Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcGrid size={17}/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
       <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
-      <RailFly btn={<button className={'rail-btn' + (view === 'agent' ? ' active' : '')} title="Agents"><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={17}/></button>}>
-        <div className="fly-head">Agents</div>
-        {AGENTS.map(a => (
-          <div key={a.id} className="chat-row" onClick={() => onOpenAgent(a.id)}>
-            <span className="chat-pin agent-row-ic"><a.icon size={14}/></span>
-            <span className="chat-title">{a.name}</span>
-            {view === 'agent' && activeAgentId === a.id && <span className="chat-pin" style={{marginLeft: 'auto'}}><IcCheck size={13}/></span>}
-          </div>
-        ))}
-      </RailFly>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
         <div className="chat-row" onClick={onNewProject}>
@@ -1829,8 +2500,8 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
     else if (e.key === 'Enter') { e.preventDefault(); if (hits[idx]) onPick(hits[idx].id); }
   };
   return (
-    <Popover className={'model-drop' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
-      <div className="drop-lbl"><span>Model</span><span className="model-sync" title="Sync is not in this preview">\u21BB Sync</span></div>
+    <Popover className={'model-drop select-motion' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
+      <div className="drop-lbl"><span>Model</span></div>
       <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey}/>
       <div className="model-list" ref={listRef}>
         {hits.map((m, i) => (
@@ -1841,7 +2512,6 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
         ))}
         {hits.length === 0 && <div className="s-none">No matches.</div>}
       </div>
-      <div className="drop-item manage" title="Key management is not in this preview"><span>Manage models &amp; keys\u2026</span></div>
     </Popover>
   );
 };
@@ -2289,8 +2959,8 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             onDismiss={() => setSlashDismissed(true)}/>}
           <div className="cspace"/>
           {searchMode
-            ? <button className="model-pill" onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
-            : <button className="model-pill" onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
+            ? <button className={'model-pill' + (scopeOpen ? ' select-open' : '')} onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
+            : <button className={'model-pill' + (modelOpen ? ' select-open' : '')} onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
           <button className={'cbtn' + (mic ? ' mic-on' : '')} title={mic ? 'Stop dictation (Ctrl+Shift+D)' : 'Dictation (Ctrl+Shift+D)'} onClick={() => setMic(m => !m)}><IcMic/></button>
           {voiceState === 'idle' && (busy
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
@@ -2302,7 +2972,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           {voiceState === 'listening' && (
             <button className="voice-pill voice-pill-end" onClick={endVoice} title="End voice"><span className="voice-dots"><i/><i/><i/></span>End</button>)}
       {modelOpen && <ModelDrop model={model} models={models} drop={drop} onPick={m => { setModel(m); setModelOpen(false); }} onClose={() => setModelOpen(false)}/>}
-          {scopeOpen && <Popover className={'model-drop scope-drop' + (drop === 'down' ? ' down' : '')} onClose={() => setScopeOpen(false)}>
+          {scopeOpen && <Popover className={'model-drop scope-drop select-motion' + (drop === 'down' ? ' down' : '')} onClose={() => setScopeOpen(false)}>
             <div className="drop-lbl"><span>Search depth</span></div>
             {['Instant', 'Standard', 'Deep'].map(s => (
               <div key={s} className="drop-item" onClick={() => { setSearchScope(s); setScopeOpen(false); }}>
@@ -2441,6 +3111,7 @@ const MessageTraceInline = ({msg, onOpenActivity}) => {
   const visibleSteps = steps.filter(s => s.label && s.id !== 'thinking').slice(-3);
   const canOpen = onOpenActivity && (trace || sources.length || (msg.activity && msg.activity.length));
   const open = () => canOpen && onOpenActivity(msg.id);
+  const stepIsActive = step => !['completed', 'failed', 'done'].includes(String(step && step.status || '').toLowerCase());
   if (!trace && !sources.length && !(msg.activity && msg.activity.length)) return null;
   return (
     <div className="turn-trace">
@@ -2451,9 +3122,9 @@ const MessageTraceInline = ({msg, onOpenActivity}) => {
         </button>
       )}
       {visibleSteps.map((step, i) => (
-        <div key={step.id || i} className={'turn-line' + (msg.streaming && i === visibleSteps.length - 1 ? ' active' : '')}>
+        <div key={step.id || i} className={'turn-line' + (msg.streaming && i === visibleSteps.length - 1 && stepIsActive(step) ? ' active' : '')}>
           <TraceIcon type={step.type} status={step.status}/>
-          <span className={msg.streaming && i === visibleSteps.length - 1 ? 'turn-label trace-glow' : 'turn-label'}>{step.label}</span>
+          <span className={msg.streaming && i === visibleSteps.length - 1 && stepIsActive(step) ? 'turn-label trace-glow' : 'turn-label'}>{step.label}</span>
         </div>
       ))}
       {sources.length > 0 && (
@@ -2751,7 +3422,7 @@ const AgentSettingsModal = ({agent, cfg, onSave, onClose}) => {
         </div>
         <div className="set-row">Enabled<span className="sr-end"><div className={'sw' + (c.enabled ? ' on' : '')} role="switch" aria-checked={c.enabled} onClick={() => set('enabled', !c.enabled)}/></span></div>
         <div className="set-row">Model
-          <span className="sr-end"><select className="agent-select" value={c.model} onChange={e => set('model', e.target.value)}>{MODELS.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></span>
+          <span className="sr-end"><VSelect className="agent-select-control" ariaLabel="Agent model" value={c.model} onValueChange={v => set('model', v)} options={MODELS.map(m => ({value:m.id,label:m.label}))}/></span>
         </div>
         <div className="set-row">Autonomy
           <span className="sr-end agent-seg">
@@ -3864,9 +4535,9 @@ const AppsView = ({apps, onConnect, onDisconnect}) => {
               <label className="conn-add-field"><span>Name</span><input value={custom.name} onChange={e=>setCustom({...custom,name:e.target.value})} placeholder="e.g. Jira" required/></label>
               <label className="conn-add-field"><span>Description</span><input value={custom.description} onChange={e=>setCustom({...custom,description:e.target.value})} placeholder="What does it do?"/></label>
               <div className="conn-add-row">
-                <label className="conn-add-field"><span>Category</span><select value={custom.category} onChange={e=>setCustom({...custom,category:e.target.value})}>{['Developer','Productivity','Data','Web','Communication','Other'].map(o=><option key={o}>{o}</option>)}</select></label>
-                <label className="conn-add-field"><span>Auth</span><select value={custom.authType} onChange={e=>setCustom({...custom,authType:e.target.value})}>{['None','API key','OAuth'].map(o=><option key={o}>{o}</option>)}</select></label>
-                <label className="conn-add-field"><span>Install</span><select value={custom.install} onChange={e=>setCustom({...custom,install:e.target.value})}>{['npm','docker','local'].map(o=><option key={o}>{o}</option>)}</select></label>
+                <div className="conn-add-field"><span>Category</span><VSelect ariaLabel="Connector category" value={custom.category} onValueChange={value=>setCustom({...custom,category:value})} options={['Developer','Productivity','Data','Web','Communication','Other']}/></div>
+                <div className="conn-add-field"><span>Auth</span><VSelect ariaLabel="Authentication type" value={custom.authType} onValueChange={value=>setCustom({...custom,authType:value})} options={['None','API key','OAuth']}/></div>
+                <div className="conn-add-field"><span>Install</span><VSelect ariaLabel="Install method" value={custom.install} onValueChange={value=>setCustom({...custom,install:value})} options={['npm','docker','local']}/></div>
               </div>
               <label className="conn-add-field"><span>{custom.install==='docker'?'Image':custom.install==='local'?'Command':'Package'}</span><input value={custom.pkg} onChange={e=>setCustom({...custom,pkg:e.target.value})} placeholder={custom.install==='docker'?'mcp/my-server':custom.install==='local'?'npx my-mcp-server':'@scope/server-name'}/></label>
               <label className="conn-add-field"><span>Tools exposed <em>(comma-separated)</em></span><input value={custom.tools} onChange={e=>setCustom({...custom,tools:e.target.value})} placeholder="search, create_issue, list"/></label>
@@ -4079,7 +4750,7 @@ const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalizat
     </div>
   );
   return (
-    <Popover portal className="pop" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}} onClose={onClose}>
+    <Popover portal className="pop select-motion" style={{left: Math.max(8, pos.x), bottom: window.innerHeight - pos.y + 8}} onClose={onClose}>
         <div className="pop-email">{profile.email}</div>
         <div className="pop-acct">
           <div className="pop-row" onClick={() => setAcctOpen(o => !o)}>
@@ -4159,25 +4830,9 @@ const PERS_CHARS = [
   {v:'less', label:'Less', sub:'More professional and factual'},
 ];
 const DEFAULT_PERS = { baseStyle:'default', warm:'default', enthusiastic:'default', headers:'default', emoji:'default', fastAnswers:true, custom:'', nickname:'', occupation:'', about:'', memory:true, dreaming:true, refHistory:true, recordHist:true, webSearch:true, canvas:true, voice:true, advVoice:true, connector:true };
-const PDrop = ({value, options, onChange, width=214}) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => { if(!open) return; const h = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); }; document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h); }, [open]);
-  const cur = options.find(o => o.v === value) || options[0];
-  return (
-    <span className="pdrop" ref={ref}>
-      <button className="pdrop-btn" onClick={() => setOpen(o => !o)}>{cur.label}<IcChevD size={12}/></button>
-      {open && <div className="pdrop-menu" style={{width}}>
-        {options.map(o => (
-          <div key={o.v} className={'pdrop-item' + (o.v === value ? ' on' : '')} onClick={() => { onChange(o.v); setOpen(false); }}>
-            <span className="pdrop-il"><span className="pdrop-label">{o.label}</span>{o.sub && <span className="pdrop-sub">{o.sub}</span>}</span>
-            {o.v === value && <span className="pdrop-check"><IcCheck size={14}/></span>}
-          </div>
-        ))}
-      </div>}
-    </span>
-  );
-};
+const PDrop = ({value, options, onChange, width=214}) => (
+  <VSelect className="pdrop-select" ariaLabel="Personalization option" value={value} onValueChange={onChange} menuWidth={width} options={options.map(option => ({value:option.v,label:option.label,sub:option.sub}))}/>
+);
 
 const memoryEntryDate = (entry) => {
   const raw = entry && (entry.created_at || entry.updated_at || entry.timestamp || entry.date);
@@ -4828,11 +5483,158 @@ function applyAccent(id){
     'linear-gradient(155deg,'+accentRgba(back,0.60)+' 0%,var(--bg) 58%,'+accentRgba(back,0.45)+' 100%)');
 }
 
-const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, initialTab, onProviderKey, onMemoryChanged, onClose}) => {
+const SpotifyConnectModal = ({onClose, onConnected}) => {
+  const [clientId, setClientId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(async () => {
+      try {
+        const status = await SpotifyAPI.status();
+        if (status && status.connected) onConnected(status);
+      } catch (_) {}
+    }, 1800);
+    return () => clearInterval(timer);
+  }, [waiting, onConnected]);
+  const begin = async () => {
+    const value = clientId.trim();
+    if (!value || busy) return;
+    setBusy(true); setError('');
+    const popup = window.open('about:blank', 'vellum-spotify-oauth', 'width=520,height=720');
+    try {
+      const result = await SpotifyAPI.start(value);
+      if (popup) popup.location.href = result.authorization_url;
+      else window.open(result.authorization_url, '_blank', 'noopener,noreferrer');
+      setWaiting(true);
+    } catch (err) {
+      if (popup) popup.close();
+      setError(err && err.message ? err.message : 'Could not start Spotify connection.');
+    } finally { setBusy(false); }
+  };
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="modal spotify-connect-modal" role="dialog" aria-modal="true" aria-label="Connect Spotify">
+        <button className="set-close" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={16}/></button>
+        <div style={{display:'flex',alignItems:'center',gap:11}}><span className="spotify-mark">S</span><div><div className="m-title">Connect Spotify</div><div className="agent-bar-tag">One-time PKCE setup. No client secret required.</div></div></div>
+        <div className="spotify-steps">
+          <div className="spotify-step"><span className="spotify-step-n">1</span><div className="spotify-step-copy"><b>Create a Spotify developer app</b>Enable Web API, then add the callback below.<div className="spotify-uri">http://127.0.0.1:8000/api/plugins/spotify/oauth/callback</div><button className="btn" style={{marginTop:8}} onClick={() => window.open('https://developer.spotify.com/dashboard','_blank','noopener,noreferrer')}>Open Spotify dashboard</button></div></div>
+          <div className="spotify-step"><span className="spotify-step-n">2</span><div className="spotify-step-copy" style={{width:'100%'}}><b>Paste the public Client ID</b>Vellum stores it with your local refresh token. It is never sent to the model.<div className="spotify-client-field"><label htmlFor="spotify-client-id">Spotify Client ID</label><input id="spotify-client-id" value={clientId} onChange={e => setClientId(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') begin(); }} autoComplete="off" spellCheck="false" placeholder="Your Spotify Client ID"/></div></div></div>
+        </div>
+        <div className="hintcard"><span className="sb-ic"><IcShield size={15}/></span><span>Spotify Premium is required for play, pause, skip, volume, queue additions, and device transfer. Keep Spotify open on at least one Connect device.</span></div>
+        {error && <div className="spotify-error">{error}</div>}
+        {waiting && <div className="spotify-wait">Waiting for Spotify authorization…</div>}
+        <div className="m-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!clientId.trim() || busy || waiting} onClick={begin}>{waiting ? 'Authorization opened' : busy ? 'Starting…' : 'Continue to Spotify'}</button></div>
+      </div>
+    </React.Fragment>
+  );
+};
+
+const fmtSpotifyTime = ms => {
+  const seconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+  return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+};
+
+const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
+  const connected = !!(spotify && spotify.connected);
+  const [player, setPlayer] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState('');
+  const timerRef = useRef(null);
+  const stoppedRef = useRef(false);
+  const refresh = async details => {
+    try {
+      const next = await SpotifyAPI.player(!!details);
+      setPlayer(prev => ({...(prev || {}),...next,devices:next.devices || (prev && prev.devices) || [],queue:next.queue || (prev && prev.queue) || []}));
+      setError('');
+      return next;
+    } catch (err) {
+      const message = err && err.message ? err.message : 'Spotify is unavailable.';
+      setError(message);
+      if (/not connected|authorization/i.test(message)) onReconnect();
+      throw err;
+    }
+  };
+  useEffect(() => {
+    if (!connected) { setPlayer(null); setOpen(false); return; }
+    stoppedRef.current = false;
+    const schedule = delay => { clearTimeout(timerRef.current); timerRef.current = setTimeout(tick, delay); };
+    const tick = async () => {
+      if (stoppedRef.current) return;
+      if (document.visibilityState !== 'visible') { schedule(5000); return; }
+      try {
+        const next = await refresh(false);
+        schedule(next && next.is_playing ? 5000 : 15000);
+      } catch (err) {
+        schedule(/rate|429/i.test(err && err.message || '') ? 30000 : 15000);
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'visible') { clearTimeout(timerRef.current); tick(); } };
+    document.addEventListener('visibilitychange', onVisibility);
+    tick();
+    return () => { stoppedRef.current = true; clearTimeout(timerRef.current); document.removeEventListener('visibilitychange', onVisibility); };
+  }, [connected]);
+  useEffect(() => { if (connected && open) refresh(true).catch(() => {}); }, [connected, open]);
+  useEffect(() => {
+    if (!connected) return;
+    const onAgentAction = () => refresh(open).catch(() => {});
+    window.addEventListener('vellum:spotify-player-refresh', onAgentAction);
+    return () => window.removeEventListener('vellum:spotify-player-refresh', onAgentAction);
+  }, [connected, open]);
+  if (!connected) return null;
+  const isPlaying = !!(player && player.is_playing);
+  const track = player && player.track;
+  const artists = player && Array.isArray(player.artists) ? player.artists.join(', ') : '';
+  const run = async body => {
+    try { await SpotifyAPI.action(body); await refresh(open); }
+    catch (err) { setError(err && err.message ? err.message : 'Spotify action failed.'); }
+  };
+  const toggle = event => { event.stopPropagation(); run({action:isPlaying ? 'pause' : 'play'}); };
+  const repeatNext = !player || player.repeat === 'off' ? 'context' : player.repeat === 'context' ? 'track' : 'off';
+  return (
+    <div className={'spotify-player-shell side-' + dockSide}>
+      <div className="spotify-player-pill" role="button" tabIndex="0" aria-label="Open Spotify player" onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}>
+        {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6" size={17}/></span>}
+        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (player && player.device && player.device.name) || 'Open Spotify on a device'}</span></span>
+        <button className="spotify-mini-btn primary" aria-label={isPlaying ? 'Pause Spotify' : 'Play Spotify'} title={isPlaying ? 'Pause' : 'Play'} onClick={toggle}>{isPlaying ? <I d="M9 6v12M15 6v12" size={14}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
+        <button className="spotify-mini-btn" aria-label="Next Spotify track" title="Next" onClick={e => { e.stopPropagation(); run({action:'next'}); }}><I d="M6 5l9 7-9 7V5zM18 5v14" size={14}/></button>
+      </div>
+      {open && <div className="spotify-player-panel">
+        <div className="spotify-panel-track">
+          {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M6 21a3 3 0 1 0 0-6" size={20}/></span>}
+          <div className="spotify-panel-copy"><b>{track ? track.name : 'Nothing playing'}</b><span>{artists || 'Choose music in Spotify or ask Vellum'}</span></div>
+        </div>
+        <div className="spotify-progress"><input className="spotify-range" aria-label="Spotify playback position" type="range" min="0" max={Math.max(1,player && player.duration_ms || 1)} value={Math.min(player && player.progress_ms || 0,player && player.duration_ms || 1)} onChange={e => setPlayer(p => ({...(p || {}),progress_ms:Number(e.target.value)}))} onMouseUp={e => run({action:'seek',position_ms:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'seek',position_ms:Number(e.currentTarget.value)})}/><div className="spotify-times"><span>{fmtSpotifyTime(player && player.progress_ms)}</span><span>{fmtSpotifyTime(player && player.duration_ms)}</span></div></div>
+        <div className="spotify-controls">
+          <button className={'spotify-control' + (player && player.shuffle ? ' on' : '')} aria-label="Toggle shuffle" title="Shuffle" onClick={() => run({action:'set_shuffle',shuffle:!(player && player.shuffle)})}><I d="M16 3h5v5M4 20l16-16M4 4l5 5M15 15l6 6M16 21h5v-5" size={15}/></button>
+          <button className="spotify-control" aria-label="Previous track" title="Previous" onClick={() => run({action:'previous'})}><I d="M18 5l-9 7 9 7V5zM6 5v14" size={16}/></button>
+          <button className="spotify-control primary" aria-label={isPlaying ? 'Pause' : 'Play'} onClick={() => run({action:isPlaying ? 'pause' : 'play'})}>{isPlaying ? <I d="M9 6v12M15 6v12" size={17}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
+          <button className="spotify-control" aria-label="Next track" title="Next" onClick={() => run({action:'next'})}><I d="M6 5l9 7-9 7V5zM18 5v14" size={16}/></button>
+          <button className={'spotify-control' + (player && player.repeat !== 'off' ? ' on' : '')} aria-label="Change repeat mode" title={'Repeat: ' + (player && player.repeat || 'off')} onClick={() => run({action:'set_repeat',state:repeatNext})}><I d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" size={15}/></button>
+        </div>
+        <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})}/></div>
+        <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' · active' : ''}</option>)}</select></div>
+        {(player && player.queue || []).length > 0 && <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{player.queue.slice(0,5).map((item,index) => <div className="spotify-queue-row" key={(item.uri || item.id || '') + index}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>)}</div>}
+        {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
+      </div>}
+    </div>
+  );
+};
+
+const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
+  const [routingStatus, setRoutingStatus] = useState(null);
+  const [routingCredentials, setRoutingCredentials] = useState({credentials: [], strategies: {}});
+  const [routingPolicy, setRoutingPolicy] = useState({sort: 'latency', require_parameters: true, allow_fallbacks: true});
+  const [routingError, setRoutingError] = useState('');
+  const [routingBusy, setRoutingBusy] = useState(false);
+  const [fallbackDraft, setFallbackDraft] = useState(model);
+  const [credentialDraft, setCredentialDraft] = useState({provider: 'openrouter', label: '', secret: ''});
   const [accent, setAccentState] = useState(() => { try { return localStorage.getItem('vellum-accent') || 'default'; } catch { return 'default'; } });
   const setAccent = id => { setAccentState(id); try { localStorage.setItem('vellum-accent', id); } catch {} applyAccent(id); };
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
@@ -4871,6 +5673,58 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
     } finally {
       setSavingKey('');
     }
+  };
+  const loadRouting = async () => {
+    setRoutingBusy(true);
+    setRoutingError('');
+    try {
+      const [status, credentials] = await Promise.all([API.settings.routingStatus(), API.settings.routingCredentials()]);
+      setRoutingStatus(status);
+      setRoutingCredentials(credentials || {credentials: [], strategies: {}});
+      setRoutingPolicy(status.global_policy || {sort: 'latency', require_parameters: true, allow_fallbacks: true});
+    } catch (err) {
+      setRoutingError('Routing status unavailable.');
+    } finally {
+      setRoutingBusy(false);
+    }
+  };
+  useEffect(() => { if (tab === 'Configuration') loadRouting(); }, [tab]);
+  const saveRoutingPolicy = async () => {
+    setRoutingBusy(true);
+    try { await API.settings.setGlobalRoutingPolicy(routingPolicy); await loadRouting(); }
+    catch (err) { setRoutingError('Could not save provider routing.'); setRoutingBusy(false); }
+  };
+  const saveFallbacks = async targets => {
+    setRoutingBusy(true);
+    try { await API.settings.setFallbacks(targets.map(item => ({provider: item.provider, model: item.model}))); await loadRouting(); }
+    catch (err) { setRoutingError('Could not save fallback chain.'); setRoutingBusy(false); }
+  };
+  const addFallback = () => {
+    if (!fallbackDraft) return;
+    const current = (routingStatus && routingStatus.fallbacks) || [];
+    if (!current.some(item => item.model === fallbackDraft)) saveFallbacks([...current, {provider: 'openrouter', model: fallbackDraft}]);
+  };
+  const addRoutingCredential = async () => {
+    if (!credentialDraft.label.trim() || !credentialDraft.secret.trim()) return;
+    setRoutingBusy(true);
+    try { await API.settings.addCredential(credentialDraft); await loadRouting(); }
+    catch (err) { setRoutingError('Could not add credential.'); }
+    finally { setCredentialDraft(d => ({...d, secret: ''})); setRoutingBusy(false); }
+  };
+  const removeRoutingCredential = async credentialId => {
+    setRoutingBusy(true);
+    try { await API.settings.removeCredential(credentialId); await loadRouting(); }
+    catch (err) { setRoutingError('Could not remove credential.'); setRoutingBusy(false); }
+  };
+  const changeCredentialStrategy = async (provider, strategy) => {
+    setRoutingBusy(true);
+    try { await API.settings.setCredentialStrategy(provider, strategy); await loadRouting(); }
+    catch (err) { setRoutingError('Could not update rotation strategy.'); setRoutingBusy(false); }
+  };
+  const resetCredentialPool = async provider => {
+    setRoutingBusy(true);
+    try { await API.settings.resetCredentialPool(provider); await loadRouting(); }
+    catch (err) { setRoutingError('Could not reset credential health.'); setRoutingBusy(false); }
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
@@ -4923,6 +5777,16 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
                     <button className={'ap-seg-b' + (theme === 'dark' ? ' on' : '')} onClick={() => { if (theme !== 'dark') onTheme(); }}><IcMoon size={13}/>Dark</button>
                   </div>
                 </span>
+              </div>
+              <div className="set-row">
+                <div>Dock position<span className="sr-sub">Auto uses the top in conversations and the right edge in tools.</span></div>
+                <span className="sr-end"><VSelect className="dock-pos-select" ariaLabel="Dock position" value={dockPosition} onValueChange={onDockPosition} options={[
+                  {value:'auto',label:'Auto'}, {value:'top',label:'Top'}, {value:'right',label:'Right'}, {value:'bottom',label:'Bottom'}, {value:'left',label:'Left'}
+                ]}/></span>
+              </div>
+              <div className="set-row">
+                <div>Keep dock visible<span className="sr-sub">Turn this off to reveal the dock only when you approach its edge.</span></div>
+                <span className="sr-end"><div className={'sw' + (dockLocked ? ' on' : '')} role="switch" tabIndex="0" aria-checked={dockLocked} onClick={() => onDockLocked(!dockLocked)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onDockLocked(!dockLocked); } }}/></span>
               </div>
               <div className="cfg-sec">Accent palette</div>
               <div className="ap-grid">
@@ -4980,7 +5844,7 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
               <div className="set-h">Configuration</div>
               <div className="cfg-note">Pick your default model and connect provider keys. Keys are kept on this machine.</div>
               <div className="set-row">Default model
-                <span className="sr-end"><select className="agent-select" value={model} onChange={e => onModel(e.target.value)}>{models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select></span>
+                <span className="sr-end"><VSelect className="agent-select-control" ariaLabel="Default model" value={model} onValueChange={onModel} options={models.map(m => ({value:m.id,label:m.label}))}/></span>
               </div>
               <div className="cfg-sec">API keys</div>
               {PROVIDERS.map(p => (
@@ -4993,6 +5857,33 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
                 </div>
               ))}
               <div className="set-note">Keys are saved locally in Vellum's .env. The model picker refreshes after a provider connects.</div>
+
+              <div className="cfg-sec">Provider routing</div>
+              <div className="set-row"><div>Optimization<span className="sr-sub">How OpenRouter chooses an inference provider for the selected model.</span></div><span className="sr-end"><select className="agent-select" value={routingPolicy.sort || 'latency'} onChange={e => setRoutingPolicy(p => ({...p, sort: e.target.value}))}><option value="latency">Lowest latency</option><option value="price">Lowest price</option><option value="throughput">Highest throughput</option></select></span></div>
+              <div className="set-row"><div>Require parameter support<span className="sr-sub">Skip providers that cannot honor every requested parameter.</span></div><span className="sr-end"><div className={'sw' + (routingPolicy.require_parameters ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.require_parameters} onClick={() => setRoutingPolicy(p => ({...p, require_parameters: !p.require_parameters}))}/></span></div>
+              <div className="set-row"><div>OpenRouter provider fallback<span className="sr-sub">Allow OpenRouter to try another inference provider for the same model.</span></div><span className="sr-end"><div className={'sw' + (routingPolicy.allow_fallbacks ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.allow_fallbacks} onClick={() => setRoutingPolicy(p => ({...p, allow_fallbacks: !p.allow_fallbacks}))}/></span></div>
+              <div className="set-row"><div>Privacy floor<span className="sr-sub">Zero data retention and data collection denied on every request.</span></div><span className="sr-end"><span className="cu-pill on">enforced</span></span></div>
+              <div className="set-row"><div>{routingStatus ? `Primary: ${routingStatus.primary_provider} · ${routingStatus.active_model}` : 'Routing status'}</div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={saveRoutingPolicy}>Save routing</button></span></div>
+
+              <div className="cfg-sec">Fallback chain</div>
+              {((routingStatus && routingStatus.fallbacks) || []).map((target, index) => (
+                <div key={target.id || `${target.provider}-${target.model}`} className="set-row"><div>{index + 1}. {models.find(m => m.id === target.model)?.label || target.model}<span className="sr-sub">{target.provider}</span></div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={() => saveFallbacks(routingStatus.fallbacks.filter((_, i) => i !== index))}>Remove</button></span></div>
+              ))}
+              <div className="set-row"><div>Add model<span className="sr-sub">Used only after the selected model cannot complete the request.</span></div><span className="sr-end" style={{display:'flex', gap:8}}><select className="agent-select" value={fallbackDraft} onChange={e => setFallbackDraft(e.target.value)}>{models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select><button className="btn" disabled={routingBusy} onClick={addFallback}>Add</button></span></div>
+
+              <div className="cfg-sec">Credential pools</div>
+              {['openrouter', 'openai'].map(provider => {
+                const health = (routingStatus && routingStatus.credential_health && routingStatus.credential_health[provider]) || {};
+                return <div key={provider} className="set-row"><div>{provider === 'openrouter' ? 'OpenRouter' : 'OpenAI'}<span className="sr-sub">{health.healthy || 0} healthy · {health.cooldown || 0} cooling down · {health.invalid || 0} invalid</span></div><span className="sr-end" style={{display:'flex', gap:8}}><select className="agent-select" value={(routingCredentials.strategies || {})[provider] || 'fill_first'} onChange={e => changeCredentialStrategy(provider, e.target.value)}><option value="fill_first">Fill first</option><option value="round_robin">Round robin</option><option value="least_used">Least used</option><option value="random">Random</option></select><button className="btn" disabled={routingBusy} onClick={() => resetCredentialPool(provider)}>Reset</button></span></div>;
+              })}
+              {(routingCredentials.credentials || []).map(credential => (
+                <div key={credential.id} className="set-row"><div>{credential.label}<span className="sr-sub">{credential.provider} · {credential.status} · key …{credential.fingerprint}</span></div><span className="sr-end">{String(credential.source || '').startsWith('keyring:') && <button className="btn" disabled={routingBusy} onClick={() => removeRoutingCredential(credential.id)}>Remove</button>}</span></div>
+              ))}
+              <div className="set-row"><div>Add credential<span className="sr-sub">Stored in the operating system credential store, never browser storage.</span></div><span className="sr-end" style={{display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}><select className="agent-select" value={credentialDraft.provider} onChange={e => setCredentialDraft(d => ({...d, provider: e.target.value}))}><option value="openrouter">OpenRouter</option><option value="openai">OpenAI</option></select><input className="cfg-key" placeholder="Label" value={credentialDraft.label} onChange={e => setCredentialDraft(d => ({...d, label: e.target.value}))}/><input type="password" className="cfg-key" placeholder="API key" value={credentialDraft.secret} onChange={e => setCredentialDraft(d => ({...d, secret: e.target.value}))}/><button className="btn" disabled={routingBusy || !credentialDraft.label.trim() || !credentialDraft.secret.trim()} onClick={addRoutingCredential}>Add</button></span></div>
+
+              <div className="cfg-sec">Latest route</div>
+              <div className="set-row"><div>{routingStatus && routingStatus.latest_attempt ? `${routingStatus.latest_attempt.model} · ${routingStatus.latest_attempt.inference_provider || routingStatus.latest_attempt.api_provider}` : 'No routing attempts recorded yet.'}<span className="sr-sub">Refresh after a model request to inspect the most recent route.</span></div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={loadRouting}>Refresh</button></span></div>
+              {routingError && <div className="set-note" role="alert">{routingError}</div>}
             </React.Fragment>
           )}
           {tab === 'Reflections' && (
@@ -5034,13 +5925,17 @@ const SettingsModal = ({theme, onTheme, feeds, onToggleFeed, cu, onCu, model, mo
           {tab === 'Plugins' && (
             <React.Fragment>
               <div className="set-h">Plugins</div>
-              {(apps || []).map(p => (
+              <div className="set-row spotify-row">
+                <div className="spotify-row-main"><span className="spotify-mark">S</span><div className="spotify-row-copy">Spotify<span className="sr-sub">Playback, devices, queue, search, playlists, albums, library, and history.</span><span className={'spotify-status' + (spotify && spotify.connected ? ' connected' : '')}>{spotify && spotify.connected ? ((spotify.account_name || 'Spotify') + (spotify.product ? ' · ' + spotify.product : '')) : spotify && spotify.status === 'reauth_required' ? 'Reauthentication required' : 'Not connected'}</span></div></div>
+                <span className="sr-end">{spotify && spotify.connected ? <button className="btn" onClick={onSpotifyDisconnect}>Disconnect</button> : <button className="btn primary" onClick={onSpotifyConnect}>{spotify && spotify.status === 'reauth_required' ? 'Reconnect' : 'Connect'}</button>}</span>
+              </div>
+              {(apps || []).filter(p => p.id !== 'spotify').map(p => (
                 <div key={p.id} className="set-row">
                   <div>{p.name}<span className="sr-sub">{p.note || 'Backend plugin or MCP capability.'}</span></div>
                   <span className="sr-end"><span className={'cu-pill' + (p.state === 'ready' ? ' on' : '')}>{p.state === 'ready' ? 'connected' : 'not configured'}</span></span>
                 </div>
               ))}
-              <div className="set-note">Loaded through the plugins API. Connector management remains a template surface.</div>
+              <div className="set-note">Portable plugins are loaded through Vellum's Hermes-compatible wrapper.</div>
             </React.Fragment>
           )}
           {tab === 'Automations' && (
@@ -5102,15 +5997,24 @@ const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
   });
+  const [backgroundId] = useState(() => {
+    try { return resolveBackground(localStorage.getItem('vellum-background') || 'galaxy').id; }
+    catch { return 'galaxy'; }
+  });
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem('vellum-theme', theme); } catch {}
   }, [theme]);
+  useEffect(() => { try { localStorage.setItem('vellum-background', backgroundId); } catch {} }, [backgroundId]);
   useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
 
   const [sidebarPinned, setSidebarPinned] = useState(() => { try { const v = localStorage.getItem('vellum-sb-open'); return v === null ? true : v === '1'; } catch { return true; } });
   const [sidebarHover, setSidebarHover] = useState(false);
   useEffect(() => { try { localStorage.setItem('vellum-sb-open', sidebarPinned ? '1' : '0'); } catch {} }, [sidebarPinned]);
+  const [dockPosition, setDockPosition] = useState(() => { try { return localStorage.getItem('vellum-dock-position') || 'auto'; } catch { return 'auto'; } });
+  const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
+  useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
+  useEffect(() => { try { localStorage.setItem('vellum-dock-locked', dockLocked ? '1' : '0'); } catch {} }, [dockLocked]);
   const [view, setView] = useState('chat');
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
@@ -5132,6 +6036,8 @@ const App = () => {
   const [backendSettings, setBackendSettings] = useState(null);
   const [memoryData, setMemoryData] = useState({facts: [], entries: [], archived: [], summary: null});
   const [apps, setApps] = useState(SEED_APPS);
+  const [spotify, setSpotify] = useState({connected:false,status:'loading',account_name:'',product:''});
+  const [spotifyConnectOpen, setSpotifyConnectOpen] = useState(false);
   const [automations, setAutomations] = useState([]);
   const [subagents, setSubagents] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
@@ -5189,6 +6095,38 @@ const App = () => {
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const shortcutRef = useRef(null);
+
+  const refreshSpotify = async () => {
+    try {
+      const status = await SpotifyAPI.status();
+      setSpotify(status);
+      setApps(as => as.map(app => app.id === 'spotify' ? {...app,state:status.connected ? 'ready' : 'off',configured:!!status.connected} : app));
+      return status;
+    } catch (_) {
+      const status = {connected:false,status:'unreachable',account_name:'',product:''};
+      setSpotify(status);
+      return status;
+    }
+  };
+  useEffect(() => {
+    let alive = true;
+    if (alive) refreshSpotify();
+    const onMessage = event => {
+      if (!event.data || event.data.type !== 'vellum:spotify-oauth-complete') return;
+      refreshSpotify().then(status => { if (status.connected) { setSpotifyConnectOpen(false); pushToast('Spotify connected'); } });
+    };
+    const onStorage = event => {
+      if (event.key !== 'vellum:spotify-oauth-complete') return;
+      refreshSpotify().then(status => { if (status.connected) setSpotifyConnectOpen(false); });
+    };
+    window.addEventListener('message', onMessage);
+    window.addEventListener('storage', onStorage);
+    return () => { alive = false; window.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); };
+  }, []);
+  const disconnectSpotify = async () => {
+    try { await SpotifyAPI.logout(); setSpotify({connected:false,status:'not_configured',account_name:'',product:''}); pushToast('Spotify disconnected'); }
+    catch (err) { pushToast('Spotify disconnect failed'); }
+  };
 
   async function refreshMemoryData() {
     const [memoryRecentData, memoryEntriesData, memorySettingsData] = await Promise.all([
@@ -5314,6 +6252,7 @@ const App = () => {
     const routedMessage = agent && agent.name
       ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
       : message;
+    const completedSpotifyTools = new Set();
     try {
       await API.chat.stream(
         {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
@@ -5338,16 +6277,25 @@ const App = () => {
               streaming: true,
             }));
           },
-          activity: (activity, tools) => updateAgentTurn(agent.id, convoId, assistantId, m => ({
-            ...m,
-            activity,
-            tools,
-            steps: stepsFromActivity(activity, m.steps),
-            refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
-            phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
-            refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
-            streaming: true,
-          })),
+          activity: (activity, tools) => {
+            activity.forEach(item => {
+              const key = item && (item.id || item.name);
+              if (key && String(item.name || '').startsWith('spotify_') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
+                completedSpotifyTools.add(key);
+                window.dispatchEvent(new CustomEvent('vellum:spotify-player-refresh'));
+              }
+            });
+            updateAgentTurn(agent.id, convoId, assistantId, m => ({
+              ...m,
+              activity,
+              tools,
+              steps: stepsFromActivity(activity, m.steps),
+              refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
+              phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
+              streaming: true,
+            }));
+          },
           sources: sources => {
             const liveSources = normalizeSources(sources);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
@@ -5764,6 +6712,7 @@ const App = () => {
   };
 
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}) => {
+    const completedSpotifyTools = new Set();
     try {
       await API.chat.stream(
         {message, thread_id: threadId || chatId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
@@ -5793,16 +6742,25 @@ const App = () => {
               streaming: true,
             }));
           },
-          activity: (activity, tools) => updateTurn(chatId, assistantId, m => ({
-            ...m,
-            activity,
-            tools,
-            steps: stepsFromActivity(activity, m.steps),
-            refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
-            phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
-            refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
-            streaming: true,
-          })),
+          activity: (activity, tools) => {
+            activity.forEach(item => {
+              const key = item && (item.id || item.name);
+              if (key && String(item.name || '').startsWith('spotify_') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
+                completedSpotifyTools.add(key);
+                window.dispatchEvent(new CustomEvent('vellum:spotify-player-refresh'));
+              }
+            });
+            updateTurn(chatId, assistantId, m => ({
+              ...m,
+              activity,
+              tools,
+              steps: stepsFromActivity(activity, m.steps),
+              refLines: FEATURE_FLAGS.realChat ? [] : refLinesFromActivity(activity, m.refLines),
+              phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
+              refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
+              streaming: true,
+            }));
+          },
           sources: sources => {
             const liveSources = normalizeSources(sources);
             updateTurn(chatId, assistantId, m => ({
@@ -6025,31 +6983,17 @@ const App = () => {
   };
   const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
+  const dockSide = dockPosition === 'auto' ? (['library','ledger','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   return (
     <div className="stage" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
+      <SharedLayoutBg/>
       <div className="bg-orb orb1"></div>
       <div className="bg-orb orb2"></div>
       <div className="bg-orb orb3"></div>
       <div className="cursor-glow"></div>
       <div className="win">
-        <div className="titlebar">
-          <button className="tbtn" title="Back" disabled={!canBack} onClick={() => navGo(-1)}
-            style={{opacity: canBack ? 1 : .35, marginRight: 1}}><I d="M15 18l-6-6 6-6" size={15}/></button>
-          <button className="tbtn" title="Forward" disabled={!canFwd} onClick={() => navGo(1)}
-            style={{opacity: canFwd ? 1 : .35, marginRight: 4}}><I d="M9 6l6 6-6 6" size={15}/></button>
-          <div className="menu"><span>File</span><span>Edit</span><span>View</span><span className="menu-help" onClick={() => setShortcutsOpen(true)}>Help</span></div>
-          <div className="tb-right">
-            {devMode && <span className="dev-badge" title="Dev mode (Ctrl+.)">DEV</span>}
-            <button className="tbtn" title={theme==='dark' ? 'Light mode' : 'Dark mode'}
-              onClick={() => setTheme(theme==='dark' ? 'light' : 'dark')}>
-              {theme==='dark' ? <IcSun/> : <IcMoon/>}
-            </button>
-            <div className="wc"><I d="M5 12h14"/></div>
-            <div className="wc"><I size={13}><rect x="5" y="5" width="14" height="14" rx="2"/></I></div>
-            <div className="wc close"><I d="M6 6l12 12M18 6L6 18"/></div>
-          </div>
-        </div>
+        <AppBackground backgroundId={backgroundId}/>
         <div className="body">
           {sidebarPinned && <Sidebar chats={chats} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
@@ -6098,6 +7042,10 @@ const App = () => {
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>
         </div>
+        <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen}
+          onNewChat={newChat} onSearch={() => setSearchOpen(true)} onNav={nav} onOpenAgent={openAgent}
+          onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
+        <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {
@@ -6120,11 +7068,12 @@ const App = () => {
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); setSettingsOpen(true); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
           onClose={() => setSettingsOpen(false)}/>} 
+        {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
           onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
