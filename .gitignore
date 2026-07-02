@@ -10,6 +10,8 @@ data/memory/*.db-*
 data/memory/audit_log.jsonl
 data/x-api-oauth.json
 data/xai-oauth.json
+data/plugins/spotify/auth.json
+data/plugins/spotify/oauth-flow.json
 data/logs/
 data/cache/
 data/embeddings/
