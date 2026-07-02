@@ -22,6 +22,13 @@ try {
     "Fallback chain",
     "Credential pools",
     "Latest route",
+    "routing-row",
+    "routing-control",
+    "credential-add-grid",
+    'ariaLabel="Provider optimization"',
+    'ariaLabel="Fallback model"',
+    'ariaLabel="Credential provider"',
+    "credential strategy`",
   ];
   const requiredApi = ["setGlobalRoutingPolicy", "setFallbacks", "setCredentialStrategy", "resetCredentialPool", "addCredential", "removeCredential"];
   for (const marker of requiredUi) {
@@ -32,6 +39,9 @@ try {
   }
   if (/localStorage\.setItem\([^\n]*(credential|api.?key)/i.test(html)) {
     throw new Error("credential secrets must not be stored in localStorage");
+  }
+  if (html.includes('<select className="agent-select"')) {
+    throw new Error("routing dropdowns must reuse VSelect instead of native selects");
   }
   console.log("OK: re-designed JSX and routing integration compile");
 } catch (err) {

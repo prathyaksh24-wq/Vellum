@@ -277,7 +277,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .set-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;color:var(--txt);font-size:12.5px;cursor:pointer}
 .set-item:hover{background:var(--hover)}
 .set-item.on{background:var(--active);color:var(--txt2)}
-.set-body{flex:1;padding:20px 22px;overflow-y:auto;min-width:0}
+.set-body{flex:1;padding:20px 22px;overflow-y:auto;overflow-x:hidden;min-width:0}
 .set-h{font-size:14px;color:var(--txt2);font-weight:500;margin-bottom:14px}
 .set-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt)}
 .set-row .sr-sub{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
@@ -1281,6 +1281,28 @@ body{font-size:14px}
 .cfg-key:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
 .cfg-dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex-shrink:0;transition:background .2s,box-shadow .2s}
 .cfg-dot.on{background:var(--ember);box-shadow:0 0 7px var(--glow)}
+.routing-row{align-items:flex-start;min-width:0}
+.routing-copy{flex:1;min-width:0;line-height:1.35}
+.routing-actions{min-width:0;max-width:58%}
+.v-select.routing-control{width:184px;min-width:184px;max-width:100%}
+.v-select.routing-control .v-select-content{min-width:100%}
+.credential-add-row{display:block;min-width:0;padding-top:12px;padding-bottom:12px}
+.credential-add-grid{display:grid;grid-template-columns:124px minmax(104px,1fr) minmax(122px,1.2fr) auto;align-items:center;gap:8px;margin-top:10px;min-width:0}
+.credential-add-grid .v-select{width:100%;min-width:0}
+.credential-add-grid .cfg-key{width:100%;max-width:none;min-width:0;box-sizing:border-box}
+.credential-add-grid .btn{min-height:34px}
+@media(max-width:760px){
+  .set-modal{width:min(660px,96vw)}
+  .routing-row{flex-direction:column;align-items:stretch;gap:9px}
+  .routing-row .sr-end{margin-left:0;width:100%;max-width:none;justify-content:flex-end}
+  .routing-row .routing-control{width:100%;min-width:0}
+  .credential-add-grid{grid-template-columns:1fr 1fr}
+  .credential-add-grid .btn{justify-self:end}
+}
+@media(max-width:560px){
+  .credential-add-grid{grid-template-columns:1fr}
+  .credential-add-grid .btn{width:100%;justify-content:center}
+}
 
 /* reusable application backgrounds */
 .app-background{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
@@ -2534,6 +2556,21 @@ const PROVIDERS = [
   { id: 'openai',     name: 'OpenAI',     note: 'GPT-4.1, GPT-4o' },
   { id: 'google',     name: 'Google',     note: 'Gemini models' },
   { id: 'openrouter', name: 'OpenRouter', note: 'DeepSeek, MiniMax & more' },
+];
+const ROUTING_SORT_OPTIONS = [
+  {value: 'latency', label: 'Lowest latency'},
+  {value: 'price', label: 'Lowest price'},
+  {value: 'throughput', label: 'Highest throughput'},
+];
+const CREDENTIAL_STRATEGY_OPTIONS = [
+  {value: 'fill_first', label: 'Fill first'},
+  {value: 'round_robin', label: 'Round robin'},
+  {value: 'least_used', label: 'Least used'},
+  {value: 'random', label: 'Random'},
+];
+const CREDENTIAL_PROVIDER_OPTIONS = [
+  {value: 'openrouter', label: 'OpenRouter'},
+  {value: 'openai', label: 'OpenAI'},
 ];
 
 const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onWeb, onClose}) => {
@@ -5859,30 +5896,30 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="set-note">Keys are saved locally in Vellum's .env. The model picker refreshes after a provider connects.</div>
 
               <div className="cfg-sec">Provider routing</div>
-              <div className="set-row"><div>Optimization<span className="sr-sub">How OpenRouter chooses an inference provider for the selected model.</span></div><span className="sr-end"><select className="agent-select" value={routingPolicy.sort || 'latency'} onChange={e => setRoutingPolicy(p => ({...p, sort: e.target.value}))}><option value="latency">Lowest latency</option><option value="price">Lowest price</option><option value="throughput">Highest throughput</option></select></span></div>
-              <div className="set-row"><div>Require parameter support<span className="sr-sub">Skip providers that cannot honor every requested parameter.</span></div><span className="sr-end"><div className={'sw' + (routingPolicy.require_parameters ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.require_parameters} onClick={() => setRoutingPolicy(p => ({...p, require_parameters: !p.require_parameters}))}/></span></div>
-              <div className="set-row"><div>OpenRouter provider fallback<span className="sr-sub">Allow OpenRouter to try another inference provider for the same model.</span></div><span className="sr-end"><div className={'sw' + (routingPolicy.allow_fallbacks ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.allow_fallbacks} onClick={() => setRoutingPolicy(p => ({...p, allow_fallbacks: !p.allow_fallbacks}))}/></span></div>
-              <div className="set-row"><div>Privacy floor<span className="sr-sub">Zero data retention and data collection denied on every request.</span></div><span className="sr-end"><span className="cu-pill on">enforced</span></span></div>
-              <div className="set-row"><div>{routingStatus ? `Primary: ${routingStatus.primary_provider} · ${routingStatus.active_model}` : 'Routing status'}</div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={saveRoutingPolicy}>Save routing</button></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">Optimization<span className="sr-sub">How OpenRouter chooses an inference provider for the selected model.</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel="Provider optimization" value={routingPolicy.sort || 'latency'} onValueChange={value => setRoutingPolicy(p => ({...p, sort: value}))} options={ROUTING_SORT_OPTIONS}/></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">Require parameter support<span className="sr-sub">Skip providers that cannot honor every requested parameter.</span></div><span className="sr-end routing-actions"><div className={'sw' + (routingPolicy.require_parameters ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.require_parameters} onClick={() => setRoutingPolicy(p => ({...p, require_parameters: !p.require_parameters}))}/></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">OpenRouter provider fallback<span className="sr-sub">Allow OpenRouter to try another inference provider for the same model.</span></div><span className="sr-end routing-actions"><div className={'sw' + (routingPolicy.allow_fallbacks ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.allow_fallbacks} onClick={() => setRoutingPolicy(p => ({...p, allow_fallbacks: !p.allow_fallbacks}))}/></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">Privacy floor<span className="sr-sub">Zero data retention and data collection denied on every request.</span></div><span className="sr-end routing-actions"><span className="cu-pill on">enforced</span></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">{routingStatus ? `Primary: ${routingStatus.primary_provider} · ${routingStatus.active_model}` : 'Routing status'}</div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={saveRoutingPolicy}>Save routing</button></span></div>
 
               <div className="cfg-sec">Fallback chain</div>
               {((routingStatus && routingStatus.fallbacks) || []).map((target, index) => (
-                <div key={target.id || `${target.provider}-${target.model}`} className="set-row"><div>{index + 1}. {models.find(m => m.id === target.model)?.label || target.model}<span className="sr-sub">{target.provider}</span></div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={() => saveFallbacks(routingStatus.fallbacks.filter((_, i) => i !== index))}>Remove</button></span></div>
+                <div key={target.id || `${target.provider}-${target.model}`} className="set-row routing-row"><div className="routing-copy">{index + 1}. {models.find(m => m.id === target.model)?.label || target.model}<span className="sr-sub">{target.provider}</span></div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={() => saveFallbacks(routingStatus.fallbacks.filter((_, i) => i !== index))}>Remove</button></span></div>
               ))}
-              <div className="set-row"><div>Add model<span className="sr-sub">Used only after the selected model cannot complete the request.</span></div><span className="sr-end" style={{display:'flex', gap:8}}><select className="agent-select" value={fallbackDraft} onChange={e => setFallbackDraft(e.target.value)}>{models.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}</select><button className="btn" disabled={routingBusy} onClick={addFallback}>Add</button></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">Add model<span className="sr-sub">Used only after the selected model cannot complete the request.</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel="Fallback model" value={fallbackDraft} onValueChange={setFallbackDraft} options={models.map(m => ({value:m.id,label:m.label}))}/><button className="btn" disabled={routingBusy} onClick={addFallback}>Add</button></span></div>
 
               <div className="cfg-sec">Credential pools</div>
               {['openrouter', 'openai'].map(provider => {
                 const health = (routingStatus && routingStatus.credential_health && routingStatus.credential_health[provider]) || {};
-                return <div key={provider} className="set-row"><div>{provider === 'openrouter' ? 'OpenRouter' : 'OpenAI'}<span className="sr-sub">{health.healthy || 0} healthy · {health.cooldown || 0} cooling down · {health.invalid || 0} invalid</span></div><span className="sr-end" style={{display:'flex', gap:8}}><select className="agent-select" value={(routingCredentials.strategies || {})[provider] || 'fill_first'} onChange={e => changeCredentialStrategy(provider, e.target.value)}><option value="fill_first">Fill first</option><option value="round_robin">Round robin</option><option value="least_used">Least used</option><option value="random">Random</option></select><button className="btn" disabled={routingBusy} onClick={() => resetCredentialPool(provider)}>Reset</button></span></div>;
+                return <div key={provider} className="set-row routing-row"><div className="routing-copy">{provider === 'openrouter' ? 'OpenRouter' : 'OpenAI'}<span className="sr-sub">{health.healthy || 0} healthy · {health.cooldown || 0} cooling down · {health.invalid || 0} invalid</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel={`${provider} credential strategy`} value={(routingCredentials.strategies || {})[provider] || 'fill_first'} onValueChange={value => changeCredentialStrategy(provider, value)} options={CREDENTIAL_STRATEGY_OPTIONS}/><button className="btn" disabled={routingBusy} onClick={() => resetCredentialPool(provider)}>Reset</button></span></div>;
               })}
               {(routingCredentials.credentials || []).map(credential => (
-                <div key={credential.id} className="set-row"><div>{credential.label}<span className="sr-sub">{credential.provider} · {credential.status} · key …{credential.fingerprint}</span></div><span className="sr-end">{String(credential.source || '').startsWith('keyring:') && <button className="btn" disabled={routingBusy} onClick={() => removeRoutingCredential(credential.id)}>Remove</button>}</span></div>
+                <div key={credential.id} className="set-row routing-row"><div className="routing-copy">{credential.label}<span className="sr-sub">{credential.provider} · {credential.status} · key …{credential.fingerprint}</span></div><span className="sr-end routing-actions">{String(credential.source || '').startsWith('keyring:') && <button className="btn" disabled={routingBusy} onClick={() => removeRoutingCredential(credential.id)}>Remove</button>}</span></div>
               ))}
-              <div className="set-row"><div>Add credential<span className="sr-sub">Stored in the operating system credential store, never browser storage.</span></div><span className="sr-end" style={{display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end'}}><select className="agent-select" value={credentialDraft.provider} onChange={e => setCredentialDraft(d => ({...d, provider: e.target.value}))}><option value="openrouter">OpenRouter</option><option value="openai">OpenAI</option></select><input className="cfg-key" placeholder="Label" value={credentialDraft.label} onChange={e => setCredentialDraft(d => ({...d, label: e.target.value}))}/><input type="password" className="cfg-key" placeholder="API key" value={credentialDraft.secret} onChange={e => setCredentialDraft(d => ({...d, secret: e.target.value}))}/><button className="btn" disabled={routingBusy || !credentialDraft.label.trim() || !credentialDraft.secret.trim()} onClick={addRoutingCredential}>Add</button></span></div>
+              <div className="set-row credential-add-row"><div className="routing-copy">Add credential<span className="sr-sub">Stored in the operating system credential store, never browser storage.</span></div><div className="credential-add-grid"><VSelect ariaLabel="Credential provider" value={credentialDraft.provider} onValueChange={value => setCredentialDraft(d => ({...d, provider: value}))} options={CREDENTIAL_PROVIDER_OPTIONS}/><input className="cfg-key" aria-label="Credential label" placeholder="Label" value={credentialDraft.label} onChange={e => setCredentialDraft(d => ({...d, label: e.target.value}))}/><input type="password" className="cfg-key" aria-label="Credential API key" placeholder="API key" value={credentialDraft.secret} onChange={e => setCredentialDraft(d => ({...d, secret: e.target.value}))}/><button className="btn" disabled={routingBusy || !credentialDraft.label.trim() || !credentialDraft.secret.trim()} onClick={addRoutingCredential}>Add</button></div></div>
 
               <div className="cfg-sec">Latest route</div>
-              <div className="set-row"><div>{routingStatus && routingStatus.latest_attempt ? `${routingStatus.latest_attempt.model} · ${routingStatus.latest_attempt.inference_provider || routingStatus.latest_attempt.api_provider}` : 'No routing attempts recorded yet.'}<span className="sr-sub">Refresh after a model request to inspect the most recent route.</span></div><span className="sr-end"><button className="btn" disabled={routingBusy} onClick={loadRouting}>Refresh</button></span></div>
+              <div className="set-row routing-row"><div className="routing-copy">{routingStatus && routingStatus.latest_attempt ? `${routingStatus.latest_attempt.model} · ${routingStatus.latest_attempt.inference_provider || routingStatus.latest_attempt.api_provider}` : 'No routing attempts recorded yet.'}<span className="sr-sub">Refresh after a model request to inspect the most recent route.</span></div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={loadRouting}>Refresh</button></span></div>
               {routingError && <div className="set-note" role="alert">{routingError}</div>}
             </React.Fragment>
           )}
