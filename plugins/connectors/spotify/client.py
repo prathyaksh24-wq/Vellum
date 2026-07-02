@@ -90,6 +90,8 @@ class SpotifyClient:
         try:
             payload = response.json()
         except ValueError as exc:
+            if response.status_code < 300 and method.upper() in {"POST", "PUT", "DELETE"}:
+                return {}
             raise SpotifyAPIError("Spotify returned an invalid response") from exc
         return payload if isinstance(payload, dict) else {"items": payload}
 
@@ -181,7 +183,7 @@ class SpotifyClient:
                 retry_after = 1
             raise SpotifyRateLimited(retry_after)
         message = self._safe_error_message(response).lower()
-        if response.status_code == 403 and "no active device" in message:
+        if response.status_code in {403, 404} and "no active device" in message:
             raise SpotifyNoActiveDevice("No active Spotify device found")
         if response.status_code == 403 and ("premium" in message or "premium_required" in message):
             raise SpotifyPremiumRequired("Spotify Premium is required for this action")

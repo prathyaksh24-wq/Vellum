@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from .auth import SpotifyAuthStore
 from .client import SpotifyClient
-from .errors import SpotifyError, SpotifyRateLimited
+from .errors import SpotifyError, SpotifyNoActiveDevice, SpotifyRateLimited
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -55,6 +55,54 @@ def _params(args: dict, *names: str) -> dict:
     return {name: args[name] for name in names if args.get(name) is not None}
 
 
+def _available_device_id(service: SpotifyClient) -> str:
+    payload = service.get_devices()
+    devices = payload.get("devices") if isinstance(payload, dict) else []
+    candidates = [
+        device
+        for device in (devices or [])
+        if isinstance(device, dict) and device.get("id") and not device.get("is_restricted")
+    ]
+    active = next((device for device in candidates if device.get("is_active")), None)
+    selected = active or (candidates[0] if candidates else None)
+    if not selected:
+        raise SpotifyNoActiveDevice("No available Spotify device found")
+    return str(selected["id"])
+
+
+def _player_request(
+    service: SpotifyClient,
+    *,
+    action: str,
+    method: str,
+    path: str,
+    device_id: str = "",
+    json_body: dict | None = None,
+) -> dict:
+    params = {"device_id": device_id} if device_id else None
+    request_kwargs: dict[str, Any] = {"params": params}
+    if json_body is not None:
+        request_kwargs["json_body"] = json_body
+    try:
+        return service.request(method, path, **request_kwargs)
+    except SpotifyNoActiveDevice:
+        if action == "pause":
+            return {"status": "already_paused"}
+        if device_id:
+            raise
+        selected_device = _available_device_id(service)
+        if action in {"next", "previous"}:
+            service.request(
+                "PUT",
+                "/me/player",
+                json_body={"device_ids": [selected_device], "play": True},
+            )
+        retry_kwargs: dict[str, Any] = {"params": {"device_id": selected_device}}
+        if json_body is not None:
+            retry_kwargs["json_body"] = json_body
+        return service.request(method, path, **retry_kwargs)
+
+
 def spotify_playback(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     action = args.get("action")
@@ -65,13 +113,46 @@ def spotify_playback(args: dict, **kwargs) -> str:
         return _result(lambda: service.request("GET", "/me/player/currently-playing"))
     if action == "play":
         body = _params(args, "context_uri", "uris", "offset", "position_ms")
-        return _result(lambda: service.request("PUT", "/me/player/play", params=device or None, json_body=body or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="play",
+                method="PUT",
+                path="/me/player/play",
+                device_id=str(args.get("device_id") or ""),
+                json_body=body or None,
+            )
+        )
     if action == "pause":
-        return _result(lambda: service.request("PUT", "/me/player/pause", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="pause",
+                method="PUT",
+                path="/me/player/pause",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "next":
-        return _result(lambda: service.request("POST", "/me/player/next", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="next",
+                method="POST",
+                path="/me/player/next",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "previous":
-        return _result(lambda: service.request("POST", "/me/player/previous", params=device or None))
+        return _result(
+            lambda: _player_request(
+                service,
+                action="previous",
+                method="POST",
+                path="/me/player/previous",
+                device_id=str(args.get("device_id") or ""),
+            )
+        )
     if action == "seek":
         missing = _missing(args, "position_ms")
         if missing:
@@ -196,12 +277,12 @@ def spotify_playlists(args: dict, **kwargs) -> str:
         missing = _missing(args, "playlist_id", "uris")
         if missing:
             return _invalid(*missing)
-        path = f"/playlists/{args['playlist_id']}/tracks"
+        path = f"/playlists/{args['playlist_id']}/items"
         if action == "add_items":
             body = {"uris": args["uris"], **_params(args, "position")}
             return _result(lambda: service.request("POST", path, json_body=body))
         body = {
-            "tracks": [{"uri": uri} for uri in args["uris"]],
+            "items": [{"uri": uri} for uri in args["uris"]],
             **_params(args, "snapshot_id"),
         }
         return _result(lambda: service.request("DELETE", path, json_body=body))
@@ -254,12 +335,27 @@ def spotify_library(args: dict, **kwargs) -> str:
                 "GET", path, params=_params(args, "market", "limit", "offset") or None
             )
         )
-    if action in {"save", "remove"}:
-        ids = args.get("ids") or [uri.rsplit(":", 1)[-1] for uri in (args.get("uris") or [])]
-        if not ids:
+    if action in {"save", "remove", "save_current", "remove_current"}:
+        def mutate() -> dict:
+            uris = list(args.get("uris") or [])
+            if action in {"save_current", "remove_current"}:
+                current = service.request("GET", "/me/player/currently-playing")
+                item = current.get("item") if isinstance(current, dict) else None
+                uri = item.get("uri") if isinstance(item, dict) else None
+                if not uri or not str(uri).startswith("spotify:track:"):
+                    raise SpotifyNoActiveDevice("No Spotify track is currently playing")
+                uris = [str(uri)]
+            if not uris:
+                singular = "track" if kind == "tracks" else "album"
+                uris = [f"spotify:{singular}:{item_id}" for item_id in (args.get("ids") or [])]
+            if not uris:
+                raise ValueError("ids or uris")
+            method = "PUT" if action in {"save", "save_current"} else "DELETE"
+            return service.request(method, "/me/library", params={"uris": ",".join(uris)})
+
+        if action in {"save", "remove"} and not (args.get("ids") or args.get("uris")):
             return _invalid("ids or uris")
-        method = "PUT" if action == "save" else "DELETE"
-        return _result(lambda: service.request(method, path, json_body={"ids": ids}))
+        return _result(mutate)
     return _invalid("action")
 
 

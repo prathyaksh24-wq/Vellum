@@ -104,6 +104,61 @@ def test_playlist_create_uses_current_user():
 
 
 @pytest.mark.parametrize(
+    ("action", "method"),
+    [("add_items", "POST"), ("remove_items", "DELETE")],
+)
+def test_playlist_mutations_use_current_items_endpoint(action, method):
+    service = FakeService()
+
+    result = json.loads(
+        spotify_playlists(
+            {"action": action, "playlist_id": "playlist-1", "uris": ["spotify:track:1"]},
+            service=service,
+        )
+    )
+
+    assert result["ok"] is True
+    assert service.calls[-1][0:2] == (method, "/playlists/playlist-1/items")
+
+
+@pytest.mark.parametrize(
+    ("kind", "action", "values", "method", "expected_uris"),
+    [
+        ("tracks", "save", {"ids": ["track-1"]}, "PUT", "spotify:track:track-1"),
+        ("albums", "remove", {"uris": ["spotify:album:album-1"]}, "DELETE", "spotify:album:album-1"),
+    ],
+)
+def test_library_mutations_use_unified_library_endpoint(kind, action, values, method, expected_uris):
+    service = FakeService()
+
+    result = json.loads(spotify_library({"kind": kind, "action": action, **values}, service=service))
+
+    assert result["ok"] is True
+    assert service.calls == [
+        (method, "/me/library", {"params": {"uris": expected_uris}}),
+    ]
+
+
+def test_library_can_save_the_currently_playing_track_in_one_action():
+    class CurrentlyPlayingService(FakeService):
+        def request(self, method, path, **kwargs):
+            self.calls.append((method, path, kwargs))
+            if (method, path) == ("GET", "/me/player/currently-playing"):
+                return {"item": {"type": "track", "uri": "spotify:track:current-1"}}
+            return {"method": method, "path": path}
+
+    service = CurrentlyPlayingService()
+
+    result = json.loads(spotify_library({"kind": "tracks", "action": "save_current"}, service=service))
+
+    assert result["ok"] is True
+    assert service.calls == [
+        ("GET", "/me/player/currently-playing", {}),
+        ("PUT", "/me/library", {"params": {"uris": "spotify:track:current-1"}}),
+    ]
+
+
+@pytest.mark.parametrize(
     ("handler", "args"),
     [
         (spotify_playback, {"action": "seek"}),
@@ -127,12 +182,65 @@ def test_domain_errors_do_not_escape_or_leak_details():
         def request(self, method, path, **kwargs):
             raise SpotifyNoActiveDevice("No active Spotify device found")
 
-    result = json.loads(spotify_playback({"action": "pause"}, service=FailingService()))
+    result = json.loads(
+        spotify_playback(
+            {"action": "set_volume", "volume_percent": 50},
+            service=FailingService(),
+        )
+    )
 
     assert result == {
         "ok": False,
         "error": {"code": "no_active_device", "message": "No active Spotify device found"},
     }
+
+
+def test_next_activates_available_device_and_retries():
+    class InactiveDeviceService(FakeService):
+        def __init__(self):
+            super().__init__()
+            self.next_attempts = 0
+
+        def request(self, method, path, **kwargs):
+            self.calls.append((method, path, kwargs))
+            if (method, path) == ("POST", "/me/player/next"):
+                self.next_attempts += 1
+                if self.next_attempts == 1:
+                    raise SpotifyNoActiveDevice("No active Spotify device found")
+            return {"method": method, "path": path}
+
+        def get_devices(self):
+            self.calls.append(("GET", "/me/player/devices", {}))
+            return {
+                "devices": [
+                    {"id": "desktop-1", "name": "Desktop", "is_active": False, "is_restricted": False}
+                ]
+            }
+
+    service = InactiveDeviceService()
+
+    result = json.loads(spotify_playback({"action": "next"}, service=service))
+
+    assert result["ok"] is True
+    assert service.calls == [
+        ("POST", "/me/player/next", {"params": None}),
+        ("GET", "/me/player/devices", {}),
+        ("PUT", "/me/player", {"json_body": {"device_ids": ["desktop-1"], "play": True}}),
+        ("POST", "/me/player/next", {"params": {"device_id": "desktop-1"}}),
+    ]
+
+
+def test_pause_without_active_device_is_idempotent():
+    class InactiveDeviceService(FakeService):
+        def request(self, method, path, **kwargs):
+            self.calls.append((method, path, kwargs))
+            raise SpotifyNoActiveDevice("No active Spotify device found")
+
+    service = InactiveDeviceService()
+
+    result = json.loads(spotify_playback({"action": "pause"}, service=service))
+
+    assert result == {"ok": True, "data": {"status": "already_paused"}}
 
 
 def test_spotify_search_allows_public_artist_names():

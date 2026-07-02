@@ -57,6 +57,18 @@ def test_204_is_inactive_state(auth_store):
     assert result == {"is_playing": False, "item": None}
 
 
+def test_2xx_plain_text_player_acknowledgement_is_success(auth_store):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, text="opaque-player-command-id")
+    )
+
+    result = SpotifyClient(auth_store=auth_store, transport=transport).request(
+        "POST", "/me/player/next"
+    )
+
+    assert result == {}
+
+
 def test_429_uses_retry_after(auth_store):
     transport = httpx.MockTransport(
         lambda request: httpx.Response(429, headers={"Retry-After": "12"})
@@ -82,6 +94,24 @@ def test_403_maps_safe_domain_errors(auth_store, message, error_type):
 
     with pytest.raises(error_type):
         SpotifyClient(auth_store=auth_store, transport=transport).request("PUT", "/me/player/pause")
+
+
+def test_404_no_active_device_maps_to_domain_error(auth_store):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            404,
+            json={
+                "error": {
+                    "status": 404,
+                    "message": "Player command failed: No active device found",
+                    "reason": "NO_ACTIVE_DEVICE",
+                }
+            },
+        )
+    )
+
+    with pytest.raises(SpotifyNoActiveDevice):
+        SpotifyClient(auth_store=auth_store, transport=transport).request("POST", "/me/player/next")
 
 
 def test_get_player_normalizes_track_and_device(auth_store):
