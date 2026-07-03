@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agent.profiles import AgentProfile, ProfileRegistry
+from agent.profiles import AgentProfile, ProfileRegistry, profile_policy
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
 def test_builtin_profiles_preserve_deterministic_specialists(tmp_path: Path) -> None:
@@ -68,3 +69,37 @@ def test_profile_instruction_path_must_stay_inside_profile_directory(tmp_path: P
 def test_llm_profile_rejects_declared_tools() -> None:
     with pytest.raises(ValueError, match="reasoning-only"):
         AgentProfile(id="ResearchAgent", executor="llm", tools={"allow": ["web.search"]})
+
+
+def test_active_profile_can_narrow_shared_tool_registry() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        CapabilityRecord(
+            name="sports.search",
+            namespace="sports",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"SportsAgent"}),
+            stream_label="Searching sports",
+            adapter=lambda payload: {"query": payload["query"]},
+        )
+    )
+
+    with profile_policy(profile_id="SportsAgent", allowed_tools=frozenset()):
+        with pytest.raises(ToolPermissionError, match="profile policy"):
+            registry.invoke("sports.search", {"query": "NBA"}, agent_name="SportsAgent")
+
+
+def test_no_active_profile_preserves_legacy_tool_permissions() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        CapabilityRecord(
+            name="sports.search",
+            namespace="sports",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"SportsAgent"}),
+            stream_label="Searching sports",
+            adapter=lambda payload: {"ok": True},
+        )
+    )
+
+    assert registry.invoke("sports.search", {}, agent_name="SportsAgent") == {"ok": True}
