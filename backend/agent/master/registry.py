@@ -34,6 +34,9 @@ class PupilRegistry:
     def get(self, name: str) -> SpecialistAgent:
         return self._pupils[name]
 
+    def try_get(self, name: str) -> SpecialistAgent | None:
+        return self._pupils.get(name)
+
     def names(self) -> list[str]:
         return sorted(self._pupils)
 

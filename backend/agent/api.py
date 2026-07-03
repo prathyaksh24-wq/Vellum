@@ -48,6 +48,8 @@ from agent.memory.honcho_client import HonchoMemory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.project_context import ProjectContext
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.master.runtime import DelegationRuntime
+from agent.profiles import ProfileRegistry
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
@@ -95,7 +97,15 @@ _dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
-_live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
+_profile_registry = ProfileRegistry()
+_delegation_runtime = DelegationRuntime(
+    profile_registry=_profile_registry,
+    memory_orchestrator=_memory_orchestrator,
+)
+_live_dispatcher = LiveAgentDispatcher(
+    vault_root=get_settings().obsidian_vault_path,
+    delegation_runtime=_delegation_runtime,
+)
 _oauth_flows: dict[str, dict[str, Any]] = {}
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
@@ -1259,7 +1269,7 @@ async def _background_learn(
         scrubber = PrivacyScrubber()
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
-        await asyncio.to_thread(store_qa_pair, clean_query, clean_answer, source)
+        await asyncio.to_thread(store_qa_pair, query, answer, source)
         settings = get_settings()
         honcho = HonchoMemory(
             base_url=settings.honcho_base_url,
@@ -1270,19 +1280,21 @@ async def _background_learn(
         await asyncio.to_thread(
             _memory_orchestrator.record_turn,
             thread_id=thread_id,
-            query=clean_query,
-            answer=clean_answer,
+            query=query,
+            answer=answer,
             tools=tools or [],
             sources=sources or [],
             confidence=float(confidence if confidence is not None else _memory_confidence([], [])),
             agent_name=agent_name,
+            external_query=clean_query,
+            external_answer=clean_answer,
         )
         pending = await asyncio.to_thread(
             _memory_orchestrator.extract_memory_candidates,
             thread_id=thread_id,
-            user_message=clean_query,
-            assistant_message=clean_answer,
-            agent_name="VellumAgent",
+            user_message=query,
+            assistant_message=answer,
+            agent_name=agent_name,
         )
         if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
@@ -1686,6 +1698,14 @@ async def list_subagents() -> dict[str, Any]:
             }
             for name in registry.names()
         ]
+    }
+
+
+@router.get("/agent-profiles")
+async def list_agent_profiles() -> dict[str, Any]:
+    return {
+        "profiles": _profile_registry.public_summaries(),
+        "diagnostics": _profile_registry.diagnostics(),
     }
 
 
@@ -2336,6 +2356,12 @@ async def _stream_agent_turn(
             "status": "in_progress",
             "label": f"Routed to {live_result.agent_name}",
             "detail": clean_message[:200],
+            "metadata": {
+                "run_id": live_result.run_id,
+                "cache_status": live_result.cache_status,
+                "cache_reason": live_result.cache_reason,
+                "route_source": live_result.route_source,
+            },
         }
         yield _agent_activity_event(
             response_id=response_id,
