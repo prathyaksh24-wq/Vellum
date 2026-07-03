@@ -53,3 +53,30 @@ def test_skill_route_resolver_respects_negative_trigger(tmp_path):
     resolver = SkillRouteResolver(SkillStore(root=tmp_path))
 
     assert resolver.resolve("Any UFC updates?") is None
+
+
+def test_skill_route_resolver_routes_canonical_routing_skill(tmp_path):
+    package = tmp_path / "packages" / "routing" / "sports-route"
+    package.mkdir(parents=True)
+    (package / "SKILL.md").write_text(
+        """---
+name: sports-route
+description: Route sports questions
+metadata:
+  vellum:
+    trigger: [Arsenal, Champions League]
+    confidence_threshold: 0.25
+    route_to_agent: SportsAgent
+    routing_critical: true
+---
+# Route sports
+
+## Procedure
+Consult SportsAgent before answering.
+""",
+        encoding="utf-8",
+    )
+
+    route = SkillRouteResolver(SkillStore(root=tmp_path)).resolve("Arsenal Champions League update")
+
+    assert route == SkillRoute(agent_name="SportsAgent", skill_id="sports-route")
