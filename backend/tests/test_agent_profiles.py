@@ -109,3 +109,28 @@ def test_memory_profile_bypasses_mutating_memory_instructions(tmp_path: Path) ->
     profile = ProfileRegistry(profile_dir=tmp_path).get("MemoryAgent")
 
     assert {"remember", "memorize", "note", "forget", "delete"} <= set(profile.cache.bypass_terms)
+
+
+def test_registry_discovers_new_llm_profile_from_yaml(tmp_path: Path) -> None:
+    (tmp_path / "ResearchAgent.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "id": "ResearchAgent",
+                "description": "Independent research specialist",
+                "executor": "llm",
+                "model": "openrouter/auto",
+                "tools": {"allow": []},
+                "memory": {
+                    "read_scopes": ["user_profile", "shared", "agent:ResearchAgent"],
+                    "write_scope": "agent:ResearchAgent",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    registry = ProfileRegistry(profile_dir=tmp_path)
+
+    assert registry.try_get("ResearchAgent").executor == "llm"
+    assert "ResearchAgent" in [profile.id for profile in registry.list()]

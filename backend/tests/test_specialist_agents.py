@@ -9,6 +9,7 @@ from agent.master.registry import PupilRegistry
 from agent.master.runtime import DelegationRunResult
 from agent.master.state import MasterThreadStateStore
 from agent.agents.skill_router import SkillRoute
+from agent.profiles import ProfileRegistry
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
@@ -1462,3 +1463,61 @@ def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
     assert second.cache_status == "hit"
     assert second.run_id == "run-2"
     assert second.confidence == 0.9
+
+
+def test_live_dispatcher_routes_skill_to_profile_only_llm_agent(tmp_path):
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    (profile_dir / "ResearchAgent.yaml").write_text(
+        """version: 1
+id: ResearchAgent
+description: Research specialist
+executor: llm
+tools:
+  allow: []
+memory:
+  read_scopes: [user_profile, shared, 'agent:ResearchAgent']
+  write_scope: 'agent:ResearchAgent'
+""",
+        encoding="utf-8",
+    )
+    profiles = ProfileRegistry(profile_dir=profile_dir)
+
+    class ProfileRuntime:
+        profile_registry = profiles
+
+        def delegate(self, **kwargs):
+            assert kwargs["pupil"] is None
+            return DelegationRunResult(
+                run_id="profile-run",
+                task_id="profile-task",
+                parent_thread_id=kwargs["parent_thread_id"],
+                profile_id=kwargs["profile_id"],
+                profile_version=1,
+                executor="llm",
+                cache_status="miss",
+                cache_reason="not_found",
+                started_at="2026-07-03T00:00:00+00:00",
+                finished_at="2026-07-03T00:00:01+00:00",
+                response=SpecialistResponse(
+                    agent="ResearchAgent",
+                    status="answered",
+                    summary="Independent research result",
+                    confidence=0.65,
+                ),
+            )
+
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("ResearchAgent"),
+        delegation_runtime=ProfileRuntime(),
+        profile_registry=profiles,
+    )
+
+    result = dispatcher.maybe_handle("research storage engines", "thread-1")
+
+    assert result.agent_name == "ResearchAgent"
+    assert result.answer == "Independent research result"
+    assert result.route_source == "skill"

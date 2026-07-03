@@ -21,30 +21,43 @@ class ProfileRegistry:
         self._diagnostics: list[dict[str, str]] = []
 
     def get(self, profile_id: str) -> AgentProfile:
-        builtin = self._builtins[profile_id]
+        builtin = self._builtins.get(profile_id)
         path = self.profile_dir / f"{profile_id}.yaml"
         if not path.exists():
+            if builtin is None:
+                raise KeyError(profile_id)
             return builtin.model_copy(deep=True)
         try:
             loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
             if not isinstance(loaded, dict):
                 raise ValueError("profile YAML must contain an object")
-            merged = _deep_merge(builtin.model_dump(mode="python"), loaded)
+            merged = _deep_merge(builtin.model_dump(mode="python") if builtin is not None else {}, loaded)
             profile = AgentProfile.model_validate(merged)
             if profile.id != profile_id:
                 raise ValueError(f"profile id must remain {profile_id}")
             return profile
         except (OSError, ValueError, yaml.YAMLError) as exc:
             self._record(profile_id, "fallback", str(exc))
+            if builtin is None:
+                raise KeyError(profile_id) from exc
             return builtin.model_copy(deep=True)
 
     def try_get(self, profile_id: str) -> AgentProfile | None:
-        if profile_id not in self._builtins:
+        if profile_id not in self._builtins and not (self.profile_dir / f"{profile_id}.yaml").exists():
             return None
-        return self.get(profile_id)
+        try:
+            return self.get(profile_id)
+        except KeyError:
+            return None
 
     def list(self) -> list[AgentProfile]:
-        return [self.get(profile_id) for profile_id in sorted(self._builtins)]
+        discovered = {path.stem for path in self.profile_dir.glob("*.yaml")} if self.profile_dir.exists() else set()
+        profiles = []
+        for profile_id in sorted(set(self._builtins) | discovered):
+            profile = self.try_get(profile_id)
+            if profile is not None:
+                profiles.append(profile)
+        return profiles
 
     def instructions_for(self, profile: AgentProfile) -> str:
         if not profile.instructions:

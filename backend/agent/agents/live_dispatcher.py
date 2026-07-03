@@ -12,6 +12,7 @@ from agent.agents.sports import SportsAgent
 from agent.master.registry import PupilRegistry
 from agent.master.runtime import DelegationRunResult, DelegationRuntime
 from agent.master.state import MasterThreadStateStore
+from agent.profiles import ProfileRegistry
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class LiveAgentDispatcher:
         state_store: MasterThreadStateStore | None = None,
         skill_route_resolver: SkillRouteResolver | None = None,
         delegation_runtime: DelegationRuntime | None = None,
+        profile_registry: ProfileRegistry | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         if registry is not None:
@@ -68,6 +70,7 @@ class LiveAgentDispatcher:
         self.state_store = state_store or MasterThreadStateStore()
         self.skill_route_resolver = skill_route_resolver or SkillRouteResolver()
         self.delegation_runtime = delegation_runtime
+        self.profile_registry = profile_registry or getattr(delegation_runtime, "profile_registry", ProfileRegistry())
 
     def maybe_handle(self, message: str, thread_id: str) -> LiveAgentResult | None:
         state = self.state_store.get(thread_id)
@@ -102,6 +105,7 @@ class LiveAgentDispatcher:
                     tools=["x_agent"],
                 )
         matched_pupil = None
+        profile_only_id = ""
         route_source = "deterministic"
         try:
             skill_route = self.skill_route_resolver.resolve(message)
@@ -113,31 +117,39 @@ class LiveAgentDispatcher:
             if matched_pupil is not None:
                 route_source = "skill"
             else:
-                logger.warning("Ignoring skill route %s to unknown pupil %s.", skill_route.skill_id, skill_route.agent_name)
-        if matched_pupil is None:
+                profile = self.profile_registry.try_get(skill_route.agent_name)
+                if profile is not None and profile.executor == "llm" and self.delegation_runtime is not None:
+                    profile_only_id = profile.id
+                    route_source = "skill"
+                else:
+                    logger.warning("Ignoring skill route %s to unknown pupil %s.", skill_route.skill_id, skill_route.agent_name)
+        if matched_pupil is None and not profile_only_id:
             matched_pupil = self.registry.match(message)
 
-        if matched_pupil is not None:
-            if active_agent != matched_pupil.name:
-                self.state_store.set_active_agent(thread_id, matched_pupil.name)
+        if matched_pupil is not None or profile_only_id:
+            agent_name = matched_pupil.name if matched_pupil is not None else profile_only_id
+            if active_agent != agent_name:
+                self.state_store.set_active_agent(thread_id, agent_name)
                 self.state_store.clear_pending_reroute(thread_id)
                 self._record_handoff(
                     message=message,
                     thread_id=thread_id,
-                    agent_name=matched_pupil.name,
+                    agent_name=agent_name,
                     reason=(
-                        f"routing skill selected {matched_pupil.name}"
+                        f"routing skill selected {agent_name}"
                         if route_source == "skill"
-                        else f"{matched_pupil.name} intent detected"
+                        else f"{agent_name} intent detected"
                     ),
                 )
             try:
                 run = None
                 if self.delegation_runtime is None:
+                    if matched_pupil is None:
+                        raise RuntimeError(f"{agent_name} requires the delegation runtime")
                     response = matched_pupil.answer(message)
                 else:
                     run = self.delegation_runtime.delegate(
-                        profile_id=matched_pupil.name,
+                        profile_id=agent_name,
                         pupil=matched_pupil,
                         goal=message,
                         parent_thread_id=thread_id,
@@ -146,21 +158,21 @@ class LiveAgentDispatcher:
                 result = self._result_from_response(response, run=run, route_source=route_source)
                 response_action = response.action_request
                 if response_action:
-                    self.state_store.set_pending_action(thread_id, {"agent": matched_pupil.name, **response_action})
+                    self.state_store.set_pending_action(thread_id, {"agent": agent_name, **response_action})
                 return result
             except Exception:
-                logger.exception("Pupil %s failed while answering.", matched_pupil.name)
+                logger.exception("Pupil %s failed while answering.", agent_name)
                 self.state_store.set_active_agent(thread_id, "VellumAgent")
                 self.state_store.clear_pending_reroute(thread_id)
                 return LiveAgentResult(
                     handled=True,
-                    agent_name=matched_pupil.name,
+                    agent_name=agent_name,
                     status="error",
                     answer=(
-                        f"{matched_pupil.name} could not complete this request. "
+                        f"{agent_name} could not complete this request. "
                         "I routed control back to Vellum so the main agent can continue."
                     ),
-                    tools=[self._tool_name(matched_pupil.name)],
+                    tools=[self._tool_name(agent_name)],
                     route_source=route_source,
                 )
 
