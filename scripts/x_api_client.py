@@ -109,6 +109,10 @@ def _access_token(oauth_file: Path, timeout_secs: int) -> str:
     return access_token
 
 
+def _auth_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
@@ -158,14 +162,52 @@ def get_bookmarks(
     return _handle_response(response)
 
 
-def post_tweet(*, text: str, oauth_file: Path = DEFAULT_OAUTH_FILE, timeout_secs: int = DEFAULT_TIMEOUT_SECS) -> dict[str, Any]:
+def post_tweet(
+    *,
+    text: str,
+    media_ids: list[str] | None = None,
+    made_with_ai: bool = False,
+    oauth_file: Path = DEFAULT_OAUTH_FILE,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
+) -> dict[str, Any]:
     text = text.strip()
     if not text:
         raise XApiError("Tweet text is required.")
+    payload: dict[str, Any] = {"text": text}
+    clean_media_ids = [str(media_id).strip() for media_id in media_ids or [] if str(media_id).strip()]
+    if clean_media_ids:
+        payload["media"] = {"media_ids": clean_media_ids}
+    if made_with_ai:
+        payload["made_with_ai"] = True
     response = httpx.post(
         f"{DEFAULT_BASE_URL}/tweets",
         headers=_headers(_access_token(oauth_file, timeout_secs)),
-        json={"text": text},
+        json=payload,
         timeout=timeout_secs,
     )
+    return _handle_response(response)
+
+
+def upload_media(
+    *,
+    media_path: Path | str,
+    media_category: str = "tweet_image",
+    oauth_file: Path = DEFAULT_OAUTH_FILE,
+    timeout_secs: int = DEFAULT_TIMEOUT_SECS,
+) -> dict[str, Any]:
+    path = Path(media_path)
+    if not path.exists() or not path.is_file():
+        raise XApiError(f"Media file does not exist: {path}")
+    token = _access_token(oauth_file, timeout_secs)
+    handle = path.open("rb")
+    try:
+        response = httpx.post(
+            f"{DEFAULT_BASE_URL}/media/upload",
+            headers=_auth_headers(token),
+            data={"media_category": media_category},
+            files={"media": (path.name, handle)},
+            timeout=timeout_secs,
+        )
+    finally:
+        handle.close()
     return _handle_response(response)

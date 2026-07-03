@@ -15,6 +15,7 @@ class SpecialistSource(BaseModel):
     kind: SourceKind
     title: str
     path_or_url: str
+    snippet: str = ""
     captured_at: str = ""
     freshness: Freshness = "historical"
 
@@ -34,6 +35,8 @@ class SpecialistResponse(BaseModel):
     sources: list[SpecialistSource] = Field(default_factory=list)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     memory_proposals: list[MemoryProposal] = Field(default_factory=list)
+    action_request: dict = Field(default_factory=dict)
+    activity_events: list[dict] = Field(default_factory=list)
 
 
 class SpecialistAgent(Protocol):

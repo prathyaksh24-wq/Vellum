@@ -11,11 +11,13 @@ from agent.mcp import (
     apify_tools,
     context7_tools,
     context_mode_tools,
+    firecrawl_tools,
     filesystem_tools,
     github_tools,
     gitmcp_tools,
     obsidian_tools,
     playwright_tools,
+    tavily_tools,
 )
 
 
@@ -50,6 +52,10 @@ SERVER_RUNNERS: dict[str, ToolFn] = {
     "ctx": context_mode_tools.run_tool_async,
     "playwright": playwright_tools.run_tool_async,
     "browser": playwright_tools.run_tool_async,
+    "tavily": tavily_tools.run_tool_async,
+    "web_research": tavily_tools.run_tool_async,
+    "firecrawl": firecrawl_tools.run_tool_async,
+    "web_extract": firecrawl_tools.run_tool_async,
 }
 
 

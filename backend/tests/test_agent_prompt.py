@@ -35,6 +35,19 @@ def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):
     assert all("<PROTECTED>" not in m.content for m in messages)
 
 
+def test_vellum_prompt_includes_runtime_date_grounding(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "agent.graph.agent._prompt_project_ctx",
+        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
+        raising=False,
+    )
+
+    messages = vellum_prompt({"messages": [HumanMessage(content="which year are you in?")]}, {})
+
+    assert "Runtime current date:" in messages[0].content
+    assert "Do not answer from training cutoff dates" in messages[0].content
+
+
 def test_vellum_prompt_documents_x_action_safety_rules():
     assert "x_action" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
@@ -86,11 +99,17 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
+    spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
+    monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
 
     agent_graph.build_agent()
 
     assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
 
@@ -108,12 +127,27 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
     monkeypatch.setattr(agent_graph, "build_async_checkpointer", fake_checkpointer)
+    spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
+    monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
 
     import asyncio
 
     asyncio.run(agent_graph.build_async_agent())
 
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
+
+
+def test_agent_prompt_documents_tavily_and_firecrawl_tools():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "web_research" in prompt
+    assert "Tavily" in prompt
+    assert "web_extract" in prompt
+    assert "Firecrawl" in prompt
 
 
 def test_prompt_describes_main_agent_as_router_with_specialists():
@@ -125,3 +159,18 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "transcript-backed summaries" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "durable memory lookup" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "contract-compatible stubs" not in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
+def test_agent_prompt_forbids_live_access_refusal_when_tools_exist():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "Do not tell the user you lack live information access" in prompt
+    assert "use web_search" in prompt
+
+
+def test_agent_prompt_documents_memory_orchestrator_tool():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "memory_orchestrator" in prompt
+    assert "Dreaming status" in prompt
+    assert "Do not infer Dreaming" in prompt

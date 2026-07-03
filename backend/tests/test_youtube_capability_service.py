@@ -1,16 +1,16 @@
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 
 
-def test_youtube_service_prefers_apify_backend_over_web_fallback(tmp_path):
+def test_youtube_service_prefers_serpapi_backend_over_web_fallback(tmp_path):
     calls = []
 
-    def apify_search(query, max_results):
-        calls.append(("apify", query, max_results))
+    def serpapi_search(query, max_results):
+        calls.append(("serpapi", query, max_results))
         return [
             {
-                "videoId": "apify12345",
-                "title": "Apify result",
-                "url": "https://www.youtube.com/watch?v=apify12345",
+                "videoId": "serp123456",
+                "title": "SerpAPI result",
+                "url": "https://www.youtube.com/watch?v=serp123456",
             }
         ]
 
@@ -26,21 +26,21 @@ def test_youtube_service_prefers_apify_backend_over_web_fallback(tmp_path):
 
     service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
-        apify_search_backend=apify_search,
+        serpapi_search_backend=serpapi_search,
         web_search_backend=web_search,
     )
 
     result = service.search_videos({"query": "Arsenal highlights", "max_results": 2})
 
-    assert calls == [("apify", "Arsenal highlights", 2)]
-    assert result["items"][0]["video_id"] == "apify12345"
+    assert calls == [("serpapi", "Arsenal highlights", 2)]
+    assert result["items"][0]["video_id"] == "serp123456"
 
 
-def test_youtube_service_falls_back_to_web_when_apify_empty(tmp_path):
+def test_youtube_service_falls_back_to_web_when_serpapi_empty(tmp_path):
     calls = []
 
-    def apify_search(query, max_results):
-        calls.append(("apify", query, max_results))
+    def serpapi_search(query, max_results):
+        calls.append(("serpapi", query, max_results))
         return []
 
     def web_search(query, max_results):
@@ -55,14 +55,69 @@ def test_youtube_service_falls_back_to_web_when_apify_empty(tmp_path):
 
     service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
-        apify_search_backend=apify_search,
+        serpapi_search_backend=serpapi_search,
         web_search_backend=web_search,
     )
 
     result = service.search_videos({"query": "NBA analysis", "max_results": 4})
 
-    assert calls == [("apify", "NBA analysis", 4), ("web", "NBA analysis", 4)]
+    assert calls == [("serpapi", "NBA analysis", 4), ("web", "NBA analysis", 4)]
     assert result["items"][0]["video_id"] == "web1234567"
+
+
+def test_youtube_service_filters_simulation_videos_and_ranks_official_recent_results(tmp_path):
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "videoId": "fake123456",
+                "title": "Portugal 112-1 Argentina | Ronaldo Messi | PES Gameplay",
+                "url": "https://www.youtube.com/watch?v=fake123456",
+                "channelName": "Football Gaming",
+                "publishedAt": "2 years ago",
+                "description": "PES simulation and fantasy score.",
+            },
+            {
+                "videoId": "fifa123456",
+                "title": "Argentina v Portugal highlights",
+                "url": "https://www.youtube.com/watch?v=fifa123456",
+                "channelName": "FIFA",
+                "publishedAt": "2 days ago",
+                "description": "Official match archive highlights.",
+            },
+            {
+                "videoId": "fan1234567",
+                "title": "Argentina vs Portugal friendly highlights",
+                "url": "https://www.youtube.com/watch?v=fan1234567",
+                "channelName": "Football Star",
+                "publishedAt": "4 years ago",
+                "description": "Fan upload.",
+            },
+        ],
+    )
+
+    result = service.search_videos({"query": "Portugal Argentina football highlights", "max_results": 3})
+
+    assert [item["video_id"] for item in result["items"]] == ["fifa123456", "fan1234567"]
+
+
+def test_youtube_service_fetches_serpapi_transcript_before_local_cards(tmp_path):
+    calls = {}
+
+    def serpapi_transcript(video_id):
+        calls["video_id"] = video_id
+        return {"video_id": video_id, "transcript": "SerpAPI transcript.", "path": ""}
+
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [],
+        serpapi_transcript_backend=serpapi_transcript,
+    )
+
+    result = service.fetch_transcript({"video_id": "abc123XYZ09"})
+
+    assert calls == {"video_id": "abc123XYZ09"}
+    assert result["transcript"] == "SerpAPI transcript."
 
 
 def test_youtube_service_normalizes_search_results(tmp_path):
@@ -103,7 +158,11 @@ def test_youtube_service_fetches_local_transcript_card(tmp_path):
         "---\ntype: youtube_transcript\nvideo_id: \"abc123XYZ09\"\n---\n\n## Transcript\n\nArsenal transcript body.",
         encoding="utf-8",
     )
-    service = YoutubeCapabilityService(vault_root=vault, search_backend=lambda query, max_results: [])
+    service = YoutubeCapabilityService(
+        vault_root=vault,
+        search_backend=lambda query, max_results: [],
+        serpapi_transcript_backend=lambda video_id: None,
+    )
 
     result = service.fetch_transcript({"video_id": "abc123XYZ09"})
 

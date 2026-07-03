@@ -15,6 +15,17 @@ class YoutubeAgent:
         "youtube",
         "yt",
     )
+    _VIDEO_INTENT_PATTERNS = (
+        r"(?<!\w)what\s+did\s+.+\s+upload(?:ed)?(?!\w)",
+        r"(?<!\w).+\s+latest\s+upload(?:s)?(?!\w)",
+        r"(?<!\w).+\s+latest\s+video(?:s)?(?!\w)",
+        r"(?<!\w).+\s+new\s+video(?:s)?(?!\w)",
+    )
+    _META_FEEDBACK_PATTERNS = (
+        r"\b(previous|last|earlier)\s+(response|answer|reply)\b",
+        r"\b(i\s+don'?t\s+need|don'?t\s+add|stop\s+adding|remove|hide)\s+.+\b(evidence|source|sources|format|section)\b",
+        r"\b(i\s+don'?t\s+like|i\s+like|prefer|feedback)\b.+\b(answer|response|format|evidence|source|sources)\b",
+    )
 
     def __init__(
         self,
@@ -30,7 +41,11 @@ class YoutubeAgent:
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
-        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS)
+        if self._is_meta_feedback(lowered):
+            return False
+        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS) or any(
+            re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS
+        )
 
     def answer(self, query: str) -> SpecialistResponse:
         try:
@@ -44,6 +59,7 @@ class YoutubeAgent:
                 confidence=0.2,
             )
         items = result.get("items") or []
+        providers = {str(provider).strip().lower() for provider in (result.get("providers") or []) if str(provider).strip()}
         if not items:
             return SpecialistResponse(
                 agent=self.name,
@@ -76,6 +92,7 @@ class YoutubeAgent:
                         kind="web",
                         title=title,
                         path_or_url=url,
+                        snippet=detail[:500],
                         captured_at=str(item.get("published_at") or ""),
                         freshness="recent",
                     )
@@ -87,6 +104,7 @@ class YoutubeAgent:
             summary="\n".join(lines),
             analysis=(
                 "Used youtube.search_videos through YoutubeCapabilityService"
+                + (" via SerpAPI" if "serpapi" in providers else "")
                 + (" with transcript snippets." if used_transcript else ".")
             ),
             sources=sources,
@@ -100,6 +118,9 @@ class YoutubeAgent:
 
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
+
+    def _is_meta_feedback(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._META_FEEDBACK_PATTERNS)
 
     def _sanitize_error(self, exc: Exception) -> str:
         message = str(exc).replace("\r", " ").replace("\n", " ").strip()

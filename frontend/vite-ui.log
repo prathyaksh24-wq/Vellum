@@ -3,22 +3,6 @@
 > vite --host 127.0.0.1 --port 5173
 
 
-  [32m[1mVITE[22m v7.3.2[39m  [2mready in [0m[1m770[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v7.3.2[39m  [2mready in [0m[1m2675[22m[2m[0m ms[22m
 
   [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
-[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
-[2m2:27:17 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:27:29 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:27:39 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:27:54 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:28:01 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:28:46 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/terminal/vellum/index.html[22m
-[2m2:29:12 PM[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
-[2m2:29:12 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2mui/vellum-chat.html[22m
-[2m2:29:12 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because lockfile has changed
-[2m2:29:12 PM[22m [36m[1m[vite][22m[39m server restarted.
-[2m2:30:04 PM[22m [36m[1m[vite][22m[39m [32mvite.config.mjs changed, restarting server...[39m
-[2m2:30:04 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m Re-optimizing dependencies because vite config has changed
-[2m2:30:04 PM[22m [36m[1m[vite][22m[39m server restarted.
-[2m2:39:05 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ new dependencies optimized: [33m@xterm/xterm, @xterm/addon-fit[32m[39m
-[2m2:39:05 PM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32m✨ optimized dependencies changed. reloading[39m

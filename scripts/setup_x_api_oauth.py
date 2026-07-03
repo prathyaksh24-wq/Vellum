@@ -19,12 +19,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
+from dotenv import load_dotenv
 
 
 X_API_BASE_URL = "https://api.x.com/2"
 X_API_AUTHORIZE_URL = "https://x.com/i/oauth2/authorize"
 X_API_TOKEN_URL = "https://api.x.com/2/oauth2/token"
-X_API_OAUTH_SCOPE = "tweet.read users.read tweet.write bookmark.read offline.access"
+X_API_OAUTH_SCOPE = "tweet.read users.read tweet.write bookmark.read media.write offline.access"
 X_API_REDIRECT_HOST = "127.0.0.1"
 X_API_REDIRECT_PORT = 56122
 X_API_REDIRECT_PATH = "/callback"
@@ -207,6 +208,7 @@ def main() -> int:
     args = parser.parse_args()
 
     project_root = args.project_root.resolve()
+    load_dotenv(project_root / ".env")
     oauth_file = args.oauth_file.resolve() if args.oauth_file else project_root / "data" / "x-api-oauth.json"
     try:
         return run(project_root, oauth_file, args.timeout_secs, args.no_browser)

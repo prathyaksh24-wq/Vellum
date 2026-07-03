@@ -135,3 +135,54 @@ def test_honcho_memory_is_local_noop_when_sdk_missing(monkeypatch):
 def test_default_memory_paths_match_new_architecture():
     assert FTS5_DB_PATH.as_posix() == "data/memory/fts5.db"
     assert RESOLVED_DB_PATH.as_posix() == "data/memory/resolved.db"
+
+
+def test_memory_context_block_includes_orchestrator_packet(monkeypatch):
+    from agent.memory import memory_context
+
+    class FakeOrchestrator:
+        def build_memory_packet(self, **kwargs):
+            assert kwargs["thread_id"] == "thread-1"
+            assert kwargs["query"] == "What do you know about my Vellum project?"
+            return {
+                "global_summary": "User is building Vellum.",
+                "saved_memories": [{"text": "User prefers concise answers."}],
+                "honcho_context": "User cares about reliable agents.",
+                "project_context": "Vellum uses sub-agents.",
+                "recent_context": "Recent chat discussed memory orchestration.",
+            }
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", FakeOrchestrator())
+
+    block = memory_context.build_memory_block("thread-1", query="What do you know about my Vellum project?")
+
+    assert "# Memory packet" in block
+    assert "User is building Vellum." in block
+    assert "User prefers concise answers." in block
+    assert "Vellum uses sub-agents." in block
+
+
+def test_memory_context_block_includes_hermes_style_context_files(monkeypatch, tmp_path):
+    from agent.memory import memory_context
+
+    memory_dir = tmp_path / "memory"
+    memory_dir.mkdir()
+    (memory_dir / "USER.md").write_text("# User Profile\n\n- User prefers direct answers.", encoding="utf-8")
+    (memory_dir / "MEMORY.md").write_text("# Agent Memory\n\n- Vellum uses Memory Orchestrator.", encoding="utf-8")
+
+    class EmptyOrchestrator:
+        def build_memory_packet(self, **kwargs):
+            return {}
+
+    monkeypatch.setattr(memory_context, "load_soul", lambda: "")
+    monkeypatch.setattr(memory_context, "get_user_model", lambda thread_id: "")
+    monkeypatch.setattr(memory_context, "_ORCHESTRATOR", EmptyOrchestrator())
+    monkeypatch.setattr(memory_context, "_MEMORY_FILES_DIR", memory_dir)
+
+    block = memory_context.build_memory_block("thread-1", query="What do you know about me?")
+
+    assert "Hermes-style persistent memory" in block
+    assert "User prefers direct answers" in block
+    assert "Vellum uses Memory Orchestrator" in block

@@ -23,6 +23,7 @@ class LiveAgentResult:
     status: str = "answered"
     tools: list[str] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)
+    activity_events: list[dict] = field(default_factory=list)
 
 
 class LiveAgentDispatcher:
@@ -60,6 +61,35 @@ class LiveAgentDispatcher:
     def maybe_handle(self, message: str, thread_id: str) -> LiveAgentResult | None:
         state = self.state_store.get(thread_id)
         active_agent = state.active_agent
+        pending_action = self.state_store.get_pending_action(thread_id)
+        if pending_action is not None:
+            if self._is_confirmation(message):
+                agent_name = str(pending_action.get("agent") or "XAgent")
+                try:
+                    agent = self.registry.get(agent_name)
+                    execute = getattr(agent, "execute_action_request")
+                    response = execute(pending_action)
+                    self.state_store.clear_pending_action(thread_id)
+                    return self._result_from_response(response)
+                except Exception:
+                    logger.exception("Pending action for %s failed.", agent_name)
+                    self.state_store.clear_pending_action(thread_id)
+                    return LiveAgentResult(
+                        handled=True,
+                        agent_name=agent_name,
+                        status="error",
+                        answer=f"{agent_name} could not complete the confirmed action.",
+                        tools=[self._tool_name(agent_name)],
+                    )
+            if self._is_rejection(message):
+                self.state_store.clear_pending_action(thread_id)
+                return LiveAgentResult(
+                    handled=True,
+                    agent_name=str(pending_action.get("agent") or "XAgent"),
+                    status="blocked",
+                    answer="Canceled the pending X action.",
+                    tools=["x_agent"],
+                )
         matched_pupil = self.registry.match(message)
 
         if matched_pupil is not None:
@@ -73,7 +103,12 @@ class LiveAgentDispatcher:
                     reason=f"{matched_pupil.name} intent detected",
                 )
             try:
-                return self._result_from_response(matched_pupil.answer(message))
+                response = matched_pupil.answer(message)
+                result = self._result_from_response(response)
+                response_action = response.action_request
+                if response_action:
+                    self.state_store.set_pending_action(thread_id, {"agent": matched_pupil.name, **response_action})
+                return result
             except Exception:
                 logger.exception("Pupil %s failed while answering.", matched_pupil.name)
                 self.state_store.set_active_agent(thread_id, "VellumAgent")
@@ -90,24 +125,21 @@ class LiveAgentDispatcher:
                 )
 
         if active_agent != "VellumAgent":
-            self.state_store.set_pending_reroute(thread_id, "VellumAgent", "non-sports turn while SportsAgent active")
-            return LiveAgentResult(
-                handled=True,
-                agent_name=active_agent,
-                status="needs_handoff",
-                answer=(
-                    f"This looks outside {active_agent}. Should I route this back to Vellum "
-                    "so the main agent can handle it?"
-                ),
-                tools=[self._tool_name(active_agent)],
-            )
+            self.state_store.set_active_agent(thread_id, "VellumAgent")
+            self.state_store.clear_pending_reroute(thread_id)
+            return None
 
         return None
 
     def _result_from_response(self, response: SpecialistResponse) -> LiveAgentResult:
         tools = [self._tool_name(response.agent)]
-        if any(source.kind == "web" for source in response.sources):
+        uses_agent_reach = "agent-reach" in response.analysis.casefold() or any(
+            str(event.get("name") or "").startswith("agent_reach_x_") for event in response.activity_events
+        )
+        if any(source.kind == "web" for source in response.sources) and not uses_agent_reach:
             tools.append("web_search")
+        if "serpapi" in response.analysis.casefold():
+            tools.append("serpapi")
         return LiveAgentResult(
             handled=True,
             agent_name=response.agent,
@@ -119,6 +151,7 @@ class LiveAgentDispatcher:
                 for source in response.sources
                 if source.path_or_url
             ],
+            activity_events=list(response.activity_events),
         )
 
     def _record_handoff(self, *, message: str, thread_id: str, agent_name: str, reason: str) -> None:
@@ -148,7 +181,7 @@ class LiveAgentDispatcher:
         return {
             "url": source.path_or_url,
             "title": source.title,
-            "snippet": "",
+            "snippet": str(getattr(source, "snippet", "") or ""),
             "domain": domain,
             "fetched_at": source.captured_at,
         }
@@ -156,3 +189,13 @@ class LiveAgentDispatcher:
     def _tool_name(self, agent_name: str) -> str:
         name = re.sub(r"(?<!^)(?=[A-Z])", "_", agent_name).lower()
         return name[:-6] + "_agent" if name.endswith("_agent") else name
+
+    def _is_confirmation(self, message: str) -> bool:
+        lowered = message.strip().lower()
+        return lowered in {"yes", "confirm", "confirmed", "do it", "post it", "yes post it", "yes, post it"} or (
+            "confirm" in lowered or "post it" in lowered or "go ahead" in lowered
+        )
+
+    def _is_rejection(self, message: str) -> bool:
+        lowered = message.strip().lower()
+        return lowered in {"no", "cancel", "stop", "don't", "do not"}
