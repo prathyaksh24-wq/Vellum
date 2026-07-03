@@ -854,11 +854,46 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     agent_reach_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "agent-reach")
     assert agent_reach_plugin["metadata"]["portable_plugin"]["path"].endswith("plugins/connectors/agent-reach")
     assert skills.status_code == 200
-    assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
+    assert skills.json()["mock"] is False
+    assert any(item["id"] == "skill-skill-creator-v1" for item in skills.json()["skills"]["active"])
     assert automations.status_code == 200
     assert any(item["id"] == "nightly-digest" for item in automations.json()["automations"])
     assert subagents.status_code == 200
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
+
+
+def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monkeypatch, tmp_path):
+    from agent.skills import SkillSurfaceService
+
+    root = tmp_path / ".skills"
+    proposed = root / "proposed" / "research" / "api-skill"
+    proposed.mkdir(parents=True)
+    (proposed / "SKILL.md").write_text(
+        "---\nname: api-skill\ndescription: API skill\n---\n# API Skill\n\n## Procedure\nRun it.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        api,
+        "_skill_surface_singleton",
+        SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[]),
+    )
+
+    with TestClient(api.app) as client:
+        blocked = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
+        approved = client.post(
+            "/api/skills/action",
+            json={"action": "approve", "name": "api-skill", "confirm": True},
+        )
+        detail = client.get("/api/skills/api-skill")
+        learned = client.post("/api/skills/learn", json={"source": "this conversation"})
+
+    assert blocked.status_code == 400
+    assert approved.status_code == 200
+    assert approved.json()["result"]["state"] == "active"
+    assert detail.status_code == 200
+    assert "Run it" in detail.json()["content"]
+    assert learned.json()["handled"] is False
+    assert 'skill_manage(action="create"' in learned.json()["expanded"]
 
 
 def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):

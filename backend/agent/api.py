@@ -69,6 +69,8 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.skills import SkillSurfaceService, create_skill_source_router
+from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -79,6 +81,9 @@ from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.obsidian_write import store_qa_pair
+from agent.tools.skill_bundles import skill_bundles
+from agent.tools.skill_curator import skill_curator
+from agent.tools.skill_hub import skill_hub
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
@@ -110,6 +115,7 @@ _oauth_flows: dict[str, dict[str, Any]] = {}
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
 _project_context_singleton: ProjectContext | None = None
+_skill_surface_singleton: SkillSurfaceService | None = None
 
 
 def _project_context() -> ProjectContext:
@@ -118,6 +124,17 @@ def _project_context() -> ProjectContext:
         s = get_settings()
         _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
     return _project_context_singleton
+
+
+def _skill_surface() -> SkillSurfaceService:
+    global _skill_surface_singleton
+    if _skill_surface_singleton is None:
+        _skill_surface_singleton = SkillSurfaceService(
+            REPO_ROOT / ".skills",
+            logs_root=REPO_ROOT / "data" / "logs" / "curator",
+            sources=create_skill_source_router(),
+        )
+    return _skill_surface_singleton
 
 
 def _spotify_store():
@@ -1141,6 +1158,15 @@ async def _run_agent(
 
     active_thread_id = thread_id or get_settings().thread_id
 
+    skill_command = _skill_surface().slash(clean_message)
+    if skill_command["handled"]:
+        return ChatResponse(
+            answer=str(skill_command.get("answer") or ""),
+            thread_id=active_thread_id,
+            tools=[],
+        )
+    clean_message = str(skill_command.get("expanded") or clean_message)
+
     if clean_message.startswith("/project"):
         parts = clean_message.split()
         args = parts[1:]
@@ -1615,35 +1641,52 @@ async def delete_conversation(conversation_id: str) -> dict[str, bool]:
 
 @router.get("/skills")
 async def list_skills_catalog() -> dict[str, Any]:
-    return {
-        "mock": True,
-        "skills": {
-            "proposed": [
-                {
-                    "id": "sports-snapshot-brief",
-                    "name": "Sports snapshot brief",
-                    "trigger": "score · fixture · standings",
-                    "note": "Template until user-approved skill persistence is connected.",
-                },
-                {
-                    "id": "source-backed-answer",
-                    "name": "Source-backed answer",
-                    "trigger": "latest · verify · cite",
-                    "note": "Uses live search and source drawer behavior.",
-                },
-            ],
-            "active": [
-                {
-                    "id": "subagent-routing",
-                    "name": "Sub-agent routing",
-                    "trigger": "sports · x · youtube · memory",
-                    "uses": 0,
-                    "last": "live",
-                }
-            ],
-            "retired": [],
-        },
-    }
+    return _skill_surface().catalog()
+
+
+@router.post("/skills/action")
+async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        result = _skill_surface().action(
+            str(payload.get("action") or ""),
+            name=str(payload.get("name") or ""),
+            confirm=payload.get("confirm") is True,
+            **{key: value for key, value in payload.items() if key not in {"action", "name", "confirm"}},
+        )
+    except (SkillMutationError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "result": result, "catalog": _skill_surface().catalog()}
+
+
+@router.post("/skills/learn")
+async def learn_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    source = str(payload.get("source") or "").strip()
+    if not source:
+        raise HTTPException(status_code=400, detail="learn source is required")
+    return _skill_surface().slash(f"/learn {source}")
+
+
+@router.post("/skills/bundles")
+async def skill_bundle_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_bundles.invoke(payload))
+
+
+@router.post("/skills/hub")
+async def skill_hub_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_hub.invoke(payload))
+
+
+@router.post("/skills/curator")
+async def skill_curator_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_curator.invoke(payload))
+
+
+@router.get("/skills/{skill_name}")
+async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
+    try:
+        return _skill_surface().detail(skill_name, path=path)
+    except (KeyError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/automations")
@@ -3110,9 +3153,22 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
+    active_thread_id = request.thread_id or get_settings().thread_id
+
+    skill_command = _skill_surface().slash(clean_message)
+    if skill_command["handled"]:
+        msg = str(skill_command.get("answer") or "")
+        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+
+        async def skill_event():
+            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
+
+        return StreamingResponse(skill_event(), media_type="text/event-stream")
+    clean_message = str(skill_command.get("expanded") or clean_message)
     if request.force_web_search:
         clean_message = _with_forced_web_search_context(clean_message)
-    active_thread_id = request.thread_id or get_settings().thread_id
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:
         return StreamingResponse(
