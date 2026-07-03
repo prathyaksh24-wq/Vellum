@@ -21,6 +21,9 @@ from typing import Any
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.memory.specialist_cache import CacheDecision, SpecialistResponseCache
+from agent.profiles import AgentProfile
+from agent.agents.base import SpecialistResponse
 from agent.memory.sessions import SESSIONS_DB
 from agent.privacy.classifier import DataClass, classify
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
@@ -394,13 +397,47 @@ class MemoryOrchestrator:
     honcho: Any | None = None
     memory_dir: Path = Path("data/memory")
     provider_extensions: MemoryProviderExtensionManager | None = None
+    specialist_cache: SpecialistResponseCache | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = SQLiteMemoryStore()
         self.memory_dir = Path(self.memory_dir)
+        if self.specialist_cache is None:
+            self.specialist_cache = SpecialistResponseCache(self.memory_dir / "specialist-cache.db")
         if self.provider_extensions is None:
             self.provider_extensions = build_default_memory_provider_extensions()
+
+    def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
+        if self.store is not None:
+            settings = self.store.get_settings()
+            if not settings.get("memory_enabled", True) or not settings.get("reference_history_enabled", True):
+                return CacheDecision(status="miss", reason="memory_lookup_disabled")
+        return self.specialist_cache.lookup(
+            profile_id=profile.id,
+            profile_version=profile.version,
+            query=query,
+            policy=profile.cache,
+        )
+
+    def store_specialist_response(
+        self,
+        *,
+        profile: AgentProfile,
+        query: str,
+        response: SpecialistResponse,
+    ) -> bool:
+        if self.store is not None:
+            settings = self.store.get_settings()
+            if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
+                return False
+        return self.specialist_cache.store(
+            profile_id=profile.id,
+            profile_version=profile.version,
+            query=query,
+            response=response,
+            policy=profile.cache,
+        )
 
     def record_turn(
         self,
