@@ -6,7 +6,9 @@ from pydantic import ValidationError
 
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.master.registry import PupilRegistry
+from agent.master.runtime import DelegationRunResult
 from agent.master.state import MasterThreadStateStore
+from agent.agents.skill_router import SkillRoute
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
@@ -32,6 +34,39 @@ from agent.agents.base import (
 class AgentReachUnavailable:
     def available(self):
         return False
+
+
+class FixedSkillResolver:
+    def __init__(self, agent_name: str | None):
+        self.agent_name = agent_name
+
+    def resolve(self, query: str):
+        if self.agent_name is None:
+            return None
+        return SkillRoute(agent_name=self.agent_name, skill_id="route-test")
+
+
+class RecordingRuntime:
+    def __init__(self):
+        self.calls = []
+
+    def delegate(self, **kwargs):
+        self.calls.append(kwargs)
+        cache_status = "hit" if len(self.calls) > 1 else "miss"
+        response = kwargs["pupil"].answer(kwargs["goal"])
+        return DelegationRunResult(
+            run_id=f"run-{len(self.calls)}",
+            task_id=f"task-{len(self.calls)}",
+            parent_thread_id=kwargs["parent_thread_id"],
+            profile_id=kwargs["profile_id"],
+            profile_version=1,
+            executor="deterministic",
+            cache_status=cache_status,
+            cache_reason="exact_query" if cache_status == "hit" else "not_found",
+            started_at="2026-07-03T00:00:00+00:00",
+            finished_at="2026-07-03T00:00:01+00:00",
+            response=response,
+        )
 
 
 def test_specialist_response_defaults_are_empty_and_bounded():
@@ -1346,3 +1381,84 @@ def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
     proposals = agent.review_proposals([low_confidence, high_confidence])
 
     assert proposals == [high_confidence]
+
+
+def test_live_dispatcher_prefers_valid_skill_route_over_match_order(tmp_path):
+    class Pupil:
+        def __init__(self, name, matches):
+            self.name = name
+            self.matches = matches
+
+        def can_handle(self, query):
+            return self.matches
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary=f"{self.name}: {query}")
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": Pupil("SportsAgent", True), "ResearchAgent": Pupil("ResearchAgent", False)}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("ResearchAgent"),
+        delegation_runtime=runtime,
+    )
+
+    result = dispatcher.maybe_handle("analyze this", "thread-1")
+
+    assert result.agent_name == "ResearchAgent"
+    assert result.route_source == "skill"
+    assert runtime.calls[0]["profile_id"] == "ResearchAgent"
+
+
+def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
+    class SportsPupil:
+        name = "SportsAgent"
+
+        def can_handle(self, query):
+            return "NBA" in query
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary="NBA answer")
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("MissingAgent"),
+        delegation_runtime=runtime,
+    )
+
+    result = dispatcher.maybe_handle("NBA injury report", "thread-1")
+
+    assert result.agent_name == "SportsAgent"
+    assert result.route_source == "deterministic"
+
+
+def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
+    class SportsPupil:
+        name = "SportsAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary="Historical answer", confidence=0.9)
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver(None),
+        delegation_runtime=runtime,
+    )
+
+    first = dispatcher.maybe_handle("Historical Arsenal titles", "thread-1")
+    second = dispatcher.maybe_handle("Historical Arsenal titles", "thread-2")
+
+    assert first.cache_status == "miss"
+    assert second.cache_status == "hit"
+    assert second.run_id == "run-2"
+    assert second.confidence == 0.9

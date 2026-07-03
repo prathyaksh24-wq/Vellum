@@ -103,3 +103,9 @@ def test_no_active_profile_preserves_legacy_tool_permissions() -> None:
     )
 
     assert registry.invoke("sports.search", {}, agent_name="SportsAgent") == {"ok": True}
+
+
+def test_memory_profile_bypasses_mutating_memory_instructions(tmp_path: Path) -> None:
+    profile = ProfileRegistry(profile_dir=tmp_path).get("MemoryAgent")
+
+    assert {"remember", "memorize", "note", "forget", "delete"} <= set(profile.cache.bypass_terms)

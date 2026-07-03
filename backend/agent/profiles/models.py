@@ -135,6 +135,9 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                 read_scopes=["user_profile", "shared", "agent:MemoryAgent"],
                 write_scope="agent:MemoryAgent",
             ),
-            cache=CachePolicy(default_ttl_seconds=2592000, bypass_terms=[]),
+            cache=CachePolicy(
+                default_ttl_seconds=2592000,
+                bypass_terms=["remember", "memorize", "note", "forget", "delete"],
+            ),
         ),
     }

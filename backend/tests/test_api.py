@@ -447,6 +447,46 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
     assert "Tyler Herro" in related["answer_summary"]
 
 
+def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer standings in sports answers.",
+            "Understood.",
+            thread_id="sports-memory",
+            source="sports_agent",
+            agent_name="SportsAgent",
+        )
+    )
+
+    assert store.list_pending()[0]["scope"] == "agent:SportsAgent"
+
+
 def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore

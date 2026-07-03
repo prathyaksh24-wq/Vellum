@@ -449,9 +449,13 @@ class MemoryOrchestrator:
         sources: list[str] | None = None,
         confidence: float = 0.0,
         agent_name: str = "VellumAgent",
+        external_query: str | None = None,
+        external_answer: str | None = None,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         clean_answer = answer.strip()
+        provider_query = clean_query if external_query is None else external_query.strip()
+        provider_answer = clean_answer if external_answer is None else external_answer.strip()
         compact_tools = [_compact_tool(tool) for tool in tools or []]
         source_list = [str(source) for source in sources or [] if str(source).strip()]
         content = _turn_document(
@@ -489,14 +493,14 @@ class MemoryOrchestrator:
 
         if self.honcho is not None:
             session_id = self.honcho.get_or_create_session(thread_id)
-            self.honcho.add_message(session_id, content=clean_query, role="user")
-            self.honcho.add_message(session_id, content=clean_answer, role="assistant")
+            self.honcho.add_message(session_id, content=provider_query, role="user")
+            self.honcho.add_message(session_id, content=provider_answer, role="assistant")
 
         external_sync = []
         if self.provider_extensions is not None:
             external_sync = self.provider_extensions.sync_turn(
-                clean_query,
-                clean_answer,
+                provider_query,
+                provider_answer,
                 session_id=thread_id,
                 metadata={
                     "agent_name": agent_name,
