@@ -487,6 +487,23 @@ def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch
     assert store.list_pending()[0]["scope"] == "agent:SportsAgent"
 
 
+def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, tmp_path):
+    from agent.profiles import ProfileRegistry
+
+    monkeypatch.setattr(api, "_profile_registry", ProfileRegistry(profile_dir=tmp_path / "profiles"))
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/agent-profiles")
+
+    assert response.status_code == 200
+    body = response.json()
+    sports = next(profile for profile in body["profiles"] if profile["id"] == "SportsAgent")
+    assert sports["executor"] == "deterministic"
+    assert sports["memory"]["write_scope"] == "agent:SportsAgent"
+    assert "instructions" not in sports
+    assert "diagnostics" in body
+
+
 def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore

@@ -64,7 +64,22 @@ class ProfileRegistry:
         return list(self._diagnostics)
 
     def public_summaries(self) -> list[dict[str, Any]]:
-        return [profile.model_dump(mode="json") for profile in self.list()]
+        summaries = []
+        for profile in self.list():
+            summaries.append(
+                {
+                    "id": profile.id,
+                    "version": profile.version,
+                    "description": profile.description,
+                    "executor": profile.executor,
+                    "model": profile.model,
+                    "tools": profile.tools.model_dump(mode="json"),
+                    "memory": profile.memory.model_dump(mode="json"),
+                    "cache": profile.cache.model_dump(mode="json"),
+                    "delegation": profile.delegation.model_dump(mode="json"),
+                }
+            )
+        return summaries
 
     def _record(self, profile_id: str, status: str, detail: str) -> None:
         self._diagnostics.append({"profile_id": profile_id, "status": status, "detail": detail[:300]})

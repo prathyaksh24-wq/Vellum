@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import json
 
 from langchain_core.messages import AIMessage
 
@@ -55,7 +56,12 @@ def build_runtime(tmp_path: Path, *, clock: list[datetime] | None = None):
         cache=CachePolicy(default_ttl_seconds=60, bypass_terms=[]),
     )
     profiles = ProfileRegistry(profile_dir=tmp_path / "profiles", builtins={"SportsAgent": sports})
-    return DelegationRuntime(profile_registry=profiles, memory_orchestrator=orchestrator, now=lambda: active_clock[0]), active_clock
+    return DelegationRuntime(
+        profile_registry=profiles,
+        memory_orchestrator=orchestrator,
+        now=lambda: active_clock[0],
+        audit_path=tmp_path / "delegation-runs.jsonl",
+    ), active_clock
 
 
 def test_deterministic_run_uses_fresh_id_and_explicit_goal_only(tmp_path: Path) -> None:
@@ -146,3 +152,37 @@ def test_llm_executor_receives_only_profile_goal_context_and_memory(tmp_path: Pa
     assert "Compare two storage engines" in model.messages[1].content
     assert "Use only the supplied benchmark notes" in model.messages[1].content
     assert "parent-thread-with-private-history" not in model.messages[1].content
+
+
+def test_delegation_audit_is_redacted_and_records_cache_status(tmp_path: Path) -> None:
+    runtime, _ = build_runtime(tmp_path)
+    audit_path = tmp_path / "delegation-runs.jsonl"
+    audited = DelegationRuntime(
+        profile_registry=runtime.profile_registry,
+        memory_orchestrator=runtime.memory_orchestrator,
+        now=runtime._now,
+        audit_path=audit_path,
+    )
+    pupil = FakePupil()
+
+    audited.delegate(
+        profile_id="SportsAgent",
+        pupil=pupil,
+        goal="Historical Arsenal titles",
+        context="PRIVATE BENCHMARK NOTES",
+        parent_thread_id="thread-1",
+    )
+    audited.delegate(
+        profile_id="SportsAgent",
+        pupil=pupil,
+        goal="Historical Arsenal titles",
+        context="PRIVATE BENCHMARK NOTES",
+        parent_thread_id="thread-2",
+    )
+
+    records = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert [record["cache_status"] for record in records] == ["miss", "hit"]
+    assert records[0]["profile_id"] == "SportsAgent"
+    assert records[0]["context_hash"]
+    assert records[0]["source_count"] == 0
+    assert "PRIVATE BENCHMARK NOTES" not in audit_path.read_text(encoding="utf-8")

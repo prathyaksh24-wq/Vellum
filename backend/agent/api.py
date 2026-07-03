@@ -1701,6 +1701,14 @@ async def list_subagents() -> dict[str, Any]:
     }
 
 
+@router.get("/agent-profiles")
+async def list_agent_profiles() -> dict[str, Any]:
+    return {
+        "profiles": _profile_registry.public_summaries(),
+        "diagnostics": _profile_registry.diagnostics(),
+    }
+
+
 def _chunk_text(chunk: Any) -> str:
     if chunk is None:
         return ""
