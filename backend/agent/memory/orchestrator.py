@@ -522,9 +522,13 @@ class MemoryOrchestrator:
         agent_name: str = "VellumAgent",
         active_project: str | None = None,
         cloud_safe: bool = False,
+        read_scopes: list[str] | None = None,
     ) -> dict[str, Any]:
         clean_query = query.strip()
-        scopes = _packet_scopes(agent_name=agent_name, active_project=active_project)
+        scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
+            agent_name=agent_name,
+            active_project=active_project,
+        )
         settings = self.store.get_settings() if self.store is not None else dict(DEFAULT_MEMORY_SETTINGS)
         if not settings.get("memory_enabled", True):
             return {
@@ -542,20 +546,37 @@ class MemoryOrchestrator:
             baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
             matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
             saved = _dedupe_memories([*baseline, *matched])[:8]
-        docs = self.fts5.search(_memory_search_query(clean_query), limit=5) if settings.get("reference_history_enabled", True) else []
+        strict_profile_scope = read_scopes is not None
+        docs = (
+            self.fts5.search(_memory_search_query(clean_query), limit=5)
+            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            else []
+        )
         honcho_context = ""
-        if self.honcho is not None:
+        if self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
                 honcho_context = ""
-        docs = docs or (self.fts5.recent_documents(limit=5) if settings.get("reference_history_enabled", True) else [])
-        external_context = self.provider_extensions.prefetch(clean_query, session_id=thread_id) if self.provider_extensions else []
+        docs = docs or (
+            self.fts5.recent_documents(limit=5)
+            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            else []
+        )
+        external_context = (
+            self.provider_extensions.prefetch(clean_query, session_id=thread_id)
+            if self.provider_extensions and not strict_profile_scope
+            else []
+        )
         packet = {
-            "global_summary": self.store.global_summary() if self.store is not None else "",
+            "global_summary": self.store.global_summary() if self.store is not None and (not strict_profile_scope or "global" in scopes) else "",
             "saved_memories": saved,
             "honcho_context": honcho_context,
-            "project_context": self.store.project_summary(active_project) if self.store is not None else "",
+            "project_context": (
+                self.store.project_summary(active_project)
+                if self.store is not None and active_project and (not strict_profile_scope or f"project:{_normalize_scope(active_project)}" in scopes)
+                else ""
+            ),
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
             "external_providers": external_context,
