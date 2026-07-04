@@ -45,9 +45,11 @@ class TaskControl:
         return self._cancellation.is_set()
 
     def heartbeat(self) -> None:
+        self._supervisor.wait_if_paused(self.task_id)
         self._supervisor._heartbeat(self.task_id)
 
     def operation(self, kind: str) -> int:
+        self._supervisor.wait_if_paused(self.task_id)
         if kind not in {"model", "tool"}:
             raise ValueError("only completed model and tool operations count as iterations")
         count = self._supervisor._increment(self.task_id)
@@ -69,6 +71,7 @@ class AgentSupervisor:
         self.stale_heartbeat_seconds = stale_heartbeat_seconds
         self._lock = threading.RLock()
         self._cancellations: dict[str, threading.Event] = {}
+        self._pauses: dict[str, threading.Event] = {}
         self._results: dict[str, Any] = {}
         self._initialize()
         threading.Thread(target=self._monitor, daemon=True, name="vellum-agent-supervisor").start()
@@ -98,6 +101,9 @@ class AgentSupervisor:
                 (identifier, run_id, parent_task_id, agent_name, department, "queued", deadline.isoformat() if deadline else None, 0, now.isoformat(), None, None, now.isoformat()),
             )
             self._cancellations[identifier] = event
+            pause = threading.Event()
+            pause.set()
+            self._pauses[identifier] = pause
         threading.Thread(
             target=self._run,
             args=(identifier, work, event, max_iterations),
@@ -141,6 +147,30 @@ class AgentSupervisor:
             if event is not None:
                 event.set()
             self._set_terminal(identifier, "cancelled", "cancelled_by_supervisor")
+
+    def pause(self, task_id: str) -> TaskRecord:
+        record = self.status(task_id)
+        if record.state != "running":
+            raise RuntimeError("task cannot be paused")
+        self._pauses[task_id].clear()
+        self._set_state(task_id, "paused")
+        return self.status(task_id)
+
+    def resume(self, task_id: str) -> TaskRecord:
+        record = self.status(task_id)
+        if record.state != "paused":
+            raise RuntimeError("task cannot be resumed")
+        self._pauses[task_id].set()
+        self._set_state(task_id, "running")
+        self._heartbeat(task_id)
+        return self.status(task_id)
+
+    def wait_if_paused(self, task_id: str) -> None:
+        pause = self._pauses.get(task_id)
+        cancellation = self._cancellations.get(task_id)
+        while pause is not None and not pause.wait(timeout=self.monitor_interval):
+            if cancellation is not None and cancellation.is_set():
+                return
 
     def list_tasks(self, *, run_id: str | None = None) -> list[TaskRecord]:
         with self._lock, self._connection() as conn:

@@ -47,3 +47,21 @@ def test_timeout_zero_disables_deadline(tmp_path: Path):
     supervisor = AgentSupervisor(tmp_path / "tasks.db", monitor_interval=0.01)
     task = supervisor.submit(run_id="run", agent_name="A", department="d", work=lambda control: "ok", timeout_seconds=0)
     assert supervisor.wait(task, timeout=2).state == "completed"
+
+
+def test_supervisor_can_pause_and_resume_cooperative_task(tmp_path: Path):
+    supervisor = AgentSupervisor(tmp_path / "tasks.db", monitor_interval=0.01)
+
+    def work(control):
+        while not control.cancelled:
+            control.heartbeat()
+            time.sleep(0.01)
+
+    task = supervisor.submit(run_id="run", agent_name="A", department="d", work=work)
+    deadline = time.monotonic() + 2
+    while supervisor.status(task).state != "running" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert supervisor.pause(task).state == "paused"
+    assert supervisor.resume(task).state == "running"
+    supervisor.cancel(task)
+    assert supervisor.wait(task, timeout=2).state == "cancelled"

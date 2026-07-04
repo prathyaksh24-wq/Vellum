@@ -1397,6 +1397,10 @@ body{font-size:14px}
 .spotify-player-error{padding:8px 2px 2px;color:var(--danger);font-size:10.5px;line-height:1.4}.spotify-reconnect{margin-top:8px}
 @media(max-width:720px){.spotify-player-shell.side-top,.spotify-player-shell.side-right{top:58px;right:10px}.spotify-player-pill{max-width:178px}.spotify-now{display:none}.spotify-player-panel{width:min(310px,calc(100vw - 20px))}}
 @media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
+.org-runtime{position:fixed;right:18px;bottom:18px;z-index:116;width:min(360px,calc(100vw - 36px));border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--menu-solid) 94%,transparent);box-shadow:0 20px 60px rgba(0,0,0,.48);backdrop-filter:blur(24px);color:var(--txt);font-size:11px;overflow:hidden}
+.org-runtime summary{cursor:pointer;padding:10px 12px;color:var(--txt2);font-weight:600;list-style:none;display:flex;justify-content:space-between}.org-runtime summary::-webkit-details-marker{display:none}
+.org-runtime-body{max-height:300px;overflow:auto;border-top:1px solid var(--line);padding:9px}.org-dept{padding:7px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px}.org-dept-name{text-transform:uppercase;letter-spacing:.08em;color:var(--dim2);font-size:9px}.org-agent{display:inline-flex;margin:5px 5px 0 0;padding:3px 6px;border-radius:999px;background:var(--hover)}
+.org-task{display:grid;grid-template-columns:1fr auto;gap:4px 8px;padding:7px;border-radius:8px;background:var(--input);margin-top:6px}.org-task-meta{color:var(--dim);font-size:9.5px}.org-task button{border:0;border-radius:6px;padding:3px 6px;background:rgba(240,138,138,.12);color:var(--danger);cursor:pointer}.org-disagreement{margin-top:6px;padding:6px;border-left:2px solid var(--ember);color:var(--dim)}
 </style>
 </head>
 <body>
@@ -6030,6 +6034,51 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
 };
 
 /* â”€â”€â”€ app â”€â”€â”€ */
+const OrganizationRuntimePanel = () => {
+  const [departments, setDepartments] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [events, setEvents] = useState([]);
+  const refresh = async () => {
+    try {
+      const [d, t] = await Promise.all([
+        API.client.request('/api/agent-runtime/departments'),
+        API.client.request('/api/agent-runtime/tasks'),
+      ]);
+      setDepartments(d.departments || []); setTasks(t.tasks || []);
+    } catch (_) {}
+  };
+  useEffect(() => {
+    refresh();
+    const onOrganization = e => {
+      const event = e.detail || {};
+      setEvents(items => [event, ...items].slice(0, 20));
+      refresh();
+    };
+    window.addEventListener('vellum:organization', onOrganization);
+    return () => window.removeEventListener('vellum:organization', onOrganization);
+  }, []);
+  const cancelTask = async id => {
+    if (!window.confirm('Cancel this agent task and its children?')) return;
+    await API.client.request(`/api/agent-runtime/tasks/${id}/cancel`, API.client.jsonOptions('POST', {confirm:true}));
+    refresh();
+  };
+  const active = tasks.filter(task => ['queued','starting','running','paused'].includes(task.state));
+  return <details className="org-runtime" data-vellum-organizational-runtime data-composer-remains-active="true">
+    <summary><span>Agent organization</span><span>{active.length} active</span></summary>
+    <div className="org-runtime-body">
+      {departments.map(dept => <div className="org-dept" key={dept.id}>
+        <div className="org-dept-name">{dept.id}</div>
+        {dept.agents.map(agent => <span className="org-agent" key={agent}>{agent}</span>)}
+      </div>)}
+      {active.map(task => <div className="org-task" key={task.task_id}>
+        <div><b>{task.agent_name}</b><div className="org-task-meta">{task.department} · {task.state}</div></div>
+        <button onClick={() => cancelTask(task.task_id)}>Cancel</button>
+      </div>)}
+      {events.filter(event => event.event === 'disagreement' || event.message_type === 'final_contribution').map((event, i) => <div className="org-disagreement" key={i}><b>{event.attribution}</b>: {event.claim || event.message_type}</div>)}
+    </div>
+  </details>;
+};
+
 const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
@@ -7083,6 +7132,7 @@ const App = () => {
           onNewChat={newChat} onSearch={() => setSearchOpen(true)} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
+        <OrganizationRuntimePanel/>
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {

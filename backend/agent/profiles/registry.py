@@ -85,12 +85,16 @@ class ProfileRegistry:
                     "id": profile.id,
                     "version": profile.version,
                     "description": profile.description,
+                    "department": profile.department,
                     "executor": profile.executor,
                     "model": profile.model,
                     "tools": profile.tools.model_dump(mode="json"),
                     "memory": profile.memory.model_dump(mode="json"),
                     "cache": profile.cache.model_dump(mode="json"),
                     "delegation": profile.delegation.model_dump(mode="json"),
+                    "identity": profile.identity.model_dump(mode="json"),
+                    "isolation": profile.isolation.model_dump(mode="json"),
+                    "workspace": profile.workspace.model_dump(mode="json"),
                 }
             )
         return summaries

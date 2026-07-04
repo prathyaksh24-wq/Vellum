@@ -88,6 +88,14 @@ class OrganizationStore:
             return None
         return TaskRoom(row["id"], row["owner"], row["purpose"], tuple(json.loads(row["participants_json"])), row["status"], row["created_at"])
 
+    def list_rooms(self) -> list[TaskRoom]:
+        with self.connection() as conn:
+            rows = conn.execute("SELECT * FROM task_rooms ORDER BY created_at DESC, id").fetchall()
+        return [
+            TaskRoom(row["id"], row["owner"], row["purpose"], tuple(json.loads(row["participants_json"])), row["status"], row["created_at"])
+            for row in rows
+        ]
+
     def close_room(self, room_id: str) -> None:
         with self.connection() as conn:
             conn.execute("UPDATE task_rooms SET status = 'completed' WHERE id = ?", (room_id,))

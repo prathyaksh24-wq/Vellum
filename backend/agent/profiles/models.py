@@ -128,7 +128,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "SportsAgent": _profile(
             "SportsAgent",
             "Sports research, schedules, results, and analysis.",
-            tools=[],
+            tools=["sports.search"],
             department="sports",
         ),
         "XAgent": _profile(

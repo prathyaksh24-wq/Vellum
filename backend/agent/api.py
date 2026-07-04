@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from datetime import datetime, timezone
 import importlib.util
 import inspect
@@ -50,6 +51,7 @@ from agent.memory.project_context import ProjectContext
 from agent.memory.resolved import ResolvedQuestionsCache
 from agent.master.runtime import DelegationRuntime
 from agent.profiles import ProfileRegistry
+from agent.organization import OrganizationStore, TaskRoomService
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
@@ -102,6 +104,8 @@ _delegation_runtime = DelegationRuntime(
     profile_registry=_profile_registry,
     memory_orchestrator=_memory_orchestrator,
 )
+_organization_store = OrganizationStore(Path("data/organization/organization.db"))
+_task_rooms = TaskRoomService(_organization_store)
 _live_dispatcher = LiveAgentDispatcher(
     vault_root=get_settings().obsidian_vault_path,
     delegation_runtime=_delegation_runtime,
@@ -155,6 +159,10 @@ class ChatAttachment(BaseModel):
     mime_type: str = ""
     data_url: str | None = None
     url: str | None = None
+
+
+class RuntimeActionRequest(BaseModel):
+    confirm: bool = False
 
 
 class Source(BaseModel):
@@ -1709,6 +1717,85 @@ async def list_agent_profiles() -> dict[str, Any]:
     }
 
 
+@router.get("/agent-runtime/departments")
+async def runtime_departments() -> dict[str, Any]:
+    departments: dict[str, list[str]] = {}
+    for profile in _profile_registry.list():
+        departments.setdefault(profile.department, []).append(profile.id)
+    return {"departments": [{"id": key, "agents": sorted(value)} for key, value in sorted(departments.items())]}
+
+
+@router.get("/agent-runtime/agents")
+async def runtime_agents() -> dict[str, Any]:
+    return {"agents": _profile_registry.public_summaries()}
+
+
+@router.get("/agent-runtime/tasks")
+async def runtime_tasks(run_id: str | None = None) -> dict[str, Any]:
+    return {"tasks": [asdict(record) for record in _delegation_runtime.supervisor.list_tasks(run_id=run_id)]}
+
+
+@router.get("/agent-runtime/tasks/{task_id}")
+async def runtime_task(task_id: str) -> dict[str, Any]:
+    try:
+        root = _delegation_runtime.supervisor.status(task_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="task unavailable") from exc
+    all_tasks = _delegation_runtime.supervisor.list_tasks(run_id=root.run_id)
+    return {"task": asdict(root), "tree": [asdict(record) for record in all_tasks]}
+
+
+@router.post("/agent-runtime/tasks/{task_id}/cancel")
+async def runtime_cancel(task_id: str, request: RuntimeActionRequest) -> dict[str, Any]:
+    if not request.confirm:
+        raise HTTPException(status_code=409, detail="confirmation required")
+    try:
+        _delegation_runtime.supervisor.cancel(task_id, recursive=True)
+        return {"task": asdict(_delegation_runtime.supervisor.status(task_id))}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="task unavailable") from exc
+
+
+@router.post("/agent-runtime/tasks/{task_id}/pause")
+async def runtime_pause(task_id: str) -> dict[str, Any]:
+    try:
+        return {"task": asdict(_delegation_runtime.supervisor.pause(task_id))}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="task unavailable") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/agent-runtime/tasks/{task_id}/resume")
+async def runtime_resume(task_id: str) -> dict[str, Any]:
+    try:
+        return {"task": asdict(_delegation_runtime.supervisor.resume(task_id))}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="task unavailable") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/agent-runtime/rooms")
+async def runtime_rooms() -> dict[str, Any]:
+    return {"rooms": [asdict(room) for room in _organization_store.list_rooms()]}
+
+
+@router.get("/agent-runtime/rooms/{room_id}/messages")
+async def runtime_room_messages(room_id: str, actor: str = "VellumAgent") -> dict[str, Any]:
+    try:
+        return {"messages": [asdict(message) for message in _task_rooms.list_messages(room_id, actor=actor)]}
+    except PermissionError as exc:
+        raise HTTPException(status_code=404, detail="task room unavailable") from exc
+
+
+@router.get("/agent-runtime/health")
+async def runtime_health() -> dict[str, Any]:
+    tasks = _delegation_runtime.supervisor.list_tasks()
+    active = [record for record in tasks if record.state in {"queued", "starting", "running", "paused"}]
+    return {"status": "ok", "active_workers": len(active), "tasks": len(tasks)}
+
+
 def _chunk_text(chunk: Any) -> str:
     if chunk is None:
         return ""
@@ -2301,6 +2388,9 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
         return False
     if live_result.agent_name != "XAgent":
         return False
+    # Exact X reads/actions are intentionally forwarded unchanged so handles,
+    # status URLs, and action confirmations cannot be corrupted by a rewrite.
+    # Vellum still owns the user-facing turn and final response envelope.
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
 
 
@@ -2363,6 +2453,18 @@ async def _stream_agent_turn(
                 "route_source": live_result.route_source,
             },
         }
+        routed_profile = _profile_registry.try_get(live_result.agent_name)
+        department = routed_profile.department if routed_profile is not None else "general"
+        yield _sse("organization", {
+            "event": "task_queued", "run_id": live_result.run_id,
+            "agent": live_result.agent_name, "department": department,
+            "attribution": "VellumAgent",
+        })
+        yield _sse("organization", {
+            "event": "task_started", "run_id": live_result.run_id,
+            "agent": live_result.agent_name, "department": department,
+            "attribution": live_result.agent_name,
+        })
         yield _agent_activity_event(
             response_id=response_id,
             thread_id=active_thread_id,
@@ -2476,6 +2578,21 @@ async def _stream_agent_turn(
             item_id=str(subagent_item["id"]),
             name=live_result.agent_name,
         )
+        yield _sse("organization", {
+            "event": "task_failed" if subagent_status == "failed" else "task_completed",
+            "run_id": live_result.run_id, "agent": live_result.agent_name,
+            "attribution": live_result.agent_name, "status": subagent_status,
+        })
+        yield _sse("organization", {
+            "event": "message", "message_type": "final_contribution",
+            "run_id": live_result.run_id, "sender": live_result.agent_name,
+            "recipient": "VellumAgent", "attribution": live_result.agent_name,
+        })
+        if not _should_passthrough_live_result(live_result):
+            yield _sse("organization", {
+                "event": "vellum_synthesis", "run_id": live_result.run_id,
+                "agent": "VellumAgent", "attribution": "VellumAgent",
+            })
         if _should_passthrough_live_result(live_result):
             answer = live_result.answer or "No response."
             message_item = {

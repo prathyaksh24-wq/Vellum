@@ -190,6 +190,11 @@
         if (!parsed) continue;
         var ev = parsed.event;
         var data = parsed.data;
+        if (ev === "organization") {
+          window.dispatchEvent(new CustomEvent("vellum:organization", { detail: data }));
+          if (handlers.organization) handlers.organization(data);
+          continue;
+        }
         if (ev === "agent.activity") {
           semanticSeen = true;
           var agentAct = normalizeAgentActivity(data.activity || data);
