@@ -93,6 +93,19 @@ def test_second_identical_run_uses_cache_without_calling_pupil(tmp_path: Path) -
     assert second.response == first.response
 
 
+def test_identity_change_invalidates_specialist_cache(tmp_path: Path) -> None:
+    runtime, _ = build_runtime(tmp_path)
+    pupil = FakePupil()
+    runtime.delegate(profile_id="SportsAgent", pupil=pupil, goal="Historical NBA titles", parent_thread_id="t1")
+    home = runtime.agent_home_manager.ensure("SportsAgent")
+    (home / "SOUL.md").write_text("A materially different sports perspective.\n", encoding="utf-8")
+
+    second = runtime.delegate(profile_id="SportsAgent", pupil=pupil, goal="Historical NBA titles", parent_thread_id="t2")
+
+    assert second.cache_status == "miss"
+    assert len(pupil.queries) == 2
+
+
 def test_live_failure_returns_stale_cached_response(tmp_path: Path) -> None:
     runtime, clock = build_runtime(tmp_path)
     runtime.delegate(profile_id="SportsAgent", pupil=FakePupil(), goal="Arsenal fixture", parent_thread_id="t1")

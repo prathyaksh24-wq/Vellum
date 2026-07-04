@@ -30,7 +30,7 @@ class SubprocessHandle:
         Thread(target=self._read_stdout, daemon=True).start()
         Thread(target=self._read_stderr, daemon=True).start()
 
-    def authenticate(self, timeout: float = 5.0) -> None:
+    def authenticate(self, timeout: float = 15.0) -> None:
         message = self.read(timeout=timeout, validate=False)
         if message.type != "progress" or message.payload.get("event") != "hello" or not secrets.compare_digest(str(message.payload.get("token", "")), self._token):
             self.terminate()

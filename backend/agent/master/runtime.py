@@ -75,7 +75,8 @@ class DelegationRuntime:
         run_id = str(uuid4())
         resolved_task_id = task_id or str(uuid4())
         profile = self.profile_registry.get(profile_id)
-        decision = self._lookup(profile, goal)
+        cache_profile = self._cache_profile(profile, goal)
+        decision = self._lookup(cache_profile, goal)
         if decision.status == "hit" and decision.response is not None:
             return self._complete(
                 profile=profile,
@@ -140,7 +141,7 @@ class DelegationRuntime:
         else:
             cache_status = decision.status
             try:
-                self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
+                self.memory_orchestrator.store_specialist_response(profile=cache_profile, query=goal, response=response)
             except Exception:
                 logger.exception("Could not store specialist response for %s.", profile.id)
 
@@ -166,6 +167,25 @@ class DelegationRuntime:
         except Exception as exc:
             logger.exception("Specialist cache lookup failed for %s.", profile.id)
             return CacheDecision(status="miss", reason=f"cache_error:{exc.__class__.__name__}")
+
+    def _cache_profile(self, profile: AgentProfile, goal: str) -> AgentProfile:
+        """Bind cache reuse to the effective profile, identity, and activated skills."""
+        import hashlib
+
+        home = self.agent_home_manager.ensure(profile.id)
+        identity = IdentityLoader(home).load(profile)
+        skills = AgentSkillLoader(home).activate(goal).skills
+        payload = json.dumps(
+            {
+                "profile": profile.model_dump(mode="json"),
+                "identity": identity.identity_hash,
+                "skills": [(skill.id, skill.source_hash) for skill in skills],
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        effective_version = int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:8], 16)
+        return profile.model_copy(update={"version": effective_version})
 
     def _execute(
         self,

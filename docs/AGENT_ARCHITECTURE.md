@@ -186,13 +186,15 @@ def load_relevant_skills(query: str) -> str:
 Skills are loaded into the system prompt for the current turn only.
 They do not persist across turns unless triggered again.
 
-### Profile-Based Specialist Delegation
+### Profile-Based Organizational Delegation
 
 Runtime specialist configuration is split into persistent profiles and ephemeral runs.
 
-`agent/profiles/` owns the strict profile schema, safe built-in defaults, YAML loading, diagnostics, instruction-path containment, and context-local tool policy. Profile YAML is loaded from `data/agent_profiles/`. Existing deterministic agents remain registered through `PupilRegistry`; a newly discovered `executor: llm` profile can be selected directly by an active routing skill without a Python pupil class.
+`agent/profiles/` owns profile v2, safe built-in defaults, v1 in-memory migration, YAML loading, agent-home creation, identity/skill loading, diagnostics, path containment, and context-local tool policy. Profiles live in `data/agent_profiles/`; individual homes live in `data/agents/<AgentName>/`. Existing deterministic agents remain registered through `PupilRegistry`; profile-only LLM agents can be selected by routing skills.
 
-`agent/master/runtime.py` creates a fresh `DelegationRunResult` for every specialist task. Deterministic profiles receive only the current goal through their existing `answer(query)` contract. LLM profiles receive a new two-message invocation containing their profile system instructions and a human task packet with the goal, explicit context, and profile-approved memory. Parent chat history and LangGraph checkpoints are not inherited.
+`agent/master/runtime.py` creates a fresh `DelegationRunResult` for every specialist task and submits v2 work to `AgentSupervisor`. Deterministic profiles receive only a typed task context (with compatibility for `answer(query)`); hybrid profiles acquire deterministic evidence before an identity-conditioned model pass; LLM profiles receive a new invocation containing only the effective identity, task, explicit context, activated skills, and approved memory. Parent chat history and LangGraph checkpoints are not inherited.
+
+Identity order is exactly `SOUL.md` -> `AGENTS.md` -> selected personality. Skills activate for one task. Their hashes, the identity hash, and profile JSON form the effective cache version.
 
 Routing order is:
 
@@ -203,9 +205,27 @@ Routing order is:
 
 Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
 
+### Departments, Memory, and Collaboration
+
+`agent/organization/` persists independently attributed memory records, task rooms, and immutable messages. Private memory is owner-only; department memory is department-only; organization memory is readable across departments but writable only through Vellum/MemoryAgent promotion. Promotion creates a new record with a parent reference rather than changing the original scope.
+
+Task rooms have owners, participants, purpose, expiry, and status. Messages name sender, recipient, task, type, evidence references, confidence, and visibility. Recipient-only messages do not expose sender memory to other room members. Completing a room returns proposals/artifacts and never auto-publishes organization memory.
+
+### Worker Supervision and Isolation
+
+`agent/runtime/` provides:
+
+- `brokers.py`: run/task/agent/expiry-bound capability grants plus tool, memory, filesystem, terminal, network, credential, and model mediation.
+- `protocol.py`, `worker.py`, and `backends.py`: strict v1 JSON-line messages, one-run authentication, sanitized subprocess environments, heartbeats, broker round trips, graceful cancellation, and forced termination.
+- `supervisor.py`: durable task trees, lifecycle state, deadlines, iteration budgets, heartbeat monitoring, recursive cancellation, and cooperative pause/resume.
+- `orchestrator.py`: global/department/profile concurrency bounds, deterministic batch ordering, partial-failure attribution, department rooms, and role/depth-gated nested delegation.
+- `container.py`: optional allowlisted Docker execution with read-only root, no network, explicit mounts, resource limits, no-new-privileges, dropped capabilities, and exact timeout cleanup.
+
+Container execution is optional and fail-closed. Subprocess fallback occurs only when `allow_subprocess_fallback` is explicitly enabled. Provider credentials remain supervisor-side.
+
 ### Specialist Response Cache
 
-`agent/memory/specialist_cache.py` is owned by `MemoryOrchestrator`. It stores serialized `SpecialistResponse` objects keyed by profile ID, profile version, and normalized query fingerprint. Conservative lexical related-query matching is permitted only within the same profile/version.
+`agent/memory/specialist_cache.py` is owned by `MemoryOrchestrator`. It stores serialized `SpecialistResponse` objects keyed by profile ID, effective profile/identity/skill version, and normalized query fingerprint. Conservative lexical related-query matching is permitted only within the same effective version.
 
 Cache decisions are `hit`, `miss`, `stale`, or `bypass`. Freshness classes select profile TTLs:
 
@@ -217,9 +237,9 @@ Profile bypass terms take precedence over stored entries. Responses with errors,
 
 Specialist memory reads are limited to declared scopes. Strict profile memory packets do not include the unscoped global FTS turn history. Local Obsidian/SQLite memory retains original public names; Honcho and provider-extension synchronization receive privacy-scrubbed text.
 
-Run audits are written to `data/memory/delegation-runs.jsonl`. They contain identifiers, profile version, executor, cache decision, timing, status, confidence, hashes, and counts only. `GET /api/agent-profiles` returns safe configuration and fallback diagnostics without instruction contents or credentials.
+Run audits are written to `data/memory/delegation-runs.jsonl`; durable task state is in `data/memory/agent-tasks.db`; organization state is in `data/organization/organization.db`. These contain identifiers and operational metadata, not provider credentials. `GET /api/agent-profiles` and `/api/agent-runtime/*` return safe configuration/health data without instruction contents or credentials.
 
-Profiles are application policy boundaries, not filesystem or operating-system sandboxes.
+Operational rollback is additive: retain databases and agent homes, remove/disable runtime API/UI wiring, and fall back to built-in deterministic profiles. V1 profile files remain accepted through in-memory migration.
 
 ---
 

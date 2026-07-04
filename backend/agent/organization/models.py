@@ -22,6 +22,7 @@ class TaskRoom:
     participants: tuple[str, ...]
     status: str
     created_at: str
+    expires_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -35,3 +36,5 @@ class AgentMessage:
     evidence_refs: tuple[str, ...]
     confidence: float
     created_at: str
+    task: str = ""
+    visibility: str = "recipient"
