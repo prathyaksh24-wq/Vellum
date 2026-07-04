@@ -114,7 +114,7 @@ class SportsAgent:
             return any(self._has_phrase(lowered, term) for term in self._ATHLETE_CONTEXT_TERMS)
         return any(self._has_phrase(lowered, term) for term in self._SPORT_TERMS)
 
-    def answer(self, query: str) -> SpecialistResponse:
+    def answer(self, query: str, *, context: Any | None = None) -> SpecialistResponse:
         if not self.can_handle(query):
             return SpecialistResponse(
                 agent=self.name,
@@ -125,7 +125,18 @@ class SportsAgent:
 
         league = self.resolve_league(query)
         source_budget = self._source_budget(query)
-        search_result = self.web_searcher(self._search_query(query, league, source_budget))
+        search_query = self._search_query(query, league, source_budget)
+        if context is not None and getattr(context, "tool_broker", None) is not None:
+            search_result = context.tool_broker.invoke(
+                context.capability_token or "",
+                actor=self.name,
+                run_id=context.run_id,
+                task_id=context.task_id,
+                tool_name="sports.search",
+                payload={"query": search_query},
+            )
+        else:
+            search_result = self.web_searcher(search_query)
         provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
@@ -172,6 +183,9 @@ class SportsAgent:
                 )
             ],
         )
+
+    def answer_task(self, context: Any) -> SpecialistResponse:
+        return self.answer(context.goal, context=context)
 
     def resolve_league(self, query: str) -> str:
         lowered = query.lower()

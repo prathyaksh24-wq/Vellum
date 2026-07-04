@@ -50,6 +50,7 @@ class XCapabilityService:
         allow_posts: bool | None = None,
     ) -> None:
         self.search_posts_backend = search_posts_backend or self._default_search_posts
+        self._post_backend_injected = post_backend is not None
         self.post_backend = post_backend or self._default_post
         self.account_backend = account_backend or self._default_account
         self.bookmarks_backend = bookmarks_backend or self._default_bookmarks
@@ -185,7 +186,9 @@ class XCapabilityService:
         query = str(payload.get("query", "")).strip()
         max_results = self._normalize_max_results(payload.get("max_results", 10))
         fallback_reason = ""
-        if self._agent_reach_available():
+        # An explicitly supplied backend is an execution boundary (and is how
+        # tests and supervised brokers prevent an accidental live write).
+        if not self._post_backend_injected and self._agent_reach_available():
             try:
                 items = [self._normalize_post(item) for item in self.agent_reach_provider.search(query, max_results)]
                 return {"action": "x.search_posts", "items": items, "provider": "agent-reach"}

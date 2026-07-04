@@ -36,6 +36,8 @@ class AgentExecutionContext:
     deadline: datetime | None
     max_iterations: int
     cancellation: CancellationView
+    capability_token: str | None = None
+    tool_broker: Any | None = None
 
 
 def invoke_specialist(pupil: Any, context: AgentExecutionContext) -> SpecialistResponse:
