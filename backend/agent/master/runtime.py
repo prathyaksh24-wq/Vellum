@@ -69,6 +69,7 @@ class DelegationRuntime:
         parent_thread_id: str,
         context: str = "",
         task_id: str | None = None,
+        parent_task_id: str | None = None,
     ) -> DelegationRunResult:
         started = self._utc_now()
         run_id = str(uuid4())
@@ -94,6 +95,7 @@ class DelegationRuntime:
             response = self._execute(
                 profile=profile, pupil=pupil, goal=goal, context=context,
                 parent_thread_id=parent_thread_id, run_id=run_id, task_id=resolved_task_id,
+                parent_task_id=parent_task_id,
             )
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
@@ -175,11 +177,13 @@ class DelegationRuntime:
         parent_thread_id: str,
         run_id: str,
         task_id: str,
+        parent_task_id: str | None,
     ) -> SpecialistResponse:
         if profile.version >= 2:
             submitted = self.supervisor.submit(
                 run_id=run_id,
                 task_id=task_id,
+                parent_task_id=parent_task_id,
                 agent_name=profile.id,
                 department=profile.department,
                 timeout_seconds=profile.delegation.timeout_seconds,
@@ -188,6 +192,7 @@ class DelegationRuntime:
                     profile=profile, pupil=pupil, goal=goal, context=context,
                     parent_thread_id=parent_thread_id, run_id=run_id,
                     task_id=task_id, control=control,
+                    parent_task_id=parent_task_id,
                 ),
             )
             record = self.supervisor.wait(submitted, timeout=max(5.0, profile.delegation.timeout_seconds + 2.0))
@@ -197,6 +202,7 @@ class DelegationRuntime:
         return self._execute_direct(
             profile=profile, pupil=pupil, goal=goal, context=context,
             parent_thread_id=parent_thread_id, run_id=run_id, task_id=task_id, control=None,
+            parent_task_id=parent_task_id,
         )
 
     def _execute_direct(
@@ -210,12 +216,13 @@ class DelegationRuntime:
         run_id: str,
         task_id: str,
         control: TaskControl | None,
+        parent_task_id: str | None,
     ) -> SpecialistResponse:
         with profile_policy(profile_id=profile.id, allowed_tools=frozenset(profile.tools.allow)):
             if profile.executor == "deterministic":
                 if pupil is None:
                     raise ValueError(f"{profile.id} requires a deterministic pupil")
-                response = invoke_specialist(pupil, self._execution_context(profile, goal, context, run_id, task_id, control))
+                response = invoke_specialist(pupil, self._execution_context(profile, goal, context, run_id, task_id, control, parent_task_id))
                 if control:
                     for _ in response.activity_events:
                         control.operation("tool")
@@ -223,7 +230,7 @@ class DelegationRuntime:
             if profile.executor == "hybrid":
                 if pupil is None:
                     raise ValueError(f"{profile.id} requires a deterministic acquisition pupil")
-                execution_context = self._execution_context(profile, goal, context, run_id, task_id, control)
+                execution_context = self._execution_context(profile, goal, context, run_id, task_id, control, parent_task_id)
                 acquisition = invoke_specialist(pupil, execution_context)
                 if control:
                     for _ in acquisition.activity_events:
@@ -242,6 +249,7 @@ class DelegationRuntime:
     def _execution_context(
         self, profile: AgentProfile, goal: str, explicit_context: str,
         run_id: str, task_id: str, control: TaskControl | None,
+        parent_task_id: str | None,
     ) -> AgentExecutionContext:
         home = self.agent_home_manager.ensure(profile.id)
         identity = IdentityLoader(home).load(profile)
@@ -254,7 +262,7 @@ class DelegationRuntime:
         return AgentExecutionContext(
             run_id=run_id,
             task_id=task_id,
-            parent_task_id=None,
+            parent_task_id=parent_task_id,
             goal=goal,
             explicit_context=explicit_context,
             profile=profile,
