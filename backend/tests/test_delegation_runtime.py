@@ -186,3 +186,34 @@ def test_delegation_audit_is_redacted_and_records_cache_status(tmp_path: Path) -
     assert records[0]["context_hash"]
     assert records[0]["source_count"] == 0
     assert "PRIVATE BENCHMARK NOTES" not in audit_path.read_text(encoding="utf-8")
+
+
+def test_runtime_hybrid_executes_pupil_then_profile_reasoning(tmp_path: Path) -> None:
+    runtime, _ = build_runtime(tmp_path)
+    pupil = FakePupil()
+    profile = AgentProfile(
+        id="SportsAgent",
+        department="sports",
+        executor="hybrid",
+        tools={"allow": []},
+        memory=MemoryPolicy(read_scopes=["agent:SportsAgent"], write_scope="agent:SportsAgent"),
+        cache=CachePolicy(bypass_terms=[]),
+    )
+    runtime.profile_registry = ProfileRegistry(profile_dir=tmp_path / "profiles", builtins={"SportsAgent": profile})
+
+    class Model:
+        def invoke(self, messages):
+            assert "Answer for tactical review" in messages[-1].content
+            return AIMessage(content="Profile-specific opinion")
+
+    runtime.llm_factory = lambda _model=None: Model()
+
+    result = runtime.delegate(
+        profile_id="SportsAgent",
+        pupil=pupil,
+        goal="tactical review",
+        parent_thread_id="thread-1",
+    )
+
+    assert pupil.queries == ["tactical review"]
+    assert result.response.summary == "Profile-specific opinion"

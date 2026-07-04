@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 from pathlib import Path
@@ -13,10 +13,12 @@ from uuid import uuid4
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.agents.base import SpecialistAgent, SpecialistResponse
+from agent.agents.context import AgentExecutionContext, CancellationView, invoke_specialist
 from agent.llm.routing.runtime import get_routed_chat_model
 from agent.memory.orchestrator import MemoryOrchestrator
 from agent.memory.specialist_cache import CacheDecision
-from agent.profiles import AgentProfile, ProfileRegistry, profile_policy
+from agent.profiles import AgentHomeManager, AgentProfile, AgentSkillLoader, IdentityLoader, ProfileRegistry, profile_policy
+from agent.master.hybrid import HybridExecutor
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,7 @@ class DelegationRuntime:
         self.llm_factory = llm_factory
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
+        self.agent_home_manager = AgentHomeManager(self.profile_registry.profile_dir.parent / "agents")
 
     def delegate(
         self,
@@ -161,13 +164,44 @@ class DelegationRuntime:
             if profile.executor == "deterministic":
                 if pupil is None:
                     raise ValueError(f"{profile.id} requires a deterministic pupil")
-                return pupil.answer(goal)
+                return invoke_specialist(pupil, self._execution_context(profile, goal, context))
+            if profile.executor == "hybrid":
+                if pupil is None:
+                    raise ValueError(f"{profile.id} requires a deterministic acquisition pupil")
+                execution_context = self._execution_context(profile, goal, context)
+                acquisition = invoke_specialist(pupil, execution_context)
+                return HybridExecutor(self.llm_factory).refine(execution_context, acquisition)
             return self._execute_llm(
                 profile=profile,
                 goal=goal,
                 context=context,
                 parent_thread_id=parent_thread_id,
             )
+
+    def _execution_context(self, profile: AgentProfile, goal: str, explicit_context: str) -> AgentExecutionContext:
+        home = self.agent_home_manager.ensure(profile.id)
+        identity = IdentityLoader(home).load(profile)
+        skills = AgentSkillLoader(home).activate(goal).skills
+        deadline = (
+            self._utc_now() + timedelta(seconds=profile.delegation.timeout_seconds)
+            if profile.delegation.timeout_seconds > 0
+            else None
+        )
+        return AgentExecutionContext(
+            run_id=str(uuid4()),
+            task_id=str(uuid4()),
+            parent_task_id=None,
+            goal=goal,
+            explicit_context=explicit_context,
+            profile=profile,
+            prompt_stack=identity,
+            skills=skills,
+            memory_refs=(),
+            task_room_id=None,
+            deadline=deadline,
+            max_iterations=profile.delegation.max_iterations,
+            cancellation=CancellationView(lambda: False),
+        )
 
     def _execute_llm(
         self,
