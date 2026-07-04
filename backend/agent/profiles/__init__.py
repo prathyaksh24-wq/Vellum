@@ -12,11 +12,19 @@ from agent.profiles.models import (
 )
 from agent.profiles.registry import ProfileRegistry
 from agent.profiles.home import AgentHomeManager
+from agent.profiles.identity import IdentityLoader, IdentityStack, PromptSection
+from agent.profiles.skills import ActivatedSkill, ActivatedSkills, AgentSkillLoader
 from agent.profiles.policy import ActiveProfilePolicy, get_active_profile_policy, profile_policy
 
 __all__ = [
     "AgentProfile",
     "AgentHomeManager",
+    "IdentityLoader",
+    "IdentityStack",
+    "PromptSection",
+    "ActivatedSkill",
+    "ActivatedSkills",
+    "AgentSkillLoader",
     "ActiveProfilePolicy",
     "CachePolicy",
     "DelegationPolicy",
