@@ -366,7 +366,11 @@ Writes, memory mutations, live intent, and non-idempotent operations bypass cach
 
 ## Frontend Contract
 
-The frontend continues to chat only with Vellum. Existing response events remain compatible. Additive events expose task trees, departments, workers, progress, messages, cancellation, disagreements, and synthesis state.
+The required frontend integration target is:
+
+`design/Velllum/uploads/Vellum Default Re-designed.html`
+
+The frontend continues to chat only with Vellum. Existing response events remain compatible. Additive events expose task trees, departments, workers, progress, messages, cancellation, disagreements, and synthesis state. Changes must be implemented and tested against this file rather than retired or alternate Vellum HTML surfaces.
 
 The frontend never needs to know worker transport details. A specialist result is never rendered as the final assistant response until Vellum synthesizes it.
 
