@@ -10,6 +10,7 @@ data/memory/*.db-*
 data/memory/audit_log.jsonl
 data/llm-routing/*.db
 data/llm-routing/*.db-*
+data/organization/
 data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
