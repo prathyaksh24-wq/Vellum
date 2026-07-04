@@ -18,6 +18,25 @@ class SkillPolicy(ProfileModel):
     directories: list[str] = Field(default_factory=list)
 
 
+class IdentityPolicy(ProfileModel):
+    soul: str = "SOUL.md"
+    agents: str = "AGENTS.md"
+    default_personality: str = "default"
+    max_identity_chars: int = Field(default=12000, ge=1000, le=50000)
+
+
+class IsolationPolicy(ProfileModel):
+    backend: Literal["in_process", "subprocess", "container"] = "subprocess"
+    container_image: str | None = None
+    allow_fallback: bool = False
+
+
+class WorkspacePolicy(ProfileModel):
+    filesystem_roots: list[str] = Field(default_factory=lambda: ["workspace"])
+    terminal: Literal["none", "dedicated"] = "dedicated"
+    network_domains: list[str] = Field(default_factory=list)
+
+
 class MemoryPolicy(ProfileModel):
     read_scopes: list[str] = Field(default_factory=list)
     write_scope: str = ""
@@ -36,17 +55,24 @@ class DelegationPolicy(ProfileModel):
     max_iterations: int = Field(default=30, ge=1)
     timeout_seconds: int = Field(default=0, ge=0)
     can_delegate: bool = False
+    role: Literal["leaf", "orchestrator"] = "leaf"
+    max_concurrent_children: int = Field(default=0, ge=0)
+    max_spawn_depth: int = Field(default=1, ge=1)
 
 
 class AgentProfile(ProfileModel):
-    version: int = Field(default=1, ge=1)
+    version: int = Field(default=2, ge=1)
     id: str = Field(min_length=1)
+    department: str = "general"
     description: str = ""
-    executor: Literal["deterministic", "llm"] = "deterministic"
+    executor: Literal["deterministic", "llm", "hybrid"] = "deterministic"
     model: str | None = None
     instructions: str = ""
     tools: ToolPolicy = Field(default_factory=ToolPolicy)
     skills: SkillPolicy = Field(default_factory=SkillPolicy)
+    identity: IdentityPolicy = Field(default_factory=IdentityPolicy)
+    isolation: IsolationPolicy = Field(default_factory=IsolationPolicy)
+    workspace: WorkspacePolicy = Field(default_factory=WorkspacePolicy)
     memory: MemoryPolicy = Field(default_factory=MemoryPolicy)
     cache: CachePolicy = Field(default_factory=CachePolicy)
     delegation: DelegationPolicy = Field(default_factory=DelegationPolicy)
@@ -66,11 +92,13 @@ def _profile(
     description: str,
     *,
     tools: list[str],
+    department: str,
     cache: CachePolicy | None = None,
 ) -> AgentProfile:
     return AgentProfile(
         id=profile_id,
         description=description,
+        department=department,
         tools=ToolPolicy(allow=tools),
         memory=MemoryPolicy(
             read_scopes=["user_profile", "shared", f"agent:{profile_id}"],
@@ -101,11 +129,13 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             "SportsAgent",
             "Sports research, schedules, results, and analysis.",
             tools=[],
+            department="sports",
         ),
         "XAgent": _profile(
             "XAgent",
             "X search, account reads, and confirmed X actions.",
             tools=x_tools,
+            department="social",
             cache=CachePolicy(
                 bypass_terms=[
                     "live", "latest", "today", "now", "post", "publish", "tweet",
@@ -117,9 +147,11 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             "YoutubeAgent",
             "YouTube search, metadata, transcripts, and summaries.",
             tools=["youtube.search_videos", "youtube.fetch_transcript"],
+            department="social",
         ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",
+            department="memory",
             description="Durable memory lookup and reviewed memory proposals.",
             tools=ToolPolicy(
                 allow=[

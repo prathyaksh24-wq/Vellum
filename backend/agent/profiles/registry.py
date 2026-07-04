@@ -31,6 +31,7 @@ class ProfileRegistry:
             loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
             if not isinstance(loaded, dict):
                 raise ValueError("profile YAML must contain an object")
+            loaded = _migrate_profile_dict(profile_id, loaded)
             merged = _deep_merge(builtin.model_dump(mode="python") if builtin is not None else {}, loaded)
             profile = AgentProfile.model_validate(merged)
             if profile.id != profile_id:
@@ -106,3 +107,17 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             merged[key] = value
     return merged
+
+
+def _migrate_profile_dict(profile_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    migrated = deepcopy(data)
+    if int(migrated.get("version") or 1) < 2:
+        migrated["version"] = 2
+    migrated.setdefault(
+        "department",
+        {"SportsAgent": "sports", "XAgent": "social", "YoutubeAgent": "social", "MemoryAgent": "memory"}.get(
+            profile_id, "general"
+        ),
+    )
+    migrated.setdefault("isolation", {"backend": "subprocess", "allow_fallback": False})
+    return migrated
