@@ -75,6 +75,9 @@ def test_deterministic_run_uses_fresh_id_and_explicit_goal_only(tmp_path: Path) 
     assert pupil.queries == ["NBA schedule", "NBA injuries"]
     assert first.profile_id == "SportsAgent"
     assert first.parent_thread_id == "t1"
+    supervised = runtime.supervisor.status(first.task_id)
+    assert supervised.run_id == first.run_id
+    assert supervised.state == "completed"
 
 
 def test_second_identical_run_uses_cache_without_calling_pupil(tmp_path: Path) -> None:

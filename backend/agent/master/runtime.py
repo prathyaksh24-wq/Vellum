@@ -19,6 +19,7 @@ from agent.memory.orchestrator import MemoryOrchestrator
 from agent.memory.specialist_cache import CacheDecision
 from agent.profiles import AgentHomeManager, AgentProfile, AgentSkillLoader, IdentityLoader, ProfileRegistry, profile_policy
 from agent.master.hybrid import HybridExecutor
+from agent.runtime.supervisor import AgentSupervisor, TaskControl
 
 
 logger = logging.getLogger(__name__)
@@ -49,12 +50,14 @@ class DelegationRuntime:
         llm_factory: Callable[[str | None], Any] = get_routed_chat_model,
         now: Callable[[], datetime] | None = None,
         audit_path: str | Path = Path("data/memory/delegation-runs.jsonl"),
+        supervisor: AgentSupervisor | None = None,
     ) -> None:
         self.profile_registry = profile_registry
         self.memory_orchestrator = memory_orchestrator
         self.llm_factory = llm_factory
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
+        self.supervisor = supervisor or AgentSupervisor(self.audit_path.with_name("agent-tasks.db"))
         self.agent_home_manager = AgentHomeManager(self.profile_registry.profile_dir.parent / "agents")
 
     def delegate(
@@ -68,6 +71,8 @@ class DelegationRuntime:
         task_id: str | None = None,
     ) -> DelegationRunResult:
         started = self._utc_now()
+        run_id = str(uuid4())
+        resolved_task_id = task_id or str(uuid4())
         profile = self.profile_registry.get(profile_id)
         decision = self._lookup(profile, goal)
         if decision.status == "hit" and decision.response is not None:
@@ -81,10 +86,15 @@ class DelegationRuntime:
                 cache_reason=decision.reason,
                 goal=goal,
                 context=context,
+                run_id=run_id,
+                resolved_task_id=resolved_task_id,
             )
 
         try:
-            response = self._execute(profile=profile, pupil=pupil, goal=goal, context=context, parent_thread_id=parent_thread_id)
+            response = self._execute(
+                profile=profile, pupil=pupil, goal=goal, context=context,
+                parent_thread_id=parent_thread_id, run_id=run_id, task_id=resolved_task_id,
+            )
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
             if decision.status == "stale" and decision.response is not None:
@@ -105,6 +115,8 @@ class DelegationRuntime:
                     cache_reason=exc.__class__.__name__,
                     goal=goal,
                     context=context,
+                    run_id=run_id,
+                    resolved_task_id=resolved_task_id,
                 )
             response = SpecialistResponse(
                 agent=profile.id,
@@ -140,6 +152,8 @@ class DelegationRuntime:
             cache_reason=decision.reason,
             goal=goal,
             context=context,
+            run_id=run_id,
+            resolved_task_id=resolved_task_id,
         )
 
     def _lookup(self, profile: AgentProfile, goal: str) -> CacheDecision:
@@ -159,18 +173,65 @@ class DelegationRuntime:
         goal: str,
         context: str,
         parent_thread_id: str,
+        run_id: str,
+        task_id: str,
+    ) -> SpecialistResponse:
+        if profile.version >= 2:
+            submitted = self.supervisor.submit(
+                run_id=run_id,
+                task_id=task_id,
+                agent_name=profile.id,
+                department=profile.department,
+                timeout_seconds=profile.delegation.timeout_seconds,
+                max_iterations=profile.delegation.max_iterations,
+                work=lambda control: self._execute_direct(
+                    profile=profile, pupil=pupil, goal=goal, context=context,
+                    parent_thread_id=parent_thread_id, run_id=run_id,
+                    task_id=task_id, control=control,
+                ),
+            )
+            record = self.supervisor.wait(submitted, timeout=max(5.0, profile.delegation.timeout_seconds + 2.0))
+            if record.state != "completed" or not isinstance(record.result, SpecialistResponse):
+                raise RuntimeError(record.exit_reason or f"delegation_{record.state}")
+            return record.result
+        return self._execute_direct(
+            profile=profile, pupil=pupil, goal=goal, context=context,
+            parent_thread_id=parent_thread_id, run_id=run_id, task_id=task_id, control=None,
+        )
+
+    def _execute_direct(
+        self,
+        *,
+        profile: AgentProfile,
+        pupil: SpecialistAgent | None,
+        goal: str,
+        context: str,
+        parent_thread_id: str,
+        run_id: str,
+        task_id: str,
+        control: TaskControl | None,
     ) -> SpecialistResponse:
         with profile_policy(profile_id=profile.id, allowed_tools=frozenset(profile.tools.allow)):
             if profile.executor == "deterministic":
                 if pupil is None:
                     raise ValueError(f"{profile.id} requires a deterministic pupil")
-                return invoke_specialist(pupil, self._execution_context(profile, goal, context))
+                response = invoke_specialist(pupil, self._execution_context(profile, goal, context, run_id, task_id, control))
+                if control:
+                    for _ in response.activity_events:
+                        control.operation("tool")
+                return response
             if profile.executor == "hybrid":
                 if pupil is None:
                     raise ValueError(f"{profile.id} requires a deterministic acquisition pupil")
-                execution_context = self._execution_context(profile, goal, context)
+                execution_context = self._execution_context(profile, goal, context, run_id, task_id, control)
                 acquisition = invoke_specialist(pupil, execution_context)
+                if control:
+                    for _ in acquisition.activity_events:
+                        control.operation("tool")
+                    control.operation("model")
                 return HybridExecutor(self.llm_factory).refine(execution_context, acquisition)
+            if control:
+                control.operation("model")
             return self._execute_llm(
                 profile=profile,
                 goal=goal,
@@ -178,7 +239,10 @@ class DelegationRuntime:
                 parent_thread_id=parent_thread_id,
             )
 
-    def _execution_context(self, profile: AgentProfile, goal: str, explicit_context: str) -> AgentExecutionContext:
+    def _execution_context(
+        self, profile: AgentProfile, goal: str, explicit_context: str,
+        run_id: str, task_id: str, control: TaskControl | None,
+    ) -> AgentExecutionContext:
         home = self.agent_home_manager.ensure(profile.id)
         identity = IdentityLoader(home).load(profile)
         skills = AgentSkillLoader(home).activate(goal).skills
@@ -188,8 +252,8 @@ class DelegationRuntime:
             else None
         )
         return AgentExecutionContext(
-            run_id=str(uuid4()),
-            task_id=str(uuid4()),
+            run_id=run_id,
+            task_id=task_id,
             parent_task_id=None,
             goal=goal,
             explicit_context=explicit_context,
@@ -200,7 +264,7 @@ class DelegationRuntime:
             task_room_id=None,
             deadline=deadline,
             max_iterations=profile.delegation.max_iterations,
-            cancellation=CancellationView(lambda: False),
+            cancellation=CancellationView(lambda: bool(control and control.cancelled)),
         )
 
     def _execute_llm(
@@ -244,10 +308,12 @@ class DelegationRuntime:
         cache_reason: str,
         goal: str,
         context: str,
+        run_id: str,
+        resolved_task_id: str,
     ) -> DelegationRunResult:
         result = DelegationRunResult(
-            run_id=str(uuid4()),
-            task_id=task_id or str(uuid4()),
+            run_id=run_id,
+            task_id=resolved_task_id,
             parent_thread_id=parent_thread_id,
             profile_id=profile.id,
             profile_version=profile.version,
