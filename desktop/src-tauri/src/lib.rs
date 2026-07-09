@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const VELLUM_CHAT_URL: &str = "http://127.0.0.1:5173/ui/vellum-workspace.html?desktop=1";
+const VELLUM_FRONTEND_URL: &str = "http://127.0.0.1:5173/ui/Vellum%20Default%20Re-designed.html?desktop=1";
 const DESKTOP_OVERLAY_DEV_URL: &str = "http://127.0.0.1:1420/overlay.html";
 
 #[derive(Serialize)]
@@ -45,7 +45,7 @@ fn open_vellum_window(app: tauri::AppHandle) -> Result<(), String> {
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(&app, "vellum", external_url(VELLUM_CHAT_URL)?)
+    WebviewWindowBuilder::new(&app, "vellum", external_url(VELLUM_FRONTEND_URL)?)
     .title("Vellum")
     .inner_size(1280.0, 820.0)
     .center()
