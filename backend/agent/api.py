@@ -26,6 +26,7 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import get_settings
+from agent.contracts.capabilities import public_capability_contract
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
@@ -504,6 +505,11 @@ async def health() -> dict[str, Any]:
 @router.get("/status")
 async def status() -> dict[str, Any]:
     return await health()
+
+
+@router.get("/capabilities")
+async def capabilities() -> dict[str, Any]:
+    return public_capability_contract()
 
 
 @router.post("/chat", response_model=ChatResponse)

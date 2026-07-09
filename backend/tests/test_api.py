@@ -59,6 +59,34 @@ def test_health_endpoint_reports_service_and_vector(monkeypatch):
     assert body["models"]["primary"]
 
 
+def test_capabilities_endpoint_publishes_stable_frontend_contract():
+    with TestClient(api.app) as client:
+        response = client.get("/api/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_version"] == "v1"
+    assert body["contract_version"] == 1
+    assert body["frontend"]["canonical_entry"] == "/ui/Vellum%20Default%20Re-designed.html"
+
+    features = body["features"]
+    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "hermes_skills", "openrouter", "agent_runtime"]:
+        assert key in features
+        assert isinstance(features[key]["enabled"], bool)
+        assert features[key]["contract"] == "v1"
+        assert features[key]["endpoints"]
+
+    assert features["spotify"]["plugin_owned"] is True
+    assert features["memory_orchestrator"]["plugin_owned"] is True
+    assert features["hermes_skills"]["plugin_owned"] is True
+    assert features["openrouter"]["endpoints"]["models"] == "/api/models"
+
+    chat_events = body["stream_events"]["chat"]
+    assert "response.output_text.delta" in chat_events
+    assert "agent.activity" in chat_events
+    assert "response.completed" in chat_events
+
+
 def test_cors_allows_local_vite_fallback_ports():
     with TestClient(api.app) as client:
         response = client.options(
