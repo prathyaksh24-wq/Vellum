@@ -1,0 +1,54 @@
+---
+name: skill-find-skills-v1
+description: Find Skills
+version: 1.0.0
+metadata:
+  hermes:
+    category: uncategorized
+    tags:
+    - migrated
+    - vellum
+  vellum:
+    trigger:
+    - find skill
+    - find skills
+    - skill search
+    - search skills
+    - install skill
+    - add skill
+    - npx skills
+    - skills cli
+    - skills.sh
+    - is there a skill
+    - capability extension
+    - extend agent capabilities
+    negative_trigger:
+    - use existing skill
+    - current skill
+    - active skill
+    - skill already installed
+    - run skill
+    confidence_threshold: 0.14
+    route_to_agent: null
+    routing_critical: false
+x-vellum-legacy-id: skill-find-skills-v1
+x-vellum-created: '2026-05-23'
+x-vellum-approved: '2026-05-23'
+source: https://github.com/vercel-labs/skills/tree/main/skills/find-skills
+install_command: npx skills add https://github.com/vercel-labs/skills --skill find-skills
+---
+
+# Find Skills
+
+## When to Use
+Use when the request matches: find skill, find skills, skill search, search skills, install skill, add skill, npx skills, skills cli, skills.sh, is there a skill, capability extension, extend agent capabilities.
+
+## Procedure
+Use this skill when the user wants to discover, evaluate, or install an agent skill from the open skills ecosystem. First identify the domain and task the user wants help with. Prefer the skills.sh leaderboard for popular, battle-tested options, then use `npx skills find <query>` when a direct popular option is not obvious. Verify quality before recommending: prefer reputable sources such as vercel-labs, anthropics, microsoft, or established repositories; treat low install counts, unknown authors, or tiny repositories cautiously. Present only relevant options with the skill name, purpose, source, install command, and link when available. Offer to install only after the user chooses an option; use `npx skills add <package> -g -y` for global user-level installation when appropriate. If no relevant skill exists, say that clearly and offer to help directly or create a custom skill.
+
+## Pitfalls
+Do not use for executing an already active Vellum skill, reading local skill JSON, generic package search unrelated to agent skills, or installing arbitrary npm packages.
+
+## Verification
+Citation style: Mention the source repository or skills.sh page used for any recommendation.
+Output format: Short ranked options with install commands. Include caveats for low-confidence or unverified results.

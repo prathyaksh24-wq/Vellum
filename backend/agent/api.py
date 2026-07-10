@@ -41,6 +41,7 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, get_settings
+from agent.contracts.capabilities import public_capability_contract
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
@@ -48,6 +49,8 @@ from agent.memory.honcho_client import HonchoMemory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.project_context import ProjectContext
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.master.runtime import DelegationRuntime
+from agent.profiles import ProfileRegistry
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
@@ -68,6 +71,8 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.skills import SkillSurfaceService, create_skill_source_router
+from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
@@ -78,6 +83,9 @@ from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.obsidian_write import store_qa_pair
+from agent.tools.skill_bundles import skill_bundles
+from agent.tools.skill_curator import skill_curator
+from agent.tools.skill_hub import skill_hub
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
@@ -96,11 +104,20 @@ _dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
-_live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
+_profile_registry = ProfileRegistry()
+_delegation_runtime = DelegationRuntime(
+    profile_registry=_profile_registry,
+    memory_orchestrator=_memory_orchestrator,
+)
+_live_dispatcher = LiveAgentDispatcher(
+    vault_root=get_settings().obsidian_vault_path,
+    delegation_runtime=_delegation_runtime,
+)
 _oauth_flows: dict[str, dict[str, Any]] = {}
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
 _project_context_singleton: ProjectContext | None = None
+_skill_surface_singleton: SkillSurfaceService | None = None
 
 
 def _project_context() -> ProjectContext:
@@ -109,6 +126,17 @@ def _project_context() -> ProjectContext:
         s = get_settings()
         _project_context_singleton = ProjectContext(vault_root=s.obsidian_vault_path)
     return _project_context_singleton
+
+
+def _skill_surface() -> SkillSurfaceService:
+    global _skill_surface_singleton
+    if _skill_surface_singleton is None:
+        _skill_surface_singleton = SkillSurfaceService(
+            REPO_ROOT / ".skills",
+            logs_root=REPO_ROOT / "data" / "logs" / "curator",
+            sources=create_skill_source_router(),
+        )
+    return _skill_surface_singleton
 
 
 def _spotify_store():
@@ -1132,6 +1160,15 @@ async def _run_agent(
 
     active_thread_id = thread_id or get_settings().thread_id
 
+    skill_command = _skill_surface().slash(clean_message)
+    if skill_command["handled"]:
+        return ChatResponse(
+            answer=str(skill_command.get("answer") or ""),
+            thread_id=active_thread_id,
+            tools=[],
+        )
+    clean_message = str(skill_command.get("expanded") or clean_message)
+
     if clean_message.startswith("/project"):
         parts = clean_message.split()
         args = parts[1:]
@@ -1260,7 +1297,7 @@ async def _background_learn(
         scrubber = PrivacyScrubber()
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
-        await asyncio.to_thread(store_qa_pair, clean_query, clean_answer, source)
+        await asyncio.to_thread(store_qa_pair, query, answer, source)
         settings = get_settings()
         honcho = HonchoMemory(
             base_url=settings.honcho_base_url,
@@ -1271,19 +1308,21 @@ async def _background_learn(
         await asyncio.to_thread(
             _memory_orchestrator.record_turn,
             thread_id=thread_id,
-            query=clean_query,
-            answer=clean_answer,
+            query=query,
+            answer=answer,
             tools=tools or [],
             sources=sources or [],
             confidence=float(confidence if confidence is not None else _memory_confidence([], [])),
             agent_name=agent_name,
+            external_query=clean_query,
+            external_answer=clean_answer,
         )
         pending = await asyncio.to_thread(
             _memory_orchestrator.extract_memory_candidates,
             thread_id=thread_id,
-            user_message=clean_query,
-            assistant_message=clean_answer,
-            agent_name="VellumAgent",
+            user_message=query,
+            assistant_message=answer,
+            agent_name=agent_name,
         )
         if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
@@ -1551,6 +1590,11 @@ async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
     return await health(deep=deep)
 
 
+@router.get("/capabilities")
+async def capabilities() -> dict[str, Any]:
+    return public_capability_contract()
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     return await _run_agent(request.message, request.thread_id, request.model, request.attachments)
@@ -1604,35 +1648,52 @@ async def delete_conversation(conversation_id: str) -> dict[str, bool]:
 
 @router.get("/skills")
 async def list_skills_catalog() -> dict[str, Any]:
-    return {
-        "mock": True,
-        "skills": {
-            "proposed": [
-                {
-                    "id": "sports-snapshot-brief",
-                    "name": "Sports snapshot brief",
-                    "trigger": "score · fixture · standings",
-                    "note": "Template until user-approved skill persistence is connected.",
-                },
-                {
-                    "id": "source-backed-answer",
-                    "name": "Source-backed answer",
-                    "trigger": "latest · verify · cite",
-                    "note": "Uses live search and source drawer behavior.",
-                },
-            ],
-            "active": [
-                {
-                    "id": "subagent-routing",
-                    "name": "Sub-agent routing",
-                    "trigger": "sports · x · youtube · memory",
-                    "uses": 0,
-                    "last": "live",
-                }
-            ],
-            "retired": [],
-        },
-    }
+    return _skill_surface().catalog()
+
+
+@router.post("/skills/action")
+async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        result = _skill_surface().action(
+            str(payload.get("action") or ""),
+            name=str(payload.get("name") or ""),
+            confirm=payload.get("confirm") is True,
+            **{key: value for key, value in payload.items() if key not in {"action", "name", "confirm"}},
+        )
+    except (SkillMutationError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "result": result, "catalog": _skill_surface().catalog()}
+
+
+@router.post("/skills/learn")
+async def learn_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    source = str(payload.get("source") or "").strip()
+    if not source:
+        raise HTTPException(status_code=400, detail="learn source is required")
+    return _skill_surface().slash(f"/learn {source}")
+
+
+@router.post("/skills/bundles")
+async def skill_bundle_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_bundles.invoke(payload))
+
+
+@router.post("/skills/hub")
+async def skill_hub_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_hub.invoke(payload))
+
+
+@router.post("/skills/curator")
+async def skill_curator_action(payload: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(skill_curator.invoke(payload))
+
+
+@router.get("/skills/{skill_name}")
+async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
+    try:
+        return _skill_surface().detail(skill_name, path=path)
+    except (KeyError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.get("/automations")
@@ -1687,6 +1748,14 @@ async def list_subagents() -> dict[str, Any]:
             }
             for name in registry.names()
         ]
+    }
+
+
+@router.get("/agent-profiles")
+async def list_agent_profiles() -> dict[str, Any]:
+    return {
+        "profiles": _profile_registry.public_summaries(),
+        "diagnostics": _profile_registry.diagnostics(),
     }
 
 
@@ -2365,6 +2434,12 @@ async def _stream_agent_turn(
             "status": "in_progress",
             "label": f"Routed to {live_result.agent_name}",
             "detail": clean_message[:200],
+            "metadata": {
+                "run_id": live_result.run_id,
+                "cache_status": live_result.cache_status,
+                "cache_reason": live_result.cache_reason,
+                "route_source": live_result.route_source,
+            },
         }
         yield _agent_activity_event(
             response_id=response_id,
@@ -3115,9 +3190,22 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
+    active_thread_id = request.thread_id or get_settings().thread_id
+
+    skill_command = _skill_surface().slash(clean_message)
+    if skill_command["handled"]:
+        msg = str(skill_command.get("answer") or "")
+        final_response = ChatResponse(answer=msg, thread_id=active_thread_id, tools=[])
+
+        async def skill_event():
+            yield f"event: meta\ndata: {json.dumps({'thread_id': active_thread_id})}\n\n"
+            yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
+            yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
+
+        return StreamingResponse(skill_event(), media_type="text/event-stream")
+    clean_message = str(skill_command.get("expanded") or clean_message)
     if request.force_web_search:
         clean_message = _with_forced_web_search_context(clean_message)
-    active_thread_id = request.thread_id or get_settings().thread_id
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:
         return StreamingResponse(

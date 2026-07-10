@@ -174,3 +174,78 @@ def test_agent_prompt_documents_memory_orchestrator_tool():
     assert "memory_orchestrator" in prompt
     assert "Dreaming status" in prompt
     assert "Do not infer Dreaming" in prompt
+
+
+def test_vellum_prompt_includes_compact_skill_index_without_skill_body(tmp_path: Path, monkeypatch):
+    class FakeRegistry:
+        def list_skills(self):
+            from agent.skills import SkillIndexEntry
+
+            return [
+                SkillIndexEntry(
+                    name="sports-brief",
+                    description="Prepare sports briefs",
+                    category="research",
+                    state="active",
+                    available=True,
+                    package_root="C:/private/path",
+                    is_external=False,
+                )
+            ]
+
+    monkeypatch.setattr(agent_graph, "_prompt_skill_registry", FakeRegistry(), raising=False)
+    monkeypatch.setattr(
+        agent_graph,
+        "_prompt_project_ctx",
+        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
+        raising=False,
+    )
+
+    messages = agent_graph.vellum_prompt({"messages": [HumanMessage(content="sports update")]}, {})
+
+    assert "## Available Skills" in messages[0].content
+    assert "sports-brief" in messages[0].content
+    assert "C:/private/path" not in messages[0].content
+
+
+def test_agent_tool_list_includes_progressive_skill_tools(monkeypatch):
+    captured = {}
+
+    def fake_create_react_agent(**kwargs):
+        captured["tools"] = kwargs["tools"]
+        return object()
+
+    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
+    monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [])
+
+    agent_graph.build_agent()
+
+    names = {getattr(item, "name", "") for item in captured["tools"]}
+    assert {
+        "skills_list",
+        "skill_view",
+        "skill_manage",
+        "skill_learn",
+        "skill_bundles",
+        "skill_hub",
+        "skill_curator",
+    } <= names
+
+
+def test_agent_prompt_documents_skill_mutation_safety():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
+
+    assert "skill_manage" in prompt
+    assert "confirm=true" in prompt
+    assert "background_review" in prompt
+    assert "foreground" in prompt
+    assert "blueprint" in prompt
+    assert "suggestion" in prompt
+    assert "never schedules" in prompt
+    assert "quarantine" in prompt
+    assert "dangerous" in prompt
+    assert "force" in prompt
+    assert "never auto-deletes" in prompt
+    assert "rollback" in prompt

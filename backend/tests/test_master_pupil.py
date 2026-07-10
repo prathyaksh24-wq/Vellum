@@ -2,6 +2,7 @@ from pathlib import Path
 
 from agent.agents.base import MemoryProposal, SpecialistResponse
 from agent.master.delegation import DelegationManager
+from agent.master.runtime import DelegationRunResult
 from agent.master.registry import PupilRegistry
 from agent.master.state import MasterThreadStateStore
 from agent.reward.models import RewardSignal
@@ -101,6 +102,48 @@ def test_delegation_manager_contains_pupil_failures(tmp_path):
     assert result.confidence == 0.0
     assert result.sources == []
     assert result.memory_proposals == []
+
+
+def test_delegation_manager_can_use_profile_runtime_without_changing_result_contract(tmp_path):
+    class FakePupil:
+        name = "MemoryAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            raise AssertionError("runtime should own execution")
+
+    class FakeRuntime:
+        def delegate(self, **kwargs):
+            assert kwargs["profile_id"] == "MemoryAgent"
+            assert kwargs["goal"] == "remember this"
+            return DelegationRunResult(
+                run_id="run-1",
+                task_id="task-1",
+                parent_thread_id="thread-1",
+                profile_id="MemoryAgent",
+                profile_version=1,
+                executor="deterministic",
+                cache_status="miss",
+                cache_reason="not_found",
+                started_at="2026-07-03T00:00:00+00:00",
+                finished_at="2026-07-03T00:00:01+00:00",
+                response=SpecialistResponse(
+                    agent="MemoryAgent",
+                    status="answered",
+                    summary="Remembered through runtime",
+                    confidence=0.88,
+                ),
+            )
+
+    manager = DelegationManager(PupilRegistry({"MemoryAgent": FakePupil()}), runtime=FakeRuntime())
+
+    result = manager.delegate("MemoryAgent", "remember this", task_id="task-1", parent_thread_id="thread-1")
+
+    assert result.answer == "Remembered through runtime"
+    assert result.status == "answered"
+    assert result.confidence == 0.88
 
 
 def test_reward_scorer_and_store_round_trip(tmp_path):

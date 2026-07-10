@@ -21,6 +21,9 @@ from typing import Any
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.provider_extensions import MemoryProviderExtensionManager, build_default_memory_provider_extensions
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.memory.specialist_cache import CacheDecision, SpecialistResponseCache
+from agent.profiles import AgentProfile
+from agent.agents.base import SpecialistResponse
 from agent.memory.sessions import SESSIONS_DB
 from agent.privacy.classifier import DataClass, classify
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
@@ -394,13 +397,47 @@ class MemoryOrchestrator:
     honcho: Any | None = None
     memory_dir: Path = Path("data/memory")
     provider_extensions: MemoryProviderExtensionManager | None = None
+    specialist_cache: SpecialistResponseCache | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
             self.store = SQLiteMemoryStore()
         self.memory_dir = Path(self.memory_dir)
+        if self.specialist_cache is None:
+            self.specialist_cache = SpecialistResponseCache(self.memory_dir / "specialist-cache.db")
         if self.provider_extensions is None:
             self.provider_extensions = build_default_memory_provider_extensions()
+
+    def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
+        if self.store is not None:
+            settings = self.store.get_settings()
+            if not settings.get("memory_enabled", True) or not settings.get("reference_history_enabled", True):
+                return CacheDecision(status="miss", reason="memory_lookup_disabled")
+        return self.specialist_cache.lookup(
+            profile_id=profile.id,
+            profile_version=profile.version,
+            query=query,
+            policy=profile.cache,
+        )
+
+    def store_specialist_response(
+        self,
+        *,
+        profile: AgentProfile,
+        query: str,
+        response: SpecialistResponse,
+    ) -> bool:
+        if self.store is not None:
+            settings = self.store.get_settings()
+            if not settings.get("memory_enabled", True) or not settings.get("save_new_memories", True):
+                return False
+        return self.specialist_cache.store(
+            profile_id=profile.id,
+            profile_version=profile.version,
+            query=query,
+            response=response,
+            policy=profile.cache,
+        )
 
     def record_turn(
         self,
@@ -412,9 +449,13 @@ class MemoryOrchestrator:
         sources: list[str] | None = None,
         confidence: float = 0.0,
         agent_name: str = "VellumAgent",
+        external_query: str | None = None,
+        external_answer: str | None = None,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         clean_answer = answer.strip()
+        provider_query = clean_query if external_query is None else external_query.strip()
+        provider_answer = clean_answer if external_answer is None else external_answer.strip()
         compact_tools = [_compact_tool(tool) for tool in tools or []]
         source_list = [str(source) for source in sources or [] if str(source).strip()]
         content = _turn_document(
@@ -452,14 +493,14 @@ class MemoryOrchestrator:
 
         if self.honcho is not None:
             session_id = self.honcho.get_or_create_session(thread_id)
-            self.honcho.add_message(session_id, content=clean_query, role="user")
-            self.honcho.add_message(session_id, content=clean_answer, role="assistant")
+            self.honcho.add_message(session_id, content=provider_query, role="user")
+            self.honcho.add_message(session_id, content=provider_answer, role="assistant")
 
         external_sync = []
         if self.provider_extensions is not None:
             external_sync = self.provider_extensions.sync_turn(
-                clean_query,
-                clean_answer,
+                provider_query,
+                provider_answer,
                 session_id=thread_id,
                 metadata={
                     "agent_name": agent_name,
@@ -485,9 +526,13 @@ class MemoryOrchestrator:
         agent_name: str = "VellumAgent",
         active_project: str | None = None,
         cloud_safe: bool = False,
+        read_scopes: list[str] | None = None,
     ) -> dict[str, Any]:
         clean_query = query.strip()
-        scopes = _packet_scopes(agent_name=agent_name, active_project=active_project)
+        scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
+            agent_name=agent_name,
+            active_project=active_project,
+        )
         settings = self.store.get_settings() if self.store is not None else dict(DEFAULT_MEMORY_SETTINGS)
         if not settings.get("memory_enabled", True):
             return {
@@ -505,20 +550,37 @@ class MemoryOrchestrator:
             baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
             matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
             saved = _dedupe_memories([*baseline, *matched])[:8]
-        docs = self.fts5.search(_memory_search_query(clean_query), limit=5) if settings.get("reference_history_enabled", True) else []
+        strict_profile_scope = read_scopes is not None
+        docs = (
+            self.fts5.search(_memory_search_query(clean_query), limit=5)
+            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            else []
+        )
         honcho_context = ""
-        if self.honcho is not None:
+        if self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
                 honcho_context = ""
-        docs = docs or (self.fts5.recent_documents(limit=5) if settings.get("reference_history_enabled", True) else [])
-        external_context = self.provider_extensions.prefetch(clean_query, session_id=thread_id) if self.provider_extensions else []
+        docs = docs or (
+            self.fts5.recent_documents(limit=5)
+            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            else []
+        )
+        external_context = (
+            self.provider_extensions.prefetch(clean_query, session_id=thread_id)
+            if self.provider_extensions and not strict_profile_scope
+            else []
+        )
         packet = {
-            "global_summary": self.store.global_summary() if self.store is not None else "",
+            "global_summary": self.store.global_summary() if self.store is not None and (not strict_profile_scope or "global" in scopes) else "",
             "saved_memories": saved,
             "honcho_context": honcho_context,
-            "project_context": self.store.project_summary(active_project) if self.store is not None else "",
+            "project_context": (
+                self.store.project_summary(active_project)
+                if self.store is not None and active_project and (not strict_profile_scope or f"project:{_normalize_scope(active_project)}" in scopes)
+                else ""
+            ),
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
             "external_providers": external_context,

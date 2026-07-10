@@ -2,6 +2,7 @@
 
 from agent.master.delegation import DelegationManager, DelegationResult
 from agent.master.registry import PupilRegistry
+from agent.master.runtime import DelegationRunResult, DelegationRuntime
 from agent.master.state import MasterThreadState, MasterThreadStateStore
 
 __all__ = [
@@ -10,4 +11,6 @@ __all__ = [
     "MasterThreadState",
     "MasterThreadStateStore",
     "PupilRegistry",
+    "DelegationRunResult",
+    "DelegationRuntime",
 ]

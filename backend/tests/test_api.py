@@ -80,6 +80,34 @@ def test_health_endpoint_is_lightweight_by_default(monkeypatch):
     assert "embeddings" not in body
 
 
+def test_capabilities_endpoint_publishes_stable_frontend_contract():
+    with TestClient(api.app) as client:
+        response = client.get("/api/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_version"] == "v1"
+    assert body["contract_version"] == 1
+    assert body["frontend"]["canonical_entry"] == "/ui/Vellum%20Default%20Re-designed.html"
+
+    features = body["features"]
+    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "hermes_skills", "openrouter", "agent_runtime"]:
+        assert key in features
+        assert isinstance(features[key]["enabled"], bool)
+        assert features[key]["contract"] == "v1"
+        assert features[key]["endpoints"]
+
+    assert features["spotify"]["plugin_owned"] is True
+    assert features["memory_orchestrator"]["plugin_owned"] is True
+    assert features["hermes_skills"]["plugin_owned"] is True
+    assert features["openrouter"]["endpoints"]["models"] == "/api/models"
+
+    chat_events = body["stream_events"]["chat"]
+    assert "response.output_text.delta" in chat_events
+    assert "agent.activity" in chat_events
+    assert "response.completed" in chat_events
+
+
 def test_cors_allows_local_vite_fallback_ports():
     with TestClient(api.app) as client:
         response = client.options(
@@ -447,6 +475,63 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
     assert "Tyler Herro" in related["answer_summary"]
 
 
+def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer standings in sports answers.",
+            "Understood.",
+            thread_id="sports-memory",
+            source="sports_agent",
+            agent_name="SportsAgent",
+        )
+    )
+
+    assert store.list_pending()[0]["scope"] == "agent:SportsAgent"
+
+
+def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, tmp_path):
+    from agent.profiles import ProfileRegistry
+
+    monkeypatch.setattr(api, "_profile_registry", ProfileRegistry(profile_dir=tmp_path / "profiles"))
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/agent-profiles")
+
+    assert response.status_code == 200
+    body = response.json()
+    sports = next(profile for profile in body["profiles"] if profile["id"] == "SportsAgent")
+    assert sports["executor"] == "deterministic"
+    assert sports["memory"]["write_scope"] == "agent:SportsAgent"
+    assert "instructions" not in sports
+    assert "diagnostics" in body
+
+
 def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
@@ -797,11 +882,46 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     agent_reach_plugin = next(item for item in plugins.json()["plugins"] if item["id"] == "agent-reach")
     assert agent_reach_plugin["metadata"]["portable_plugin"]["path"].endswith("plugins/connectors/agent-reach")
     assert skills.status_code == 200
-    assert any(item["id"] == "sports-snapshot-brief" for item in skills.json()["skills"]["proposed"])
+    assert skills.json()["mock"] is False
+    assert any(item["id"] == "skill-skill-creator-v1" for item in skills.json()["skills"]["active"])
     assert automations.status_code == 200
     assert any(item["id"] == "nightly-digest" for item in automations.json()["automations"])
     assert subagents.status_code == 200
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
+
+
+def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monkeypatch, tmp_path):
+    from agent.skills import SkillSurfaceService
+
+    root = tmp_path / ".skills"
+    proposed = root / "proposed" / "research" / "api-skill"
+    proposed.mkdir(parents=True)
+    (proposed / "SKILL.md").write_text(
+        "---\nname: api-skill\ndescription: API skill\n---\n# API Skill\n\n## Procedure\nRun it.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        api,
+        "_skill_surface_singleton",
+        SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[]),
+    )
+
+    with TestClient(api.app) as client:
+        blocked = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
+        approved = client.post(
+            "/api/skills/action",
+            json={"action": "approve", "name": "api-skill", "confirm": True},
+        )
+        detail = client.get("/api/skills/api-skill")
+        learned = client.post("/api/skills/learn", json={"source": "this conversation"})
+
+    assert blocked.status_code == 400
+    assert approved.status_code == 200
+    assert approved.json()["result"]["state"] == "active"
+    assert detail.status_code == 200
+    assert "Run it" in detail.json()["content"]
+    assert learned.json()["handled"] is False
+    assert 'skill_manage(action="create"' in learned.json()["expanded"]
 
 
 def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):
@@ -1400,6 +1520,13 @@ def test_active_model_switch_waits_for_active_stream(monkeypatch):
 
         streaming_agent = StreamingAgent()
         monkeypatch.setattr(api, "agent", streaming_agent)
+
+        class NoopLiveDispatcher:
+            def maybe_handle(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(api, "_live_dispatcher", NoopLiveDispatcher())
+
         async def fake_background_learn(*args, **kwargs):
             return None
 

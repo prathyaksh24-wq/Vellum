@@ -2635,13 +2635,18 @@ const LedgerView = () => (
 /* ─── skills ─── */
 const SkillsView = ({skills, onApprove, onRetire}) => {
   const [tab, setTab] = useState('Proposed');
-  const lists = { Proposed: skills.proposed, Active: skills.active, Retired: skills.retired };
+  const lists = {
+    Proposed: skills.proposed || [],
+    Active: skills.active || [],
+    Retired: skills.retired || [],
+    Archived: skills.archived || [],
+  };
   return (
     <div className="page">
       <div className="page-inner" style={{maxWidth: 700}}>
         <div className="page-head"><div className="page-title">Skills</div></div>
         <div className="tab-row">
-          {['Proposed', 'Active', 'Retired'].map(t => (
+          {['Proposed', 'Active', 'Retired', 'Archived'].map(t => (
             <button key={t} className={'tab' + (tab === t ? ' on' : '')} onClick={() => setTab(t)}>{t} ({lists[t].length})</button>
           ))}
         </div>
@@ -3671,17 +3676,16 @@ const App = () => {
       if (activeProjectId === id && view === 'project') setView('projects');
     }
   };
-  const approveSkill = id => setSkills(sk => {
-    const s = sk.proposed.find(x => x.id === id);
-    if (!s) return sk;
-    return {...sk, proposed: sk.proposed.filter(x => x.id !== id),
-      active: [{...s, uses: 0, last: 'Today'}, ...sk.active]};
-  });
-  const retireSkill = id => setSkills(sk => {
-    const s = sk.active.find(x => x.id === id);
-    if (!s) return sk;
-    return {...sk, active: sk.active.filter(x => x.id !== id), retired: [s, ...sk.retired]};
-  });
+  const mutateSkill = async (action, id) => {
+    try {
+      const result = await API.plugins.skillAction({action, name: id, confirm: true});
+      if (result && result.catalog && result.catalog.skills) setSkills(result.catalog.skills);
+    } catch (err) {
+      pushToast(`Skill ${action} failed`);
+    }
+  };
+  const approveSkill = id => mutateSkill('approve', id);
+  const retireSkill = id => mutateSkill('retire', id);
   const forgetFact = async id => {
     if (FEATURE_FLAGS.mockMemory) {
       setMemory(ms => ms.filter(m => m.id !== id));
