@@ -6,7 +6,10 @@ from pydantic import ValidationError
 
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.master.registry import PupilRegistry
+from agent.master.runtime import DelegationRunResult
 from agent.master.state import MasterThreadStateStore
+from agent.agents.skill_router import SkillRoute
+from agent.profiles import ProfileRegistry
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
@@ -27,6 +30,44 @@ from agent.agents.base import (
     SourceKind,
     SpecialistStatus,
 )
+
+
+class AgentReachUnavailable:
+    def available(self):
+        return False
+
+
+class FixedSkillResolver:
+    def __init__(self, agent_name: str | None):
+        self.agent_name = agent_name
+
+    def resolve(self, query: str):
+        if self.agent_name is None:
+            return None
+        return SkillRoute(agent_name=self.agent_name, skill_id="route-test")
+
+
+class RecordingRuntime:
+    def __init__(self):
+        self.calls = []
+
+    def delegate(self, **kwargs):
+        self.calls.append(kwargs)
+        cache_status = "hit" if len(self.calls) > 1 else "miss"
+        response = kwargs["pupil"].answer(kwargs["goal"])
+        return DelegationRunResult(
+            run_id=f"run-{len(self.calls)}",
+            task_id=f"task-{len(self.calls)}",
+            parent_thread_id=kwargs["parent_thread_id"],
+            profile_id=kwargs["profile_id"],
+            profile_version=1,
+            executor="deterministic",
+            cache_status=cache_status,
+            cache_reason="exact_query" if cache_status == "hit" else "not_found",
+            started_at="2026-07-03T00:00:00+00:00",
+            finished_at="2026-07-03T00:00:01+00:00",
+            response=response,
+        )
 
 
 def test_specialist_response_defaults_are_empty_and_bounded():
@@ -122,7 +163,8 @@ def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_
 
     assert response.status == "answered"
     assert "UFC 302" in response.summary
-    assert "[1]" in response.summary
+    assert "[1]" not in response.summary
+    assert "Sources checked" not in response.summary
     assert response.agent == "SportsAgent"
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.espn.com/mma/story/ufc-302-results"
@@ -170,6 +212,205 @@ def test_sports_agent_prioritizes_current_sources_for_yesterday_queries(tmp_path
 
     assert response.sources[0].path_or_url == "https://www.reuters.com/sports/soccer/ronaldo-2026-06-17/"
     assert response.summary.startswith("Portugal's Ronaldo does little")
+
+
+def test_sports_agent_prioritizes_official_schedule_for_next_f1_race(tmp_path):
+    seen = {}
+    search_result = {
+        "text": "Google Sports Data\nThis response uses data provided by Google Sports",
+        "sources": [
+            {
+                "title": "2026 F1 Standings: Drivers & Constructors Championship List",
+                "url": "https://www.f1-fansite.com/f1-results/f1-standings-2026-championship/",
+                "snippet": "Jun 17, 2026 — 2026 F1 standings championship.",
+                "domain": "f1-fansite.com",
+            },
+            {
+                "title": "Google Sports Data",
+                "url": "https://support.google.com/knowledgepanel/answer/9787176",
+                "snippet": "This response uses data provided by Google Sports",
+                "domain": "support.google.com",
+            },
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "2026 FIA Formula One World Championship Race Calendar. Next. Round 8 Austria, 26 - 28 Jun.",
+                "domain": "formula1.com",
+            },
+            {
+                "title": "F1 news, rumours and gossip",
+                "url": "https://www.skysports.com/f1/live-blog",
+                "snippet": "Latest Formula 1 news and rumours.",
+                "domain": "skysports.com",
+            },
+        ],
+    }
+
+    def searcher(query):
+        seen["query"] = query
+        return search_result
+
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=searcher)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert "official Formula 1 calendar" in seen["query"]
+    assert "2026" in seen["query"]
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
+    assert "Austria" in response.summary
+    assert "26 - 28 Jun" in response.summary
+    assert "support.google.com" not in response.sources[0].path_or_url
+
+
+def test_sports_agent_answer_uses_serpapi_answer_without_inline_source_list(tmp_path):
+    search_result = {
+        "text": (
+            "The next Formula 1 race is the Austrian Grand Prix at the Red Bull Ring, "
+            "with race weekend running June 26-28, 2026.\n\n---\n\n"
+            "**F1 Schedule 2026 - Official Calendar of Grand Prix Races**\n"
+            "Round 8 Austria 26 - 28 Jun.\n"
+            "https://www.formula1.com/en/racing/2026"
+        ),
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "snippet": "Round 8 Austria 26 - 28 Jun.",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race")
+
+    assert response.summary.startswith("The next Formula 1 race is the Austrian Grand Prix")
+    assert "Sources checked" not in response.summary
+    assert "- [1]" not in response.summary
+    assert response.sources[0].path_or_url == "https://www.formula1.com/en/racing/2026"
+
+
+def test_sports_agent_prefers_serpapi_compact_facts_over_raw_text(tmp_path):
+    search_result = {
+        "text": "**Old World Cup scorers page**\nMiroslav Klose leads with 16 goals.\nhttps://example.com/old",
+        "facts": [
+            "Lionel Messi and Miroslav Klose are tied for the men's FIFA World Cup career goals record with 16 goals each.",
+            "sports_results: rank: T1 | player: Lionel Messi | country: Argentina | goals: 16",
+            "sports_results: rank: T1 | player: Miroslav Klose | country: Germany | goals: 16",
+        ],
+        "sources": [
+            {
+                "title": "FIFA World Cup all-time scorers",
+                "url": "https://www.fifa.com/worldcup/scorers",
+                "snippet": "Lionel Messi and Miroslav Klose are tied on 16.",
+                "domain": "fifa.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("who leads the fifa world cup career goals all time")
+
+    assert response.summary.startswith("Lionel Messi and Miroslav Klose are tied")
+    assert "Old World Cup scorers page" not in response.summary
+
+
+def test_sports_agent_preserves_serpapi_full_markdown_answer(tmp_path):
+    markdown = (
+        "# Ronaldo vs DR Congo\n\n"
+        "Portugal drew **1-1** with DR Congo.\n\n"
+        "## Match Summary\n\n"
+        "- Ronaldo played 90 minutes.\n"
+        "- He recorded 3 shots and 0 on target.\n\n"
+        "## Team Lineups\n\n"
+        "| Portugal | DR Congo |\n"
+        "| --- | --- |\n"
+        "| C. Ronaldo | Y. Wissa |\n\n"
+        "## Injury News\n\n"
+        "No major injuries were reported after the match.\n\n"
+        + ("Detailed tactical note. " * 120)
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "Portugal vs DR Congo report",
+                "url": "https://www.espn.com/soccer/report/_/gameId/760435",
+                "domain": "espn.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("tell me about ronaldo performance against congo yesterday")
+
+    assert response.summary == markdown
+    assert "| Portugal | DR Congo |" in response.summary
+    assert "Injury News" in response.summary
+    assert len(response.summary) > 1200
+
+
+def test_sports_agent_preserves_serpapi_f1_calendar_markdown(tmp_path):
+    markdown = (
+        "The next F1 race is the Austrian Grand Prix, scheduled for June 26-28, 2026.\n\n"
+        "### 2026 F1 Calendar Details\n\n"
+        "| Round | Grand Prix | Circuit / Location | Race Date |\n"
+        "| --- | --- | --- | --- |\n"
+        "| R08 | Austrian Grand Prix | Red Bull Ring, Spielberg | June 28 |\n"
+        "| R09 | British Grand Prix | Silverstone Circuit | July 5 |\n\n"
+        "### References\n\n"
+        "[0] [Official F1 Calendar](https://www.formula1.com/en/racing/2026)\n"
+    )
+    search_result = {
+        "text": markdown,
+        "facts": [markdown],
+        "answer_mode": "full_markdown_answer",
+        "sources": [
+            {
+                "title": "F1 Schedule 2026 - Official Calendar of Grand Prix Races",
+                "url": "https://www.formula1.com/en/racing/2026",
+                "domain": "formula1.com",
+            }
+        ],
+    }
+    agent = SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_result)
+
+    response = agent.answer("what is the next f1 race and show the calendar details")
+
+    assert response.summary == markdown
+    assert "| R09 | British Grand Prix |" in response.summary
+
+
+def test_sports_agent_ranking_demotes_ticket_and_low_relevance_sources():
+    agent = SportsAgent(vault_root=Path("unused"))
+    sources = [
+        {
+            "title": "Portugal vs Argentina Tickets",
+            "url": "https://www.vividseats.com/portugal-vs-argentina-tickets",
+            "domain": "vividseats.com",
+            "snippet": "Buy tickets and compare prices.",
+        },
+        {
+            "title": "Portugal next fixtures - FIFA",
+            "url": "https://www.fifa.com/en/teams/portugal/fixtures",
+            "domain": "fifa.com",
+            "snippet": "Official fixtures and match dates for Portugal.",
+        },
+        {
+            "title": "SportBusy football gossip",
+            "url": "https://sportbusy.com/random-football-rumours",
+            "domain": "sportbusy.com",
+            "snippet": "Rumours and ticket chatter.",
+        },
+    ]
+
+    ranked = agent._rank_sources("when is the next Portugal vs Argentina match", sources)
+
+    assert ranked[0]["domain"] == "fifa.com"
+    assert ranked[-1]["domain"] in {"vividseats.com", "sportbusy.com"}
 
 
 def test_sports_agent_disabled_keywords_do_not_match_word_fragments(tmp_path):
@@ -308,7 +549,7 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
 
 
-def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(tmp_path):
+def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_prompt(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -323,9 +564,27 @@ def test_live_dispatcher_asks_handback_for_non_sports_turn_while_sports_active(t
 
     result = dispatcher.maybe_handle("Now draft an email to Sam", thread_id="t1")
 
-    assert result is not None
-    assert result.agent_name == "SportsAgent"
-    assert "route this back to Vellum" in result.answer
+    assert result is None
+
+
+def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
+    search_output = (
+        "**NBA update**\n"
+        "A short live sports result.\n"
+        "https://www.nba.com/news/update"
+    )
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        state_store=state_store,
+    )
+    assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
+
+    result = dispatcher.maybe_handle("hey how are you?", thread_id="t1")
+
+    assert result is None
+    assert state_store.get("t1").active_agent == "VellumAgent"
 
 
 def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
@@ -337,7 +596,8 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
                 "author": {"username": "nba"},
                 "created_at": "2026-05-31T12:00:00Z",
             }
-        ]
+        ],
+        agent_reach_provider=AgentReachUnavailable(),
     )
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
@@ -385,6 +645,71 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
     assert memory_result.tools == ["memory_agent"]
 
 
+def test_live_dispatcher_exposes_serpapi_tool_for_youtube_provider(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Mat Armstrong latest upload",
+                "url": "https://www.youtube.com/watch?v=mat123",
+                "channel": "Mat Armstrong",
+                "description": "Latest car rebuild video.",
+                "provider": "serpapi",
+            }
+        ],
+    )
+    registry = PupilRegistry(
+        {
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("did mat armstrong upload a new video?", thread_id="yt-serp")
+
+    assert result is not None
+    assert result.agent_name == "YoutubeAgent"
+    assert result.tools == ["youtube_agent", "web_search", "serpapi"]
+
+
+def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path):
+    class SerpPupil:
+        name = "ResearchAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="SerpAPI-backed answer.",
+                analysis="Used SerpAPI Google AI Mode for this lookup.",
+                sources=[
+                    SpecialistSource(
+                        kind="web",
+                        title="Result",
+                        path_or_url="https://example.com/result",
+                    )
+                ],
+            )
+
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"ResearchAgent": SerpPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("research this", thread_id="serp-thread")
+
+    assert result is not None
+    assert result.tools == ["research_agent", "web_search", "serpapi"]
+
+
 def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_path):
     search_output = (
         "**NBA update**\n"
@@ -392,7 +717,7 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
         "https://www.nba.com/news/update"
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
     registry = PupilRegistry(
         {
             "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
@@ -581,7 +906,8 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
                 "author": {"username": "naval"},
                 "created_at": "2026-05-31T12:00:00Z",
             }
-        ]
+        ],
+        agent_reach_provider=AgentReachUnavailable(),
     )
     agent = XAgent(vault_root=tmp_path, x_service=service)
 
@@ -591,6 +917,81 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
     assert "Naval posted about leverage" in response.summary
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://x.com/naval/status/1"
+
+
+def test_x_agent_search_with_agent_reach_emits_visible_activity(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [
+                {
+                    "text": "OpenAI posted a research update.",
+                    "url": "https://x.com/openai/status/1",
+                    "handle": "OpenAI",
+                    "created_at": "2026-06-21T12:00:00Z",
+                }
+            ]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer("What did OpenAI post on X?")
+
+    assert response.status == "answered"
+    assert "OpenAI posted a research update" in response.summary
+    assert response.analysis == "Used Agent-Reach through the shared X capability service."
+    assert any(event["label"] == "Searching X with Agent-Reach..." for event in response.activity_events)
+    assert any(event["label"] == "Reading X results..." for event in response.activity_events)
+    assert any(event["label"] == "X action completed" for event in response.activity_events)
+
+
+def test_live_dispatcher_does_not_label_agent_reach_x_sources_as_web_search(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [{"text": "Agent-Reach X result", "url": "https://x.com/openai/status/1", "handle": "OpenAI"}]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle("What did OpenAI post on X?", thread_id="x-agent-reach")
+
+    assert result is not None
+    assert result.tools == ["x_agent"]
+    assert any(event["label"] == "Searching X with Agent-Reach..." for event in result.activity_events)
+
+
+def test_agent_reach_activity_marks_generic_tool_events_suppressible(tmp_path):
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            return [{"text": "Agent-Reach X result", "url": "https://x.com/openai/status/1", "handle": "OpenAI"}]
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: [{"text": "fallback"}],
+        agent_reach_provider=FakeAgentReach(),
+    )
+    agent = XAgent(vault_root=tmp_path / "Vault", x_service=service)
+
+    response = agent.answer("What did OpenAI post on X?")
+
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in response.activity_events)
 
 
 def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
@@ -617,7 +1018,7 @@ def test_x_agent_invokes_shared_tool_registry_when_provided(tmp_path):
 
 
 def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
-    service = XCapabilityService(search_posts_backend=lambda query, max_results: [])
+    service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
     agent = XAgent(vault_root=tmp_path, x_service=service)
 
     response = agent.answer("What did AlexHormozi post on X?")
@@ -626,6 +1027,134 @@ def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
     assert agent.can_handle("latest-50 tweets from AlexHormozi")
     assert response.status == "needs_fetch"
     assert response.summary == "XAgent did not find matching X posts."
+
+
+def test_x_agent_post_request_returns_confirmation_preview_without_publishing(tmp_path):
+    calls = []
+    service = XCapabilityService(post_backend=lambda text: calls.append(text) or {"id": "1"}, allow_posts=True)
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer('Post this to X: "Shipping the Agent-Reach connector today."')
+
+    assert calls == []
+    assert response.status == "blocked"
+    assert "Confirm before I post this to X" in response.summary
+    assert response.action_request["action"] == "x.publish_post"
+    assert response.action_request["payload"]["text"] == "Shipping the Agent-Reach connector today."
+    assert response.activity_events[0]["label"] == "Preparing post..."
+
+
+def test_x_agent_reads_bookmarks_and_timeline_with_agent_reach_activity(tmp_path):
+    class FakeXService:
+        def bookmarks(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Saved X post", "handle": "a", "url": "https://x.com/a/status/1"}],
+            }
+
+        def timeline(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Timeline X post", "handle": "b", "url": "https://x.com/b/status/2"}],
+            }
+
+        def likes(self, payload):
+            return {
+                "provider": "agent-reach",
+                "items": [{"text": "Liked X post", "handle": "c", "url": "https://x.com/c/status/3"}],
+            }
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    bookmarks = agent.answer("show my X bookmarks")
+    timeline = agent.answer("show my X timeline")
+    likes = agent.answer("what is my latest like on X?")
+
+    assert "Saved X post" in bookmarks.summary
+    assert "https://x.com/a/status/1" in bookmarks.summary
+    assert "Timeline X post" in timeline.summary
+    assert "https://x.com/b/status/2" in timeline.summary
+    assert "Liked X post" in likes.summary
+    assert "https://x.com/c/status/3" in likes.summary
+    assert any(event["label"] == "Fetching X bookmarks with Agent-Reach..." for event in bookmarks.activity_events)
+    assert any(event["label"] == "Fetching X timeline with Agent-Reach..." for event in timeline.activity_events)
+    assert any(event["label"] == "Fetching X likes with Agent-Reach..." for event in likes.activity_events)
+
+
+def test_x_agent_delete_request_returns_confirmation_preview_without_deleting(tmp_path):
+    calls = []
+    service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
+    service.delete = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.answer("delete this X post https://x.com/me/status/123")
+
+    assert calls == []
+    assert response.status == "blocked"
+    assert response.action_request["action"] == "x.delete"
+    assert response.action_request["payload"]["tweet_id"] == "https://x.com/me/status/123"
+    assert "Confirm before I delete" in response.summary
+    assert any(event["label"] == "Preparing X delete..." for event in response.activity_events)
+    assert any(event["metadata"].get("suppress_generic_tool") is True for event in response.activity_events)
+
+
+def test_x_agent_confirmed_repost_uses_normalized_numeric_tweet_id(tmp_path):
+    calls = []
+    service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
+    service.repost = lambda payload: calls.append(payload) or {"provider": "agent-reach"}
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    response = agent.execute_action_request(
+        {"action": "x.repost", "payload": {"tweet_id": "https://x.com/openai/status/1234567890123456789"}}
+    )
+
+    assert response.status == "answered"
+    assert calls == [{"tweet_id": "1234567890123456789", "confirm": True}]
+
+
+def test_x_agent_empty_likes_preserves_agent_reach_activity(tmp_path):
+    class FakeXService:
+        def likes(self, payload):
+            return {"provider": "agent-reach", "items": []}
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    response = agent.answer("what is my latest like on X?")
+
+    assert response.status == "needs_fetch"
+    assert response.summary == "XAgent did not find X likes."
+    assert any(event["label"] == "Fetching X likes with Agent-Reach..." for event in response.activity_events)
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in response.activity_events)
+
+
+def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_path):
+    calls = []
+
+    class NoAgentReach:
+        def available(self):
+            return False
+
+    service = XCapabilityService(
+        post_backend=lambda text: calls.append(text) or {"id": "tweet-1", "text": text},
+        agent_reach_provider=NoAgentReach(),
+        allow_posts=True,
+    )
+    registry = PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)})
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path / "Vault", registry=registry, state_store=state_store)
+
+    preview = dispatcher.maybe_handle('Post this to X: "Hello from Vellum."', thread_id="thread-x")
+    confirmed = dispatcher.maybe_handle("yes, post it", thread_id="thread-x")
+
+    assert calls == ["Hello from Vellum."]
+    assert preview.status == "blocked"
+    assert "Confirm before I post this to X" in preview.answer
+    assert confirmed.status == "answered"
+    assert "Posted to X" in confirmed.answer
+    assert state_store.get_pending_action("thread-x") is None
+    assert any(event["label"] == "Posting to X..." for event in confirmed.activity_events)
+    assert any(event["label"] == "X action completed" for event in confirmed.activity_events)
+    assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in confirmed.activity_events)
 
 
 def test_x_agent_returns_structured_response_when_service_fails(tmp_path):
@@ -690,6 +1219,45 @@ def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
 
     assert response.status == "answered"
     assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
+
+
+def test_youtube_agent_does_not_route_meta_feedback_about_youtube(tmp_path):
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault")
+
+    assert not agent.can_handle("in your previous response regarding youtube i don't need the evidence section")
+    assert not agent.can_handle("stop adding the evidence section for YouTube searches")
+    assert not agent.can_handle("I don't like the youtube answer format")
+    assert agent.can_handle("can you see my channel on youtube?")
+    assert agent.can_handle("did mat armstrong upload a new video?")
+
+
+def test_live_dispatcher_keeps_youtube_feedback_with_vellum(tmp_path):
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [
+            {
+                "title": "Should not be called",
+                "url": "https://www.youtube.com/watch?v=notcalled1",
+            }
+        ],
+    )
+    registry = PupilRegistry(
+        {
+            "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
+        }
+    )
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=registry,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+    )
+
+    result = dispatcher.maybe_handle(
+        "in your previous response regarding youtube i don't need the evidence section",
+        thread_id="feedback-thread",
+    )
+
+    assert result is None
 
 
 def test_youtube_agent_invokes_shared_tool_registry_when_provided(tmp_path):
@@ -814,3 +1382,142 @@ def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
     proposals = agent.review_proposals([low_confidence, high_confidence])
 
     assert proposals == [high_confidence]
+
+
+def test_live_dispatcher_prefers_valid_skill_route_over_match_order(tmp_path):
+    class Pupil:
+        def __init__(self, name, matches):
+            self.name = name
+            self.matches = matches
+
+        def can_handle(self, query):
+            return self.matches
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary=f"{self.name}: {query}")
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": Pupil("SportsAgent", True), "ResearchAgent": Pupil("ResearchAgent", False)}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("ResearchAgent"),
+        delegation_runtime=runtime,
+    )
+
+    result = dispatcher.maybe_handle("analyze this", "thread-1")
+
+    assert result.agent_name == "ResearchAgent"
+    assert result.route_source == "skill"
+    assert runtime.calls[0]["profile_id"] == "ResearchAgent"
+
+
+def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
+    class SportsPupil:
+        name = "SportsAgent"
+
+        def can_handle(self, query):
+            return "NBA" in query
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary="NBA answer")
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("MissingAgent"),
+        delegation_runtime=runtime,
+    )
+
+    result = dispatcher.maybe_handle("NBA injury report", "thread-1")
+
+    assert result.agent_name == "SportsAgent"
+    assert result.route_source == "deterministic"
+
+
+def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
+    class SportsPupil:
+        name = "SportsAgent"
+
+        def can_handle(self, query):
+            return True
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary="Historical answer", confidence=0.9)
+
+    runtime = RecordingRuntime()
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver(None),
+        delegation_runtime=runtime,
+    )
+
+    first = dispatcher.maybe_handle("Historical Arsenal titles", "thread-1")
+    second = dispatcher.maybe_handle("Historical Arsenal titles", "thread-2")
+
+    assert first.cache_status == "miss"
+    assert second.cache_status == "hit"
+    assert second.run_id == "run-2"
+    assert second.confidence == 0.9
+
+
+def test_live_dispatcher_routes_skill_to_profile_only_llm_agent(tmp_path):
+    profile_dir = tmp_path / "profiles"
+    profile_dir.mkdir()
+    (profile_dir / "ResearchAgent.yaml").write_text(
+        """version: 1
+id: ResearchAgent
+description: Research specialist
+executor: llm
+tools:
+  allow: []
+memory:
+  read_scopes: [user_profile, shared, 'agent:ResearchAgent']
+  write_scope: 'agent:ResearchAgent'
+""",
+        encoding="utf-8",
+    )
+    profiles = ProfileRegistry(profile_dir=profile_dir)
+
+    class ProfileRuntime:
+        profile_registry = profiles
+
+        def delegate(self, **kwargs):
+            assert kwargs["pupil"] is None
+            return DelegationRunResult(
+                run_id="profile-run",
+                task_id="profile-task",
+                parent_thread_id=kwargs["parent_thread_id"],
+                profile_id=kwargs["profile_id"],
+                profile_version=1,
+                executor="llm",
+                cache_status="miss",
+                cache_reason="not_found",
+                started_at="2026-07-03T00:00:00+00:00",
+                finished_at="2026-07-03T00:00:01+00:00",
+                response=SpecialistResponse(
+                    agent="ResearchAgent",
+                    status="answered",
+                    summary="Independent research result",
+                    confidence=0.65,
+                ),
+            )
+
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        registry=PupilRegistry({}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("ResearchAgent"),
+        delegation_runtime=ProfileRuntime(),
+        profile_registry=profiles,
+    )
+
+    result = dispatcher.maybe_handle("research storage engines", "thread-1")
+
+    assert result.agent_name == "ResearchAgent"
+    assert result.answer == "Independent research result"
+    assert result.route_source == "skill"

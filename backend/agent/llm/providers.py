@@ -91,9 +91,10 @@ class ProviderRegistry:
         return list(_GROUPS)
 
     def list_models(self, group: str | None = None) -> list[ModelEntry]:
+        models = available_models()
         if group is None:
-            return list(_CATALOG)
-        return [entry for entry in _CATALOG if entry.provider == group]
+            return models
+        return [entry for entry in models if entry.provider == group]
 
     def find_group(self, key: str) -> ProviderGroup | None:
         normalized = key.strip().casefold()
@@ -164,3 +165,26 @@ class ProviderRegistry:
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
     return ProviderRegistry()
+
+
+def configured_provider_keys() -> dict[str, bool]:
+    settings = get_settings()
+    return {
+        "openrouter": bool(settings.openrouter_api_key),
+        "openai": bool(settings.openai_api_key),
+    }
+
+
+def available_models() -> list[ModelEntry]:
+    settings = get_settings()
+    has_openrouter = bool(settings.openrouter_api_key)
+    has_openai = bool(settings.openai_api_key)
+    visible: list[ModelEntry] = []
+    for entry in _CATALOG:
+        if entry.open_weights:
+            visible.append(entry)
+        elif has_openrouter:
+            visible.append(entry)
+        elif entry.provider == "openai" and has_openai:
+            visible.append(entry)
+    return visible

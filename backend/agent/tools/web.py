@@ -5,8 +5,10 @@ from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
+from agent.config import get_settings
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
+from agent.tools.serpapi import SerpApiClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,24 @@ def web_search(query: str) -> str:
         return f"Web search blocked for privacy: {reason}"
 
     clean_query = public_web_search_query(query)
+    settings = get_settings()
+    if getattr(settings, "serpapi_api_key", ""):
+        try:
+            result = SerpApiClient(
+                api_key=settings.serpapi_api_key,
+                log_path=settings.serpapi_log_path,
+            )
+            if hasattr(result, "fresh_google_search"):
+                search_result = result.fresh_google_search(clean_query, num=8, min_sources=3)
+                text = str(search_result.get("text") or "")
+            else:
+                text = str(result.fresh_google_search_text(clean_query, num=5))
+            text_for_check = text.strip()
+            if text_for_check and text_for_check != "No web results found.":
+                return text
+        except Exception as exc:
+            logger.warning("[TOOL:web] SerpAPI search failed; falling back to DuckDuckGo: %s", exc)
+
     try:
         from duckduckgo_search import DDGS
     except ImportError:

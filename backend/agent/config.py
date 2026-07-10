@@ -1,4 +1,5 @@
 from functools import lru_cache
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -9,6 +10,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Vellum repo root: this file lives at <repo>/backend/agent/config.py,
 # so parents[2] is the repo root regardless of how Python was invoked.
 REPO_ROOT = Path(__file__).resolve().parents[2]
+os.environ.setdefault("HF_HOME", str(REPO_ROOT / "data" / "cache" / "huggingface"))
+os.environ.setdefault("TRANSFORMERS_CACHE", str(REPO_ROOT / "data" / "cache" / "huggingface" / "transformers"))
 
 
 def _resolve_against_repo(p: Path) -> Path:
@@ -46,6 +49,19 @@ class Settings(BaseSettings):
     primary_model: str = Field(default="google/gemma-4-31b-it", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
+    llm_routing_db_path: Path = Field(
+        default=Path("data/llm-routing/routing.db"),
+        alias="LLM_ROUTING_DB_PATH",
+    )
+    llm_routing_keyring_service: str = Field(
+        default="vellum.llm",
+        alias="LLM_ROUTING_KEYRING_SERVICE",
+    )
+    llm_routing_max_targets: int = Field(default=4, alias="LLM_ROUTING_MAX_TARGETS")
+    llm_routing_max_transient_retries: int = Field(
+        default=2,
+        alias="LLM_ROUTING_MAX_TRANSIENT_RETRIES",
+    )
 
     # Obsidian
     obsidian_vault_path: Path = Field(alias="OBSIDIAN_VAULT_PATH")
@@ -73,6 +89,11 @@ class Settings(BaseSettings):
     serpapi_api_key: str = Field(default="", alias="SERPAPI_API_KEY")
     serpapi_base_url: str = Field(default="https://serpapi.com/search.json", alias="SERPAPI_BASE_URL")
     serpapi_log_path: Path = Field(default=Path("data/logs/serpapi-searches.jsonl"), alias="SERPAPI_LOG_PATH")
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    tavily_mcp_url: str = Field(default="https://mcp.tavily.com/mcp/", alias="TAVILY_MCP_URL")
+    firecrawl_api_key: str = Field(default="", alias="FIRECRAWL_API_KEY")
+    firecrawl_mcp_command: str = Field(default="npx", alias="FIRECRAWL_MCP_COMMAND")
+    firecrawl_mcp_args: str = Field(default="-y firecrawl-mcp", alias="FIRECRAWL_MCP_ARGS")
     playwright_mcp_command: str = Field(default="npx", alias="PLAYWRIGHT_MCP_COMMAND")
     playwright_mcp_args: str = Field(default="-y @playwright/mcp@latest --isolated", alias="PLAYWRIGHT_MCP_ARGS")
     playwright_mcp_allow_mutations: bool = Field(default=False, alias="PLAYWRIGHT_MCP_ALLOW_MUTATIONS")
@@ -84,6 +105,8 @@ class Settings(BaseSettings):
     git_tool_allow_writes: bool = Field(default=False, alias="GIT_TOOL_ALLOW_WRITES")
     x_tool_allow_private_reads: bool = Field(default=False, alias="X_TOOL_ALLOW_PRIVATE_READS")
     x_tool_allow_posts: bool = Field(default=False, alias="X_TOOL_ALLOW_POSTS")
+    x_api_client_id: str = Field(default="", alias="X_API_CLIENT_ID")
+    x_api_client_secret: str = Field(default="", alias="X_API_CLIENT_SECRET")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")
@@ -102,6 +125,7 @@ class Settings(BaseSettings):
     thread_id: str = Field(default="default", alias="THREAD_ID")
     cloud_escalation_model: str = Field(default="google/gemini-2.5-pro", alias="CLOUD_ESCALATION_MODEL")
     cloud_escalation_enabled: bool = Field(default=True, alias="CLOUD_ESCALATION_ENABLED")
+    llm_stream_timeout_seconds: float = Field(default=90.0, alias="LLM_STREAM_TIMEOUT_SECONDS")
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
     honcho_user_id: str = Field(default="default", alias="HONCHO_USER_ID")
@@ -136,6 +160,7 @@ class Settings(BaseSettings):
         "chroma_path",
         "voice_model_dir",
         "computer_use_screenshot_dir",
+        "llm_routing_db_path",
         mode="before",
     )
     @classmethod
@@ -156,6 +181,7 @@ class Settings(BaseSettings):
             self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
+        self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
@@ -175,8 +201,14 @@ class Settings(BaseSettings):
             raise ValueError("MAX_CONTEXT_CHUNKS must be at least 1.")
         if self.max_context_tokens < 1:
             raise ValueError("MAX_CONTEXT_TOKENS must be at least 1.")
+        if self.llm_routing_max_targets < 1:
+            raise ValueError("LLM_ROUTING_MAX_TARGETS must be at least 1.")
+        if self.llm_routing_max_transient_retries < 0:
+            raise ValueError("LLM_ROUTING_MAX_TRANSIENT_RETRIES cannot be negative.")
         if self.mcp_timeout_seconds < 1:
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
+        if self.llm_stream_timeout_seconds <= 0:
+            raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
         if self.voice_stt_engine not in {"moonshine"}:
@@ -189,6 +221,8 @@ class Settings(BaseSettings):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.serpapi_base_url.startswith(("https://", "http://")):
             raise ValueError("SERPAPI_BASE_URL must be an HTTP(S) URL.")
+        if not self.tavily_mcp_url.startswith(("https://", "http://")):
+            raise ValueError("TAVILY_MCP_URL must be an HTTP(S) URL.")
         if not self.github_mcp_url.startswith(("https://", "http://")):
             raise ValueError("GITHUB_MCP_URL must be an HTTP(S) URL.")
         if not self.obsidian_mcp_url.startswith(("https://", "http://")):

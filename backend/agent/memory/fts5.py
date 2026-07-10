@@ -109,6 +109,20 @@ class FTS5Memory:
             ).fetchall()
         return [self._row(row) for row in rows]
 
+    def source_path_exists(self, source_path: str) -> bool:
+        needle = json.dumps(str(source_path))
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT 1
+                FROM qa_fts
+                WHERE source_paths LIKE ?
+                LIMIT 1
+                """,
+                (f"%{needle}%",),
+            ).fetchone()
+        return row is not None
+
     @staticmethod
     def _row(row: sqlite3.Row) -> dict:
         try:

@@ -8,8 +8,12 @@ __pycache__/
 data/memory/*.db
 data/memory/*.db-*
 data/memory/audit_log.jsonl
+data/llm-routing/*.db
+data/llm-routing/*.db-*
 data/x-api-oauth.json
 data/xai-oauth.json
+data/plugins/spotify/auth.json
+data/plugins/spotify/oauth-flow.json
 data/logs/
 data/cache/
 data/embeddings/
@@ -23,6 +27,7 @@ ui-dist/
 .ui-runtime/
 .api-runtime/
 .desktop-runtime/
+.worktrees/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml

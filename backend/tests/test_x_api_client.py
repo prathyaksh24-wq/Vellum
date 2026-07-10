@@ -80,6 +80,40 @@ def test_post_tweet_posts_json_body(tmp_path):
     assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer access-token"
 
 
+def test_post_tweet_can_attach_media_ids_and_ai_label(tmp_path):
+    mod = _load()
+    oauth_file = _oauth_file(tmp_path)
+
+    with patch.object(mod.httpx, "post", return_value=_Response({"data": {"id": "99", "text": "Hello"}})) as post:
+        out = mod.post_tweet(text="Hello", media_ids=["media-1"], made_with_ai=True, oauth_file=oauth_file)
+
+    assert out["data"]["id"] == "99"
+    assert post.call_args.kwargs["json"] == {
+        "text": "Hello",
+        "media": {"media_ids": ["media-1"]},
+        "made_with_ai": True,
+    }
+
+
+def test_upload_media_posts_multipart_file(tmp_path):
+    mod = _load()
+    oauth_file = _oauth_file(tmp_path)
+    image = tmp_path / "image.png"
+    image.write_bytes(b"png")
+
+    with patch.object(mod.httpx, "post", return_value=_Response({"data": {"id": "media-1"}})) as post:
+        out = mod.upload_media(media_path=image, oauth_file=oauth_file)
+
+    assert out["data"]["id"] == "media-1"
+    assert post.call_args.args[0] == "https://api.x.com/2/media/upload"
+    assert post.call_args.kwargs["data"] == {"media_category": "tweet_image"}
+    assert post.call_args.kwargs["headers"]["Authorization"] == "Bearer access-token"
+    assert "Content-Type" not in post.call_args.kwargs["headers"]
+    uploaded_file = post.call_args.kwargs["files"]["media"]
+    assert uploaded_file[0] == "image.png"
+    uploaded_file[1].close()
+
+
 def test_refresh_uses_saved_client_id_without_leaking_token(tmp_path):
     mod = _load()
     oauth_file = _oauth_file(tmp_path, access_token="expired.jwt.token")

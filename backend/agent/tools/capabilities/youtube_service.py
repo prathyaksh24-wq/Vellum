@@ -76,7 +76,9 @@ class YoutubeCapabilityService:
             )
             if _is_youtube_video_url(item.get("url", ""))
         ]
-        return {"action": "youtube.search_videos", "items": items[:max_results]}
+        ranked_items = _rank_youtube_videos(query, items)
+        providers = sorted({str(item.get("provider") or "") for item in ranked_items if item.get("provider")})
+        return {"action": "youtube.search_videos", "items": ranked_items[:max_results], "providers": providers}
 
     def fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any]:
         result = self.transcript_backend(payload)
@@ -102,7 +104,7 @@ class YoutubeCapabilityService:
             or item.get("id")
             or _video_id_from_url(url)
         )
-        return {
+        record = {
             "video_id": video_id,
             "title": _string(item.get("title") or item.get("name")),
             "url": url or (f"https://www.youtube.com/watch?v={video_id}" if video_id else ""),
@@ -111,6 +113,10 @@ class YoutubeCapabilityService:
             "description": _string(item.get("description") or item.get("snippet") or item.get("body")),
             "transcript": _string(item.get("transcript") or item.get("transcriptText")),
         }
+        provider = _string(item.get("provider"))
+        if provider:
+            record["provider"] = provider
+        return record
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:
@@ -119,8 +125,8 @@ class YoutubeCapabilityService:
             logger.warning("YouTube SerpAPI search failed; falling back to web search: %s", exc)
             serpapi_items = []
         if serpapi_items:
-            return serpapi_items[:max_results]
-        return self.web_search_backend(query, max_results)[:max_results]
+            return [{**item, "provider": str(item.get("provider") or "serpapi")} for item in serpapi_items[:max_results]]
+        return [{**item, "provider": str(item.get("provider") or "web_search")} for item in self.web_search_backend(query, max_results)[:max_results]]
 
     def _default_serpapi_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         settings = get_settings()
@@ -128,13 +134,13 @@ class YoutubeCapabilityService:
             return []
         return SerpApiClient(api_key=settings.serpapi_api_key, log_path=settings.serpapi_log_path).youtube_search(
             query,
-            max_results=max_results,
+            max_results=max_results * 3,
         )
 
     def _default_web_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         output = web_search.invoke({"query": f"site:youtube.com/watch {query}"})
         sources = extract_web_sources(str(output))
-        return [
+        candidates = [
             {
                 "title": source.get("title", ""),
                 "url": source.get("url", ""),
@@ -142,7 +148,8 @@ class YoutubeCapabilityService:
             }
             for source in sources
             if _is_youtube_video_url(str(source.get("url", "")))
-        ][:max_results]
+        ]
+        return candidates[: max_results * 3]
 
     def _default_fetch_transcript(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         video_id = str(payload.get("video_id") or "").strip()
@@ -202,6 +209,99 @@ def _positive_int(value: Any, *, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(1, parsed)
+
+
+def _rank_youtube_videos(query: str, items: list[dict[str, str]]) -> list[dict[str, str]]:
+    candidates = [item for item in items if item.get("url") and not _is_low_quality_youtube_result(item)]
+    return sorted(
+        candidates,
+        key=lambda item: _youtube_video_score(query, item),
+        reverse=True,
+    )
+
+
+def _youtube_video_score(query: str, item: dict[str, str]) -> int:
+    title = item.get("title", "")
+    channel = item.get("channel", "")
+    description = item.get("description", "")
+    published_at = item.get("published_at", "")
+    haystack = f"{title} {description}".lower()
+    query_tokens = {
+        token
+        for token in re.findall(r"[a-z0-9]+", query.lower())
+        if len(token) > 2 and token not in {"the", "and", "for", "vs", "v"}
+    }
+    matched_tokens = sum(1 for token in query_tokens if token in haystack)
+
+    score = matched_tokens * 10
+    if _is_official_youtube_channel(channel):
+        score += 100
+    if "official" in haystack:
+        score += 20
+    if "highlight" in haystack:
+        score += 10
+    score += _published_at_score(published_at)
+    if "youtube.com/watch" in item.get("url", "") or "youtu.be/" in item.get("url", ""):
+        score += 5
+    return score
+
+
+def _is_low_quality_youtube_result(item: dict[str, str]) -> bool:
+    text = f"{item.get('title', '')} {item.get('description', '')} {item.get('channel', '')}".lower()
+    blocked_terms = (
+        "dream league",
+        "efootball",
+        "fantasy score",
+        "fifa 23",
+        "fifa 24",
+        "fifa 25",
+        "fifa 26",
+        "football gaming",
+        "gameplay",
+        "gaming",
+        "pes ",
+        "pes20",
+        "pes21",
+        "pes22",
+        "pes23",
+        "pes24",
+        "simulation",
+        "simulated",
+    )
+    return any(term in text for term in blocked_terms)
+
+
+def _is_official_youtube_channel(channel: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", channel.lower()).strip()
+    official_channels = {
+        "fifa",
+        "uefa",
+        "nba",
+        "formula 1",
+        "f1",
+        "premier league",
+        "arsenal",
+        "espn",
+        "sky sports",
+        "nbc sports",
+        "fox soccer",
+    }
+    return normalized in official_channels
+
+
+def _published_at_score(value: str) -> int:
+    normalized = value.lower()
+    if "hour" in normalized or "minute" in normalized or "today" in normalized:
+        return 30
+    if "day" in normalized or "yesterday" in normalized:
+        return 25
+    if "week" in normalized:
+        return 15
+    if "month" in normalized:
+        return 5
+    if "year" in normalized:
+        return -10
+    return 0
 
 
 def _video_id_from_url(url: str) -> str:

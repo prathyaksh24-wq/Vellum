@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from agent.config import get_settings
+from agent.llm.routing.runtime import get_routing_runtime
 from agent.telemetry.usage_ledger import UsageLedger
 
 logger = logging.getLogger(__name__)
@@ -209,6 +210,24 @@ async def openrouter_chat(
     settings = get_settings()
     primary_model = model_override or settings.primary_model
     fallback_model = settings.fallback_model
+
+    if client is None:
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        result = await get_routing_runtime().engine.ainvoke(
+            messages=[
+                SystemMessage(content=system),
+                HumanMessage(content=user),
+            ],
+            primary_model=primary_model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            thread_id=session_id or "background",
+        )
+        answer = getattr(result, "content", None)
+        if not isinstance(answer, str) or not answer.strip():
+            raise OpenRouterError("Routed model returned an empty answer.")
+        return answer.strip()
 
     owns_client = client is None
     if client is None:

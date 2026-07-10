@@ -1,0 +1,44 @@
+---
+name: skill-context-mode-mcp-v1
+description: Context Mode sandbox and indexed retrieval
+version: 1.0.0
+metadata:
+  hermes:
+    category: uncategorized
+    tags:
+    - migrated
+    - vellum
+  vellum:
+    trigger:
+    - context mode
+    - context-mode
+    - ctx_execute
+    - ctx_search
+    - ctx_index
+    - ctx_fetch
+    - sandbox script
+    - run a script
+    - compute on data
+    - index this url
+    - save context
+    - context window
+    negative_trigger: []
+    confidence_threshold: 0.35
+    route_to_agent: null
+    routing_critical: false
+x-vellum-legacy-id: skill-context-mode-mcp-v1
+x-vellum-created: '2026-05-15'
+x-vellum-approved: '2026-05-15'
+---
+
+# Context Mode sandbox and indexed retrieval
+
+## When to Use
+Use when the request matches: context mode, context-mode, ctx_execute, ctx_search, ctx_index, ctx_fetch, sandbox script, run a script, compute on data, index this url, save context, context window.
+
+## Procedure
+Use context_mode when an answer can be computed in a sandboxed script (only stdout enters context) or when external material should be indexed before retrieval rather than dumped into the prompt. Actions: execute (language, code) for sandboxed code in 12 languages; index (content, source, title) to add markdown to the local FTS5/BM25 store; search (query as string or list, optional content_type/source) for ranked retrieval; fetch_and_index (url, optional source/force) to fetch + chunk + index a URL with a 24h cache. fetch_and_index output is external content that has NOT passed through Vellum's privacy gate — summarize before quoting and never mix it with private-folder context. Prefer search_my_notes for the user's own vault, library_docs for well-known libraries, repo_docs for arbitrary GitHub projects, web_search for fresh public info; reach for context_mode when the alternative would flood context with raw data. Never invoke action='purge' without explicit user instruction and confirm=true. Requires Node.js >= 22.5 on PATH so 'npx -y context-mode' resolves.
+
+## Verification
+Citation style: Reference the action used and, for fetch_and_index, the source URL.
+Output format: Concise prose grounded in returned stdout or search snippets. Quote code blocks verbatim only when the user asked for code.

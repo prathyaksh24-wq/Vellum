@@ -14,6 +14,9 @@ from langgraph.prebuilt import create_react_agent
 from agent.config import get_settings
 from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
+from agent.llm.routing.runtime import get_routed_chat_model
+from agent.plugins.spotify_runtime import portable_agent_tools
+from agent.skills import SkillRegistry, build_skill_index_block, get_skill_registry
 from agent.tools.apify import search_amazon
 from agent.tools.browser import (
     browser_action,
@@ -36,11 +39,19 @@ from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
 from agent.tools.library_docs import library_docs
+from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
+from agent.tools.skill_bundles import skill_bundles
+from agent.tools.skill_curator import skill_curator
+from agent.tools.skill_hub import skill_hub
+from agent.tools.skill_manage import skill_learn, skill_manage
+from agent.tools.skills import skill_view, skills_list
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
+from agent.tools.web_extract import web_extract
+from agent.tools.web_research import web_research
 from agent.tools.x import x_action
 
 VELLUM_SYSTEM_PROMPT = """You are Vellum, a self-learning personal archivist for one person.
@@ -64,7 +75,17 @@ Tools:
 16. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
 18. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-19. x_action - Controlled X actions. Supports public X search, account lookup, bookmarks, and posting. Search uses xAI X Search. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+19. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
+21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
+22. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
+23. skills_list - List compact metadata for installed skills.
+24. skill_view - Load one skill's full instructions or one relative support file.
+25. skill_manage - Create or mutate a local skill package after explicit confirmation.
+26. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
+27. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
+28. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
+29. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -81,6 +102,10 @@ Rules:
 - Never make up facts not present in retrieved context or tool results.
 - Be plain, restrained, and useful. Do not flatter.
 - Reference sources when relevant.
+- Do not dump raw URL lists or "Sources checked" blocks into normal answers. Full source URLs are available in the UI source drawer. Use publisher names in prose only when it helps the user judge evidence or when the user explicitly asks for sources.
+- Never surface scrubber placeholders such as [PERSON_1], [ORGANIZATION_2], [LOCATION_3], or [DATE_TIME_1] as if they were real names. If retrieved memory contains placeholders, say the exact private detail is redacted or hidden, then answer from the non-redacted context.
+- If the user asks about previous sources, URLs, or citations, keep the same topic from the prior turn and use the exact provided source context. Do not switch to a different subject just because the prompt mentions an example format.
+- For system/status questions about Vellum, distinguish available capability, configured connection, and actually-used tool. Do not claim a sub-agent or MCP tool was actively used unless the current turn trace includes that tool.
 - For private folder content, paraphrase and summarize rather than quoting raw text.
 - Treat Amazon/Apify results as private and summarize without exposing raw scraped data.
 - Use computer_use only when the user asks for computer/desktop/browser automation or live visual inspection. In computer-use mode, treat the task as an observe-act loop: inspect with screenshot/snapshot first, perform one small action, then inspect again before claiming success. For ambiguous automation requests, call computer_use_route first and follow this priority: browser first, workspace second, desktop last. Prefer mode='browser' or browser_* tools for website tasks, computer_use(mode='workspace', ...) for terminal/workspace tasks, and computer_use(mode='desktop', ...) only when explicit host-laptop app control is required. For native desktop work, use action='open_app' or action='launch_app' for installed host apps, action='list_windows' to find target window IDs, action='observe' with target='hwnd:<id>' to inspect a specific window, and element_index for accessibility-targeted clicks when the observation provides indexes.
@@ -107,12 +132,20 @@ Rules:
 - Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
 - Do not write outside the Agent/ folder in the Obsidian vault.
-- For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and cite sources.
-- Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search and cite sources instead of answering from model memory or refusing.
-- Use x_action for explicit X requests. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting requires X_TOOL_ALLOW_POSTS=true and confirm=True.
+- For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and answer from those sources.
+- Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
+- Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
+- Use x_action for explicit X requests and Agent-Reach/X capability questions. For "do you have Agent-Reach/X access" or similar status questions, call x_action with action='status' before answering. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
+- Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
+- The Available Skills index contains descriptions only. Load a matching skill with skill_view before following it. Never infer instructions from the description alone. Use only relative support-file paths and never expose local package paths.
+- Use skill_manage only for a user-directed foreground mutation and pass confirm=true only after explicit approval. The foreground tool must never claim origin='background_review'; that provenance is reserved for the isolated background review path. skill_learn gathers no data itself and must use existing privacy-gated tools before creation.
+- A skill blueprint creates an automation suggestion only and never schedules a job. Use skill_bundles to load related skills in declared order; bundle creation and deletion require confirmation.
+- Treat every remote skill as untrusted until skill_hub has placed it in quarantine and completed validation and security scanning. The force option may override a community caution verdict only; it never overrides a dangerous verdict. Installation, update, uninstall, and tap mutations require confirmation.
+- The skill curator never auto-deletes. It archives eligible inactive skills only after taking a backup, keeps hub and foreground-created skills out of its jurisdiction, and supports rollback. Consolidation is opt-in and pinned skills are excluded.
 """
 
 _prompt_project_ctx: ProjectContext | None = None
+_prompt_skill_registry: SkillRegistry | None = None
 
 
 def _get_project_ctx() -> ProjectContext:
@@ -121,6 +154,13 @@ def _get_project_ctx() -> ProjectContext:
         s = get_settings()
         _prompt_project_ctx = ProjectContext(vault_root=s.obsidian_vault_path)
     return _prompt_project_ctx
+
+
+def _get_skill_registry() -> SkillRegistry:
+    global _prompt_skill_registry
+    if _prompt_skill_registry is None:
+        _prompt_skill_registry = get_skill_registry()
+    return _prompt_skill_registry
 
 
 def vellum_prompt(state, config=None):
@@ -152,11 +192,18 @@ def vellum_prompt(state, config=None):
     try:
         from agent.memory.memory_context import build_memory_block
 
-        memory_block = build_memory_block(thread_id)
+        memory_block = build_memory_block(thread_id, query=_latest_user_query(state))
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("memory context load failed: %s", exc)
         memory_block = ""
+
+    skill_index = ""
+    try:
+        skill_index = build_skill_index_block(_get_skill_registry())
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("skill index load failed: %s", exc)
 
     active_model = get_provider_registry().current_model()
     current_date = datetime.now().date().isoformat()
@@ -170,71 +217,39 @@ def vellum_prompt(state, config=None):
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
     if memory_block:
         system_body = f"{memory_block}\n\n{system_body}"
+    if skill_index:
+        system_body = f"{skill_index}\n\n{system_body}"
     system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
+
+
+def _latest_user_query(state) -> str:
+    messages = list((state or {}).get("messages", []))
+    for message in reversed(messages):
+        role = getattr(message, "type", "") or getattr(message, "role", "")
+        if role not in {"human", "user"}:
+            continue
+        content = getattr(message, "content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") in {"text", "input_text"}:
+                    parts.append(str(item.get("text") or ""))
+            return "\n".join(part for part in parts if part)
+    return ""
 
 
 CHECKPOINT_DB = Path("data/memory/checkpoints.db")
 
 
 def build_llm(model: str | None = None):
-    settings = get_settings()
-    try:
-        from langchain_openai import ChatOpenAI
-    except ImportError as exc:
-        raise RuntimeError("langchain-openai is required to build the ReAct agent.") from exc
-
-    registry = get_provider_registry()
-    active_entry, active_temp = registry.current()
-    resolved_id = model or active_entry.id
-
-    # Direct OpenAI path: if the model is an OpenAI vendor model and a native
-    # key is configured, skip OpenRouter. Trades OpenRouter's ZDR enforcement
-    # for OpenAI's own data-retention terms; intentional, user-configured.
-    if resolved_id.startswith("openai/") and settings.openai_api_key:
-        bare_id = resolved_id.split("/", 1)[1]
-        return ChatOpenAI(
-            model=bare_id,
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            temperature=active_temp,
-            max_tokens=2048,
-        )
-
-    provider_config: dict = {
-        "data_collection": "deny",
-        "zdr": settings.zdr_only,
-        "allow_fallbacks": True,
-    }
-    # Only constrain provider order for open-weights models hosted by multiple
-    # privacy-respecting upstreams. Vendor-hosted models (Anthropic, OpenAI,
-    # Gemini, Grok) have a single upstream — adding an order list would block
-    # routing.
-    entry = registry._find_by_id(resolved_id) or active_entry
-    if entry.open_weights:
-        provider_config["order"] = ["Fireworks", "Together", "DeepInfra"]
-
-    return ChatOpenAI(
-        model=resolved_id,
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
-        temperature=active_temp,
-        max_tokens=2048,
-        default_headers={
-            "HTTP-Referer": "http://localhost",
-            "X-Title": "PersonalAgent",
-        },
-        extra_body={"provider": provider_config},
-    )
-
+    return get_routed_chat_model(model)
 
 def build_llm_with_fallback(model: str | None = None):
-    settings = get_settings()
-    primary = build_llm(model)
-    primary_model = model or get_provider_registry().current()[0].id
-    if primary_model == settings.fallback_model:
-        return primary
-    return primary.with_fallbacks([build_llm(settings.fallback_model)])
+    """Compatibility alias; fallback is handled by the routing engine."""
+    return get_routed_chat_model(model)
 
 
 def build_checkpointer() -> SqliteSaver:
@@ -258,10 +273,8 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
     return saver
 
 
-def build_agent(model: str | None = None):
-    return create_react_agent(
-        model=build_llm(model),
-        tools=[
+def core_tools() -> list:
+    return [
             search_my_notes,
             web_search,
             search_amazon,
@@ -285,13 +298,29 @@ def build_agent(model: str | None = None):
             git_action,
             obsidian_api,
             library_docs,
+            memory_orchestrator,
+            skills_list,
+            skill_view,
+            skill_manage,
+            skill_learn,
+            skill_bundles,
+            skill_curator,
+            skill_hub,
             repo_docs,
             context_mode,
+            web_research,
+            web_extract,
             escalate_to_cloud,
             create_note,
             append_to_note,
             x_action,
-        ],
+        ]
+
+
+def build_agent(model: str | None = None):
+    return create_react_agent(
+        model=build_llm(model),
+        tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=build_checkpointer(),
         prompt=vellum_prompt,
     )
@@ -300,37 +329,7 @@ def build_agent(model: str | None = None):
 async def build_async_agent(model: str | None = None):
     return create_react_agent(
         model=build_llm(model),
-        tools=[
-            search_my_notes,
-            web_search,
-            search_amazon,
-            read_file,
-            list_files,
-            computer_use_route,
-            computer_use,
-            browser_navigate,
-            browser_snapshot,
-            browser_tabs,
-            browser_click,
-            browser_type,
-            browser_press_key,
-            browser_select_option,
-            browser_hover,
-            browser_wait,
-            browser_close,
-            browser_action,
-            github_read,
-            github_write,
-            git_action,
-            obsidian_api,
-            library_docs,
-            repo_docs,
-            context_mode,
-            escalate_to_cloud,
-            create_note,
-            append_to_note,
-            x_action,
-        ],
+        tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=await build_async_checkpointer(),
         prompt=vellum_prompt,
     )
@@ -345,6 +344,10 @@ class LazyAgent:
         if self._agent is None:
             self._agent = build_agent()
         return self._agent
+
+    def invalidate(self) -> None:
+        self._agent = None
+        self._async_agent = None
 
     async def _aget(self):
         if self._async_agent is None:

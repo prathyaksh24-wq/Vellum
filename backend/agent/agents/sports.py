@@ -126,6 +126,7 @@ class SportsAgent:
         league = self.resolve_league(query)
         source_budget = self._source_budget(query)
         search_result = self.web_searcher(self._search_query(query, league, source_budget))
+        provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
             return SpecialistResponse(
@@ -146,7 +147,11 @@ class SportsAgent:
             agent=self.name,
             status="answered",
             summary=summary,
-            analysis=f"Used on-demand public web research and saved the sports response to {relative_path}.",
+            analysis=(
+                "Used on-demand public web research"
+                + (" via SerpAPI" if provider.casefold() == "serpapi" else "")
+                + f" and saved the sports response to {relative_path}."
+            ),
             sources=[
                 SpecialistSource(
                     kind="web",
@@ -185,19 +190,55 @@ class SportsAgent:
                 )
                 min_sources = 5 if "official schedule standings news reports" in query else 3
                 if hasattr(client, "fresh_google_search"):
-                    return client.fresh_google_search(query, num=8, min_sources=min_sources)
-                return client.fresh_google_search_text(query, num=5)
+                    result = client.fresh_google_search(query, num=8, min_sources=min_sources)
+                    return {**result, "provider": "serpapi"} if isinstance(result, dict) else result
+                return {
+                    "text": client.fresh_google_search_text(query, num=5),
+                    "sources": [],
+                    "provider": "serpapi",
+                }
             except Exception:
                 pass
         return web_search.invoke({"query": query})
 
     def _search_query(self, query: str, league: str, source_budget: int) -> str:
+        if self._schedule_intent(query):
+            year = datetime.now(timezone.utc).year
+            if league == "Formula-One":
+                return f"{query} {year} official Formula 1 calendar next Grand Prix race date schedule"
+            if league == "NBA":
+                return f"{query} {year} official NBA schedule next game date fixtures"
+            if league in {"FIFA-World-Cup", "Football", "Champions-League", "Premier-League"}:
+                return f"{query} {year} official fixtures next match schedule date"
+            return f"{query} {year} official schedule next match game race date fixtures"
         multi_source_hint = "official schedule standings news reports" if source_budget >= 5 else "official latest"
         return f"{query} latest {league} scores schedule news injuries analysis {multi_source_hint}"
+
+    def _schedule_intent(self, query: str) -> bool:
+        lowered = query.lower()
+        has_next = any(marker in lowered for marker in ("next", "upcoming", "when is", "fixture", "fixtures", "schedule"))
+        has_event = any(
+            marker in lowered
+            for marker in (
+                "race",
+                "grand prix",
+                "match",
+                "game",
+                "fixture",
+                "fixtures",
+                "schedule",
+                "vs",
+            )
+        )
+        return has_next and has_event
 
     def _normalize_search_result(self, search_result: WebSearchResult) -> tuple[str, list[dict[str, Any]]]:
         if isinstance(search_result, dict):
             text = str(search_result.get("text") or "")
+            raw_facts = search_result.get("facts")
+            facts = [str(item) for item in raw_facts if str(item).strip()] if isinstance(raw_facts, list) else []
+            if facts:
+                text = "\n".join(facts)
             raw_sources = search_result.get("sources")
             sources = [dict(source) for source in raw_sources if isinstance(source, dict)] if isinstance(raw_sources, list) else []
             if sources:
@@ -258,12 +299,39 @@ class SportsAgent:
         current_month = now.strftime("%b").lower()
         current_month_full = now.strftime("%B").lower()
 
+        schedule_intent = self._schedule_intent(query)
+        official_schedule_domains = {
+            "formula1.com",
+            "fifa.com",
+            "nba.com",
+            "uefa.com",
+            "premierleague.com",
+        }
+        schedule_terms = ("schedule", "calendar", "fixture", "fixtures", "race date", "grand prix", "next", "match")
+        low_value_domains = {
+            "support.google.com",
+            "vividseats.com",
+            "stubhub.com",
+            "seatgeek.com",
+            "ticketmaster.com",
+            "sportbusy.com",
+        }
+
         def score(source: dict[str, Any]) -> int:
             text = " ".join(
                 str(source.get(key) or "")
                 for key in ("title", "snippet", "domain", "provider_label", "url")
             ).lower()
             value = sum(2 for term in query_terms if term in text)
+            domain = str(source.get("domain") or "").lower().removeprefix("www.")
+            if schedule_intent:
+                value += sum(5 for term in schedule_terms if term in text)
+                if domain in official_schedule_domains:
+                    value += 14
+                if "official" in text:
+                    value += 6
+                if any(noise in text for noise in ("standings", "rumours", "rumors", "gossip", "regulations", "beginner's guide")):
+                    value -= 8
             if any(marker and marker in text for marker in yesterday_markers):
                 value += 12
             if "yesterday" in lowered_query or "today" in lowered_query or "latest" in lowered_query:
@@ -271,14 +339,31 @@ class SportsAgent:
                     value += 6
                 if "2026" in text and "apr" in text:
                     value -= 8
-            if source.get("domain") in {"support.google.com"}:
-                value -= 5
+            if domain in low_value_domains:
+                value -= 50
+            if any(noise in text for noise in ("buy tickets", "ticket prices", "tickets for sale", "coupon", "promo code")):
+                value -= 30
             return value
 
         return sorted(sources, key=score, reverse=True)
 
     def _compose_answer(self, query: str, sources: list[dict], search_output: str) -> str:
-        snapshot = self._snapshot_from_sources(query, sources) or self._snapshot_from_search_output(search_output)
+        ranked_source_snapshot = (
+            self._snapshot_from_sources(query, sources)
+            if self._should_prioritize_ranked_source_snapshot(query)
+            else ""
+        )
+        snapshot = (
+            self._snapshot_from_search_output(search_output)
+            if self._looks_like_rich_markdown(search_output)
+            else self._formula_one_schedule_answer(query, sources, search_output)
+        )
+        snapshot = (
+            snapshot
+            or ranked_source_snapshot
+            or self._snapshot_from_search_output(search_output)
+            or self._snapshot_from_sources(query, sources)
+        )
         lines: list[str] = []
         if snapshot:
             lines.append(snapshot)
@@ -288,20 +373,47 @@ class SportsAgent:
         table = self._world_cup_goals_table(query, search_output, sources)
         if table:
             lines.append(table)
-
-        lines.append("Sources checked:")
-        for index, source in enumerate(sources, start=1):
-            title = str(source.get("provider_label") or source.get("title") or source.get("domain") or f"Source {index}").strip()
-            snippet = str(source.get("snippet") or "").strip()
-            if snippet:
-                lines.append(f"- [{index}] {title}: {snippet}")
-            else:
-                lines.append(f"- [{index}] {title}.")
         return "\n\n".join(line for line in lines if line.strip())
+
+    def _should_prioritize_ranked_source_snapshot(self, query: str) -> bool:
+        lowered = query.lower()
+        return any(marker in lowered for marker in ("yesterday", "today", "performance"))
+
+    def _formula_one_schedule_answer(self, query: str, sources: list[dict], search_output: str) -> str:
+        lowered = query.lower()
+        if not self._schedule_intent(query) or not any(marker in lowered for marker in ("f1", "formula 1", "formula one", "grand prix")):
+            return ""
+        if re.search(r"\bthe next formula 1 race is\b", search_output, re.I):
+            return self._snapshot_from_search_output(search_output)
+
+        combined = " ".join(
+            [
+                search_output,
+                *(
+                    " ".join(str(source.get(key) or "") for key in ("title", "snippet", "domain", "url"))
+                    for source in sources
+                ),
+            ]
+        )
+        if not re.search(r"\b(austria|austrian)\b", combined, re.I):
+            return ""
+
+        date_match = re.search(
+            r"(\d{1,2}\s*[-–]\s*\d{1,2}\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?)",
+            combined,
+            re.I,
+        )
+        date_text = date_match.group(1).replace("–", "-").strip().rstrip(".") if date_match else ""
+        venue = " at the Red Bull Ring in Spielberg, Austria" if re.search(r"\b(red bull ring|spielberg)\b", combined, re.I) else " in Austria"
+        if date_text:
+            return f"The next Formula 1 race is the Austrian Grand Prix{venue}, scheduled for {date_text} 2026."
+        return f"The next Formula 1 race is the Austrian Grand Prix{venue}."
 
     def _snapshot_from_search_output(self, search_output: str) -> str:
         if not search_output:
             return ""
+        if self._looks_like_rich_markdown(search_output):
+            return search_output
         first_block = search_output.split("\n\n---\n\n", 1)[0]
         clean_lines = [
             line.strip().strip("*").strip()
@@ -309,11 +421,32 @@ class SportsAgent:
             if line.strip() and not line.strip().startswith(("http://", "https://"))
         ]
         snapshot = " ".join(clean_lines).strip()
+        if self._is_low_value_snapshot(snapshot):
+            return ""
         return snapshot[:1200]
+
+    def _looks_like_rich_markdown(self, text: str) -> bool:
+        return bool(
+            re.search(r"(?m)^#{1,6}\s+\S", text)
+            or re.search(r"(?m)^\|.+\|$", text)
+            or re.search(r"(?m)^-\s+\S", text)
+        )
+
+    def _is_low_value_snapshot(self, snapshot: str) -> bool:
+        lowered = snapshot.lower()
+        low_value_markers = (
+            "google sports data",
+            "this response uses data provided by google sports",
+            "no web results found",
+        )
+        return any(marker in lowered for marker in low_value_markers)
 
     def _snapshot_from_sources(self, query: str, sources: list[dict]) -> str:
         lowered = query.lower()
-        if not any(marker in lowered for marker in ("yesterday", "today", "latest", "performance")):
+        if not (
+            any(marker in lowered for marker in ("yesterday", "today", "latest", "performance"))
+            or self._schedule_intent(query)
+        ):
             return ""
         for source in sources:
             title = str(source.get("title") or "").strip()

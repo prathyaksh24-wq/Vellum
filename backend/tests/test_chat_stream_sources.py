@@ -13,6 +13,7 @@ import json
 from langchain_core.messages import ToolMessage
 
 from agent import api
+from agent.agents.live_dispatcher import LiveAgentResult
 from agent.tools.web import WEB_RESULT_SEPARATOR
 
 
@@ -70,6 +71,8 @@ def test_sources_from_messages_parses_dedupes_and_strips_www():
 
     assert by_url[URL_A].domain == "formula1.com"  # www. stripped
     assert by_url[URL_B].domain == "skysports.com"  # www. stripped
+    assert by_url[URL_A].provider_label == "Formula 1"
+    assert by_url[URL_B].provider_label == "Sky Sports"
     assert by_url[URL_A].title == "Verstappen wins the last F1 race"
     assert "Verstappen" in by_url[URL_A].snippet
     assert by_url[URL_A].fetched_at  # populated via _now_iso()
@@ -77,6 +80,34 @@ def test_sources_from_messages_parses_dedupes_and_strips_www():
 
 def test_activity_for_web_search_label_and_detail():
     assert api._activity_for("web_search", {"query": "x"}) == ("Searched the web", "x")
+
+
+def test_delegated_agent_prompt_keeps_sources_out_of_answer_body_by_default():
+    prompt = api._delegated_agent_message(
+        "who leads the fifa career goals all time?",
+        SimpleNamespace(
+            agent_name="SportsAgent",
+            status="answered",
+            answer="Snapshot: Lionel Messi and Miroslav Klose are tied on 16 goals.",
+        ),
+        [
+            {
+                "title": "World Cup top scorers",
+                "url": "https://www.theguardian.com/football/world-cup-top-scorers",
+                "snippet": "Messi joined Klose at the top of the all-time World Cup scoring chart.",
+                "domain": "theguardian.com",
+                "provider_label": "The Guardian",
+            }
+        ],
+    )
+
+    assert "Do not expose raw tool dumps" in prompt
+    assert "Start with the direct answer" in prompt
+    assert "do not add an 'Evidence'" in prompt
+    assert "Full source URLs and favicons are already available" in prompt
+    assert "compact markdown table" in prompt
+    assert "never invent extra fixtures" in prompt
+    assert "The Guardian" in prompt
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +215,7 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert "response.output_text.delta" in names
     assert "response.output_item.done" in names
     assert "response.completed" in names
+    assert "agent.activity" in names
 
     response_created = json.loads(next(data for name, data in events if name == "response.created"))
     assert response_created["type"] == "response.created"
@@ -198,6 +230,31 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     response_delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
     assert response_delta["type"] == "response.output_text.delta"
     assert response_delta["delta"] == "Verstappen won the last race."
+
+    agent_activities = [
+        json.loads(data)["activity"] for name, data in events if name == "agent.activity"
+    ]
+    activity_types = [item["type"] for item in agent_activities]
+    assert "thinking_started" in activity_types
+    assert "tool_call_started" in activity_types
+    assert "tool_call_completed" in activity_types
+    assert "source_discovered" in activity_types
+    assert "source_reading" in activity_types
+    assert "final_answer_started" in activity_types
+    assert "final_answer_delta" in activity_types
+    assert "final_answer_completed" in activity_types
+    assert any(
+        item["type"] == "tool_call_started"
+        and item["name"] == "web_search"
+        and item["label"] == "Using web_search..."
+        for item in agent_activities
+    )
+    assert any(
+        item["type"] == "source_reading"
+        and item["label"] == "Reading Formula 1..."
+        and item["source"]["domain"] == "formula1.com"
+        for item in agent_activities
+    )
 
     response_done_items = [
         json.loads(data)["item"] for name, data in events if name == "response.output_item.done"
@@ -226,6 +283,11 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     by_url = {p["url"]: p for p in source_payloads}
     assert by_url[URL_A]["domain"] == "formula1.com"
     assert by_url[URL_B]["domain"] == "skysports.com"
+    assert by_url[URL_A]["source_index"] == 1
+    assert by_url[URL_B]["source_index"] == 2
+    assert by_url[URL_A]["source_type"] == "web"
+    assert by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
+    assert by_url[URL_A]["provider_label"] == "Formula 1"
 
     # The 'final' payload JSON carries the same sources (>= 2) with url/domain.
     final_data = next(data for name, data in events if name == "final")
@@ -237,6 +299,9 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(final_by_url) == {URL_A, URL_B}
     assert final_by_url[URL_A]["domain"] == "formula1.com"
     assert final_by_url[URL_B]["domain"] == "skysports.com"
+    assert final_by_url[URL_A]["source_index"] == 1
+    assert final_by_url[URL_A]["source_type"] == "web"
+    assert final_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
 
     response_final = json.loads(next(data for name, data in events if name == "response.completed"))
     assert response_final["response"]["output_text"] == "Verstappen won the last race."
@@ -245,6 +310,9 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(response_by_url) == {URL_A, URL_B}
     assert response_by_url[URL_A]["domain"] == "formula1.com"
     assert response_by_url[URL_B]["domain"] == "skysports.com"
+    assert response_by_url[URL_A]["source_index"] == 1
+    assert response_by_url[URL_A]["source_type"] == "web"
+    assert response_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
 
     response_items = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
     assert any(item["type"] == "tool_call" and item["name"] == "web_search" for item in response_items)
@@ -253,3 +321,184 @@ def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     assert set(response_source_by_url) == {URL_A, URL_B}
     assert response_source_by_url[URL_A]["domain"] == "formula1.com"
     assert response_source_by_url[URL_B]["domain"] == "skysports.com"
+    assert response_source_by_url[URL_A]["source_index"] == 1
+    assert response_source_by_url[URL_A]["source_type"] == "web"
+    assert response_source_by_url[URL_A]["favicon_url"] == "https://www.google.com/s2/favicons?domain=formula1.com&sz=64"
+
+
+def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypatch):
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                answer="Posted to X: tweet-1",
+                status="answered",
+                tools=["x_agent"],
+                activity_events=[
+                    {"type": "tool_call_started", "label": "Posting to X...", "name": "agent_reach_x_post"},
+                    {
+                        "type": "tool_call_completed",
+                        "label": "X action completed",
+                        "name": "agent_reach_x_completed",
+                        "status": "completed",
+                    },
+                ],
+            )
+
+    class FakeAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {"chunk": SimpleNamespace(content="Done.")},
+            }
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "agent", FakeAgent())
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="yes, post it",
+            active_thread_id="x-thread",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    activities = [json.loads(data)["activity"] for name, data in events if name == "agent.activity"]
+
+    assert any(activity["label"] == "Posting to X..." for activity in activities)
+    assert any(activity["label"] == "X action completed" and activity["status"] == "completed" for activity in activities)
+
+
+def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):
+    class FunctionStreamingAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '{"query":'},
+                        ],
+                    )
+                },
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '"f1"}'},
+                        ],
+                    )
+                },
+            }
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="Done.")}}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(api, "agent", FunctionStreamingAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or SimpleNamespace())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="search f1",
+            active_thread_id="t-functions",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    names = [name for name, _ in events]
+    deltas = [json.loads(data) for name, data in events if name == "response.function_call_arguments.delta"]
+    done = [json.loads(data) for name, data in events if name == "response.function_call_arguments.done"]
+    added = [json.loads(data)["item"] for name, data in events if name == "response.output_item.added"]
+
+    assert any(item["type"] == "function_call" and item["name"] == "web_search" for item in added)
+    assert [item["delta"] for item in deltas] == ['{"query":', '"f1"}']
+    assert done[-1]["arguments"] == '{"query":"f1"}'
+
+
+def test_stream_agent_turn_emits_agent_activity_for_function_calls(monkeypatch):
+    class FunctionStreamingAgent:
+        async def astream_events(self, payload, config=None, version=None):
+            yield {
+                "event": "on_chat_model_stream",
+                "data": {
+                    "chunk": SimpleNamespace(
+                        content="",
+                        tool_call_chunks=[
+                            {"id": "call-1", "index": 0, "name": "web_search", "args": '{"query":'},
+                        ],
+                    )
+                },
+            }
+            yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="Done.")}}
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr(api, "agent", FunctionStreamingAgent())
+    monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_ensure_model", _async_noop)
+    monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+    monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
+    monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close() or SimpleNamespace())
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="search f1",
+            active_thread_id="t-functions",
+            model=None,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    agent_activities = [
+        json.loads(data)["activity"] for name, data in events if name == "agent.activity"
+    ]
+
+    assert any(
+        item["type"] == "tool_call_started"
+        and item["name"] == "web_search"
+        and item["label"] == "Using web_search..."
+        for item in agent_activities
+    )
+    assert any(
+        item["type"] == "tool_call_delta"
+        and item["name"] == "web_search"
+        and item["detail"] == '{"query":'
+        for item in agent_activities
+    )

@@ -14,6 +14,7 @@ from rich.prompt import Prompt
 from pathlib import Path
 
 from agent.config import get_settings
+from agent.cli import expand_skill_input, handle_command as handle_skill_command
 from agent.graph.agent import agent
 from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
@@ -48,6 +49,9 @@ HELP_TEXT = """
   [green]/memory[/green]      - Show recently learned facts
   [green]/reindex[/green]     - Re-index your Obsidian vault
   [green]/thread <id>[/green] - Switch conversation thread
+  [green]/skills[/green]       - List installed skills
+  [green]/curator[/green]      - Show curator status
+  [green]/learn <text>[/green] - Draft a skill from instructions
   [green]/help[/green]        - Show this message
   [green]/quit[/green]        - Exit
 """
@@ -107,6 +111,14 @@ async def handle_command(
     *,
     current_thread_config: dict[str, Any] | None = None,
 ) -> tuple[bool, dict[str, Any] | None]:
+    skill_handled, skill_config = await handle_skill_command(
+        user_input,
+        active_console,
+        current_thread_config=current_thread_config,
+    )
+    if skill_handled:
+        return True, skill_config
+
     command = user_input.strip()
     normalized = command.casefold()
 
@@ -175,6 +187,8 @@ async def chat_loop(
                 active_thread_config = maybe_config
             if handled:
                 continue
+
+            user_input = expand_skill_input(user_input)
 
             active_console.print()
             try:

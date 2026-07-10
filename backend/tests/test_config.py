@@ -15,6 +15,11 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.apify_mcp_url == "https://mcp.apify.com"
     assert settings.serpapi_base_url == "https://serpapi.com/search.json"
     assert settings.serpapi_log_path.name == "serpapi-searches.jsonl"
+    assert settings.tavily_mcp_url == "https://mcp.tavily.com/mcp/"
+    assert isinstance(settings.tavily_api_key, str)
+    assert settings.firecrawl_mcp_command == "npx"
+    assert "firecrawl-mcp" in settings.firecrawl_mcp_args
+    assert isinstance(settings.firecrawl_api_key, str)
     assert settings.playwright_mcp_command == "npx"
     assert "@playwright/mcp@latest" in settings.playwright_mcp_args
     assert isinstance(settings.playwright_mcp_allow_mutations, bool)
@@ -31,6 +36,11 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.cloud_escalation_enabled is True
     assert settings.chroma_path is not None
     assert settings.chroma_path.name == "chroma"
+    assert settings.llm_routing_db_path.is_absolute()
+    assert settings.llm_routing_db_path.name == "routing.db"
+    assert settings.llm_routing_keyring_service == "vellum.llm"
+    assert settings.llm_routing_max_targets == 4
+    assert settings.llm_routing_max_transient_retries == 2
 
 
 def test_auto_gui_removed_from_dependency_files():

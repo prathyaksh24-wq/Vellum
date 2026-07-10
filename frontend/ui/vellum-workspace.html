@@ -6,9 +6,9 @@
 <title>Vellum — Workspace Preview</title>
 
 <!-- React + Babel (CDN). Double-click this file to run. -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600&display=swap');
@@ -347,6 +347,30 @@ button{font-family:inherit}
 .sa-add{color:#4ade80}.sa-rem{color:#f87171}
 .sources-row{display:flex;align-items:center;justify-content:space-between;color:#555;font-size:12.5px;cursor:pointer;padding:3px 0;transition:color .12s}
 .sources-row:hover{color:#aaa}
+.source-stack{margin-top:9px;max-width:min(560px,100%)}
+.source-trigger{display:flex;align-items:center;gap:9px;border:none;background:transparent;color:#777;padding:0;cursor:pointer;font-family:'Geist',sans-serif;max-width:100%}
+.source-trigger:hover{color:#d5d5d5}
+.source-trigger.live .source-label{background:linear-gradient(90deg,#777 0%,#fff 22%,#e35d2b 43%,#ffe0c8 58%,#fff 78%,#777 100%);background-size:240% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:shimmer 2.1s linear infinite}
+.source-icons{display:flex;align-items:center;flex-shrink:0}
+.source-favicon{width:20px;height:20px;border-radius:50%;border:1px solid #2d2d31;background:#171719;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 0 0 1px rgba(0,0,0,.25);margin-left:-6px;color:#aaa;font-size:10px;font-weight:600;line-height:1}
+.source-favicon:first-child{margin-left:0}
+.source-favicon img{width:100%;height:100%;object-fit:cover;display:block}
+.source-favicon.reddit{background:#ff4500;color:#fff}
+.source-favicon.x{background:#050505;color:#fff}
+.source-favicon.youtube{background:#ff0033;color:#fff}
+.source-label{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.source-chev{color:#555;display:flex;align-items:center;transition:transform .14s ease,color .12s}
+.source-trigger.open .source-chev{transform:rotate(180deg);color:#aaa}
+.source-drawer{margin-top:8px;border:1px solid #222226;background:#121214;border-radius:8px;overflow:hidden;max-width:620px}
+.source-drawer-head{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid #202024;color:#858585;font-size:11.5px}
+.source-drawer-title{color:#cfcfcf;font-size:12px}
+.source-row-link{display:grid;grid-template-columns:22px minmax(0,1fr);gap:9px;padding:8px 10px;text-decoration:none;color:#aaa;border-bottom:1px solid #1c1c1f}
+.source-row-link:last-child{border-bottom:none}
+.source-row-link:hover{background:#18181a;color:#eee}
+.source-row-main{min-width:0}
+.source-row-title{display:block;font-size:12.5px;color:#d4d4d4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-row-meta{display:block;font-size:11px;color:#666;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-row-snippet{font-size:11.5px;color:#777;line-height:1.45;margin-top:4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 
 /* Memory cards */
 .memory-card{background:#121212;border:1px solid #202020;border-radius:9px;padding:9px 10px;margin:6px 0;cursor:pointer;transition:border-color .12s,background .12s}
@@ -716,6 +740,59 @@ function InlineCode({children}){ return <code className="icode">{children}</code
 function MsgText({msg}){
   if (msg.textParts && msg.codes) return (<div className="msg-text">{msg.textParts[0]}<InlineCode>{msg.codes[0]}</InlineCode>{msg.textParts[1]}<InlineCode>{msg.codes[1]}</InlineCode>{msg.textParts[2]}</div>);
   return <div className="msg-text">{msg.text}</div>;
+}
+function sourceDomain(source){
+  if(source && source.domain) return String(source.domain).replace(/^www\./,"");
+  try{ return new URL(source.url).hostname.replace(/^www\./,""); }catch(e){ return ""; }
+}
+function sourceIconClass(domain){
+  const d = (domain||"").toLowerCase();
+  if(d.indexOf("reddit.com")>=0) return " reddit";
+  if(d==="x.com" || d==="twitter.com") return " x";
+  if(d.indexOf("youtube.com")>=0 || d.indexOf("youtu.be")>=0) return " youtube";
+  return "";
+}
+function sourceInitial(domain){
+  const clean = (domain||"source").replace(/^www\./,"");
+  return clean.charAt(0).toUpperCase();
+}
+function SourceFavicon({source}){
+  const domain = sourceDomain(source);
+  const fav = source && source.favicon_url;
+  return <span className={"source-favicon"+sourceIconClass(domain)}>{fav ? <img src={fav} alt=""/> : sourceInitial(domain)}</span>;
+}
+function SourceStack({sources, streaming=false}){
+  const [open, setOpen] = useState(false);
+  const clean = [];
+  (sources||[]).forEach(s=>{ if(s && s.url && !clean.some(x=>x.url===s.url)) clean.push(s); });
+  if(!clean.length) return null;
+  const domains = clean.map(sourceDomain).filter(Boolean);
+  const liveLabel = domains.length ? "Searching " + domains.slice(0,3).join(", ") : "Searching sources";
+  const doneLabel = clean.length === 1 ? "1 source" : clean.length + " sources";
+  return (
+    <div className="source-stack">
+      <button className={"source-trigger"+(streaming?" live":"")+(open?" open":"")} onClick={()=>setOpen(v=>!v)} type="button">
+        <span className="source-icons">{clean.slice(0,5).map((s,i)=><SourceFavicon key={s.url||i} source={s}/>)}</span>
+        <span className="source-label">{streaming ? liveLabel : doneLabel}</span>
+        <span className="source-chev"><IcChevD size={12}/></span>
+      </button>
+      {open && <div className="source-drawer">
+        <div className="source-drawer-head"><span className="source-drawer-title">Sources</span><span>{clean.length}</span></div>
+        {clean.map((s,i)=>{
+          const domain = sourceDomain(s);
+          const title = s.title || domain || s.url;
+          return <a key={s.url||i} className="source-row-link" href={s.url} target="_blank" rel="noreferrer">
+            <SourceFavicon source={s}/>
+            <span className="source-row-main">
+              <span className="source-row-title">{title}</span>
+              <span className="source-row-meta">{domain || s.provider_label || "source"}</span>
+              {s.snippet && <span className="source-row-snippet">{s.snippet}</span>}
+            </span>
+          </a>;
+        })}
+      </div>}
+    </div>
+  );
 }
 function Toggle({on}){ return <div className={"toggle"+(on?" on":"")}/>; }
 const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
@@ -1821,8 +1898,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           </div>
         ); })()}
         {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {msg.sources && msg.sources.length>0 && <SourceStack sources={msg.sources} streaming={msg.streaming}/>}
         {msg.activity && msg.activity.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.activity.slice(0,4).map((a,i)=><span key={i} className="att-chip"><Spinner/><span className="att-name">{a.label}</span></span>)}</div>}
-        {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
       </div>;
     }
     if(msg.type==="system") return <div key={msg.id} className="sys-line">{msg.icon==="cmd" ? <Fragment><span style={{fontSize:12,color:"#3a3a3a"}}>⬡</span><span className="sys-cmd">{msg.label}</span></Fragment> : <Fragment><div className="sys-dot"/><span>{msg.label}</span></Fragment>}</div>;
