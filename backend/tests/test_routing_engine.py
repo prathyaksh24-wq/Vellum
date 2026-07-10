@@ -34,6 +34,7 @@ class FakeModel:
 
     def bind_tools(self, tools):
         self.adapter.bound_tools = list(tools)
+        self.adapter.bound_tools_history.append(list(tools))
         return self
 
     async def ainvoke(self, messages, **kwargs):
@@ -53,9 +54,12 @@ class FakeAdapter:
         self.outcomes = list(outcomes)
         self.calls: list[tuple[str, str]] = []
         self.bound_tools: list[object] = []
+        self.bound_tools_history: list[list[object]] = []
+        self.kwargs_history: list[dict] = []
 
     def build_model(self, *, target, secret, **kwargs):
         self.calls.append((target.model, secret))
+        self.kwargs_history.append(dict(kwargs))
         return FakeModel(self, self.outcomes.pop(0))
 
 
@@ -229,6 +233,81 @@ def test_tools_are_bound_on_the_selected_attempt(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_model_unavailable_with_tools_retries_same_model_without_tools(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, adapter, openai = build_engine(
+            tmp_path,
+            openrouter_outcomes=[
+                FakeStatusError(404, "no endpoints found that can handle the requested parameters"),
+                AIMessage(content="plain answer"),
+            ],
+            openai_outcomes=[AIMessage(content="fallback must not run")],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+        tools = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+
+        result = await engine.ainvoke(
+            messages=[HumanMessage(content="hello")],
+            primary_model="google/primary",
+            tools=tools,
+        )
+
+        assert result.content == "plain answer"
+        assert adapter.calls == [
+            ("google/primary", "or-key"),
+            ("google/primary", "or-key"),
+        ]
+        assert adapter.bound_tools_history == [tools]
+        assert openai.calls == []
+        attempts = store.list_attempts(limit=10, offset=0)
+        assert [attempt.outcome for attempt in attempts] == ["failure", "success"]
+        assert [attempt.fallback_index for attempt in attempts] == [0, 0]
+
+    asyncio.run(scenario())
+
+
+def test_model_unavailable_retries_same_model_with_relaxed_openrouter_policy(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, adapter, openai = build_engine(
+            tmp_path,
+            openrouter_outcomes=[
+                FakeStatusError(404, "no endpoints found that can handle the requested parameters"),
+                AIMessage(content="relaxed answer"),
+            ],
+            openai_outcomes=[AIMessage(content="fallback must not run")],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+
+        result = await engine.ainvoke(
+            messages=[HumanMessage(content="hello")],
+            primary_model="google/primary",
+        )
+
+        assert result.content == "relaxed answer"
+        assert adapter.calls == [
+            ("google/primary", "or-key"),
+            ("google/primary", "or-key"),
+        ]
+        first_policy = adapter.kwargs_history[0]["policy"]
+        relaxed_policy = adapter.kwargs_history[1]["policy"]
+        assert first_policy.require_parameters is True
+        assert relaxed_policy.require_parameters is False
+        assert relaxed_policy.order == ["Fireworks", "Together", "DeepInfra"]
+        assert relaxed_policy.data_collection == "deny"
+        assert relaxed_policy.zdr is True
+        assert openai.calls == []
+
+    asyncio.run(scenario())
+
+
 def test_stream_falls_back_when_primary_fails_before_visible_chunk(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, _, fallback = build_engine(
@@ -255,6 +334,43 @@ def test_stream_falls_back_when_primary_fails_before_visible_chunk(tmp_path) -> 
         attempts = store.list_attempts(limit=10, offset=0)
         assert [attempt.outcome for attempt in attempts] == ["failure", "success"]
         assert [attempt.fallback_index for attempt in attempts] == [0, 1]
+
+    asyncio.run(scenario())
+
+
+def test_stream_model_unavailable_with_tools_retries_same_model_without_tools(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, adapter, fallback = build_engine(
+            tmp_path,
+            openrouter_outcomes=[
+                [FakeStatusError(404, "no endpoints found that can handle the requested parameters")],
+                [AIMessageChunk(content="plain stream")],
+            ],
+            openai_outcomes=[[AIMessageChunk(content="fallback must not run")]],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+        tools = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+
+        chunks = [
+            chunk
+            async for chunk in engine.astream(
+                messages=[HumanMessage(content="hello")],
+                primary_model="google/primary",
+                tools=tools,
+            )
+        ]
+
+        assert "".join(str(chunk.content) for chunk in chunks) == "plain stream"
+        assert adapter.calls == [
+            ("google/primary", "or-key"),
+            ("google/primary", "or-key"),
+        ]
+        assert adapter.bound_tools_history == [tools]
+        assert fallback.calls == []
 
     asyncio.run(scenario())
 

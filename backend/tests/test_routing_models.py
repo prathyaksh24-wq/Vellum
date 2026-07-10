@@ -51,6 +51,7 @@ def test_openrouter_body_omits_unset_and_empty_optional_values() -> None:
 
     assert policy.to_openrouter_body() == {
         "sort": "latency",
+        "order": ["Fireworks", "Together", "DeepInfra"],
         "data_collection": "deny",
         "zdr": True,
     }

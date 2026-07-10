@@ -38,6 +38,7 @@ from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
 from agent.tools.library_docs import library_docs
+from agent.tools.llm_routing import llm_routing
 from agent.tools.knowledge_wiki import knowledge_wiki
 from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_api import obsidian_api
@@ -74,7 +75,8 @@ Tools:
 20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
 22. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
-23. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
+23. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
+24. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -129,6 +131,7 @@ Rules:
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Use x_action for explicit X requests and Agent-Reach/X capability questions. For "do you have Agent-Reach/X access" or similar status questions, call x_action with action='status' before answering. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 - Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
+- Use llm_routing when the user asks to inspect or change model/provider routing, fallback models, credential rotation strategy, or credential pool health. Never accept or transmit raw API keys through chat; tell the user to configure credential secrets through the backend keyring/env path.
 """
 
 _prompt_project_ctx: ProjectContext | None = None
@@ -268,6 +271,7 @@ def core_tools() -> list:
             git_action,
             obsidian_api,
             library_docs,
+            llm_routing,
             knowledge_wiki,
             memory_orchestrator,
             repo_docs,

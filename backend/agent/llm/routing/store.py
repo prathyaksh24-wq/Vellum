@@ -11,6 +11,7 @@ from agent.llm.routing.models import (
     CredentialStrategy,
     CredentialStatus,
     FallbackTarget,
+    OPENROUTER_DEFAULT_PROVIDER_ORDER,
     ProviderRoutingPolicy,
     RoutingAttempt,
     validate_fallback_chain,
@@ -156,6 +157,7 @@ class RoutingStore:
 
     def get_global_policy(self) -> ProviderRoutingPolicy:
         return self._get_policy(self._policy_scope(None)) or ProviderRoutingPolicy(
+            order=list(OPENROUTER_DEFAULT_PROVIDER_ORDER),
             require_parameters=True,
             allow_fallbacks=True,
         )

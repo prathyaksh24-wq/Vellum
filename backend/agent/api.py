@@ -1705,6 +1705,19 @@ def _chunk_text(chunk: Any) -> str:
     return str(content or "")
 
 
+def _is_primary_chat_model_stream_event(event: dict[str, Any]) -> bool:
+    """Ignore nested provider events already re-emitted by RoutedChatModel.
+
+    LangChain exposes both the routed facade and its nested ChatOpenAI run via
+    ``astream_events``. Consuming both duplicates every text and tool-call
+    chunk. Synthetic and legacy events may omit ``name``, so keep accepting
+    those while preferring the routed facade in production.
+    """
+
+    name = str(event.get("name") or "").strip()
+    return not name or name == "RoutedChatModel"
+
+
 def _chunk_tool_call_chunks(chunk: Any) -> list[dict[str, Any]]:
     if chunk is None:
         return []
@@ -2588,6 +2601,8 @@ async def _stream_agent_turn(
                     break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
+                    if not _is_primary_chat_model_stream_event(event):
+                        continue
                     chunk = event.get("data", {}).get("chunk")
                     for call_chunk in _chunk_tool_call_chunks(chunk):
                         call_id = str(call_chunk.get("id") or call_chunk.get("index") or "0")

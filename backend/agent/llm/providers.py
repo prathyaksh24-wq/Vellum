@@ -61,6 +61,16 @@ _GROUPS: tuple[ProviderGroup, ...] = (
     ProviderGroup("moonshot", "MoonshotAI", "moonshotai/kimi-k2.6"),
 )
 
+_MODEL_ALIASES: dict[str, str] = {
+    # Legacy picker IDs from older static uploads. Keep accepting them at the
+    # backend boundary so stale clients do not break the active model switch.
+    "deepseek/deepseek-chat": "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-chat-v3-0324": "deepseek/deepseek-v4-flash",
+    "minimax/minimax-01": "minimax/minimax-m2.7",
+    "google/gemma-3-27b-it": "google/gemma-4-31b-it",
+    "google/gemma-2-27b-it": "google/gemma-4-26b-a4b-it",
+}
+
 DEFAULT_TEMPERATURE = 0.3
 
 
@@ -82,6 +92,7 @@ class ProviderRegistry:
 
     @staticmethod
     def _find_by_id(model_id: str) -> ModelEntry | None:
+        model_id = canonical_model_id(model_id)
         for entry in _CATALOG:
             if entry.id == model_id:
                 return entry
@@ -107,6 +118,9 @@ class ProviderRegistry:
         normalized = query.strip().casefold()
         if not normalized:
             return None
+        alias = _MODEL_ALIASES.get(normalized)
+        if alias is not None:
+            return self._find_by_id(alias)
         # 1. Exact id match
         for entry in _CATALOG:
             if entry.id.casefold() == normalized:
@@ -130,7 +144,7 @@ class ProviderRegistry:
         return None
 
     def set_active(self, model_id: str) -> ModelEntry:
-        entry = self._find_by_id(model_id)
+        entry = self._find_by_id(canonical_model_id(model_id))
         if entry is None:
             resolved = self.resolve(model_id)
             if resolved is None:
@@ -165,6 +179,11 @@ class ProviderRegistry:
 @lru_cache(maxsize=1)
 def get_provider_registry() -> ProviderRegistry:
     return ProviderRegistry()
+
+
+def canonical_model_id(model_id: str) -> str:
+    normalized = model_id.strip()
+    return _MODEL_ALIASES.get(normalized.casefold(), normalized)
 
 
 def configured_provider_keys() -> dict[str, bool]:

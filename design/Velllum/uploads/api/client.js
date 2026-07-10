@@ -16,7 +16,10 @@
       } catch (_) {}
       throw new Error(detail);
     }
-    return response.json();
+    if (response.status === 204) return null;
+    var text = await response.text();
+    if (!text) return null;
+    return JSON.parse(text);
   }
 
   function jsonOptions(method, body, signal) {
