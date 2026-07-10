@@ -1,8 +1,9 @@
 """Agent-maintained Obsidian knowledge wiki.
 
-The wiki is a compiled knowledge layer over immutable source notes. Library/
-contains source material, Knowledge/ contains maintained synthesis, and the
-existing memory/search systems remain implementation details and indexes.
+The wiki is a private, maintained knowledge layer.  ``Knowledge/`` is the
+only directory this service mutates.  ``Library/`` is never read as part of a
+normal wiki operation: a caller must supply content or explicitly approve a
+specific source path before ingestion can use it.
 """
 
 from __future__ import annotations
@@ -41,10 +42,31 @@ REQUIRED_FIELDS = (
     "version",
     "sources",
     "source_count",
+    "source_trust",
+    "provenance",
     "tags",
 )
 VALID_STATUSES = {"draft", "verified", "needs_review", "superseded"}
 VALID_SENSITIVITIES = {"public", "private"}
+VALID_SOURCE_TRUST = {
+    "maintained",
+    "user_supplied",
+    "approved_path",
+    "trusted",
+    "untrusted",
+    "unknown",
+    "mixed",
+}
+_SOURCE_TRUST_ALIASES = {
+    "approved": "approved_path",
+    "path_approved": "approved_path",
+    "raw": "untrusted",
+    "user": "user_supplied",
+    "supplied": "user_supplied",
+    "wiki": "maintained",
+    "verified": "trusted",
+}
+_SUPPLIED_SOURCE_PREFIX = "supplied-content:"
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]")
 
 
@@ -58,6 +80,10 @@ class KnowledgeWiki:
     def __init__(self, vault_root: str | Path, wiki_folder: str = WIKI_FOLDER) -> None:
         self.vault_root = Path(vault_root).expanduser().resolve()
         self.wiki_folder = _safe_segment(wiki_folder)
+        if self.wiki_folder.casefold() != WIKI_FOLDER.casefold():
+            raise KnowledgeWikiError("Knowledge wiki writes must stay inside Knowledge/.")
+        if not self.vault_root.exists() or not self.vault_root.is_dir():
+            raise KnowledgeWikiError(f"Obsidian vault does not exist: {self.vault_root}")
         self.wiki_root = (self.vault_root / self.wiki_folder).resolve()
         if not self.wiki_root.is_relative_to(self.vault_root):
             raise KnowledgeWikiError("Knowledge wiki must stay inside the Obsidian vault.")
@@ -98,9 +124,24 @@ class KnowledgeWiki:
             "log": f"{self.wiki_folder}/log.md",
             "page_count": len(pages),
             "counts": dict(sorted(counts.items())),
+            "source_trust_counts": self._source_trust_counts(pages),
+            "source_policy": {
+                "library_auto_ingestion": False,
+                "path_ingestion_requires_explicit_approval": True,
+            },
             "inbox_count": len(list((self.wiki_root / "inbox").glob("*.md"))),
             "lint_report_count": len(list((self.wiki_root / "lint").glob("*.md"))),
+            "history_count": sum(
+                1 for path in (self.wiki_root / ".history").rglob("*.md") if path.is_file()
+            ),
         }
+
+    def _source_trust_counts(self, pages: Iterable[Path]) -> dict[str, int]:
+        counts: Counter[str] = Counter()
+        for path in pages:
+            metadata, _body = _parse_document(path.read_text(encoding="utf-8", errors="ignore"))
+            counts[str(metadata.get("source_trust") or "unknown")] += 1
+        return dict(sorted(counts.items()))
 
     def upsert_page(
         self,
@@ -114,6 +155,12 @@ class KnowledgeWiki:
         tags: Iterable[str] | None = None,
         status: str = "draft",
         sensitivity: str = "private",
+        source_trust: str = "",
+        provenance: Iterable[dict[str, Any] | str] | None = None,
+        page_id: str = "",
+        identity: str = "",
+        stable_id: str = "",
+        id: str = "",
     ) -> dict[str, Any]:
         self.ensure_structure()
         clean_title = _clean_title(title)
@@ -126,6 +173,7 @@ class KnowledgeWiki:
         clean_sensitivity = sensitivity.strip().casefold() or "private"
         if clean_sensitivity not in VALID_SENSITIVITIES:
             raise KnowledgeWikiError(f"Unsupported page sensitivity: {sensitivity!r}.")
+        clean_source_trust = _clean_source_trust(source_trust or "maintained")
         clean_content = _clean_body(content, clean_title)
         if not clean_content:
             raise KnowledgeWikiError("Knowledge page content is required.")
@@ -133,16 +181,53 @@ class KnowledgeWiki:
         clean_sources = self._normalize_sources(sources or [])
         clean_links = _unique(_clean_title(item) for item in links or [] if str(item).strip())
         clean_tags = _unique(_slug(item) for item in tags or [] if str(item).strip())
+        requested_id = _clean_page_id(page_id or identity or stable_id or id)
         path = self.wiki_root / PAGE_FOLDERS[clean_type] / f"{_slug(clean_title)}.md"
+        identity_path: Path | None = None
+        if requested_id:
+            identity_path = self._find_page_by_id(requested_id)
+            if identity_path is not None:
+                existing_metadata, _existing_body = _parse_document(
+                    identity_path.read_text(encoding="utf-8", errors="ignore")
+                )
+                existing_type = str(existing_metadata.get("type") or "").strip().casefold()
+                if existing_type and existing_type != clean_type:
+                    raise KnowledgeWikiError(
+                        f"Stable page identity {requested_id!r} already belongs to type {existing_type!r}."
+                    )
+                path = identity_path
+        title_path = self.wiki_root / PAGE_FOLDERS[clean_type] / f"{_slug(clean_title)}.md"
+        if identity_path is not None and title_path.exists() and title_path.resolve() != identity_path.resolve():
+            raise KnowledgeWikiError(
+                f"A {clean_type} page with title {clean_title!r} already exists; use its stable identity."
+            )
         old_metadata: dict[str, Any] = {}
         old_text = ""
         if path.exists():
             old_text = path.read_text(encoding="utf-8", errors="ignore")
             old_metadata, _old_body = _parse_document(old_text)
 
+        if old_text and not source_trust:
+            clean_source_trust = _clean_source_trust(str(old_metadata.get("source_trust") or "maintained"))
+        if old_text and requested_id and str(old_metadata.get("id") or "").strip() != requested_id:
+            raise KnowledgeWikiError(
+                f"A page already exists at {self._relative(path)} with a different stable identity."
+            )
+
+        old_id = str(old_metadata.get("id") or "").strip()
+        page_identity = requested_id or old_id or f"knowledge:{clean_type}:{_slug(clean_title)}"
+        page_identity = _clean_page_id(page_identity)
+        old_sources = _as_list(old_metadata.get("sources"))
+        merged_sources = _unique([*old_sources, *clean_sources])
+        merged_provenance = _merge_provenance(
+            _as_provenance(old_metadata.get("provenance")),
+            _as_provenance(provenance),
+            merged_sources,
+            clean_source_trust,
+        )
         now = _now()
         metadata = {
-            "id": str(old_metadata.get("id") or f"knowledge:{clean_type}:{_slug(clean_title)}"),
+            "id": page_identity,
             "type": clean_type,
             "title": clean_title,
             "description": _description(description or clean_content),
@@ -151,8 +236,10 @@ class KnowledgeWiki:
             "created": str(old_metadata.get("created") or now),
             "updated": now,
             "version": int(old_metadata.get("version") or 0) + 1,
-            "sources": _unique([*_as_list(old_metadata.get("sources")), *clean_sources]),
+            "sources": merged_sources,
             "source_count": 0,
+            "source_trust": clean_source_trust,
+            "provenance": merged_provenance,
             "tags": _unique([*_as_list(old_metadata.get("tags")), *clean_tags]),
         }
         metadata["source_count"] = len(metadata["sources"])
@@ -163,45 +250,110 @@ class KnowledgeWiki:
         if old_text and int(old_metadata.get("version") or 0) > 0:
             self._save_history(path, old_text, int(old_metadata.get("version") or 1))
         _atomic_write(path, document)
+        if identity_path is not None and path.resolve() != title_path.resolve():
+            # A stable identity permits a deliberate rename without leaving a
+            # near-duplicate page behind.  Both paths are inside Knowledge/.
+            old_path = path
+            new_path = title_path
+            if new_path.exists():
+                raise KnowledgeWikiError(f"Knowledge page path already exists: {self._relative(new_path)}")
+            old_history = self._history_dir(old_path)
+            _atomic_move(old_path, new_path)
+            if old_history.exists():
+                new_history = self._history_dir(new_path)
+                if not new_history.exists():
+                    old_history.replace(new_history)
+            path = new_path
         self.rebuild_index()
         action = "update" if old_text else "ingest"
         self.append_log(action, clean_title, path=self._relative(path), detail=f"{clean_type} v{metadata['version']}")
-        return {"created": not bool(old_text), "updated": True, "path": self._relative(path), "page": metadata}
+        return {
+            "created": not bool(old_text),
+            "updated": True,
+            "path": self._relative(path),
+            "ref": _page_ref(self._relative(path), page_identity),
+            "page": metadata,
+        }
 
     def ingest_source(
         self,
         *,
-        source_path: str,
-        title: str,
-        synthesis: str,
+        source_path: str = "",
+        title: str = "",
+        synthesis: str = "",
+        content: str = "",
         description: str = "",
         links: Iterable[str] | None = None,
         tags: Iterable[str] | None = None,
         related_pages: Iterable[dict[str, Any]] | None = None,
+        source_content: str = "",
+        source_trust: str = "",
+        provenance: Iterable[dict[str, Any] | str] | None = None,
+        source_provenance: Iterable[dict[str, Any] | str] | None = None,
+        source_id: str = "",
+        approved_source: bool = False,
+        approved_path: bool = False,
+        approve_source: bool = False,
+        approved: bool = False,
     ) -> dict[str, Any]:
-        source = self._validate_library_source(source_path)
-        source_metadata, _source_body = _parse_document(source.read_text(encoding="utf-8", errors="ignore"))
+        self.ensure_structure()
+        clean_source_path = str(source_path or "").strip()
+        explicit_path_approval = bool(approved_source or approved_path or approve_source or approved)
+        source: Path | None = None
+        source_metadata: dict[str, Any] = {}
+        source_body = ""
+        if clean_source_path:
+            source = self._validate_approved_source(clean_source_path, explicit_path_approval)
+            source_metadata, source_body = _parse_document(source.read_text(encoding="utf-8", errors="ignore"))
+        supplied_body = str(synthesis or source_content or content or "").strip()
+        if not supplied_body and source is not None:
+            supplied_body = source_body
+        if not supplied_body:
+            raise KnowledgeWikiError(
+                "Ingestion requires supplied content or an explicitly approved source_path."
+            )
         source_sensitivity = str(source_metadata.get("sensitivity") or "private").strip().casefold()
         if source_sensitivity not in VALID_SENSITIVITIES:
             source_sensitivity = "private"
-        source_title = _clean_title(title or source.stem)
+        source_title = _clean_title(title or (source.stem if source is not None else "Supplied Source"))
+        clean_trust = _clean_source_trust(
+            source_trust or ("approved_path" if source is not None else "user_supplied")
+        )
+        if source is not None:
+            source_ref = self._relative(source)
+            source_kind = "approved_path"
+        else:
+            digest = hashlib.sha256(supplied_body.encode("utf-8")).hexdigest()[:16]
+            source_ref = _SUPPLIED_SOURCE_PREFIX + digest
+            source_kind = "supplied_content"
+        source_provenance = [
+            *(_as_provenance(provenance)),
+            *(_as_provenance(source_provenance)),
+            {"kind": source_kind, "ref": source_ref, "trust": clean_trust, "approved": source is not None},
+        ]
+        source_identity = _clean_page_id(source_id) or (
+            f"knowledge:source:{_slug(source_ref if source is not None else source_title)}"
+        )
         related = list(related_pages or [])
         related_titles = [_clean_title(str(item.get("title") or "")) for item in related if item.get("title")]
         source_result = self.upsert_page(
             title=source_title,
             page_type="source",
-            content=synthesis,
+            content=supplied_body,
             description=description,
-            sources=[self._relative(source)],
+            sources=[source_ref],
             links=[*(links or []), *related_titles],
             tags=tags,
             status="draft",
             sensitivity=source_sensitivity,
+            source_trust=clean_trust,
+            provenance=source_provenance,
+            page_id=source_identity,
         )
 
         compiled: list[dict[str, Any]] = []
         for page in related:
-            page_sources = [*_as_list(page.get("sources")), self._relative(source)]
+            page_sources = [*_as_list(page.get("sources")), source_ref]
             page_links = [*_as_list(page.get("links")), source_title]
             compiled.append(
                 self.upsert_page(
@@ -214,18 +366,23 @@ class KnowledgeWiki:
                     tags=_as_list(page.get("tags")),
                     status=str(page.get("status") or "draft"),
                     sensitivity=str(page.get("sensitivity") or source_sensitivity),
+                    source_trust=str(page.get("source_trust") or clean_trust),
+                    provenance=_as_provenance(page.get("provenance")) + source_provenance,
+                    page_id=str(page.get("page_id") or page.get("identity") or page.get("stable_id") or page.get("id") or ""),
                 )
             )
-        self.append_log(
-            "ingest",
-            source_title,
-            path=self._relative(source),
-            detail=f"Compiled one source page and {len(compiled)} related pages.",
-        )
-        return {"source": self._relative(source), "source_page": source_result, "related_pages": compiled}
+        if source_result.get("updated") or any(item.get("updated") for item in compiled):
+            self.append_log(
+                "ingest",
+                source_title,
+                path=source_ref if source is not None else "",
+                detail=f"Compiled one source page and {len(compiled)} related pages.",
+            )
+        return {"source": source_ref, "source_page": source_result, "related_pages": compiled, "source_trust": clean_trust}
 
     def query(self, query: str, *, limit: int = 8) -> dict[str, Any]:
         self.ensure_structure()
+        clean_limit = _clean_limit(limit)
         terms = _terms(query)
         if not terms:
             return {"query": query, "index_consulted": f"{self.wiki_folder}/index.md", "results": []}
@@ -261,7 +418,10 @@ class KnowledgeWiki:
                 (
                     float(score),
                     {
-                        "ref": _page_ref(self._relative(path)),
+                        "ref": _page_ref(
+                            self._relative(path),
+                            str(metadata.get("id") or f"knowledge:{metadata.get('type', 'unknown')}:{_slug(path.stem)}"),
+                        ),
                         "title": safe_title,
                         "type": str(metadata.get("type") or "unknown"),
                         "description": safe_description,
@@ -272,24 +432,35 @@ class KnowledgeWiki:
                     },
                 )
             )
-        results = [item for _score, item in sorted(scored, key=lambda pair: (-pair[0], pair[1]["title"]))[: max(1, int(limit))]]
+        results = [item for _score, item in sorted(scored, key=lambda pair: (-pair[0], pair[1]["title"]))[:clean_limit]]
         return {"query": query, "index_consulted": f"{self.wiki_folder}/index.md", "results": results}
 
     def read_page(self, page_ref: str) -> dict[str, Any]:
         self.ensure_structure()
-        clean_ref = str(page_ref or "").strip()
+        clean_ref = _clean_ref(page_ref)
         selected: tuple[Path, dict[str, Any], str] | None = None
         for path in self._content_pages():
             relative = self._relative(path)
-            if _page_ref(relative) != clean_ref:
-                continue
             metadata, body = _parse_document(path.read_text(encoding="utf-8", errors="ignore"))
+            page_id = str(metadata.get("id") or f"knowledge:{metadata.get('type', 'unknown')}:{_slug(path.stem)}")
+            if _page_ref(relative, page_id) != clean_ref and _legacy_page_ref(relative) != clean_ref:
+                continue
             selected = (path, metadata, body)
             break
         if selected is None:
             raise KnowledgeWikiError("Knowledge page reference was not found.")
 
         _path, metadata, body = selected
+        return self._display_page(clean_ref, metadata, body)
+
+    def _display_page(
+        self,
+        page_ref: str,
+        metadata: dict[str, Any],
+        body: str,
+        *,
+        version: int | None = None,
+    ) -> dict[str, Any]:
         sensitivity = str(metadata.get("sensitivity") or "private")
         raw_title = str(metadata.get("title") or "Untitled")
         raw_description = str(metadata.get("description") or "")
@@ -302,18 +473,99 @@ class KnowledgeWiki:
             safe_body, _body_mapping = self.scrubber.scrub_regex(display_body)
         sources = []
         for source in _as_list(metadata.get("sources")):
-            sources.append(source if _is_url(source) else Path(source).stem)
+            source_label = source if _is_url(source) or _is_source_token(source) else Path(source).stem
+            if sensitivity == "public":
+                sources.append(source_label)
+            else:
+                safe_source, _source_mapping = self.scrubber.scrub_regex(source_label)
+                sources.append(safe_source)
+        provenance = _display_provenance(_as_provenance(metadata.get("provenance")), sensitivity, self.scrubber)
+        raw_id = str(metadata.get("id") or "")
+        if sensitivity == "public":
+            safe_id = raw_id
+        else:
+            safe_id, _id_mapping = self.scrubber.scrub_regex(raw_id)
         return {
-            "ref": clean_ref,
+            "ref": page_ref,
+            "id": safe_id,
             "title": safe_title,
             "type": str(metadata.get("type") or "unknown"),
             "description": safe_description,
             "sensitivity": sensitivity,
             "status": str(metadata.get("status") or "draft"),
             "updated": str(metadata.get("updated") or ""),
+            "version": int(version if version is not None else metadata.get("version") or 0),
             "content": safe_body,
             "sources": sources,
+            "source_count": int(metadata.get("source_count") or len(sources)),
+            "source_trust": str(metadata.get("source_trust") or "unknown"),
+            "provenance": provenance,
         }
+
+    def version_history(self, page_ref: str) -> dict[str, Any]:
+        """Return the immutable prior revisions for one page.
+
+        History files remain private vault artifacts. This method intentionally
+        returns metadata and opaque version refs, not raw historical text;
+        callers can request a particular version with ``read_page_version``.
+        """
+        path, metadata, _body = self._page_for_ref(page_ref)
+        history_dir = self._history_dir(path)
+        versions: list[dict[str, Any]] = []
+        if history_dir.exists():
+            for history_path in sorted(history_dir.glob("*.md")):
+                match = re.search(r"-v(\d+)\.md$", history_path.name)
+                if not match:
+                    continue
+                versions.append(
+                    {
+                        "version": int(match.group(1)),
+                        "ref": f"{_clean_ref(page_ref)}:v{int(match.group(1))}",
+                    }
+                )
+        sensitivity = str(metadata.get("sensitivity") or "private")
+        raw_title = str(metadata.get("title") or path.stem)
+        raw_id = str(metadata.get("id") or "")
+        if sensitivity == "public":
+            safe_title, safe_id = raw_title, raw_id
+        else:
+            safe_title, _title_mapping = self.scrubber.scrub_regex(raw_title)
+            safe_id, _id_mapping = self.scrubber.scrub_regex(raw_id)
+        return {
+            "ref": _clean_ref(page_ref),
+            "id": safe_id,
+            "title": safe_title,
+            "current_version": int(metadata.get("version") or 0),
+            "versions": versions,
+        }
+
+    def history(self, page_ref: str) -> dict[str, Any]:
+        """Compatibility alias for :meth:`version_history`."""
+        return self.version_history(page_ref)
+
+    def read_page_version(self, page_ref: str, version: int) -> dict[str, Any]:
+        path, current_metadata, _body = self._page_for_ref(page_ref)
+        try:
+            clean_version = int(version)
+        except (TypeError, ValueError) as exc:
+            raise KnowledgeWikiError("Page version must be an integer.") from exc
+        if clean_version < 1 or clean_version >= int(current_metadata.get("version") or 0):
+            raise KnowledgeWikiError("Requested page version is not available in history.")
+        history_path = self._history_dir(path)
+        matches = list(history_path.glob(f"*-v{clean_version}.md"))
+        if not matches:
+            raise KnowledgeWikiError("Requested page version is not available in history.")
+        metadata, body = _parse_document(matches[0].read_text(encoding="utf-8", errors="ignore"))
+        current_id = str(
+            current_metadata.get("id")
+            or f"knowledge:{current_metadata.get('type', 'unknown')}:{_slug(path.stem)}"
+        )
+        return self._display_page(
+            _page_ref(self._relative(path), current_id),
+            metadata,
+            body,
+            version=clean_version,
+        )
 
     def rebuild_index(self) -> dict[str, Any]:
         self.ensure_structure()
@@ -359,6 +611,8 @@ class KnowledgeWiki:
         content: str,
         links: Iterable[str] | None = None,
         sources: Iterable[str] | None = None,
+        source_trust: str = "",
+        provenance: Iterable[dict[str, Any] | str] | None = None,
     ) -> dict[str, Any]:
         self.ensure_structure()
         clean_content = _clean_body(content, "Knowledge Overview")
@@ -369,6 +623,15 @@ class KnowledgeWiki:
         path = self.wiki_root / "overview.md"
         old_text = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
         old_metadata, _old_body = _parse_document(old_text)
+        clean_trust = _clean_source_trust(
+            source_trust or str(old_metadata.get("source_trust") or "maintained")
+        )
+        clean_provenance = _merge_provenance(
+            _as_provenance(old_metadata.get("provenance")),
+            _as_provenance(provenance),
+            clean_sources,
+            clean_trust,
+        )
         version = int(old_metadata.get("version") or 0) + 1
         lines = [
             "---",
@@ -376,6 +639,8 @@ class KnowledgeWiki:
             f'updated: {json.dumps(_now())}',
             f"version: {version}",
             f"sources: {json.dumps(clean_sources, ensure_ascii=False)}",
+            f"source_trust: {json.dumps(clean_trust)}",
+            f"provenance: {json.dumps(clean_provenance, ensure_ascii=False)}",
             "---",
             "",
             "# Knowledge Overview",
@@ -411,7 +676,10 @@ class KnowledgeWiki:
         missing_fields: list[dict[str, Any]] = []
         broken_links: list[dict[str, str]] = []
         missing_sources: list[dict[str, str]] = []
+        missing_provenance: list[str] = []
+        invalid_source_trust: list[dict[str, str]] = []
         stale_pages: list[str] = []
+        identity_paths: dict[str, list[str]] = defaultdict(list)
         inbound: Counter[str] = Counter()
         cutoff = datetime.now(UTC) - timedelta(days=max(0, int(stale_days)))
 
@@ -420,11 +688,22 @@ class KnowledgeWiki:
             missing = [field for field in REQUIRED_FIELDS if field not in metadata]
             if missing:
                 missing_fields.append({"path": relative, "fields": missing})
+            page_id = str(metadata.get("id") or "").strip()
+            if page_id:
+                identity_paths[page_id.casefold()].append(relative)
+            if not _as_provenance(metadata.get("provenance")):
+                missing_provenance.append(relative)
+            try:
+                _clean_source_trust(str(metadata.get("source_trust") or "unknown"))
+            except KnowledgeWikiError:
+                invalid_source_trust.append(
+                    {"path": relative, "source_trust": str(metadata.get("source_trust") or "")}
+                )
             updated = _parse_date(str(metadata.get("updated") or ""))
             if updated is not None and updated <= cutoff and not bool(metadata.get("pinned")):
                 stale_pages.append(relative)
             for source in _as_list(metadata.get("sources")):
-                if _is_url(source):
+                if _is_url(source) or _is_source_token(source):
                     continue
                 source_path = (self.vault_root / source).resolve()
                 if not source_path.is_relative_to(self.vault_root) or not source_path.exists():
@@ -448,20 +727,36 @@ class KnowledgeWiki:
                     broken_links.append({"path": relative, "link": clean_link})
 
         duplicates = [paths for paths in title_paths.values() if len(paths) > 1]
+        duplicate_identities = [paths for paths in identity_paths.values() if len(paths) > 1]
         orphan_pages = [self._relative(path) for path, _metadata, _body in pages if inbound[self._relative(path)] == 0]
         overview = self.wiki_root / "overview.md"
         newest_page_mtime = max((path.stat().st_mtime for path, _metadata, _body in pages), default=0)
         overview_drift = bool(newest_page_mtime and overview.exists() and overview.stat().st_mtime < newest_page_mtime)
-        errors = len(missing_fields) + len(missing_sources)
-        warnings = len(broken_links) + len(duplicates) + len(orphan_pages) + len(stale_pages) + int(overview_drift)
+        errors = (
+            len(missing_fields)
+            + len(missing_sources)
+            + len(missing_provenance)
+            + len(invalid_source_trust)
+        )
+        warnings = (
+            len(broken_links)
+            + len(duplicates)
+            + len(duplicate_identities)
+            + len(orphan_pages)
+            + len(stale_pages)
+            + int(overview_drift)
+        )
         health = "red" if errors else "yellow" if warnings else "green"
         result = {
             "health": health,
             "page_count": len(pages),
             "missing_fields": missing_fields,
             "missing_sources": missing_sources,
+            "missing_provenance": missing_provenance,
+            "invalid_source_trust": invalid_source_trust,
             "broken_links": broken_links,
             "duplicate_titles": duplicates,
+            "duplicate_identities": duplicate_identities,
             "orphan_pages": orphan_pages,
             "stale_pages": stale_pages,
             "overview_drift": overview_drift,
@@ -493,6 +788,26 @@ class KnowledgeWiki:
             paths.extend(sorted((self.wiki_root / folder).glob("*.md")))
         return paths
 
+    def _find_page_by_id(self, page_id: str) -> Path | None:
+        matches: list[Path] = []
+        for path in self._content_pages():
+            metadata, _body = _parse_document(path.read_text(encoding="utf-8", errors="ignore"))
+            if str(metadata.get("id") or "").strip() == page_id:
+                matches.append(path)
+        if len(matches) > 1:
+            raise KnowledgeWikiError(f"Stable page identity {page_id!r} is duplicated in the wiki.")
+        return matches[0] if matches else None
+
+    def _page_for_ref(self, page_ref: str) -> tuple[Path, dict[str, Any], str]:
+        clean_ref = _clean_ref(page_ref)
+        for path in self._content_pages():
+            relative = self._relative(path)
+            metadata, body = _parse_document(path.read_text(encoding="utf-8", errors="ignore"))
+            page_id = str(metadata.get("id") or f"knowledge:{metadata.get('type', 'unknown')}:{_slug(path.stem)}")
+            if _page_ref(relative, page_id) == clean_ref or _legacy_page_ref(relative) == clean_ref:
+                return path, metadata, body
+        raise KnowledgeWikiError("Knowledge page reference was not found.")
+
     def _normalize_sources(self, sources: Iterable[str]) -> list[str]:
         normalized: list[str] = []
         for source in sources:
@@ -500,6 +815,9 @@ class KnowledgeWiki:
             if not clean:
                 continue
             if _is_url(clean):
+                normalized.append(clean)
+                continue
+            if _is_source_token(clean):
                 normalized.append(clean)
                 continue
             target = (self.vault_root / clean.strip("/")).resolve()
@@ -510,19 +828,35 @@ class KnowledgeWiki:
             normalized.append(self._relative(target))
         return _unique(normalized)
 
-    def _validate_library_source(self, source_path: str) -> Path:
+    def _validate_approved_source(self, source_path: str, approved: bool) -> Path:
         clean = str(source_path or "").strip().replace("\\", "/").strip("/")
+        if not clean:
+            raise KnowledgeWikiError("An explicit source_path is required when approving path ingestion.")
+        if not approved:
+            raise KnowledgeWikiError(
+                "Source path ingestion is opt-in; pass approved_source=true. Library/ is never read automatically."
+            )
         target = (self.vault_root / clean).resolve()
-        library_root = (self.vault_root / "Library").resolve()
-        if not target.is_relative_to(library_root):
-            raise KnowledgeWikiError("Wiki ingestion accepts immutable sources from Library/ only.")
+        if not target.is_relative_to(self.vault_root):
+            raise KnowledgeWikiError("Knowledge source must stay inside the Obsidian vault.")
         if not target.is_file():
-            raise KnowledgeWikiError(f"Library source does not exist: {clean}")
+            raise KnowledgeWikiError(f"Approved source does not exist: {clean}")
         return target
 
+    def _validate_library_source(self, source_path: str) -> Path:
+        """Backward-compatible validation that always requires approval.
+
+        Kept private for older integrations; callers should use
+        :meth:`_validate_approved_source` through ``ingest_source``.
+        """
+        return self._validate_approved_source(source_path, approved=False)
+
+    def _history_dir(self, page_path: Path) -> Path:
+        relative = page_path.resolve().relative_to(self.wiki_root)
+        return self.wiki_root / ".history" / relative.with_suffix("")
+
     def _save_history(self, page_path: Path, text: str, version: int) -> None:
-        relative = page_path.relative_to(self.wiki_root)
-        history_dir = self.wiki_root / ".history" / relative.with_suffix("")
+        history_dir = self._history_dir(page_path)
         history_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
         _atomic_write(history_dir / f"{stamp}-v{version}.md", text)
@@ -544,6 +878,8 @@ def _render_page(metadata: dict[str, Any], body: str, links: list[str]) -> str:
         for source in metadata["sources"]:
             if _is_url(source):
                 lines.append(f"- [{source}]({source})")
+            elif _is_source_token(source):
+                lines.append(f"- `{source}`")
             else:
                 link = source[:-3] if source.endswith(".md") else source
                 lines.append(f"- [[{link}]]")
@@ -590,8 +926,11 @@ def _render_lint_report(result: dict[str, Any]) -> str:
     sections = (
         ("Schema integrity", result["missing_fields"]),
         ("Missing sources", result["missing_sources"]),
+        ("Missing provenance", result.get("missing_provenance", [])),
+        ("Invalid source trust", result.get("invalid_source_trust", [])),
         ("Broken links", result["broken_links"]),
         ("Duplicate titles", result["duplicate_titles"]),
+        ("Duplicate identities", result.get("duplicate_identities", [])),
         ("Orphan pages", result["orphan_pages"]),
         ("Stale pages", result["stale_pages"]),
     )
@@ -617,7 +956,7 @@ updated: \"{_now()}\"
 
 ## Layers
 
-1. `Library/` contains immutable raw sources. The wiki agent may read but never edit these files.
+1. `Library/` contains raw sources whose accuracy is not assumed. The wiki agent never reads them automatically and never edits them.
 2. `{wiki_folder}/` contains agent-maintained synthesis. Vellum owns these pages; the user reviews them in Obsidian.
 3. This schema defines how Vellum ingests, queries, and lints the wiki.
 
@@ -632,16 +971,17 @@ updated: \"{_now()}\"
 
 ## Required frontmatter
 
-Every content page requires `id`, `type`, `title`, `description`, `sensitivity`, `status`, `created`, `updated`, `version`, `sources`, `source_count`, and `tags`. Sensitivity is explicitly `public` or `private`; missing values are treated as private.
+Every content page requires `id`, `type`, `title`, `description`, `sensitivity`, `status`, `created`, `updated`, `version`, `sources`, `source_count`, `source_trust`, `provenance`, and `tags`. Sensitivity is explicitly `public` or `private`; missing values are treated as private. `id` is the stable identity used to derive opaque API references.
 
 ## Ingest workflow
 
-1. Read the source from `Library/`; never modify it.
-2. Read `index.md` and search existing pages before creating anything.
-3. Create or revise the source page.
-4. Revise every affected entity, concept, topic, project, or analysis page with the new synthesis.
-5. Preserve citations and add Obsidian wikilinks between related pages.
-6. Rebuild `index.md` and append the operation to `log.md`.
+1. Supply complete content, or pass one explicit `source_path` together with `approved_source=true`. A `Library/` path without approval is rejected.
+2. Record the source trust (`user_supplied` or `approved_path`) and provenance in every affected page.
+3. Read `index.md` and search existing pages before creating anything.
+4. Create or revise the source page.
+5. Revise every affected entity, concept, topic, project, or analysis page with the new synthesis.
+6. Preserve citations and add Obsidian wikilinks between related pages.
+7. Rebuild `index.md` and append the operation to `log.md`.
 
 Prefer revising an existing page when the new information changes an attribute or synthesis. Create a new page only for a distinct entity or concept that deserves inbound links.
 
@@ -671,6 +1011,8 @@ def _overview_document() -> str:
     return f"""---
 type: \"overview\"
 updated: \"{_now()}\"
+source_trust: \"maintained\"
+provenance: [{{\"kind\": \"maintained_page\", \"trust\": \"maintained\"}}]
 ---
 
 # Knowledge Overview
@@ -696,6 +1038,18 @@ def _atomic_write(path: Path, content: str) -> None:
     temporary.replace(path)
 
 
+def _atomic_move(source: Path, target: Path) -> None:
+    """Move a Knowledge page without ever crossing the wiki root."""
+    source_root = source.resolve().parents
+    target_root = target.resolve().parents
+    if not any(parent.name == WIKI_FOLDER for parent in source_root) or not any(
+        parent.name == WIKI_FOLDER for parent in target_root
+    ):
+        raise KnowledgeWikiError("Knowledge page moves must stay inside Knowledge/.")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source.replace(target)
+
+
 def _safe_segment(value: str) -> str:
     clean = str(value or "").strip().strip("/\\")
     if not clean or clean in {".", ".."} or "/" in clean or "\\" in clean:
@@ -709,6 +1063,42 @@ def _clean_title(value: str) -> str:
         raise KnowledgeWikiError("Knowledge page title is required.")
     if len(clean) > 160:
         raise KnowledgeWikiError("Knowledge page title is too long.")
+    return clean
+
+
+def _clean_page_id(value: str) -> str:
+    clean = " ".join(str(value or "").replace("\r", " ").replace("\n", " ").split()).strip()
+    if not clean:
+        return ""
+    if len(clean) > 200 or any(char in clean for char in "/\\\x00"):
+        raise KnowledgeWikiError("Stable page identity must be a short path-free value.")
+    return clean
+
+
+def _clean_source_trust(value: str) -> str:
+    clean = str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
+    clean = _SOURCE_TRUST_ALIASES.get(clean, clean)
+    if clean not in VALID_SOURCE_TRUST:
+        raise KnowledgeWikiError(
+            f"Unsupported source trust {value!r}; use maintained, user_supplied, approved_path, trusted, untrusted, unknown, or mixed."
+        )
+    return clean
+
+
+def _clean_ref(value: str) -> str:
+    clean = str(value or "").strip().casefold()
+    if not re.fullmatch(r"kw-[0-9a-f]{16}", clean):
+        raise KnowledgeWikiError("Knowledge page reference must be an opaque kw- reference returned by query.")
+    return clean
+
+
+def _clean_limit(value: int) -> int:
+    try:
+        clean = int(value)
+    except (TypeError, ValueError) as exc:
+        raise KnowledgeWikiError("Query limit must be an integer between 1 and 25.") from exc
+    if clean < 1 or clean > 25:
+        raise KnowledgeWikiError("Query limit must be an integer between 1 and 25.")
     return clean
 
 
@@ -762,8 +1152,70 @@ def _as_list(value: Any) -> list[str]:
     return [str(value)]
 
 
+def _as_provenance(value: Any) -> list[dict[str, Any]]:
+    if value is None or value == "":
+        return []
+    items: Iterable[Any]
+    if isinstance(value, (list, tuple, set)):
+        items = value
+    else:
+        items = [value]
+    result: list[dict[str, Any]] = []
+    for item in items:
+        if isinstance(item, dict):
+            clean: dict[str, Any] = {}
+            for key, raw in item.items():
+                key_text = str(key).strip()
+                if not key_text:
+                    continue
+                if isinstance(raw, (str, int, float, bool)) or raw is None:
+                    clean[key_text] = raw
+                elif isinstance(raw, (list, tuple)):
+                    clean[key_text] = [str(entry) for entry in raw]
+                else:
+                    clean[key_text] = str(raw)
+            if clean:
+                result.append(clean)
+        elif str(item).strip():
+            result.append({"kind": "reference", "ref": str(item).strip()})
+    return result
+
+
+def _merge_provenance(
+    previous: Iterable[dict[str, Any]],
+    incoming: Iterable[dict[str, Any]],
+    sources: Iterable[str],
+    source_trust: str,
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*previous, *incoming]:
+        key = json.dumps(item, sort_keys=True, ensure_ascii=False)
+        if key not in seen:
+            seen.add(key)
+            result.append(dict(item))
+    refs = {
+        str(item.get("ref") or item.get("source") or "").casefold()
+        for item in result
+        if isinstance(item, dict)
+    }
+    for source in sources:
+        if source.casefold() in refs:
+            continue
+        result.append({"kind": "reference", "ref": source, "trust": source_trust})
+        refs.add(source.casefold())
+    if not result:
+        result.append({"kind": "maintained_page", "trust": source_trust})
+    return result
+
+
 def _is_url(value: str) -> bool:
     return str(value or "").startswith(("https://", "http://"))
+
+
+def _is_source_token(value: str) -> bool:
+    clean = str(value or "").casefold()
+    return clean.startswith((_SUPPLIED_SOURCE_PREFIX, "approved-source:"))
 
 
 def _now() -> str:
@@ -782,7 +1234,12 @@ def _normalized(value: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", str(value or "").casefold()))
 
 
-def _page_ref(relative_path: str) -> str:
+def _page_ref(relative_path: str, page_id: str = "") -> str:
+    stable_key = str(page_id or relative_path)
+    return "kw-" + hashlib.sha256(stable_key.encode("utf-8")).hexdigest()[:16]
+
+
+def _legacy_page_ref(relative_path: str) -> str:
     return "kw-" + hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:16]
 
 
@@ -800,3 +1257,26 @@ def _display_wikilinks(text: str) -> str:
 def _without_volatile_metadata(text: str) -> str:
     clean = re.sub(r"^updated:.*$", "updated:", text, flags=re.MULTILINE)
     return re.sub(r"^version:.*$", "version:", clean, flags=re.MULTILINE)
+
+
+def _display_provenance(
+    provenance: Iterable[dict[str, Any]], sensitivity: str, scrubber: PrivacyScrubber
+) -> list[dict[str, Any]]:
+    if sensitivity == "public":
+        return [dict(item) for item in provenance]
+    displayed: list[dict[str, Any]] = []
+    for item in provenance:
+        safe: dict[str, Any] = {}
+        for key, value in item.items():
+            if isinstance(value, str) and not _is_url(value):
+                scrubbed, _mapping = scrubber.scrub_regex(value)
+                safe[key] = scrubbed
+            elif isinstance(value, list):
+                safe[key] = [
+                    scrubber.scrub_regex(str(entry))[0] if not _is_url(str(entry)) else str(entry)
+                    for entry in value
+                ]
+            else:
+                safe[key] = value
+        displayed.append(safe)
+    return displayed

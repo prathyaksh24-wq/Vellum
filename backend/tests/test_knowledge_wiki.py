@@ -33,6 +33,7 @@ def test_ingest_compiles_source_and_related_pages_without_mutating_library(tmp_p
         source_path="Library/Research/article.md",
         title="Agent Memory",
         synthesis="A persistent synthesis compiled from the source.",
+        approved_source=True,
         description="How agent memory compounds.",
         links=["Memory Orchestrator"],
         related_pages=[
@@ -51,6 +52,8 @@ def test_ingest_compiles_source_and_related_pages_without_mutating_library(tmp_p
     assert result["related_pages"][0]["path"] == "Knowledge/concepts/memory-orchestrator.md"
     source_page = (tmp_path / result["source_page"]["path"]).read_text(encoding="utf-8")
     assert 'sources: ["Library/Research/article.md"]' in source_page
+    assert 'source_trust: "approved_path"' in source_page
+    assert '"kind": "approved_path"' in source_page
     assert "[[Memory Orchestrator]]" in source_page
     index = (tmp_path / "Knowledge" / "index.md").read_text(encoding="utf-8")
     assert "[[Knowledge/sources/agent-memory|Agent Memory]]" in index
@@ -73,14 +76,67 @@ def test_upsert_is_idempotent_and_saves_history_before_revision(tmp_path):
     assert "Version one" in history[0].read_text(encoding="utf-8")
 
 
-def test_ingest_rejects_sources_outside_library(tmp_path):
+def test_stable_identity_renames_without_duplicate_and_exposes_history(tmp_path):
+    wiki = KnowledgeWiki(tmp_path)
+    first = wiki.upsert_page(
+        title="Canonical Context",
+        page_type="concept",
+        content="Version one",
+        page_id="concept:context",
+        sensitivity="public",
+    )
+    revised = wiki.upsert_page(
+        title="Canonical Context Revised",
+        page_type="concept",
+        content="Version two",
+        page_id="concept:context",
+        sensitivity="public",
+    )
+
+    assert revised["created"] is False
+    assert revised["ref"] == first["ref"]
+    assert not (tmp_path / first["path"]).exists()
+    assert (tmp_path / revised["path"]).exists()
+    history = wiki.version_history(first["ref"])
+    assert history["current_version"] == 2
+    assert [item["version"] for item in history["versions"]] == [1]
+    assert "Version one" in wiki.read_page_version(first["ref"], 1)["content"]
+
+
+def test_ingest_requires_explicit_approval_for_any_source_path(tmp_path):
     outside = tmp_path / "Agent" / "private.md"
     outside.parent.mkdir(parents=True)
     outside.write_text("private", encoding="utf-8")
     wiki = KnowledgeWiki(tmp_path)
 
-    with pytest.raises(KnowledgeWikiError, match="Library"):
+    with pytest.raises(KnowledgeWikiError, match="approved_source"):
         wiki.ingest_source(source_path="Agent/private.md", title="Private", synthesis="No")
+
+
+def test_ingest_accepts_supplied_content_without_reading_library(tmp_path):
+    source = _source(tmp_path, text="This inaccurate Library text must not be used.")
+    wiki = KnowledgeWiki(tmp_path)
+
+    result = wiki.ingest_source(
+        title="Supplied Research",
+        synthesis="The caller supplied this maintained synthesis.",
+        source_trust="user_supplied",
+    )
+
+    assert result["source_trust"] == "user_supplied"
+    page = (tmp_path / result["source_page"]["path"]).read_text(encoding="utf-8")
+    assert "The caller supplied this maintained synthesis." in page
+    assert "inaccurate Library text" not in page
+    assert "supplied-content:" in page
+    assert source.read_text(encoding="utf-8") == "This inaccurate Library text must not be used."
+
+    revised = wiki.ingest_source(
+        title="Supplied Research",
+        synthesis="A revised maintained synthesis supplied by the caller.",
+        source_trust="user_supplied",
+    )
+    assert revised["source_page"]["created"] is False
+    assert revised["source_page"]["page"]["version"] == 2
 
 
 def test_query_consults_index_and_returns_relevant_pages(tmp_path):
