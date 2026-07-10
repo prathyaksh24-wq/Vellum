@@ -3,8 +3,9 @@
   window.VellumApi.settings = {
     get: function () { return client.request("/api/settings"); },
     models: function () { return client.request("/api/models"); },
+    memorySummary: function () { return client.request("/api/memory/summary"); },
     memoryRecent: function () {
-      return client.request("/api/memory/summary").then(function (body) {
+      return window.VellumApi.settings.memorySummary().then(function (body) {
         var facts = [];
         if (body.global_summary) facts.push(body.global_summary);
         (body.saved_memories || []).forEach(function (item) {
