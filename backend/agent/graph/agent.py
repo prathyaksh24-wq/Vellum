@@ -38,6 +38,7 @@ from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
 from agent.tools.library_docs import library_docs
+from agent.tools.knowledge_wiki import knowledge_wiki
 from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
@@ -73,6 +74,7 @@ Tools:
 20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
 22. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
+23. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -118,7 +120,10 @@ Rules:
 - Never send secrets, API keys, passwords, tokens, credentials, or .env content to escalate_to_cloud.
 - Cloud escalation lessons help Vellum adapt through memory and skills; do not claim Gemma's actual model weights changed unless real fine-tuning happened.
 - Offer to save useful insights when appropriate.
-- Do not write outside the Agent/ folder in the Obsidian vault.
+- Do not write outside the Agent/ folder with generic note tools. The knowledge_wiki tool may write only inside Knowledge/, and project-management code may write managed files inside Projects/. Never modify Library/ through any wiki workflow.
+- Treat Library/ as immutable raw sources and Knowledge/ as Vellum's maintained, interlinked synthesis. For wiki questions, call knowledge_wiki(action='query') so index.md routes you to a small relevant page set, then call read_page only for the returned refs needed to answer.
+- When the user asks to ingest a Library source, read Knowledge/schema.md and Knowledge/index.md, read the source, query existing related pages, then call knowledge_wiki(action='ingest_source') with a complete source synthesis and complete revised related pages. Update existing entities and concepts instead of creating near-duplicates, then call update_overview when the high-level synthesis changed.
+- Run knowledge_wiki(action='lint') when the user asks to check wiki health. Never delete or rewrite pages based only on lint output. Save a valuable answer as an analysis page only when the user asks or approves it.
 - For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and answer from those sources.
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
@@ -263,6 +268,7 @@ def core_tools() -> list:
             git_action,
             obsidian_api,
             library_docs,
+            knowledge_wiki,
             memory_orchestrator,
             repo_docs,
             context_mode,
