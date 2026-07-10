@@ -1,6 +1,251 @@
 {
   "conversations": [
     {
+      "id": "r14bage5",
+      "thread_id": "r14bage5",
+      "title": "last time we spoke?",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "1ndqu1cc",
+          "role": "user",
+          "text": "last time we spoke?",
+          "attachments": []
+        },
+        {
+          "id": "5my9bbt0",
+          "role": "assistant",
+          "text": "Backend error: LLM routing failed (route-d347d6f2e8e547d5be46daf127773cca): model route is unavailable",
+          "full": "On \"last time we spoke?\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_9c6de0e8d26a4c0eb458cb110e4a64f1",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "last time we spoke?",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-09T13:00:51+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "thinking",
+              "status": "in_progress",
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_9c6de0e8d26a4c0eb458cb110e4a64f1",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "last time we spoke?",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "error",
+              "type": "error",
+              "status": "failed",
+              "kind": "eval",
+              "title": "Stream error",
+              "text": "LLM routing failed (route-d347d6f2e8e547d5be46daf127773cca): model route is unavailable",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live activity",
+              "text": "Done"
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        },
+        {
+          "id": "gjw99z2b",
+          "role": "user",
+          "text": "??",
+          "attachments": []
+        },
+        {
+          "id": "omz9fpj5",
+          "role": "assistant",
+          "text": "Backend error: LLM routing failed (route-7e48363e410b4c8c84d0b7ccfd56aecd): model route is unavailable; model route is unavailable",
+          "full": "On \"??\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_e87e71255d324f4bb085adeeebac0d73",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "??",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-09T13:02:01+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "thinking",
+              "status": "in_progress",
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_e87e71255d324f4bb085adeeebac0d73",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "??",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "error",
+              "type": "error",
+              "status": "failed",
+              "kind": "eval",
+              "title": "Stream error",
+              "text": "LLM routing failed (route-7e48363e410b4c8c84d0b7ccfd56aecd): model route is unavailable; model route is unavailable",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live activity",
+              "text": "Done"
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        }
+      ],
+      "updated_at": "2026-07-09T13:02:14+00:00"
+    },
+    {
+      "id": "1sbgm8jv",
+      "thread_id": "1sbgm8jv",
+      "title": "hi",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "ponxkhjq",
+          "role": "user",
+          "text": "hi",
+          "attachments": []
+        },
+        {
+          "id": "xrrji33x",
+          "role": "assistant",
+          "text": "Backend error: Unknown model: deepseek/deepseek-chat",
+          "full": "On \"hi\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_3e9799bccfb64a2da59090fd01427da0",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "hi",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-09T12:59:41+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "thinking",
+              "status": "in_progress",
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_3e9799bccfb64a2da59090fd01427da0",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "hi",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "error",
+              "type": "error",
+              "status": "failed",
+              "kind": "eval",
+              "title": "Stream error",
+              "text": "Unknown model: deepseek/deepseek-chat",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live activity",
+              "text": "Done"
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": true
+        }
+      ],
+      "updated_at": "2026-07-09T12:59:45+00:00"
+    },
+    {
       "id": "1qxzdcal",
       "thread_id": "1qxzdcal",
       "title": "what song did you play from?",
