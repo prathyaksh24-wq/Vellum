@@ -12,6 +12,8 @@ from agent.llm.routing.models import (
     CredentialRecord,
     FailureKind,
     FallbackTarget,
+    OPENROUTER_DEFAULT_PROVIDER_ORDER,
+    ProviderRoutingPolicy,
     ProviderFailure,
     RoutingStreamInterrupted,
     RoutingAttempt,
@@ -87,6 +89,16 @@ class RoutingEngine:
             targets=tuple(targets[: self.max_targets]),
         )
 
+    @staticmethod
+    def _relaxed_openrouter_policy():
+        return ProviderRoutingPolicy(
+            order=list(OPENROUTER_DEFAULT_PROVIDER_ORDER),
+            require_parameters=False,
+            allow_fallbacks=True,
+            data_collection="deny",
+            zdr=True,
+        )
+
     async def ainvoke(
         self,
         *,
@@ -117,6 +129,8 @@ class RoutingEngine:
             preferred_id: str | None = None
             transient_retries = 0
             malformed_retries = 0
+            retry_without_tools = False
+            retry_relaxed_policy = False
 
             while True:
                 try:
@@ -151,9 +165,13 @@ class RoutingEngine:
                     secret = self.secret_resolver.resolve(credential)
                     policy = None
                     if target.provider == "openrouter":
-                        policy = merge_policy(
-                            self.store.get_global_policy(),
-                            self.store.get_model_policy(target.model),
+                        policy = (
+                            self._relaxed_openrouter_policy()
+                            if retry_relaxed_policy
+                            else merge_policy(
+                                self.store.get_global_policy(),
+                                self.store.get_model_policy(target.model),
+                            )
                         )
                     model = adapter.build_model(
                         target=target,
@@ -162,7 +180,8 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=max_tokens,
                     )
-                    if tools:
+                    attempt_tools = () if retry_without_tools else tools
+                    if attempt_tools:
                         model = model.bind_tools(list(tools))
                     result = await model.ainvoke(list(messages), **kwargs)
                     has_content = bool(getattr(result, "content", None))
@@ -224,8 +243,20 @@ class RoutingEngine:
                     if not rotate and delay:
                         await self.async_sleep(delay)
                     continue
-                if failure.kind is FailureKind.model_unavailable:
+                if failure.kind in {FailureKind.model_unavailable, FailureKind.route_unavailable}:
                     await self.pool.release(lease)
+                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
+                        retry_without_tools = True
+                        preferred_id = credential.id
+                        continue
+                    if (
+                        failure.kind is FailureKind.route_unavailable
+                        and target.provider == "openrouter"
+                        and not retry_relaxed_policy
+                    ):
+                        retry_relaxed_policy = True
+                        preferred_id = credential.id
+                        continue
                     break
                 if failure.kind is FailureKind.invalid_request:
                     await self.pool.release(lease)
@@ -297,6 +328,8 @@ class RoutingEngine:
 
             preferred_id: str | None = None
             transient_retries = 0
+            retry_without_tools = False
+            retry_relaxed_policy = False
             while True:
                 try:
                     lease = await self.pool.lease(
@@ -327,9 +360,13 @@ class RoutingEngine:
                     secret = self.secret_resolver.resolve(credential)
                     policy = None
                     if target.provider == "openrouter":
-                        policy = merge_policy(
-                            self.store.get_global_policy(),
-                            self.store.get_model_policy(target.model),
+                        policy = (
+                            self._relaxed_openrouter_policy()
+                            if retry_relaxed_policy
+                            else merge_policy(
+                                self.store.get_global_policy(),
+                                self.store.get_model_policy(target.model),
+                            )
                         )
                     model = adapter.build_model(
                         target=target,
@@ -338,7 +375,8 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=max_tokens,
                     )
-                    if tools:
+                    attempt_tools = () if retry_without_tools else tools
+                    if attempt_tools:
                         model = model.bind_tools(list(tools))
                     async for chunk in model.astream(list(messages), **kwargs):
                         last_chunk = chunk
@@ -428,13 +466,25 @@ class RoutingEngine:
                     if not rotate and failure.retry_after_seconds:
                         await self.async_sleep(failure.retry_after_seconds)
                     continue
-                if failure.kind in {FailureKind.model_unavailable, FailureKind.invalid_request}:
+                if failure.kind in {FailureKind.model_unavailable, FailureKind.route_unavailable, FailureKind.invalid_request}:
                     await self.pool.release(lease)
                     if failure.kind is FailureKind.invalid_request:
                         raise RoutingTerminalError(
                             correlation_id=plan.correlation_id,
                             failures=failures,
                         )
+                    if failure.kind is FailureKind.route_unavailable and tools and not retry_without_tools:
+                        retry_without_tools = True
+                        preferred_id = credential.id
+                        continue
+                    if (
+                        failure.kind is FailureKind.route_unavailable
+                        and target.provider == "openrouter"
+                        and not retry_relaxed_policy
+                    ):
+                        retry_relaxed_policy = True
+                        preferred_id = credential.id
+                        continue
                     break
                 if failure.kind in {FailureKind.timeout, FailureKind.network, FailureKind.server}:
                     await self.pool.release(lease)

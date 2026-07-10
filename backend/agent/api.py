@@ -54,6 +54,7 @@ from agent.profiles import ProfileRegistry
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
+from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
@@ -1773,6 +1774,19 @@ def _chunk_text(chunk: Any) -> str:
     return str(content or "")
 
 
+def _is_primary_chat_model_stream_event(event: dict[str, Any]) -> bool:
+    """Ignore nested provider events already re-emitted by RoutedChatModel.
+
+    LangChain exposes both the routed facade and its nested ChatOpenAI run via
+    ``astream_events``. Consuming both duplicates every text and tool-call
+    chunk. Synthetic and legacy events may omit ``name``, so keep accepting
+    those while preferring the routed facade in production.
+    """
+
+    name = str(event.get("name") or "").strip()
+    return not name or name == "RoutedChatModel"
+
+
 def _chunk_tool_call_chunks(chunk: Any) -> list[dict[str, Any]]:
     if chunk is None:
         return []
@@ -2011,6 +2025,7 @@ _ACTIVITY_LABELS = {
     "x_action": "Searched X",
     "search_amazon": "Checked Amazon",
     "computer_use": "Used the desktop",
+    "knowledge_wiki": "Maintained your knowledge wiki",
 }
 
 
@@ -2096,6 +2111,20 @@ def _decorate_source_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
+    if name == "knowledge_wiki" and isinstance(tool_input, dict):
+        action = str(tool_input.get("action") or "").strip().casefold().replace("-", "_")
+        label = {
+            "status": "Checking your knowledge wiki",
+            "query": "Searching your knowledge wiki",
+            "read_page": "Reading your knowledge wiki",
+            "ingest_source": "Compiling a source into your wiki",
+            "upsert_page": "Updating your knowledge wiki",
+            "update_overview": "Updating your knowledge overview",
+            "rebuild_index": "Rebuilding your knowledge index",
+            "lint": "Checking wiki health",
+        }.get(action, _ACTIVITY_LABELS["knowledge_wiki"])
+        detail = str(tool_input.get("query") or tool_input.get("source_path") or tool_input.get("title") or "")
+        return label, detail[:200]
     label = _ACTIVITY_LABELS.get(name, f"Used {name}")
     detail = ""
     if isinstance(tool_input, dict):
@@ -2647,6 +2676,8 @@ async def _stream_agent_turn(
                     break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
+                    if not _is_primary_chat_model_stream_event(event):
+                        continue
                     chunk = event.get("data", {}).get("chunk")
                     for call_chunk in _chunk_tool_call_chunks(chunk):
                         call_id = str(call_chunk.get("id") or call_chunk.get("index") or "0")
@@ -4083,6 +4114,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
 
 router.include_router(llm_routing_router)
+router.include_router(knowledge_router)
 app.include_router(router)
 
 

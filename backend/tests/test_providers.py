@@ -63,6 +63,16 @@ def test_set_active_by_label_via_resolve() -> None:
     assert entry.id == "deepseek/deepseek-v4-flash"
 
 
+def test_legacy_picker_ids_resolve_to_current_catalog() -> None:
+    registry = ProviderRegistry()
+
+    assert registry.set_active("deepseek/deepseek-chat").id == "deepseek/deepseek-v4-pro"
+    assert registry.set_active("deepseek/deepseek-chat-v3-0324").id == "deepseek/deepseek-v4-flash"
+    assert registry.set_active("minimax/minimax-01").id == "minimax/minimax-m2.7"
+    assert registry.set_active("google/gemma-3-27b-it").id == "google/gemma-4-31b-it"
+    assert registry.set_active("google/gemma-2-27b-it").id == "google/gemma-4-26b-a4b-it"
+
+
 def test_set_active_unknown_raises() -> None:
     registry = ProviderRegistry()
     with pytest.raises(ValueError):

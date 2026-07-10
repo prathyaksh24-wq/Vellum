@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -7,12 +7,12 @@
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
-<script src="api/client.js"></script>
+<script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/chat.js"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="api/automations.js"></script>
-<script src="api/settings.js?v=20260702-llm-routing"></script>
+<script src="api/settings.js?v=20260710-backend-routing"></script>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -878,7 +878,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:var(--onember)}
 .btn.primary:hover{filter:brightness(1.08)}
-/* â”€â”€ modern visual system (addendum E) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ modern visual system (addendum E) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .wordmark{font-family:var(--font-d);font-weight:600;font-size:17px}
 .wordmark em{font-style:normal}
 .land-mark{font-family:var(--font-d);font-weight:600;font-size:42px;letter-spacing:-.03em;background:linear-gradient(105deg,var(--txt2) 16%,var(--ember) 50%,var(--accent2) 84%);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -932,7 +932,7 @@ body{font-size:14px}
 .mem-row{font-size:13.5px}
 .arc-row{font-size:13.5px}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
-/* â”€â”€ motion (addendum H) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ motion (addendum H) Ã¢â€â‚¬Ã¢â€â‚¬ */
 @media (prefers-reduced-motion:no-preference){
   .landing > *{animation:landRise .6s cubic-bezier(.2,.7,.2,1) both}
   .landing > *:nth-child(1){animation-delay:.04s}
@@ -1075,7 +1075,7 @@ body{font-size:14px}
 .agent-seg button.on{background:var(--grad);color:#fff}
 .agent-ta{width:100%;background:var(--input);border:1px solid var(--line2);border-radius:10px;color:var(--txt2);font:inherit;font-size:13px;padding:10px 12px;resize:vertical;outline:none;min-height:64px}
 .agent-ta:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-/* â”€â”€ agent conversation history handle (addendum L) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ agent conversation history handle (addendum L) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .agent-bar-acts{display:flex;gap:4px;align-items:center}
 .agent-hist{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:42;display:flex;align-items:center}
 .agent-hist-handle{display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:15px 10px;cursor:pointer;background:var(--glass);border:1px solid var(--line2);border-right:none;border-radius:13px 0 0 13px;backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);box-shadow:-6px 0 22px rgba(0,0,0,.20);transition:background .2s,box-shadow .2s,padding-right .2s}
@@ -1102,7 +1102,7 @@ body{font-size:14px}
 .ahp-title{flex:1;min-width:0;font-size:12.5px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ahp-when{font-size:10.5px;color:var(--dim2);flex-shrink:0}
 
-/* â”€â”€ agent: hover avatar -> back (addendum M) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ agent: hover avatar -> back (addendum M) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .agent-back{position:relative;width:28px;height:28px;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0}
 .agent-back .agent-back-ava{transition:opacity .18s,transform .18s}
 .agent-back-ic{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--hover);color:var(--txt2);opacity:0;transform:scale(.82);transition:opacity .18s cubic-bezier(.2,.7,.2,1),transform .18s cubic-bezier(.34,1.56,.64,1)}
@@ -1113,7 +1113,7 @@ body{font-size:14px}
 .agent-head-set{margin-left:auto}
 .agent-bar .agent-id-meta{min-width:0}
 
-/* â”€â”€ keyboard shortcuts + toast + dev mode (addendum N) â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬ keyboard shortcuts + toast + dev mode (addendum N) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .menu-help{cursor:pointer;border-radius:5px;padding:1px 5px;transition:background .15s,color .15s}
 .menu-help:hover{background:var(--hover);color:var(--txt2)}
 .dev-badge{font-family:var(--font-m);font-size:9.5px;letter-spacing:.12em;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 45%,var(--line2));border-radius:5px;padding:1px 6px;align-self:center;margin-right:4px}
@@ -1281,27 +1281,10 @@ body{font-size:14px}
 .cfg-key:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
 .cfg-dot{width:8px;height:8px;border-radius:50%;background:var(--dim2);flex-shrink:0;transition:background .2s,box-shadow .2s}
 .cfg-dot.on{background:var(--ember);box-shadow:0 0 7px var(--glow)}
-.routing-row{align-items:flex-start;min-width:0}
-.routing-copy{flex:1;min-width:0;line-height:1.35}
-.routing-actions{min-width:0;max-width:58%}
-.v-select.routing-control{width:184px;min-width:184px;max-width:100%}
-.v-select.routing-control .v-select-content{min-width:100%}
-.credential-add-row{display:block;min-width:0;padding-top:12px;padding-bottom:12px}
-.credential-add-grid{display:grid;grid-template-columns:124px minmax(104px,1fr) minmax(122px,1.2fr) auto;align-items:center;gap:8px;margin-top:10px;min-width:0}
-.credential-add-grid .v-select{width:100%;min-width:0}
-.credential-add-grid .cfg-key{width:100%;max-width:none;min-width:0;box-sizing:border-box}
-.credential-add-grid .btn{min-height:34px}
 @media(max-width:760px){
   .set-modal{width:min(660px,96vw)}
-  .routing-row{flex-direction:column;align-items:stretch;gap:9px}
-  .routing-row .sr-end{margin-left:0;width:100%;max-width:none;justify-content:flex-end}
-  .routing-row .routing-control{width:100%;min-width:0}
-  .credential-add-grid{grid-template-columns:1fr 1fr}
-  .credential-add-grid .btn{justify-self:end}
 }
 @media(max-width:560px){
-  .credential-add-grid{grid-template-columns:1fr}
-  .credential-add-grid .btn{width:100%;justify-content:center}
 }
 
 /* reusable application backgrounds */
@@ -1423,7 +1406,7 @@ const FEATURE_FLAGS = {
   mockPlugins: true,
 };
 
-/* â”€â”€â”€ icons â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const I = ({d, size=17, sw=1.5, children}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d?<path d={d}/>:children}</svg>
 );
@@ -2157,7 +2140,7 @@ const visibleChats = cs => {
   return [...v.filter(c => c.pinned), ...v.filter(c => !c.pinned)];
 };
 
-/* â”€â”€â”€ data â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ data Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -2238,7 +2221,7 @@ const SEED_FEEDS = [
   { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots ? last filed 07/06', on: false },
 ];
 
-/* â”€â”€â”€ sidebar â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ sidebar Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => {
   const [draft, setDraft] = useState(chat.title);
   useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
@@ -2444,7 +2427,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
   );
 };
 
-/* â”€â”€â”€ project menu â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ project menu Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ProjectMenu = ({pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
@@ -2454,7 +2437,7 @@ const ProjectMenu = ({pos, onAction, onClose}) => (
   </Popover>
 );
 
-/* â”€â”€â”€ chat â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ chat Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const KIND_BY_EXT = { png:'image', jpg:'image', jpeg:'image', gif:'image', webp:'image', svg:'image',
   pdf:'pdf', diff:'diff', patch:'diff', html:'code', js:'code', jsx:'code', ts:'code', py:'code', css:'code', json:'code', mjs:'code' };
 const kindOf = (name) => KIND_BY_EXT[(name.split('.').pop() || '').toLowerCase()] || 'note';
@@ -2539,17 +2522,22 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
 };
 const PLACEHOLDERS = ['Ask anything?', 'Search your library?', 'Draft something new?', 'Think out loud?', 'Plan the week?'];
 
-/* models ? curated list ported from vellum-workspace.html */
+/* models â€” backend-canonical fallback list. Live /api/models replaces this on boot. */
 let MODELS = [
-  { id: 'deepseek/deepseek-chat',         label: 'DeepSeek V4 Pro' },
-  { id: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V4 Flash' },
-  { id: 'minimax/minimax-01',             label: 'MiniMax' },
-  { id: 'google/gemma-3-27b-it',          label: 'Gemma 31B' },
-  { id: 'claude-3-7-sonnet-latest',       label: 'Claude 3.7 Sonnet' },
-  { id: 'gpt-4.1',                        label: 'GPT-4.1' },
-  { id: 'gemini-2.0-flash',               label: 'Gemini 2.0 Flash' },
+  { id: 'google/gemma-4-31b-it',          label: 'Gemma 4 31B' },
+  { id: 'google/gemma-4-26b-a4b-it',      label: 'Gemma 4 26B A4B' },
+  { id: 'qwen/qwen3.5-35b-a3b',           label: 'Qwen 3.5 35B A3B' },
+  { id: 'minimax/minimax-m2.7',           label: 'MiniMax M2.7' },
+  { id: 'anthropic/claude-opus-4.7',      label: 'Claude Opus 4.7' },
+  { id: 'anthropic/claude-opus-4.6',      label: 'Claude Opus 4.6' },
+  { id: 'anthropic/claude-sonnet-4.5',    label: 'Claude Sonnet 4.5' },
+  { id: 'openai/gpt-5.5',                 label: 'GPT 5.5' },
+  { id: 'deepseek/deepseek-v4-pro',       label: 'DeepSeek V4 Pro' },
+  { id: 'deepseek/deepseek-v4-flash',     label: 'DeepSeek V4 Flash' },
+  { id: 'google/gemini-3-flash-preview',  label: 'Gemini 3 Flash (preview)' },
+  { id: 'moonshotai/kimi-k2.6',           label: 'Kimi K2.6' },
 ];
-const DEFAULT_MODEL = 'deepseek/deepseek-chat';
+const DEFAULT_MODEL = 'google/gemma-4-31b-it';
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
   { id: 'anthropic',  name: 'Anthropic',  note: 'Claude models' },
@@ -2557,22 +2545,6 @@ const PROVIDERS = [
   { id: 'google',     name: 'Google',     note: 'Gemini models' },
   { id: 'openrouter', name: 'OpenRouter', note: 'DeepSeek, MiniMax & more' },
 ];
-const ROUTING_SORT_OPTIONS = [
-  {value: 'latency', label: 'Lowest latency'},
-  {value: 'price', label: 'Lowest price'},
-  {value: 'throughput', label: 'Highest throughput'},
-];
-const CREDENTIAL_STRATEGY_OPTIONS = [
-  {value: 'fill_first', label: 'Fill first'},
-  {value: 'round_robin', label: 'Round robin'},
-  {value: 'least_used', label: 'Least used'},
-  {value: 'random', label: 'Random'},
-];
-const CREDENTIAL_PROVIDER_OPTIONS = [
-  {value: 'openrouter', label: 'OpenRouter'},
-  {value: 'openai', label: 'OpenAI'},
-];
-
 const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpenLibrary, onOpenProject, onWeb, onClose}) => {
   const [sub, setSub] = useState(null);
   return (
@@ -4005,7 +3977,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
   );
 };
 
-/* â”€â”€â”€ search overlay â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ search overlay Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
   const [q, setQ] = useState('');
   const hits = chats.filter(c => !c.archived && c.title.toLowerCase().includes(q.toLowerCase()));
@@ -4030,7 +4002,7 @@ const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
   );
 };
 
-/* â”€â”€â”€ library â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ library Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const KIND_ICONS = {
   image: IcImage, pdf: IcPdf, code: IcCode, diff: IcDiffFile, note: IcNote,
 };
@@ -4116,7 +4088,7 @@ const LibraryView = ({library, setLibrary}) => {
         </div>
         {mode === 'list' ? (
           <div className="ltable">
-            <div className="lth"><span>Name</span><span>Modified ↓</span><span>Size</span><span/></div>
+            <div className="lth"><span>Name</span><span>Modified â†“</span><span>Size</span><span/></div>
             {items.map(it => (
               <div key={it.id} className="ltr">
                 <div className="lt-name">
@@ -4153,7 +4125,7 @@ const LibraryView = ({library, setLibrary}) => {
   );
 };
 
-/* â”€â”€â”€ projects â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ projects Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   <div className="page">
     <div className="page-inner">
@@ -4177,7 +4149,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   </div>
 );
 
-/* â”€â”€â”€ project page â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ project page Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
@@ -4264,7 +4236,7 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
   );
 };
 
-/* â”€â”€â”€ ledger â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ledger Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const CB_PERIODS = [['today','Today'],['7d','7 Days'],['30d','30 Days'],['month','Month'],['all','All Time']];
 const CB_DATA = {
   today: { cost:0.62, calls:84, sessions:3, cache:0.86, days:[['',0.62]],
@@ -4363,7 +4335,7 @@ const LedgerView = () => {
   );
 };
 
-/* â”€â”€â”€ skills â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ skills Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const SkillsView = ({skills, onApprove, onRetire}) => {
   const [tab, setTab] = useState('Proposed');
   const lists = { Proposed: skills.proposed, Active: skills.active, Retired: skills.retired };
@@ -4381,7 +4353,7 @@ const SkillsView = ({skills, onApprove, onRetire}) => {
           <div key={s.id} className="skill-card">
             <div className="sk-meta">
               <h4>{s.name}</h4>
-              <p><span className="trig">{s.trigger}</span>{s.note ? ' — ' + s.note : ''}{s.uses != null ? ` — used ${s.uses}×, last ${s.last}` : ''}</p>
+              <p><span className="trig">{s.trigger}</span>{s.note ? ' â€” ' + s.note : ''}{s.uses != null ? ` â€” used ${s.uses}Ã—, last ${s.last}` : ''}</p>
             </div>
             {tab === 'Proposed' && <button className="btn primary" onClick={() => onApprove(s.id)}>Approve</button>}
             {tab === 'Active' && <button className="btn" onClick={() => onRetire(s.id)}>Retire</button>}
@@ -4393,7 +4365,7 @@ const SkillsView = ({skills, onApprove, onRetire}) => {
   );
 };
 
-/* â”€â”€â”€ memory â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ memory Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const MEM_SOURCES = [{ id: 'vellum', name: 'Vellum', icon: IcBrain }].concat(AGENTS.map(a => ({ id: a.id, name: a.name, icon: a.icon })));
 
 const MemoryView = ({memory, onForget}) => {
@@ -4440,7 +4412,7 @@ const MemoryView = ({memory, onForget}) => {
   );
 };
 
-/* â”€â”€â”€ archive â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ archive Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const APP_BLURB = { airtable:'Bases, tables and records.', github:'Repos, issues and pull requests.', linear:'Issues, projects and cycles.', box:'Cloud files and folders.', dropbox:'Cloud files and folders.', gmail:'Email, drafts and threads.' };
 
 // 1) Local connector registry ? normalized MCP server descriptors.
@@ -4614,7 +4586,7 @@ const InstallWizard = ({wizard, onApprove, onAuth, onFinish, onCancel}) => {
   );
 };
 
-/* â”€â”€â”€ archive â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ archive Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const CONNECTOR_STATUS_LABELS = {
   ready: 'Ready',
   missing_agent_reach: 'Install Agent-Reach',
@@ -4675,7 +4647,7 @@ const BackendConnectorsView = ({apps = []}) => {
                   <span className="conn-ic"><ConnLogo c={app} size={20}/></span>
                   <div className="conn-card-head">
                     <div className="conn-name">{app.name || app.id}<span className={'conn-trust ' + (readyState ? 'verified' : st === 'error' ? 'unverified' : 'community')}><IcShield size={11}/>{statusText}</span></div>
-                    <div className="conn-meta">{app.category} · {app.type} · {app.id}</div>
+                    <div className="conn-meta">{app.category} Â· {app.type} Â· {app.id}</div>
                   </div>
                 </div>
                 <div className="conn-desc">{connectorSetupNote(app)}</div>
@@ -4713,7 +4685,7 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
   );
 };
 
-/* â”€â”€â”€ context menu (chat row) â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ context menu (chat row) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={clampMenuPosition(pos, 230, 260)} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
@@ -4731,7 +4703,7 @@ const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   </Popover>
 );
 
-/* â”€â”€â”€ create project modal â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ create project modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const CreateProjectModal = ({onCreate, onClose}) => {
   const [name, setName] = useState('');
   const [mem, setMem] = useState('default');
@@ -4778,7 +4750,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
   );
 };
 
-/* â”€â”€â”€ profile â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ profile Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalization, onAddAccount, onClose}) => {
   const [acctOpen, setAcctOpen] = useState(false);
   const Row = ({icon, label, hint}) => (
@@ -4878,7 +4850,7 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Honcho-style Memory Console (OpenConcho) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Honcho-style Memory Console (OpenConcho) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 const HONCHO_PEERS = [
   { id:'main-agent',    name:'main-agent',    label:'Main assistant', facts:42, sessions:128, conclusions:64, derived:[
       'Builds AI products and developer tools; Vellum is the active long-term project.',
@@ -5179,7 +5151,7 @@ const memorySectionFor = (kind, value) => {
 const splitMemoryParagraphs = value => {
   const text = cleanMemoryDisplayText(value);
   if (text.length <= 430) return text ? [text] : [];
-  const sentences = text.match(/[^.!?…]+(?:[.!?…]+|$)/g) || [text];
+  const sentences = text.match(/[^.!?â€¦]+(?:[.!?â€¦]+|$)/g) || [text];
   const paragraphs = [];
   let current = '';
   sentences.forEach(sentence => {
@@ -5259,7 +5231,7 @@ const MemorySummaryDocument = ({summary}) => {
 const MemoryListRow = ({memory, tab, menuOpen, children}) => {
   const recent = tab === 'recent' ? parseRecentMemoryRecord(memory) : null;
   const body = cleanMemoryDisplayText((memory && memory.text) || '');
-  const leadMatch = !recent && body.length > 220 ? body.match(/^([\s\S]{1,220}?[.!?…])(?:\s+|$)/) : null;
+  const leadMatch = !recent && body.length > 220 ? body.match(/^([\s\S]{1,220}?[.!?â€¦])(?:\s+|$)/) : null;
   const lead = leadMatch ? leadMatch[1].trim() : body;
   const detail = leadMatch ? body.slice(leadMatch[0].length).trim() : '';
   return <div className={'sm-item' + (menuOpen ? ' menu-open' : '')} data-memory-kind={tab}>
@@ -5268,7 +5240,7 @@ const MemoryListRow = ({memory, tab, menuOpen, children}) => {
         <div className="sm-item-title">{recent.title}</div>
         {recent.question && recent.question !== recent.title && <div className="sm-item-body"><span className="sm-item-label">You</span>{recent.question}</div>}
         {recent.answer && <div className="sm-item-body sm-item-answer"><span className="sm-item-label">Vellum</span>{recent.answer}</div>}
-        <div className="sm-item-date">{memoryEntryDate(memory)}{recent.thread ? ' · ' + recent.thread : ''}</div>
+        <div className="sm-item-date">{memoryEntryDate(memory)}{recent.thread ? ' Â· ' + recent.thread : ''}</div>
       </React.Fragment> : <React.Fragment>
         <div className="sm-item-body">{lead}</div>
         {detail && <details className="sm-item-details"><summary>Show details</summary><div className="sm-item-body">{detail}</div></details>}
@@ -5475,7 +5447,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
   );
 };
 
-/* â”€â”€â”€ settings modal â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ settings modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const ACCENTS = [
   { id:'default', name:'Vellum', accent:'#988686', accent2:'#5c4e4e', swatch:['#988686','#b4a39f','#5c4e4e','#3a3433'] },
   { id:'blue-eclipse', name:'Blue eclipse', accent:'#505081', accent2:'#272757', swatch:['#272757','#8686AC','#505081','#0F0E47'] },
@@ -5562,8 +5534,8 @@ const SpotifyConnectModal = ({onClose, onConnected}) => {
         </div>
         <div className="hintcard"><span className="sb-ic"><IcShield size={15}/></span><span>Spotify Premium is required for play, pause, skip, volume, queue additions, and device transfer. Keep Spotify open on at least one Connect device.</span></div>
         {error && <div className="spotify-error">{error}</div>}
-        {waiting && <div className="spotify-wait">Waiting for Spotify authorization…</div>}
-        <div className="m-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!clientId.trim() || busy || waiting} onClick={begin}>{waiting ? 'Authorization opened' : busy ? 'Starting…' : 'Continue to Spotify'}</button></div>
+        {waiting && <div className="spotify-wait">Waiting for Spotify authorizationâ€¦</div>}
+        <div className="m-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!clientId.trim() || busy || waiting} onClick={begin}>{waiting ? 'Authorization opened' : busy ? 'Startingâ€¦' : 'Continue to Spotify'}</button></div>
       </div>
     </React.Fragment>
   );
@@ -5652,7 +5624,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
           <button className={'spotify-control' + (player && player.repeat !== 'off' ? ' on' : '')} aria-label="Change repeat mode" title={'Repeat: ' + (player && player.repeat || 'off')} onClick={() => run({action:'set_repeat',state:repeatNext})}><I d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" size={15}/></button>
         </div>
         <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})}/></div>
-        <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' · active' : ''}</option>)}</select></div>
+        <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>
         {(player && player.queue || []).length > 0 && <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{player.queue.slice(0,5).map((item,index) => <div className="spotify-queue-row" key={(item.uri || item.id || '') + index}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>)}</div>}
         {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
       </div>}
@@ -5665,13 +5637,6 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
-  const [routingStatus, setRoutingStatus] = useState(null);
-  const [routingCredentials, setRoutingCredentials] = useState({credentials: [], strategies: {}});
-  const [routingPolicy, setRoutingPolicy] = useState({sort: 'latency', require_parameters: true, allow_fallbacks: true});
-  const [routingError, setRoutingError] = useState('');
-  const [routingBusy, setRoutingBusy] = useState(false);
-  const [fallbackDraft, setFallbackDraft] = useState(model);
-  const [credentialDraft, setCredentialDraft] = useState({provider: 'openrouter', label: '', secret: ''});
   const [accent, setAccentState] = useState(() => { try { return localStorage.getItem('vellum-accent') || 'default'; } catch { return 'default'; } });
   const setAccent = id => { setAccentState(id); try { localStorage.setItem('vellum-accent', id); } catch {} applyAccent(id); };
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
@@ -5710,58 +5675,6 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
     } finally {
       setSavingKey('');
     }
-  };
-  const loadRouting = async () => {
-    setRoutingBusy(true);
-    setRoutingError('');
-    try {
-      const [status, credentials] = await Promise.all([API.settings.routingStatus(), API.settings.routingCredentials()]);
-      setRoutingStatus(status);
-      setRoutingCredentials(credentials || {credentials: [], strategies: {}});
-      setRoutingPolicy(status.global_policy || {sort: 'latency', require_parameters: true, allow_fallbacks: true});
-    } catch (err) {
-      setRoutingError('Routing status unavailable.');
-    } finally {
-      setRoutingBusy(false);
-    }
-  };
-  useEffect(() => { if (tab === 'Configuration') loadRouting(); }, [tab]);
-  const saveRoutingPolicy = async () => {
-    setRoutingBusy(true);
-    try { await API.settings.setGlobalRoutingPolicy(routingPolicy); await loadRouting(); }
-    catch (err) { setRoutingError('Could not save provider routing.'); setRoutingBusy(false); }
-  };
-  const saveFallbacks = async targets => {
-    setRoutingBusy(true);
-    try { await API.settings.setFallbacks(targets.map(item => ({provider: item.provider, model: item.model}))); await loadRouting(); }
-    catch (err) { setRoutingError('Could not save fallback chain.'); setRoutingBusy(false); }
-  };
-  const addFallback = () => {
-    if (!fallbackDraft) return;
-    const current = (routingStatus && routingStatus.fallbacks) || [];
-    if (!current.some(item => item.model === fallbackDraft)) saveFallbacks([...current, {provider: 'openrouter', model: fallbackDraft}]);
-  };
-  const addRoutingCredential = async () => {
-    if (!credentialDraft.label.trim() || !credentialDraft.secret.trim()) return;
-    setRoutingBusy(true);
-    try { await API.settings.addCredential(credentialDraft); await loadRouting(); }
-    catch (err) { setRoutingError('Could not add credential.'); }
-    finally { setCredentialDraft(d => ({...d, secret: ''})); setRoutingBusy(false); }
-  };
-  const removeRoutingCredential = async credentialId => {
-    setRoutingBusy(true);
-    try { await API.settings.removeCredential(credentialId); await loadRouting(); }
-    catch (err) { setRoutingError('Could not remove credential.'); setRoutingBusy(false); }
-  };
-  const changeCredentialStrategy = async (provider, strategy) => {
-    setRoutingBusy(true);
-    try { await API.settings.setCredentialStrategy(provider, strategy); await loadRouting(); }
-    catch (err) { setRoutingError('Could not update rotation strategy.'); setRoutingBusy(false); }
-  };
-  const resetCredentialPool = async provider => {
-    setRoutingBusy(true);
-    try { await API.settings.resetCredentialPool(provider); await loadRouting(); }
-    catch (err) { setRoutingError('Could not reset credential health.'); setRoutingBusy(false); }
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
@@ -5895,32 +5808,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               ))}
               <div className="set-note">Keys are saved locally in Vellum's .env. The model picker refreshes after a provider connects.</div>
 
-              <div className="cfg-sec">Provider routing</div>
-              <div className="set-row routing-row"><div className="routing-copy">Optimization<span className="sr-sub">How OpenRouter chooses an inference provider for the selected model.</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel="Provider optimization" value={routingPolicy.sort || 'latency'} onValueChange={value => setRoutingPolicy(p => ({...p, sort: value}))} options={ROUTING_SORT_OPTIONS}/></span></div>
-              <div className="set-row routing-row"><div className="routing-copy">Require parameter support<span className="sr-sub">Skip providers that cannot honor every requested parameter.</span></div><span className="sr-end routing-actions"><div className={'sw' + (routingPolicy.require_parameters ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.require_parameters} onClick={() => setRoutingPolicy(p => ({...p, require_parameters: !p.require_parameters}))}/></span></div>
-              <div className="set-row routing-row"><div className="routing-copy">OpenRouter provider fallback<span className="sr-sub">Allow OpenRouter to try another inference provider for the same model.</span></div><span className="sr-end routing-actions"><div className={'sw' + (routingPolicy.allow_fallbacks ? ' on' : '')} role="switch" aria-checked={!!routingPolicy.allow_fallbacks} onClick={() => setRoutingPolicy(p => ({...p, allow_fallbacks: !p.allow_fallbacks}))}/></span></div>
-              <div className="set-row routing-row"><div className="routing-copy">Privacy floor<span className="sr-sub">Zero data retention and data collection denied on every request.</span></div><span className="sr-end routing-actions"><span className="cu-pill on">enforced</span></span></div>
-              <div className="set-row routing-row"><div className="routing-copy">{routingStatus ? `Primary: ${routingStatus.primary_provider} · ${routingStatus.active_model}` : 'Routing status'}</div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={saveRoutingPolicy}>Save routing</button></span></div>
-
-              <div className="cfg-sec">Fallback chain</div>
-              {((routingStatus && routingStatus.fallbacks) || []).map((target, index) => (
-                <div key={target.id || `${target.provider}-${target.model}`} className="set-row routing-row"><div className="routing-copy">{index + 1}. {models.find(m => m.id === target.model)?.label || target.model}<span className="sr-sub">{target.provider}</span></div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={() => saveFallbacks(routingStatus.fallbacks.filter((_, i) => i !== index))}>Remove</button></span></div>
-              ))}
-              <div className="set-row routing-row"><div className="routing-copy">Add model<span className="sr-sub">Used only after the selected model cannot complete the request.</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel="Fallback model" value={fallbackDraft} onValueChange={setFallbackDraft} options={models.map(m => ({value:m.id,label:m.label}))}/><button className="btn" disabled={routingBusy} onClick={addFallback}>Add</button></span></div>
-
-              <div className="cfg-sec">Credential pools</div>
-              {['openrouter', 'openai'].map(provider => {
-                const health = (routingStatus && routingStatus.credential_health && routingStatus.credential_health[provider]) || {};
-                return <div key={provider} className="set-row routing-row"><div className="routing-copy">{provider === 'openrouter' ? 'OpenRouter' : 'OpenAI'}<span className="sr-sub">{health.healthy || 0} healthy · {health.cooldown || 0} cooling down · {health.invalid || 0} invalid</span></div><span className="sr-end routing-actions"><VSelect className="routing-control" ariaLabel={`${provider} credential strategy`} value={(routingCredentials.strategies || {})[provider] || 'fill_first'} onValueChange={value => changeCredentialStrategy(provider, value)} options={CREDENTIAL_STRATEGY_OPTIONS}/><button className="btn" disabled={routingBusy} onClick={() => resetCredentialPool(provider)}>Reset</button></span></div>;
-              })}
-              {(routingCredentials.credentials || []).map(credential => (
-                <div key={credential.id} className="set-row routing-row"><div className="routing-copy">{credential.label}<span className="sr-sub">{credential.provider} · {credential.status} · key …{credential.fingerprint}</span></div><span className="sr-end routing-actions">{String(credential.source || '').startsWith('keyring:') && <button className="btn" disabled={routingBusy} onClick={() => removeRoutingCredential(credential.id)}>Remove</button>}</span></div>
-              ))}
-              <div className="set-row credential-add-row"><div className="routing-copy">Add credential<span className="sr-sub">Stored in the operating system credential store, never browser storage.</span></div><div className="credential-add-grid"><VSelect ariaLabel="Credential provider" value={credentialDraft.provider} onValueChange={value => setCredentialDraft(d => ({...d, provider: value}))} options={CREDENTIAL_PROVIDER_OPTIONS}/><input className="cfg-key" aria-label="Credential label" placeholder="Label" value={credentialDraft.label} onChange={e => setCredentialDraft(d => ({...d, label: e.target.value}))}/><input type="password" className="cfg-key" aria-label="Credential API key" placeholder="API key" value={credentialDraft.secret} onChange={e => setCredentialDraft(d => ({...d, secret: e.target.value}))}/><button className="btn" disabled={routingBusy || !credentialDraft.label.trim() || !credentialDraft.secret.trim()} onClick={addRoutingCredential}>Add</button></div></div>
-
-              <div className="cfg-sec">Latest route</div>
-              <div className="set-row routing-row"><div className="routing-copy">{routingStatus && routingStatus.latest_attempt ? `${routingStatus.latest_attempt.model} · ${routingStatus.latest_attempt.inference_provider || routingStatus.latest_attempt.api_provider}` : 'No routing attempts recorded yet.'}<span className="sr-sub">Refresh after a model request to inspect the most recent route.</span></div><span className="sr-end routing-actions"><button className="btn" disabled={routingBusy} onClick={loadRouting}>Refresh</button></span></div>
-              {routingError && <div className="set-note" role="alert">{routingError}</div>}
+              <div className="set-note">Provider routing, fallback models, and credential pools are managed by Vellum's backend. Ask Vellum to inspect or change routing behavior.</div>
             </React.Fragment>
           )}
           {tab === 'Reflections' && (
@@ -5963,7 +5851,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
             <React.Fragment>
               <div className="set-h">Plugins</div>
               <div className="set-row spotify-row">
-                <div className="spotify-row-main"><span className="spotify-mark">S</span><div className="spotify-row-copy">Spotify<span className="sr-sub">Playback, devices, queue, search, playlists, albums, library, and history.</span><span className={'spotify-status' + (spotify && spotify.connected ? ' connected' : '')}>{spotify && spotify.connected ? ((spotify.account_name || 'Spotify') + (spotify.product ? ' · ' + spotify.product : '')) : spotify && spotify.status === 'reauth_required' ? 'Reauthentication required' : 'Not connected'}</span></div></div>
+                <div className="spotify-row-main"><span className="spotify-mark">S</span><div className="spotify-row-copy">Spotify<span className="sr-sub">Playback, devices, queue, search, playlists, albums, library, and history.</span><span className={'spotify-status' + (spotify && spotify.connected ? ' connected' : '')}>{spotify && spotify.connected ? ((spotify.account_name || 'Spotify') + (spotify.product ? ' Â· ' + spotify.product : '')) : spotify && spotify.status === 'reauth_required' ? 'Reauthentication required' : 'Not connected'}</span></div></div>
                 <span className="sr-end">{spotify && spotify.connected ? <button className="btn" onClick={onSpotifyDisconnect}>Disconnect</button> : <button className="btn primary" onClick={onSpotifyConnect}>{spotify && spotify.status === 'reauth_required' ? 'Reconnect' : 'Connect'}</button>}</span>
               </div>
               {(apps || []).filter(p => p.id !== 'spotify').map(p => (
@@ -6029,7 +5917,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   );
 };
 
-/* â”€â”€â”€ app â”€â”€â”€ */
+/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
@@ -6935,7 +6823,10 @@ const App = () => {
   const selectModel = async id => {
     setSelModel(id);
     if (!FEATURE_FLAGS.realModels) return;
-    try { await API.settings.setActiveModel(id); }
+    try {
+      const active = await API.settings.setActiveModel(id);
+      if (active && active.id) setSelModel(active.id);
+    }
     catch (err) { pushToast('Model switch failed'); }
   };
   const saveProviderKey = async (provider, apiKey) => {

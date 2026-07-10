@@ -155,9 +155,17 @@ class _FakeAgent:
                 )
             },
         }
-        # Model stream -> drives 'token' SSE and the final answer text.
+        # LangChain exposes the nested provider event as well as the routed
+        # facade event. The API must consume only the routed event or every
+        # token is duplicated in the final answer.
         yield {
             "event": "on_chat_model_stream",
+            "name": "ChatOpenAI",
+            "data": {"chunk": SimpleNamespace(content="Verstappen won the last race.")},
+        }
+        yield {
+            "event": "on_chat_model_stream",
+            "name": "RoutedChatModel",
             "data": {"chunk": SimpleNamespace(content="Verstappen won the last race.")},
         }
 

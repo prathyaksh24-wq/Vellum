@@ -16,6 +16,12 @@ def test_projects_sent_to_llm():
     assert can_send_to_llm("Projects/fitness/notes/anything.md")
 
 
+def test_knowledge_wiki_is_indexed_and_scrubbed_before_llm_use():
+    assert can_store("Knowledge/concepts/memory.md")
+    assert can_index("Knowledge/concepts/memory.md")
+    assert can_send_to_llm("Knowledge/concepts/memory.md")
+
+
 def test_library_books_private():
     assert not can_send_to_llm("Library/Books/some-book.md")
     assert can_index("Library/Books/some-book.md")

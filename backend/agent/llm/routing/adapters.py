@@ -32,6 +32,7 @@ _FAILURE_SUMMARIES = {
     FailureKind.plan_exhausted: "provider usage plan is exhausted",
     FailureKind.rate_limit: "provider rate limit reached",
     FailureKind.model_unavailable: "model route is unavailable",
+    FailureKind.route_unavailable: "model route is unavailable",
     FailureKind.timeout: "provider request timed out",
     FailureKind.network: "provider connection failed",
     FailureKind.server: "provider service is unavailable",
@@ -75,6 +76,13 @@ def classify_provider_exception(exc: BaseException) -> ProviderFailure:
             kind = FailureKind.auth
         elif status == 402:
             kind = FailureKind.billing
+        elif status == 404 and (
+            "no endpoints found" in message
+            or "requested parameters" in message
+            or "data policy" in message
+            or "zero data retention" in message
+        ):
+            kind = FailureKind.route_unavailable
         elif status == 404:
             kind = FailureKind.model_unavailable
         elif status == 429 and any(phrase in message for phrase in _PLAN_EXHAUSTION_PHRASES):
@@ -124,7 +132,7 @@ class OpenRouterAdapter:
             api_key=secret,
             base_url=self.base_url,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=max(256, max_tokens),
             default_headers={
                 "HTTP-Referer": "http://localhost",
                 "X-Title": "Vellum",
@@ -158,6 +166,6 @@ class OpenAIAdapter:
             api_key=secret,
             base_url=self.base_url,
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=max(256, max_tokens),
             **kwargs,
         )
