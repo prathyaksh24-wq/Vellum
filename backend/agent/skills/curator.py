@@ -43,7 +43,7 @@ class CuratorBackupStore:
         with tarfile.open(archive, "w:gz") as handle:
             if self.root.exists():
                 for child in sorted(self.root.iterdir()):
-                    if child.name == ".curator_backups":
+                    if child.name in {".curator_backups", ".locks", ".staging"}:
                         continue
                     handle.add(child, arcname=child.name, recursive=True)
         manifest = {

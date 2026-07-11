@@ -21,5 +21,5 @@ Author a Hermes-compatible SKILL.md with a concise description (60 characters or
 
 Use progressive disclosure: keep the common procedure in SKILL.md and put large supporting material in relative references/, templates/, scripts/, or assets/ files. Do not invent commands, APIs, or capabilities that were not verified from the source. Do not copy secrets, personal identifiers, raw private-folder content, or machine paths into the reusable skill. Generalize private local procedures before authoring.
 
-Validate trigger and when-not-to-use guidance. Finish by calling skill_manage(action="create", skill_md=<complete SKILL.md>, category=<slug>, confirm=true). Use skill_manage(action="write_file") for support files only after creation.
+Validate trigger and when-not-to-use guidance. Finish by calling skill_manage(action="create", skill_md=<complete SKILL.md>, category=<slug>). This stages the package in the user's approval queue. Use skill_manage(action="write_file") for support files only after creation is approved.
 """.strip()

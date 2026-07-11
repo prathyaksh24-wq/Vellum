@@ -32,6 +32,13 @@ from agent.skills.models import (
 )
 from agent.skills.migration import JsonSkillMigrator, MigrationReport
 from agent.skills.manager import SkillManager, SkillMutationError
+from agent.skills.locking import SkillLockManager, SkillLockTimeout
+from agent.skills.mutation import (
+    FilesystemSkillBackend,
+    PreparedMutation,
+    SkillMutationBackend,
+    SkillMutationCoordinator,
+)
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 from agent.skills.registry import SkillRegistry
 from agent.skills.runtime import CORE_TOOL_NAMES, CORE_TOOLSETS, build_skill_index_block, get_skill_registry
@@ -78,8 +85,14 @@ __all__ = [
     "SkillBundleError",
     "SkillBundleStore",
     "SkillManager",
+    "SkillLockManager",
+    "SkillLockTimeout",
     "SkillMetadata",
     "SkillMutationError",
+    "SkillMutationBackend",
+    "SkillMutationCoordinator",
+    "FilesystemSkillBackend",
+    "PreparedMutation",
     "SkillPackage",
     "SkillPackageError",
     "SkillPackageParser",

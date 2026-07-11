@@ -35,8 +35,10 @@ def test_surface_actions_persist_approval_and_retirement(tmp_path: Path) -> None
     (proposed / "SKILL.md").write_text(skill_md("proposed-skill"), encoding="utf-8")
     service = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[])
 
-    approved = service.action("approve", name="proposed-skill", confirm=True)
-    retired = service.action("retire", name="proposed-skill", confirm=True)
+    approve_pending = service.action("approve", name="proposed-skill", confirm=True)
+    approved = service.action("pending_approve", name=approve_pending["id"])
+    retire_pending = service.action("retire", name="proposed-skill", confirm=True)
+    retired = service.action("pending_approve", name=retire_pending["id"])
 
     assert approved["state"] == "active"
     assert retired["state"] == "retired"

@@ -822,16 +822,15 @@ def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monke
     )
 
     with TestClient(api.app) as client:
-        blocked = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
-        approved = client.post(
-            "/api/skills/action",
-            json={"action": "approve", "name": "api-skill", "confirm": True},
-        )
+        staged = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
+        approved = client.post("/api/skills/action", json={"action": "pending_approve", "name": staged.json()["result"]["id"]})
         detail = client.get("/api/skills/api-skill")
         learned = client.post("/api/skills/learn", json={"source": "this conversation"})
 
-    assert blocked.status_code == 400
+    assert staged.status_code == 200
+    assert staged.json()["result"]["status"] == "pending"
     assert approved.status_code == 200
+    assert approved.json()["result"]["status"] == "applied"
     assert approved.json()["result"]["state"] == "active"
     assert detail.status_code == 200
     assert "Run it" in detail.json()["content"]
