@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -77,6 +78,15 @@ async def run_digest(
         run_sports_calibration(now=now if isinstance(now, datetime) else datetime.now())
     except Exception as exc:  # noqa: BLE001
         logger.warning("[DIGEST] sports calibration step failed: %s", exc)
+
+    try:
+        from agent.skills.learning import SkillLearningWorkflow
+
+        learning = SkillLearningWorkflow(Path(".skills"))
+        learning.record_signal(summary, kind="nightly_digest", successful=True)
+        learning.review_candidates()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DIGEST] skill learning review failed: %s", exc)
 
     return str(note_path)
 

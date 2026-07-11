@@ -4,11 +4,12 @@ import json
 
 from langchain_core.tools import tool
 
-from agent.skills import SkillMutationCoordinator, SkillMutationError, build_learn_prompt
+from agent.skills import SkillLearningWorkflow, SkillMutationCoordinator, SkillMutationError
 from agent.skills.runtime import SKILLS_PATH
 
 
 _COORDINATOR: SkillMutationCoordinator | None = None
+_LEARNING: SkillLearningWorkflow | None = None
 
 
 def _coordinator() -> SkillMutationCoordinator:
@@ -20,6 +21,13 @@ def _coordinator() -> SkillMutationCoordinator:
 
 def _json(value) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
+
+
+def _learning() -> SkillLearningWorkflow:
+    global _LEARNING
+    if _LEARNING is None:
+        _LEARNING = SkillLearningWorkflow(SKILLS_PATH)
+    return _LEARNING
 
 
 @tool
@@ -82,6 +90,6 @@ def skill_manage(
 def skill_learn(source: str, focus: str = "") -> str:
     """Build standards-guided instructions for learning a reusable skill from supplied sources."""
     try:
-        return _json({"ok": True, "prompt": build_learn_prompt(source, focus)})
+        return _json(_learning().compose(source, focus))
     except ValueError as exc:
         return _json({"ok": False, "error": str(exc)})

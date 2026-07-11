@@ -1312,6 +1312,19 @@ async def _background_learn(
         )
         if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
+        try:
+            from agent.skills.learning import SkillLearningWorkflow
+
+            learning = SkillLearningWorkflow(Path(".skills"))
+            turn = await asyncio.to_thread(
+                learning.record_successful_turn,
+                clean_query[:1000],
+                complex_task=bool(tools) or len(clean_query) >= 240,
+            )
+            if turn["review_due"]:
+                await asyncio.to_thread(learning.review_candidates)
+        except Exception:
+            pass
         # Hermes-style: refresh the cached user model (Honcho dialectic) on a
         # cadence so the next turn's prompt reflects a deeper understanding.
         try:

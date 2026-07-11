@@ -208,6 +208,12 @@ class FilesystemSkillBackend:
         if result.verdict == "dangerous":
             identifiers = ", ".join(finding.pattern_id for finding in result.findings)
             raise SkillMutationError(f"skill security scan rejected package: {identifiers}")
+        from agent.skills.privacy import SkillPrivacyError, SkillPrivacyGate
+
+        try:
+            SkillPrivacyGate().validate_generated(FilesystemSkillBackend._text_files(root).items())
+        except SkillPrivacyError as exc:
+            raise SkillMutationError(str(exc)) from exc
         return package
 
     def _assert_deletable(self, name: str) -> None:

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
 
-def build_learn_prompt(source: str, focus: str = "") -> str:
-    clean_source = source.strip()
+from agent.skills.privacy import SkillPrivacyGate
+
+
+def build_learn_prompt(source: str, focus: str = "", *, source_path: str | Path | None = None) -> str:
+    gate = SkillPrivacyGate()
+    clean_source = gate.sanitize(source, source_path=source_path).text.strip()
     if not clean_source:
         raise ValueError("learn source is required")
-    focus_line = f"Focus specifically on: {focus.strip()}\n" if focus.strip() else ""
+    clean_focus = gate.sanitize(focus).text.strip() if focus.strip() else ""
+    focus_line = f"Focus specifically on: {clean_focus}\n" if clean_focus else ""
     return f"""Learn a reusable Vellum skill from this source:
 {clean_source}
 {focus_line}

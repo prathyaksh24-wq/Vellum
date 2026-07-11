@@ -1,4 +1,6 @@
 from agent.skills.authoring import build_learn_prompt
+from agent.skills.learning import SkillLearningWorkflow, SkillSignal
+from agent.skills.privacy import PrivacyGateResult, SkillPrivacyError, SkillPrivacyGate
 from agent.skills.bundles import SkillBundleError, SkillBundleStore
 from agent.skills.configuration import SkillConfigStore
 from agent.skills.catalog import (
@@ -88,6 +90,11 @@ __all__ = [
     "LobeHubSource",
     "OfficialSkillSource",
     "SkillIndexEntry",
+    "SkillLearningWorkflow",
+    "SkillSignal",
+    "SkillPrivacyGate",
+    "SkillPrivacyError",
+    "PrivacyGateResult",
     "SkillHub",
     "SkillHubError",
     "SkillConfigStore",
