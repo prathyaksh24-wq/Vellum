@@ -99,6 +99,9 @@ def start_scheduler(scheduler: AsyncIOScheduler | None = None) -> AsyncIOSchedul
 
     scheduler = scheduler or AsyncIOScheduler()
     scheduler.add_job(run_digest, "cron", hour=2, minute=0, id="nightly_digest", replace_existing=True)
+    from agent.skills.curator_runtime import install_curator_ticker
+
+    install_curator_ticker(scheduler)
     scheduler.start()
     logger.info("[DIGEST] Nightly digest scheduler started at 02:00 local time.")
     return scheduler

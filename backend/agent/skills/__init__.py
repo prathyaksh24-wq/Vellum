@@ -14,6 +14,7 @@ from agent.skills.catalog import (
     semantic_projection,
 )
 from agent.skills.curator import CuratorBackupStore, CuratorConfig, SkillCurator
+from agent.skills.curator_runtime import CuratorRuntime, get_curator_runtime, install_curator_ticker
 from agent.skills.hub import HubLockFile, SkillHub, SkillHubError, TapsManager, bundle_content_hash
 from agent.skills.hub_models import HubSkillBundle, HubSkillMeta
 from agent.skills.hub_sources import (
@@ -74,6 +75,7 @@ __all__ = [
     "CORE_TOOLSETS",
     "CuratorBackupStore",
     "CuratorConfig",
+    "CuratorRuntime",
     "ConfigSetting",
     "CredentialRequirement",
     "EnvironmentRequirement",
@@ -134,6 +136,8 @@ __all__ = [
     "allow_skill_install",
     "bundle_content_hash",
     "create_skill_source_router",
+    "get_curator_runtime",
+    "install_curator_ticker",
     "cosine_similarity",
     "calibrate_semantic_threshold",
     "package_content_hash",

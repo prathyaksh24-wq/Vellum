@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from agent.skills import CuratorBackupStore, CuratorConfig, SkillCurator, SkillManager, SkillUsageStore
+from agent.skills import CuratorBackupStore, CuratorConfig, CuratorRuntime, SkillCurator, SkillManager, SkillUsageStore
 import pytest
 
 
@@ -120,3 +120,24 @@ def test_curator_pin_requires_agent_created_skill_and_consolidation_is_bounded(t
 
     assert result["consolidated"] == ["agent-skill"]
     assert calls[0][1] == 8
+
+
+def test_curator_defaults_protect_builtins_and_runtime_tracks_idle_time(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(skill_md("bundled"), origin="background_review", confirm=True)
+    (root / ".bundled_manifest").write_text(json.dumps({"bundled": {}}), encoding="utf-8")
+    set_created(root, "bundled", "2026-01-01T00:00:00+00:00")
+    now = datetime(2026, 7, 3, tzinfo=timezone.utc)
+    curator = SkillCurator(root, logs_root=tmp_path / "logs")
+    curator.run(now=now, idle_hours=10)
+
+    result = curator.run(now=now, idle_hours=10, force=True)
+
+    assert curator.config.prune_builtins is False
+    assert "bundled" in result["kept"]
+    assert manager.package("bundled")
+
+    runtime = CuratorRuntime(root, logs_root=tmp_path / "runtime-logs")
+    runtime.mark_activity(datetime(2026, 7, 3, tzinfo=timezone.utc))
+    assert runtime.idle_hours(datetime(2026, 7, 3, 2, tzinfo=timezone.utc)) == 2

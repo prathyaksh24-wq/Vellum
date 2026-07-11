@@ -1591,6 +1591,9 @@ async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
+    from agent.skills.curator_runtime import get_curator_runtime
+
+    get_curator_runtime().mark_activity()
     return await _run_agent(request.message, request.thread_id, request.model, request.attachments)
 
 
@@ -3137,6 +3140,9 @@ async def computer_use_events() -> StreamingResponse:
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    from agent.skills.curator_runtime import get_curator_runtime
+
+    get_curator_runtime().mark_activity()
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")

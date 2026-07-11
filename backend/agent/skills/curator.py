@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from agent.skills.hub import HubLockFile
 from agent.skills.manager import SkillManager
+from agent.skills.mutation import SkillMutationCoordinator
 from agent.skills.usage import SkillUsageStore
 
 
@@ -23,7 +24,7 @@ class CuratorConfig:
     stale_after_days: int = 30
     archive_after_days: int = 90
     consolidate: bool = False
-    prune_builtins: bool = True
+    prune_builtins: bool = False
     backup_enabled: bool = True
     backup_keep: int = 5
 
@@ -120,6 +121,7 @@ class SkillCurator:
         self.reviewer = reviewer
         self.usage = SkillUsageStore(self.root)
         self.manager = SkillManager(self.root)
+        self.mutations = SkillMutationCoordinator(self.root)
         self.backups = CuratorBackupStore(self.root, keep=self.config.backup_keep)
         self.state_path = self.root / ".curator_state.json"
 
@@ -224,10 +226,10 @@ class SkillCurator:
     def archive(self, name: str) -> dict[str, Any]:
         if not self._is_agent_created(name):
             raise ValueError(f"only agent-created skills can be curated: {name}")
-        return self.manager.archive(name, confirm=True)
+        return self.mutations.submit("archive", name=name, origin="curator_manual")
 
     def restore(self, name: str) -> dict[str, Any]:
-        return self.manager.restore(name, confirm=True)
+        return self.mutations.submit("restore", name=name, origin="curator_manual")
 
     def list_archived(self) -> list[str]:
         root = self.root / ".archive"
@@ -266,7 +268,7 @@ class SkillCurator:
         review: list[dict[str, Any]] = []
         for name, record in sorted(usage.items()):
             is_builtin = name in bundled
-            eligible = record.get("created_by") == "agent" or (self.config.prune_builtins and is_builtin)
+            eligible = (record.get("created_by") == "agent" and not is_builtin) or (self.config.prune_builtins and is_builtin)
             if (
                 not eligible
                 or name in hub_names

@@ -33,6 +33,8 @@ ui-dist/
 .skills/.migration_state.json
 .skills/.locks/
 .skills/.staging/
+.skills/.curator_state.json
+.skills/.curator_backups/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml
