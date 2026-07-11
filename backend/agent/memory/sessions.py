@@ -6,7 +6,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-SESSIONS_DB = Path("data/memory/sessions.db")
+from agent.config import REPO_ROOT
+
+
+SESSIONS_DB = REPO_ROOT / "data" / "memory" / "sessions.db"
 
 
 class SessionsReader:

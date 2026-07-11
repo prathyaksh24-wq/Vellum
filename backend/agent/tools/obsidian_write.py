@@ -47,31 +47,10 @@ def append_to_note(filename: str, content: str) -> str:
 
 
 def store_qa_pair(query: str, answer: str, source: str = "agent") -> None:
-    settings = get_settings()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    title = f"QA {datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    content = f"---\ntype: agent-response\nsource: {source}\ndate: {timestamp}\n---\n\n## Question\n{query}\n\n## Answer\n{answer}"
-    ObsidianVault(settings.obsidian_vault_path).create_note(
-        folder=f"{settings.agent_notes_folder}/Responses",
-        title=title,
-        content=content,
-    )
-    if not settings.enable_vector_search:
-        return
-    try:
-        combined = f"Q: {query}\nA: {answer}"
-        get_vector_store().upsert(
-            collection="obsidian_vault",
-            text=combined,
-            embedding=get_embedder().embed(combined),
-            metadata={
-                "folder": f"{settings.agent_notes_folder}/Responses",
-                "source": source,
-                "timestamp": timestamp,
-                "type": "qa_pair",
-                "can_send_to_llm": True,
-            },
-        )
-    except Exception as exc:
-        logger.warning("[TOOL:write] Q&A embedding skipped: %s", exc)
+    """Deprecated compatibility hook; conversation persistence is orchestrator-owned.
+
+    Kept temporarily for external callers, but intentionally performs no write so
+    legacy integrations cannot recreate timestamped Agent/Responses notes.
+    """
+    logger.info("Ignoring legacy store_qa_pair call from %s", source)
 

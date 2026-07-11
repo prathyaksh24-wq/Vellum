@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.agent.obsidian.conversation_export import run_migration  # noqa: E402
+from backend.agent.obsidian.conversation_export import archive_legacy_agent_logs, run_migration  # noqa: E402
 
 
 def load_dotenv(path: Path) -> None:
@@ -46,12 +46,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apply", action="store_true", help="Write the projection; defaults to dry-run")
     parser.add_argument("--dry-run", action="store_true", help="Explicitly request the default dry-run")
     parser.add_argument("--manifest", type=Path, help="Also write the JSON manifest to this path")
+    parser.add_argument(
+        "--archive-legacy",
+        action="store_true",
+        help="Move legacy Agent/Queries and Agent/Responses notes into Archive without deleting them",
+    )
     args = parser.parse_args(argv)
 
     project_root = args.project_root.expanduser().resolve()
     source = (args.source or project_root / "data" / "ui" / "conversations.json").expanduser()
     vault = (args.vault_root or configured_vault(project_root)).expanduser()
     manifest = run_migration(source_path=source, vault_root=vault, dry_run=not args.apply)
+    if args.archive_legacy:
+        manifest["legacy_archive"] = archive_legacy_agent_logs(vault_root=vault, dry_run=not args.apply)
     encoded = json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
     if args.manifest:
         manifest_path = args.manifest.expanduser()

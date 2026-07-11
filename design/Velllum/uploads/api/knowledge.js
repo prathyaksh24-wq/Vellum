@@ -15,11 +15,7 @@
   }
 
   function rebuildIndex() {
-    return client.request("/api/knowledge/index/rebuild", { method: "POST" }).catch(function (error) {
-      // Older backend builds expose the same contract as /rebuild-index.
-      if (error && error.status === 404) return client.request("/api/knowledge/rebuild-index", { method: "POST" });
-      throw error;
-    });
+    return client.request("/api/knowledge/rebuild-index", { method: "POST" });
   }
 
   window.VellumApi.knowledge = {

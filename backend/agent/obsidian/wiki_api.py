@@ -32,6 +32,7 @@ class KnowledgePageRequest(BaseModel):
     identity: str = ""
     stable_id: str = ""
     id: str = ""
+    replace_sources: bool = False
 
 
 class KnowledgeSourceRequest(BaseModel):

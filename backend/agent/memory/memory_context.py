@@ -36,7 +36,6 @@ _TURN_COUNT: dict[str, int] = {}
 _MODEL_LOCK = threading.Lock()
 _DIALECTIC_CADENCE = 2  # refresh every N stored turns (Hermes default)
 _ORCHESTRATOR: Any | None = None
-_ORCHESTRATOR_LOCK = threading.Lock()
 _MEMORY_FILES_DIR = Path("data/memory")
 _MAX_MEMORY_FILE_CHARS = 3600
 
@@ -84,28 +83,11 @@ def set_user_model(thread_id: str, text: str) -> None:
 
 
 def _default_orchestrator():
-    global _ORCHESTRATOR
     if _ORCHESTRATOR is not None:
         return _ORCHESTRATOR
-    with _ORCHESTRATOR_LOCK:
-        if _ORCHESTRATOR is None:
-            from agent.config import get_settings
-            from agent.memory.fts5 import FTS5Memory
-            from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
-            from agent.memory.resolved import ResolvedQuestionsCache
-            from agent.tools.capabilities.memory_service import MemoryCapabilityService
+    from agent.memory.runtime import get_memory_orchestrator
 
-            settings = get_settings()
-            _ORCHESTRATOR = MemoryOrchestrator(
-                fts5=FTS5Memory(),
-                resolved_cache=ResolvedQuestionsCache(),
-                memory_service=MemoryCapabilityService(
-                    vault_root=settings.obsidian_vault_path,
-                    sessions_db=Path("data/memory/sessions.db"),
-                ),
-                store=SQLiteMemoryStore(Path("data/memory/sessions.db")),
-            )
-    return _ORCHESTRATOR
+    return get_memory_orchestrator()
 
 
 def refresh_user_model(thread_id: str, honcho) -> None:
@@ -217,6 +199,23 @@ def _format_memory_packet(packet: dict[str, Any]) -> str:
     external_context = str(packet.get("external_context") or "").strip()
     if external_context:
         sections.append("## External memory provider context\n" + external_context)
+    knowledge_refs = packet.get("knowledge_refs") or []
+    if knowledge_refs:
+        lines = []
+        for item in knowledge_refs[:4]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "Untitled")
+            ref = str(item.get("ref") or "")
+            description = str(item.get("description") or "").strip()
+            suffix = f" - {description}" if description else ""
+            lines.append(f"- {title} ({ref}){suffix}")
+        if lines:
+            sections.append(
+                "## Relevant Knowledge wiki references\n"
+                "These are routing references, not copied memory. Use the knowledge_wiki tool to read a page only when needed.\n"
+                + "\n".join(lines)
+            )
     if not sections:
         return ""
     return (

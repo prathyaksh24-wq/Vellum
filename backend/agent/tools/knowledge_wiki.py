@@ -44,6 +44,7 @@ def knowledge_wiki(
     approved_path: bool = False,
     approve_source: bool = False,
     approved: bool = False,
+    replace_sources: bool = False,
     version: int = 0,
     limit: int = 8,
     stale_days: int = 120,
@@ -103,6 +104,7 @@ def knowledge_wiki(
                         identity=identity,
                         stable_id=stable_id,
                         id=id,
+                        replace_sources=replace_sources,
                     ),
                 }
             )

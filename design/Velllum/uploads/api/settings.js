@@ -30,12 +30,14 @@
     },
     memorySaved: function () {
       return client.request("/api/memory/saved").then(function (body) {
-        return { entries: body.memories || [] };
+        var memories = body.memories || [];
+        return { memories: memories, entries: memories };
       });
     },
     memoryEntries: function () {
       return client.request("/api/memory/archived").then(function (body) {
-        return { entries: body.memories || [] };
+        var memories = body.memories || [];
+        return { memories: memories, entries: memories };
       });
     },
     memoryDreamingStatus: function () { return client.request("/api/memory/dreaming/status"); },

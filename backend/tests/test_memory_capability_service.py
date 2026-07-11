@@ -108,3 +108,39 @@ def test_memory_service_create_card_writes_safe_frontmatter(tmp_path):
     assert 'scope: "shared-attacker-true"' in frontmatter
     assert 'visible_to: ["VellumAgent\\"\\nattacker: true", "MemoryAgent"]' in frontmatter
     assert "\nattacker: true\n" not in frontmatter
+
+
+def test_memory_card_search_enforces_agent_scope_and_visibility(tmp_path):
+    vault = tmp_path / "Vault"
+    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+    service.create_card(
+        {
+            "scope": "shared",
+            "title": "Shared preference",
+            "summary": "User prefers direct answers.",
+        }
+    )
+    service.create_card(
+        {
+            "scope": "agent:XAgent",
+            "title": "X private context",
+            "summary": "Private X drafting context.",
+            "visible_to": ["XAgent", "VellumAgent", "MemoryAgent"],
+        }
+    )
+    service.create_card(
+        {
+            "scope": "agent:SportsAgent",
+            "title": "Sports private context",
+            "summary": "Private sports analysis context.",
+            "visible_to": ["SportsAgent", "MemoryAgent"],
+        }
+    )
+
+    x_cards = service.search_cards({"agent_name": "XAgent", "query": "context", "limit": 20})["cards"]
+    vellum_cards = service.search_cards({"agent_name": "VellumAgent", "query": "context", "limit": 20})["cards"]
+
+    assert any("X private context" in card["text"] for card in x_cards)
+    assert not any("Sports private context" in card["text"] for card in x_cards)
+    assert any("X private context" in card["text"] for card in vellum_cards)
+    assert not any("Sports private context" in card["text"] for card in vellum_cards)

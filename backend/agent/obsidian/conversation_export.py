@@ -25,6 +25,8 @@ CONVERSATIONS_ROOT = Path("Agent") / "Conversations"
 SOURCE_LABEL = "data/ui/conversations.json"
 PROJECTION_TYPE = "conversation"
 UNKNOWN_DATE = date(1970, 1, 1)
+LEGACY_AGENT_ROOTS = (Path("Agent") / "Queries", Path("Agent") / "Responses")
+LEGACY_ARCHIVE_ROOT = Path("Archive") / "Legacy Agent Logs"
 
 
 @dataclass(frozen=True)
@@ -141,8 +143,11 @@ def clean_title(value: Any, *, conversation: Mapping[str, Any] | None = None) ->
         "untitled chat",
         "conversation",
     }
+    first_user = _first_user_text(conversation or {})
     if placeholder and conversation is not None:
-        title = _first_user_text(conversation)
+        title = first_user
+    elif first_user and _looks_like_truncated_title(title, first_user):
+        title = first_user
     title = re.sub(r"[\x00-\x1f\x7f]", " ", title)
     title = re.sub(r"^\s*[#>*-]+\s*", "", title)
     # Old QA exports commonly put a timestamp in the title.  Remove that
@@ -164,6 +169,22 @@ def clean_title(value: Any, *, conversation: Mapping[str, Any] | None = None) ->
             else:
                 title = f"Conversation {conversation_id}"
     return title[:160].rstrip()
+
+
+def _looks_like_truncated_title(title: str, first_user: str) -> bool:
+    if len(first_user.strip()) <= len(title.strip()):
+        return False
+    if title.rstrip().endswith(("…", "...")):
+        return True
+    clean_title_text = " ".join(re.findall(r"[A-Za-z0-9]+", title.casefold()))
+    clean_first = " ".join(re.findall(r"[A-Za-z0-9]+", first_user.casefold()))
+    prefix = clean_title_text.rstrip()
+    if len(prefix) < 12:
+        return False
+    # UI-generated titles sometimes replace the truncated final word with a
+    # question mark. Compare the stable prefix before that partial word.
+    stable = prefix.rsplit(" ", 1)[0] if " " in prefix else prefix
+    return len(stable) >= 12 and clean_first.startswith(stable)
 
 
 def slugify_title(title: str, *, fallback: str = "conversation") -> str:
@@ -565,6 +586,106 @@ def export_conversations(
         "counts": counts,
         "entries": entries,
     }
+
+
+def archive_conversation_projection(
+    conversation_id: str,
+    *,
+    thread_id: str = "",
+    vault_root: str | Path,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Move a deleted canonical conversation projection into the private archive."""
+
+    vault = Path(vault_root).expanduser().resolve()
+    match = next(
+        (
+            note
+            for note in _read_existing_notes(vault)
+            if note.metadata.get("conversation_id") == conversation_id
+            or (thread_id and note.metadata.get("thread_id") == thread_id)
+        ),
+        None,
+    )
+    if match is None:
+        return {"found": False, "archived": False, "conversation_id": conversation_id}
+    relative = match.path.relative_to(vault)
+    parts = relative.parts
+    if len(parts) < 5 or parts[:2] != ("Agent", "Conversations"):
+        raise ValueError(f"Conversation projection is outside the managed tree: {relative.as_posix()}")
+    target = _safe_vault_path(vault, Path("Archive") / relative)
+    if target.exists() and target.resolve() != match.path.resolve():
+        raise FileExistsError(f"Refusing to overwrite archived conversation: {target}")
+    if not dry_run:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        match.path.replace(target)
+    return {
+        "found": True,
+        "archived": not dry_run,
+        "dry_run": dry_run,
+        "conversation_id": conversation_id,
+        "previous_path": relative.as_posix(),
+        "path": target.relative_to(vault).as_posix(),
+    }
+
+
+def archive_legacy_agent_logs(*, vault_root: str | Path, dry_run: bool = True) -> dict[str, Any]:
+    """Reversibly move timestamp-era query/response notes out of the active vault tree."""
+
+    vault = Path(vault_root).expanduser().resolve()
+    entries: list[dict[str, str]] = []
+    counts = {"archived": 0, "already_archived": 0, "blocked": 0}
+    for legacy_root in LEGACY_AGENT_ROOTS:
+        source_root = _safe_vault_path(vault, legacy_root)
+        if not source_root.exists():
+            continue
+        for source in sorted(path for path in source_root.rglob("*.md") if path.is_file()):
+            relative_inside = source.relative_to(source_root)
+            target = _safe_vault_path(vault, LEGACY_ARCHIVE_ROOT / legacy_root.name / relative_inside)
+            action = "archive"
+            if target.exists():
+                if source.read_bytes() != target.read_bytes():
+                    action = "blocked_conflict"
+                    counts["blocked"] += 1
+                else:
+                    action = "already_archived"
+                    counts["already_archived"] += 1
+                    if not dry_run:
+                        source.unlink()
+            else:
+                counts["archived"] += 1
+                if not dry_run:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    source.replace(target)
+            entries.append(
+                {
+                    "action": action,
+                    "source": source.relative_to(vault).as_posix(),
+                    "path": target.relative_to(vault).as_posix(),
+                }
+            )
+        if not dry_run:
+            for directory in sorted(source_root.rglob("*"), reverse=True):
+                if directory.is_dir():
+                    try:
+                        directory.rmdir()
+                    except OSError:
+                        pass
+            try:
+                source_root.rmdir()
+            except OSError:
+                pass
+    if not dry_run and entries:
+        readme = _safe_vault_path(vault, LEGACY_ARCHIVE_ROOT / "README.md")
+        if not readme.exists():
+            _atomic_write(
+                readme,
+                "# Legacy Agent Logs\n\n"
+                "These timestamp-era query and response notes are preserved for audit. "
+                "They are not canonical conversation history or durable memory. "
+                "Current conversations live in `Agent/Conversations`.\n",
+            )
+    return {"dry_run": dry_run, "counts": counts, "entries": entries}
 
 
 def load_conversations(source_path: str | Path) -> list[dict[str, Any]]:

@@ -161,6 +161,7 @@ class KnowledgeWiki:
         identity: str = "",
         stable_id: str = "",
         id: str = "",
+        replace_sources: bool = False,
     ) -> dict[str, Any]:
         self.ensure_structure()
         clean_title = _clean_title(title)
@@ -218,7 +219,7 @@ class KnowledgeWiki:
         page_identity = requested_id or old_id or f"knowledge:{clean_type}:{_slug(clean_title)}"
         page_identity = _clean_page_id(page_identity)
         old_sources = _as_list(old_metadata.get("sources"))
-        merged_sources = _unique([*old_sources, *clean_sources])
+        merged_sources = clean_sources if replace_sources else _unique([*old_sources, *clean_sources])
         merged_provenance = _merge_provenance(
             _as_provenance(old_metadata.get("provenance")),
             _as_provenance(provenance),

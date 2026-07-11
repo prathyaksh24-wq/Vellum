@@ -174,7 +174,7 @@ def test_memory_packet_respects_global_and_agent_scopes(tmp_path: Path) -> None:
     assert "enterprise demo" in texts
     assert "channel name and video link" in texts
     assert "standings" not in texts
-    assert packet["scopes"] == ["global", "user_profile", "agent:YoutubeAgent"]
+    assert packet["scopes"] == ["global", "user_profile", "shared", "agent:YoutubeAgent"]
 
 
 def test_memory_settings_can_disable_recent_context_without_disabling_saved_memory(tmp_path: Path) -> None:

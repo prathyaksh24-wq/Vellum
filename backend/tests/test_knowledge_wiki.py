@@ -76,6 +76,33 @@ def test_upsert_is_idempotent_and_saves_history_before_revision(tmp_path):
     assert "Version one" in history[0].read_text(encoding="utf-8")
 
 
+def test_upsert_can_replace_stale_sources_with_version_history(tmp_path):
+    wiki = KnowledgeWiki(tmp_path)
+    first = wiki.upsert_page(
+        title="Source repair",
+        page_type="concept",
+        content="Maintained knowledge.",
+        sources=["approved-source:legacy"],
+        source_trust="unknown",
+    )
+
+    revised = wiki.upsert_page(
+        title="Source repair",
+        page_type="concept",
+        content="Maintained knowledge.",
+        sources=["approved-source:maintained"],
+        source_trust="maintained",
+        provenance=[{"kind": "maintenance", "ref": "approved-source:maintained", "trust": "maintained"}],
+        page_id=first["page"]["id"],
+        replace_sources=True,
+    )
+
+    page = wiki.read_page(revised["ref"])
+    assert page["sources"] == ["approved-source:maintained"]
+    assert page["source_trust"] == "maintained"
+    assert len(wiki.version_history(revised["ref"])["versions"]) == 1
+
+
 def test_stable_identity_renames_without_duplicate_and_exposes_history(tmp_path):
     wiki = KnowledgeWiki(tmp_path)
     first = wiki.upsert_page(

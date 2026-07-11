@@ -2,7 +2,7 @@ use serde::Serialize;
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const VELLUM_FRONTEND_URL: &str = "http://127.0.0.1:5173/ui/Vellum%20Default%20Re-designed.html?desktop=1";
+const VELLUM_FRONTEND_URL: &str = "http://127.0.0.1:5173/design-uploads/Vellum%20Default%20Re-designed.html?desktop=1";
 const DESKTOP_OVERLAY_DEV_URL: &str = "http://127.0.0.1:1420/overlay.html";
 
 #[derive(Serialize)]

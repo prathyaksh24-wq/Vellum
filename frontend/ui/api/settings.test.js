@@ -12,7 +12,7 @@ async function loadSettingsApi(fetchImpl) {
       }),
     },
   };
-  await import("./settings.js");
+  await import("../../../design/Velllum/uploads/api/settings.js");
   return window.VellumApi.settings;
 }
 
@@ -61,8 +61,8 @@ describe("Vellum settings API memory endpoints", () => {
     });
     const api = await loadSettingsApi(fetchImpl);
 
-    await expect(api.memorySaved()).resolves.toEqual({ entries: [{ id: 1, text: "Saved memory." }] });
-    await expect(api.memoryEntries()).resolves.toEqual({ entries: [{ id: 2, text: "Old memory." }] });
+    await expect(api.memorySaved()).resolves.toEqual({ memories: [{ id: 1, text: "Saved memory." }], entries: [{ id: 1, text: "Saved memory." }] });
+    await expect(api.memoryEntries()).resolves.toEqual({ memories: [{ id: 2, text: "Old memory." }], entries: [{ id: 2, text: "Old memory." }] });
     await expect(api.memoryDreamingRun()).resolves.toMatchObject({ global_summary: "Updated." });
   });
 

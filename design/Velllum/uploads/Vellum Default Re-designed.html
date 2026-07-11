@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Vellum - Default Mode (preview)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a1717'/%3E%3Cpath d='M15 17h10l7 27 7-27h10L38 51H26z' fill='%23988686'/%3E%3C/svg%3E"/>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
@@ -4904,12 +4905,13 @@ function KnowledgeGraphView({ onBack }){
     setBusy(true); setError('');
     try {
       const result = await action();
-      if (result && result.issues) setLintReport(result);
+      if (result && (result.issues || result.health)) setLintReport(result);
       await loadStatus();
     } catch (err) { setError((err && err.message) || 'Knowledge wiki action failed.'); }
     finally { setBusy(false); }
   };
   const counts = status && status.counts ? Object.entries(status.counts) : [];
+  const lintIssueCount = lintReport ? ['missing_fields','missing_sources','missing_provenance','invalid_source_trust','broken_links','duplicate_titles','duplicate_identities','orphan_pages','stale_pages'].reduce((total, key) => total + (Array.isArray(lintReport[key]) ? lintReport[key].length : 0), 0) + (lintReport.overview_drift ? 1 : 0) : 0;
   return (
     <div className="page">
       <div className="page-inner wiki-page" style={{maxWidth: 980}}>
@@ -4926,7 +4928,7 @@ function KnowledgeGraphView({ onBack }){
           <div className="wiki-status-copy">{loading ? 'Checking wiki…' : status ? (status.page_count || 0) + ' pages · ' + (status.root || 'ready') : 'Wiki status unavailable'}</div>
           <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.lint())}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.indexRebuild())}>Rebuild index</button></div>
         </div>
-        {lintReport && <div className="wiki-report"><span>Lint</span>{lintReport.issue_count != null ? lintReport.issue_count + ' issue' + (lintReport.issue_count === 1 ? '' : 's') : 'completed'}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
+        {lintReport && <div className="wiki-report"><span>Lint · {lintReport.health || 'complete'}</span>{lintIssueCount + ' issue' + (lintIssueCount === 1 ? '' : 's')}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
         <div className="wiki-layout">
           <section className="wiki-results" aria-label="Wiki search results">
             <div className="wiki-section-label">{submittedQuery ? 'Results for “' + submittedQuery + '”' : 'Wiki status'}</div>
@@ -4960,7 +4962,7 @@ function MemoryConsole({ onClose, onBack, page, onDreamComplete }){
       const [summary, saved, archived, settings, dreaming] = await Promise.all([
         API.settings.memorySummary(), API.settings.memorySaved(), API.settings.memoryEntries(), API.settings.memorySettings(), API.settings.memoryDreamingStatus(),
       ]);
-      setData({summary: summary || null, saved: (saved && saved.memories) || [], archived: (archived && archived.memories) || [], recent: (summary && summary.recent_context) || [], settings: settings && settings.settings});
+      setData({summary: summary || null, saved: (saved && (saved.memories || saved.entries)) || [], archived: (archived && (archived.memories || archived.entries)) || [], recent: (summary && summary.recent_context) || [], settings: settings && settings.settings});
       setDreamStatus(dreaming || null);
     } catch (err) { setError((err && err.message) || 'Memory backend unavailable.'); }
     finally { setLoading(false); }
@@ -5957,13 +5959,13 @@ const App = () => {
       const [summary, savedBody, archivedBody, settingsBody] = await Promise.all([
         API.settings.memorySummary(), API.settings.memorySaved(), API.settings.memoryEntries(), API.settings.memorySettings(),
       ]);
-      const saved = (savedBody && Array.isArray(savedBody.memories)) ? savedBody.memories : ((summary && Array.isArray(summary.saved_memories)) ? summary.saved_memories : []);
+      const saved = (savedBody && Array.isArray(savedBody.memories || savedBody.entries)) ? (savedBody.memories || savedBody.entries) : ((summary && Array.isArray(summary.saved_memories)) ? summary.saved_memories : []);
       const recent = (summary && Array.isArray(summary.recent_context)) ? summary.recent_context : [];
       setMemoryData({
         facts: [summary && summary.global_summary, ...saved.map(item => item && item.text)].filter(Boolean),
         entries: recent,
         saved,
-        archived: (archivedBody && Array.isArray(archivedBody.memories)) ? archivedBody.memories : [],
+        archived: (archivedBody && Array.isArray(archivedBody.memories || archivedBody.entries)) ? (archivedBody.memories || archivedBody.entries) : [],
         summary: summary || null,
         settings: (settingsBody && settingsBody.settings) ? settingsBody.settings : null,
         loading: false,

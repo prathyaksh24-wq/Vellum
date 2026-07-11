@@ -88,10 +88,10 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     body = response.json()
     assert body["api_version"] == "v1"
     assert body["contract_version"] == 1
-    assert body["frontend"]["canonical_entry"] == "/ui/Vellum%20Default%20Re-designed.html"
+    assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
 
     features = body["features"]
-    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "hermes_skills", "openrouter", "agent_runtime"]:
+    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
         assert key in features
         assert isinstance(features[key]["enabled"], bool)
         assert features[key]["contract"] == "v1"
@@ -243,6 +243,9 @@ def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tm
 
 def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
+    monkeypatch.setattr(api, "_index_ui_conversation", lambda conversation: {"indexed_turns": 1})
+    monkeypatch.setattr(api, "_project_ui_conversation", lambda conversation: {"ok": True, "action": "update"})
+    monkeypatch.setattr(api, "_archive_ui_conversation", lambda conversation: {"ok": True, "archived": True})
 
     payload = {
         "id": "chat-1",
@@ -270,7 +273,8 @@ def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path
     assert fetched.json()["conversation"]["messages"][1]["text"] == "Live answer"
     assert patched.json()["conversation"]["pinned"] is True
     assert patched.json()["conversation"]["title"] == "Pinned sports"
-    assert deleted.json() == {"ok": True}
+    assert deleted.json()["ok"] is True
+    assert deleted.json()["obsidian_projection"]["archived"] is True
 
 
 def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatch, tmp_path):
@@ -355,7 +359,6 @@ def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
 
     with TestClient(api.app) as client:
         before = client.get("/api/memory/settings")
@@ -399,7 +402,6 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
         "HonchoMemory",
@@ -440,7 +442,6 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
         "HonchoMemory",
@@ -490,7 +491,6 @@ def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
         "HonchoMemory",
@@ -549,7 +549,6 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "_DREAMING_MIN_PENDING", 1)
     monkeypatch.setattr(api, "_DREAMING_COOLDOWN_SECONDS", 0)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     api._dreaming_status.clear()
     api._dreaming_status.update({"status": "idle", "last_run": None, "last_result": None})
 

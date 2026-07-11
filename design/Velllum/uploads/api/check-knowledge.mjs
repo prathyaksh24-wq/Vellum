@@ -7,13 +7,9 @@ import vm from "node:vm";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const requests = [];
-let rebuildAttempt = 0;
 const fakeFetch = async (url, options = {}) => {
   const parsed = new URL(url);
   requests.push({path: parsed.pathname + parsed.search, method: options.method || "GET", body: options.body});
-  if (parsed.pathname === "/api/knowledge/index/rebuild" && rebuildAttempt++ === 0) {
-    return {ok: false, status: 404, async json() { return {detail: "Not Found"}; }, async text() { return ""; }};
-  }
   let body = {};
   if (parsed.pathname === "/api/knowledge/query") body = {results: [{ref: "Knowledge/concept/example", title: "Example"}]};
   if (parsed.pathname === "/api/knowledge/pages/Knowledge%2Fconcept%2Fexample") body = {ref: "Knowledge/concept/example", title: "Example", content: "Content"};
@@ -44,12 +40,11 @@ for (const required of [
   "/api/knowledge/query?q=memory+%26+wiki&limit=4",
   "/api/knowledge/pages/Knowledge%2Fconcept%2Fexample",
   "/api/knowledge/lint",
-  "/api/knowledge/index/rebuild",
   "/api/knowledge/rebuild-index",
 ]) {
   if (!paths.includes(required)) throw new Error(`missing request: ${required}`);
 }
-if (methods[3] !== "POST" || methods[4] !== "POST" || methods[5] !== "POST") throw new Error("knowledge mutations must use POST");
+if (methods[3] !== "POST" || methods[4] !== "POST") throw new Error("knowledge mutations must use POST");
 const lintRequest = requests.find(request => request.path === "/api/knowledge/lint");
 if (JSON.parse(lintRequest.body).stale_days !== 30) throw new Error("lint stale_days was not forwarded");
-console.log("OK: knowledge client contracts and rebuild compatibility verified");
+console.log("OK: knowledge client contracts verified");
