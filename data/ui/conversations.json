@@ -1,6 +1,110 @@
 {
   "conversations": [
     {
+      "id": "ukr9qoba",
+      "thread_id": "ukr9qoba",
+      "title": "wow",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "0yre5gym",
+          "role": "user",
+          "text": "wow",
+          "attachments": []
+        },
+        {
+          "id": "g4sk9kq1",
+          "role": "assistant",
+          "text": "Hey. What's on your mind?",
+          "full": "On \"wow\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_9ff1a597fa234904a90e3a3fb5151fe9",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "wow",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-11T07:01:23+00:00"
+            },
+            {
+              "id": "msg_6715cc51899b4af7bffc40c970d20b31",
+              "type": "final_answer_completed",
+              "label": "Answer written",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-11T07:01:54+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_9ff1a597fa234904a90e3a3fb5151fe9",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "wow",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "msg_6715cc51899b4af7bffc40c970d20b31",
+              "type": "final_answer_completed",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "kind": "done",
+              "title": "Answer written",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "answering",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        }
+      ],
+      "updated_at": "2026-07-11T07:01:54+00:00"
+    },
+    {
       "id": "1qxzdcal",
       "thread_id": "1qxzdcal",
       "title": "what song did you play from?",
