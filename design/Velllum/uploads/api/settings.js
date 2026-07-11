@@ -3,8 +3,9 @@
   window.VellumApi.settings = {
     get: function () { return client.request("/api/settings"); },
     models: function () { return client.request("/api/models"); },
+    memorySummary: function () { return client.request("/api/memory/summary"); },
     memoryRecent: function () {
-      return client.request("/api/memory/summary").then(function (body) {
+      return window.VellumApi.settings.memorySummary().then(function (body) {
         var facts = [];
         if (body.global_summary) facts.push(body.global_summary);
         (body.saved_memories || []).forEach(function (item) {
@@ -29,12 +30,14 @@
     },
     memorySaved: function () {
       return client.request("/api/memory/saved").then(function (body) {
-        return { entries: body.memories || [] };
+        var memories = body.memories || [];
+        return { memories: memories, entries: memories };
       });
     },
     memoryEntries: function () {
       return client.request("/api/memory/archived").then(function (body) {
-        return { entries: body.memories || [] };
+        var memories = body.memories || [];
+        return { memories: memories, entries: memories };
       });
     },
     memoryDreamingStatus: function () { return client.request("/api/memory/dreaming/status"); },

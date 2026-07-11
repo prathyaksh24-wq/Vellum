@@ -123,6 +123,12 @@ class FTS5Memory:
             ).fetchone()
         return row is not None
 
+    def delete_thread(self, thread_id: str) -> int:
+        """Remove all derived search rows for a deleted canonical thread."""
+        with self._connect() as conn:
+            cursor = conn.execute("DELETE FROM qa_fts WHERE thread_id = ?", (str(thread_id),))
+            return max(int(cursor.rowcount), 0)
+
     @staticmethod
     def _row(row: sqlite3.Row) -> dict:
         try:

@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
+from pathlib import Path
 import re
 
 from langchain_core.tools import tool
@@ -161,7 +162,7 @@ def search_my_notes(query: str) -> str:
 
 
 def _store_query(query: str) -> None:
-    """Store a query locally after deduplication."""
+    """Store private search telemetry without creating user-facing note clutter."""
     settings = _settings()
     if getattr(settings, "enable_query_vector_storage", False):
         try:
@@ -181,11 +182,34 @@ def _store_query(query: str) -> None:
             logger.warning("[TOOL:vault] Query vector storage skipped: %s", exc)
 
     try:
-        ObsidianVault(settings.obsidian_vault_path).create_note(
-            folder=f"{settings.agent_notes_folder}/Queries",
-            title=f"Query {datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            content=f"**Query logged at {datetime.now().strftime('%Y-%m-%d %H:%M')}**\n\n{query}",
-        )
+        now = datetime.now(timezone.utc)
+        log_dir = Path(settings.obsidian_vault_path) / settings.agent_notes_folder / "System" / "Search Logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / f"Search Activity - {now:%Y-%m}.md"
+        if log_path.exists():
+            existing = log_path.read_text(encoding="utf-8", errors="ignore")
+        else:
+            existing = (
+                "---\n"
+                "type: system-search-log\n"
+                f"month: {now:%Y-%m}\n"
+                "visibility: system\n"
+                "retention: archive\n"
+                "---\n\n"
+                f"# Search Activity - {now:%B %Y}\n\n"
+                "> Private tool telemetry. Conversation history and durable memory live elsewhere.\n"
+            )
+        marker = f"<!-- query:{_query_fingerprint(query)} -->"
+        if marker in existing:
+            return
+        entry = f"\n## {now:%d %B %Y at %H:%M UTC}\n\n{marker}\n\n{query.strip()}\n"
+        log_path.write_text(existing.rstrip() + "\n" + entry, encoding="utf-8", newline="\n")
     except Exception as exc:
         logger.warning("[TOOL:vault] Query note logging skipped: %s", exc)
+
+
+def _query_fingerprint(query: str) -> str:
+    import hashlib
+
+    return hashlib.sha256(query.strip().casefold().encode("utf-8")).hexdigest()[:16]
 

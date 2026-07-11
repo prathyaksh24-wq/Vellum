@@ -14,7 +14,9 @@
         var body = await response.json();
         detail = body.detail || body.message || detail;
       } catch (_) {}
-      throw new Error(detail);
+      var error = new Error(detail);
+      error.status = response.status;
+      throw error;
     }
     if (response.status === 204) return null;
     var text = await response.text();

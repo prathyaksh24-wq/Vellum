@@ -1,5 +1,6 @@
 from datetime import datetime
 import asyncio
+from types import SimpleNamespace
 
 from agent.memory.fts5 import FTS5Memory
 from agent.obsidian.vault import ObsidianVault
@@ -64,11 +65,21 @@ def test_start_scheduler_registers_nightly_job(monkeypatch):
             self.started = True
 
     scheduler = FakeScheduler()
+    monkeypatch.setattr(
+        digest,
+        "get_settings",
+        lambda: SimpleNamespace(enable_nightly_digest=True, enable_vault_retention=True),
+    )
 
-    result = digest.start_scheduler(scheduler=scheduler)
+    async def dreaming_job():
+        return True
+
+    result = digest.start_scheduler(scheduler=scheduler, dreaming_job=dreaming_job)
 
     assert result is scheduler
     assert scheduler.started is True
-    assert scheduler.jobs[0][1] == "cron"
-    assert scheduler.jobs[0][2]["hour"] == 2
-    assert scheduler.jobs[0][2]["minute"] == 0
+    jobs = {job[2]["id"]: job for job in scheduler.jobs}
+    assert set(jobs) == {"memory_dreaming", "nightly_digest", "vault_retention"}
+    assert jobs["memory_dreaming"][2]["hour"] == 2
+    assert jobs["nightly_digest"][2]["minute"] == 15
+    assert jobs["vault_retention"][2]["hour"] == 3

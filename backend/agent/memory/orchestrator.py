@@ -398,6 +398,7 @@ class MemoryOrchestrator:
     memory_dir: Path = Path("data/memory")
     provider_extensions: MemoryProviderExtensionManager | None = None
     specialist_cache: SpecialistResponseCache | None = None
+    knowledge_wiki: Any | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
@@ -478,18 +479,9 @@ class MemoryOrchestrator:
             )
             resolved_cached = True
 
+        # Obsidian cards are projections of reviewed SQLite memories. A raw
+        # high-confidence turn must not create a second durable authority.
         memory_card_path = ""
-        if confidence >= 0.85:
-            card = self.memory_service.create_card(
-                {
-                    "scope": _scope_for_agent(agent_name),
-                    "title": _card_title(clean_query),
-                    "summary": clean_answer,
-                    "evidence": _evidence_text(compact_tools, source_list),
-                    "visible_to": ["VellumAgent", "MemoryAgent", agent_name],
-                }
-            )
-            memory_card_path = str(card.get("path") or "")
 
         if self.honcho is not None:
             session_id = self.honcho.get_or_create_session(thread_id)
@@ -541,6 +533,7 @@ class MemoryOrchestrator:
                 "honcho_context": "",
                 "project_context": "",
                 "recent_context": "",
+                "knowledge_refs": [],
                 "scopes": scopes,
                 "settings": settings,
             }
@@ -572,6 +565,24 @@ class MemoryOrchestrator:
             if self.provider_extensions and not strict_profile_scope
             else []
         )
+        knowledge_refs: list[dict[str, Any]] = []
+        if self.knowledge_wiki is not None and clean_query and not strict_profile_scope:
+            try:
+                wiki_result = self.knowledge_wiki.query(clean_query, limit=4)
+                for item in wiki_result.get("results", []):
+                    if not isinstance(item, dict):
+                        continue
+                    knowledge_refs.append(
+                        {
+                            "ref": str(item.get("ref") or ""),
+                            "title": str(item.get("title") or ""),
+                            "type": str(item.get("type") or ""),
+                            "description": str(item.get("description") or ""),
+                            "updated": str(item.get("updated") or ""),
+                        }
+                    )
+            except Exception:
+                knowledge_refs = []
         packet = {
             "global_summary": self.store.global_summary() if self.store is not None and (not strict_profile_scope or "global" in scopes) else "",
             "saved_memories": saved,
@@ -584,6 +595,7 @@ class MemoryOrchestrator:
             "recent_context": "\n\n".join(str(doc.get("content") or "") for doc in docs[:3]),
             "external_context": "\n\n".join(item["context"] for item in external_context if item.get("context")),
             "external_providers": external_context,
+            "knowledge_refs": knowledge_refs,
             "scopes": scopes,
             "settings": settings,
         }
@@ -1059,7 +1071,7 @@ def _agent_scope(agent_name: str) -> str:
 
 
 def _packet_scopes(*, agent_name: str, active_project: str | None = None) -> list[str]:
-    scopes = ["global", "user_profile"]
+    scopes = ["global", "user_profile", "shared"]
     if active_project:
         scopes.append(f"project:{_normalize_scope(active_project)}")
     scopes.append(_agent_scope(agent_name))

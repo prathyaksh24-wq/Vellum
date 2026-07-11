@@ -26,7 +26,7 @@ function Test-HttpReady {
   }
 }
 
-$UiPath = "ui/Vellum%20Default%20Re-designed.html"
+$UiPath = "design-uploads/Vellum%20Default%20Re-designed.html"
 $uiUrl = "http://${HostName}:${UiPort}/$UiPath"
 if (Test-HttpReady $uiUrl) {
   Write-Host "UI is already running on port $UiPort."

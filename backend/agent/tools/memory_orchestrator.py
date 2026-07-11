@@ -3,35 +3,23 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 from langchain_core.tools import tool
 
 from agent.config import get_settings
-from agent.memory.fts5 import FTS5Memory
-from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
-from agent.memory.resolved import ResolvedQuestionsCache
-from agent.tools.capabilities.memory_service import MemoryCapabilityService
+from agent.memory.orchestrator import MemoryOrchestrator
 
 
 _ORCHESTRATOR: MemoryOrchestrator | None = None
 
 
 def _default_orchestrator() -> MemoryOrchestrator:
-    global _ORCHESTRATOR
-    if _ORCHESTRATOR is None:
-        settings = get_settings()
-        _ORCHESTRATOR = MemoryOrchestrator(
-            fts5=FTS5Memory(),
-            resolved_cache=ResolvedQuestionsCache(),
-            memory_service=MemoryCapabilityService(
-                vault_root=settings.obsidian_vault_path,
-                sessions_db=Path("data/memory/sessions.db"),
-            ),
-            store=SQLiteMemoryStore(Path("data/memory/sessions.db")),
-        )
-    return _ORCHESTRATOR
+    if _ORCHESTRATOR is not None:
+        return _ORCHESTRATOR
+    from agent.memory.runtime import get_memory_orchestrator
+
+    return get_memory_orchestrator()
 
 
 def _json(payload: dict[str, Any]) -> str:

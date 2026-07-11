@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Vellum - Default Mode (preview)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a1717'/%3E%3Cpath d='M15 17h10l7 27 7-27h10L38 51H26z' fill='%23988686'/%3E%3C/svg%3E"/>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
@@ -13,6 +14,7 @@
 <script src="api/plugins.js"></script>
 <script src="api/automations.js"></script>
 <script src="api/settings.js?v=20260710-backend-routing"></script>
+<script src="api/knowledge.js?v=20260710-wiki"></script>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -188,6 +190,42 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .kg-stat{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:20px;padding:3px 10px}
 .kg-sub-note{text-transform:none;letter-spacing:0;color:var(--dim2);font-size:10.5px}
 .kg-empty{font-size:12.5px;color:var(--dim2);padding:6px 0}
+/* knowledge wiki */
+.wiki-search{display:flex;align-items:center;gap:10px;margin:18px 0 12px;padding:8px 10px 8px 14px;border:1px solid var(--line2);border-radius:12px;background:var(--input);color:var(--dim)}
+.wiki-search input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--txt2);font:inherit;font-size:13px}
+.wiki-search input::placeholder{color:var(--dim2)}
+.wiki-actions{display:flex;align-items:center;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.wiki-status-copy{flex:1;min-width:0;color:var(--dim);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wiki-action-buttons{display:flex;gap:7px;flex-shrink:0}
+.wiki-report{display:flex;gap:8px;align-items:center;margin:-4px 0 14px;font-size:12px;color:var(--dim)}
+.wiki-report span{color:var(--ember);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10px}
+.wiki-layout{display:grid;grid-template-columns:minmax(250px,.84fr) minmax(0,1.3fr);gap:24px;min-height:390px}
+.wiki-results{min-width:0;border-right:1px solid var(--line);padding-right:20px}
+.wiki-section-label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;margin:2px 0 10px}
+.wiki-result{display:flex;flex-direction:column;align-items:flex-start;width:100%;padding:12px 11px;margin-bottom:5px;border:1px solid transparent;border-radius:10px;background:none;text-align:left;color:inherit;cursor:pointer;font:inherit}
+.wiki-result:hover{background:var(--hover)}
+.wiki-result.on{border-color:color-mix(in srgb,var(--ember) 40%,var(--line2));background:color-mix(in srgb,var(--ember) 7%,transparent)}
+.wiki-result-title{font-size:13px;color:var(--txt2);font-weight:500}
+.wiki-result-meta{margin-top:4px;font-size:10.5px;color:var(--ember)}
+.wiki-result-description{margin-top:5px;font-size:11.5px;color:var(--dim);line-height:1.45}
+.wiki-page-view{min-width:0;padding-bottom:20px}
+.wiki-page-title{font-family:var(--font-d);font-size:21px;line-height:1.25;color:var(--txt2);font-weight:600}
+.wiki-page-meta{margin-top:6px;color:var(--dim);font-size:11px}
+.wiki-page-description{color:var(--dim);font-size:13px;line-height:1.55;margin:16px 0 0}
+.wiki-page-content{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--txt);font-size:13.5px;line-height:1.7;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.wiki-page-sources{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:20px;color:var(--dim);font-size:11px}
+.wiki-page-sources span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim2);margin-right:3px}
+.wiki-page-sources code{font:11px var(--font-m);color:var(--txt);background:var(--input);border:1px solid var(--line2);border-radius:6px;padding:3px 6px}
+.wiki-state{padding:32px 8px;color:var(--dim2);font-size:13px;line-height:1.5}
+.wiki-state.error{padding:10px 12px;color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,transparent);border:1px solid color-mix(in srgb,var(--danger) 24%,var(--line));border-radius:9px}
+.wiki-status-list{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.wiki-status-list div{padding:12px 10px;border-top:1px solid var(--line2);background:var(--glass)}
+.wiki-status-list b,.wiki-status-list span{display:block}
+.wiki-status-list b{font-size:19px;color:var(--txt2);font-family:var(--font-d)}
+.wiki-status-list span{margin-top:3px;font-size:11px;color:var(--dim)}
+.wiki-counts{display:flex;flex-wrap:wrap;gap:6px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:10.5px;color:var(--dim)}
+.wiki-counts span{border:1px solid var(--line2);border-radius:14px;padding:3px 8px}
+@media (max-width:720px){.wiki-actions{align-items:flex-start;flex-direction:column}.wiki-action-buttons{width:100%}.wiki-layout{grid-template-columns:1fr;gap:18px}.wiki-results{border-right:0;border-bottom:1px solid var(--line);padding:0 0 14px}.wiki-page-view{padding-top:2px}}
 /* memory architecture */
 .km-sech{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin:22px 0 11px;display:flex;align-items:center;gap:8px}
 .km-layers{display:flex;flex-direction:column;gap:8px}
@@ -445,7 +483,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sm-row-meta{padding:7px 11px 8px;font-size:12px;color:var(--dim);line-height:1.5}
 .sm-row-chat{color:var(--ember);text-decoration:underline;cursor:pointer}
 .sm-empty{padding:40px;text-align:center;color:var(--dim2);font-size:13px}
-/* Honcho Memory Console */
+/* Memory console */
 .hc-card{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:80;width:860px;max-width:95vw;height:min(640px,90vh);background:var(--modal);border:1px solid var(--line2);border-radius:18px;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.55);overflow:hidden}
 .hc-page-wrap{height:100%;display:flex;flex-direction:column;overflow:hidden;padding:0}
 .hc-card-page{position:static;transform:none;left:auto;top:auto;width:100%;max-width:none;height:100%;border:none;border-radius:0;box-shadow:none;background:transparent}
@@ -2187,33 +2225,6 @@ const SEED_SKILLS = {
     { id: 's5', name: 'Daily news digest', trigger: 'news ? today', uses: 3, last: '12/05' },
   ],
 };
-
-const SEED_MEMORY = [
-  { id: 'm1',  src: 'vellum',   cat: 'taste',     text: 'Prefers plain answers. No exclamation marks, no celebration.', when: '2d ago' },
-  { id: 'm2',  src: 'vellum',   cat: 'habits',    text: 'Works late; asks the heaviest questions after ten.', when: '5d ago' },
-  { id: 'm3',  src: 'vellum',   cat: 'people',    text: 'A small circle that matters; the rest is weather.', when: '1w ago' },
-  { id: 'm4',  src: 'x',        cat: 'following', text: 'Tracks a handful of design and AI accounts; mutes the rest.', when: '1d ago' },
-  { id: 'm5',  src: 'x',        cat: 'voice',     text: 'Posts rarely, in short declarative lines. Rarely threads.', when: '3d ago' },
-  { id: 'm6',  src: 'youtube',  cat: 'topics',    text: 'Watches long-form lectures and build logs. Skips shorts.', when: '2d ago' },
-  { id: 'm7',  src: 'youtube',  cat: 'channels',  text: 'Subscribed to systems-thinking and woodworking channels.', when: '6d ago' },
-  { id: 'm8',  src: 'books',    cat: 'reading',   text: 'Reads slowly, returns to ideas. Circling Meditations, book four.', when: '4h ago' },
-  { id: 'm9',  src: 'books',    cat: 'shelf',     text: 'Stoics, a little fiction, almost no business books.', when: '1w ago' },
-  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell; coding belongs to the workspace.', when: '1d ago' },
-  { id: 'm11', src: 'memory',   cat: 'identity',  text: 'Goes by Pratyakssh. Private account, local-first by choice.', when: '2w ago' },
-  { id: 'm12', src: 'research', cat: 'method',    text: 'Wants sources cited inline and claims cross-checked first.', when: '2d ago' },
-  { id: 'm13', src: 'sports',   cat: 'teams',     text: 'Follows one football side and the tennis majors. Scores, not punditry.', when: '3d ago' },
-];
-
-const SEED_REFLECTIONS = [
-  { id: 'r1', kind: 'monthly provocation', date: '01/06', text: 'You keep filing notes on stillness while planning three projects at once. Which is the real one.' },
-  { id: 'r2', kind: 'weekly reflection',   date: '08/06', text: 'The week leaned on Meditations and the sports daemon. Reading slowed when building sped up.' },
-  { id: 'r3', kind: 'nightly digest',      date: '09/06', text: 'Three threads on the desktop shell. One on patience. The patience one was shorter.' },
-];
-
-const SEED_SAVED = [
-  { id: 'v1', date: '04/06', text: 'On attention ? what you give it to, you become. Filed from a late thread.' },
-  { id: 'v2', date: '28/05', text: 'The sports daemon plan, condensed to five lines.' },
-];
 
 const SEED_FEEDS = [
   { id: 'f1', name: 'X',       sub: 'Quotes from your handles ? last filed 09/06', on: true },
@@ -4850,268 +4861,150 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Honcho-style Memory Console (OpenConcho) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
-const HONCHO_PEERS = [
-  { id:'main-agent',    name:'main-agent',    label:'Main assistant', facts:42, sessions:128, conclusions:64, derived:[
-      'Builds AI products and developer tools; Vellum is the active long-term project.',
-      'Prefers local-first architecture and self-hosted infrastructure.',
-      'Communicates tersely; wants execution over hedging.' ] },
-  { id:'coding-agent',  name:'coding-agent',  label:'Coding', facts:31, sessions:74, conclusions:48, derived:[
-      'Works primarily in React + vanilla JS for prototypes.',
-      'Validates with a working prototype before polishing.',
-      'Dislikes unrequested redesigns; change only what was asked.' ] },
-  { id:'youtube-agent', name:'youtube-agent', label:'YouTube', facts:12, sessions:19, conclusions:14, derived:[
-      'Connected a YouTube account via OAuth for transcripts and scripts.',
-      'Favors concise script drafts with clear hooks.' ] },
-  { id:'x-agent',       name:'x-agent',       label:'X / social', facts:9, sessions:16, conclusions:11, derived:[
-      'Connected an X account (SuperGrok) to activate posting.',
-      'Tracks breaking trends; drafts threads in a candid voice.' ] },
-  { id:'books-agent',   name:'books-agent',   label:'Reading', facts:7, sessions:11, conclusions:8, derived:[
-      'Keeps a reading list and chapter summaries.',
-      'Interested in AI, systems design, and product strategy.' ] },
-];
-const HONCHO_SESSIONS = [
-  { id:'s1', peer:'main-agent',  title:'Vellum memory architecture', msgs:38, when:'2h ago', summary:'Discussed Honcho peers per sub-agent, dream consolidation, and review controls. Concluded each sub-agent should be its own peer with shared workspace.' },
-  { id:'s2', peer:'coding-agent', title:'Streaming + stop button', msgs:24, when:'Yesterday', summary:'Implemented interruptible streaming and a stop control. Learned user wants to send while busy and force-stop generation.' },
-  { id:'s3', peer:'youtube-agent', title:'Script: local-first AI', msgs:16, when:'2 days ago', summary:'Drafted a 6-minute script. User prefers a strong cold open and no filler.' },
-  { id:'s4', peer:'main-agent',  title:'Personalization + Dreaming', msgs:29, when:'3 days ago', summary:'Added Dreaming toggle and memory summary review. User reviews curated memories rather than auto-accepting.' },
-  { id:'s5', peer:'x-agent',     title:'Thread on agent memory', msgs:12, when:'5 days ago', summary:'Distilled a thread into 5 posts. Candid tone, no hashtags.' },
-];
-const HONCHO_CONCLUSIONS = [
-  { id:'c1', observer:'main-agent',  subject:'user', text:'Prefers concise, execution-focused answers and dislikes filler.', conf:0.94, when:'2h ago', private:false, pinned:true },
-  { id:'c2', observer:'coding-agent', subject:'user', text:'Wants to send follow-up messages while a response is still streaming.', conf:0.88, when:'Yesterday', private:false, pinned:false },
-  { id:'c3', observer:'main-agent',  subject:'user', text:'Values data ownership and privacy; favors local models with user-provided keys.', conf:0.91, when:'3 days ago', private:false, pinned:false },
-  { id:'c4', observer:'youtube-agent', subject:'user', text:'Prefers script openings with a strong hook; cut throat-clearing intros.', conf:0.82, when:'2 days ago', private:false, pinned:false },
-  { id:'c5', observer:'memory-agent', subject:'user', text:'Reviews curated memories manually rather than auto-accepting them.', conf:0.86, when:'4 days ago', private:true, pinned:false },
-  { id:'c6', observer:'x-agent',     subject:'user', text:'Writes in a candid voice, avoids hashtags and corporate phrasing.', conf:0.79, when:'5 days ago', private:false, pinned:false },
-];
-const HONCHO_DREAMS = [
-  { id:'d1', when:'8 hours ago', status:'complete', merged:14, created:3, updated:5, note:'Consolidated 14 raw observations into 3 new conclusions and refreshed 5 that drifted (e.g. "planning Singapore trip" ? "visited Singapore").' },
-  { id:'d2', when:'Yesterday', status:'complete', merged:9, created:2, updated:2, note:'Merged duplicate facts about model preferences across coding-agent and main-agent peers.' },
-  { id:'d3', when:'3 days ago', status:'complete', merged:21, created:4, updated:7, note:'First full pass after enabling Dreaming. Built initial peer cards for all sub-agents.' },
-];
-const MEM_LAYERS = [
-  { id:'honcho',  name:'Honcho',      role:'User model / evolving profile',          icon:IcBrain,  detail:'Maintains the long-term theory-of-mind: who you are, how you work, what you prefer. Conclusions sharpen as evidence accrues.' },
-  { id:'chroma',  name:'ChromaDB',    role:'Semantic retrieval',                     icon:IcSparkle,detail:'Vector store for meaning-based recall. Finds relevant memories by similarity, not keywords.' },
-  { id:'fts5',    name:'FTS5',        role:'Exact chat + note search',               icon:IcSearch, detail:'SQLite full-text index for precise lookups across every message and note.' },
-  { id:'obsidian',name:'Obsidian',    role:'Durable memory cards / inspectable vault',icon:IcNote,   detail:'Human-readable markdown vault. Every durable belief is a card you can open, edit, or delete.' },
-  { id:'sqlite',  name:'SQLite',      role:'Sessions, conversations, retention',     icon:IcLedger, detail:'System of record for raw history and retention metadata. The source the other layers build on.' },
-  { id:'agent',   name:'MemoryAgent', role:'Specialist interface',                   icon:IcChat,   detail:'The agent that reads and writes across all layers ? the single front door to memory for the rest of Vellum.' },
-];
-const INGEST_FLOW = [
-  { k:'Capture',  d:'Chats, notes & files land in SQLite' },
-  { k:'Index',    d:'FTS5 + ChromaDB build search indexes' },
-  { k:'Distill',  d:'MemoryAgent extracts candidate beliefs' },
-  { k:'Model',    d:'Honcho updates the evolving user profile' },
-  { k:'Persist',  d:'Durable cards written to the Obsidian vault' },
-];
-const DURABLE_CARDS = [
-  { id:'c1', text:'User prefers direct, implementation-first answers.', evidence:'Multiple corrections in Vellum UI debugging sessions.', conf:'high', seen:'2026-06-22', visible:['VellumAgent','MemoryAgent','CodingAgent'], pinned:true },
-  { id:'c2', text:'Local-first by default; cloud models only with explicit opt-in.', evidence:'Repeated emphasis on self-hosted infra and privacy.', conf:'high', seen:'2026-06-20', visible:['VellumAgent','MemoryAgent'] },
-  { id:'c3', text:'Wants sources cited inline and claims cross-checked first.', evidence:'Asked to remove canned lead-ins and show real URLs.', conf:'medium', seen:'2026-06-23', visible:['VellumAgent','ResearchAgent','MemoryAgent'] },
-  { id:'c4', text:'Iterates fast ? ships rough, refines in place.', evidence:'High edit cadence across UI sessions, prefers live tweaks.', conf:'medium', seen:'2026-06-18', visible:['VellumAgent','MemoryAgent','CodingAgent'] },
-  { id:'c5', text:'Follows one football side and the tennis majors.', evidence:'Sports queries: scores over punditry.', conf:'low', seen:'2026-06-11', visible:['SportsAgent','MemoryAgent'] },
-];
 function KnowledgeGraphView({ onBack }){
-  const [openLayer, setOpenLayer] = useState(null);
-  const [cards, setCards] = useState(DURABLE_CARDS);
-  const confDot = c => c==='high' ? '#3fb950' : c==='medium' ? '#d6a635' : 'var(--dim)';
+  const [status, setStatus] = useState(null);
+  const [query, setQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [results, setResults] = useState([]);
+  const [page, setPage] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [lintReport, setLintReport] = useState(null);
+
+  const loadStatus = async () => {
+    setLoading(true);
+    setError('');
+    try { setStatus(await API.knowledge.status()); }
+    catch (err) { setError((err && err.message) || 'Knowledge wiki is unavailable.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { loadStatus(); }, []);
+
+  const search = async event => {
+    if (event) event.preventDefault();
+    const value = query.trim();
+    if (!value) { setResults([]); setSubmittedQuery(''); return; }
+    setSearching(true); setError(''); setPage(null); setSubmittedQuery(value);
+    try {
+      const body = await API.knowledge.query(value, 12);
+      setResults(Array.isArray(body && body.results) ? body.results : []);
+    } catch (err) { setResults([]); setError((err && err.message) || 'Wiki search failed.'); }
+    finally { setSearching(false); }
+  };
+  const openPage = async ref => {
+    if (!ref) return;
+    setPageLoading(true); setError('');
+    try { setPage(await API.knowledge.page(ref)); }
+    catch (err) { setError((err && err.message) || 'Could not open that wiki page.'); }
+    finally { setPageLoading(false); }
+  };
+  const runWikiAction = async action => {
+    setBusy(true); setError('');
+    try {
+      const result = await action();
+      if (result && (result.issues || result.health)) setLintReport(result);
+      await loadStatus();
+    } catch (err) { setError((err && err.message) || 'Knowledge wiki action failed.'); }
+    finally { setBusy(false); }
+  };
+  const counts = status && status.counts ? Object.entries(status.counts) : [];
+  const lintIssueCount = lintReport ? ['missing_fields','missing_sources','missing_provenance','invalid_source_trust','broken_links','duplicate_titles','duplicate_identities','orphan_pages','stale_pages'].reduce((total, key) => total + (Array.isArray(lintReport[key]) ? lintReport[key].length : 0), 0) + (lintReport.overview_drift ? 1 : 0) : 0;
   return (
     <div className="page">
-      <div className="page-inner" style={{maxWidth: 880}}>
-        <div className="page-head"><span className="page-head-ic kg-ic"><IcGraph size={18}/></span><div style={{flex:1}}><div className="page-title">Knowledge graph</div><div className="page-sub">Vellum's memory system ? how knowledge is captured, modelled, and made durable.</div></div>
-          <div className="kg-legend"><span className="kg-stat">6 layers</span><span className="kg-stat">{cards.length} durable cards</span></div></div>
-
-        <div className="km-sech">Memory architecture</div>
-        <div className="km-layers">
-          {MEM_LAYERS.map(l => (
-            <button key={l.id} className={'km-layer'+(openLayer===l.id?' on':'')} onClick={()=>setOpenLayer(o=>o===l.id?null:l.id)}>
-              <span className="km-layer-ic"><l.icon size={17}/></span>
-              <span className="km-layer-main"><span className="km-layer-name">{l.name}</span><span className="km-layer-role">{l.role}</span></span>
-              <span className="km-layer-chev"><IcChevD size={13}/></span>
-              {openLayer===l.id && <span className="km-layer-detail">{l.detail}</span>}
-            </button>
-          ))}
+      <div className="page-inner wiki-page" style={{maxWidth: 980}}>
+        <div className="page-head">
+          <span className="page-head-ic kg-ic"><IcGraph size={18}/></span>
+          <div style={{flex:1}}><div className="page-title">Knowledge wiki</div><div className="page-sub">Search the maintained pages behind Vellum's answers. Open a result to read the source.</div></div>
+          {onBack && <button className="btn" onClick={onBack}>Back</button>}
         </div>
-
-        <div className="km-sech">Knowledge ingestion</div>
-        <div className="km-flow">
-          {INGEST_FLOW.map((st,i) => (
-            <React.Fragment key={st.k}>
-              <div className="km-stage">
-                <div className="km-stage-n">{i+1}</div>
-                <div className="km-stage-k">{st.k}</div>
-                <div className="km-stage-d">{st.d}</div>
-              </div>
-              {i < INGEST_FLOW.length-1 && <div className="km-arrow"><IcChevR size={15}/></div>}
-            </React.Fragment>
-          ))}
+        {error && <div className="wiki-state error" role="alert">{error}</div>}
+        <form className="wiki-search" onSubmit={search}>
+          <IcSearch size={16}/><input aria-label="Search knowledge wiki" placeholder="Search your knowledge wiki" value={query} onChange={e => setQuery(e.target.value)}/><button className="btn primary" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Search'}</button>
+        </form>
+        <div className="wiki-actions">
+          <div className="wiki-status-copy">{loading ? 'Checking wiki…' : status ? (status.page_count || 0) + ' pages · ' + (status.root || 'ready') : 'Wiki status unavailable'}</div>
+          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.lint())}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.indexRebuild())}>Rebuild index</button></div>
         </div>
-
-        <div className="km-sech">Durable memory cards <span className="kg-sub-note">written to the Obsidian vault</span></div>
-        <div className="km-cards">
-          {cards.map(c => (
-            <div key={c.id} className="km-card">
-              <div className="km-card-top">
-                <span className="km-card-text">{c.text}</span>
-                {c.pinned && <span className="km-card-pin" title="Pinned"><IcPin size={12}/></span>}
-                <button className="km-card-x" title="Forget this card" onClick={()=>setCards(cs=>cs.filter(x=>x.id!==c.id))}><IcX size={13}/></button>
-              </div>
-              <div className="km-card-ev"><span className="km-k">Evidence</span>{c.evidence}</div>
-              <div className="km-card-meta">
-                <span className="km-conf"><span className="km-conf-dot" style={{background:confDot(c.conf)}}/>Confidence: {c.conf}</span>
-                <span className="km-seen">Last seen: {c.seen}</span>
-              </div>
-              <div className="km-card-vis"><span className="km-k">Visible to</span>{c.visible.map(v => <span key={v} className="km-vis-chip">{v}</span>)}</div>
-            </div>
-          ))}
-          {cards.length===0 && <div className="kg-empty">No durable cards. They appear as Vellum learns and consolidates.</div>}
+        {lintReport && <div className="wiki-report"><span>Lint · {lintReport.health || 'complete'}</span>{lintIssueCount + ' issue' + (lintIssueCount === 1 ? '' : 's')}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
+        <div className="wiki-layout">
+          <section className="wiki-results" aria-label="Wiki search results">
+            <div className="wiki-section-label">{submittedQuery ? 'Results for “' + submittedQuery + '”' : 'Wiki status'}</div>
+            {!submittedQuery && (loading ? <div className="wiki-state">Loading wiki status…</div> : status ? <div className="wiki-status-list"><div><b>{status.page_count || 0}</b><span>pages</span></div><div><b>{status.inbox_count || 0}</b><span>inbox</span></div><div><b>{status.lint_report_count || 0}</b><span>lint reports</span></div></div> : <div className="wiki-state">No status to show.</div>)}
+            {!searching && submittedQuery && results.length === 0 && <div className="wiki-state">No wiki pages matched that search.</div>}
+            {results.map(item => <button key={item.ref} className={'wiki-result' + (page && page.ref === item.ref ? ' on' : '')} onClick={() => openPage(item.ref)}><span className="wiki-result-title">{item.title || item.ref}</span><span className="wiki-result-meta">{item.type || 'page'} · {item.status || 'draft'}{item.updated ? ' · ' + memoryEntryDate({date:item.updated}) : ''}</span>{item.description && <span className="wiki-result-description">{item.description}</span>}</button>)}
+            {counts.length > 0 && <div className="wiki-counts">{counts.map(([type, count]) => <span key={type}>{type} {count}</span>)}</div>}
+          </section>
+          <section className="wiki-page-view" aria-label="Wiki page">
+            {pageLoading && <div className="wiki-state">Loading page…</div>}
+            {!pageLoading && !page && <div className="wiki-state">Choose a search result to read its page.</div>}
+            {!pageLoading && page && <React.Fragment><div className="wiki-page-title">{page.title}</div><div className="wiki-page-meta">{page.type || 'page'} · {page.status || 'draft'}{page.updated ? ' · updated ' + memoryEntryDate({date:page.updated}) : ''}</div>{page.description && <p className="wiki-page-description">{page.description}</p>}<div className="wiki-page-content">{page.content || 'This page has no content.'}</div>{Array.isArray(page.sources) && page.sources.length > 0 && <div className="wiki-page-sources"><span>Sources</span>{page.sources.map(source => <code key={source}>{source}</code>)}</div>}</React.Fragment>}
+          </section>
         </div>
-
-        <div className="quiet-foot">Built locally. Honcho models you, ChromaDB + FTS5 retrieve, Obsidian keeps the inspectable vault, SQLite is the source of record.</div>
       </div>
     </div>
   );
 }
-function HonchoConsole({ onClose, onBack, page, onDreamComplete }){
-  const [tab, setTab] = useState('peers');
-  const [activePeer, setActivePeer] = useState(HONCHO_PEERS[0].id);
+function MemoryConsole({ onClose, onBack, page, onDreamComplete }){
+  const [tab, setTab] = useState('summary');
   const [q, setQ] = useState('');
-  const [concl, setConcl] = useState(HONCHO_CONCLUSIONS);
-  const [dreams, setDreams] = useState(HONCHO_DREAMS);
-  const [dreaming, setDreaming] = useState(false);
-  const [dreamError, setDreamError] = useState('');
-  const peer = HONCHO_PEERS.find(p => p.id === activePeer) || HONCHO_PEERS[0];
-  const peerSessions = HONCHO_SESSIONS.filter(s => tab !== 'sessions' || true);
-  const filteredConcl = concl.filter(c => !q || c.text.toLowerCase().includes(q.toLowerCase()) || c.observer.includes(q.toLowerCase()));
-  const togglePin = id => setConcl(cs => cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c));
-  const togglePriv = id => setConcl(cs => cs.map(c => c.id === id ? {...c, private: !c.private} : c));
-  const delConcl = id => setConcl(cs => cs.filter(c => c.id !== id));
-  const scheduleDream = async () => {
-    if (dreaming) return;
-    setDreaming(true);
-    setDreamError('');
+  const [data, setData] = useState({summary:null, saved:[], archived:[], recent:[], settings:null});
+  const [dreamStatus, setDreamStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true); setError('');
+    try {
+      const [summary, saved, archived, settings, dreaming] = await Promise.all([
+        API.settings.memorySummary(), API.settings.memorySaved(), API.settings.memoryEntries(), API.settings.memorySettings(), API.settings.memoryDreamingStatus(),
+      ]);
+      setData({summary: summary || null, saved: (saved && (saved.memories || saved.entries)) || [], archived: (archived && (archived.memories || archived.entries)) || [], recent: (summary && summary.recent_context) || [], settings: settings && settings.settings});
+      setDreamStatus(dreaming || null);
+    } catch (err) { setError((err && err.message) || 'Memory backend unavailable.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, []);
+  const runDream = async () => {
+    if (busy) return;
+    setBusy(true); setError('');
     try {
       const result = await API.settings.memoryDreamingRun();
-      const created = Array.isArray(result && result.new_memories) ? result.new_memories.length : 0;
-      const updated = Array.isArray(result && result.updated_memories) ? result.updated_memories.length : 0;
-      const archived = Array.isArray(result && result.archived_memories) ? result.archived_memories.length : 0;
-      const contradictions = Array.isArray(result && result.contradictions) ? result.contradictions.length : 0;
-      setDreams(ds => [{
-        id:'d'+Date.now(),
-        when:'just now',
-        status:'complete',
-        merged: created + updated + archived,
-        created,
-        updated,
-        note:'Promoted '+created+' memories, updated '+updated+', archived '+archived+(contradictions ? ', flagged '+contradictions+' contradiction(s).' : '.')
-      }, ...ds]);
-      if (onDreamComplete) onDreamComplete(result);
-    } catch (err) {
-      setDreamError((err && err.message) || 'Dreaming failed.');
-    } finally {
-      setDreaming(false);
-    }
+      if (onDreamComplete) await onDreamComplete(result);
+      await load();
+    } catch (err) { setError((err && err.message) || 'Dreaming failed.'); }
+    finally { setBusy(false); }
   };
-  const TABS = [['peers','Peers',IcBrain],['sessions','Sessions',IcChat],['conclusions','Conclusions',IcSearch],['dream','Dream',IcMoon]];
-  const totalConcl = HONCHO_PEERS.reduce((a,p)=>a+p.conclusions,0);
-  const totalSess = HONCHO_PEERS.reduce((a,p)=>a+p.sessions,0);
+  const filterItems = items => items.filter(item => !q || String(item.text || item.content || '').toLowerCase().includes(q.toLowerCase()));
+  const saved = filterItems(data.saved);
+  const archived = filterItems(data.archived);
+  const audit = data.summary && Array.isArray(data.summary.audit_log) ? data.summary.audit_log : [];
+  const lastResult = dreamStatus && dreamStatus.last_result;
+  const resultCount = key => Array.isArray(lastResult && lastResult[key]) ? lastResult[key].length : 0;
+  const TABS = [['summary','Summary',IcBrain],['saved','Saved',IcCheck],['archived','Old',IcArchive],['audit','Audit',IcList],['dream','Dreaming',IcMoon]];
+  const statusLabel = dreamStatus && dreamStatus.status ? dreamStatus.status : 'unknown';
   const inner = (
-      <div className={page ? "hc-card hc-card-page" : "hc-card"}>
-        <div className="hc-hd">
-          <div className="hc-title">{page && <button className="hc-back" title="Back to chat" onClick={onBack}><I d="M15 18l-6-6 6-6" size={18}/></button>}<span className="hc-logo"><IcBrain size={17}/></span>Memory Console <span className="hc-badge">Honcho</span></div>
-          <div className="hc-status">
-            <span className="hc-dot ok"/><span>workspace <b>vellum</b></span>
-            <span className="hc-sdiv"/><span>{HONCHO_PEERS.length} peers</span>
-            <span className="hc-sdiv"/><span>{totalConcl} conclusions</span>
-            <span className="hc-sdiv"/><span className="hc-queue">queue idle</span>
-          </div>
-          {!page && <button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button>}
-        </div>
-        <div className="hc-tabs">
-          {TABS.map(([k,lbl,Ic]) => (
-            <button key={k} className={'hc-tab'+(tab===k?' on':'')} onClick={()=>setTab(k)}><Ic size={14}/>{lbl}</button>
-          ))}
-        </div>
-        <div className="hc-body">
-          {tab === 'peers' && (
-            <div className="hc-peers">
-              <div className="hc-peer-list">
-                {HONCHO_PEERS.map(p => (
-                  <button key={p.id} className={'hc-peer-item'+(activePeer===p.id?' on':'')} onClick={()=>setActivePeer(p.id)}>
-                    <span className="hc-peer-name">{p.name}</span>
-                    <span className="hc-peer-sub">{p.label} ? {p.facts} facts</span>
-                  </button>
-                ))}
-              </div>
-              <div className="hc-peer-detail">
-                <div className="hc-peer-card">
-                  <div className="hc-pc-hd"><span className="hc-pc-name">{peer.name}</span><span className="hc-pc-tag">peer card</span></div>
-                  <div className="hc-pc-stats">
-                    <div className="hc-pc-stat"><b>{peer.facts}</b><span>facts</span></div>
-                    <div className="hc-pc-stat"><b>{peer.sessions}</b><span>sessions</span></div>
-                    <div className="hc-pc-stat"><b>{peer.conclusions}</b><span>conclusions</span></div>
-                  </div>
-                </div>
-                <div className="hc-pc-rep-h">Representation <span className="hc-pc-rep-sub">what this peer believes about the user</span></div>
-                {peer.derived.map((d,i) => (
-                  <div key={i} className="hc-rep-row"><span className="hc-rep-bullet"/><span>{d}</span></div>
-                ))}
-              </div>
-            </div>
-          )}
-          {tab === 'sessions' && (
-            <div className="hc-sessions">
-              {HONCHO_SESSIONS.map(s => (
-                <div key={s.id} className="hc-session">
-                  <div className="hc-ss-top"><span className="hc-ss-title">{s.title}</span><span className="hc-ss-peer">{s.peer}</span></div>
-                  <div className="hc-ss-summary">{s.summary}</div>
-                  <div className="hc-ss-meta">{s.msgs} messages ? {s.when}</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {tab === 'conclusions' && (
-            <div className="hc-concl">
-              <div className="hc-search"><IcSearch size={15}/><input placeholder="Semantic search across conclusions" value={q} onChange={e=>setQ(e.target.value)}/></div>
-              {filteredConcl.map(c => (
-                <div key={c.id} className={'hc-concl-row'+(c.pinned?' pinned':'')}>
-                  <div className="hc-concl-main">
-                    <div className="hc-concl-obs"><span className="hc-obs">{c.observer}</span><span className="hc-arrow">?</span><span className="hc-subj">{c.subject}</span>{c.pinned && <span className="hc-tag-pin"><IcPin size={11}/>pinned</span>}{c.private && <span className="hc-tag-priv">private</span>}</div>
-                    <div className="hc-concl-text">{c.text}</div>
-                    <div className="hc-concl-meta">confidence {Math.round(c.conf*100)}% ? {c.when}</div>
-                  </div>
-                  <div className="hc-concl-acts">
-                    <button className="hc-act" title={c.pinned?'Unpin':'Pin'} onClick={()=>togglePin(c.id)}><IcPin size={14}/></button>
-                    <button className="hc-act" title={c.private?'Make shared':'Mark private'} onClick={()=>togglePriv(c.id)}><IcEye size={14}/></button>
-                    <button className="hc-act danger" title="Delete" onClick={()=>delConcl(c.id)}><IcTrash size={14}/></button>
-                  </div>
-                </div>
-              ))}
-              {filteredConcl.length===0 && <div className="hc-empty">No conclusions match.</div>}
-            </div>
-          )}
-          {tab === 'dream' && (
-            <div className="hc-dream">
-              <div className="hc-dream-cta">
-                <div className="hc-dream-cta-l"><span className="dream-label"><IcMoon size={15}/>Dream / consolidation</span><span className="hc-dream-sub">Trigger Honcho's consolidation pass to merge raw observations into durable conclusions and refresh peer cards.</span></div>
-                <button className={'btn primary hc-dream-btn'+(dreaming?' running':'')} onClick={scheduleDream} disabled={dreaming}>{dreaming ? <React.Fragment><span className="hc-spin"/>Dreaming...</React.Fragment> : <React.Fragment><IcMoon size={14}/>Schedule dream</React.Fragment>}</button>
-              </div>
-              {dreamError && <div className="hc-empty" style={{color:'var(--danger)'}}>{dreamError}</div>}
-              {dreams.map(d => (
-                <div key={d.id} className="hc-dream-row">
-                  <div className="hc-dream-ic"><IcMoon size={15}/></div>
-                  <div className="hc-dream-main">
-                    <div className="hc-dream-top"><span className="hc-dream-when">{d.when}</span><span className="hc-dream-status">{d.status}</span></div>
-                    <div className="hc-dream-note">{d.note}</div>
-                    <div className="hc-dream-stats"><span>{d.merged} merged</span><span>{d.created} created</span><span>{d.updated} updated</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+    <div className={page ? "hc-card hc-card-page" : "hc-card"}>
+      <div className="hc-hd">
+        <div className="hc-title">{page && <button className="hc-back" title="Back to chat" onClick={onBack}><I d="M15 18l-6-6 6-6" size={18}/></button>}<span className="hc-logo"><IcBrain size={17}/></span>Memory <span className="hc-badge">backend</span></div>
+        <div className="hc-status"><span className={'hc-dot' + (loading ? '' : ' ok')}/><span>{loading ? 'loading' : data.saved.length + ' saved'}</span><span className="hc-sdiv"/><span>{data.archived.length} old</span><span className="hc-sdiv"/><span className="hc-queue">Dreaming {statusLabel}</span></div>
+        <button className="mem-iconbtn" title="Refresh memory" disabled={loading || busy} onClick={load}><IcRefresh size={16}/></button>
+        {!page && <button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button>}
       </div>
+      <div className="hc-tabs">{TABS.map(([key,label,Icon]) => <button key={key} className={'hc-tab' + (tab === key ? ' on' : '')} onClick={() => setTab(key)}><Icon size={14}/>{label}</button>)}</div>
+      <div className="hc-body">
+        {error && <div className="hc-empty" role="alert" style={{color:'var(--danger)'}}>{error}</div>}
+        {loading && !data.summary && <div className="hc-empty">Loading memory…</div>}
+        {!loading && tab === 'summary' && <React.Fragment><MemorySummaryDocument summary={data.summary || {}}/><div className="hc-dream-row"><div className="hc-dream-ic"><IcMoon size={15}/></div><div className="hc-dream-main"><div className="hc-dream-top"><span className="hc-dream-when">Dreaming status</span><span className="hc-dream-status">{statusLabel}</span></div><div className="hc-dream-note">{dreamStatus && dreamStatus.last_run ? 'Last run ' + memoryEntryDate({date:dreamStatus.last_run}) : 'No Dreaming run recorded yet.'}</div><div className="hc-dream-stats"><span>{data.summary && data.summary.pending_count || 0} pending</span><span>{audit.length} audit entries</span></div></div></div></React.Fragment>}
+        {!loading && tab === 'saved' && <React.Fragment><div className="hc-search"><IcSearch size={15}/><input placeholder="Filter saved memories" value={q} onChange={e => setQ(e.target.value)}/></div>{saved.map(item => <MemoryListRow key={item.id} memory={item} tab="saved"/>)}{saved.length === 0 && <div className="hc-empty">No saved memories.</div>}</React.Fragment>}
+        {!loading && tab === 'archived' && <React.Fragment><div className="hc-search"><IcSearch size={15}/><input placeholder="Filter old memories" value={q} onChange={e => setQ(e.target.value)}/></div>{archived.map(item => <MemoryListRow key={item.id} memory={item} tab="archived"/>)}{archived.length === 0 && <div className="hc-empty">No old memories.</div>}</React.Fragment>}
+        {!loading && tab === 'audit' && <React.Fragment>{audit.map(item => <div key={item.id} className="hc-session"><div className="hc-ss-top"><span className="hc-ss-title">{item.event || 'memory event'}</span><span className="hc-ss-peer">{memoryEntryDate(item)}</span></div><div className="hc-ss-summary">{item.detail || 'No details recorded.'}</div>{item.memory_id != null && <div className="hc-ss-meta">Memory {item.memory_id}</div>}</div>)}{audit.length === 0 && <div className="hc-empty">No memory audit entries yet.</div>}</React.Fragment>}
+        {!loading && tab === 'dream' && <div className="hc-dream"><div className="hc-dream-cta"><div className="hc-dream-cta-l"><span className="dream-label"><IcMoon size={15}/>Dream / consolidation</span><span className="hc-dream-sub">Review recent conversations and update durable memories through the backend.</span></div><button className={'btn primary hc-dream-btn' + (busy ? ' running' : '')} onClick={runDream} disabled={busy}>{busy ? <React.Fragment><span className="hc-spin"/>Dreaming…</React.Fragment> : <React.Fragment><IcMoon size={14}/>Run now</React.Fragment>}</button></div><div className="hc-dream-row"><div className="hc-dream-ic"><IcMoon size={15}/></div><div className="hc-dream-main"><div className="hc-dream-top"><span className="hc-dream-when">Current status</span><span className="hc-dream-status">{statusLabel}</span></div><div className="hc-dream-note">{dreamStatus && dreamStatus.error ? dreamStatus.error : dreamStatus && dreamStatus.last_run ? 'Last completed ' + memoryEntryDate({date:dreamStatus.last_run}) : 'Dreaming has not run yet.'}</div><div className="hc-dream-stats"><span>{resultCount('new_memories')} new</span><span>{resultCount('updated_memories')} updated</span><span>{resultCount('archived_memories')} archived</span><span>{resultCount('contradictions')} flagged</span></div></div></div></div>}
+      </div>
+    </div>
   );
   if (page) return <div className="page hc-page-wrap">{inner}</div>;
   return (<React.Fragment><div className="backdrop dim mem-backdrop" onClick={onClose}/>{inner}</React.Fragment>);
@@ -5257,10 +5150,11 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
   const [summary, setSummary] = useState((memoryData && memoryData.summary) || null);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState((memoryData && memoryData.error) || '');
   useEffect(() => {
     if (memoryData && memoryData.summary) setSummary(memoryData.summary);
-  }, [memoryData && memoryData.summary]);
+    if (memoryData && memoryData.error) setError(memoryData.error);
+  }, [memoryData && memoryData.summary, memoryData && memoryData.error]);
   const load = async () => {
     setError('');
     try {
@@ -5348,8 +5242,10 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const load = async () => {
+    setLoading(true);
     setError('');
     try {
       const [savedBody, archivedBody, summaryBody, settingsBody] = await Promise.all([
@@ -5366,7 +5262,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
       if (onChanged) await onChanged();
     } catch (err) {
       setError('Memory backend unavailable.');
-    }
+    } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
   const runAction = async action => {
@@ -5422,7 +5318,8 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
           {history.length === 0 && <div className="sm-empty">No memory history yet.</div>}
         </div>}
         <div className="sm-list" onClick={e => e.stopPropagation()}>
-          {filtered.map(m => (
+          {loading && <div className="sm-empty">Loading memories…</div>}
+          {!loading && filtered.map(m => (
             <MemoryListRow key={m.id} memory={m} tab={tab} menuOpen={rowMenu === m.id}>
               <div className="sm-item-menu-wrap">
                 <button className="sm-item-dots" onClick={() => setRowMenu(rowMenu === m.id ? null : m.id)}><IcDots size={16}/></button>
@@ -5440,7 +5337,7 @@ const SavedMemoriesCard = ({onClose, onChanged}) => {
               </div>
             </MemoryListRow>
           ))}
-          {filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : (tab === 'recent' ? 'recent chat' : 'saved')} memories.</div>}
+          {!loading && filtered.length === 0 && <div className="sm-empty">No {tab === 'archived' ? 'old' : (tab === 'recent' ? 'recent chat' : 'saved')} memories.</div>}
         </div>
       </div>
     </React.Fragment>
@@ -5813,24 +5710,28 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
           )}
           {tab === 'Reflections' && (
             <React.Fragment>
-              <div className="set-h">Reflections</div>
-              {SEED_REFLECTIONS.map(r => (
+              <div className="set-h">Memory audit</div>
+              {((memoryData && memoryData.summary && memoryData.summary.audit_log) || []).map(r => (
                 <div key={r.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.kind} ? {r.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.text}</span></div>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{r.event || 'memory event'} · {memoryEntryDate(r)}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{r.detail || 'No details recorded.'}</span></div>
                 </div>
               ))}
-              <div className="set-note">Written at 2:00. Read when you like.</div>
+              {(!memoryData || !memoryData.summary || !Array.isArray(memoryData.summary.audit_log) || memoryData.summary.audit_log.length === 0) && <div className="set-note">No memory audit entries yet.</div>}
+              <div className="set-note">Recorded by the memory backend as memories change.</div>
             </React.Fragment>
           )}
           {tab === 'Saved' && (
             <React.Fragment>
               <div className="set-h">Saved</div>
-              {SEED_SAVED.map(s => (
+              {memoryData && memoryData.loading && <div className="set-note">Loading saved memories…</div>}
+              {memoryData && !memoryData.loading && memoryData.error && <div className="set-note" style={{color:'var(--danger)'}}>{memoryData.error}</div>}
+              {memoryData && !memoryData.loading && !memoryData.error && ((memoryData.saved || (memoryData.summary && memoryData.summary.saved_memories)) || []).map(s => (
                 <div key={s.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{s.date}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{s.text}</span></div>
+                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{memoryEntryDate(s)}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{s.text || 'Saved memory'}</span></div>
                 </div>
               ))}
-              <div className="set-note">Responses you chose to keep. Filed under Agent/Saved.</div>
+              {memoryData && !memoryData.loading && !memoryData.error && (!Array.isArray(memoryData.saved) || memoryData.saved.length === 0) && <div className="set-note">No saved memories yet.</div>}
+              <div className="set-note">Memories returned by the backend.</div>
             </React.Fragment>
           )}
           {tab === 'Feeds' && (
@@ -5954,12 +5855,11 @@ const App = () => {
   const [projects, setProjects] = useState([]);
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
   const [skills, setSkills] = useState(SEED_SKILLS);
-  const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState(MODELS);
   const [backendSettings, setBackendSettings] = useState(null);
-  const [memoryData, setMemoryData] = useState({facts: [], entries: [], archived: [], summary: null});
+  const [memoryData, setMemoryData] = useState({facts: [], entries: [], saved: [], archived: [], summary: null, settings: null, loading: true, error: ''});
   const [apps, setApps] = useState(SEED_APPS);
   const [spotify, setSpotify] = useState({connected:false,status:'loading',account_name:'',product:''});
   const [spotifyConnectOpen, setSpotifyConnectOpen] = useState(false);
@@ -6054,18 +5954,28 @@ const App = () => {
   };
 
   async function refreshMemoryData() {
-    const [memoryRecentData, memoryEntriesData, memorySettingsData] = await Promise.all([
-      API.settings.memoryRecent().catch(() => ({facts: [], entries: [], summary: null})),
-      API.settings.memoryEntries().catch(() => ({entries: []})),
-      API.settings.memorySettings().catch(() => ({settings: null})),
-    ]);
-    setMemoryData({
-      facts: (memoryRecentData && Array.isArray(memoryRecentData.facts)) ? memoryRecentData.facts : [],
-      entries: (memoryRecentData && Array.isArray(memoryRecentData.entries)) ? memoryRecentData.entries : [],
-      archived: (memoryEntriesData && Array.isArray(memoryEntriesData.entries)) ? memoryEntriesData.entries : [],
-      summary: (memoryRecentData && memoryRecentData.summary) ? memoryRecentData.summary : null,
-      settings: (memorySettingsData && memorySettingsData.settings) ? memorySettingsData.settings : null,
-    });
+    setMemoryData(previous => ({...previous, loading: true, error: ''}));
+    try {
+      const [summary, savedBody, archivedBody, settingsBody] = await Promise.all([
+        API.settings.memorySummary(), API.settings.memorySaved(), API.settings.memoryEntries(), API.settings.memorySettings(),
+      ]);
+      const saved = (savedBody && Array.isArray(savedBody.memories || savedBody.entries)) ? (savedBody.memories || savedBody.entries) : ((summary && Array.isArray(summary.saved_memories)) ? summary.saved_memories : []);
+      const recent = (summary && Array.isArray(summary.recent_context)) ? summary.recent_context : [];
+      setMemoryData({
+        facts: [summary && summary.global_summary, ...saved.map(item => item && item.text)].filter(Boolean),
+        entries: recent,
+        saved,
+        archived: (archivedBody && Array.isArray(archivedBody.memories || archivedBody.entries)) ? (archivedBody.memories || archivedBody.entries) : [],
+        summary: summary || null,
+        settings: (settingsBody && settingsBody.settings) ? settingsBody.settings : null,
+        loading: false,
+        error: '',
+      });
+      return summary;
+    } catch (err) {
+      setMemoryData(previous => ({...previous, loading: false, error: (err && err.message) || 'Memory backend unavailable.'}));
+      return null;
+    }
   }
 
   async function maybeRunDreaming() {
@@ -6964,7 +6874,7 @@ const App = () => {
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
             {view === 'apps' && <BackendConnectorsView apps={apps}/>}
-            {view === 'memory' && <HonchoConsole page onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
+            {view === 'memory' && <MemoryConsole page onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}

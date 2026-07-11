@@ -7,7 +7,7 @@ async function loadPluginsApi(fetchImpl) {
       request: async (path, options) => fetchImpl(path, options),
     },
   };
-  await import("./plugins.js");
+  await import("../../../design/Velllum/uploads/api/plugins.js");
   return window.VellumApi.plugins;
 }
 

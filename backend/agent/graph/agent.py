@@ -11,7 +11,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import create_react_agent
 
-from agent.config import get_settings
+from agent.config import REPO_ROOT, get_settings
 from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
 from agent.llm.routing.runtime import get_routed_chat_model
@@ -249,7 +249,7 @@ def _latest_user_query(state) -> str:
     return ""
 
 
-CHECKPOINT_DB = Path("data/memory/checkpoints.db")
+CHECKPOINT_DB = REPO_ROOT / "data" / "memory" / "checkpoints.db"
 
 
 def build_llm(model: str | None = None):

@@ -24,7 +24,7 @@ class FeatureContract(BaseModel):
 class FrontendContract(BaseModel):
     canonical_entry: str
     api_adapter_namespace: str = "window.VellumApi"
-    api_adapter_path: str = "/ui/api"
+    api_adapter_path: str = "/design-uploads/api"
 
 
 class CapabilityContract(BaseModel):
@@ -40,7 +40,7 @@ def build_capability_contract() -> CapabilityContract:
 
     return CapabilityContract(
         frontend=FrontendContract(
-            canonical_entry="/ui/Vellum%20Default%20Re-designed.html",
+            canonical_entry="/design-uploads/Vellum%20Default%20Re-designed.html",
         ),
         features={
             "chat": FeatureContract(
@@ -87,6 +87,22 @@ def build_capability_contract() -> CapabilityContract:
                     "import_conversations": "/api/memory/import-conversations",
                 },
             ),
+            "knowledge_wiki": FeatureContract(
+                enabled=True,
+                source="backend.agent.obsidian.wiki_api",
+                endpoints={
+                    "status": "/api/knowledge/status",
+                    "query": "/api/knowledge/query",
+                    "read_page": "/api/knowledge/pages/{ref}",
+                    "history": "/api/knowledge/pages/{ref}/history",
+                    "upsert_page": "/api/knowledge/pages",
+                    "ingest": "/api/knowledge/ingest",
+                    "overview": "/api/knowledge/overview",
+                    "lint": "/api/knowledge/lint",
+                    "rebuild_index": "/api/knowledge/rebuild-index",
+                },
+                notes="Private maintained knowledge; raw Library notes are never ingested automatically.",
+            ),
             "hermes_skills": FeatureContract(
                 enabled=True,
                 source="plugin_runtime.hermes",
@@ -107,11 +123,9 @@ def build_capability_contract() -> CapabilityContract:
             ),
             "agent_runtime": FeatureContract(
                 enabled=True,
-                source="agent_runtime",
+                source="backend.agent.api",
                 endpoints={
-                    "departments": "/api/agent-runtime/departments",
-                    "tasks": "/api/agent-runtime/tasks",
-                    "cancel_task": "/api/agent-runtime/tasks/{id}/cancel",
+                    "subagents": "/api/subagents",
                 },
             ),
         },

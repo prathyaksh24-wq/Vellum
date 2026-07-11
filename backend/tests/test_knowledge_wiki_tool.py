@@ -13,6 +13,12 @@ class FakeWiki:
     def lint(self, *, stale_days):
         return {"health": "green", "stale_days": stale_days}
 
+    def version_history(self, page_ref):
+        return {"ref": page_ref, "current_version": 2, "versions": [{"version": 1}]}
+
+    def read_page_version(self, page_ref, version):
+        return {"ref": page_ref, "version": version, "content": "old"}
+
 
 def test_knowledge_wiki_tool_exposes_status_query_and_lint(monkeypatch):
     fake = FakeWiki()
@@ -27,6 +33,15 @@ def test_knowledge_wiki_tool_exposes_status_query_and_lint(monkeypatch):
     assert query["limit"] == 4
     assert lint["health"] == "green"
     assert lint["stale_days"] == 30
+
+    history = json.loads(tool_module.knowledge_wiki.func(action="history", page_ref="kw-0000000000000000"))
+    old = json.loads(
+        tool_module.knowledge_wiki.func(
+            action="read_version", page_ref="kw-0000000000000000", version=1
+        )
+    )
+    assert history["current_version"] == 2
+    assert old["page"]["content"] == "old"
 
 
 def test_agent_activity_uses_action_specific_wiki_labels():

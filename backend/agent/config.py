@@ -134,6 +134,9 @@ class Settings(BaseSettings):
         alias="LOG_LEVEL",
     )
     enable_nightly_digest: bool = Field(default=True, alias="ENABLE_NIGHTLY_DIGEST")
+    enable_vault_retention: bool = Field(default=True, alias="ENABLE_VAULT_RETENTION")
+    retention_archive_days: int = Field(default=30, alias="RETENTION_ARCHIVE_DAYS")
+    retention_delete_days: int = Field(default=90, alias="RETENTION_DELETE_DAYS")
     enable_vault_watcher: bool = Field(default=True, alias="ENABLE_VAULT_WATCHER")
     vault_watcher_debounce_seconds: float = Field(default=2.0, alias="VAULT_WATCHER_DEBOUNCE_SECONDS")
     voice_enabled: bool = Field(default=True, alias="VOICE_ENABLED")
@@ -211,6 +214,10 @@ class Settings(BaseSettings):
             raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
+        if self.retention_archive_days < 1:
+            raise ValueError("RETENTION_ARCHIVE_DAYS must be at least 1.")
+        if self.retention_delete_days <= self.retention_archive_days:
+            raise ValueError("RETENTION_DELETE_DAYS must be greater than RETENTION_ARCHIVE_DAYS.")
         if self.voice_stt_engine not in {"moonshine"}:
             raise ValueError("VOICE_STT_ENGINE must be moonshine.")
         if self.voice_tts_engine not in {"kokoro"}:

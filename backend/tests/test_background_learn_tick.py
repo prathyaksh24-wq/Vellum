@@ -37,7 +37,6 @@ def _setup_background_learn_case(tmp_path, monkeypatch):
         def add_message(self, sid, content, role): pass
 
     monkeypatch.setattr(api_mod, "HonchoMemory", FakeHoncho)
-    monkeypatch.setattr(api_mod, "store_qa_pair", lambda *a, **kw: None)
 
     class FakeFTS:
         def add_qa_pair(self, **kw): pass

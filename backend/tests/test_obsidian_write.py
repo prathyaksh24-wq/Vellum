@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from agent.tools import obsidian_write
 
 
-def test_store_qa_pair_skips_embedding_when_vector_search_disabled(monkeypatch, tmp_path):
+def test_store_qa_pair_is_a_noop_compatibility_hook(monkeypatch, tmp_path):
     settings = SimpleNamespace(
         obsidian_vault_path=tmp_path,
         agent_notes_folder="Agent",
@@ -21,7 +21,5 @@ def test_store_qa_pair_skips_embedding_when_vector_search_disabled(monkeypatch, 
 
     obsidian_write.store_qa_pair("question", "answer")
 
-    written = list((tmp_path / "Agent" / "Responses").glob("*.md"))
-    assert len(written) == 1
-    assert "question" in written[0].read_text(encoding="utf-8")
+    assert not (tmp_path / "Agent" / "Responses").exists()
     assert touched["vector"] is False

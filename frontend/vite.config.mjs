@@ -13,11 +13,12 @@ function copyStaticUiAssets() {
     closeBundle() {
       for (const [source, target] of [
         ['ui/terminal/vellum', 'ui-dist/ui/terminal/vellum'],
-        ['ui/api', 'ui-dist/ui/api'],
+        [designUploadsRoot + '/Vellum Default Re-designed.html', 'ui-dist/design-uploads/Vellum Default Re-designed.html'],
+        [designUploadsRoot + '/api', 'ui-dist/design-uploads/api'],
       ]) {
         rmSync(target, { recursive: true, force: true });
         cpSync(source, target, { recursive: true });
-        if (source === 'ui/api') {
+        if (source.endsWith('/api')) {
           for (const file of readdirSync(target)) {
             if (file.endsWith('.test.js')) rmSync(`${target}/${file}`, { force: true });
           }
@@ -61,7 +62,7 @@ function serveDesignUploads() {
       });
       server.middlewares.use((req, res, next) => {
         const path = (req.url || '').split('?')[0];
-        if (decodeURIComponent(path) === '/Vellum Default Re-designed.html') {
+        if (['/Vellum Default Re-designed.html', '/ui/Vellum Default Re-designed.html'].includes(decodeURIComponent(path))) {
           res.statusCode = 302;
           res.setHeader('Location', '/design-uploads/Vellum%20Default%20Re-designed.html');
           res.end();
@@ -89,7 +90,7 @@ export default defineConfig({
     outDir: 'ui-dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: 'ui/Vellum Default Re-designed.html',
+      input: 'build-entry.js',
     },
   },
 });
