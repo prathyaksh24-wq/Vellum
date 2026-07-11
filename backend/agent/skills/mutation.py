@@ -470,6 +470,9 @@ class SkillMutationCoordinator:
 
             snapshot = CuratorBackupStore(self.root).create(f"pre-delete {record['identity']}")
         applied = self.backend.apply(record["action"], record["payload"])
+        from agent.skills.catalog import SkillCatalog
+
+        SkillCatalog(self.root).reconcile(embed_semantics=False)
         result = {
             **applied,
             "id": record["id"],

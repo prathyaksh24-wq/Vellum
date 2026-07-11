@@ -16,6 +16,8 @@ from agent.skills.registry import SkillRegistry
 from agent.skills.suggestions import BlueprintSuggestionStore
 from agent.skills.usage import SkillUsageStore
 from agent.skills.configuration import SkillConfigStore
+from agent.skills.usage_intelligence import SkillUsageIntelligence
+from agent.skills.hub import HubLockFile
 
 
 class SkillSurfaceService:
@@ -28,6 +30,7 @@ class SkillSurfaceService:
         self.mutations = SkillMutationCoordinator(self.root)
         self.migrator = JsonSkillMigrator(self.root)
         self.usage = SkillUsageStore(self.root)
+        self.usage_intelligence = SkillUsageIntelligence(self.root)
         self.parser = SkillPackageParser()
         self.bundles = SkillBundleStore(self.root, self.registry)
         self.hub = SkillHub(self.root, sources=sources)
@@ -60,12 +63,32 @@ class SkillSurfaceService:
         if path:
             return {"name": name, "path": path, "content": self.registry.view_file(name, path)}
         package = self.registry.view(name)
+        provenance = HubLockFile(self.root).get(name) or {}
+        support_files = sorted(
+            path.relative_to(package.root).as_posix()
+            for path in package.root.rglob("*")
+            if path.is_file() and not path.is_symlink() and path.name != "SKILL.md"
+        )
         return {
             "name": name,
             "description": package.metadata.description,
             "metadata": package.metadata.model_dump(mode="json", exclude_none=True),
             "content": package.body,
+            "skill_md": package.skill_file.read_text(encoding="utf-8"),
             "usage": self.usage.get(name),
+            "usage_intelligence": self.usage_intelligence.aggregate(name),
+            "recent_usage": self.usage_intelligence.recent(name),
+            "provenance": {
+                "source": provenance.get("source") or ("external" if package.is_external else "local"),
+                "identifier": provenance.get("identifier"),
+                "repository_url": provenance.get("repository_url"),
+                "source_ref": provenance.get("source_ref"),
+                "source_path": provenance.get("source_path"),
+                "content_hash": provenance.get("content_hash"),
+                "trust_level": provenance.get("trust_level") or ("local" if not package.is_external else "external"),
+                "scan_verdict": provenance.get("scan_verdict"),
+            },
+            "support_files": support_files,
         }
 
     def action(self, action: str, *, name: str = "", confirm: bool = False, **payload) -> dict[str, Any]:

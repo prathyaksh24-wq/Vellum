@@ -838,6 +838,34 @@ def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monke
     assert 'skill_manage(action="create"' in learned.json()["expanded"]
 
 
+def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, tmp_path):
+    from agent.skills import SkillCatalog, SkillManager, SkillSurfaceService
+
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    for name in ("alpha-skill", "beta-skill"):
+        manager.create(f"---\nname: {name}\ndescription: {name}\n---\n# {name}\n\n## Procedure\nRun safely.\n", confirm=True)
+    surface = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[])
+    SkillCatalog(root).reconcile(embed_semantics=False)
+    monkeypatch.setattr(api, "_skill_surface_singleton", surface)
+
+    with TestClient(api.app) as client:
+        first = client.get("/api/skills/v2/catalog", params={"limit": 1})
+        second = client.get("/api/skills/v2/catalog", params={"limit": 1, "cursor": first.json()["next_cursor"]})
+        cached = client.get("/api/skills/v2/catalog", params={"limit": 1}, headers={"If-None-Match": first.headers["etag"]})
+        detail = client.get("/api/skills/alpha-skill")
+        overview = client.get("/api/skills/v2/overview")
+
+    assert first.status_code == 200
+    assert first.headers["etag"]
+    assert first.json()["items"][0]["normalized_name"] == "alpha-skill"
+    assert second.json()["items"][0]["normalized_name"] == "beta-skill"
+    assert cached.status_code == 304
+    assert "name: alpha-skill" in detail.json()["skill_md"]
+    assert detail.json()["provenance"]["source"] == "local"
+    assert overview.json()["counts"]["active"] == 2
+
+
 def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):
     saved = {}
 

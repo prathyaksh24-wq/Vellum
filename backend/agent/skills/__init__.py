@@ -65,6 +65,7 @@ from agent.skills.security import (
 from agent.skills.suggestions import BlueprintSuggestionStore
 from agent.skills.surface import SkillSurfaceService
 from agent.skills.usage import SkillUsageStore
+from agent.skills.usage_intelligence import SkillUsageIntelligence, SkillUsageScope, record_current_activation, usage_scope
 
 __all__ = [
     "BlueprintMetadata",
@@ -127,6 +128,8 @@ __all__ = [
     "SkillSurfaceService",
     "SkillUsage",
     "SkillUsageStore",
+    "SkillUsageIntelligence",
+    "SkillUsageScope",
     "SkillsShSource",
     "SkillsMpSource",
     "UrlSkillSource",
@@ -144,4 +147,6 @@ __all__ = [
     "calibrate_semantic_threshold",
     "package_content_hash",
     "semantic_projection",
+    "record_current_activation",
+    "usage_scope",
 ]

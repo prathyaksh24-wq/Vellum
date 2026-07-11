@@ -230,7 +230,7 @@ class SkillCatalog:
                 raise
         return CatalogReconcileReport(len(packages), removed, unchanged, recomputed, candidates, tuple(errors))
 
-    def search(self, query: str, *, state: str | None = None, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    def search(self, query: str, *, state: str | None = None, limit: int = 50, offset: int = 0, after: str = "") -> list[dict[str, Any]]:
         clean = SkillTextNormalizer.normalize(query)
         with self.connect() as connection:
             if clean:
@@ -242,6 +242,9 @@ class SkillCatalog:
             if state:
                 sql += " AND s.state=?"
                 params.append(state)
+            if after:
+                sql += " AND s.normalized_name>?"
+                params.append(after.casefold())
             sql += " ORDER BY s.normalized_name LIMIT ? OFFSET ?"
             params.extend([min(max(limit, 1), 200), max(offset, 0)])
             return [dict(row) for row in connection.execute(sql, params)]

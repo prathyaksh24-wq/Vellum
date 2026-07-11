@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 
 from agent.skills import SkillBundleError, SkillBundleStore, get_skill_registry
 from agent.skills.runtime import SKILLS_PATH
+from agent.skills.usage_intelligence import record_current_activation
 
 
 _STORE: SkillBundleStore | None = None
@@ -37,6 +38,8 @@ def skill_bundles(
             result = {"ok": True, "bundle": store.show(name)}
         elif normalized == "load":
             result = store.load(name)
+            for member in result.get("skills", []):
+                record_current_activation(member, source=f"bundle:{name}")
         elif normalized == "create":
             result = store.create(
                 name,
