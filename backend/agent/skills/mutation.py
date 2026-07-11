@@ -64,39 +64,56 @@ class SkillMutationBackend(Protocol):
 class FilesystemSkillBackend:
     _PACKAGE_MUTATIONS = {"patch", "edit", "write_file", "remove_file"}
 
-    def __init__(self, root: str | Path, *, protected: set[str] | None = None):
+    def __init__(self, root: str | Path, *, protected: set[str] | None = None, source_resolver=None):
         self.root = Path(root)
         self.manager = SkillManager(self.root, require_confirmation=False)
         self.parser = SkillPackageParser()
         self.scanner = SkillSecurityScanner()
         self.protected = protected or {"skill-skill-creator-v1", "plan"}
+        self.source_resolver = source_resolver
 
     def prepare(self, action: str, payload: dict[str, Any]) -> PreparedMutation:
         normalized = action.strip().casefold().replace("-", "_")
         staging = Path(tempfile.mkdtemp(prefix="skill-preview-", dir=self._staging_parent()))
         try:
-            if normalized == "create":
+            if normalized in {"create", "hub_install", "hub_update"}:
                 package_root = staging / "package"
                 package_root.mkdir()
-                (package_root / "SKILL.md").write_text(str(payload.get("skill_md") or ""), encoding="utf-8")
+                if normalized == "create":
+                    (package_root / "SKILL.md").write_text(str(payload.get("skill_md") or ""), encoding="utf-8")
+                else:
+                    for relative, content in dict(payload.get("files") or {}).items():
+                        target_file = SkillManager._safe_target(package_root, relative)
+                        target_file.parent.mkdir(parents=True, exist_ok=True)
+                        target_file.write_text(str(content), encoding="utf-8")
                 package = self._validate_package(package_root)
-                self._assert_unique_content(package_root)
                 category = SkillManager._category(str(payload.get("category") or "uncategorized"))
                 target = self.root / "packages" / category / package.metadata.name
-                if self.manager._name_exists(package.metadata.name):
+                self._assert_unique_content(package_root, exclude=target if normalized == "hub_update" else None)
+                if normalized in {"create", "hub_install"} and self.manager._name_exists(package.metadata.name):
                     raise SkillMutationError(f"skill already exists: {package.metadata.name}")
+                if normalized == "hub_update" and not target.exists():
+                    raise SkillMutationError(f"hub skill not found: {package.metadata.name}")
                 return PreparedMutation(
                     package.metadata.name,
                     normalized,
                     f"packages/{category}/{package.metadata.name}",
                     target,
-                    None,
+                    _tree_hash(target) if normalized == "hub_update" else None,
                     self._text_files(package_root),
                 )
 
             name = str(payload.get("name") or "").strip().casefold()
             if not name:
                 raise SkillMutationError("skill name is required")
+            if normalized == "hub_uninstall":
+                from agent.skills.hub import HubLockFile
+
+                entry = HubLockFile(self.root).get(name)
+                if entry is None:
+                    raise SkillMutationError(f"hub skill not found: {name}")
+                source = (self.root / entry["install_path"]).resolve()
+                return PreparedMutation(name, normalized, entry["install_path"], source, _tree_hash(source), {})
             if normalized in self._PACKAGE_MUTATIONS:
                 source = self.manager.package(name).root
                 package_root = staging / "package"
@@ -156,6 +173,34 @@ class FilesystemSkillBackend:
                 origin=str(payload.get("origin") or "foreground"),
                 confirm=True,
             )
+        if normalized in {"hub_install", "hub_update"}:
+            from agent.skills.hub import SkillHub
+            from agent.skills.hub_models import HubSkillBundle
+
+            bundle = HubSkillBundle(
+                str(payload["bundle_name"]), str(payload.get("description") or ""), str(payload["source"]),
+                str(payload["identifier"]), str(payload.get("trust_level") or "community"), dict(payload.get("files") or {}),
+                dict(payload.get("metadata") or {}),
+            )
+            if payload.get("verify_upstream"):
+                from agent.skills.hub import bundle_content_hash
+                if self.source_resolver is not None:
+                    upstream = self.source_resolver(bundle.identifier).fetch(bundle.identifier)
+                else:
+                    from agent.skills.hub_sources import create_skill_source_router
+
+                    verifier = SkillHub(self.root, sources=create_skill_source_router())
+                    upstream = verifier._source_for(bundle.identifier).fetch(bundle.identifier)
+                if bundle_content_hash(upstream) != payload.get("inspected_hash"):
+                    raise SkillMutationError("upstream package changed since inspection; inspect it again")
+            return SkillHub(self.root, sources=[])._install_bundle(
+                bundle, category=str(payload.get("category") or "uncategorized"), force=bool(payload.get("force")),
+                replace=normalized == "hub_update",
+            )
+        if normalized == "hub_uninstall":
+            from agent.skills.hub import SkillHub
+
+            return SkillHub(self.root, sources=[]).uninstall(name, confirm=True)
         if normalized == "patch":
             return self.manager.patch(name, str(payload.get("old_text") or ""), str(payload.get("new_text") or ""), confirm=True)
         if normalized == "edit":
@@ -179,10 +224,10 @@ class FilesystemSkillBackend:
 
     def current_fingerprint(self, action: str, payload: dict[str, Any]) -> str | None:
         normalized = action.strip().casefold().replace("-", "_")
-        if normalized == "create":
+        if normalized in {"create", "hub_install"}:
             return None
         name = str(payload.get("name") or "").strip().casefold()
-        if normalized in self._PACKAGE_MUTATIONS or normalized in {"archive", "retire"}:
+        if normalized in self._PACKAGE_MUTATIONS or normalized in {"archive", "retire", "hub_update", "hub_uninstall"}:
             source = self.manager._locate(self.root / "packages", name)
         elif normalized == "restore":
             source = self.manager._locate(self.root / ".archive", name)
@@ -319,7 +364,7 @@ class SkillMutationCoordinator:
         data = {**payload, "origin": origin}
         prepared = self.backend.prepare(normalized, data)
         lock_names = [prepared.identity]
-        if normalized in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore"}:
+        if normalized in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore", "hub_install", "hub_update"}:
             lock_names.append("__catalog_identity_reservation__")
         with self.locks.acquire_many(lock_names):
             prepared = self.backend.prepare(normalized, data)
@@ -380,7 +425,7 @@ class SkillMutationCoordinator:
             return receipt["result"]
         record = self._read_pending(identifier)
         lock_names = [record["identity"]]
-        if record["action"] in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore"}:
+        if record["action"] in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore", "hub_install", "hub_update"}:
             lock_names.append("__catalog_identity_reservation__")
         with self.locks.acquire_many(lock_names):
             record = self._read_pending(identifier)
@@ -420,7 +465,7 @@ class SkillMutationCoordinator:
         self._assert_local_target(prepared.target_path)
         self._verify_record(record, prepared)
         snapshot = None
-        if record["action"] == "delete":
+        if record["action"] in {"delete", "hub_uninstall"}:
             from agent.skills.curator import CuratorBackupStore
 
             snapshot = CuratorBackupStore(self.root).create(f"pre-delete {record['identity']}")

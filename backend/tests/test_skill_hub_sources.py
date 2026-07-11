@@ -5,10 +5,14 @@ from agent.skills import (
     LobeHubSource,
     OfficialSkillSource,
     SkillsShSource,
+    SkillsMpSource,
     UrlSkillSource,
     WellKnownSkillSource,
     create_skill_source_router,
+    GuardedHttpClient,
 )
+import socket
+import pytest
 
 
 SKILL = "---\nname: remote\ndescription: Remote skill\n---\n# Remote\n"
@@ -39,6 +43,7 @@ def test_router_exposes_all_documented_source_ids() -> None:
         "claude-marketplace",
         "lobehub",
         "browse-sh",
+        "skillsmp",
     } <= ids
 
 
@@ -130,3 +135,34 @@ def test_skills_sh_resolves_underlying_github_identifier() -> None:
 
     assert bundle.source == "skills-sh"
     assert bundle.identifier == "skills-sh/acme/skills/remote"
+
+
+def test_skillsmp_search_resolves_repository_and_exposes_quota_and_provenance() -> None:
+    http = FakeHttp()
+    http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1"] = {
+        "skills": [{"slug": "remote", "name": "remote", "description": "Deploy", "repository_url": "https://github.com/acme/skills", "path": "skills/remote"}],
+        "rate_limit": {"remaining": 9},
+    }
+    http.json["https://skillsmp.test/api/v1/skills/remote"] = {
+        "slug": "remote", "repository_url": "https://github.com/acme/skills/tree/main/skills/remote", "path": "skills/remote"
+    }
+    http.json["https://api.github.com/repos/acme/skills/contents/skills/remote"] = [
+        {"type": "file", "path": "skills/remote/SKILL.md", "download_url": "https://raw.example/SKILL.md"}
+    ]
+    http.text["https://raw.example/SKILL.md"] = SKILL
+    source = SkillsMpSource(http, base_url="https://skillsmp.test/api/v1")
+
+    result = source.search("deploy")[0]
+    bundle = source.fetch("skillsmp/remote")
+
+    assert result.extra["rate_limit"]["remaining"] == 9
+    assert bundle.metadata["repository_url"] == "https://github.com/acme/skills"
+    assert bundle.metadata["source_ref"] == "main"
+
+
+def test_guarded_http_rejects_ssrf_and_dns_rebinding(monkeypatch) -> None:
+    with pytest.raises(ValueError, match="blocked"):
+        GuardedHttpClient._validate("http://127.0.0.1/secret")
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *_args: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 0))])
+    with pytest.raises(ValueError, match="blocked"):
+        GuardedHttpClient._validate_dns("public.example")

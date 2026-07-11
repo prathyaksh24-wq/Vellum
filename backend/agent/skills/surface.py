@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 from typing import Any
 
 from agent.skills.authoring import build_learn_prompt
@@ -14,12 +15,15 @@ from agent.skills.parser import SkillPackageError, SkillPackageParser
 from agent.skills.registry import SkillRegistry
 from agent.skills.suggestions import BlueprintSuggestionStore
 from agent.skills.usage import SkillUsageStore
+from agent.skills.configuration import SkillConfigStore
 
 
 class SkillSurfaceService:
     def __init__(self, root: str | Path, *, logs_root: str | Path, sources: list):
         self.root = Path(root)
-        self.registry = SkillRegistry(local_root=self.root / "packages")
+        config = SkillConfigStore(self.root / "config.yaml")
+        external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
+        self.registry = SkillRegistry(local_root=self.root / "packages", external_dirs=external_dirs)
         self.manager = SkillManager(self.root)
         self.mutations = SkillMutationCoordinator(self.root)
         self.migrator = JsonSkillMigrator(self.root)
@@ -49,6 +53,7 @@ class SkillSurfaceService:
             "curator": self.curator.status(),
             "pending_writes": self.mutations.list_pending(),
             "write_approval": self.mutations.write_approval,
+            "external_diagnostics": self.registry.diagnostics(),
         }
 
     def detail(self, name: str, *, path: str = "") -> dict[str, Any]:
@@ -192,4 +197,5 @@ class SkillSurfaceService:
             "state": state,
             "pinned": bool(usage.get("pinned")),
             "created_by": usage.get("created_by"),
+            "is_external": bool(package.is_external),
         }

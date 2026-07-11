@@ -186,7 +186,11 @@ class SkillHub:
                 "files": sorted(bundle.files),
                 "content_hash": bundle_content_hash(bundle),
                 "scan_verdict": scan.verdict,
+                "findings": [finding.__dict__ for finding in scan.findings],
                 "skill_md": skill_md,
+                "repository_url": bundle.metadata.get("repository_url"),
+                "source_ref": bundle.metadata.get("source_ref"),
+                "source_path": bundle.metadata.get("source_path"),
             }
         finally:
             shutil.rmtree(staging, ignore_errors=True)
@@ -311,6 +315,9 @@ class SkillHub:
                     "content_hash": content_hash,
                     "installed_at": datetime.now(timezone.utc).isoformat(),
                     "scan_verdict": scan.verdict,
+                    "repository_url": bundle.metadata.get("repository_url"),
+                    "source_ref": bundle.metadata.get("source_ref"),
+                    "source_path": bundle.metadata.get("source_path"),
                 }
                 self.lock.set(bundle.name, entry)
             except Exception:
