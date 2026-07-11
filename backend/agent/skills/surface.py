@@ -9,6 +9,7 @@ from agent.skills.curator import SkillCurator
 from agent.skills.hub import SkillHub
 from agent.skills.manager import SkillManager
 from agent.skills.mutation import SkillMutationCoordinator
+from agent.skills.migration import JsonSkillMigrator
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 from agent.skills.registry import SkillRegistry
 from agent.skills.suggestions import BlueprintSuggestionStore
@@ -21,6 +22,7 @@ class SkillSurfaceService:
         self.registry = SkillRegistry(local_root=self.root / "packages")
         self.manager = SkillManager(self.root)
         self.mutations = SkillMutationCoordinator(self.root)
+        self.migrator = JsonSkillMigrator(self.root)
         self.usage = SkillUsageStore(self.root)
         self.parser = SkillPackageParser()
         self.bundles = SkillBundleStore(self.root, self.registry)
@@ -122,6 +124,10 @@ class SkillSurfaceService:
                 records = self.mutations.list_pending()
                 answer = "\n".join(f"- {item['id']}: {item['gist']}" for item in records) or "No pending skill mutations."
                 return {"handled": True, "answer": answer}
+            if action == "migrate" and len(args) >= 2 and args[1] == "--dry-run":
+                return {"handled": True, "answer": str(self.migrator.dry_run().to_dict())}
+            if action == "migrate" and len(args) >= 3 and args[1] == "--rollback":
+                return {"handled": True, "answer": str(self.migrator.rollback(args[2]))}
             if action == "diff" and len(args) == 2:
                 return {"handled": True, "answer": self.mutations.diff(args[1])["diff"] or "No textual changes."}
             if action in {"approve", "reject"} and len(args) == 2:

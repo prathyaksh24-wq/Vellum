@@ -1,14 +1,29 @@
-import json
 from pathlib import Path
+
+import yaml
 
 from agent.agents.skill_router import SkillRoute, SkillRouteResolver
 from agent.memory.skills import SkillStore
 
 
 def write_skill(root: Path, payload: dict):
-    active = root / "active"
-    active.mkdir(parents=True)
-    (active / f"{payload['id']}.json").write_text(json.dumps(payload), encoding="utf-8")
+    package = root / "packages" / "routing" / payload["id"]
+    package.mkdir(parents=True)
+    frontmatter = {
+        "name": payload["id"],
+        "description": payload["name"],
+        "metadata": {"vellum": {
+            "trigger": payload.get("trigger", []),
+            "negative_trigger": payload.get("negative_trigger", []),
+            "confidence_threshold": payload.get("confidence_threshold", 0.75),
+            "route_to_agent": payload.get("route_to_agent"),
+            "routing_critical": bool(payload.get("route_to_agent")),
+        }},
+    }
+    (package / "SKILL.md").write_text(
+        f"---\n{yaml.safe_dump(frontmatter, sort_keys=False)}---\n# Route\n\n## Procedure\n{payload['instructions']}\n",
+        encoding="utf-8",
+    )
 
 
 def test_skill_route_resolver_routes_matching_skill(tmp_path):

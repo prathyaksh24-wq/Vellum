@@ -80,6 +80,7 @@ class FilesystemSkillBackend:
                 package_root.mkdir()
                 (package_root / "SKILL.md").write_text(str(payload.get("skill_md") or ""), encoding="utf-8")
                 package = self._validate_package(package_root)
+                self._assert_unique_content(package_root)
                 category = SkillManager._category(str(payload.get("category") or "uncategorized"))
                 target = self.root / "packages" / category / package.metadata.name
                 if self.manager._name_exists(package.metadata.name):
@@ -104,6 +105,7 @@ class FilesystemSkillBackend:
                 parsed = self._validate_package(package_root)
                 if parsed.metadata.name != name:
                     raise SkillMutationError("skill name cannot change during edit")
+                self._assert_unique_content(package_root, exclude=source)
                 return PreparedMutation(
                     name,
                     normalized,
@@ -217,6 +219,21 @@ class FilesystemSkillBackend:
         if usage.get("pinned") is True:
             raise SkillMutationError(f"skill is pinned; unpin before deletion: {name}")
 
+    def _assert_unique_content(self, candidate: Path, *, exclude: Path | None = None) -> None:
+        from agent.skills.catalog import package_content_hash
+
+        expected = package_content_hash(candidate)
+        excluded = exclude.resolve() if exclude else None
+        for base in (self.root / "packages", self.root / "proposed", self.root / "retired", self.root / ".archive"):
+            if not base.exists():
+                continue
+            for skill_file in base.rglob("SKILL.md"):
+                package_root = skill_file.parent.resolve()
+                if excluded is not None and package_root == excluded:
+                    continue
+                if package_content_hash(package_root) == expected:
+                    raise SkillMutationError(f"exact duplicate skill package already exists: {package_root.name}")
+
     @staticmethod
     def _mutate_preview(root: Path, action: str, payload: dict[str, Any]) -> None:
         if action == "patch":
@@ -295,7 +312,10 @@ class SkillMutationCoordinator:
         normalized = action.strip().casefold().replace("-", "_")
         data = {**payload, "origin": origin}
         prepared = self.backend.prepare(normalized, data)
-        with self.locks.acquire(prepared.identity):
+        lock_names = [prepared.identity]
+        if normalized in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore"}:
+            lock_names.append("__catalog_identity_reservation__")
+        with self.locks.acquire_many(lock_names):
             prepared = self.backend.prepare(normalized, data)
             self._assert_local_target(prepared.target_path)
             key = idempotency_key or _canonical_hash({"action": normalized, "payload": data, "origin": origin})
@@ -353,7 +373,10 @@ class SkillMutationCoordinator:
         if receipt is not None:
             return receipt["result"]
         record = self._read_pending(identifier)
-        with self.locks.acquire(record["identity"]):
+        lock_names = [record["identity"]]
+        if record["action"] in {"create", "edit", "patch", "write_file", "remove_file", "approve_proposed", "restore"}:
+            lock_names.append("__catalog_identity_reservation__")
+        with self.locks.acquire_many(lock_names):
             record = self._read_pending(identifier)
             return self._apply_record(record)
 

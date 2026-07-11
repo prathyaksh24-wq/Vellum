@@ -1,6 +1,16 @@
 from agent.skills.authoring import build_learn_prompt
 from agent.skills.bundles import SkillBundleError, SkillBundleStore
 from agent.skills.configuration import SkillConfigStore
+from agent.skills.catalog import (
+    CatalogReconcileReport,
+    SkillCatalog,
+    SkillCatalogError,
+    SkillTextNormalizer,
+    cosine_similarity,
+    calibrate_semantic_threshold,
+    package_content_hash,
+    semantic_projection,
+)
 from agent.skills.curator import CuratorBackupStore, CuratorConfig, SkillCurator
 from agent.skills.hub import HubLockFile, SkillHub, SkillHubError, TapsManager, bundle_content_hash
 from agent.skills.hub_models import HubSkillBundle, HubSkillMeta
@@ -81,6 +91,10 @@ __all__ = [
     "SkillHub",
     "SkillHubError",
     "SkillConfigStore",
+    "SkillCatalog",
+    "SkillCatalogError",
+    "SkillTextNormalizer",
+    "CatalogReconcileReport",
     "SkillCurator",
     "SkillBundleError",
     "SkillBundleStore",
@@ -113,4 +127,8 @@ __all__ = [
     "allow_skill_install",
     "bundle_content_hash",
     "create_skill_source_router",
+    "cosine_similarity",
+    "calibrate_semantic_threshold",
+    "package_content_hash",
+    "semantic_projection",
 ]
