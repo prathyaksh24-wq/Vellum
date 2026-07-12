@@ -69,11 +69,18 @@ AGENT_ACCESSIBLE = _permissions(
     FolderPermission.SENT_TO_LLM,
     FolderPermission.TOOL_ACCESSIBLE,
 )
+KNOWLEDGE_ACCESSIBLE = _permissions(
+    FolderPermission.STORED,
+    FolderPermission.INDEXED,
+    FolderPermission.SENT_TO_LLM,
+    FolderPermission.TOOL_ACCESSIBLE,
+)
 
 
 FOLDER_POLICIES: dict[str, FolderPolicy] = {
     "Meta": FolderPolicy("Meta", META_PUBLIC, requires_scrubbing=True),
     "Projects": FolderPolicy("Projects", PROJECT_PUBLIC, requires_scrubbing=True),
+    "Knowledge": FolderPolicy("Knowledge", KNOWLEDGE_ACCESSIBLE, requires_scrubbing=True),
     "Library": FolderPolicy("Library", PRIVATE_LOCAL_ONLY, requires_scrubbing=True),
     "Library/X": FolderPolicy("Library/X", LIBRARY_PUBLIC, requires_scrubbing=False),
     "Library/Youtube": FolderPolicy("Library/Youtube", LIBRARY_PUBLIC, requires_scrubbing=False),

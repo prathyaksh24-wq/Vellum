@@ -155,21 +155,18 @@ class PrivacyScrubber:
     def scrub(self, text: str) -> tuple[str, list[Replacement]]:
         clean = text or ""
         detections = self.analyze(clean)
-        replacements: list[Replacement] = []
-        label_counts: dict[str, int] = {}
+        return _apply_detections(clean, detections)
 
-        tokens_by_span: dict[tuple[int, int], str] = {}
-        for detection in detections:
-            label_counts[detection.label] = label_counts.get(detection.label, 0) + 1
-            token = f"[{detection.label}_{label_counts[detection.label]}]"
-            replacements.append(Replacement(detection.label, detection.value, token))
-            tokens_by_span[(detection.start, detection.end)] = token
+    def scrub_regex(self, text: str) -> tuple[str, list[Replacement]]:
+        """Fast deterministic scrubbing for routing metadata and previews.
 
-        for detection in sorted(detections, key=lambda item: item.start, reverse=True):
-            token = tokens_by_span[(detection.start, detection.end)]
-            clean = f"{clean[:detection.start]}{token}{clean[detection.end:]}"
+        Full prompt-bound content must continue to use ``scrub`` so Presidio is
+        included. This lighter method is for small local maps that help the
+        agent select which fully protected document to read next.
+        """
 
-        return clean, replacements
+        clean = text or ""
+        return _apply_detections(clean, _select_non_overlapping(self._regex_detections(clean)))
 
     def _regex_detections(self, text: str) -> list[PIIDetection]:
         detections: list[PIIDetection] = []
@@ -218,6 +215,24 @@ class PrivacyScrubber:
                 )
             )
         return detections
+
+
+def _apply_detections(clean: str, detections: list[PIIDetection]) -> tuple[str, list[Replacement]]:
+    replacements: list[Replacement] = []
+    label_counts: dict[str, int] = {}
+
+    tokens_by_span: dict[tuple[int, int], str] = {}
+    for detection in detections:
+        label_counts[detection.label] = label_counts.get(detection.label, 0) + 1
+        token = f"[{detection.label}_{label_counts[detection.label]}]"
+        replacements.append(Replacement(detection.label, detection.value, token))
+        tokens_by_span[(detection.start, detection.end)] = token
+
+    for detection in sorted(detections, key=lambda item: item.start, reverse=True):
+        token = tokens_by_span[(detection.start, detection.end)]
+        clean = f"{clean[:detection.start]}{token}{clean[detection.end:]}"
+
+    return clean, replacements
 
 
 @lru_cache(maxsize=1)

@@ -42,16 +42,20 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, get_settings
+from agent.contracts.capabilities import public_capability_contract
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
-from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
-from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+from agent.memory.runtime import get_memory_orchestrator
 from agent.memory.project_context import ProjectContext
-from agent.memory.resolved import ResolvedQuestionsCache
+from agent.memory.sessions import SessionsReader
+from agent.master.runtime import DelegationRuntime
+from agent.profiles import ProfileRegistry
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
+from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
+from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
@@ -78,22 +82,15 @@ from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
-from agent.tools.capabilities.memory_service import MemoryCapabilityService
-from agent.tools.obsidian_write import store_qa_pair
 from agent.tools.skill_bundles import skill_bundles
 from agent.tools.skill_curator import skill_curator
 from agent.tools.skill_hub import skill_hub
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
-_api_ledger = UsageLedger(Path("data/memory/usage.db"))
-_fts5_memory = FTS5Memory()
-_memory_orchestrator = MemoryOrchestrator(
-    fts5=_fts5_memory,
-    resolved_cache=ResolvedQuestionsCache(),
-    memory_service=MemoryCapabilityService(vault_root=get_settings().obsidian_vault_path, sessions_db=Path("data/memory/sessions.db")),
-    store=SQLiteMemoryStore(Path("data/memory/sessions.db")),
-)
+_api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
+_memory_orchestrator = get_memory_orchestrator()
+_fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
 _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SECONDS", "900")))
@@ -101,7 +98,15 @@ _dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _agent_runtime_lock = asyncio.Lock()
-_live_dispatcher = LiveAgentDispatcher(vault_root=get_settings().obsidian_vault_path)
+_profile_registry = ProfileRegistry()
+_delegation_runtime = DelegationRuntime(
+    profile_registry=_profile_registry,
+    memory_orchestrator=_memory_orchestrator,
+)
+_live_dispatcher = LiveAgentDispatcher(
+    vault_root=get_settings().obsidian_vault_path,
+    delegation_runtime=_delegation_runtime,
+)
 _oauth_flows: dict[str, dict[str, Any]] = {}
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
@@ -535,6 +540,58 @@ def _import_ui_conversations_to_memory(limit: int | None = None) -> dict[str, in
     return {"indexed_turns": indexed_turns, "skipped_turns": skipped_turns, "scanned_turns": scanned_turns}
 
 
+def _index_ui_conversation(conversation: dict[str, Any]) -> dict[str, int]:
+    fts5 = getattr(_memory_orchestrator, "fts5", _fts5_memory)
+    cid = str(conversation.get("thread_id") or conversation.get("id") or "ui-chat")
+    title = str(conversation.get("title") or "Untitled chat")
+    indexed_turns = 0
+    skipped_turns = 0
+    for turn in _conversation_turns(conversation):
+        source_id = f"ui-conversation:{cid}:{turn['message_id']}"
+        if hasattr(fts5, "source_path_exists") and fts5.source_path_exists(source_id):
+            skipped_turns += 1
+            continue
+        content = (
+            f"Conversation: {title}\n"
+            f"Thread: {cid}\n"
+            f"Q: {turn['user']}\n"
+            f"A: {turn['assistant']}"
+        )
+        fts5.add_document(content=content, thread_id=cid, source_paths=[source_id, f"ui-conversation:{cid}"])
+        indexed_turns += 1
+    return {
+        "indexed_turns": indexed_turns,
+        "skipped_turns": skipped_turns,
+        "scanned_turns": indexed_turns + skipped_turns,
+    }
+
+
+def _project_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
+    try:
+        manifest = export_conversations(
+            [conversation],
+            vault_root=get_settings().obsidian_vault_path,
+            dry_run=False,
+        )
+        entry = (manifest.get("entries") or [{}])[0]
+        return {"ok": True, "action": entry.get("action"), "path": entry.get("path")}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
+def _archive_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
+    try:
+        result = archive_conversation_projection(
+            str(conversation.get("id") or ""),
+            thread_id=str(conversation.get("thread_id") or conversation.get("id") or ""),
+            vault_root=get_settings().obsidian_vault_path,
+            dry_run=False,
+        )
+        return {"ok": True, **result}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:500]}
+
+
 def _conversation_timestamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -555,7 +612,19 @@ def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) ->
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    async def scheduled_dreaming() -> bool:
+        return await _maybe_run_dreaming(reason="scheduled", force=True)
+
     scheduler = start_scheduler()
+    if scheduler is not None and hasattr(scheduler, "add_job"):
+        scheduler.add_job(
+            scheduled_dreaming,
+            "cron",
+            hour=2,
+            minute=0,
+            id="memory_dreaming",
+            replace_existing=True,
+        )
     watcher = start_vault_watcher()
     app.state.scheduler = scheduler
     app.state.vault_watcher = watcher
@@ -1304,7 +1373,6 @@ async def _background_learn(
         scrubber = PrivacyScrubber()
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
-        await asyncio.to_thread(store_qa_pair, clean_query, clean_answer, source)
         settings = get_settings()
         honcho = HonchoMemory(
             base_url=settings.honcho_base_url,
@@ -1315,19 +1383,21 @@ async def _background_learn(
         await asyncio.to_thread(
             _memory_orchestrator.record_turn,
             thread_id=thread_id,
-            query=clean_query,
-            answer=clean_answer,
+            query=query,
+            answer=answer,
             tools=tools or [],
             sources=sources or [],
             confidence=float(confidence if confidence is not None else _memory_confidence([], [])),
             agent_name=agent_name,
+            external_query=clean_query,
+            external_answer=clean_answer,
         )
         pending = await asyncio.to_thread(
             _memory_orchestrator.extract_memory_candidates,
             thread_id=thread_id,
-            user_message=clean_query,
-            assistant_message=clean_answer,
-            agent_name="VellumAgent",
+            user_message=query,
+            assistant_message=answer,
+            agent_name=agent_name,
         )
         if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
@@ -1608,6 +1678,11 @@ async def status(deep: bool = Query(default=False)) -> dict[str, Any]:
     return await health(deep=deep)
 
 
+@router.get("/capabilities")
+async def capabilities() -> dict[str, Any]:
+    return public_capability_contract()
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     from agent.skills.curator_runtime import get_curator_runtime
@@ -1640,7 +1715,11 @@ async def put_conversation(conversation_id: str, payload: dict[str, Any]) -> dic
     conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
     conversations.insert(0, record)
     _write_ui_conversations(conversations)
-    return {"conversation": record}
+    indexed, projection = await asyncio.gather(
+        asyncio.to_thread(_index_ui_conversation, record),
+        asyncio.to_thread(_project_ui_conversation, record),
+    )
+    return {"conversation": record, "memory_index": indexed, "obsidian_projection": projection}
 
 
 @router.patch("/conversations/{conversation_id}")
@@ -1651,15 +1730,40 @@ async def patch_conversation(conversation_id: str, payload: dict[str, Any]) -> d
             updated = _normalize_ui_conversation(conversation_id, {**conversation, **payload})
             conversations[index] = updated
             _write_ui_conversations(conversations)
-            return {"conversation": updated}
+            indexed, projection = await asyncio.gather(
+                asyncio.to_thread(_index_ui_conversation, updated),
+                asyncio.to_thread(_project_ui_conversation, updated),
+            )
+            return {"conversation": updated, "memory_index": indexed, "obsidian_projection": projection}
     raise HTTPException(status_code=404, detail="Conversation not found.")
 
 
 @router.delete("/conversations/{conversation_id}")
-async def delete_conversation(conversation_id: str) -> dict[str, bool]:
-    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
+async def delete_conversation(conversation_id: str) -> dict[str, Any]:
+    current = _read_ui_conversations()
+    deleted = next((item for item in current if str(item.get("id")) == conversation_id), None)
+    conversations = [item for item in current if str(item.get("id")) != conversation_id]
     _write_ui_conversations(conversations)
-    return {"ok": True}
+    if not deleted:
+        return {"ok": True, "found": False, "obsidian_projection": {"ok": True, "found": False}}
+    thread_id = str(deleted.get("thread_id") or deleted.get("id") or conversation_id)
+    projection, deleted_fts = await asyncio.gather(
+        asyncio.to_thread(_archive_ui_conversation, deleted),
+        asyncio.to_thread(_fts5_memory.delete_thread, thread_id),
+    )
+    await asyncio.to_thread(
+        SessionsReader(
+            checkpoints_db=REPO_ROOT / "data" / "memory" / "checkpoints.db",
+            sessions_db=REPO_ROOT / "data" / "memory" / "sessions.db",
+        ).delete,
+        thread_id,
+    )
+    return {
+        "ok": True,
+        "found": True,
+        "deleted_fts_rows": deleted_fts,
+        "obsidian_projection": projection,
+    }
 
 
 @router.get("/skills")
@@ -1938,6 +2042,14 @@ async def list_subagents() -> dict[str, Any]:
     }
 
 
+@router.get("/agent-profiles")
+async def list_agent_profiles() -> dict[str, Any]:
+    return {
+        "profiles": _profile_registry.public_summaries(),
+        "diagnostics": _profile_registry.diagnostics(),
+    }
+
+
 def _chunk_text(chunk: Any) -> str:
     if chunk is None:
         return ""
@@ -1951,6 +2063,19 @@ def _chunk_text(chunk: Any) -> str:
                 parts.append(str(item))
         return "".join(parts)
     return str(content or "")
+
+
+def _is_primary_chat_model_stream_event(event: dict[str, Any]) -> bool:
+    """Ignore nested provider events already re-emitted by RoutedChatModel.
+
+    LangChain exposes both the routed facade and its nested ChatOpenAI run via
+    ``astream_events``. Consuming both duplicates every text and tool-call
+    chunk. Synthetic and legacy events may omit ``name``, so keep accepting
+    those while preferring the routed facade in production.
+    """
+
+    name = str(event.get("name") or "").strip()
+    return not name or name == "RoutedChatModel"
 
 
 def _chunk_tool_call_chunks(chunk: Any) -> list[dict[str, Any]]:
@@ -2191,6 +2316,7 @@ _ACTIVITY_LABELS = {
     "x_action": "Searched X",
     "search_amazon": "Checked Amazon",
     "computer_use": "Used the desktop",
+    "knowledge_wiki": "Maintained your knowledge wiki",
 }
 
 
@@ -2276,6 +2402,20 @@ def _decorate_source_list(records: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _activity_for(name: str, tool_input: Any) -> tuple[str, str]:
+    if name == "knowledge_wiki" and isinstance(tool_input, dict):
+        action = str(tool_input.get("action") or "").strip().casefold().replace("-", "_")
+        label = {
+            "status": "Checking your knowledge wiki",
+            "query": "Searching your knowledge wiki",
+            "read_page": "Reading your knowledge wiki",
+            "ingest_source": "Compiling a source into your wiki",
+            "upsert_page": "Updating your knowledge wiki",
+            "update_overview": "Updating your knowledge overview",
+            "rebuild_index": "Rebuilding your knowledge index",
+            "lint": "Checking wiki health",
+        }.get(action, _ACTIVITY_LABELS["knowledge_wiki"])
+        detail = str(tool_input.get("query") or tool_input.get("source_path") or tool_input.get("title") or "")
+        return label, detail[:200]
     label = _ACTIVITY_LABELS.get(name, f"Used {name}")
     detail = ""
     if isinstance(tool_input, dict):
@@ -2585,6 +2725,12 @@ async def _stream_agent_turn(
             "status": "in_progress",
             "label": f"Routed to {live_result.agent_name}",
             "detail": clean_message[:200],
+            "metadata": {
+                "run_id": live_result.run_id,
+                "cache_status": live_result.cache_status,
+                "cache_reason": live_result.cache_reason,
+                "route_source": live_result.route_source,
+            },
         }
         yield _agent_activity_event(
             response_id=response_id,
@@ -2828,6 +2974,8 @@ async def _stream_agent_turn(
                     break
                 kind = event.get("event")
                 if kind == "on_chat_model_stream":
+                    if not _is_primary_chat_model_stream_event(event):
+                        continue
                     chunk = event.get("data", {}).get("chunk")
                     for call_chunk in _chunk_tool_call_chunks(chunk):
                         call_id = str(call_chunk.get("id") or call_chunk.get("index") or "0")
@@ -3536,7 +3684,6 @@ class MemorySettingsRequest(BaseModel):
 @router.get("/memory/summary")
 async def memory_summary() -> dict[str, Any]:
     store = _memory_orchestrator.store
-    import_result = await asyncio.to_thread(_import_ui_conversations_to_memory, 500)
     recent_context = await asyncio.to_thread(_memory_orchestrator.fts5.recent_documents, limit=25)
     if store is None:
         return {
@@ -3546,7 +3693,7 @@ async def memory_summary() -> dict[str, Any]:
             "recent_context": recent_context,
             "pending_count": 0,
             "audit_log": [],
-            "conversation_import": import_result,
+            "conversation_import": {"mode": "write_through"},
         }
     return {
         "global_summary": store.global_summary(),
@@ -3555,7 +3702,7 @@ async def memory_summary() -> dict[str, Any]:
         "recent_context": recent_context,
         "pending_count": len(store.list_pending()),
         "audit_log": store.audit_log(limit=25),
-        "conversation_import": import_result,
+        "conversation_import": {"mode": "write_through"},
     }
 
 
@@ -4273,6 +4420,7 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
 
 router.include_router(llm_routing_router)
+router.include_router(knowledge_router)
 app.include_router(router)
 
 

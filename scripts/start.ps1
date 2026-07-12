@@ -26,8 +26,8 @@ function Test-HttpReady {
   }
 }
 
-$uiPath = "design-uploads/Vellum%20Default%20Re-designed.html"
-$uiUrl = "http://${HostName}:${UiPort}/${uiPath}"
+$UiPath = "design-uploads/Vellum%20Default%20Re-designed.html"
+$uiUrl = "http://${HostName}:${UiPort}/$UiPath"
 if (Test-HttpReady $uiUrl) {
   Write-Host "UI is already running on port $UiPort."
 } else {
@@ -60,10 +60,10 @@ if (Test-HttpReady $uiUrl) {
 @(
   "status=running",
   "started_at=$((Get-Date).ToUniversalTime().ToString('s'))Z",
-  "url=http://localhost:$UiPort/$uiPath",
+  "url=http://localhost:$UiPort/$UiPath",
   "api=http://localhost:$ApiPort"
 ) | Set-Content -Path $StatusFile -Encoding ascii
 
 Write-Host "Vellum is ready."
-Write-Host "UI: http://localhost:$UiPort/$uiPath"
+Write-Host "UI: http://localhost:$UiPort/$UiPath"
 Write-Host "API: http://localhost:$ApiPort"

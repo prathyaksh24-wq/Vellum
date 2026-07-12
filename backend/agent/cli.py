@@ -24,7 +24,6 @@ from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
 from agent.telemetry.hooks import capture_from_invoke_result
 from agent.telemetry.usage_ledger import UsageLedger
-from agent.tools.obsidian_write import store_qa_pair
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level)
@@ -232,7 +231,6 @@ async def _background_learn(query: str, answer: str, thread_id: str = "default")
         scrubber = PrivacyScrubber()
         clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
         clean_answer = scrubber.scrub(answer)[0] if data_class == DataClass.YELLOW else answer
-        store_qa_pair(clean_query, clean_answer)
         memory.add_qa_pair(query=clean_query, answer=clean_answer, thread_id=thread_id, source_paths=[])
         honcho = HonchoMemory(
             base_url=settings.honcho_base_url,

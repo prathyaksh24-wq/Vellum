@@ -26,6 +26,16 @@ def test_fts5_indexes_and_searches_qa_pairs(tmp_path):
     assert "discipline" in results[0]["content"]
 
 
+def test_fts5_delete_thread_removes_only_deleted_conversation(tmp_path):
+    memory = FTS5Memory(tmp_path / "fts5.db")
+    memory.add_document(content="deleted conversation marker", thread_id="gone")
+    memory.add_document(content="retained conversation marker", thread_id="kept")
+
+    assert memory.delete_thread("gone") == 1
+    assert memory.search("deleted") == []
+    assert memory.search("retained")[0]["thread_id"] == "kept"
+
+
 def test_resolved_cache_round_trip_and_access_count(tmp_path):
     cache = ResolvedQuestionsCache(tmp_path / "resolved.db")
     cache.store(

@@ -81,6 +81,34 @@ def test_health_endpoint_is_lightweight_by_default(monkeypatch):
     assert "embeddings" not in body
 
 
+def test_capabilities_endpoint_publishes_stable_frontend_contract():
+    with TestClient(api.app) as client:
+        response = client.get("/api/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_version"] == "v1"
+    assert body["contract_version"] == 1
+    assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
+
+    features = body["features"]
+    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
+        assert key in features
+        assert isinstance(features[key]["enabled"], bool)
+        assert features[key]["contract"] == "v1"
+        assert features[key]["endpoints"]
+
+    assert features["spotify"]["plugin_owned"] is True
+    assert features["memory_orchestrator"]["plugin_owned"] is True
+    assert features["hermes_skills"]["plugin_owned"] is True
+    assert features["openrouter"]["endpoints"]["models"] == "/api/models"
+
+    chat_events = body["stream_events"]["chat"]
+    assert "response.output_text.delta" in chat_events
+    assert "agent.activity" in chat_events
+    assert "response.completed" in chat_events
+
+
 def test_cors_allows_local_vite_fallback_ports():
     with TestClient(api.app) as client:
         response = client.options(
@@ -216,6 +244,9 @@ def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tm
 
 def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
+    monkeypatch.setattr(api, "_index_ui_conversation", lambda conversation: {"indexed_turns": 1})
+    monkeypatch.setattr(api, "_project_ui_conversation", lambda conversation: {"ok": True, "action": "update"})
+    monkeypatch.setattr(api, "_archive_ui_conversation", lambda conversation: {"ok": True, "archived": True})
 
     payload = {
         "id": "chat-1",
@@ -243,7 +274,8 @@ def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path
     assert fetched.json()["conversation"]["messages"][1]["text"] == "Live answer"
     assert patched.json()["conversation"]["pinned"] is True
     assert patched.json()["conversation"]["title"] == "Pinned sports"
-    assert deleted.json() == {"ok": True}
+    assert deleted.json()["ok"] is True
+    assert deleted.json()["obsidian_projection"]["archived"] is True
 
 
 def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatch, tmp_path):
@@ -328,7 +360,6 @@ def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
 
     with TestClient(api.app) as client:
         before = client.get("/api/memory/settings")
@@ -372,7 +403,6 @@ def test_background_learn_records_pending_memory_candidates(monkeypatch, tmp_pat
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
         "HonchoMemory",
@@ -413,7 +443,6 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
         memory_dir=tmp_path / "memory-files",
     )
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         api,
         "HonchoMemory",
@@ -451,6 +480,62 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
     assert "Tyler Herro" in related["answer_summary"]
 
 
+def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch, tmp_path):
+    from agent.memory.fts5 import FTS5Memory
+    from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
+    from agent.memory.resolved import ResolvedQuestionsCache
+    from agent.tools.capabilities.memory_service import MemoryCapabilityService
+
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+    monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
+    monkeypatch.setattr(
+        api,
+        "HonchoMemory",
+        lambda **kwargs: SimpleNamespace(
+            get_or_create_session=lambda thread_id: thread_id,
+            add_message=lambda *args, **kwargs: None,
+            chat=lambda **kwargs: "",
+        ),
+    )
+    monkeypatch.setattr(api, "_project_context", lambda: SimpleNamespace(summarizer=lambda text: "", tick=lambda *args, **kwargs: None))
+
+    asyncio.run(
+        api._background_learn(
+            "Remember that I prefer standings in sports answers.",
+            "Understood.",
+            thread_id="sports-memory",
+            source="sports_agent",
+            agent_name="SportsAgent",
+        )
+    )
+
+    assert store.list_pending()[0]["scope"] == "agent:SportsAgent"
+
+
+def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, tmp_path):
+    from agent.profiles import ProfileRegistry
+
+    monkeypatch.setattr(api, "_profile_registry", ProfileRegistry(profile_dir=tmp_path / "profiles"))
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/agent-profiles")
+
+    assert response.status_code == 200
+    body = response.json()
+    sports = next(profile for profile in body["profiles"] if profile["id"] == "SportsAgent")
+    assert sports["executor"] == "deterministic"
+    assert sports["memory"]["write_scope"] == "agent:SportsAgent"
+    assert "instructions" not in sports
+    assert "diagnostics" in body
+
+
 def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypatch, tmp_path):
     from agent.memory.fts5 import FTS5Memory
     from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
@@ -468,7 +553,6 @@ def test_background_learn_auto_runs_dreaming_when_pending_threshold_met(monkeypa
     monkeypatch.setattr(api, "_memory_orchestrator", orchestrator)
     monkeypatch.setattr(api, "_DREAMING_MIN_PENDING", 1)
     monkeypatch.setattr(api, "_DREAMING_COOLDOWN_SECONDS", 0)
-    monkeypatch.setattr(api, "store_qa_pair", lambda *args, **kwargs: None)
     api._dreaming_status.clear()
     api._dreaming_status.update({"status": "idle", "last_run": None, "last_result": None})
 
@@ -1466,6 +1550,13 @@ def test_active_model_switch_waits_for_active_stream(monkeypatch):
 
         streaming_agent = StreamingAgent()
         monkeypatch.setattr(api, "agent", streaming_agent)
+
+        class NoopLiveDispatcher:
+            def maybe_handle(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(api, "_live_dispatcher", NoopLiveDispatcher())
+
         async def fake_background_learn(*args, **kwargs):
             return None
 

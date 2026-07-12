@@ -24,7 +24,7 @@ async function loadChatApi(fetchImpl) {
     },
   };
   globalThis.fetch = fetchImpl;
-  await import("./chat.js");
+  await import("../../../design/Velllum/uploads/api/chat.js");
   return window.VellumApi.chat;
 }
 

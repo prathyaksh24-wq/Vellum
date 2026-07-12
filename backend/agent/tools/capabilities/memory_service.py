@@ -82,9 +82,15 @@ class MemoryCapabilityService:
 
     def build_context_pack(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query", ""))
-        cards = self.search_cards({"query": query, "limit": 8})["cards"]
+        search_payload = {
+            "query": query,
+            "limit": 8,
+            "agent_name": payload.get("agent_name"),
+            "scopes": payload.get("scopes"),
+        }
+        cards = self.search_cards(search_payload)["cards"]
         if not cards:
-            cards = self.search_cards({"query": "", "limit": 8})["cards"]
+            cards = self.search_cards({**search_payload, "query": ""})["cards"]
         return {
             "action": "memory.build_context_pack",
             "query": query,
@@ -96,6 +102,17 @@ class MemoryCapabilityService:
     def search_cards(self, payload: dict[str, Any]) -> dict[str, Any]:
         query_terms = _terms(str(payload.get("query", "")))
         limit = _positive_int(payload.get("limit"))
+        agent_name = str(payload.get("agent_name") or "VellumAgent").strip() or "VellumAgent"
+        requested_scopes = payload.get("scopes")
+        allowed_scopes = {
+            _canonical_scope(scope)
+            for scope in requested_scopes
+        } if isinstance(requested_scopes, list) else {
+            "global",
+            "user_profile",
+            "shared",
+            f"agent:{agent_name}",
+        }
         cards: list[dict[str, str]] = []
         memory_root = self.vault_root / "Agent" / "Memories"
         if limit == 0:
@@ -103,12 +120,20 @@ class MemoryCapabilityService:
 
         for path in sorted(memory_root.rglob("*.md")) if memory_root.exists() else []:
             text = path.read_text(encoding="utf-8")
+            metadata = _card_frontmatter(text)
+            card_scope = _canonical_scope(metadata.get("scope") or "shared")
+            visible_to = _visible_to(metadata.get("visible_to"))
+            if card_scope not in allowed_scopes and agent_name not in visible_to:
+                continue
+            if visible_to and agent_name not in visible_to:
+                continue
             if query_terms and not query_terms.intersection(_terms(text)):
                 continue
             cards.append(
                 {
                     "path": path.relative_to(self.vault_root).as_posix(),
                     "text": text[:1000],
+                    "scope": card_scope,
                 }
             )
             if limit is not None and len(cards) >= limit:
@@ -139,8 +164,8 @@ class MemoryCapabilityService:
 
     def create_card(self, payload: dict[str, Any]) -> dict[str, str]:
         raw_scope = str(payload.get("scope") or "shared").strip() or "shared"
-        scope_parts = _scope_path_parts(raw_scope)
-        scope = "/".join(part.lower() for part in scope_parts)
+        scope = _canonical_scope(raw_scope)
+        scope_parts = _scope_path_parts(scope.replace(":", "/", 1))
         title = str(payload.get("title") or payload.get("claim") or "Memory").strip() or "Memory"
         summary = str(payload.get("summary") or payload.get("claim") or "").strip()
         evidence = str(payload.get("evidence") or "").strip()
@@ -273,6 +298,43 @@ def _normalize_visible_to(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value]
+
+
+def _canonical_scope(value: Any) -> str:
+    raw = str(value or "shared").strip()
+    lowered = raw.casefold().replace("-", "_")
+    if lowered in {"global", "shared", "user_profile"}:
+        return lowered
+    match = re.match(r"^(agent|project|thread)[:/\-](.+)$", raw, flags=re.IGNORECASE)
+    if match:
+        prefix = match.group(1).casefold()
+        identity = re.sub(r"[^A-Za-z0-9_.-]+", "", match.group(2)).casefold()
+        return f"{prefix}:{identity}" if identity else "shared"
+    return _slug(raw)
+
+
+def _card_frontmatter(text: str) -> dict[str, Any]:
+    if not text.startswith("---"):
+        return {}
+    metadata: dict[str, Any] = {}
+    for line in text.splitlines()[1:]:
+        if line.strip() == "---":
+            break
+        if ":" not in line or line[:1].isspace():
+            continue
+        key, value = line.split(":", 1)
+        clean = value.strip()
+        try:
+            metadata[key.strip()] = json.loads(clean)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            metadata[key.strip()] = clean.strip("\"'")
+    return metadata
+
+
+def _visible_to(value: Any) -> set[str]:
+    if isinstance(value, list):
+        return {str(item) for item in value if str(item).strip()}
+    return set()
 
 
 def _yaml_json(value: str | list[str]) -> str:

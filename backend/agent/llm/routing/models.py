@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 ProviderSort = Literal["price", "latency", "throughput"]
 ApiProvider = Literal["openrouter", "openai"]
+OPENROUTER_DEFAULT_PROVIDER_ORDER = ("Fireworks", "Together", "DeepInfra")
 
 
 class CredentialStrategy(StrEnum):
@@ -32,6 +33,7 @@ class FailureKind(StrEnum):
     plan_exhausted = "plan_exhausted"
     rate_limit = "rate_limit"
     model_unavailable = "model_unavailable"
+    route_unavailable = "route_unavailable"
     timeout = "timeout"
     network = "network"
     server = "server"
@@ -93,6 +95,7 @@ class ProviderRoutingPolicy(BaseModel):
             value = getattr(self, field)
             if value is not None and value != []:
                 body[field] = value
+        body.setdefault("order", list(OPENROUTER_DEFAULT_PROVIDER_ORDER))
         body["data_collection"] = "deny"
         body["zdr"] = True
         return body

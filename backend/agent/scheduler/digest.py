@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 from pathlib import Path
+from collections.abc import Callable
+from typing import Awaitable
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -91,18 +93,30 @@ async def run_digest(
     return str(note_path)
 
 
-def start_scheduler(scheduler: AsyncIOScheduler | None = None) -> AsyncIOScheduler | None:
+def start_scheduler(
+    scheduler: AsyncIOScheduler | None = None,
+    *,
+    dreaming_job: Callable[[], Awaitable[object]] | None = None,
+) -> AsyncIOScheduler | None:
     settings = get_settings()
-    if not settings.enable_nightly_digest:
-        logger.info("[DIGEST] Nightly digest scheduler disabled.")
+    retention_enabled = bool(getattr(settings, "enable_vault_retention", True))
+    if not settings.enable_nightly_digest and not retention_enabled and dreaming_job is None:
+        logger.info("[SCHEDULER] Dreaming, digest, and retention are disabled.")
         return None
 
     scheduler = scheduler or AsyncIOScheduler()
-    scheduler.add_job(run_digest, "cron", hour=2, minute=0, id="nightly_digest", replace_existing=True)
+    if dreaming_job is not None:
+        scheduler.add_job(dreaming_job, "cron", hour=2, minute=0, id="memory_dreaming", replace_existing=True)
+    if settings.enable_nightly_digest:
+        scheduler.add_job(run_digest, "cron", hour=2, minute=15, id="nightly_digest", replace_existing=True)
+    if retention_enabled:
+        from agent.scheduler.retention import run_retention
+
+        scheduler.add_job(run_retention, "cron", hour=3, minute=0, id="vault_retention", replace_existing=True)
     from agent.skills.curator_runtime import install_curator_ticker
 
     install_curator_ticker(scheduler)
     scheduler.start()
-    logger.info("[DIGEST] Nightly digest scheduler started at 02:00 local time.")
+    logger.info("[SCHEDULER] Dreaming/digest/retention scheduler started.")
     return scheduler
 

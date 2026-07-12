@@ -20,6 +20,7 @@ data/logs/
 data/cache/
 data/embeddings/
 data/models/
+data/ui/
 backend/data/
 backend/.test-data/
 backend/*.log

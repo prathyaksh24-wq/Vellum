@@ -14,9 +14,14 @@
         var body = await response.json();
         detail = body.detail || body.message || detail;
       } catch (_) {}
-      throw new Error(detail);
+      var error = new Error(detail);
+      error.status = response.status;
+      throw error;
     }
-    return response.json();
+    if (response.status === 204) return null;
+    var text = await response.text();
+    if (!text) return null;
+    return JSON.parse(text);
   }
 
   function jsonOptions(method, body, signal) {

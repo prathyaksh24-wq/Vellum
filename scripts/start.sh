@@ -58,7 +58,7 @@ async function serve(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname.startsWith('/api/')) return apiStub(req, res, url.pathname);
 
-  const requestPath = url.pathname === '/' ? '/frontend/ui/vellum-chat.html' : decodeURIComponent(url.pathname);
+  const requestPath = url.pathname === '/' ? '/design/Velllum/uploads/Vellum Default Re-designed.html' : decodeURIComponent(url.pathname);
   const filePath = path.resolve(root, `.${requestPath}`);
   if (!filePath.startsWith(root + path.sep)) return json(res, 403, { error: 'Forbidden' });
 

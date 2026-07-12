@@ -40,6 +40,7 @@ def test_openrouter_adapter_builds_effective_provider_body() -> None:
     assert model.extra_body["provider"] == {
         "sort": "price",
         "ignore": ["Together"],
+        "order": ["Fireworks", "Together", "DeepInfra"],
         "require_parameters": True,
         "data_collection": "deny",
         "zdr": True,

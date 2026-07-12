@@ -158,12 +158,12 @@ context = honcho_client.apps.users.sessions.chat(
 ```
 
 **FTS5 full-text search index** (`data/memory/fts5.db` — SQLite in Docker)
-- Every Q&A pair written to `Agent/Responses/` is also indexed here.
+- Canonical conversations are indexed from `data/ui/conversations.json`; Obsidian conversation notes are projections.
 - Enables keyword-based retrieval across all past sessions.
 - Query: `SELECT content FROM qa_fts WHERE qa_fts MATCH ?`
 - Used when semantic vector search returns low confidence and the query
   contains specific keywords that might exist verbatim in past sessions.
-- The FTS5 index is rebuilt nightly from the `Agent/Responses/` folder.
+- FTS5 is a derived index managed by the Memory Orchestrator. See `docs/memory-knowledge-architecture.md`.
 
 **Resolved questions cache** (`data/memory/resolved.db` — SQLite in Docker)
 - High-confidence Q&A pairs that resolved cleanly (confidence > 0.85, user did not regenerate).
@@ -454,10 +454,10 @@ internet connection (except where noted), do not make unauthorized vault changes
 and do not send data to external services.
 
 ### Nightly Digest (2:00 AM daily)
-- Read recent Q&A pairs from `Agent/Responses/` (last 24 hours)
+- Read recent canonical conversations and pending memories through the Memory Orchestrator
 - Extract skill signals using fast model (Gemma 4 12B via OpenRouter)
 - Write synthesis note to `Agent/Digests/YYYY-MM-DD.md`
-- Rebuild FTS5 index from `Agent/Responses/`
+- Maintain summaries, saved memories, archive state, and the derived FTS5 index
 - Honcho automatically updates its user model on every turn — no batch job needed
 - Send `data_collection: deny` on all OpenRouter calls in this job
 
@@ -483,24 +483,14 @@ and do not send data to external services.
 - DO NOT activate the skill. Wait for user approval.
 
 ### FTS5 Index Rebuild (runs after nightly digest)
-- Walk `Agent/Responses/` directory
-- Parse each Q&A markdown file
-- Rebuild `data/memory/fts5.db` using SQLite FTS5
+- Read canonical conversations through the Memory Orchestrator
+- Rebuild `data/memory/fts5.db` as a disposable derived index
 - Log: number of documents indexed, index size, rebuild duration
 
-### Sports Snapshots (NOT scheduled — curiosity-driven)
-- `Library/Sports/` snapshots are **not** on any cron or interval.
-- All fetching goes through SerpAPI via `scripts/import_sports_snapshots.py`.
-- The agent decides when to fetch via `agent/tools/sports_curiosity.py`: per-league
-  curiosity scores combine recency hunger, user-signal keywords from recent
-  `Agent/Queries/`, season weight, cross-feed signals from `Library/X/` and
-  `Library/Youtube/`, and a small stochastic kick. Eligibility is only checked
-  opportunistically while the agent is already running for another reason.
-- A SerpAPI budget guard in `Library/Sports/.state/snapshot_state.json` blocks
-  fetches once the daily or monthly cap is hit.
-- Self-calibration: `agent/scheduler/sports_calibration.py` piggybacks on the
-  nightly digest and gently raises/lowers per-league thresholds based on
-  fetch-usage signals recorded in `Agent/Memories/sports_*_fetch_*.md`.
+### Sports Research (on demand)
+- SportsAgent runs only when the user asks a sports-related question.
+- It uses live providers and does not run a sports daemon or curiosity loop.
+- `Library/Sports/` is legacy reference material, not a canonical truth source.
 
 ---
 
@@ -516,8 +506,7 @@ Projects/<slug>/vellum.md       ← READ-ONLY; user-authored
 Projects/<slug>/hot.md          ← Vellum may REWRITE (gated by active_project)
 Projects/<slug>/log.md          ← Vellum may APPEND (gated by active_project)
 Projects/<slug>/notes/          ← Vellum may WRITE (per project's Allowed Actions)
-Agent/Queries/          ← every user query (intake node)
-Agent/Responses/        ← every Q&A pair (store_response)
+Agent/Conversations/    ← readable projection of canonical chat history
 Agent/Memories/         ← synthesized higher-order observations
 Agent/Connections/      ← cross-note connections discovered by agent
 Agent/Reflections/      ← weekly, monthly synthesis notes
@@ -543,9 +532,9 @@ The agent NEVER writes to or modifies:
   current thread (`sessions.thread_state.active_project`). Writes to any other project's
   files are rejected even though folder_policy declares them writable in principle.
 
-Exception: explicit ingestion and retention automation may manage public source folders (`Library/X/`, `Library/Youtube/`, and `Library/Sports/`) by moving raw notes to `Archive/` after 30 days, distilling them into `Agent/Memories/`, and deleting archived raw notes after 90 days.
+Exception: explicit, user-approved ingestion may read source material. `Library/` is not promoted into the maintained wiki automatically.
 
-Retention automation may also distill and delete old raw conversation logs: `Agent/Queries/` after 30 days and `Agent/Responses/` after 90 days. `Agent/Saved/`, `Agent/Memories/`, `Agent/Digests/`, `Agent/Reflections/`, and notes marked `pinned: true` or `retention: keep` are protected.
+Retention archives generated `Agent/Conversations/` projections after 30 days and may delete archived projections after 90 days only after durable memory distillation. Canonical chat history and pinned/keep notes are protected from silent deletion.
 
 ### Frontmatter Standard
 
@@ -568,7 +557,7 @@ Every file written by the agent should wikilink its source notes:
 ```markdown
 ## sources
 - [[Books/meditations--marcus-aurelius/04-book-four|Book Four · Meditations]]
-- [[Agent/Responses/QA 20260108_143022|asked about stillness · January]]
+- [[Agent/Conversations/2026/01/Asked about stillness|asked about stillness · January]]
 ```
 
 This makes the agent's work visible in the Obsidian graph view.

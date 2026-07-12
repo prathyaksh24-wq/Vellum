@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from agent.profiles.policy import get_active_profile_policy
+
 
 class CapabilityAccess(str, Enum):
     READ = "read"
@@ -55,6 +57,11 @@ class ToolRegistry:
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
         if agent_name not in record.allowed_agents:
             raise ToolPermissionError(f"{agent_name} cannot use {record.name}")
+        policy = get_active_profile_policy()
+        if policy is not None and record.name not in policy.allowed_tools:
+            raise ToolPermissionError(
+                f"{record.name} is not allowed by active profile policy {policy.profile_id}"
+            )
         requires_confirmation = record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE
         if requires_confirmation and payload.get("confirm") is not True:
             raise ToolPermissionError(f"{record.name} requires explicit confirmation")

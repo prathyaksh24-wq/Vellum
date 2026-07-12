@@ -11,9 +11,11 @@ from agent.tools.registry import ToolRegistry
 class YoutubeAgent:
     name = "YoutubeAgent"
 
-    _SOURCE_KEYWORDS = (
-        "youtube",
-        "yt",
+    _INTENT_PATTERNS = (
+        re.compile(r"(?<!\w)(?:youtube|yt)(?!\w)", re.I),
+        re.compile(r"\bwhat\s+did\s+.+\s+upload(?:ed)?\b", re.I),
+        re.compile(r"\b(?:latest|new|recent)\s+.+\s+video\b", re.I),
+        re.compile(r"\b(?:video|upload|uploaded|transcript)\s+(?:from|by|of)\s+.+", re.I),
     )
     _VIDEO_INTENT_PATTERNS = (
         r"(?<!\w)what\s+did\s+.+\s+upload(?:ed)?(?!\w)",
@@ -43,7 +45,7 @@ class YoutubeAgent:
         lowered = query.lower()
         if self._is_meta_feedback(lowered):
             return False
-        return any(self._has_phrase(lowered, keyword) for keyword in self._SOURCE_KEYWORDS) or any(
+        return any(pattern.search(query) for pattern in self._INTENT_PATTERNS) or any(
             re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS
         )
 
@@ -86,7 +88,7 @@ class YoutubeAgent:
                 label += f": {detail[:240]}"
             lines.append(label)
             url = str(item.get("url") or "").strip()
-            if url:
+            if url and self._is_youtube_url(url):
                 sources.append(
                     SpecialistSource(
                         kind="web",
@@ -116,8 +118,8 @@ class YoutubeAgent:
             return self.tool_registry.invoke("youtube.search_videos", payload, agent_name=self.name)
         return self.youtube_service.search_videos(payload)
 
-    def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
-        return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
+    def _is_youtube_url(self, url: str) -> bool:
+        return "youtube.com/watch" in url or "youtu.be/" in url
 
     def _is_meta_feedback(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._META_FEEDBACK_PATTERNS)

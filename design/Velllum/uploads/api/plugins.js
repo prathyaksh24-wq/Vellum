@@ -18,5 +18,6 @@
     hubMutation: function (action, body) { return client.request("/api/skills/v2/hub/" + action, client.jsonOptions("POST", body)); },
     learn: function (source) { return client.request("/api/skills/learn", client.jsonOptions("POST", {source:source})); },
     learnExecute: function (source, threadId) { return client.request("/api/chat", client.jsonOptions("POST", {message:"/learn " + source, thread_id:threadId || "skills-hub"})); },
+    capabilities: function () { return client.request("/api/capabilities"); },
   };
 })();

@@ -60,6 +60,12 @@ def test_set_active_model_by_label(client: TestClient) -> None:
     assert body["id"] == "moonshotai/kimi-k2.6"
 
 
+def test_set_active_model_accepts_legacy_picker_id(client: TestClient) -> None:
+    r = client.post("/api/settings/active-model", json={"model": "deepseek/deepseek-chat"})
+    assert r.status_code == 200
+    assert r.json()["id"] == "deepseek/deepseek-v4-pro"
+
+
 def test_set_active_model_unknown_returns_400(client: TestClient) -> None:
     r = client.post("/api/settings/active-model", json={"model": "nope/nothing"})
     assert r.status_code == 400

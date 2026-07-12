@@ -191,6 +191,41 @@ def load_relevant_skills(query: str) -> str:
 Skills are loaded into the system prompt for the current turn only.
 They do not persist across turns unless triggered again.
 
+### Profile-Based Specialist Delegation
+
+Runtime specialist configuration is split into persistent profiles and ephemeral runs.
+
+`agent/profiles/` owns the strict profile schema, safe built-in defaults, YAML loading, diagnostics, instruction-path containment, and context-local tool policy. Profile YAML is loaded from `data/agent_profiles/`. Existing deterministic agents remain registered through `PupilRegistry`; a newly discovered `executor: llm` profile can be selected directly by an active routing skill without a Python pupil class.
+
+`agent/master/runtime.py` creates a fresh `DelegationRunResult` for every specialist task. Deterministic profiles receive only the current goal through their existing `answer(query)` contract. LLM profiles receive a new two-message invocation containing their profile system instructions and a human task packet with the goal, explicit context, and profile-approved memory. Parent chat history and LangGraph checkpoints are not inherited.
+
+Routing order is:
+
+1. Pending confirmed action, which never enters cache.
+2. Active routing skill targeting a registered pupil or profile-only LLM agent.
+3. Deterministic `PupilRegistry.match()` fallback.
+4. Return control to Vellum.
+
+Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
+
+### Specialist Response Cache
+
+`agent/memory/specialist_cache.py` is owned by `MemoryOrchestrator`. It stores serialized `SpecialistResponse` objects keyed by profile ID, profile version, and normalized query fingerprint. Conservative lexical related-query matching is permitted only within the same profile/version.
+
+Cache decisions are `hit`, `miss`, `stale`, or `bypass`. Freshness classes select profile TTLs:
+
+- `live`: active scores, breaking events, and current status.
+- `default`: schedules, standings, injuries, timelines, and recent uploads.
+- `historical`: completed events, dated history, career facts, and transcripts.
+
+Profile bypass terms take precedence over stored entries. Responses with errors, blocks, or pending action requests are not cacheable. If a live refresh fails and a stale response exists, the runtime returns it with `status=stale` and reduced confidence.
+
+Specialist memory reads are limited to declared scopes. Strict profile memory packets do not include the unscoped global FTS turn history. Local Obsidian/SQLite memory retains original public names; Honcho and provider-extension synchronization receive privacy-scrubbed text.
+
+Run audits are written to `data/memory/delegation-runs.jsonl`. They contain identifiers, profile version, executor, cache decision, timing, status, confidence, hashes, and counts only. `GET /api/agent-profiles` returns safe configuration and fallback diagnostics without instruction contents or credentials.
+
+Profiles are application policy boundaries, not filesystem or operating-system sandboxes.
+
 ---
 
 ## 3. Privacy Layer
