@@ -13,6 +13,7 @@ from typing import Any, Callable
 from agent.skills.hub import HubLockFile
 from agent.skills.manager import SkillManager
 from agent.skills.mutation import SkillMutationCoordinator
+from agent.skills.parser import SkillPackageParser
 from agent.skills.usage import SkillUsageStore
 
 
@@ -121,6 +122,7 @@ class SkillCurator:
         self.reviewer = reviewer
         self.usage = SkillUsageStore(self.root)
         self.manager = SkillManager(self.root)
+        self.parser = SkillPackageParser()
         self.mutations = SkillMutationCoordinator(self.root)
         self.backups = CuratorBackupStore(self.root, keep=self.config.backup_keep)
         self.state_path = self.root / ".curator_state.json"
@@ -181,6 +183,16 @@ class SkillCurator:
     def status(self) -> dict[str, Any]:
         state = self._state()
         usage = self.usage.all()
+        live_names: set[str] = set()
+        for base in (self.root / "packages", self.root / "proposed", self.root / "retired", self.root / ".archive"):
+            if not base.exists():
+                continue
+            for skill_file in base.rglob("SKILL.md"):
+                try:
+                    live_names.add(self.parser.parse(skill_file.parent).metadata.name)
+                except (OSError, ValueError):
+                    continue
+        usage = {name: item for name, item in usage.items() if name in live_names}
         return {
             "enabled": self.config.enabled,
             "paused": bool(state.get("paused")),

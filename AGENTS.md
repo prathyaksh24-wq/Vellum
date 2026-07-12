@@ -186,31 +186,25 @@ usage bounded regardless of session history length.
 
 ### Tier 3 — Procedural (Skills)
 
-- `.skills/proposed/` — skills drafted by the agent, awaiting user approval
-- `.skills/active/` — approved skills, loaded on demand
-- `.skills/retired/` — deactivated skills (kept for audit, not loaded)
+Hermes-compatible `SKILL.md` packages are the only skill definitions. Packages
+live under `.skills/packages/<category>/<name>/`; proposed, retired, and archived
+packages use `.skills/proposed/`, `.skills/retired/`, and `.skills/.archive/`.
+Approval records live under `.skills/pending/skills/` and are immutable until
+approved or rejected.
 
-Each skill is a JSON file with this structure:
-```json
-{
-  "id": "skill-book-summary-v1",
-  "name": "Book summary in my voice",
-  "trigger": ["summarize", "book", "what does X say about"],
-  "confidence_threshold": 0.75,
-  "instructions": "When summarizing a book for this user...",
-  "citation_style": "italic Roman numeral footnotes",
-  "output_format": "prose, max 400 words, 3 footnotes minimum",
-  "created": "2026-01-12",
-  "approved": "2026-01-13",
-  "use_count": 14,
-  "last_used": "2026-05-01"
-}
-```
+All create, patch, install, update, archive, restore, import, uninstall, and
+delete operations pass through the skill mutation coordinator. Write approval
+defaults on. Permanent deletion always requires approval and a recoverable
+snapshot. External skill directories are read-only and must be imported locally
+before modification. Exact duplicate names and package hashes are forbidden;
+semantic candidates require an explicit merge, replace, or keep-distinct decision.
 
-Skills are loaded by the agent when the query's embedding has cosine similarity
-> `confidence_threshold` with the skill's trigger terms. Multiple skills can
-load for a single query. Skills modify the system prompt for that turn only;
-they do not persist beyond the current response.
+`/learn` and `skill_learn` share the privacy-gated authoring workflow. Foreground
+learning remains user-owned. Background proposals require three consistent
+signals, are marked `created_by: agent`, and are the only skills eligible for
+automatic curator maintenance. The curator can archive but never permanently
+delete; bundled, external, hub-installed, pinned, protected, and user-owned skills
+are exempt. See `docs/SKILLS_SYSTEM.md` and `docs/SKILLS_OPERATIONS.md`.
 
 ---
 
@@ -484,7 +478,7 @@ and do not send data to external services.
 - Query Honcho for recurring preference signals the agent has observed
 - Group signals by semantic similarity
 - If any group has 3+ signals with consistent pattern, draft a skill proposal
-- Write proposed skill JSON to `.skills/proposed/`
+- Author a canonical proposed `SKILL.md` package through the mutation coordinator
 - Write a human-readable note to `Agent/Skills/Proposed/` explaining the proposal
 - DO NOT activate the skill. Wait for user approval.
 

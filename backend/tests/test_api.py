@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import asyncio
 import json
+import sqlite3
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
@@ -441,9 +442,12 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
         )
     )
 
-    related = resolved.find_related("Who were the players traded for Giannis?")
+    with sqlite3.connect(resolved.db_path) as connection:
+        stored = connection.execute("SELECT query, answer_summary FROM resolved_questions").fetchone()
 
-    assert related is not None
+    assert stored is not None
+    assert "Giannis" not in stored[0]
+    assert "Tyler Herro" not in stored[1]
     assert "Tyler Herro" in related["answer_summary"]
 
 

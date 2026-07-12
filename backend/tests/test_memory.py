@@ -44,21 +44,22 @@ def test_resolved_cache_round_trip_and_access_count(tmp_path):
 
 
 def test_skill_store_loads_matching_active_skills(tmp_path):
-    active = tmp_path / ".skills" / "active"
-    active.mkdir(parents=True)
-    (active / "skill-book-summary-v1.json").write_text(
-        """{
-  "id": "skill-book-summary-v1",
-  "name": "Book summary",
-  "trigger": ["summarize", "book"],
-  "confidence_threshold": 0.1,
-  "instructions": "Use concise footnotes.",
-  "citation_style": "footnotes",
-  "output_format": "prose",
-  "created": "2026-05-12",
-  "approved": "2026-05-12",
-  "use_count": 0
-}""",
+    package = tmp_path / ".skills" / "packages" / "writing" / "skill-book-summary-v1"
+    package.mkdir(parents=True)
+    (package / "SKILL.md").write_text(
+        """---
+name: skill-book-summary-v1
+description: Book summary
+metadata:
+  vellum:
+    trigger: [summarize, book]
+    confidence_threshold: 0.1
+---
+# Book summary
+
+## Procedure
+Use concise footnotes.
+""",
         encoding="utf-8",
     )
 
@@ -69,17 +70,23 @@ def test_skill_store_loads_matching_active_skills(tmp_path):
 
 
 def test_skill_store_skips_negative_triggers(tmp_path):
-    active = tmp_path / ".skills" / "active"
-    active.mkdir(parents=True)
-    (active / "skill-debugging-v1.json").write_text(
-        """{
-  "id": "skill-debugging-v1",
-  "name": "Debugging",
-  "trigger": ["debug", "test failure", "failing test"],
-  "negative_trigger": ["write test", "write tests", "add tests"],
-  "confidence_threshold": 0.1,
-  "instructions": "Investigate before fixing."
-}""",
+    package = tmp_path / ".skills" / "packages" / "engineering" / "skill-debugging-v1"
+    package.mkdir(parents=True)
+    (package / "SKILL.md").write_text(
+        """---
+name: skill-debugging-v1
+description: Debugging
+metadata:
+  vellum:
+    trigger: [debug, test failure, failing test]
+    negative_trigger: [write test, write tests, add tests]
+    confidence_threshold: 0.1
+---
+# Debugging
+
+## Procedure
+Investigate before fixing.
+""",
         encoding="utf-8",
     )
 
@@ -131,7 +138,7 @@ Use canonical instructions.
     assert store.matching_skills("legacy request") == []
 
 
-def test_skill_store_falls_back_to_unmigrated_json(tmp_path):
+def test_skill_store_does_not_load_unmigrated_json(tmp_path):
     active = tmp_path / ".skills" / "active"
     active.mkdir(parents=True)
     (active / "legacy.json").write_text(
@@ -147,7 +154,7 @@ def test_skill_store_falls_back_to_unmigrated_json(tmp_path):
         encoding="utf-8",
     )
 
-    assert SkillStore(tmp_path / ".skills").matching_skills("legacy request")
+    assert SkillStore(tmp_path / ".skills").matching_skills("legacy request") == []
 
 
 def test_production_skill_store_includes_requested_capability_skills():

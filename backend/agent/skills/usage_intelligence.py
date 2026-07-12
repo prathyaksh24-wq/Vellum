@@ -118,10 +118,13 @@ class SkillUsageScope:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        if self._token is None:
+            return
         outcome = "failed" if exc_type else "unknown"
         if outcome == "failed":
             self.finish(outcome)
         _CURRENT_SCOPE.reset(self._token)
+        self._token = None
 
     def activate(self, skill_name: str, source: str) -> str:
         normalized = skill_name.casefold()
