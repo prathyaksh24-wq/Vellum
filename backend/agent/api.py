@@ -1764,6 +1764,7 @@ async def skills_v2_overview(request: Request, response: Response) -> dict[str, 
         "write_approval": catalog["write_approval"],
         "external_diagnostics": catalog["external_diagnostics"],
     }
+    payload["counts"]["duplicates"] = len(SkillCatalog(_skill_surface().root).duplicate_reviews())
     _etag_response(request, response, payload)
     return payload
 

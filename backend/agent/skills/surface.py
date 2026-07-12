@@ -60,9 +60,19 @@ class SkillSurfaceService:
         }
 
     def detail(self, name: str, *, path: str = "") -> dict[str, Any]:
+        try:
+            package = self.registry.view(name)
+        except KeyError:
+            lifecycle = None
+            for base in (self.root / "proposed", self.root / "retired", self.root / ".archive"):
+                lifecycle = self.manager._locate(base, name)
+                if lifecycle is not None:
+                    break
+            if lifecycle is None:
+                raise
+            package = self.parser.parse(lifecycle)
         if path:
-            return {"name": name, "path": path, "content": self.registry.view_file(name, path)}
-        package = self.registry.view(name)
+            return {"name": name, "path": path, "content": self.parser.read_support_file(package.root, path)}
         provenance = HubLockFile(self.root).get(name) or {}
         support_files = sorted(
             path.relative_to(package.root).as_posix()

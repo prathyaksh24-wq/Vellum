@@ -26,3 +26,8 @@ not be embedded as a background image or UI substitute.
 
 The frontend implementation must be driven by live API data, remain keyboard
 navigable, respect reduced motion, and avoid duplicating skill state locally.
+
+`vellum-skills-hub-revalidation.png` is the post-backend contract revalidation.
+It adds source health, immutable diff review, verified repository/ref
+provenance, support files, and the rendered/raw `SKILL.md` panel used by the
+production implementation. It is also a design-only reference.

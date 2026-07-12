@@ -11,9 +11,10 @@ function copyTerminalVellum() {
   return {
     name: 'copy-terminal-vellum',
     closeBundle() {
-      const target = 'ui-dist/ui/terminal/vellum';
+      const target = resolve(here, 'ui-dist/ui/terminal/vellum');
       rmSync(target, { recursive: true, force: true });
-      cpSync('ui/terminal/vellum', target, { recursive: true });
+      cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
     },
   };
 }
@@ -66,7 +67,10 @@ function serveDesignUploads() {
 
 export default defineConfig({
   plugins: [react(), serveDesignUploads(), copyTerminalVellum()],
-  root: '.',
+  root: designUploadsRoot,
+  test: {
+    root: here,
+  },
   publicDir: false,
   server: {
     fs: {
@@ -74,10 +78,10 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'ui-dist',
+    outDir: resolve(here, 'ui-dist'),
     emptyOutDir: true,
     rollupOptions: {
-      input: 'ui/vellum-chat.html',
+      input: resolve(designUploadsRoot, 'Vellum Default Re-designed.html'),
     },
   },
 });
