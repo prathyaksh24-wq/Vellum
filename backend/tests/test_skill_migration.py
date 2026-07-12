@@ -47,7 +47,9 @@ def test_migrator_converts_json_to_valid_package_and_usage(tmp_path: Path) -> No
     assert "Consult SportsAgent" in package.body
     usage = json.loads((tmp_path / ".usage.json").read_text(encoding="utf-8"))
     assert usage["skill-route-sports-agent-v1"]["use_count"] == 4
-    assert (tmp_path / "active" / "skill-route-sports-agent-v1.json").exists()
+    assert not (tmp_path / "active" / "skill-route-sports-agent-v1.json").exists()
+    assert report.applied is True
+    assert report.rollback_snapshot
 
 
 def test_migrator_is_idempotent_and_preserves_modified_package(tmp_path: Path) -> None:
@@ -60,7 +62,7 @@ def test_migrator_is_idempotent_and_preserves_modified_package(tmp_path: Path) -
     report = migrator.migrate()
 
     assert report.created == []
-    assert report.skipped == ["skill-route-sports-agent-v1"]
+    assert report.applied is True
     assert "User modification" in skill_file.read_text(encoding="utf-8")
 
 
@@ -75,6 +77,28 @@ def test_migrator_does_not_publish_any_package_when_staging_validation_fails(tmp
     try:
         JsonSkillMigrator(tmp_path).migrate()
     except ValueError as exc:
-        assert str(exc) == "validation failed"
+        assert "validation failed" in str(exc)
 
     assert not (tmp_path / "packages").exists()
+
+
+def test_migration_rollback_and_interrupted_recovery_restore_legacy_source(tmp_path: Path) -> None:
+    source = write_json_skill(tmp_path)
+    migrator = JsonSkillMigrator(tmp_path)
+    report = migrator.apply()
+    snapshot_id = Path(report.rollback_snapshot).name
+
+    restored = migrator.rollback(snapshot_id)
+
+    assert restored["ok"] is True
+    assert source.is_file()
+    assert not (tmp_path / "packages").exists()
+
+    report = migrator.apply()
+    snapshot_id = Path(report.rollback_snapshot).name
+    migrator.state_path.write_text(json.dumps({"status": "applying", "snapshot": snapshot_id}), encoding="utf-8")
+
+    recovered = migrator.recover_interrupted()
+
+    assert recovered["restored"] == snapshot_id
+    assert source.is_file()

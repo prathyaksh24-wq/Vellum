@@ -3,6 +3,11 @@
 > Read this alongside SOUL.md, CLAUDE.md, and BRAND.md.
 > This is the source of truth for how all parts of the system connect.
 
+> Skills architecture update (2026-07): `SKILLS_SYSTEM.md` is authoritative for
+> procedural memory. Legacy JSON skill examples below are historical only. Runtime
+> definitions are Hermes `SKILL.md` packages indexed by `data/skills/catalog.db`
+> and all mutations use the approval coordinator.
+
 ---
 
 ## The Stack at a Glance

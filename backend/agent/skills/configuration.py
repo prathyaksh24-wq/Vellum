@@ -36,6 +36,30 @@ class SkillConfigStore:
             cursor[parts[-1]] = value
             self._write(data)
 
+    def get_option(self, key: str, default: Any = None) -> Any:
+        """Read an option directly below the top-level ``skills`` mapping."""
+        with self._lock:
+            cursor: Any = self._read().get("skills", {})
+            for part in self._parts(key):
+                if not isinstance(cursor, dict) or part not in cursor:
+                    return default
+                cursor = cursor[part]
+            return cursor
+
+    def set_option(self, key: str, value: Any) -> None:
+        """Persist an option directly below the top-level ``skills`` mapping."""
+        parts = self._parts(key)
+        with self._lock:
+            data = self._read()
+            cursor = data.setdefault("skills", {})
+            for part in parts[:-1]:
+                next_value = cursor.setdefault(part, {})
+                if not isinstance(next_value, dict):
+                    raise ValueError(f"config key conflicts with scalar value: {key}")
+                cursor = next_value
+            cursor[parts[-1]] = value
+            self._write(data)
+
     def resolve(self, package: SkillPackage) -> dict[str, Any]:
         values: dict[str, Any] = {}
         missing: list[str] = []

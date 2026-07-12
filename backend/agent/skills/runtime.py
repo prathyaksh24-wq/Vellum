@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import os
 from pathlib import Path
 
 from agent.skills.registry import SkillRegistry
+from agent.skills.configuration import SkillConfigStore
 
 
 SKILLS_PATH = Path(__file__).resolve().parents[3] / ".skills"
@@ -48,8 +50,11 @@ CORE_TOOLSETS = {"browser", "filesystem", "github", "memory", "skills", "termina
 
 @lru_cache(maxsize=1)
 def get_skill_registry() -> SkillRegistry:
+    config = SkillConfigStore(SKILLS_PATH / "config.yaml")
+    external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
     return SkillRegistry(
         local_root=SKILLS_PATH / "packages",
+        external_dirs=external_dirs,
         available_tools=set(CORE_TOOL_NAMES),
         available_toolsets=set(CORE_TOOLSETS),
     )

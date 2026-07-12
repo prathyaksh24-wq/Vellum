@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ipaddress
+import os
 import re
+import socket
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -15,19 +18,46 @@ TRUSTED_REPOS = {"openai/skills", "anthropics/skills", "huggingface/skills", "NV
 
 
 class GuardedHttpClient:
-    def __init__(self, *, timeout: float = 20.0, max_bytes: int = 4_000_000):
+    def __init__(self, *, timeout: float = 20.0, max_bytes: int = 4_000_000, ttl_seconds: int = 300, retries: int = 2, headers: dict[str, str] | None = None):
         self.timeout = timeout
         self.max_bytes = max_bytes
+        self.ttl_seconds = ttl_seconds
+        self.retries = retries
+        self._cache: dict[str, tuple[float, str]] = {}
+        self._failures: dict[str, int] = {}
+        self.rate_limit: dict[str, str] = {}
+        self.headers = dict(headers or {})
 
     def get_text(self, url: str) -> str:
         self._validate(url)
-        with httpx.Client(follow_redirects=True, timeout=self.timeout) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            self._validate(str(response.url))
-            if len(response.content) > self.max_bytes:
-                raise ValueError("remote response exceeds size limit")
-            return response.text
+        cached = self._cache.get(url)
+        if cached and cached[0] > time.monotonic():
+            return cached[1]
+        host = urlparse(url).hostname or ""
+        if self._failures.get(host, 0) >= 5:
+            raise ValueError("remote source circuit is open")
+        self._validate_dns(host)
+        error = None
+        for attempt in range(self.retries + 1):
+            try:
+                with httpx.Client(follow_redirects=True, timeout=self.timeout) as client:
+                    response = client.get(url, headers={"Accept-Encoding": "identity", **self.headers})
+                    response.raise_for_status()
+                    self._validate(str(response.url))
+                    self._validate_dns(response.url.host)
+                    if int(response.headers.get("content-length") or 0) > self.max_bytes or len(response.content) > self.max_bytes:
+                        raise ValueError("remote response exceeds size limit")
+                    self.rate_limit = {key: value for key, value in response.headers.items() if key.casefold().startswith(("x-ratelimit", "ratelimit"))}
+                    text = response.text
+                    self._cache[url] = (time.monotonic() + self.ttl_seconds, text)
+                    self._failures[host] = 0
+                    return text
+            except (httpx.HTTPError, ValueError) as exc:
+                error = exc
+                if attempt < self.retries:
+                    time.sleep(min(0.1 * (2**attempt), 1.0))
+        self._failures[host] = self._failures.get(host, 0) + 1
+        raise ValueError(f"remote source request failed: {type(error).__name__}") from error
 
     def get_json(self, url: str) -> Any:
         return httpx.Response(200, text=self.get_text(url)).json()
@@ -46,6 +76,17 @@ class GuardedHttpClient:
             return
         if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast:
             raise ValueError("remote URL address is blocked")
+
+    @staticmethod
+    def _validate_dns(host: str) -> None:
+        try:
+            addresses = {item[4][0] for item in socket.getaddrinfo(host, None)}
+        except socket.gaierror as exc:
+            raise ValueError("remote URL host did not resolve") from exc
+        for raw in addresses:
+            address = ipaddress.ip_address(raw)
+            if address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast:
+                raise ValueError("remote URL resolved to a blocked address")
 
 
 def _skill_name(text: str) -> tuple[str, str]:
@@ -110,7 +151,9 @@ class GitHubSource:
         name, description = _skill_name(files["SKILL.md"])
         repo_id = f"{owner}/{repo}"
         trust = "trusted" if repo_id in TRUSTED_REPOS else "community"
-        return HubSkillBundle(name, description, self.source_id, identifier, trust, files)
+        return HubSkillBundle(name, description, self.source_id, identifier, trust, files, {
+            "repository_url": f"https://github.com/{owner}/{repo}", "source_path": path,
+        })
 
     def _walk(self, owner: str, repo: str, path: str) -> list[dict]:
         url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
@@ -121,7 +164,17 @@ class GitHubSource:
         for entry in entries:
             if entry.get("type") == "dir" and entry.get("url"):
                 children = self.http.get_json(entry["url"])
-                flattened.extend(children if isinstance(children, list) else [children])
+                flattened.extend(self._walk_entries(children if isinstance(children, list) else [children]))
+            else:
+                flattened.append(entry)
+        return flattened
+
+    def _walk_entries(self, entries: list[dict]) -> list[dict]:
+        flattened = []
+        for entry in entries:
+            if entry.get("type") == "dir" and entry.get("url"):
+                children = self.http.get_json(entry["url"])
+                flattened.extend(self._walk_entries(children if isinstance(children, list) else [children]))
             else:
                 flattened.append(entry)
         return flattened
@@ -294,6 +347,63 @@ class BrowseShSource:
         return HubSkillBundle(name, description, self.source_id, identifier, "community", {"SKILL.md": text})
 
 
+class SkillsMpSource:
+    """SkillsMP search adapter; packages resolve to their public GitHub source."""
+
+    source_id = "skillsmp"
+
+    def __init__(self, http=None, *, api_key: str | None = None, base_url: str = "https://skillsmp.com/api/v1"):
+        self.api_key = api_key or os.getenv("SKILLSMP_API_KEY")
+        self.http = http or GuardedHttpClient(headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})
+        self.base_url = base_url.rstrip("/")
+        self.github = GitHubSource(self.http)
+        self.quota: dict[str, Any] = {"authenticated": bool(self.api_key)}
+
+    def matches(self, identifier: str) -> bool:
+        return identifier.startswith("skillsmp/")
+
+    def search(self, query: str, limit: int = 10, page: int = 1) -> list[HubSkillMeta]:
+        from urllib.parse import quote_plus
+
+        bounded_limit = min(max(int(limit), 1), 50)
+        bounded_page = min(max(int(page), 1), 20)
+        payload = self.http.get_json(f"{self.base_url}/skills/search?q={quote_plus(query)}&limit={bounded_limit}&page={bounded_page}")
+        self.quota.update(dict(payload.get("rate_limit") or {}))
+        self.quota.update(dict(getattr(self.http, "rate_limit", {}) or {}))
+        results = []
+        for item in list(payload.get("skills") or payload.get("results") or [])[:bounded_limit]:
+            slug = str(item.get("slug") or item.get("id") or item.get("name") or "")
+            repository = str(item.get("repository_url") or item.get("repo_url") or item.get("github_url") or "")
+            results.append(HubSkillMeta(
+                str(item.get("name") or slug), str(item.get("description") or ""), self.source_id,
+                f"skillsmp/{slug}", "community", {"repository_url": repository, "stars": item.get("stars"), "rate_limit": dict(self.quota)},
+            ))
+        return results
+
+    def fetch(self, identifier: str) -> HubSkillBundle:
+        slug = identifier.split("/", 1)[1]
+        item = self.http.get_json(f"{self.base_url}/skills/{slug}")
+        repository = str(item.get("repository_url") or item.get("repo_url") or item.get("github_url") or "")
+        path = str(item.get("path") or item.get("skill_path") or "").strip("/")
+        match = re.match(r"https://github\.com/([^/]+)/([^/#]+)(?:/(?:tree|blob)/([^/]+)/(.+))?", repository)
+        if not match:
+            raise ValueError("SkillsMP result has no resolvable GitHub repository")
+        owner, repo, source_ref, url_path = match.groups()
+        resolved_path = path or (url_path or "")
+        if not resolved_path:
+            raise ValueError("SkillsMP result has no skill package path")
+        bundle = self.github.fetch(f"github/{owner}/{repo}/{resolved_path}")
+        bundle.source = self.source_id
+        bundle.identifier = identifier
+        bundle.metadata.update({
+            "repository_url": f"https://github.com/{owner}/{repo}",
+            "source_ref": source_ref or item.get("ref") or item.get("commit"),
+            "source_path": resolved_path,
+            "skillsmp_slug": slug,
+        })
+        return bundle
+
+
 class OfficialSkillSource:
     source_id = "official"
 
@@ -330,4 +440,5 @@ def create_skill_source_router(http=None, *, official_catalog: dict | None = Non
         ClaudeMarketplaceSource(client),
         LobeHubSource(client),
         BrowseShSource(client),
+        SkillsMpSource(client),
     ]

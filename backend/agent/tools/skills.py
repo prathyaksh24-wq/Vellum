@@ -8,6 +8,7 @@ from langchain_core.tools import tool
 
 from agent.skills import HubLockFile, SkillConfigStore, SkillPackageError, SkillUsageStore, get_skill_registry
 from agent.skills.runtime import SKILLS_PATH
+from agent.skills.usage_intelligence import record_current_activation
 
 
 _CONFIG: SkillConfigStore | None = None
@@ -70,6 +71,7 @@ def skill_view(name: str, path: str = "") -> str:
     if HubLockFile(SKILLS_PATH).get(name) is None:
         _usage_store().increment_view(name)
         _usage_store().increment_use(name)
+    record_current_activation(name, source="skill_view")
     resolved = _config_store().resolve(package)
     safe_values = {key: _safe_config_value(key, value) for key, value in resolved["values"].items()}
     missing_environment = [

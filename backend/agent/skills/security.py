@@ -59,6 +59,20 @@ _PATTERNS = [
         "execution",
         "uses unguarded shell execution",
     ),
+    (
+        re.compile(r"(?:powershell|pwsh)[^\n]*(?:-enc(?:odedcommand)?\b|frombase64string)|base64\s+-d[^\n]*\|\s*(?:ba)?sh", re.I),
+        "encoded_execution",
+        "critical",
+        "execution",
+        "decodes or executes an encoded payload",
+    ),
+    (
+        re.compile(r"(?:chmod\s+777|sudo\s+(?:rm|sh|bash)|Invoke-Expression\b|\beval\s*\()", re.I),
+        "unsafe_shell",
+        "high",
+        "execution",
+        "contains an unsafe shell execution pattern",
+    ),
 ]
 _INVISIBLE = {"\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"}
 

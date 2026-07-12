@@ -11,18 +11,13 @@ function copyStaticUiAssets() {
   return {
     name: 'copy-static-ui-assets',
     closeBundle() {
-      for (const [source, target] of [
-        ['ui/terminal/vellum', 'ui-dist/ui/terminal/vellum'],
-        [designUploadsRoot + '/Vellum Default Re-designed.html', 'ui-dist/design-uploads/Vellum Default Re-designed.html'],
-        [designUploadsRoot + '/api', 'ui-dist/design-uploads/api'],
-      ]) {
-        rmSync(target, { recursive: true, force: true });
-        cpSync(source, target, { recursive: true });
-        if (source.endsWith('/api')) {
-          for (const file of readdirSync(target)) {
-            if (file.endsWith('.test.js')) rmSync(`${target}/${file}`, { force: true });
-          }
-        }
+      const target = resolve(here, 'ui-dist/ui/terminal/vellum');
+      rmSync(target, { recursive: true, force: true });
+      cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
+      const apiTarget = resolve(here, 'ui-dist/api');
+      for (const file of readdirSync(apiTarget)) {
+        if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
       }
     },
   };
@@ -76,7 +71,7 @@ function serveDesignUploads() {
 
 export default defineConfig({
   plugins: [react(), serveDesignUploads(), copyStaticUiAssets()],
-  root: '.',
+  root: designUploadsRoot,
   publicDir: false,
   server: {
     fs: {
@@ -84,13 +79,14 @@ export default defineConfig({
     },
   },
   test: {
+    root: here,
     exclude: ['node_modules/**', 'ui-dist/**'],
   },
   build: {
-    outDir: 'ui-dist',
+    outDir: resolve(here, 'ui-dist'),
     emptyOutDir: true,
     rollupOptions: {
-      input: 'build-entry.js',
+      input: resolve(designUploadsRoot, 'Vellum Default Re-designed.html'),
     },
   },
 });

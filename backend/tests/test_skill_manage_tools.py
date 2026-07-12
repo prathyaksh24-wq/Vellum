@@ -1,6 +1,6 @@
 import json
 
-from agent.skills import SkillManager
+from agent.skills import SkillManager, SkillMutationCoordinator
 from agent.tools import skill_manage as skill_tools
 
 
@@ -15,21 +15,20 @@ Run the workflow.
 """
 
 
-def test_skill_manage_tool_requires_confirmation_and_creates_skill(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(skill_tools, "_MANAGER", SkillManager(tmp_path))
+def test_skill_manage_tool_stages_then_approves_skill(tmp_path, monkeypatch) -> None:
+    coordinator = SkillMutationCoordinator(tmp_path)
+    monkeypatch.setattr(skill_tools, "_COORDINATOR", coordinator)
 
-    blocked = json.loads(skill_tools.skill_manage.invoke({"action": "create", "skill_md": SKILL_MD}))
-    created = json.loads(
-        skill_tools.skill_manage.invoke({"action": "create", "skill_md": SKILL_MD, "confirm": True})
-    )
+    pending = json.loads(skill_tools.skill_manage.invoke({"action": "create", "skill_md": SKILL_MD}))
+    created = json.loads(skill_tools.skill_manage.invoke({"action": "approve", "name": pending["id"]}))
 
-    assert blocked["ok"] is False
-    assert "confirmation" in blocked["error"]
-    assert created == {"ok": True, "action": "create", "name": "tool-created", "state": "active"}
+    assert pending["status"] == "pending"
+    assert created["status"] == "applied"
+    assert created["name"] == "tool-created"
 
 
 def test_skill_manage_tool_rejects_background_origin_from_foreground(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(skill_tools, "_MANAGER", SkillManager(tmp_path))
+    monkeypatch.setattr(skill_tools, "_COORDINATOR", SkillMutationCoordinator(tmp_path))
 
     payload = json.loads(
         skill_tools.skill_manage.invoke(
@@ -43,7 +42,8 @@ def test_skill_manage_tool_rejects_background_origin_from_foreground(tmp_path, m
 def test_skill_manage_tool_patches_and_archives(tmp_path, monkeypatch) -> None:
     manager = SkillManager(tmp_path)
     manager.create(SKILL_MD, confirm=True)
-    monkeypatch.setattr(skill_tools, "_MANAGER", manager)
+    coordinator = SkillMutationCoordinator(tmp_path)
+    monkeypatch.setattr(skill_tools, "_COORDINATOR", coordinator)
 
     patched = json.loads(
         skill_tools.skill_manage.invoke(
@@ -56,16 +56,16 @@ def test_skill_manage_tool_patches_and_archives(tmp_path, monkeypatch) -> None:
             }
         )
     )
-    archived = json.loads(
-        skill_tools.skill_manage.invoke({"action": "archive", "name": "tool-created", "confirm": True})
-    )
+    coordinator.approve(patched["id"])
+    archived = json.loads(skill_tools.skill_manage.invoke({"action": "archive", "name": "tool-created"}))
+    archived = coordinator.approve(archived["id"])
 
-    assert patched["ok"] is True
+    assert patched["status"] == "pending"
     assert archived["state"] == "archived"
 
 
 def test_skill_learn_returns_guidance_without_writing(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(skill_tools, "_MANAGER", SkillManager(tmp_path))
+    monkeypatch.setattr(skill_tools, "_COORDINATOR", SkillMutationCoordinator(tmp_path))
 
     payload = json.loads(skill_tools.skill_learn.invoke({"source": "notes from this conversation"}))
 

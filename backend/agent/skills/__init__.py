@@ -1,7 +1,20 @@
 from agent.skills.authoring import build_learn_prompt
+from agent.skills.learning import SkillLearningWorkflow, SkillSignal
+from agent.skills.privacy import PrivacyGateResult, SkillPrivacyError, SkillPrivacyGate
 from agent.skills.bundles import SkillBundleError, SkillBundleStore
 from agent.skills.configuration import SkillConfigStore
+from agent.skills.catalog import (
+    CatalogReconcileReport,
+    SkillCatalog,
+    SkillCatalogError,
+    SkillTextNormalizer,
+    cosine_similarity,
+    calibrate_semantic_threshold,
+    package_content_hash,
+    semantic_projection,
+)
 from agent.skills.curator import CuratorBackupStore, CuratorConfig, SkillCurator
+from agent.skills.curator_runtime import CuratorRuntime, get_curator_runtime, install_curator_ticker
 from agent.skills.hub import HubLockFile, SkillHub, SkillHubError, TapsManager, bundle_content_hash
 from agent.skills.hub_models import HubSkillBundle, HubSkillMeta
 from agent.skills.hub_sources import (
@@ -13,6 +26,7 @@ from agent.skills.hub_sources import (
     LobeHubSource,
     OfficialSkillSource,
     SkillsShSource,
+    SkillsMpSource,
     UrlSkillSource,
     WellKnownSkillSource,
     create_skill_source_router,
@@ -32,6 +46,13 @@ from agent.skills.models import (
 )
 from agent.skills.migration import JsonSkillMigrator, MigrationReport
 from agent.skills.manager import SkillManager, SkillMutationError
+from agent.skills.locking import SkillLockManager, SkillLockTimeout
+from agent.skills.mutation import (
+    FilesystemSkillBackend,
+    PreparedMutation,
+    SkillMutationBackend,
+    SkillMutationCoordinator,
+)
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 from agent.skills.registry import SkillRegistry
 from agent.skills.runtime import CORE_TOOL_NAMES, CORE_TOOLSETS, build_skill_index_block, get_skill_registry
@@ -44,6 +65,7 @@ from agent.skills.security import (
 from agent.skills.suggestions import BlueprintSuggestionStore
 from agent.skills.surface import SkillSurfaceService
 from agent.skills.usage import SkillUsageStore
+from agent.skills.usage_intelligence import SkillUsageIntelligence, SkillUsageScope, record_current_activation, usage_scope
 
 __all__ = [
     "BlueprintMetadata",
@@ -55,6 +77,7 @@ __all__ = [
     "CORE_TOOLSETS",
     "CuratorBackupStore",
     "CuratorConfig",
+    "CuratorRuntime",
     "ConfigSetting",
     "CredentialRequirement",
     "EnvironmentRequirement",
@@ -71,15 +94,30 @@ __all__ = [
     "LobeHubSource",
     "OfficialSkillSource",
     "SkillIndexEntry",
+    "SkillLearningWorkflow",
+    "SkillSignal",
+    "SkillPrivacyGate",
+    "SkillPrivacyError",
+    "PrivacyGateResult",
     "SkillHub",
     "SkillHubError",
     "SkillConfigStore",
+    "SkillCatalog",
+    "SkillCatalogError",
+    "SkillTextNormalizer",
+    "CatalogReconcileReport",
     "SkillCurator",
     "SkillBundleError",
     "SkillBundleStore",
     "SkillManager",
+    "SkillLockManager",
+    "SkillLockTimeout",
     "SkillMetadata",
     "SkillMutationError",
+    "SkillMutationBackend",
+    "SkillMutationCoordinator",
+    "FilesystemSkillBackend",
+    "PreparedMutation",
     "SkillPackage",
     "SkillPackageError",
     "SkillPackageParser",
@@ -90,7 +128,10 @@ __all__ = [
     "SkillSurfaceService",
     "SkillUsage",
     "SkillUsageStore",
+    "SkillUsageIntelligence",
+    "SkillUsageScope",
     "SkillsShSource",
+    "SkillsMpSource",
     "UrlSkillSource",
     "VellumMetadata",
     "WellKnownSkillSource",
@@ -100,4 +141,12 @@ __all__ = [
     "allow_skill_install",
     "bundle_content_hash",
     "create_skill_source_router",
+    "get_curator_runtime",
+    "install_curator_ticker",
+    "cosine_similarity",
+    "calibrate_semantic_threshold",
+    "package_content_hash",
+    "semantic_projection",
+    "record_current_activation",
+    "usage_scope",
 ]
