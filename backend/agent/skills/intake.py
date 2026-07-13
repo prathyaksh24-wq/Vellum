@@ -17,7 +17,7 @@ def resolve_skill_intake(value: str) -> SkillIntakeTarget:
         raise ValueError("learn source is required")
     if clean.startswith(("skills-sh/", "skills.sh/")):
         return SkillIntakeTarget("marketplace", "skills-sh/" + clean.split("/", 1)[1].strip("/"), "skills-sh")
-    if clean.startswith(("skillsmp/", "clawhub/", "github/", "official/")):
+    if clean.startswith(("skillsmp/", "clawhub/", "official/")):
         return SkillIntakeTarget("marketplace", clean, clean.split("/", 1)[0])
     parsed = urlparse(clean)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -29,6 +29,4 @@ def resolve_skill_intake(value: str) -> SkillIntakeTarget:
     if host in {"clawhub.ai", "www.clawhub.ai"} and parts:
         slug = parts[-1]
         return SkillIntakeTarget("marketplace", f"clawhub/{slug}", "clawhub")
-    if host == "github.com" and len(parts) >= 5 and parts[2] in {"tree", "blob"}:
-        return SkillIntakeTarget("marketplace", f"github/{parts[0]}/{parts[1]}/" + "/".join(parts[4:]), "github")
     return SkillIntakeTarget("author", clean)

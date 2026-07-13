@@ -1837,7 +1837,7 @@ async def skill_curator_action(payload: dict[str, Any]) -> dict[str, Any]:
 
 class SkillHubSearchRequest(BaseModel):
     query: str = ""
-    source: str = "all"
+    source: str | None = None
     category: str = "all"
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -1957,7 +1957,7 @@ async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]
 
     query = SkillPrivacyGate.marketplace_query(request.query)
     surface = _skill_surface()
-    items = surface.hub.search(query, source_filter=request.source, limit=request.limit)
+    items = surface.hub.search(query, source_filter=request.source or "all", limit=request.limit)
     if request.category != "all":
         items = [item for item in items if item.get("category") == request.category]
     return {"items": items, "source_health": _skills_source_health(surface)}

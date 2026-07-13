@@ -39,6 +39,8 @@ def test_skills_sh_url_routes_to_marketplace_install() -> None:
 
 def test_document_url_and_conversation_route_to_authoring() -> None:
     assert resolve_skill_intake("https://example.com/procedure").kind == "author"
+    assert resolve_skill_intake("https://github.com/acme/skills/tree/main/skills/remote").kind == "author"
+    assert resolve_skill_intake("github/acme/skills/skills/remote").kind == "author"
     assert resolve_skill_intake("learn this workflow from our conversation").kind == "author"
 
 

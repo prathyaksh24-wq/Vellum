@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 import os
@@ -26,6 +27,29 @@ def bundle_content_hash(bundle: HubSkillBundle) -> str:
         digest.update(content if isinstance(content, bytes) else content.encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def skill_install_surfaces(
+    name: str,
+    *,
+    identifier: str = "",
+    repository_url: str = "",
+    install_command: str = "",
+) -> dict[str, str | None]:
+    command = install_command.strip() or None
+    repository = repository_url.strip().rstrip("/")
+    source_reference = repository or identifier.strip()
+    if command is None and repository:
+        command = f"npx skills add {repository} --skill {name}"
+    if source_reference:
+        prompt = (
+            f'Review and install the "{name}" skill from {source_reference}. '
+            "Inspect SKILL.md and its support files, run the security and privacy checks, "
+            "and wait for my approval before installing it."
+        )
+    else:
+        prompt = f'Use the installed "{name}" skill for this task and follow its SKILL.md instructions.'
+    return {"install_cli": command, "prompt": prompt}
 
 
 class HubLockFile:
@@ -130,53 +154,72 @@ class SkillHub:
         self.lock = HubLockFile(self.root)
         self.last_search_health: dict[str, dict[str, Any]] = {}
 
-    def search(self, query: str, *, source_filter: str = "all", limit: int = 10) -> list[dict[str, Any]]:
-        results = []
+    def search(self, query: str, *, source_filter: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+        normalized_filter = str(source_filter or "all").strip().casefold() or "all"
+        selected = []
+        matched_filter = normalized_filter == "all"
         for source in self.sources:
-            source_id = getattr(source, "source_id", "unknown")
-            if source_filter != "all" and source_id != source_filter:
+            source_id = str(getattr(source, "source_id", "unknown")).casefold()
+            if normalized_filter != "all" and source_id != normalized_filter:
                 continue
+            matched_filter = True
             search = getattr(source, "search", None)
-            searchable = bool(getattr(source, "searchable", callable(search)))
-            if not callable(search) or not searchable:
+            if not callable(search) or not bool(getattr(source, "searchable", callable(search))):
                 self.last_search_health[source_id] = {"status": "install_by_identifier", "searchable": False}
                 continue
-            try:
-                if source_id == "well-known":
-                    if not query.startswith(("http://", "https://")):
-                        continue
-                    found = search(query, query="", limit=limit)
-                else:
-                    found = search(query, limit=limit)
-                self.last_search_health[source_id] = {"status": "available", "searchable": True}
-            except (OSError, ValueError, KeyError) as exc:
-                self.last_search_health[source_id] = {
-                    "status": "error", "searchable": True, "error": str(exc)[:160]
-                }
-                continue
-            for item in found:
-                extra = dict(item.extra or {})
-                results.append(
-                    {
-                        "name": item.name,
-                        "description": item.description,
-                        "source": item.source,
-                        "identifier": item.identifier,
-                        "trust_level": item.trust_level,
-                        "category": str(extra.get("category") or "other"),
-                        "repository_url": extra.get("repository_url"),
-                        "installs": extra.get("installs") or extra.get("downloads"),
-                        "updated_at": extra.get("updated_at"),
-                        "author": extra.get("author"),
-                        "extra": extra,
-                    }
-                )
+            selected.append(source)
+        if not matched_filter:
+            raise SkillHubError(f"unknown searchable source: {normalized_filter}")
+
+        results: list[dict[str, Any]] = []
+        if normalized_filter == "all" and len(selected) > 1:
+            with ThreadPoolExecutor(max_workers=min(4, len(selected)), thread_name_prefix="skill-source") as executor:
+                futures = {executor.submit(self._search_source, source, query, limit): source for source in selected}
+                for future in as_completed(futures):
+                    rows, health = future.result()
+                    source_id = str(getattr(futures[future], "source_id", "unknown")).casefold()
+                    self.last_search_health[source_id] = health
+                    results.extend(rows)
+        else:
+            for source in selected:
+                rows, health = self._search_source(source, query, limit)
+                source_id = str(getattr(source, "source_id", "unknown")).casefold()
+                self.last_search_health[source_id] = health
+                results.extend(rows)
         trust_rank = {"official": 3, "builtin": 3, "trusted": 2, "community": 1}
         results.sort(key=lambda item: (-trust_rank.get(item["trust_level"], 0), item["name"]))
         unique: dict[str, dict[str, Any]] = {}
         for item in results:
             unique.setdefault(self._discovery_key(item), item)
         return list(unique.values())[:limit]
+
+    @staticmethod
+    def _search_source(source, query: str, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        source_id = str(getattr(source, "source_id", "unknown")).casefold()
+        search = source.search
+        try:
+            found = search(query, limit=limit)
+        except (OSError, ValueError, KeyError) as exc:
+            return [], {"status": "error", "searchable": True, "error": str(exc)[:160]}
+        rows = []
+        for item in found:
+            extra = dict(item.extra or {})
+            rows.append(
+                {
+                    "name": item.name,
+                    "description": item.description,
+                    "source": item.source,
+                    "identifier": item.identifier,
+                    "trust_level": item.trust_level,
+                    "category": str(extra.get("category") or "other"),
+                    "repository_url": extra.get("repository_url"),
+                    "installs": extra.get("installs") or extra.get("downloads"),
+                    "updated_at": extra.get("updated_at"),
+                    "author": extra.get("author"),
+                    "extra": extra,
+                }
+            )
+        return rows, {"status": "available", "searchable": True, "count": len(rows), "source": source_id}
 
     @staticmethod
     def _discovery_key(item: dict[str, Any]) -> str:
@@ -206,6 +249,12 @@ class SkillHub:
             skill_md = bundle.files.get("SKILL.md", "") if scan.verdict != "dangerous" else ""
             if isinstance(skill_md, bytes):
                 skill_md = skill_md.decode("utf-8", errors="replace")
+            install_surfaces = skill_install_surfaces(
+                bundle.name,
+                identifier=bundle.identifier,
+                repository_url=str(bundle.metadata.get("repository_url") or ""),
+                install_command=str(bundle.metadata.get("install_command") or ""),
+            )
             return {
                 "name": bundle.name,
                 "description": bundle.description,
@@ -220,6 +269,7 @@ class SkillHub:
                 "repository_url": bundle.metadata.get("repository_url"),
                 "source_ref": bundle.metadata.get("source_ref"),
                 "source_path": bundle.metadata.get("source_path"),
+                **install_surfaces,
             }
         finally:
             shutil.rmtree(staging, ignore_errors=True)

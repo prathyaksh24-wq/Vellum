@@ -7,7 +7,7 @@ from typing import Any
 from agent.skills.authoring import build_learn_prompt
 from agent.skills.bundles import SkillBundleStore
 from agent.skills.curator import SkillCurator
-from agent.skills.hub import SkillHub
+from agent.skills.hub import SkillHub, skill_install_surfaces
 from agent.skills.manager import SkillManager
 from agent.skills.mutation import SkillMutationCoordinator
 from agent.skills.migration import JsonSkillMigrator
@@ -74,6 +74,13 @@ class SkillSurfaceService:
         if path:
             return {"name": name, "path": path, "content": self.parser.read_support_file(package.root, path)}
         provenance = HubLockFile(self.root).get(name) or {}
+        metadata = package.metadata.model_dump(mode="json", exclude_none=True)
+        install_surfaces = skill_install_surfaces(
+            name,
+            identifier=str(provenance.get("identifier") or ""),
+            repository_url=str(provenance.get("repository_url") or ""),
+            install_command=str(metadata.get("install_command") or ""),
+        )
         support_files = sorted(
             path.relative_to(package.root).as_posix()
             for path in package.root.rglob("*")
@@ -82,7 +89,7 @@ class SkillSurfaceService:
         return {
             "name": name,
             "description": package.metadata.description,
-            "metadata": package.metadata.model_dump(mode="json", exclude_none=True),
+            "metadata": metadata,
             "content": package.body,
             "skill_md": package.skill_file.read_text(encoding="utf-8"),
             "usage": self.usage.get(name),
@@ -100,6 +107,7 @@ class SkillSurfaceService:
                 "scan_verdict": provenance.get("scan_verdict"),
             },
             "support_files": support_files,
+            **install_surfaces,
         }
 
     def action(self, action: str, *, name: str = "", confirm: bool = False, **payload) -> dict[str, Any]:

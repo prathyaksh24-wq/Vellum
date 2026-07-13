@@ -955,6 +955,8 @@ def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, 
     assert cached.status_code == 304
     assert "name: alpha-skill" in detail.json()["skill_md"]
     assert detail.json()["provenance"]["source"] == "local"
+    assert detail.json()["install_cli"] is None
+    assert 'Use the installed "alpha-skill" skill' in detail.json()["prompt"]
     assert overview.json()["counts"]["active"] == 2
 
 

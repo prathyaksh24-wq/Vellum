@@ -35,9 +35,7 @@ def test_router_exposes_all_documented_source_ids() -> None:
 
     assert {
         "official",
-        "github",
         "url",
-        "well-known",
         "skills-sh",
         "clawhub",
         "claude-marketplace",
@@ -45,6 +43,8 @@ def test_router_exposes_all_documented_source_ids() -> None:
         "browse-sh",
         "skillsmp",
     } <= ids
+    assert "github" not in ids
+    assert "well-known" not in ids
 
 
 def test_direct_url_source_builds_single_file_bundle() -> None:

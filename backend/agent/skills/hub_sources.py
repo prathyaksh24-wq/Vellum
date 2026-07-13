@@ -511,9 +511,7 @@ def create_skill_source_router(http=None, *, official_catalog: dict | None = Non
     client = http or GuardedHttpClient()
     return [
         OfficialSkillSource(official_catalog),
-        GitHubSource(client),
         UrlSkillSource(client),
-        WellKnownSkillSource(client),
         SkillsShSource(client),
         ClawHubSource(client),
         ClaudeMarketplaceSource(client),

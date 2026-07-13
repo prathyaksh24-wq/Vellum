@@ -22,7 +22,7 @@ describe("production Skills Hub", () => {
 
   test("exposes lifecycle, accessibility, provenance, and raw SKILL.md surfaces", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
-    for (const label of ["Installed", "Discover", "Pending", "Duplicate Review", "Archived", "SKILL.md", "Recent scrubbed tasks", "Security findings", "Support files"]) {
+    for (const label of ["Installed", "Discover", "Pending", "Duplicate Review", "Archived", "SKILL.md", "Install CLI", "Prompt", "Recent scrubbed tasks", "Security findings", "Support files"]) {
       expect(html).toContain(label);
     }
     expect(html).toContain('role="dialog"');
@@ -31,6 +31,21 @@ describe("production Skills Hub", () => {
     expect(html).toContain("repository_url");
     expect(html).toContain("source_ref");
     expect(html).toContain('<VSelect className="sk-filter"');
+    expect(html).toContain('className="sk-source-modal"');
+    expect(html).not.toContain('>Rendered</button>');
+    expect(html).not.toContain("sub:'Install by URL'");
+    expect(html).not.toContain("value:'well-known'");
+    expect(html).toContain("if(source!=='all')searchBody.source=source");
+  });
+
+  test("uses a non-blocking learn state machine tied to pending approval", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+    for (const status of ["LEARNING", "LEARNT", "DRAFT_APPROVED", "AWAITING_USER_APPROVAL", "INSTALLING", "INSTALLED"]) {
+      expect(html).toContain(status);
+    }
+    expect(html).toContain('className="sk-learn-feed"');
+    expect(html).toContain("setLearnOpen(false);setLearnSource('');startLearnJob(sourceValue)");
+    expect(html).toContain("reviewLearnJob(job)");
   });
 
   test("colocated API client supports cancellable typed operations", () => {

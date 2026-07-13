@@ -56,6 +56,40 @@ def test_generated_skill_is_rescanned_before_staging() -> None:
         gate.validate_generated([("SKILL.md", "Contact Jane Doe at jane@example.com")])
 
 
+def test_public_hub_package_allows_portable_runtime_outputs_only() -> None:
+    gate = SkillPrivacyGate()
+    example = """from pathlib import Path
+output = Path('/mnt/user-data/outputs/console.log')
+print(f'Logs saved to: {output}')
+"""
+
+    gate.validate_generated(
+        [("examples/console_logging.py", example)],
+        public_package=True,
+    )
+    with pytest.raises(SkillPrivacyError, match="private_path"):
+        gate.validate_generated([("examples/console_logging.py", example)])
+    with pytest.raises(SkillPrivacyError, match="private_path"):
+        gate.validate_generated(
+            [("examples/private.py", "open('/home/private-user/history.log')")],
+            public_package=True,
+        )
+    gate.validate_generated(
+        [
+            ("LICENSE.txt", "Apache License, January 2004. http://www.apache.org/licenses/LICENSE-2.0"),
+            ("examples/fixture.py", "#!/usr/bin/env python3\nopen('/tmp/output.png')\nprint('John Doe <john@example.com>')"),
+        ],
+        public_package=True,
+    )
+    with pytest.raises(SkillPrivacyError, match="pii_email"):
+        gate.validate_generated([("examples/private.py", "print('person@example.com')")])
+    with pytest.raises(SkillPrivacyError):
+        gate.validate_generated(
+            [("examples/private.py", "api_key=supersecretvalue123456789")],
+            public_package=True,
+        )
+
+
 def test_semantically_consistent_signals_group_and_review_every_ten_turns(tmp_path: Path) -> None:
     workflow = SkillLearningWorkflow(tmp_path / ".skills", embedder=lambda _text: [1.0, 0.0])
     workflow.record_signal("Deploy after health checks", kind="success")
