@@ -1787,10 +1787,37 @@ async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/skills/learn")
 async def learn_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    from agent.skills.intake import resolve_skill_intake
+
     source = str(payload.get("source") or "").strip()
     if not source:
         raise HTTPException(status_code=400, detail="learn source is required")
-    return _skill_surface().slash(f"/learn {source}")
+    target = resolve_skill_intake(source)
+    if target.kind == "marketplace":
+        result = json.loads(skill_hub.invoke({
+            "action": "install",
+            "identifier": target.value,
+            "category": str(payload.get("category") or "community"),
+            "force": payload.get("force") is True,
+        }))
+        if result.get("ok") is False:
+            raise HTTPException(status_code=400, detail={"code": "skill_intake_failed", "message": result.get("error")})
+        mutation_id = str(result.get("id") or "")
+        if not mutation_id or not any(item["id"] == mutation_id for item in _skill_surface().mutations.list_pending()):
+            raise HTTPException(status_code=500, detail={"code": "pending_not_persisted", "message": "Skill installation was not persisted for approval."})
+        return {"ok": True, "mode": "hub_install", "status": "pending", "mutation": result}
+
+    before = {item["id"] for item in _skill_surface().mutations.list_pending()}
+    response = await _run_agent(f"/learn {source}", str(payload.get("thread_id") or "skills-hub"))
+    pending = _skill_surface().mutations.list_pending()
+    created = [item for item in pending if item["id"] not in before]
+    if not created:
+        raise HTTPException(status_code=422, detail={
+            "code": "skill_not_staged",
+            "message": "Vellum completed the learning turn but did not create an approval draft.",
+            "answer": response.answer,
+        })
+    return {"ok": True, "mode": "authored", "status": "pending", "mutation": created[-1], "answer": response.answer}
 
 
 @router.post("/skills/bundles")
@@ -1811,6 +1838,7 @@ async def skill_curator_action(payload: dict[str, Any]) -> dict[str, Any]:
 class SkillHubSearchRequest(BaseModel):
     query: str = ""
     source: str = "all"
+    category: str = "all"
     limit: int = Field(default=20, ge=1, le=100)
 
 
@@ -1910,9 +1938,14 @@ def _skills_source_health(surface: SkillSurfaceService) -> list[dict[str, Any]]:
     health = []
     for source in surface.hub.sources:
         http = getattr(source, "http", None)
+        source_id = getattr(source, "source_id", "unknown")
+        recent = dict(surface.hub.last_search_health.get(source_id) or {})
+        circuit_open = any(value >= 5 for value in getattr(http, "_failures", {}).values())
         health.append({
-            "source": getattr(source, "source_id", "unknown"),
-            "status": "circuit_open" if any(value >= 5 for value in getattr(http, "_failures", {}).values()) else "available",
+            "source": source_id,
+            "status": "circuit_open" if circuit_open else recent.get("status", "available"),
+            "searchable": bool(getattr(source, "searchable", False)),
+            "error": recent.get("error"),
             "rate_limit": dict(getattr(source, "quota", {}) or getattr(http, "rate_limit", {}) or {}),
         })
     return health
@@ -1924,7 +1957,10 @@ async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]
 
     query = SkillPrivacyGate.marketplace_query(request.query)
     surface = _skill_surface()
-    return {"items": surface.hub.search(query, source_filter=request.source, limit=request.limit), "source_health": _skills_source_health(surface)}
+    items = surface.hub.search(query, source_filter=request.source, limit=request.limit)
+    if request.category != "all":
+        items = [item for item in items if item.get("category") == request.category]
+    return {"items": items, "source_health": _skills_source_health(surface)}
 
 
 @router.post("/skills/v2/hub/inspect")

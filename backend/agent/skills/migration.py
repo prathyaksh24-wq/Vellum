@@ -249,7 +249,7 @@ class JsonSkillMigrator:
             created = f"{created}T00:00:00Z"
         return {"view_count": 0, "use_count": int(payload.get("use_count") or 0), "patch_count": 0, "last_viewed_at": None,
                 "last_used_at": payload.get("last_used"), "last_patched_at": None, "created_at": created or datetime.now(timezone.utc).isoformat(),
-                "created_by": None, "state": "active", "pinned": False, "archived_at": None}
+                "created_by": None, "origin": "builtin", "state": "active", "pinned": False, "archived_at": None}
 
     def _merge_usage(self, updates: dict[str, Any]) -> None:
         path = self.root / ".usage.json"

@@ -14,6 +14,10 @@ describe("production Skills Hub", () => {
     expect(html).not.toContain("const SEED_SKILLS");
     expect(html).toContain("API.plugins.skillsCatalog");
     expect(html).toContain("API.plugins.hubSearch");
+    expect(html).toContain("SKILL_ORIGINS");
+    expect(html).toContain("Built into Vellum");
+    expect(html).toContain("Learned by you");
+    expect(html).toContain("Learned by Vellum");
   });
 
   test("exposes lifecycle, accessibility, provenance, and raw SKILL.md surfaces", () => {
@@ -26,6 +30,7 @@ describe("production Skills Hub", () => {
     expect(html).toContain("prefers-reduced-motion");
     expect(html).toContain("repository_url");
     expect(html).toContain("source_ref");
+    expect(html).toContain('<VSelect className="sk-filter"');
   });
 
   test("colocated API client supports cancellable typed operations", () => {
@@ -35,6 +40,8 @@ describe("production Skills Hub", () => {
     expect(api).toContain("pendingApprove");
     expect(api).toContain("duplicateDecision");
     expect(api).toContain("hubMutation");
+    expect(api).toContain('client.request("/api/skills/learn"');
+    expect(api).not.toContain("learnExecute");
     expect(api).toContain("signal: signal");
   });
 });

@@ -99,3 +99,10 @@ def test_hub_rejects_unsafe_bundle_paths_before_writing(tmp_path: Path) -> None:
         SkillHub(tmp_path, sources=[source]).install("https://example.com/SKILL.md", confirm=True)
 
     assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_discovery_key_deduplicates_same_github_package_across_indexes() -> None:
+    from_skillssh = {"source": "skills-sh", "identifier": "skills-sh/anthropics/skills/frontend-design"}
+    from_skillsmp = {"source": "skillsmp", "identifier": "skillsmp/github/anthropics/skills/main/skills/frontend-design"}
+
+    assert SkillHub._discovery_key(from_skillssh) == SkillHub._discovery_key(from_skillsmp)

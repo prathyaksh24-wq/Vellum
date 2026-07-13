@@ -128,25 +128,34 @@ class SkillHub:
         self.scanner = scanner or SkillSecurityScanner()
         self.parser = SkillPackageParser()
         self.lock = HubLockFile(self.root)
+        self.last_search_health: dict[str, dict[str, Any]] = {}
 
     def search(self, query: str, *, source_filter: str = "all", limit: int = 10) -> list[dict[str, Any]]:
         results = []
         for source in self.sources:
-            if source_filter != "all" and getattr(source, "source_id", "") != source_filter:
+            source_id = getattr(source, "source_id", "unknown")
+            if source_filter != "all" and source_id != source_filter:
                 continue
             search = getattr(source, "search", None)
-            if not callable(search):
+            searchable = bool(getattr(source, "searchable", callable(search)))
+            if not callable(search) or not searchable:
+                self.last_search_health[source_id] = {"status": "install_by_identifier", "searchable": False}
                 continue
             try:
-                if getattr(source, "source_id", "") == "well-known":
+                if source_id == "well-known":
                     if not query.startswith(("http://", "https://")):
                         continue
                     found = search(query, query="", limit=limit)
                 else:
                     found = search(query, limit=limit)
-            except (OSError, ValueError, KeyError):
+                self.last_search_health[source_id] = {"status": "available", "searchable": True}
+            except (OSError, ValueError, KeyError) as exc:
+                self.last_search_health[source_id] = {
+                    "status": "error", "searchable": True, "error": str(exc)[:160]
+                }
                 continue
             for item in found:
+                extra = dict(item.extra or {})
                 results.append(
                     {
                         "name": item.name,
@@ -154,12 +163,32 @@ class SkillHub:
                         "source": item.source,
                         "identifier": item.identifier,
                         "trust_level": item.trust_level,
-                        "extra": item.extra,
+                        "category": str(extra.get("category") or "other"),
+                        "repository_url": extra.get("repository_url"),
+                        "installs": extra.get("installs") or extra.get("downloads"),
+                        "updated_at": extra.get("updated_at"),
+                        "author": extra.get("author"),
+                        "extra": extra,
                     }
                 )
         trust_rank = {"official": 3, "builtin": 3, "trusted": 2, "community": 1}
         results.sort(key=lambda item: (-trust_rank.get(item["trust_level"], 0), item["name"]))
-        return results[:limit]
+        unique: dict[str, dict[str, Any]] = {}
+        for item in results:
+            unique.setdefault(self._discovery_key(item), item)
+        return list(unique.values())[:limit]
+
+    @staticmethod
+    def _discovery_key(item: dict[str, Any]) -> str:
+        identifier = str(item.get("identifier") or "")
+        parts = identifier.split("/")
+        if identifier.startswith("skills-sh/") and len(parts) >= 4:
+            return f"github:{parts[1].casefold()}/{parts[2].casefold()}:skills/{'/'.join(parts[3:]).casefold()}"
+        if identifier.startswith("skillsmp/github/") and len(parts) >= 7:
+            return f"github:{parts[2].casefold()}/{parts[3].casefold()}:{'/'.join(parts[5:]).casefold()}"
+        if identifier.startswith("github/") and len(parts) >= 4:
+            return f"github:{parts[1].casefold()}/{parts[2].casefold()}:{'/'.join(parts[3:]).casefold()}"
+        return f"{item.get('source', 'unknown')}:{identifier.casefold()}"
 
     def inspect(self, identifier: str) -> dict[str, Any]:
         bundle = self._source_for(identifier).fetch(identifier)
