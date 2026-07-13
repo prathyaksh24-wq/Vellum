@@ -62,3 +62,21 @@ def test_surface_expands_learn_direct_skill_and_lists_management_commands(tmp_pa
     }
     assert listed["handled"] is True
     assert "active-skill" in listed["answer"]
+
+
+def test_surface_exposes_stable_skill_origins(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(skill_md("user-skill"), origin="foreground", confirm=True)
+    manager.create(skill_md("agent-skill"), origin="background_review", confirm=True)
+    builtin = root / "packages" / "system" / "builtin-skill"
+    builtin.mkdir(parents=True)
+    (builtin / "SKILL.md").write_text(
+        "---\nname: builtin-skill\ndescription: Built in\nmetadata:\n  hermes:\n    tags: [migrated, vellum]\n---\n# Built in\n",
+        encoding="utf-8",
+    )
+    surface = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[])
+
+    origins = {item["id"]: item["origin"] for item in surface.catalog()["skills"]["active"]}
+
+    assert origins == {"agent-skill": "agent_learned", "builtin-skill": "builtin", "user-skill": "user_learned"}

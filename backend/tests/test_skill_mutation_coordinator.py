@@ -142,6 +142,32 @@ def test_write_approval_can_be_disabled_explicitly(tmp_path: Path) -> None:
     assert (root / "packages" / "uncategorized" / "direct-skill" / "SKILL.md").is_file()
 
 
+def test_hub_install_stages_public_portable_runtime_example(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    coordinator = SkillMutationCoordinator(root)
+    pending = coordinator.submit(
+        "hub_install",
+        bundle_name="webapp-testing",
+        description="Browser testing examples",
+        source="skills-sh",
+        identifier="skills-sh/anthropics/skills/webapp-testing",
+        trust_level="trusted",
+        files={
+            "SKILL.md": skill_md("webapp-testing"),
+            "examples/console_logging.py": "with open('/mnt/user-data/outputs/console.log', 'w') as handle:\n    handle.write('ok')\n",
+        },
+        metadata={"repository_url": "https://github.com/anthropics/skills"},
+        category="testing",
+        force=False,
+        inspected_hash="fixture",
+        verify_upstream=False,
+        origin="hub",
+    )
+
+    assert pending["status"] == "pending"
+    assert pending["identity"] == "webapp-testing"
+
+
 def test_same_skill_file_locks_serialize_while_different_skills_do_not(tmp_path: Path) -> None:
     locks = SkillLockManager(tmp_path / "locks", timeout=2, poll_interval=0.01)
     entered: list[str] = []

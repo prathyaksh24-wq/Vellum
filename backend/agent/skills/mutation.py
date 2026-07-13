@@ -86,7 +86,10 @@ class FilesystemSkillBackend:
                         target_file = SkillManager._safe_target(package_root, relative)
                         target_file.parent.mkdir(parents=True, exist_ok=True)
                         target_file.write_text(str(content), encoding="utf-8")
-                package = self._validate_package(package_root)
+                package = self._validate_package(
+                    package_root,
+                    public_package=normalized in {"hub_install", "hub_update"},
+                )
                 category = SkillManager._category(str(payload.get("category") or "uncategorized"))
                 target = self.root / "packages" / category / package.metadata.name
                 self._assert_unique_content(package_root, exclude=target if normalized == "hub_update" else None)
@@ -119,7 +122,10 @@ class FilesystemSkillBackend:
                 package_root = staging / "package"
                 shutil.copytree(source, package_root)
                 self._mutate_preview(package_root, normalized, payload)
-                parsed = self._validate_package(package_root)
+                parsed = self._validate_package(
+                    package_root,
+                    public_package=self._is_hub_skill(name),
+                )
                 if parsed.metadata.name != name:
                     raise SkillMutationError("skill name cannot change during edit")
                 self._assert_unique_content(package_root, exclude=source)
@@ -151,7 +157,7 @@ class FilesystemSkillBackend:
                     raise SkillMutationError(f"skill not found: {name}")
             else:
                 raise SkillMutationError(f"unsupported skill action: {normalized}")
-            self._validate_package(source)
+            self._validate_package(source, public_package=self._is_hub_skill(name))
             return PreparedMutation(
                 name,
                 normalized,
@@ -244,7 +250,7 @@ class FilesystemSkillBackend:
         parent.mkdir(parents=True, exist_ok=True)
         return parent
 
-    def _validate_package(self, root: Path):
+    def _validate_package(self, root: Path, *, public_package: bool = False):
         try:
             package = self.parser.parse(root)
         except SkillPackageError as exc:
@@ -256,10 +262,18 @@ class FilesystemSkillBackend:
         from agent.skills.privacy import SkillPrivacyError, SkillPrivacyGate
 
         try:
-            SkillPrivacyGate().validate_generated(FilesystemSkillBackend._text_files(root).items())
+            SkillPrivacyGate().validate_generated(
+                FilesystemSkillBackend._text_files(root).items(),
+                public_package=public_package,
+            )
         except SkillPrivacyError as exc:
             raise SkillMutationError(str(exc)) from exc
         return package
+
+    def _is_hub_skill(self, name: str) -> bool:
+        from agent.skills.hub import HubLockFile
+
+        return HubLockFile(self.root).get(name) is not None
 
     def _assert_deletable(self, name: str) -> None:
         if name in self.protected:

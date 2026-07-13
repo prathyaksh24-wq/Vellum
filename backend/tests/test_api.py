@@ -908,6 +908,10 @@ def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monke
         "_skill_surface_singleton",
         SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[]),
     )
+    async def no_skill_created(*_args, **_kwargs):
+        return api.ChatResponse(answer="No mutation was created.", thread_id="skills-hub", tools=[])
+
+    monkeypatch.setattr(api, "_run_agent", no_skill_created)
 
     with TestClient(api.app) as client:
         staged = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
@@ -922,8 +926,8 @@ def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monke
     assert approved.json()["result"]["state"] == "active"
     assert detail.status_code == 200
     assert "Run it" in detail.json()["content"]
-    assert learned.json()["handled"] is False
-    assert 'skill_manage(action="create"' in learned.json()["expanded"]
+    assert learned.status_code == 422
+    assert learned.json()["detail"]["code"] == "skill_not_staged"
 
 
 def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, tmp_path):
@@ -951,6 +955,8 @@ def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, 
     assert cached.status_code == 304
     assert "name: alpha-skill" in detail.json()["skill_md"]
     assert detail.json()["provenance"]["source"] == "local"
+    assert detail.json()["install_cli"] is None
+    assert 'Use the installed "alpha-skill" skill' in detail.json()["prompt"]
     assert overview.json()["counts"]["active"] == 2
 
 

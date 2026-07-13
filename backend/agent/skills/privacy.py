@@ -22,6 +22,11 @@ _HANDLE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,32}\b")
 _SECRET = re.compile(r"\b(?:sk|ghp|github_pat|xox[baprs])[-_A-Za-z0-9]{16,}\b", re.I)
 _INJECTION = re.compile(r"(?:ignore|override).{0,30}(?:instructions|privacy)|reproduce.{0,30}(?:private|secret|source)", re.I | re.S)
 _PUBLIC_URL = re.compile(r"https?://(?![^\s/@]+:[^\s/@]+@)[^\s)\]>]+", re.I)
+_PUBLIC_RUNTIME_PATH = re.compile(r"^/mnt/user-data/(?:outputs|uploads)(?:/|$)", re.I)
+_PORTABLE_CODE_PATH = re.compile(
+    r"^(?:/tmp(?:/|$)|/(?:usr/)?bin/(?:env|bash|sh|python\d*)$|/dev/null$|/\{[^}]+\})",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -65,20 +70,44 @@ class SkillPrivacyGate:
             raise SkillPrivacyError("high-entropy secret-like content detected")
         return PrivacyGateResult(clean, classification.value, len(replacements))
 
-    def validate_generated(self, files: Iterable[tuple[str, str]], *, protected_values: Iterable[str] = ()) -> None:
+    def validate_generated(
+        self,
+        files: Iterable[tuple[str, str]],
+        *,
+        protected_values: Iterable[str] = (),
+        public_package: bool = False,
+    ) -> None:
         protected = [value for value in protected_values if value]
         for path, content in files:
             self.sanitize(content)
-            findings = [
+            findings = [] if public_package else [
                 item
                 for item in self.scrubber.analyze(content)
                 if item.label not in {"ORGANIZATION"}
                 and not (item.label == "PERSON" and content[content.rfind("\n", 0, item.start) + 1 : item.start].lstrip().startswith("#"))
                 and (item.label != "PERSON" or item.source == "regex" or item.score >= 0.9)
             ]
-            deterministic = any(pattern.search(content) for pattern in (_PATHS, _CREDENTIAL_URL, _HANDLE, _SECRET, _INJECTION))
-            if findings or deterministic or any(value in content for value in protected):
-                raise SkillPrivacyError(f"generated skill file failed privacy validation: {path}")
+            rules = []
+            if self._contains_private_path(content, public_package=public_package):
+                rules.append("private_path")
+            rules.extend(
+                label
+                for label, pattern in (
+                    ("credential_url", _CREDENTIAL_URL),
+                    *(() if public_package else (("private_handle", _HANDLE),)),
+                    ("secret", _SECRET),
+                    ("prompt_injection", _INJECTION),
+                )
+                if pattern.search(content)
+            )
+            if findings:
+                rules.extend(sorted({f"pii_{item.label.casefold()}" for item in findings}))
+            if any(value in content for value in protected):
+                rules.append("protected_source_value")
+            if rules:
+                raise SkillPrivacyError(
+                    f"generated skill file failed privacy validation: {path} ({', '.join(dict.fromkeys(rules))})"
+                )
 
     @staticmethod
     def marketplace_query(text: str) -> str:
@@ -91,4 +120,17 @@ class SkillPrivacyGate:
             entropy = -sum((count / len(token)) * math.log2(count / len(token)) for count in counts.values())
             if entropy >= 4.3:
                 return True
+        return False
+
+    @staticmethod
+    def _contains_private_path(text: str, *, public_package: bool) -> bool:
+        public_url_spans = [(match.start(), match.end()) for match in _PUBLIC_URL.finditer(text)]
+        for match in _PATHS.finditer(text):
+            value = match.group(0).strip("'\"`),.;:")
+            if public_package:
+                if any(match.start() < end and start < match.end() for start, end in public_url_spans):
+                    continue
+                if _PUBLIC_RUNTIME_PATH.match(value) or _PORTABLE_CODE_PATH.match(value):
+                    continue
+            return True
         return False

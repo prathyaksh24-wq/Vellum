@@ -7,7 +7,7 @@ from typing import Any
 from agent.skills.authoring import build_learn_prompt
 from agent.skills.bundles import SkillBundleStore
 from agent.skills.curator import SkillCurator
-from agent.skills.hub import SkillHub
+from agent.skills.hub import SkillHub, skill_install_surfaces
 from agent.skills.manager import SkillManager
 from agent.skills.mutation import SkillMutationCoordinator
 from agent.skills.migration import JsonSkillMigrator
@@ -74,6 +74,13 @@ class SkillSurfaceService:
         if path:
             return {"name": name, "path": path, "content": self.parser.read_support_file(package.root, path)}
         provenance = HubLockFile(self.root).get(name) or {}
+        metadata = package.metadata.model_dump(mode="json", exclude_none=True)
+        install_surfaces = skill_install_surfaces(
+            name,
+            identifier=str(provenance.get("identifier") or ""),
+            repository_url=str(provenance.get("repository_url") or ""),
+            install_command=str(metadata.get("install_command") or ""),
+        )
         support_files = sorted(
             path.relative_to(package.root).as_posix()
             for path in package.root.rglob("*")
@@ -82,10 +89,11 @@ class SkillSurfaceService:
         return {
             "name": name,
             "description": package.metadata.description,
-            "metadata": package.metadata.model_dump(mode="json", exclude_none=True),
+            "metadata": metadata,
             "content": package.body,
             "skill_md": package.skill_file.read_text(encoding="utf-8"),
             "usage": self.usage.get(name),
+            "origin": self._origin(package, self.usage.get(name)),
             "usage_intelligence": self.usage_intelligence.aggregate(name),
             "recent_usage": self.usage_intelligence.recent(name),
             "provenance": {
@@ -99,6 +107,7 @@ class SkillSurfaceService:
                 "scan_verdict": provenance.get("scan_verdict"),
             },
             "support_files": support_files,
+            **install_surfaces,
         }
 
     def action(self, action: str, *, name: str = "", confirm: bool = False, **payload) -> dict[str, Any]:
@@ -228,7 +237,23 @@ class SkillSurfaceService:
             "uses": int(usage.get("use_count") or 0),
             "last": usage.get("last_used_at") or "never",
             "state": state,
+            "category": package.metadata.metadata.hermes.category or package.root.parent.name,
+            "origin": self._origin(package, usage),
             "pinned": bool(usage.get("pinned")),
             "created_by": usage.get("created_by"),
             "is_external": bool(package.is_external),
         }
+
+    def _origin(self, package, usage: dict[str, Any]) -> str:
+        if package.is_external:
+            return "external"
+        if HubLockFile(self.root).get(package.metadata.name) is not None:
+            return "hub_installed"
+        explicit = usage.get("origin")
+        if explicit in {"builtin", "user_learned", "agent_learned", "hub_installed", "external"}:
+            return explicit
+        if usage.get("created_by") == "agent":
+            return "agent_learned"
+        if "migrated" in package.metadata.metadata.hermes.tags:
+            return "builtin"
+        return "user_learned"

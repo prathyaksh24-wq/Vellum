@@ -17,6 +17,19 @@ from agent.skills.hub_models import HubSkillBundle, HubSkillMeta
 TRUSTED_REPOS = {"openai/skills", "anthropics/skills", "huggingface/skills", "NVIDIA/skills"}
 
 
+def infer_skill_category(name: str, description: str = "") -> str:
+    text = f"{name} {description}".casefold()
+    rules = (
+        ("design", ("design", "frontend", "ui", "ux", "css")),
+        ("engineering", ("code", "developer", "engineering", "debug", "test", "react", "python")),
+        ("research", ("research", "search", "analysis", "browser")),
+        ("writing", ("write", "writing", "content", "copy", "document")),
+        ("productivity", ("workflow", "productivity", "project", "task", "automation")),
+        ("data", ("data", "database", "sql", "analytics")),
+    )
+    return next((category for category, terms in rules if any(term in text for term in terms)), "other")
+
+
 class GuardedHttpClient:
     def __init__(self, *, timeout: float = 20.0, max_bytes: int = 4_000_000, ttl_seconds: int = 300, retries: int = 2, headers: dict[str, str] | None = None):
         self.timeout = timeout
@@ -107,6 +120,7 @@ def _skill_name(text: str) -> tuple[str, str]:
 
 class UrlSkillSource:
     source_id = "url"
+    searchable = False
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -125,6 +139,7 @@ class UrlSkillSource:
 
 class GitHubSource:
     source_id = "github"
+    searchable = False
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -190,6 +205,7 @@ class GitHubSource:
 
 class WellKnownSkillSource:
     source_id = "well-known"
+    searchable = False
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -233,6 +249,7 @@ class WellKnownSkillSource:
 
 class SkillsShSource:
     source_id = "skills-sh"
+    searchable = True
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -242,16 +259,40 @@ class SkillsShSource:
         return identifier.startswith(("skills-sh/", "skills.sh/"))
 
     def search(self, query: str, limit: int = 10) -> list[HubSkillMeta]:
-        return []
+        from urllib.parse import quote_plus
+
+        payload = self.http.get_json(f"https://skills.sh/api/search?q={quote_plus(query)}")
+        results = []
+        for item in list(payload.get("skills") or [])[: min(max(limit, 1), 100)]:
+            identifier = str(item.get("id") or "").strip("/")
+            name = str(item.get("name") or item.get("skillId") or identifier.rsplit("/", 1)[-1])
+            source_repo = str(item.get("source") or "/".join(identifier.split("/")[:2]))
+            description = f"{name} from {source_repo}"
+            results.append(HubSkillMeta(
+                name, description, self.source_id, f"skills-sh/{identifier}",
+                "trusted" if source_repo in TRUSTED_REPOS else "community",
+                {"repository_url": f"https://github.com/{source_repo}", "installs": item.get("installs"),
+                 "category": infer_skill_category(name, description)},
+            ))
+        return results
 
     def fetch(self, identifier: str) -> HubSkillBundle:
         clean = identifier.split("/", 1)[1]
-        html = self.http.get_text(f"https://skills.sh/{clean}")
-        match = re.search(r"https://github\.com/([^/]+)/([^/\"']+)/(?:tree|blob)/[^/]+/([^\"']+)", html)
-        if not match:
-            raise ValueError("skills.sh page has no GitHub source path")
-        github_identifier = f"github/{match.group(1)}/{match.group(2)}/{match.group(3)}"
-        bundle = self.github.fetch(github_identifier)
+        parts = clean.split("/")
+        if len(parts) < 3:
+            raise ValueError("skills.sh identifier must include owner/repo/skill")
+        owner, repo, skill = parts[0], parts[1], "/".join(parts[2:])
+        candidates = [f"skills/{skill}", skill, f".claude/skills/{skill}", f".agents/skills/{skill}"]
+        bundle = None
+        error = None
+        for path in candidates:
+            try:
+                bundle = self.github.fetch(f"github/{owner}/{repo}/{path}")
+                break
+            except (OSError, ValueError, KeyError) as exc:
+                error = exc
+        if bundle is None:
+            raise ValueError("skills.sh source package could not be resolved on GitHub") from error
         bundle.source = self.source_id
         bundle.identifier = identifier
         return bundle
@@ -259,6 +300,7 @@ class SkillsShSource:
 
 class ClawHubSource:
     source_id = "clawhub"
+    searchable = True
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -267,18 +309,48 @@ class ClawHubSource:
         return identifier.startswith("clawhub/")
 
     def search(self, query: str, limit: int = 10) -> list[HubSkillMeta]:
-        return []
+        from urllib.parse import quote_plus
+
+        payload = self.http.get_json(f"https://clawhub.ai/api/v1/search?q={quote_plus(query)}")
+        results = []
+        for item in list(payload.get("results") or [])[: min(max(limit, 1), 100)]:
+            name = str(item.get("displayName") or item.get("slug") or "skill")
+            description = str(item.get("summary") or name)
+            results.append(HubSkillMeta(
+                name, description, self.source_id, f"clawhub/{item['slug']}", "community",
+                {"downloads": item.get("downloads"), "updated_at": item.get("updatedAt"),
+                 "author": item.get("ownerHandle"), "category": infer_skill_category(name, description)},
+            ))
+        return results
 
     def fetch(self, identifier: str) -> HubSkillBundle:
         slug = identifier.split("/", 1)[1]
-        item = self.http.get_json(f"https://clawhub.ai/api/v1/skills/{slug}")
+        payload = self.http.get_json(f"https://clawhub.ai/api/v1/skills/{slug}")
+        item = payload.get("skill") if isinstance(payload.get("skill"), dict) else payload
+        files = dict(item.get("files") or {})
+        if not files and item.get("description"):
+            raw = str(item["description"])
+            lines = raw.splitlines()
+            body = raw
+            metadata = {}
+            if lines and lines[0].strip() == "---":
+                try:
+                    closing = next(index for index, line in enumerate(lines[1:], 1) if line.strip() == "---")
+                    metadata = yaml.safe_load("\n".join(lines[1:closing])) or {}
+                    body = "\n".join(lines[closing + 1:]).lstrip()
+                except (StopIteration, yaml.YAMLError):
+                    metadata = {}
+            metadata["name"] = slug
+            metadata["description"] = str(item.get("summary") or metadata.get("description") or slug)
+            skill_md = f"---\n{yaml.safe_dump(metadata, sort_keys=False, allow_unicode=True).strip()}\n---\n\n{body}\n"
+            files = {"SKILL.md": skill_md}
         files = {
             path: self.http.get_text(value) if isinstance(value, str) and value.startswith("http") else value
-            for path, value in dict(item.get("files") or {}).items()
+            for path, value in files.items()
         }
         return HubSkillBundle(
-            str(item.get("name") or slug),
-            str(item.get("description") or slug),
+            slug,
+            str(item.get("summary") or slug),
             self.source_id,
             identifier,
             "community",
@@ -301,6 +373,7 @@ class ClaudeMarketplaceSource(GitHubSource):
 
 class LobeHubSource:
     source_id = "lobehub"
+    searchable = False
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -329,6 +402,7 @@ class LobeHubSource:
 
 class BrowseShSource:
     source_id = "browse-sh"
+    searchable = False
 
     def __init__(self, http=None):
         self.http = http or GuardedHttpClient()
@@ -351,6 +425,7 @@ class SkillsMpSource:
     """SkillsMP search adapter; packages resolve to their public GitHub source."""
 
     source_id = "skillsmp"
+    searchable = True
 
     def __init__(self, http=None, *, api_key: str | None = None, base_url: str = "https://skillsmp.com/api/v1"):
         self.api_key = api_key or os.getenv("SKILLSMP_API_KEY")
@@ -368,44 +443,48 @@ class SkillsMpSource:
         bounded_limit = min(max(int(limit), 1), 50)
         bounded_page = min(max(int(page), 1), 20)
         payload = self.http.get_json(f"{self.base_url}/skills/search?q={quote_plus(query)}&limit={bounded_limit}&page={bounded_page}")
-        self.quota.update(dict(payload.get("rate_limit") or {}))
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        self.quota.update(dict(payload.get("rate_limit") or payload.get("meta", {}).get("rate_limit") or {}))
         self.quota.update(dict(getattr(self.http, "rate_limit", {}) or {}))
         results = []
-        for item in list(payload.get("skills") or payload.get("results") or [])[:bounded_limit]:
+        for item in list(data.get("skills") or data.get("results") or [])[:bounded_limit]:
             slug = str(item.get("slug") or item.get("id") or item.get("name") or "")
-            repository = str(item.get("repository_url") or item.get("repo_url") or item.get("github_url") or "")
+            repository = str(item.get("repository_url") or item.get("repo_url") or item.get("github_url") or item.get("githubUrl") or "")
+            repo_match = re.match(r"https://github\.com/([^/]+)/([^/#]+)/(?:tree|blob)/([^/]+)/(.+)", repository)
+            identifier = f"skillsmp/{slug}"
+            if repo_match:
+                owner, repo, source_ref, source_path = repo_match.groups()
+                identifier = f"skillsmp/github/{owner}/{repo}/{source_ref}/{source_path}"
             results.append(HubSkillMeta(
                 str(item.get("name") or slug), str(item.get("description") or ""), self.source_id,
-                f"skillsmp/{slug}", "community", {"repository_url": repository, "stars": item.get("stars"), "rate_limit": dict(self.quota)},
+                identifier, "community", {"repository_url": repository, "stars": item.get("stars"),
+                "author": item.get("author"), "updated_at": item.get("updatedAt"),
+                "category": infer_skill_category(str(item.get("name") or slug), str(item.get("description") or "")),
+                "rate_limit": dict(self.quota)},
             ))
         return results
 
     def fetch(self, identifier: str) -> HubSkillBundle:
-        slug = identifier.split("/", 1)[1]
-        item = self.http.get_json(f"{self.base_url}/skills/{slug}")
-        repository = str(item.get("repository_url") or item.get("repo_url") or item.get("github_url") or "")
-        path = str(item.get("path") or item.get("skill_path") or "").strip("/")
-        match = re.match(r"https://github\.com/([^/]+)/([^/#]+)(?:/(?:tree|blob)/([^/]+)/(.+))?", repository)
-        if not match:
-            raise ValueError("SkillsMP result has no resolvable GitHub repository")
-        owner, repo, source_ref, url_path = match.groups()
-        resolved_path = path or (url_path or "")
-        if not resolved_path:
-            raise ValueError("SkillsMP result has no skill package path")
+        parts = identifier.split("/")
+        if len(parts) < 6 or parts[1] != "github":
+            raise ValueError("SkillsMP identifier has no pinned GitHub package location; search for the skill again")
+        _source, _kind, owner, repo, source_ref, *path_parts = parts
+        resolved_path = "/".join(path_parts)
         bundle = self.github.fetch(f"github/{owner}/{repo}/{resolved_path}")
         bundle.source = self.source_id
         bundle.identifier = identifier
         bundle.metadata.update({
             "repository_url": f"https://github.com/{owner}/{repo}",
-            "source_ref": source_ref or item.get("ref") or item.get("commit"),
+            "source_ref": source_ref,
             "source_path": resolved_path,
-            "skillsmp_slug": slug,
+            "skillsmp_slug": bundle.name,
         })
         return bundle
 
 
 class OfficialSkillSource:
     source_id = "official"
+    searchable = True
 
     def __init__(self, catalog: dict[str, dict[str, str]] | None = None):
         self.catalog = catalog or {}
@@ -432,9 +511,7 @@ def create_skill_source_router(http=None, *, official_catalog: dict | None = Non
     client = http or GuardedHttpClient()
     return [
         OfficialSkillSource(official_catalog),
-        GitHubSource(client),
         UrlSkillSource(client),
-        WellKnownSkillSource(client),
         SkillsShSource(client),
         ClawHubSource(client),
         ClaudeMarketplaceSource(client),

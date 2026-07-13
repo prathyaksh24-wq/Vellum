@@ -35,9 +35,7 @@ def test_router_exposes_all_documented_source_ids() -> None:
 
     assert {
         "official",
-        "github",
         "url",
-        "well-known",
         "skills-sh",
         "clawhub",
         "claude-marketplace",
@@ -45,6 +43,8 @@ def test_router_exposes_all_documented_source_ids() -> None:
         "browse-sh",
         "skillsmp",
     } <= ids
+    assert "github" not in ids
+    assert "well-known" not in ids
 
 
 def test_direct_url_source_builds_single_file_bundle() -> None:
@@ -137,14 +137,30 @@ def test_skills_sh_resolves_underlying_github_identifier() -> None:
     assert bundle.identifier == "skills-sh/acme/skills/remote"
 
 
+def test_skills_sh_and_clawhub_search_return_embedded_catalog_metadata() -> None:
+    http = FakeHttp()
+    http.json["https://skills.sh/api/search?q=frontend"] = {
+        "skills": [{"id": "anthropics/skills/frontend-design", "name": "frontend-design", "source": "anthropics/skills", "installs": 10}]
+    }
+    http.json["https://clawhub.ai/api/v1/search?q=frontend"] = {
+        "results": [{"slug": "frontend", "displayName": "Frontend Design", "summary": "Frontend UI design", "downloads": 20}]
+    }
+
+    skillssh = SkillsShSource(http).search("frontend")[0]
+    clawhub = ClawHubSource(http).search("frontend")[0]
+
+    assert skillssh.identifier == "skills-sh/anthropics/skills/frontend-design"
+    assert skillssh.extra["category"] == "design"
+    assert clawhub.identifier == "clawhub/frontend"
+    assert clawhub.extra["downloads"] == 20
+
+
 def test_skillsmp_search_resolves_repository_and_exposes_quota_and_provenance() -> None:
     http = FakeHttp()
     http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1"] = {
-        "skills": [{"slug": "remote", "name": "remote", "description": "Deploy", "repository_url": "https://github.com/acme/skills", "path": "skills/remote"}],
+        "success": True,
+        "data": {"skills": [{"id": "remote", "name": "remote", "description": "Deploy", "githubUrl": "https://github.com/acme/skills/tree/main/skills/remote"}]},
         "rate_limit": {"remaining": 9},
-    }
-    http.json["https://skillsmp.test/api/v1/skills/remote"] = {
-        "slug": "remote", "repository_url": "https://github.com/acme/skills/tree/main/skills/remote", "path": "skills/remote"
     }
     http.json["https://api.github.com/repos/acme/skills/contents/skills/remote"] = [
         {"type": "file", "path": "skills/remote/SKILL.md", "download_url": "https://raw.example/SKILL.md"}
@@ -153,7 +169,7 @@ def test_skillsmp_search_resolves_repository_and_exposes_quota_and_provenance() 
     source = SkillsMpSource(http, base_url="https://skillsmp.test/api/v1")
 
     result = source.search("deploy")[0]
-    bundle = source.fetch("skillsmp/remote")
+    bundle = source.fetch(result.identifier)
 
     assert result.extra["rate_limit"]["remaining"] == 9
     assert bundle.metadata["repository_url"] == "https://github.com/acme/skills"

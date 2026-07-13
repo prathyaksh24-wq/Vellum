@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.skills import HubSkillBundle, SkillHub, SkillHubError
+from agent.skills import HubSkillBundle, HubSkillMeta, SkillHub, SkillHubError
 
 
 class FakeSource:
@@ -23,6 +23,7 @@ class FakeSource:
                 "SKILL.md": self.body,
                 "references/guide.md": "Guide",
             },
+            metadata={"repository_url": "https://github.com/acme/skills"},
         )
 
 
@@ -50,6 +51,13 @@ def test_hub_installs_quarantined_bundle_and_records_provenance(tmp_path: Path) 
     assert lock["skills"]["remote-skill"]["identifier"] == "https://example.com/SKILL.md"
     assert lock["skills"]["remote-skill"]["trust_level"] == "community"
     assert lock["skills"]["remote-skill"]["content_hash"] == result["content_hash"]
+
+
+def test_hub_inspection_exposes_cli_and_agent_install_prompt(tmp_path: Path) -> None:
+    detail = SkillHub(tmp_path, sources=[FakeSource(SAFE)]).inspect("https://example.com/SKILL.md")
+
+    assert detail["install_cli"] == "npx skills add https://github.com/acme/skills --skill remote-skill"
+    assert 'Review and install the "remote-skill" skill' in detail["prompt"]
 
 
 def test_hub_requires_confirmation_and_force_for_community_caution(tmp_path: Path) -> None:
@@ -99,3 +107,48 @@ def test_hub_rejects_unsafe_bundle_paths_before_writing(tmp_path: Path) -> None:
         SkillHub(tmp_path, sources=[source]).install("https://example.com/SKILL.md", confirm=True)
 
     assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_discovery_key_deduplicates_same_github_package_across_indexes() -> None:
+    from_skillssh = {"source": "skills-sh", "identifier": "skills-sh/anthropics/skills/frontend-design"}
+    from_skillsmp = {"source": "skillsmp", "identifier": "skillsmp/github/anthropics/skills/main/skills/frontend-design"}
+
+    assert SkillHub._discovery_key(from_skillssh) == SkillHub._discovery_key(from_skillsmp)
+
+
+class SearchSource:
+    searchable = True
+
+    def __init__(self, source_id: str, names: list[str], *, fails: bool = False):
+        self.source_id = source_id
+        self.names = names
+        self.fails = fails
+
+    def search(self, query: str, limit: int = 10):
+        if self.fails:
+            raise ValueError("source unavailable")
+        return [
+            HubSkillMeta(name, f"{name} description", self.source_id, f"{self.source_id}/{name}")
+            for name in self.names
+            if not query or query.casefold() in name.casefold()
+        ][:limit]
+
+
+def test_all_sources_merges_available_results_and_keeps_partial_health(tmp_path: Path) -> None:
+    hub = SkillHub(
+        tmp_path,
+        sources=[
+            SearchSource("first", ["frontend-one"]),
+            SearchSource("broken", [], fails=True),
+            SearchSource("second", ["frontend-two"]),
+        ],
+    )
+
+    results = hub.search("frontend", source_filter="all", limit=10)
+
+    assert {(item["source"], item["name"]) for item in results} == {
+        ("first", "frontend-one"),
+        ("second", "frontend-two"),
+    }
+    assert hub.last_search_health["broken"]["status"] == "error"
+    assert hub.search("frontend", source_filter=None, limit=10) == results

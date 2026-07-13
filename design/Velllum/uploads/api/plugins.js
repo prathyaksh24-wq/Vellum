@@ -16,8 +16,7 @@
     hubSearch: function (body, signal) { return client.request("/api/skills/v2/hub/search", client.jsonOptions("POST", body, signal)); },
     hubInspect: function (identifier, signal) { return client.request("/api/skills/v2/hub/inspect", client.jsonOptions("POST", {identifier:identifier}, signal)); },
     hubMutation: function (action, body) { return client.request("/api/skills/v2/hub/" + action, client.jsonOptions("POST", body)); },
-    learn: function (source) { return client.request("/api/skills/learn", client.jsonOptions("POST", {source:source})); },
-    learnExecute: function (source, threadId) { return client.request("/api/chat", client.jsonOptions("POST", {message:"/learn " + source, thread_id:threadId || "skills-hub"})); },
+    learn: function (source, threadId, category) { return client.request("/api/skills/learn", client.jsonOptions("POST", {source:source, thread_id:threadId || "skills-hub", category:category || "community"})); },
     capabilities: function () { return client.request("/api/capabilities"); },
   };
 })();
