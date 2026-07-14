@@ -272,7 +272,7 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
         user_message="I prefer sports answers to begin with the score.",
         agent_name="SportsAgent",
     )
-    assert specialist[0]["scope"] == "shared"
+    assert specialist[0]["scope"] == "agent:SportsAgent"
 
 
 def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path: Path) -> None:

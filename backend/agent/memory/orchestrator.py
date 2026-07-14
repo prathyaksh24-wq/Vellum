@@ -685,7 +685,7 @@ class MemoryOrchestrator:
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
-                scope=_scope_for_candidate(agent_name, candidate["kind"]),
+                scope=_scope_for_candidate(agent_name),
             )
             item = self.store.get_memory(memory_id)
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
@@ -1179,12 +1179,10 @@ def _scope_for_agent(agent_name: str) -> str:
     return _agent_scope(agent_name)
 
 
-def _scope_for_candidate(agent_name: str, kind: str) -> str:
+def _scope_for_candidate(agent_name: str) -> str:
     normalized_agent = _normalize_scope(agent_name).casefold()
     if normalized_agent in {"vellum", "vellumagent", "main", "mainagent"}:
         return "global"
-    if kind in {"preference", "correction", "goal"}:
-        return "shared"
     return _agent_scope(agent_name)
 
 

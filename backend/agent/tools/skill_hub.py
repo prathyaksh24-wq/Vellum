@@ -6,7 +6,7 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from agent.skills import FilesystemSkillBackend, SkillConfigStore, SkillHub, SkillHubError, SkillMutationCoordinator, SkillRegistry, TapsManager, bundle_content_hash, create_skill_source_router
+from agent.skills import FilesystemSkillBackend, SkillConfigStore, SkillHub, SkillHubError, SkillMutationCoordinator, SkillMutationError, SkillRegistry, TapsManager, bundle_content_hash, create_skill_source_router
 from agent.skills.runtime import SKILLS_PATH
 
 
@@ -46,6 +46,10 @@ def _stage_bundle(action: str, identifier: str, *, category: str, force: bool) -
         raise SkillHubError("community caution requires force")
     bundle = hub._source_for(identifier).fetch(identifier)
     if bundle_content_hash(bundle) != inspected["content_hash"]:
+        # The cached inspection no longer describes upstream. Force the next
+        # staging attempt to rescan the new package instead of replaying a
+        # stale hash mismatch forever.
+        hub._inspect_cache.pop(identifier, None)
         raise SkillHubError("upstream package changed during inspection")
     files = {}
     for path, content in bundle.files.items():
@@ -142,7 +146,19 @@ def skill_hub(
         elif normalized == "pending":
             result = {"ok": True, "pending": _mutations().list_pending()}
         elif normalized == "approve":
-            result = _mutations().approve(identifier or name)
+            mutation_id = identifier or name
+            upstream = ""
+            try:
+                staged_record = _mutations()._read_pending(mutation_id)
+                upstream = str((staged_record.get("payload") or {}).get("identifier") or "")
+            except (SkillMutationError, OSError, ValueError, KeyError):
+                pass
+            try:
+                result = _mutations().approve(mutation_id)
+            except SkillMutationError as exc:
+                if "upstream package changed since inspection" in str(exc) and upstream:
+                    _hub()._inspect_cache.pop(upstream, None)
+                raise
         elif normalized == "reject":
             result = _mutations().reject(identifier or name)
         elif normalized == "tap_list":

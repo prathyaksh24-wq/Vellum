@@ -49,6 +49,10 @@ class XCapabilityService:
         allow_private_reads: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
+        self._custom_search_backend = search_posts_backend is not None
+        self._custom_post_backend = post_backend is not None
+        self._custom_bookmarks_backend = bookmarks_backend is not None
+        self._explicit_agent_reach_provider = agent_reach_provider is not None
         self.search_posts_backend = search_posts_backend or self._default_search_posts
         self.post_backend = post_backend or self._default_post
         self.account_backend = account_backend or self._default_account
@@ -185,7 +189,7 @@ class XCapabilityService:
         query = str(payload.get("query", "")).strip()
         max_results = self._normalize_max_results(payload.get("max_results", 10))
         fallback_reason = ""
-        if self._agent_reach_available():
+        if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_search_backend):
             try:
                 items = [self._normalize_post(item) for item in self.agent_reach_provider.search(query, max_results)]
                 return {"action": "x.search_posts", "items": items, "provider": "agent-reach"}
@@ -206,7 +210,7 @@ class XCapabilityService:
         if not self.allow_private_reads:
             raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
         max_results = self._normalize_max_results(payload.get("max_results", 10))
-        if self._agent_reach_available():
+        if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_bookmarks_backend):
             try:
                 items = [self._normalize_post(item) for item in self.agent_reach_provider.bookmarks(max_results)]
                 return {"action": "x.bookmarks", "items": items, "provider": "agent-reach"}
@@ -257,7 +261,7 @@ class XCapabilityService:
         if payload.get("confirm") is not True:
             raise ToolPermissionError("Posting to X requires confirm=True.")
         text = str(payload.get("text", ""))
-        if self._agent_reach_available():
+        if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_post_backend):
             try:
                 return {
                     "action": "x.publish_post",
