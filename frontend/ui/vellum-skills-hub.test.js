@@ -44,8 +44,27 @@ describe("production Skills Hub", () => {
       expect(html).toContain(status);
     }
     expect(html).toContain('className="sk-learn-feed"');
-    expect(html).toContain("setLearnOpen(false);setLearnSource('');startLearnJob(sourceValue)");
-    expect(html).toContain("reviewLearnJob(job)");
+    expect(html).toContain("setLearnOpen(false);setLearnSource('');setLearnError('');startLearnActivity(sourceValue)");
+    expect(html).toContain("SKILL_ACTIVITY_STORAGE");
+    expect(html).toContain("skillActivityListeners");
+    expect(html).toContain("skNoteStage");
+    expect(html).toContain("sk-learn-note.leaving");
+  });
+
+  test("renders ranked discovery, resilient details, validation, and direct uninstall confirmation", () => {
+    const html = fs.readFileSync(htmlPath, "utf8");
+    for (const label of ["Most Popular", "Trending", "Most Downloaded", "Retry inspection", "Confirm skill removal", "Remove skill"]) {
+      expect(html).toContain(label);
+    }
+    expect(html).toContain("isValidSkillLearnInput");
+    expect(html).toContain("valid public skill URL");
+    expect(html).toContain("confirm:true");
+    expect(html).toContain("Built-in skills can't be removed");
+    expect(html).toContain("startInstallActivity(payload)");
+    expect(html).toContain("SKILL_RANKING_OPTIONS");
+    expect(html).toContain('ariaLabel="Discovery ranking"');
+    expect(html).toContain("setInterval(()=>loadList(false,''),300000)");
+    expect(html).toContain("item.author?` · by ${item.author}`:''");
   });
 
   test("colocated API client supports cancellable typed operations", () => {

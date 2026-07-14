@@ -18,7 +18,7 @@ _MUTATIONS: SkillMutationCoordinator | None = None
 def _hub() -> SkillHub:
     global _HUB
     if _HUB is None:
-        _HUB = SkillHub(SKILLS_PATH, sources=create_skill_source_router())
+        _HUB = SkillHub(SKILLS_PATH, sources=create_skill_source_router(skills_root=SKILLS_PATH))
     return _HUB
 
 
@@ -128,7 +128,15 @@ def skill_hub(
         elif normalized == "audit":
             result = {"ok": True, "audit": _hub().audit(name)}
         elif normalized == "uninstall":
-            result = _mutations().submit("hub_uninstall", name=name, origin="hub")
+            if not confirm:
+                raise SkillHubError("Confirm uninstall before removing this skill")
+            from agent.skills.catalog import SkillCatalog
+            from agent.skills.curator import CuratorBackupStore
+
+            snapshot = CuratorBackupStore(_hub().root).create(f"pre-uninstall {name}")
+            result = _hub().uninstall(name, confirm=True)
+            SkillCatalog(_hub().root).reconcile(embed_semantics=False)
+            result["snapshot"] = snapshot
         elif normalized == "import_local":
             result = _stage_local_import(name, category=category)
         elif normalized == "pending":

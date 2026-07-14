@@ -59,3 +59,37 @@ def test_marketplace_intake_returns_only_after_pending_is_visible(monkeypatch, t
     assert response.status_code == 200
     assert response.json()["status"] == "pending"
     assert response.json()["mutation"]["id"] == pending.json()["items"][0]["id"]
+
+
+def test_learn_rejects_garbage_single_token_before_authoring(monkeypatch, tmp_path) -> None:
+    surface = SkillSurfaceService(tmp_path / ".skills", logs_root=tmp_path / "logs", sources=[])
+    monkeypatch.setattr(api, "_skill_surface_singleton", surface)
+
+    with TestClient(api.app) as client:
+        response = client.post("/api/skills/learn", json={"source": "dhfkdsfsf"})
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "invalid_skill_source"
+
+
+def test_confirmed_uninstall_is_immediate_and_never_creates_pending(monkeypatch, tmp_path) -> None:
+    root = tmp_path / ".skills"
+    source = FakeMarketplaceSource()
+    hub = SkillHub(root, sources=[source])
+    hub.install("skills-sh/acme/skills/remote", category="community", confirm=True)
+    surface = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[source])
+    monkeypatch.setattr(api, "_skill_surface_singleton", surface)
+    monkeypatch.setattr(skill_hub_tools, "_HUB", hub)
+    monkeypatch.setattr(skill_hub_tools, "_MUTATIONS", None)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/skills/v2/hub/uninstall",
+            json={"name": "remote-skill", "confirm": True},
+        )
+        pending = client.get("/api/skills/v2/catalog", params={"view": "pending"})
+
+    assert response.status_code == 200
+    assert response.json()["result"]["action"] == "uninstall"
+    assert pending.json()["items"] == []
+    assert not (root / "packages" / "community" / "remote-skill").exists()

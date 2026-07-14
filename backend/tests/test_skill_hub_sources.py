@@ -11,6 +11,7 @@ from agent.skills import (
     create_skill_source_router,
     GuardedHttpClient,
 )
+from pathlib import Path
 import socket
 import pytest
 
@@ -45,6 +46,23 @@ def test_router_exposes_all_documented_source_ids() -> None:
     } <= ids
     assert "github" not in ids
     assert "well-known" not in ids
+
+
+def test_router_populates_official_source_from_bundled_packages(tmp_path: Path) -> None:
+    package = tmp_path / "packages" / "uncategorized" / "vellum-official"
+    package.mkdir(parents=True)
+    package.joinpath("SKILL.md").write_text(
+        "---\nname: vellum-official\ndescription: Official workflow\nmetadata:\n  hermes:\n    tags: [migrated, vellum]\n---\n# Official\n",
+        encoding="utf-8",
+    )
+
+    official = next(
+        source for source in create_skill_source_router(FakeHttp(), skills_root=tmp_path)
+        if source.source_id == "official"
+    )
+
+    assert official.search("")[0].name == "vellum-official"
+    assert official.search("")[0].extra["author"] == "Vellum"
 
 
 def test_direct_url_source_builds_single_file_bundle() -> None:
@@ -137,12 +155,26 @@ def test_skills_sh_resolves_underlying_github_identifier() -> None:
     assert bundle.identifier == "skills-sh/acme/skills/remote"
 
 
+def test_skills_sh_resolves_codex_skill_repository_layout() -> None:
+    http = FakeHttp()
+    api = "https://api.github.com/repos/openai/codex/contents/.codex/skills/babysit-pr"
+    http.json[api] = [
+        {"type": "file", "path": ".codex/skills/babysit-pr/SKILL.md", "download_url": "https://raw.example/babysit-pr.md"}
+    ]
+    http.text["https://raw.example/babysit-pr.md"] = SKILL.replace("name: remote", "name: babysit-pr")
+
+    bundle = SkillsShSource(http).fetch("skills-sh/openai/codex/babysit-pr")
+
+    assert bundle.name == "babysit-pr"
+    assert bundle.source == "skills-sh"
+
+
 def test_skills_sh_and_clawhub_search_return_embedded_catalog_metadata() -> None:
     http = FakeHttp()
-    http.json["https://skills.sh/api/search?q=frontend"] = {
+    http.json["https://skills.sh/api/search?q=frontend&limit=10"] = {
         "skills": [{"id": "anthropics/skills/frontend-design", "name": "frontend-design", "source": "anthropics/skills", "installs": 10}]
     }
-    http.json["https://clawhub.ai/api/v1/search?q=frontend"] = {
+    http.json["https://clawhub.ai/api/v1/search?q=frontend&limit=10"] = {
         "results": [{"slug": "frontend", "displayName": "Frontend Design", "summary": "Frontend UI design", "downloads": 20}]
     }
 
@@ -155,9 +187,39 @@ def test_skills_sh_and_clawhub_search_return_embedded_catalog_metadata() -> None
     assert clawhub.extra["downloads"] == 20
 
 
+def test_default_source_discovery_uses_supported_ranked_endpoints() -> None:
+    http = FakeHttp()
+    http.json["https://skills.sh/api/search?q=skill&limit=10"] = {
+        "skills": [{"id": "acme/skills/popular", "name": "popular", "source": "acme/skills", "installs": 50}]
+    }
+    http.json["https://clawhub.ai/api/v1/skills?limit=10&sort=stars"] = {
+        "items": [{"slug": "rising", "displayName": "Rising", "summary": "Trending", "stats": {"downloads": 40, "stars": 5}}]
+    }
+
+    skillssh = SkillsShSource(http).search("")[0]
+    clawhub = ClawHubSource(http).search("")[0]
+
+    assert skillssh.extra["installs"] == 50
+    assert clawhub.extra["downloads"] == 40
+    assert clawhub.extra["stars"] == 5
+
+
+def test_ranked_sources_choose_current_upstream_sort() -> None:
+    http = FakeHttp()
+    http.json["https://clawhub.ai/api/v1/skills?limit=10&sort=downloads"] = {
+        "items": [{"slug": "downloaded", "displayName": "Downloaded", "stats": {"downloads": 99}}]
+    }
+    http.json["https://skillsmp.test/api/v1/skills/search?q=skill&limit=10&page=1&sortBy=recent"] = {
+        "data": {"skills": [{"id": "new", "name": "new", "updatedAt": "1780000000"}]}
+    }
+
+    assert ClawHubSource(http).discover("most-downloaded")[0].extra["downloads"] == 99
+    assert SkillsMpSource(http, base_url="https://skillsmp.test/api/v1").discover("trending")[0].name == "new"
+
+
 def test_skillsmp_search_resolves_repository_and_exposes_quota_and_provenance() -> None:
     http = FakeHttp()
-    http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1"] = {
+    http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1&sortBy=stars"] = {
         "success": True,
         "data": {"skills": [{"id": "remote", "name": "remote", "description": "Deploy", "githubUrl": "https://github.com/acme/skills/tree/main/skills/remote"}]},
         "rate_limit": {"remaining": 9},

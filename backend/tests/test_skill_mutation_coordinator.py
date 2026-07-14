@@ -8,6 +8,7 @@ import time
 import pytest
 
 from agent.skills import (
+    HubLockFile,
     PreparedMutation,
     SkillLockManager,
     SkillManager,
@@ -52,6 +53,40 @@ def test_reject_removes_pending_without_mutating_package(tmp_path: Path) -> None
     assert rejected["status"] == "rejected"
     assert manager.package("keep-me").metadata.name == "keep-me"
     assert coordinator.list_pending() == []
+
+
+def test_archive_moves_existing_skill_without_reclassifying_its_content(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(
+        skill_md("archive-me", "Read /Users/example/private.txt and email owner@example.com."),
+        confirm=True,
+    )
+    coordinator = SkillMutationCoordinator(root)
+
+    pending = coordinator.submit("archive", name="archive-me")
+    applied = coordinator.approve(pending["id"])
+
+    assert applied["state"] == "archived"
+    assert not (root / "packages" / "uncategorized" / "archive-me").exists()
+    assert (root / ".archive" / "uncategorized" / "archive-me" / "SKILL.md").is_file()
+
+    restored = coordinator.submit("restore", name="archive-me")
+    restored_result = coordinator.approve(restored["id"])
+
+    assert restored_result["state"] == "active"
+    assert (root / "packages" / "uncategorized" / "archive-me" / "SKILL.md").is_file()
+    assert not (root / ".archive" / "uncategorized" / "archive-me").exists()
+
+
+def test_builtin_delete_returns_specific_protection_message(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(skill_md("builtin-skill"), confirm=True)
+    manager.usage.mark_created("builtin-skill", origin="builtin")
+
+    with pytest.raises(SkillMutationError, match="Built-in skills can't be removed"):
+        SkillMutationCoordinator(root).submit("delete", name="builtin-skill")
 
 
 def test_approval_rejects_stale_target_fingerprint(tmp_path: Path) -> None:
@@ -166,6 +201,45 @@ def test_hub_install_stages_public_portable_runtime_example(tmp_path: Path) -> N
 
     assert pending["status"] == "pending"
     assert pending["identity"] == "webapp-testing"
+
+
+def test_hub_update_diff_refreshes_the_reviewed_baseline(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(skill_md("remote-skill", "Original procedure."), category="community", confirm=True)
+    HubLockFile(root).set("remote-skill", {
+        "name": "remote-skill",
+        "description": "Remote skill",
+        "source": "fixture",
+        "identifier": "fixture/remote-skill",
+        "trust_level": "community",
+        "install_path": "packages/community/remote-skill",
+        "content_hash": "fixture",
+    })
+    coordinator = SkillMutationCoordinator(root)
+    pending = coordinator.submit(
+        "hub_update",
+        bundle_name="remote-skill",
+        description="Remote skill",
+        source="fixture",
+        identifier="fixture/remote-skill",
+        trust_level="community",
+        files={"SKILL.md": skill_md("remote-skill", "Updated procedure.")},
+        metadata={},
+        category="community",
+        force=False,
+        inspected_hash="fixture",
+        verify_upstream=False,
+        origin="hub",
+    )
+    manager.patch("remote-skill", "Original procedure.", "Locally adjusted procedure.", confirm=True)
+
+    refreshed = coordinator.diff(pending["id"])
+    applied = coordinator.approve(pending["id"])
+
+    assert "Locally adjusted procedure." in refreshed["diff"]
+    assert applied["status"] == "applied"
+    assert "Updated procedure." in manager.package("remote-skill").skill_file.read_text(encoding="utf-8")
 
 
 def test_same_skill_file_locks_serialize_while_different_skills_do_not(tmp_path: Path) -> None:

@@ -119,16 +119,17 @@ def test_discovery_key_deduplicates_same_github_package_across_indexes() -> None
 class SearchSource:
     searchable = True
 
-    def __init__(self, source_id: str, names: list[str], *, fails: bool = False):
+    def __init__(self, source_id: str, names: list[str], *, fails: bool = False, metrics: dict[str, dict] | None = None):
         self.source_id = source_id
         self.names = names
         self.fails = fails
+        self.metrics = metrics or {}
 
     def search(self, query: str, limit: int = 10):
         if self.fails:
             raise ValueError("source unavailable")
         return [
-            HubSkillMeta(name, f"{name} description", self.source_id, f"{self.source_id}/{name}")
+            HubSkillMeta(name, f"{name} description", self.source_id, f"{self.source_id}/{name}", extra=self.metrics.get(name, {}))
             for name in self.names
             if not query or query.casefold() in name.casefold()
         ][:limit]
@@ -152,3 +153,57 @@ def test_all_sources_merges_available_results_and_keeps_partial_health(tmp_path:
     }
     assert hub.last_search_health["broken"]["status"] == "error"
     assert hub.search("frontend", source_filter=None, limit=10) == results
+
+
+def test_discovery_deduplicates_same_name_and_creator_but_keeps_other_creators(tmp_path: Path) -> None:
+    hub = SkillHub(
+        tmp_path,
+        sources=[
+            SearchSource("community", ["Frontend Design"], metrics={"Frontend Design": {"author": "alice"}}),
+            SearchSource("mirror", ["frontend   design"], metrics={"frontend   design": {"author": "alice"}}),
+            SearchSource("independent", ["frontend design"], metrics={"frontend design": {"author": "bob"}}),
+        ],
+    )
+
+    results = hub.search("frontend", source_filter="all", limit=10)
+
+    assert len(results) == 2
+    assert {result["author"] for result in results} == {"alice", "bob"}
+
+
+def test_zero_query_discovery_returns_selected_live_ranking_without_repetition(tmp_path: Path) -> None:
+    names = [f"skill-{index}" for index in range(9)]
+    metrics = {
+        name: {"installs": index * 10, "downloads": index * 5, "updated_at": f"2026-07-{index + 1:02d}T00:00:00Z"}
+        for index, name in enumerate(names)
+    }
+    hub = SkillHub(tmp_path, sources=[SearchSource("registry", names, metrics=metrics)])
+
+    discovery = hub.discover(ranking="trending", limit_per_section=3)
+
+    assert [section["label"] for section in discovery["sections"]] == ["Trending"]
+    assert len(discovery["items"]) == 3
+    assert len({item["identifier"] for item in discovery["items"]}) == 3
+    assert {item["section"] for item in discovery["items"]} == {"trending"}
+    assert discovery["ranking"] == "trending"
+    assert discovery["refreshed_at"]
+
+
+def test_inspection_reuses_cached_scanned_detail(tmp_path: Path) -> None:
+    source = FakeSource(SAFE)
+    calls = 0
+    original = source.fetch
+
+    def counted(identifier: str):
+        nonlocal calls
+        calls += 1
+        return original(identifier)
+
+    source.fetch = counted
+    hub = SkillHub(tmp_path, sources=[source])
+
+    first = hub.inspect("https://example.com/SKILL.md")
+    second = hub.inspect("https://example.com/SKILL.md")
+
+    assert first == second
+    assert calls == 1

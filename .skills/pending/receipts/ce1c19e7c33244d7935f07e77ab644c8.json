@@ -1,0 +1,19 @@
+{
+  "completed_at": "2026-07-14T06:17:32.886576+00:00",
+  "id": "ce1c19e7c33244d7935f07e77ab644c8",
+  "idempotency_key": "a226747bd44213a1c05846503a2c717da462055fe5209ad3a750aa2392807c03",
+  "result": {
+    "action": "uninstall",
+    "id": "ce1c19e7c33244d7935f07e77ab644c8",
+    "idempotency_key": "a226747bd44213a1c05846503a2c717da462055fe5209ad3a750aa2392807c03",
+    "name": "ontology",
+    "ok": true,
+    "snapshot": {
+      "created_at": "2026-07-14T06:17:32.081788+00:00",
+      "id": "20260714T061732.081788Z",
+      "reason": "pre-delete ontology",
+      "size_bytes": 48944
+    },
+    "status": "applied"
+  }
+}
