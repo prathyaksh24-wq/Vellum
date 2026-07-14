@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import copy
 import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import shutil
 import tempfile
+import time
 from typing import Any
+import unicodedata
+from urllib.parse import urlparse
 
 from agent.skills.hub_models import HubSkillBundle
 from agent.skills.parser import SkillPackageError, SkillPackageParser
@@ -153,6 +157,8 @@ class SkillHub:
         self.parser = SkillPackageParser()
         self.lock = HubLockFile(self.root)
         self.last_search_health: dict[str, dict[str, Any]] = {}
+        self._inspect_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+        self._inspect_ttl_seconds = 300
 
     def search(self, query: str, *, source_filter: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
         normalized_filter = str(source_filter or "all").strip().casefold() or "all"
@@ -189,9 +195,65 @@ class SkillHub:
         trust_rank = {"official": 3, "builtin": 3, "trusted": 2, "community": 1}
         results.sort(key=lambda item: (-trust_rank.get(item["trust_level"], 0), item["name"]))
         unique: dict[str, dict[str, Any]] = {}
+        unique_identities: set[tuple[str, str]] = set()
         for item in results:
-            unique.setdefault(self._discovery_key(item), item)
+            key = self._discovery_key(item)
+            normalized_name = " ".join(unicodedata.normalize("NFKC", str(item.get("name") or "")).casefold().split())
+            creator = self._discovery_creator(item)
+            identity = (normalized_name, creator) if creator else None
+            if key in unique or (identity is not None and identity in unique_identities):
+                continue
+            unique[key] = item
+            if identity is not None:
+                unique_identities.add(identity)
         return list(unique.values())[:limit]
+
+    def discover(self, *, source_filter: str | None = None, limit_per_section: int = 8) -> dict[str, Any]:
+        """Return a zero-query, cross-source discovery feed with stable rankings."""
+        section_size = max(1, min(int(limit_per_section), 20))
+        candidates = self.search("", source_filter=source_filter, limit=min(100, section_size * 8))
+
+        def number(item: dict[str, Any], *fields: str) -> float:
+            for field in fields:
+                value = item.get(field)
+                try:
+                    if value is not None:
+                        return float(value)
+                except (TypeError, ValueError):
+                    continue
+            return 0.0
+
+        def timestamp(item: dict[str, Any]) -> float:
+            raw = str(item.get("updated_at") or "").strip().replace("Z", "+00:00")
+            if not raw:
+                return 0.0
+            try:
+                return datetime.fromisoformat(raw).timestamp()
+            except ValueError:
+                return 0.0
+
+        rankings = (
+            ("most-popular", "Most Popular", lambda item: (number(item, "installs", "downloads", "stars"), timestamp(item))),
+            ("trending", "Trending", lambda item: (timestamp(item), number(item, "installs", "downloads", "stars"))),
+            ("most-downloaded", "Most Downloaded", lambda item: (number(item, "downloads", "installs"), timestamp(item))),
+        )
+        remaining = {self._discovery_key(item): item for item in candidates}
+        sections: list[dict[str, Any]] = []
+        flattened: list[dict[str, Any]] = []
+        for section_id, label, score in rankings:
+            ranked = sorted(
+                remaining.items(),
+                key=lambda pair: (score(pair[1]), pair[1].get("name", "").casefold()),
+                reverse=True,
+            )[:section_size]
+            rows = []
+            for rank, (key, item) in enumerate(ranked, start=1):
+                remaining.pop(key, None)
+                row = {**item, "section": section_id, "section_label": label, "rank": rank}
+                rows.append(row)
+                flattened.append(row)
+            sections.append({"id": section_id, "label": label, "count": len(rows)})
+        return {"items": flattened, "sections": sections}
 
     @staticmethod
     def _search_source(source, query: str, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -213,7 +275,9 @@ class SkillHub:
                     "trust_level": item.trust_level,
                     "category": str(extra.get("category") or "other"),
                     "repository_url": extra.get("repository_url"),
-                    "installs": extra.get("installs") or extra.get("downloads"),
+                    "installs": extra.get("installs"),
+                    "downloads": extra.get("downloads"),
+                    "stars": extra.get("stars"),
                     "updated_at": extra.get("updated_at"),
                     "author": extra.get("author"),
                     "extra": extra,
@@ -233,8 +297,33 @@ class SkillHub:
             return f"github:{parts[1].casefold()}/{parts[2].casefold()}:{'/'.join(parts[3:]).casefold()}"
         return f"{item.get('source', 'unknown')}:{identifier.casefold()}"
 
+    @staticmethod
+    def _discovery_creator(item: dict[str, Any]) -> str:
+        author = str(item.get("author") or "").strip().casefold().lstrip("@")
+        if author:
+            return author
+        repository = str(item.get("repository_url") or "").strip()
+        if repository:
+            parts = [part for part in urlparse(repository).path.split("/") if part]
+            if parts:
+                return parts[0].casefold()
+        identifier = str(item.get("identifier") or "")
+        parts = identifier.split("/")
+        if identifier.startswith("skills-sh/") and len(parts) >= 2:
+            return parts[1].casefold()
+        if identifier.startswith("skillsmp/github/") and len(parts) >= 3:
+            return parts[2].casefold()
+        if identifier.startswith("github/") and len(parts) >= 2:
+            return parts[1].casefold()
+        return ""
+
     def inspect(self, identifier: str) -> dict[str, Any]:
+        cached = self._inspect_cache.get(identifier)
+        if cached and cached[0] > time.monotonic():
+            return copy.deepcopy(cached[1])
         bundle = self._source_for(identifier).fetch(identifier)
+        if not isinstance(bundle.files, dict) or "SKILL.md" not in bundle.files:
+            raise SkillHubError("source package does not contain a valid SKILL.md")
         quarantine_root = self.root / ".hub" / "quarantine"
         quarantine_root.mkdir(parents=True, exist_ok=True)
         staging = Path(tempfile.mkdtemp(prefix="inspect-", dir=quarantine_root))
@@ -255,7 +344,7 @@ class SkillHub:
                 repository_url=str(bundle.metadata.get("repository_url") or ""),
                 install_command=str(bundle.metadata.get("install_command") or ""),
             )
-            return {
+            detail = {
                 "name": bundle.name,
                 "description": bundle.description,
                 "source": bundle.source,
@@ -271,6 +360,8 @@ class SkillHub:
                 "source_path": bundle.metadata.get("source_path"),
                 **install_surfaces,
             }
+            self._inspect_cache[identifier] = (time.monotonic() + self._inspect_ttl_seconds, detail)
+            return copy.deepcopy(detail)
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 

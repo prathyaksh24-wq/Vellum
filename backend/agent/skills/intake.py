@@ -30,3 +30,24 @@ def resolve_skill_intake(value: str) -> SkillIntakeTarget:
         slug = parts[-1]
         return SkillIntakeTarget("marketplace", f"clawhub/{slug}", "clawhub")
     return SkillIntakeTarget("author", clean)
+
+
+def validate_skill_learn_input(value: str) -> str:
+    """Reject malformed source values while retaining explicit procedure learning."""
+    clean = value.strip()
+    if clean.startswith(("skills-sh/", "skills.sh/", "skillsmp/", "clawhub/", "official/")):
+        return clean
+    parsed = urlparse(clean)
+    if parsed.scheme or "://" in clean:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or any(character.isspace() for character in clean)
+        ):
+            raise ValueError("Enter a valid public HTTP(S) skill URL")
+        return clean
+    if len(clean) < 12 or not any(character.isspace() for character in clean):
+        raise ValueError("Enter a valid public skill URL or a meaningful procedure")
+    return clean

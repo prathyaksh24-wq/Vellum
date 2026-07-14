@@ -1787,11 +1787,18 @@ async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/skills/learn")
 async def learn_skill(payload: dict[str, Any]) -> dict[str, Any]:
-    from agent.skills.intake import resolve_skill_intake
+    from agent.skills.intake import resolve_skill_intake, validate_skill_learn_input
 
     source = str(payload.get("source") or "").strip()
     if not source:
         raise HTTPException(status_code=400, detail="learn source is required")
+    try:
+        validate_skill_learn_input(source)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_skill_source", "message": str(exc)},
+        ) from exc
     target = resolve_skill_intake(source)
     if target.kind == "marketplace":
         result = json.loads(skill_hub.invoke({
@@ -1847,6 +1854,7 @@ class SkillHubMutationRequest(BaseModel):
     name: str = ""
     category: str = "uncategorized"
     force: bool = False
+    confirm: bool = False
 
 
 class DuplicateDecisionRequest(BaseModel):
@@ -1957,24 +1965,45 @@ async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]
 
     query = SkillPrivacyGate.marketplace_query(request.query)
     surface = _skill_surface()
-    items = surface.hub.search(query, source_filter=request.source or "all", limit=request.limit)
+    if not query:
+        discovery = await asyncio.to_thread(
+            surface.hub.discover,
+            source_filter=request.source or "all",
+            limit_per_section=max(1, min(12, request.limit // 3 or 1)),
+        )
+        items = discovery["items"]
+    else:
+        discovery = {"sections": []}
+        items = await asyncio.to_thread(
+            surface.hub.search,
+            query,
+            source_filter=request.source or "all",
+            limit=request.limit,
+        )
     if request.category != "all":
         items = [item for item in items if item.get("category") == request.category]
-    return {"items": items, "source_health": _skills_source_health(surface)}
+    return {"items": items, "sections": discovery["sections"], "source_health": _skills_source_health(surface)}
 
 
 @router.post("/skills/v2/hub/inspect")
 async def skills_v2_hub_inspect(request: SkillHubMutationRequest) -> dict[str, Any]:
     try:
-        return {"skill": _skill_surface().hub.inspect(request.identifier)}
+        return {"skill": await asyncio.to_thread(_skill_surface().hub.inspect, request.identifier)}
     except (ValueError, OSError, KeyError) as exc:
         raise HTTPException(status_code=400, detail={"code": "hub_inspection_failed", "message": str(exc)}) from exc
 
 
 @router.post("/skills/v2/hub/{action}")
 async def skills_v2_hub_mutation(action: Literal["install", "update", "uninstall", "import_local"], request: SkillHubMutationRequest) -> dict[str, Any]:
-    payload = {"action": action, "identifier": request.identifier, "name": request.name, "category": request.category, "force": request.force}
-    result = json.loads(skill_hub.invoke(payload))
+    payload = {
+        "action": action,
+        "identifier": request.identifier,
+        "name": request.name,
+        "category": request.category,
+        "force": request.force,
+        "confirm": request.confirm,
+    }
+    result = await asyncio.to_thread(lambda: json.loads(skill_hub.invoke(payload)))
     if result.get("ok") is False:
         raise HTTPException(status_code=400, detail={"code": "hub_mutation_failed", "message": result.get("error")})
     return {"result": result}

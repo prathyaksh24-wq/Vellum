@@ -54,7 +54,10 @@ class GuardedHttpClient:
         for attempt in range(self.retries + 1):
             try:
                 with httpx.Client(follow_redirects=True, timeout=self.timeout) as client:
-                    response = client.get(url, headers={"Accept-Encoding": "identity", **self.headers})
+                    response = client.get(
+                        url,
+                        headers={"Accept-Encoding": "identity", "User-Agent": "Vellum/1.0", **self.headers},
+                    )
                     response.raise_for_status()
                     self._validate(str(response.url))
                     self._validate_dns(response.url.host)
@@ -252,7 +255,8 @@ class SkillsShSource:
     searchable = True
 
     def __init__(self, http=None):
-        self.http = http or GuardedHttpClient()
+        token = str(os.getenv("VERCEL_OIDC_TOKEN") or "").strip()
+        self.http = http or GuardedHttpClient(headers={"Authorization": f"Bearer {token}"} if token else {})
         self.github = GitHubSource(self.http)
 
     def matches(self, identifier: str) -> bool:
@@ -261,9 +265,17 @@ class SkillsShSource:
     def search(self, query: str, limit: int = 10) -> list[HubSkillMeta]:
         from urllib.parse import quote_plus
 
-        payload = self.http.get_json(f"https://skills.sh/api/search?q={quote_plus(query)}")
+        bounded_limit = min(max(int(limit), 1), 200)
+        if query.strip():
+            payload = self.http.get_json(
+                f"https://skills.sh/api/v1/skills/search?q={quote_plus(query)}&limit={bounded_limit}"
+            )
+        else:
+            payload = self.http.get_json(
+                f"https://skills.sh/api/v1/skills?view=all-time&per_page={bounded_limit}"
+            )
         results = []
-        for item in list(payload.get("skills") or [])[: min(max(limit, 1), 100)]:
+        for item in list(payload.get("data") or payload.get("skills") or [])[:bounded_limit]:
             identifier = str(item.get("id") or "").strip("/")
             name = str(item.get("name") or item.get("skillId") or identifier.rsplit("/", 1)[-1])
             source_repo = str(item.get("source") or "/".join(identifier.split("/")[:2]))
@@ -282,7 +294,13 @@ class SkillsShSource:
         if len(parts) < 3:
             raise ValueError("skills.sh identifier must include owner/repo/skill")
         owner, repo, skill = parts[0], parts[1], "/".join(parts[2:])
-        candidates = [f"skills/{skill}", skill, f".claude/skills/{skill}", f".agents/skills/{skill}"]
+        candidates = [
+            f"skills/{skill}",
+            skill,
+            f".claude/skills/{skill}",
+            f".agents/skills/{skill}",
+            f".codex/skills/{skill}",
+        ]
         bundle = None
         error = None
         for path in candidates:
@@ -311,14 +329,25 @@ class ClawHubSource:
     def search(self, query: str, limit: int = 10) -> list[HubSkillMeta]:
         from urllib.parse import quote_plus
 
-        payload = self.http.get_json(f"https://clawhub.ai/api/v1/search?q={quote_plus(query)}")
+        bounded_limit = min(max(int(limit), 1), 100)
+        if query.strip():
+            payload = self.http.get_json(
+                f"https://clawhub.ai/api/v1/search?q={quote_plus(query)}&limit={bounded_limit}"
+            )
+        else:
+            payload = self.http.get_json(
+                f"https://clawhub.ai/api/v1/skills?limit={bounded_limit}&sort=trending"
+            )
         results = []
-        for item in list(payload.get("results") or [])[: min(max(limit, 1), 100)]:
+        for item in list(payload.get("results") or payload.get("items") or [])[:bounded_limit]:
             name = str(item.get("displayName") or item.get("slug") or "skill")
             description = str(item.get("summary") or name)
+            stats = item.get("stats") if isinstance(item.get("stats"), dict) else {}
             results.append(HubSkillMeta(
                 name, description, self.source_id, f"clawhub/{item['slug']}", "community",
-                {"downloads": item.get("downloads"), "updated_at": item.get("updatedAt"),
+                {"downloads": item.get("downloads") or stats.get("downloads"),
+                 "installs": item.get("installs") or stats.get("installs"),
+                 "stars": item.get("stars") or stats.get("stars"), "updated_at": item.get("updatedAt"),
                  "author": item.get("ownerHandle"), "category": infer_skill_category(name, description)},
             ))
         return results
@@ -442,7 +471,14 @@ class SkillsMpSource:
 
         bounded_limit = min(max(int(limit), 1), 50)
         bounded_page = min(max(int(page), 1), 20)
-        payload = self.http.get_json(f"{self.base_url}/skills/search?q={quote_plus(query)}&limit={bounded_limit}&page={bounded_page}")
+        # SkillsMP has no browse endpoint and requires a keyword. Its documented
+        # anonymous search supports star sorting, so use the broad catalog term
+        # only for Vellum's zero-query discovery view.
+        effective_query = query.strip() or "skill"
+        payload = self.http.get_json(
+            f"{self.base_url}/skills/search?q={quote_plus(effective_query)}&limit={bounded_limit}"
+            f"&page={bounded_page}&sortBy=stars"
+        )
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
         self.quota.update(dict(payload.get("rate_limit") or payload.get("meta", {}).get("rate_limit") or {}))
         self.quota.update(dict(getattr(self.http, "rate_limit", {}) or {}))
@@ -512,10 +548,10 @@ def create_skill_source_router(http=None, *, official_catalog: dict | None = Non
     return [
         OfficialSkillSource(official_catalog),
         UrlSkillSource(client),
-        SkillsShSource(client),
+        SkillsShSource(http),
         ClawHubSource(client),
         ClaudeMarketplaceSource(client),
         LobeHubSource(client),
         BrowseShSource(client),
-        SkillsMpSource(client),
+        SkillsMpSource(http),
     ]

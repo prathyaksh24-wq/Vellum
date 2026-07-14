@@ -137,12 +137,26 @@ def test_skills_sh_resolves_underlying_github_identifier() -> None:
     assert bundle.identifier == "skills-sh/acme/skills/remote"
 
 
+def test_skills_sh_resolves_codex_skill_repository_layout() -> None:
+    http = FakeHttp()
+    api = "https://api.github.com/repos/openai/codex/contents/.codex/skills/babysit-pr"
+    http.json[api] = [
+        {"type": "file", "path": ".codex/skills/babysit-pr/SKILL.md", "download_url": "https://raw.example/babysit-pr.md"}
+    ]
+    http.text["https://raw.example/babysit-pr.md"] = SKILL.replace("name: remote", "name: babysit-pr")
+
+    bundle = SkillsShSource(http).fetch("skills-sh/openai/codex/babysit-pr")
+
+    assert bundle.name == "babysit-pr"
+    assert bundle.source == "skills-sh"
+
+
 def test_skills_sh_and_clawhub_search_return_embedded_catalog_metadata() -> None:
     http = FakeHttp()
-    http.json["https://skills.sh/api/search?q=frontend"] = {
-        "skills": [{"id": "anthropics/skills/frontend-design", "name": "frontend-design", "source": "anthropics/skills", "installs": 10}]
+    http.json["https://skills.sh/api/v1/skills/search?q=frontend&limit=10"] = {
+        "data": [{"id": "anthropics/skills/frontend-design", "name": "frontend-design", "source": "anthropics/skills", "installs": 10}]
     }
-    http.json["https://clawhub.ai/api/v1/search?q=frontend"] = {
+    http.json["https://clawhub.ai/api/v1/search?q=frontend&limit=10"] = {
         "results": [{"slug": "frontend", "displayName": "Frontend Design", "summary": "Frontend UI design", "downloads": 20}]
     }
 
@@ -155,9 +169,26 @@ def test_skills_sh_and_clawhub_search_return_embedded_catalog_metadata() -> None
     assert clawhub.extra["downloads"] == 20
 
 
+def test_default_source_discovery_uses_supported_ranked_endpoints() -> None:
+    http = FakeHttp()
+    http.json["https://skills.sh/api/v1/skills?view=all-time&per_page=10"] = {
+        "data": [{"id": "acme/skills/popular", "name": "popular", "source": "acme/skills", "installs": 50}]
+    }
+    http.json["https://clawhub.ai/api/v1/skills?limit=10&sort=trending"] = {
+        "items": [{"slug": "rising", "displayName": "Rising", "summary": "Trending", "stats": {"downloads": 40, "stars": 5}}]
+    }
+
+    skillssh = SkillsShSource(http).search("")[0]
+    clawhub = ClawHubSource(http).search("")[0]
+
+    assert skillssh.extra["installs"] == 50
+    assert clawhub.extra["downloads"] == 40
+    assert clawhub.extra["stars"] == 5
+
+
 def test_skillsmp_search_resolves_repository_and_exposes_quota_and_provenance() -> None:
     http = FakeHttp()
-    http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1"] = {
+    http.json["https://skillsmp.test/api/v1/skills/search?q=deploy&limit=10&page=1&sortBy=stars"] = {
         "success": True,
         "data": {"skills": [{"id": "remote", "name": "remote", "description": "Deploy", "githubUrl": "https://github.com/acme/skills/tree/main/skills/remote"}]},
         "rate_limit": {"remaining": 9},

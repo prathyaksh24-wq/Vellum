@@ -157,7 +157,10 @@ class FilesystemSkillBackend:
                     raise SkillMutationError(f"skill not found: {name}")
             else:
                 raise SkillMutationError(f"unsupported skill action: {normalized}")
-            self._validate_package(source, public_package=self._is_hub_skill(name))
+            if normalized in {"archive", "retire", "delete"}:
+                self._parse_existing_package(source)
+            else:
+                self._validate_package(source, public_package=self._is_hub_skill(name))
             return PreparedMutation(
                 name,
                 normalized,
@@ -232,7 +235,7 @@ class FilesystemSkillBackend:
         normalized = action.strip().casefold().replace("-", "_")
         if normalized in {"create", "hub_install"}:
             return None
-        name = str(payload.get("name") or "").strip().casefold()
+        name = str(payload.get("name") or (payload.get("bundle_name") if normalized == "hub_update" else "") or "").strip().casefold()
         if normalized in self._PACKAGE_MUTATIONS or normalized in {"archive", "retire", "hub_update", "hub_uninstall"}:
             source = self.manager._locate(self.root / "packages", name)
         elif normalized == "restore":
@@ -270,12 +273,26 @@ class FilesystemSkillBackend:
             raise SkillMutationError(str(exc)) from exc
         return package
 
+    def _parse_existing_package(self, root: Path):
+        """Validate package structure without reclassifying trusted local content.
+
+        Lifecycle-only moves do not author or publish content. Re-running the
+        authoring privacy gate here can strand a previously installed package
+        and prevent it from being archived or deleted safely.
+        """
+        try:
+            return self.parser.parse(root)
+        except SkillPackageError as exc:
+            raise SkillMutationError(f"invalid skill package: {exc}") from exc
+
     def _is_hub_skill(self, name: str) -> bool:
         from agent.skills.hub import HubLockFile
 
         return HubLockFile(self.root).get(name) is not None
 
     def _assert_deletable(self, name: str) -> None:
+        if self._is_builtin(name):
+            raise SkillMutationError("Built-in skills can't be removed")
         if name in self.protected:
             raise SkillMutationError(f"skill is protected and cannot be deleted: {name}")
         usage = self.manager.usage.get(name)
@@ -283,6 +300,20 @@ class FilesystemSkillBackend:
             raise SkillMutationError(f"skill is protected and cannot be deleted: {name}")
         if usage.get("pinned") is True:
             raise SkillMutationError(f"skill is pinned; unpin before deletion: {name}")
+
+    def _is_builtin(self, name: str) -> bool:
+        usage = self.manager.usage.get(name)
+        if usage.get("origin") == "builtin":
+            return True
+        source = self.manager._locate(self.root / "packages", name) or self.manager._locate(
+            self.root / ".archive", name
+        )
+        if source is None:
+            return False
+        try:
+            return "migrated" in self.parser.parse(source).metadata.metadata.hermes.tags
+        except SkillPackageError:
+            return False
 
     def _assert_unique_content(self, candidate: Path, *, exclude: Path | None = None) -> None:
         from agent.skills.catalog import package_content_hash
@@ -424,6 +455,16 @@ class SkillMutationCoordinator:
     def diff(self, identifier: str) -> dict[str, Any]:
         record = self._read_pending(identifier)
         prepared = self.backend.prepare(record["action"], record["payload"])
+        if (
+            record["action"] == "hub_update"
+            and prepared.current_fingerprint != record.get("expected_target_fingerprint")
+        ):
+            # A hub update may be reviewed after the installed package changed.
+            # Refresh only while rendering the new diff so approval remains tied
+            # to the exact baseline the user has just inspected.
+            record["expected_target_fingerprint"] = prepared.current_fingerprint
+            record["updated_at"] = _now()
+            self._write_pending(record)
         self._verify_record(record, prepared)
         current = self._current_text_files(prepared)
         chunks: list[str] = []
