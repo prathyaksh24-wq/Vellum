@@ -6,7 +6,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 from langchain_core.tools import tool
 
-from agent.skills import HubLockFile, SkillConfigStore, SkillPackageError, SkillUsageStore, get_skill_registry
+from agent.skills import HubLockFile, SkillCatalog, SkillConfigStore, SkillPackageError, SkillUsageStore, get_skill_registry
 from agent.skills.runtime import SKILLS_PATH
 from agent.skills.usage_intelligence import record_current_activation
 
@@ -51,6 +51,14 @@ def skills_list(category: str = "", include_unavailable: bool = False) -> str:
             item["unavailable_reason"] = entry.unavailable_reason
         skills.append(item)
     return _json({"skills": skills})
+
+
+@tool
+def skills_history(since: str = "", until: str = "", action: str = "", limit: int = 100) -> str:
+    """List immutable skill lifecycle events, including removed skills."""
+    catalog = SkillCatalog(SKILLS_PATH)
+    catalog.backfill_events()
+    return _json({"events": catalog.events(since=since, until=until, event=action, limit=limit)})
 
 
 @tool

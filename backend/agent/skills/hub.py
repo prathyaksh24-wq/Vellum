@@ -571,3 +571,17 @@ class SkillHub:
         }
         with path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, sort_keys=True) + "\n")
+        from agent.skills.catalog import SkillCatalog
+
+        SkillCatalog(self.root).record_event(
+            action,
+            name,
+            details={
+                "source": source,
+                "outcome": outcome,
+                "previous_state": "missing" if action == "install" else "active",
+                "new_state": "deleted" if action == "uninstall" else "active",
+            },
+            event_key=f"hub:{action}:{name}:{record['timestamp']}",
+            created_at=record["timestamp"],
+        )

@@ -12,5 +12,14 @@
     remove: function (id) {
       return client.request("/api/conversations/" + encodeURIComponent(id), { method: "DELETE" });
     },
+    context: function (id) {
+      return client.request("/api/conversations/" + encodeURIComponent(id) + "/context");
+    },
+    attachContext: function (id, body) {
+      return client.request("/api/conversations/" + encodeURIComponent(id) + "/context", client.jsonOptions("POST", body));
+    },
+    removeContext: function (id, attachmentId) {
+      return client.request("/api/conversations/" + encodeURIComponent(id) + "/context/" + encodeURIComponent(attachmentId), { method: "DELETE" });
+    },
   };
 })();

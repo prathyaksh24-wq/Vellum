@@ -49,7 +49,7 @@ from agent.tools.skill_bundles import skill_bundles
 from agent.tools.skill_curator import skill_curator
 from agent.tools.skill_hub import skill_hub
 from agent.tools.skill_manage import skill_learn, skill_manage
-from agent.tools.skills import skill_view, skills_list
+from agent.tools.skills import skill_view, skills_history, skills_list
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
 from agent.tools.web_extract import web_extract
@@ -84,10 +84,11 @@ Tools:
 23. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
 24. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
 25. skills_list - List compact metadata for installed skills.
-26. skill_view - Load one skill's full instructions or one relative support file.
-27. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
-28. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
-29. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
+26. skills_history - Query immutable install, archive, restore, update, and delete history.
+27. skill_view - Load one skill's full instructions or one relative support file.
+28. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
+29. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
+30. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
 30. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
 31. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
 
@@ -310,6 +311,7 @@ def core_tools() -> list:
             knowledge_wiki,
             memory_orchestrator,
             skills_list,
+            skills_history,
             skill_view,
             skill_manage,
             skill_learn,

@@ -7,13 +7,14 @@ import json
 import math
 from pathlib import Path
 import sqlite3
+from datetime import datetime, timezone
 from typing import Any, Callable, Iterator, Sequence
 import unicodedata
 
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 
 
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
 DEFAULT_SEMANTIC_THRESHOLD = 0.92
 EMBEDDING_MODEL = "BAAI/bge-m3"
 
@@ -253,6 +254,125 @@ class SkillCatalog:
         with self.connect() as connection:
             return [dict(row) for row in connection.execute("SELECT * FROM duplicate_reviews ORDER BY score DESC, left_name, right_name")]
 
+    def record_event(
+        self,
+        event: str,
+        skill_name: str | None,
+        *,
+        details: dict[str, Any] | None = None,
+        event_key: str = "",
+        created_at: str | None = None,
+    ) -> dict[str, Any]:
+        """Append an immutable skill lifecycle event.
+
+        The catalog is current state; this ledger remains queryable after a
+        package is archived or deleted.
+        """
+        normalized_event = SkillTextNormalizer.identity(event).replace(" ", "_")
+        normalized_name = SkillTextNormalizer.identity(skill_name) if skill_name else None
+        timestamp = created_at or datetime.now(timezone.utc).isoformat()
+        payload = dict(details or {})
+        key = event_key.strip() or hashlib.sha256(
+            json.dumps(
+                {"event": normalized_event, "skill": normalized_name, "created_at": timestamp, "details": payload},
+                sort_keys=True,
+                default=str,
+            ).encode("utf-8")
+        ).hexdigest()
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO skill_audit(event,skill_name,details_json,created_at,event_key) VALUES(?,?,?,?,?)",
+                (normalized_event, normalized_name, json.dumps(payload, sort_keys=True, default=str), timestamp, key),
+            )
+            connection.commit()
+            row = connection.execute("SELECT * FROM skill_audit WHERE event_key=?", (key,)).fetchone()
+        return self._event_row(row)
+
+    def events(
+        self,
+        *,
+        since: str = "",
+        until: str = "",
+        event: str = "",
+        skill_name: str = "",
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses = ["1=1"]
+        params: list[Any] = []
+        if since:
+            clauses.append("created_at>=?")
+            params.append(since)
+        if until:
+            clauses.append("created_at<?")
+            params.append(until)
+        if event:
+            clauses.append("event=?")
+            params.append(SkillTextNormalizer.identity(event).replace(" ", "_"))
+        if skill_name:
+            clauses.append("skill_name=?")
+            params.append(SkillTextNormalizer.identity(skill_name))
+        params.append(min(max(int(limit), 1), 500))
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM skill_audit WHERE {' AND '.join(clauses)} ORDER BY created_at DESC,id DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._event_row(row) for row in rows]
+
+    def backfill_events(self) -> int:
+        """Import pre-ledger Hub audit and mutation receipts once, without duplicates."""
+        imported = 0
+        audit_path = self.root / ".hub" / "audit.log"
+        if audit_path.is_file():
+            for line_number, line in enumerate(audit_path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+                try:
+                    item = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                self.record_event(
+                    str(item.get("action") or "unknown"),
+                    str(item.get("name") or "") or None,
+                    details={"source": item.get("source"), "outcome": item.get("outcome"), "backfilled": True},
+                    event_key=f"hub:{item.get('action','unknown')}:{item.get('name','')}:{item.get('timestamp','')}",
+                    created_at=str(item.get("timestamp") or datetime.now(timezone.utc).isoformat()),
+                )
+                imported += 1
+        receipts = self.root / "pending" / "receipts"
+        if receipts.is_dir():
+            seen: set[str] = set()
+            for path in sorted(receipts.glob("*.json")):
+                try:
+                    receipt = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                receipt_id = str(receipt.get("id") or "")
+                if not receipt_id or receipt_id in seen:
+                    continue
+                seen.add(receipt_id)
+                result = dict(receipt.get("result") or {})
+                action = str(result.get("action") or "")
+                if not action or action in {"install", "update", "uninstall"}:
+                    continue
+                self.record_event(
+                    action,
+                    str(result.get("name") or "") or None,
+                    details={"status": result.get("status"), "backfilled": True, "mutation_id": receipt_id},
+                    event_key=f"mutation:{receipt_id}",
+                    created_at=str(receipt.get("completed_at") or datetime.now(timezone.utc).isoformat()),
+                )
+                imported += 1
+        return imported
+
+    @staticmethod
+    def _event_row(row: sqlite3.Row) -> dict[str, Any]:
+        result = dict(row)
+        try:
+            result["details"] = json.loads(result.pop("details_json") or "{}")
+        except json.JSONDecodeError:
+            result["details"] = {}
+            result.pop("details_json", None)
+        return result
+
     def decide_duplicate(self, review_id: int, decision: str, *, distinct_reason: str = "") -> dict[str, Any]:
         allowed = {"merge", "replace", "distinct"}
         normalized = decision.casefold().strip()
@@ -301,3 +421,13 @@ class SkillCatalog:
                     PRAGMA user_version=1;
                     COMMIT;"""
                 )
+                version = 1
+            if version < 2:
+                columns = {row[1] for row in connection.execute("PRAGMA table_info(skill_audit)")}
+                if "event_key" not in columns:
+                    connection.execute("ALTER TABLE skill_audit ADD COLUMN event_key TEXT")
+                connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS skill_audit_event_key ON skill_audit(event_key) WHERE event_key IS NOT NULL")
+                connection.execute("CREATE INDEX IF NOT EXISTS skill_audit_time ON skill_audit(created_at DESC,id DESC)")
+                connection.execute("CREATE INDEX IF NOT EXISTS skill_audit_skill_time ON skill_audit(skill_name,created_at DESC)")
+                connection.execute("PRAGMA user_version=2")
+                connection.commit()

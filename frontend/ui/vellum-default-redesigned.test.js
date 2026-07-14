@@ -41,4 +41,12 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("Portable plugins are loaded through Vellum's Hermes-compatible");
     expect(html).toContain("API.runtimes.subagents()");
   });
+
+  test("uses one live memory state and supports Vault or wiki chat context", () => {
+    expect(html).toContain("<MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData}");
+    expect(html).toContain("Array.isArray(summary.sections)");
+    expect(html).toContain("API.knowledge.search(value, scope, 20)");
+    expect(html).toContain("New chat with context");
+    expect(html).toContain("API.conversations.attachContext");
+  });
 });

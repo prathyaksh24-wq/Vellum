@@ -23,6 +23,28 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _previous_state(action: str) -> str | None:
+    return {
+        "archive": "active",
+        "retire": "active",
+        "restore": "archived",
+        "approve_proposed": "proposed",
+        "delete": "active_or_archived",
+        "create": "missing",
+    }.get(action)
+
+
+def _new_state(action: str) -> str | None:
+    return {
+        "archive": "archived",
+        "retire": "retired",
+        "restore": "active",
+        "approve_proposed": "active",
+        "delete": "deleted",
+        "create": "active",
+    }.get(action)
+
+
 def _canonical_hash(value: Any) -> str:
     encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -527,7 +549,8 @@ class SkillMutationCoordinator:
         applied = self.backend.apply(record["action"], record["payload"])
         from agent.skills.catalog import SkillCatalog
 
-        SkillCatalog(self.root).reconcile(embed_semantics=False)
+        catalog = SkillCatalog(self.root)
+        catalog.reconcile(embed_semantics=False)
         result = {
             **applied,
             "id": record["id"],
@@ -536,6 +559,19 @@ class SkillMutationCoordinator:
         }
         if snapshot:
             result["snapshot"] = snapshot
+        if record["action"] not in {"hub_install", "hub_update", "hub_uninstall"}:
+            catalog.record_event(
+                str(applied.get("action") or record["action"]),
+                str(applied.get("name") or record["identity"]),
+                details={
+                    "origin": record.get("origin"),
+                    "mutation_id": record["id"],
+                    "previous_state": _previous_state(record["action"]),
+                    "new_state": applied.get("state") or _new_state(record["action"]),
+                    "status": "applied",
+                },
+                event_key=f"mutation:{record['id']}",
+            )
         self._write_receipt(record, result)
         self._pending_path(record["id"]).unlink(missing_ok=True)
         return result

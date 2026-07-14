@@ -540,8 +540,8 @@ class MemoryOrchestrator:
         saved: list[dict[str, Any]] = []
         if self.store is not None:
             baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
-            baseline = self.store.list_saved(scopes=baseline_scopes)[:4] if baseline_scopes else []
-            matched = self.store.search_saved(clean_query, limit=8, scopes=scopes)
+            baseline = _durable_memories(self.store.list_saved(scopes=baseline_scopes))[:4] if baseline_scopes else []
+            matched = _durable_memories(self.store.search_saved(clean_query, limit=12, scopes=scopes))
             saved = _dedupe_memories([*baseline, *matched])[:8]
         strict_profile_scope = read_scopes is not None
         docs = (
@@ -584,7 +584,11 @@ class MemoryOrchestrator:
             except Exception:
                 knowledge_refs = []
         packet = {
-            "global_summary": self.store.global_summary() if self.store is not None and (not strict_profile_scope or "global" in scopes) else "",
+            "global_summary": (
+                _safe_global_summary(self.store)
+                if self.store is not None and (not strict_profile_scope or "global" in scopes)
+                else ""
+            ),
             "saved_memories": saved,
             "honcho_context": honcho_context,
             "project_context": (
@@ -602,6 +606,28 @@ class MemoryOrchestrator:
         if cloud_safe:
             packet = _scrub_packet(packet)
         return packet
+
+    def summary_view(self) -> dict[str, Any]:
+        """Return one stable, UI-ready memory contract for every frontend surface."""
+        if self.store is None:
+            return {
+                "global_summary": "",
+                "sections": [],
+                "saved_memories": [],
+                "archived_memories": [],
+                "pending_count": 0,
+                "audit_log": [],
+            }
+        saved = _durable_memories(self.store.list_saved())
+        archived = self.store.list_archived()
+        return {
+            "global_summary": _safe_global_summary(self.store),
+            "sections": _memory_summary_sections(saved),
+            "saved_memories": saved,
+            "archived_memories": archived,
+            "pending_count": len(_durable_memories(self.store.list_pending())),
+            "audit_log": self.store.audit_log(limit=25),
+        }
 
     def build_context_pack(self, *, thread_id: str, query: str, agent_name: str = "VellumAgent") -> dict[str, Any]:
         clean_query = query.strip()
@@ -650,7 +676,6 @@ class MemoryOrchestrator:
             return []
         candidates = _extract_candidates(user_message, assistant_message)
         stored: list[dict[str, Any]] = []
-        scope = _scope_for_agent(agent_name)
         for candidate in candidates:
             data_class, _reason = classify(candidate["text"])
             if data_class == DataClass.RED and not _explicit_remember(user_message):
@@ -660,7 +685,7 @@ class MemoryOrchestrator:
                 text=candidate["text"],
                 source_thread_id=thread_id,
                 confidence=candidate["confidence"],
-                scope=scope,
+                scope=_scope_for_candidate(agent_name),
             )
             item = self.store.get_memory(memory_id)
             self.store.audit("pending_created", memory_id, f"{agent_name}: {candidate['text']}")
@@ -675,8 +700,16 @@ class MemoryOrchestrator:
         archived_memories: list[dict[str, Any]] = []
         contradictions: list[dict[str, Any]] = []
 
-        seen_texts = {_norm(item["text"]) for item in self.store.list_saved()}
-        for pending in self.store.list_pending():
+        # Old builds could promote raw UI wrappers, operational commands, and
+        # greetings. Preserve their audit trail by archiving them, never deleting.
+        for item in [*self.store.list_pending(), *self.store.list_saved()]:
+            if item["pinned"] or _is_durable_memory_text(str(item.get("text") or "")):
+                continue
+            archived_memories.append(self.store.archive(item["id"]))
+            self.store.audit("noise_archived", item["id"], "Excluded from durable memory during Dreaming")
+
+        seen_texts = {_norm(item["text"]) for item in _durable_memories(self.store.list_saved())}
+        for pending in _durable_memories(self.store.list_pending()):
             key = _norm(pending["text"])
             if key in seen_texts:
                 archived_memories.append(self.store.archive(pending["id"]))
@@ -685,7 +718,7 @@ class MemoryOrchestrator:
             new_memories.append(promoted)
             seen_texts.add(key)
 
-        saved = self.store.list_saved()
+        saved = _durable_memories(self.store.list_saved())
         for left_index, left in enumerate(saved):
             for right in saved[left_index + 1 :]:
                 if _simple_contradiction(left["text"], right["text"]):
@@ -698,7 +731,7 @@ class MemoryOrchestrator:
             if datetime.fromisoformat(item["updated_at"]) <= cutoff:
                 archived_memories.append(self.store.archive(item["id"]))
 
-        global_summary = _summarize_memories(self.store.list_saved())
+        global_summary = _safe_global_summary(self.store, use_stored_fallback=False)
         self.store.update_global_summary(global_summary)
         context_files = self.sync_context_files()
         audit_log = self.store.audit_log(limit=50)
@@ -851,7 +884,7 @@ def _terms(text: str) -> set[str]:
 
 
 def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[str, Any]]:
-    text = user_message.strip()
+    text = _clean_candidate_text(user_message)
     if not text:
         return []
     candidates: list[dict[str, Any]] = []
@@ -861,13 +894,77 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
         flags=re.IGNORECASE | re.DOTALL,
     )
     if explicit:
-        fact = explicit.group("fact")
-        candidates.append({"kind": _candidate_kind(fact), "text": _sentence(fact), "confidence": 0.92})
+        fact = _clean_candidate_text(explicit.group("fact"))
+        if _is_durable_memory_text(fact, explicit=True):
+            candidates.append({"kind": _candidate_kind(fact), "text": _sentence(fact), "confidence": 0.92})
+    if not _is_durable_memory_text(text):
+        return _dedupe_candidates(candidates)
     if re.search(r"\b(?:i prefer|i like|i don't like|i do not like|stop adding|don't include|do not include)\b", text, re.I):
         candidates.append({"kind": "preference", "text": _sentence(text), "confidence": 0.82})
     if re.search(r"\b(?:vellum|project|we decided|decision|architecture|backend|frontend)\b", text, re.I):
         candidates.append({"kind": "project", "text": _sentence(text), "confidence": 0.7})
     return _dedupe_candidates(candidates)
+
+
+_MEMORY_NOISE_RE = re.compile(
+    r"(?:\[vellum ui context:|recency_hunger|stochastic_kick|curiosity[_ -]score|"
+    r"\b(?:install|download|archive|delete|remove|uninstall|list|show)\b.{0,40}\bskills?\b|"
+    r"\bskills?\b.{0,40}\b(?:install|download|archive|delete|remove|uninstall)\b|"
+    r"\b(?:tool_call|system prompt|developer message|use the following instructions)\b)",
+    re.IGNORECASE | re.DOTALL,
+)
+_GREETING_RE = re.compile(r"^(?:hi|hey|hello|sup|yo|thanks|thank you|good job|great job)[.!\s]*$", re.IGNORECASE)
+_QUESTION_START_RE = re.compile(
+    r"^(?:what|when|where|why|who|which|how|can|could|would|should|do|does|did|is|are|was|were|have|has)\b",
+    re.IGNORECASE,
+)
+
+
+def _clean_candidate_text(text: str) -> str:
+    clean = re.sub(r"\[Vellum UI context:.*?\]", " ", str(text or ""), flags=re.IGNORECASE | re.DOTALL)
+    return " ".join(clean.split()).strip()
+
+
+def _is_durable_memory_text(text: str, *, explicit: bool = False) -> bool:
+    clean = _clean_candidate_text(text)
+    if len(clean) < 12 or _GREETING_RE.fullmatch(clean) or _MEMORY_NOISE_RE.search(clean):
+        return False
+    if not explicit and (clean.endswith("?") or _QUESTION_START_RE.match(clean)):
+        return False
+    if len(re.findall(r"[A-Za-z0-9]+", clean)) < 3:
+        return False
+    return True
+
+
+def _durable_memories(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in memories if _is_durable_memory_text(str(item.get("text") or ""))]
+
+
+def _safe_global_summary(store: SQLiteMemoryStore, *, use_stored_fallback: bool = True) -> str:
+    stored = store.global_summary().strip()
+    if use_stored_fallback and stored and not _MEMORY_NOISE_RE.search(stored):
+        return stored
+    shared = _durable_memories(store.list_saved(scopes=["global", "user_profile", "shared"]))
+    if shared:
+        return _summarize_memories(shared)
+    return ""
+
+
+def _memory_summary_sections(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    labels = {
+        "preference": ("preferences", "Preferences"),
+        "project": ("projects", "Projects and decisions"),
+        "correction": ("corrections", "Corrections"),
+        "goal": ("goals", "Goals"),
+        "fact": ("facts", "About you"),
+    }
+    grouped: dict[str, dict[str, Any]] = {}
+    for item in memories:
+        section_id, title = labels.get(str(item.get("kind") or "fact"), ("other", "Other memories"))
+        section = grouped.setdefault(section_id, {"id": section_id, "title": title, "items": []})
+        section["items"].append(item)
+    order = ["facts", "preferences", "goals", "projects", "corrections", "other"]
+    return [grouped[key] for key in order if key in grouped]
 
 
 def _candidate_kind(text: str) -> str:
@@ -1079,6 +1176,13 @@ def _packet_scopes(*, agent_name: str, active_project: str | None = None) -> lis
 
 
 def _scope_for_agent(agent_name: str) -> str:
+    return _agent_scope(agent_name)
+
+
+def _scope_for_candidate(agent_name: str) -> str:
+    normalized_agent = _normalize_scope(agent_name).casefold()
+    if normalized_agent in {"vellum", "vellumagent", "main", "mainagent"}:
+        return "global"
     return _agent_scope(agent_name)
 
 

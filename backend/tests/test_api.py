@@ -470,13 +470,17 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
             agent_name="SportsAgent",
         )
     )
+    related = resolved.find_related("Who were the players traded for Giannis?")
 
     with sqlite3.connect(resolved.db_path) as connection:
         stored = connection.execute("SELECT query, answer_summary FROM resolved_questions").fetchone()
 
     assert stored is not None
-    assert "Giannis" not in stored[0]
-    assert "Tyler Herro" not in stored[1]
+    # Public sports entities must remain intact in Vellum's private local
+    # resolved-answer cache so later recall can match the same people.
+    assert "Giannis" in stored[0]
+    assert "Tyler Herro" in stored[1]
+    assert related is not None
     assert "Tyler Herro" in related["answer_summary"]
 
 
@@ -958,6 +962,33 @@ def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, 
     assert detail.json()["install_cli"] is None
     assert 'Use the installed "alpha-skill" skill' in detail.json()["prompt"]
     assert overview.json()["counts"]["active"] == 2
+
+
+def test_skill_inventory_and_history_use_canonical_skill_state(monkeypatch, tmp_path):
+    from agent.skills import SkillCatalog, SkillManager, SkillSurfaceService
+
+    root = tmp_path / ".skills"
+    SkillManager(root).create(
+        "---\nname: fresh-skill\ndescription: Fresh workflow\n---\n# Fresh\n\n## Procedure\nRun it.\n",
+        confirm=True,
+    )
+    surface = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[])
+    catalog = SkillCatalog(root)
+    catalog.reconcile(embed_semantics=False)
+    catalog.record_event("install", "fresh-skill", details={"source": "test"}, event_key="test-install")
+    monkeypatch.setattr(api, "_skill_surface_singleton", surface)
+
+    inventory = api._skill_system_answer("show me my current skills")
+    advice = api._skill_system_answer("what skill should I learn for testing?")
+    with TestClient(api.app) as client:
+        events = client.get("/api/skills/v2/events", params={"action": "install"})
+
+    assert inventory is not None
+    assert "fresh-skill" in inventory[0]
+    assert inventory[1] == ["skills_list"]
+    assert advice is None
+    assert events.status_code == 200
+    assert events.json()["events"][0]["skill_name"] == "fresh-skill"
 
 
 def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):

@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from agent.config import REPO_ROOT
 from agent.terminal.profiles import (
     DEFAULT_CWD,
     PROFILE_ALIASES,
@@ -10,7 +11,7 @@ from agent.terminal.profiles import (
 
 
 def test_default_cwd_points_at_repo_root():
-    assert DEFAULT_CWD.name == "Vellum"
+    assert DEFAULT_CWD == REPO_ROOT
     assert (DEFAULT_CWD / "backend").exists()
     assert (DEFAULT_CWD / "frontend").exists()
 
