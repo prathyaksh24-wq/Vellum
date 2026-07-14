@@ -97,7 +97,7 @@ def test_voice_transcribe_rejects_empty_transcript(monkeypatch):
 def test_voice_turn_streams_transcript_text_final_then_audio(monkeypatch):
     learned = []
 
-    async def fake_background_learn(query, answer, thread_id="default", source="agent", **kwargs):
+    async def fake_background_learn(query, answer, thread_id="default", source="agent", **_kwargs):
         learned.append((query, answer, thread_id, source))
 
     def fake_create_task(coro):

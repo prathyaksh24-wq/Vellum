@@ -32,6 +32,7 @@ def _default_record() -> dict[str, Any]:
         "last_patched_at": None,
         "created_at": None,
         "created_by": None,
+        "origin": None,
         "state": "active",
         "pinned": False,
         "archived_at": None,
@@ -55,6 +56,13 @@ class SkillUsageStore:
         def mutate(record: dict[str, Any]) -> None:
             record["created_at"] = record.get("created_at") or _now()
             record["created_by"] = "agent" if origin == "background_review" else None
+            record["origin"] = (
+                "builtin"
+                if origin == "builtin"
+                else "agent_learned"
+                if origin == "background_review"
+                else "user_learned"
+            )
             record["state"] = "active"
             record["archived_at"] = None
 

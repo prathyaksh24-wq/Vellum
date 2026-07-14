@@ -272,12 +272,30 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .led-row .rn{color:var(--dim2);font-style:italic;width:22px}
 .led-row .lv{margin-left:auto;color:var(--dim);font-size:12.5px}
 .quiet-foot{margin-top:22px;font-size:12px;color:var(--dim2);font-style:italic}
-/* skills */
-.skill-card{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
-.skill-card .sk-meta{flex:1;min-width:0}
-.skill-card h4{font-size:13.5px;color:var(--txt2);font-weight:500;margin-bottom:3px}
-.skill-card p{font-size:12px;color:var(--dim)}
-.skill-card .trig{color:var(--ember)}
+/* production skills hub */
+.skills-page{height:100%;display:flex;min-width:0;background:color-mix(in srgb,var(--bg) 88%,transparent)}
+.sk-hub{flex:1;min-width:0;overflow-y:auto;padding:24px clamp(18px,3vw,38px) 38px}
+.sk-hub-inner{max-width:1120px;margin:0 auto}
+.sk-head{display:flex;align-items:flex-start;gap:18px;margin-bottom:18px}.sk-head-main{flex:1}.sk-title{font-family:var(--font-d);font-size:29px;color:var(--txt2);letter-spacing:-.025em}.sk-sub{font-size:12px;color:var(--dim);margin-top:3px}
+.sk-head-actions{display:flex;align-items:center;gap:8px}.sk-health{display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid var(--line2);border-radius:9px;background:var(--glass);font-size:11px;color:var(--dim)}.sk-health i{width:7px;height:7px;border-radius:50%;background:#69b783}.sk-health.partial i{background:#d6a44f}
+.sk-primary,.sk-btn{border:1px solid var(--line2);border-radius:8px;background:var(--glass);color:var(--txt2);font:inherit;font-size:12px;padding:8px 12px;cursor:pointer;transition:.15s}.sk-primary{background:var(--ember);color:var(--onember);border-color:transparent}.sk-primary:hover,.sk-btn:hover{filter:brightness(1.08)}.sk-btn:disabled{opacity:.45;cursor:not-allowed}.sk-btn.danger{color:var(--danger)}
+.sk-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}.sk-stat{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:13px 14px}.sk-stat-k{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.045em}.sk-stat-v{font-family:var(--font-d);font-size:25px;color:var(--txt2);margin-top:7px}.sk-stat-note{font-size:10.5px;color:var(--dim2);margin-top:3px}
+.sk-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}.sk-search{flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--line2);background:var(--input);border-radius:9px;padding:8px 11px;color:var(--dim)}.sk-search input{width:100%;border:0;outline:0;background:none;color:var(--txt2);font:inherit;font-size:12px}.v-select.sk-filter{min-width:142px}.sk-filter .v-select-trigger{min-height:34px;font-size:11px;border-radius:8px}
+.sk-tabs{display:flex;gap:20px;border-bottom:1px solid var(--line);overflow-x:auto}.sk-tab{position:relative;border:0;background:none;color:var(--dim);font:inherit;font-size:12px;padding:11px 0;white-space:nowrap;cursor:pointer}.sk-tab.on{color:var(--txt2)}.sk-tab.on:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--ember)}.sk-count{display:inline-flex;min-width:17px;height:17px;align-items:center;justify-content:center;margin-left:5px;border-radius:9px;background:var(--active);font-size:9px;color:var(--ember)}
+.sk-banner{display:flex;align-items:center;gap:10px;margin:11px 0;border:1px solid color-mix(in srgb,var(--ember) 30%,var(--line));border-radius:10px;padding:10px 12px;background:color-mix(in srgb,var(--ember) 8%,var(--glass));font-size:11px;color:var(--txt)}.sk-banner strong{color:var(--txt2)}.sk-banner .sk-btn{margin-left:auto}
+.sk-list{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--glass)}.sk-row{width:100%;display:grid;grid-template-columns:minmax(190px,1fr) minmax(110px,.42fr) auto;align-items:center;gap:14px;padding:13px 14px;border:0;border-bottom:1px solid var(--line);background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}.sk-row:last-child{border-bottom:0}.sk-row:hover,.sk-row.on{background:var(--hover)}.sk-row.on{box-shadow:inset 2px 0 var(--ember)}.sk-row-name{font-family:var(--font-d);font-size:14px;color:var(--txt2);display:flex;align-items:center;gap:6px}.sk-row-desc{font-size:10.8px;color:var(--dim);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sk-row-meta{font-size:10.5px;color:var(--dim);line-height:1.55}.sk-trust{display:inline-flex;align-items:center;gap:5px;color:#72b889}.sk-trust.warn{color:#d6a44f}.sk-row-action{font-size:10.5px;color:var(--txt2);border:1px solid var(--line2);border-radius:7px;padding:6px 9px;white-space:nowrap}.sk-empty,.sk-loading{padding:42px 18px;text-align:center;color:var(--dim);font-size:12px}.sk-loadmore{display:block;margin:13px auto 0}
+.sk-origin-head{display:flex;align-items:center;justify-content:space-between;padding:17px 12px 7px;border-bottom:1px solid var(--line);font-family:var(--font-d);font-size:12px;font-weight:600;color:var(--txt2);letter-spacing:.01em}.sk-origin-head span{font-family:var(--font-m);font-size:9px;font-weight:400;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}.sk-origin-tag{display:inline-flex;margin-left:8px;padding:2px 6px;border:1px solid var(--line2);border-radius:8px;font-family:var(--font-m);font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.sk-discover-head{display:flex;align-items:center;justify-content:space-between;padding:18px 14px 9px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--panel) 78%,transparent);font-family:var(--font-d);font-size:13px;color:var(--txt2)}.sk-discover-head span{font-family:var(--font-m);font-size:9px;font-weight:400;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.sk-sourcebar{display:flex;align-items:center;gap:9px;margin-top:12px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;color:var(--dim);font-size:10.5px}.sk-sourcebar .dot{width:7px;height:7px;border-radius:50%;background:#d6a44f}.sk-sourcebar span:last-child{margin-left:auto}
+.sk-drawer{width:min(410px,36vw);flex-shrink:0;border-left:1px solid var(--line);background:var(--modal);display:flex;flex-direction:column;max-height:100%;box-shadow:-18px 0 60px rgba(0,0,0,.14)}.sk-drawer-head{display:flex;align-items:flex-start;gap:10px;padding:19px 18px 13px;border-bottom:1px solid var(--line)}.sk-drawer-title{flex:1;min-width:0}.sk-drawer-title h3{font-family:var(--font-d);font-size:18px;color:var(--txt2);overflow:hidden;text-overflow:ellipsis}.sk-drawer-title p{font-size:10px;color:var(--dim);margin-top:3px}.sk-close{border:0;background:none;color:var(--dim);cursor:pointer;font-size:20px}.sk-drawer-actions{display:flex;gap:7px;padding:10px 18px;border-bottom:1px solid var(--line)}.sk-drawer-body{padding:16px 18px 24px;overflow-y:auto}.sk-sec{padding:0 0 15px;margin-bottom:15px;border-bottom:1px solid var(--line)}.sk-sec:last-child{border-bottom:0}.sk-sec h4{font-size:11px;color:var(--txt2);margin-bottom:7px}.sk-sec p,.sk-sec li{font-size:11px;color:var(--txt);line-height:1.55}.sk-repo{color:var(--ember);text-decoration:underline;text-underline-offset:2px;word-break:break-all}.sk-kv{display:grid;grid-template-columns:1fr 1fr;gap:8px}.sk-kv div{font-size:10px;color:var(--dim)}.sk-kv strong{display:block;color:var(--txt2);font-size:12px;margin-top:3px}.sk-code-tabs{display:flex;border-bottom:1px solid var(--line)}.sk-code-tabs button{border:0;background:none;color:var(--dim);padding:7px 9px;font:inherit;font-size:10px;cursor:pointer}.sk-code-tabs button.on{color:var(--txt2);border-bottom:2px solid var(--ember)}.sk-code{max-height:260px;overflow:auto;margin:0;background:var(--input);border:1px solid var(--line);border-radius:0 0 9px 9px;padding:11px;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;line-height:1.55;white-space:pre-wrap}.sk-files{display:flex;flex-wrap:wrap;gap:6px}.sk-file{border:1px solid var(--line2);border-radius:6px;padding:4px 7px;font-size:9.5px;color:var(--txt)}
+.sk-source-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px;background:var(--input);border:1px solid var(--line);border-radius:0 0 10px 10px}.sk-source-choice p{margin:0}.sk-source-choice .sk-primary{flex-shrink:0}.sk-source-unavailable{padding:14px;background:var(--input);border:1px solid var(--line);border-radius:0 0 10px 10px;color:var(--dim);font-size:10px}.sk-source-modal{position:fixed;inset:0;z-index:380;display:grid;place-items:center;padding:24px;background:rgba(0,0,0,.58);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}.sk-source-panel{width:min(1100px,92vw);height:min(88vh,860px);display:flex;flex-direction:column;background:var(--modal);border:1px solid var(--line2);border-radius:18px;box-shadow:0 30px 100px rgba(0,0,0,.5);overflow:hidden;outline:none}.sk-source-head{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)}.sk-source-head h3{flex:1;font-family:var(--font-d);font-size:18px;color:var(--txt2)}.sk-source-full{flex:1;overflow:auto;margin:0;padding:20px 22px;background:var(--input);color:var(--txt);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;line-height:1.65;white-space:pre;tab-size:2}.sk-learn-feed{position:fixed;z-index:360;top:18px;left:50%;transform:translateX(-50%);width:min(390px,calc(100vw - 24px));display:grid;gap:8px;pointer-events:none}.sk-learn-note{pointer-events:auto;display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;padding:10px 11px;background:color-mix(in srgb,var(--modal) 92%,transparent);border:1px solid var(--line2);border-radius:16px;box-shadow:0 18px 55px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.05);backdrop-filter:blur(24px) saturate(150%);-webkit-backdrop-filter:blur(24px) saturate(150%);animation:skNoteIn .34s cubic-bezier(.16,1,.3,1);transition:transform .24s cubic-bezier(.16,1,.3,1),opacity .2s ease}.sk-learn-note.leaving{opacity:0;transform:translateY(-18px) scale(.96);pointer-events:none}.sk-learn-note-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--ember) 13%,var(--input));color:var(--ember);font-size:15px;transition:background .22s ease,color .22s ease}.sk-learn-note.running .sk-learn-note-icon::after{content:"";width:13px;height:13px;border:1.5px solid color-mix(in srgb,var(--ember) 35%,transparent);border-top-color:var(--ember);border-radius:50%;animation:spin .8s linear infinite}.sk-learn-note-copy{min-width:0;animation:skNoteStage .22s ease}.sk-learn-note-copy strong{display:block;color:var(--txt2);font-size:11.5px}.sk-learn-note-copy span{display:block;color:var(--dim);font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.sk-learn-note-actions{display:flex;align-items:center;gap:5px}.sk-learn-note-actions button{border:0;background:none;color:var(--dim);font:inherit;font-size:9.5px;cursor:pointer;padding:5px}.sk-learn-note-actions button.primary{color:var(--ember)}@keyframes skNoteIn{from{opacity:0;transform:translateY(-18px) scale(.96)}to{opacity:1;transform:none}}@keyframes skNoteStage{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}
+.sk-learn{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:20px}.sk-learn-card{width:min(580px,96vw);background:var(--modal);border:1px solid var(--line2);border-radius:15px;padding:20px;box-shadow:0 28px 80px rgba(0,0,0,.5)}.sk-learn-card h3{font-family:var(--font-d);font-size:20px;color:var(--txt2)}.sk-learn-card p{font-size:11px;color:var(--dim);margin:5px 0 13px}.sk-learn-card textarea{width:100%;min-height:150px;resize:vertical;border:1px solid var(--line2);border-radius:9px;background:var(--input);color:var(--txt2);padding:11px;font:inherit;font-size:12px;outline:none}.sk-learn-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:11px}
+.sk-error{padding:10px 12px;margin:10px 0;border:1px solid color-mix(in srgb,var(--danger) 40%,var(--line));border-radius:9px;color:var(--danger);font-size:11px}.sk-field-error{margin-top:7px;color:var(--danger);font-size:10px}.sk-detail-skeleton{display:grid;gap:11px}.sk-detail-skeleton i{display:block;height:13px;border-radius:6px;background:linear-gradient(90deg,var(--glass),var(--hover),var(--glass));background-size:220% 100%;animation:sk-shimmer 1.2s infinite}.sk-detail-skeleton i:nth-child(2){width:82%}.sk-detail-skeleton i:nth-child(3){height:72px}.sk-detail-fallback h4{color:var(--txt2);font-size:13px;margin-bottom:7px}.sk-detail-fallback p{font-size:11px;color:var(--dim);line-height:1.55;margin-bottom:11px}.sk-skeleton{height:56px;background:linear-gradient(90deg,var(--glass),var(--hover),var(--glass));background-size:220% 100%;animation:sk-shimmer 1.2s infinite}@keyframes sk-shimmer{to{background-position:-220% 0}}
+@media(max-width:900px){.sk-stats{grid-template-columns:repeat(2,1fr)}.sk-drawer{position:fixed;right:0;top:0;bottom:0;z-index:55;width:min(430px,92vw)}.sk-row{grid-template-columns:1fr auto}.sk-row-meta{display:none}}
+@media(max-width:560px){.body:has(.skills-page) .sidebar{display:none}.body:has(.skills-page) .main{width:100%;min-width:0}.sk-hub{padding:17px 12px 28px}.sk-head{align-items:center}.sk-health{display:none}.sk-stats{gap:7px}.sk-stat{padding:10px}.sk-stat-v{font-size:21px}.sk-toolbar{flex-wrap:wrap}.sk-search{flex-basis:100%}.sk-filter{flex:1}.sk-tabs{gap:15px}.sk-row{padding:12px 11px}.sk-row-action{display:none}.sk-drawer{width:100vw}.sk-title{font-size:25px}}
+@media(max-width:560px){.sk-source-modal{padding:0}.sk-source-panel{width:100vw;height:100vh;max-height:none;border-radius:0}.sk-source-full{padding:16px;font-size:11px}.sk-learn-feed{top:10px}}
+@media(prefers-reduced-motion:reduce){.sk-learn-note,.sk-learn-note-copy{animation:none;transition:none}.sk-learn-note.running .sk-learn-note-icon::after{animation:none}.sk-detail-skeleton i{animation:none}}
+@media(prefers-reduced-motion:reduce){.sk-skeleton{animation:none}.sk-primary,.sk-btn,.sk-row{transition:none}}
 /* memory */
 .mem-cat{font-size:10px;color:var(--dim);border:1px solid var(--line2);border-radius:10px;padding:1px 8px;flex-shrink:0;text-transform:lowercase;letter-spacing:.02em}
 .mem-sub{font-size:13px;color:var(--dim);line-height:1.55;margin:-4px 2px 20px;max-width:580px}
@@ -1332,6 +1350,34 @@ body{font-size:14px}
 .galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
 @media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.58}}
 
+/* full-screen 404 */
+.not-found-page{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 48%,#0b0a0a 0,#050505 34%,#020202 74%);color:#f5f3f3;outline:none;isolation:isolate}
+.not-found-page::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.11) .6px,transparent .8px);background-size:41px 41px;opacity:.07;mask-image:radial-gradient(circle at center,#000,transparent 72%)}
+.nf-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.nf-center{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:13px;transform:translateY(-2vh)}
+.nf-scene{position:relative;width:224px;height:214px;display:flex;align-items:center;justify-content:center}
+.nf-pointer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translate3d(var(--nf-x,0),var(--nf-y,0),0) rotate(var(--nf-rotate,0deg));transform-origin:center;will-change:transform}
+.nf-character-flight{position:relative;width:190px;height:178px;display:flex;align-items:center;justify-content:center;transform-origin:50% 42%;animation:nfFlight 13.5s cubic-bezier(.55,.05,.45,.95) infinite}
+.nf-character{position:relative;z-index:2;width:176px;height:160px;filter:drop-shadow(0 18px 24px rgba(0,0,0,.7));animation:nfFloat 3.8s ease-in-out infinite}
+.nf-character svg{display:block;width:100%;height:100%;overflow:visible}
+.nf-beams{position:absolute;z-index:1;left:50%;top:63%;width:102px;height:210px;opacity:0;transform:translateX(-50%);animation:nfBeams 13.5s ease-in-out infinite;pointer-events:none}
+.nf-beams::before,.nf-beams::after{content:"";position:absolute;top:0;width:16px;height:205px;border-radius:50%;background:linear-gradient(to bottom,rgba(255,183,158,.92),rgba(226,82,48,.48) 38%,transparent 90%);filter:blur(3px);box-shadow:0 0 17px rgba(255,92,54,.68)}
+.nf-beams::before{left:24px;transform:rotate(10deg);transform-origin:top}
+.nf-beams::after{right:24px;transform:rotate(-10deg);transform-origin:top}
+.nf-shadow{position:absolute;left:50%;bottom:14px;width:104px;height:17px;border-radius:50%;background:rgba(255,255,255,.075);filter:blur(9px);transform:translateX(-50%);animation:nfShadow 3.8s ease-in-out infinite}
+.nf-copy{font-family:var(--font-d);font-size:12px;font-weight:400;letter-spacing:.015em;color:rgba(241,238,238,.66);text-align:center}
+.nf-back{position:absolute;z-index:2;left:50%;bottom:28px;display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:0;background:transparent;color:rgba(242,239,239,.58);font:500 11.5px var(--font-d);letter-spacing:.015em;cursor:pointer;transform:translateX(-50%);transition:color .18s,transform .25s cubic-bezier(.34,1.56,.64,1)}
+.nf-back::before{content:"\2190";font-size:14px;transition:transform .2s}
+.nf-back:hover,.nf-back:focus-visible{color:#fff;transform:translateX(-50%) translateY(-2px);outline:none}
+.nf-back:hover::before,.nf-back:focus-visible::before{transform:translateX(-3px)}
+.nf-back:focus-visible{border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.18)}
+@keyframes nfFloat{0%,100%{transform:translateY(2px) rotate(-.7deg)}50%{transform:translateY(-7px) rotate(.8deg)}}
+@keyframes nfShadow{0%,100%{opacity:.48;transform:translateX(-50%) scale(.88)}50%{opacity:.24;transform:translateX(-50%) scale(1.08)}}
+@keyframes nfFlight{0%,64%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}69%{transform:translate3d(0,5px,0) rotate(1deg) scale(1.02)}76%{opacity:1;transform:translate3d(0,-17px,0) rotate(-3deg) scale(1.02)}86%{opacity:0;transform:translate3d(0,-210px,0) rotate(-7deg) scale(.7)}87%{opacity:0;transform:translate3d(0,64px,0) rotate(3deg) scale(.76)}94%{opacity:1;transform:translate3d(0,8px,0) rotate(0) scale(.98)}100%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}}
+@keyframes nfBeams{0%,66%{opacity:0;transform:translateX(-50%) scaleY(.25)}71%,82%{opacity:.94;transform:translateX(-50%) scaleY(1)}87%,100%{opacity:0;transform:translateX(-50%) scaleY(.35)}}
+@media (max-width:620px){.nf-scene{transform:scale(.84)}.nf-copy{margin-top:-16px}.nf-back{bottom:20px}}
+@media (prefers-reduced-motion:reduce){.nf-pointer{transform:none!important}.nf-character-flight,.nf-character,.nf-shadow,.nf-beams{animation:none!important}.nf-beams{display:none}.nf-character-flight{transform:none!important;opacity:1!important}}
+
 /* reusable edge dock + tooltip */
 .dock-layer{position:absolute;inset:0;z-index:52;pointer-events:none}
 .dock-reveal-zone{position:absolute;z-index:1;pointer-events:auto}
@@ -2212,7 +2258,8 @@ const PROFILE_DEFAULT = {
   email: 'prathyaksh24@gmail.com', plan: 'Plus',
 };
 
-const SEED_SKILLS = {
+/* Legacy static Skills seed removed from runtime.
+Static examples retained only in repository history; runtime catalog removed. {
   proposed: [
     { id: 's1', name: 'Book summary in my voice', trigger: 'summarize ? book ? what does X say', note: 'Drafted from 4 similar asks this month.' },
     { id: 's2', name: 'Sports snapshot brief', trigger: 'score ? fixture ? standings', note: 'Drafted from your match-day questions.' },
@@ -2225,6 +2272,34 @@ const SEED_SKILLS = {
     { id: 's5', name: 'Daily news digest', trigger: 'news ? today', uses: 3, last: '12/05' },
   ],
 };
+
+*/
+const SEED_MEMORY = [
+  { id: 'm1',  src: 'vellum',   cat: 'taste',     text: 'Prefers plain answers. No exclamation marks, no celebration.', when: '2d ago' },
+  { id: 'm2',  src: 'vellum',   cat: 'habits',    text: 'Works late; asks the heaviest questions after ten.', when: '5d ago' },
+  { id: 'm3',  src: 'vellum',   cat: 'people',    text: 'A small circle that matters; the rest is weather.', when: '1w ago' },
+  { id: 'm4',  src: 'x',        cat: 'following', text: 'Tracks a handful of design and AI accounts; mutes the rest.', when: '1d ago' },
+  { id: 'm5',  src: 'x',        cat: 'voice',     text: 'Posts rarely, in short declarative lines. Rarely threads.', when: '3d ago' },
+  { id: 'm6',  src: 'youtube',  cat: 'topics',    text: 'Watches long-form lectures and build logs. Skips shorts.', when: '2d ago' },
+  { id: 'm7',  src: 'youtube',  cat: 'channels',  text: 'Subscribed to systems-thinking and woodworking channels.', when: '6d ago' },
+  { id: 'm8',  src: 'books',    cat: 'reading',   text: 'Reads slowly, returns to ideas. Circling Meditations, book four.', when: '4h ago' },
+  { id: 'm9',  src: 'books',    cat: 'shelf',     text: 'Stoics, a little fiction, almost no business books.', when: '1w ago' },
+  { id: 'm10', src: 'memory',   cat: 'context',   text: 'Building the Vellum desktop shell; coding belongs to the workspace.', when: '1d ago' },
+  { id: 'm11', src: 'memory',   cat: 'identity',  text: 'Goes by Pratyakssh. Private account, local-first by choice.', when: '2w ago' },
+  { id: 'm12', src: 'research', cat: 'method',    text: 'Wants sources cited inline and claims cross-checked first.', when: '2d ago' },
+  { id: 'm13', src: 'sports',   cat: 'teams',     text: 'Follows one football side and the tennis majors. Scores, not punditry.', when: '3d ago' },
+];
+
+const SEED_REFLECTIONS = [
+  { id: 'r1', kind: 'monthly provocation', date: '01/06', text: 'You keep filing notes on stillness while planning three projects at once. Which is the real one.' },
+  { id: 'r2', kind: 'weekly reflection',   date: '08/06', text: 'The week leaned on Meditations and the sports daemon. Reading slowed when building sped up.' },
+  { id: 'r3', kind: 'nightly digest',      date: '09/06', text: 'Three threads on the desktop shell. One on patience. The patience one was shorter.' },
+];
+
+const SEED_SAVED = [
+  { id: 'v1', date: '04/06', text: 'On attention ? what you give it to, you become. Filed from a late thread.' },
+  { id: 'v2', date: '28/05', text: 'The sports daemon plan, condensed to five lines.' },
+];
 
 const SEED_FEEDS = [
   { id: 'f1', name: 'X',       sub: 'Quotes from your handles ? last filed 09/06', on: true },
@@ -4346,8 +4421,9 @@ const LedgerView = () => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ skills Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
-const SkillsView = ({skills, onApprove, onRetire}) => {
+/* â”€â”€â”€ skills â”€â”€â”€ */
+/* Legacy Skills view removed from runtime.
+Legacy component removed. ({skills, onApprove, onRetire}) => {
   const [tab, setTab] = useState('Proposed');
   const lists = { Proposed: skills.proposed, Active: skills.active, Retired: skills.retired };
   return (
@@ -4376,7 +4452,81 @@ const SkillsView = ({skills, onApprove, onRetire}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ memory Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* â”€â”€â”€ memory â”€â”€â”€ */
+const SKILL_TABS = [['installed','Installed'],['discover','Discover'],['pending','Pending'],['duplicates','Duplicate Review'],['archived','Archived']];
+const SKILL_ORIGINS = {builtin:'Built into Vellum',user_learned:'Learned by you',agent_learned:'Learned by Vellum',hub_installed:'Installed from the Hub',external:'External · read-only'};
+const SKILL_ORIGIN_ORDER = ['builtin','user_learned','agent_learned','hub_installed','external'];
+const SKILL_SOURCE_OPTIONS = [{value:'all',label:'All live sources'},{value:'skills-sh',label:'skills.sh'},{value:'skillsmp',label:'SkillsMP'},{value:'clawhub',label:'ClawHub'},{value:'official',label:'Official'}];
+const SKILL_CATEGORY_OPTIONS = ['all','design','engineering','research','writing','productivity','data','uncategorized','other'].map(value=>({value,label:value==='all'?'All categories':value[0].toUpperCase()+value.slice(1)}));
+const SKILL_DISCOVERY_SECTIONS = {'most-popular':'Most Popular',trending:'Trending','most-downloaded':'Most Downloaded'};
+const SKILL_RANKING_OPTIONS = Object.entries(SKILL_DISCOVERY_SECTIONS).map(([value,label])=>({value,label}));
+const SKILL_DETAIL_TABS = [{id:'skill-md',label:'SKILL.md'},{id:'install-cli',label:'Install CLI'},{id:'prompt',label:'Prompt'}];
+const LEARN_STAGE_META = {LEARNING:{label:'Learning',body:'Resolving and validating the source.'},LEARNT:{label:'Learnt',body:'The source was gathered successfully.'},DRAFT_APPROVED:{label:'Draft Approved',body:'Vellum validation accepted the draft.'},AWAITING_USER_APPROVAL:{label:'User Approval',body:'Review the pending change before applying it.'},INSTALLING:{label:'Installing',body:'Preparing the skill package for approval.'},INSTALLED:{label:'Installed',body:'The skill is ready to use.'},ARCHIVED:{label:'Archived',body:'The skill is recoverable from Archived.'},UNINSTALLING:{label:'Removing',body:'Removing the confirmed skill package.'},UNINSTALLED:{label:'Removed',body:'The skill was removed successfully.'},FAILED:{label:'Skill action failed',body:'The skill operation could not be completed.'}};
+const skillStagePause = ms => new Promise(resolve=>setTimeout(resolve,ms));
+const skillName = s => s.normalized_name || s.name || s.identity || s.left_name || s.id || 'skill';
+const skillDescription = s => s.description || s.gist || (s.right_name ? `${s.left_name} resembles ${s.right_name}` : 'Procedural knowledge package.');
+const SKILL_ACTIVITY_STORAGE = 'vellum-skill-activities-v1';
+const skillActivityListeners = new Set();
+const readSkillActivities = () => {try{const parsed=JSON.parse(localStorage.getItem(SKILL_ACTIVITY_STORAGE)||'[]');return Array.isArray(parsed)?parsed.slice(0,12):[];}catch(_){return [];}};
+let skillActivities = readSkillActivities().map(job=>['LEARNING','INSTALLING','UNINSTALLING'].includes(job.status)?{...job,status:'FAILED',error:'This operation was interrupted. Retry to continue.'}:job);
+const publishSkillActivities = next => {skillActivities=next.slice(0,12);try{localStorage.setItem(SKILL_ACTIVITY_STORAGE,JSON.stringify(skillActivities));}catch(_){}skillActivityListeners.forEach(listener=>listener(skillActivities));};
+const updateSkillActivity = (id,patch) => publishSkillActivities(skillActivities.map(job=>job.id===id?{...job,...patch,phase:'active',updatedAt:Date.now()}:job));
+const removeSkillActivity = id => {updateSkillActivity(id,{phase:'leaving'});setTimeout(()=>publishSkillActivities(skillActivities.filter(job=>job.id!==id)),240);};
+const createSkillActivity = job => {const next={id:`skill-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,phase:'active',createdAt:Date.now(),error:'',...job};publishSkillActivities([next,...skillActivities]);return next;};
+const useSkillActivities = () => {const [jobs,setJobs]=useState(skillActivities);useEffect(()=>{skillActivityListeners.add(setJobs);return()=>skillActivityListeners.delete(setJobs);},[]);return jobs;};
+const runLearnActivity = async job => {updateSkillActivity(job.id,{status:'LEARNING',error:''});try{const result=await API.plugins.learn(job.source,'skills-hub','community');if(!result||result.status!=='pending'||!result.mutation||!result.mutation.id)throw new Error('The skill was not persisted in Pending.');updateSkillActivity(job.id,{status:'LEARNT',mutation:result.mutation,name:result.mutation.identity});await skillStagePause(500);updateSkillActivity(job.id,{status:'DRAFT_APPROVED'});await skillStagePause(650);updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL'});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
+const startLearnActivity = source => {const job=createSkillActivity({type:'learn',source,status:'LEARNING'});void runLearnActivity(job);return job;};
+const runInstallActivity = async job => {updateSkillActivity(job.id,{status:'INSTALLING',error:''});try{const response=await API.plugins.hubMutation('install',{identifier:job.item.identifier,category:'community'});const mutation=response&&response.result;if(!mutation||!mutation.id)throw new Error('The install request was not persisted in Pending.');updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL',mutation,name:mutation.identity||skillName(job.item)});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
+const startInstallActivity = item => {const job=createSkillActivity({type:'install',item,status:'INSTALLING',name:skillName(item)});void runInstallActivity(job);return job;};
+const retrySkillActivity = job => {if(job.type==='learn')void runLearnActivity(job);else if(job.type==='install')void runInstallActivity(job);};
+const isValidSkillLearnInput = value => {const clean=value.trim();if(/^(skills-sh|skills\.sh|skillsmp|clawhub|official)\//i.test(clean))return true;try{const url=new URL(clean);if((url.protocol==='http:'||url.protocol==='https:')&&url.hostname&&!url.username&&!url.password&&!/\s/.test(clean))return true;}catch(_){}return clean.length>=12&&/\s/.test(clean);};
+const SkillsActivityFeed = ({onOpenSkills}) => {const jobs=useSkillActivities();const openJob=(job,mode)=>{onOpenSkills();setTimeout(()=>window.dispatchEvent(new CustomEvent('vellum:skills-activity',{detail:{job,mode}})),40);};return <div className="sk-learn-feed" aria-live="polite" aria-label="Skill activity progress">{jobs.slice(0,3).map(job=>{const stage=LEARN_STAGE_META[job.status]||LEARN_STAGE_META.LEARNING;const running=['LEARNING','INSTALLING','UNINSTALLING'].includes(job.status),finished=['INSTALLED','ARCHIVED','UNINSTALLED'].includes(job.status);return <div className={'sk-learn-note'+(running?' running':'')+(job.phase==='leaving'?' leaving':'')} key={job.id}><div className="sk-learn-note-icon">{running?'':job.status==='FAILED'?'!':finished?'✓':'•'}</div><div className="sk-learn-note-copy" key={`${job.id}-${job.status}`}><strong>{stage.label}</strong><span>{job.error||job.message||stage.body}</span></div><div className="sk-learn-note-actions">{job.status==='AWAITING_USER_APPROVAL'&&<button className="primary" onClick={()=>openJob(job,'review')}>Review</button>}{job.status==='FAILED'&&<button className="primary" onClick={()=>retrySkillActivity(job)}>Retry</button>}{job.status==='INSTALLED'&&<button className="primary" onClick={()=>openJob(job,'installed')}>Open</button>}{(job.status==='FAILED'||finished)&&<button onClick={()=>removeSkillActivity(job.id)} aria-label="Dismiss skill status">×</button>}</div></div>})}{jobs.length>3&&<div className="sk-learn-note"><div className="sk-learn-note-icon">+</div><div className="sk-learn-note-copy"><strong>{jobs.length-3} more skill activities</strong><span>Open Skills to review all pending changes.</span></div><div/></div>}</div>;};
+const SkillsHubView = () => {
+  const activities=useSkillActivities();
+  const [tab,setTab]=useState('installed'),[overview,setOverview]=useState(null),[items,setItems]=useState([]),[query,setQuery]=useState(''),[source,setSource]=useState('all'),[category,setCategory]=useState('all'),[ranking,setRanking]=useState('most-popular');
+  const [cursor,setCursor]=useState(null),[loading,setLoading]=useState(true),[mutating,setMutating]=useState(false),[error,setError]=useState(''),[health,setHealth]=useState([]);
+  const [refreshedAt,setRefreshedAt]=useState(null);
+  const [selected,setSelected]=useState(null),[detail,setDetail]=useState(null),[detailLoading,setDetailLoading]=useState(false),[codeTab,setCodeTab]=useState('skill-md');
+  const [skillMdOpen,setSkillMdOpen]=useState(false),[copied,setCopied]=useState(false);
+  const [learnOpen,setLearnOpen]=useState(false),[learnSource,setLearnSource]=useState(''),[learnError,setLearnError]=useState(''),[confirmAction,setConfirmAction]=useState(null);
+  const requestRef=useRef(null),drawerRef=useRef(null),skillMdRef=useRef(null);
+  const refreshOverview=async()=>{try{setOverview(await API.plugins.skillsOverview());}catch(_){}};
+  const countFor=k=>{if(!overview)return 0;if(k==='pending')return overview.pending||0;const m={installed:'active',archived:'archived',duplicates:'duplicates'};return overview.counts&&overview.counts[m[k]]||0;};
+  const partial=!navigator.onLine||health.some(h=>['error','circuit_open','unavailable'].includes(h.status));
+  const loadList=async(append,next)=>{if(requestRef.current)requestRef.current.abort();const c=new AbortController();requestRef.current=c;setLoading(!append);setError('');try{const searchBody={query,category,ranking,limit:40};if(source!=='all')searchBody.source=source;const data=tab==='discover'?await API.plugins.hubSearch(searchBody,c.signal):await API.plugins.skillsCatalog({view:tab,query,limit:50,cursor:next||''},c.signal);if(c.signal.aborted)return;setItems(old=>append?old.concat(data.items||[]):(data.items||[]));setCursor(data.next_cursor||null);setHealth(data.source_health||[]);if(tab==='discover')setRefreshedAt(data.refreshed_at||new Date().toISOString());}catch(e){if(e&&e.name!=='AbortError'){setHealth([{source:'backend',status:'unavailable'}]);setError(navigator.onLine?String(e.message||e):'Offline. Showing the last loaded catalog.');}}finally{if(!c.signal.aborted)setLoading(false);}};
+  useEffect(()=>{refreshOverview();},[]);
+  useEffect(()=>{const t=setTimeout(()=>loadList(false,''),250);return()=>{clearTimeout(t);if(requestRef.current)requestRef.current.abort();};},[tab,query,source,category,ranking]);
+  useEffect(()=>{if(tab!=='discover'||query)return;const timer=setInterval(()=>loadList(false,''),300000);return()=>clearInterval(timer);},[tab,query,source,category,ranking]);
+  const openItem=async item=>{setSelected(item);setDetail(null);setDetailLoading(true);setCodeTab('skill-md');setSkillMdOpen(false);try{let data;if(tab==='discover')data=(await API.plugins.hubInspect(item.identifier)).skill;else if(tab==='pending')data=(await API.plugins.skillAction({action:'pending_diff',name:item.id})).result;else if(tab==='duplicates')data=item;else data=await API.plugins.skillDetail(skillName(item));setDetail(data);}catch(e){setDetail({error:String(e.message||e)});}finally{setDetailLoading(false);setTimeout(()=>drawerRef.current&&drawerRef.current.focus(),0);}};
+  const submitLearn=e=>{e.preventDefault();const sourceValue=learnSource.trim();if(!isValidSkillLearnInput(sourceValue)){setLearnError('Enter a valid public skill URL or a meaningful procedure.');return;}setLearnOpen(false);setLearnSource('');setLearnError('');startLearnActivity(sourceValue);};
+  const reviewActivity=async job=>{if(!job||!job.mutation)return;setTab('pending');setQuery('');setCategory('all');setSelected(job.mutation);setDetail(null);setDetailLoading(true);try{setDetail((await API.plugins.skillAction({action:'pending_diff',name:job.mutation.id})).result);}catch(e){setDetail({error:String(e.message||e)});}finally{setDetailLoading(false);setTimeout(()=>drawerRef.current&&drawerRef.current.focus(),0);}};
+  useEffect(()=>{const handler=e=>{const detail=e.detail||{};if(detail.mode==='installed'){setTab('installed');setQuery(detail.job&&detail.job.name||'');return;}reviewActivity(detail.job);};window.addEventListener('vellum:skills-activity',handler);return()=>window.removeEventListener('vellum:skills-activity',handler);},[]);
+  const mutate=async(action,payload)=>{const activity=activities.find(job=>job.mutation&&job.mutation.id===payload.id);if(action==='install'){startInstallActivity(payload);setSelected(null);setDetail(null);return;}setMutating(true);setError('');if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'INSTALLING',error:'',message:'Applying the approved skill package.'});try{let response;if(action==='approve')response=await API.plugins.pendingApprove(payload.id);else if(action==='reject')response=await API.plugins.pendingReject(payload.id);else if(action==='uninstall_confirm')response=await API.plugins.hubMutation('uninstall',{name:payload.name,confirm:true});else if(['update','import_local'].includes(action))response=await API.plugins.hubMutation(action,{name:payload.name});else if(['archive','restore','delete'].includes(action))response=await API.plugins.skillAction({action,name:payload.name});else response=await API.plugins.duplicateDecision(payload.id,action,action==='distinct'?'Explicitly retained as a distinct workflow':'');const staged=response&&(response.result||response);if(action==='approve'&&activity){const finalStatus=activity.type==='archive'?'ARCHIVED':activity.type==='delete'?'UNINSTALLED':'INSTALLED';updateSkillActivity(activity.id,{status:finalStatus,message:finalStatus==='ARCHIVED'?'The skill is now available in Archived.':'The approved skill change is complete.'});setTimeout(()=>removeSkillActivity(activity.id),3200);}if(action==='reject'&&activity)removeSkillActivity(activity.id);if(action==='uninstall_confirm'){const job=createSkillActivity({type:'uninstall',name:payload.name,status:'UNINSTALLED'});setTimeout(()=>removeSkillActivity(job.id),3200);setConfirmAction(null);}if(['archive','update','import_local','delete','restore'].includes(action)&&staged&&staged.status==='pending'){const job=createSkillActivity({type:action,name:payload.name,status:'AWAITING_USER_APPROVAL',mutation:staged,message:`Review the ${action.replace('_',' ')} change before applying it.`});setTab('pending');await reviewActivity(job);}else{setSelected(null);setDetail(null);}setSkillMdOpen(false);await Promise.all([refreshOverview(),loadList(false,'')]);}catch(e){const message=String(e.message||e);setError(message);if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'AWAITING_USER_APPROVAL',error:message});if(action==='uninstall_confirm')setConfirmAction(null);}finally{setMutating(false);}};
+  const copyDetail=async value=>{if(!value)return;try{await navigator.clipboard.writeText(value);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch(_){setCopied(false);}};
+  useEffect(()=>{if(!selected)return;const trap=e=>{if(skillMdOpen)return;if(e.key==='Escape'){setSelected(null);setDetail(null);return;}if(e.key!=='Tab'||!drawerRef.current)return;const a=[...drawerRef.current.querySelectorAll('button,a,input,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled);if(!a.length)return;if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a[a.length-1].focus();}else if(!e.shiftKey&&document.activeElement===a[a.length-1]){e.preventDefault();a[0].focus();}};window.addEventListener('keydown',trap);return()=>window.removeEventListener('keydown',trap);},[selected,skillMdOpen]);
+  useEffect(()=>{if(!skillMdOpen)return;setTimeout(()=>skillMdRef.current&&skillMdRef.current.focus(),0);const trap=e=>{if(e.key==='Escape'){setSkillMdOpen(false);return;}if(e.key!=='Tab'||!skillMdRef.current)return;const a=[...skillMdRef.current.querySelectorAll('button,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled);if(!a.length)return;if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a[a.length-1].focus();}else if(!e.shiftKey&&document.activeElement===a[a.length-1]){e.preventDefault();a[0].focus();}};window.addEventListener('keydown',trap);return()=>window.removeEventListener('keydown',trap);},[skillMdOpen]);
+  useEffect(()=>{if(!learnOpen)return;const trap=e=>{if(e.key==='Escape'){setLearnOpen(false);return;}if(e.key!=='Tab')return;const card=document.querySelector('.sk-learn-card');if(!card)return;const a=[...card.querySelectorAll('button,textarea')].filter(x=>!x.disabled);if(!a.length)return;if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a[a.length-1].focus();}else if(!e.shiftKey&&document.activeElement===a[a.length-1]){e.preventDefault();a[0].focus();}};window.addEventListener('keydown',trap);return()=>window.removeEventListener('keydown',trap);},[learnOpen]);
+  const visible=tab==='discover'||category==='all'?items:items.filter(i=>String(i.category||'other').toLowerCase()===category);
+  const orderedVisible=tab==='installed'?[...visible].sort((a,b)=>SKILL_ORIGIN_ORDER.indexOf(a.origin)-SKILL_ORIGIN_ORDER.indexOf(b.origin)||skillName(a).localeCompare(skillName(b))):visible;
+  return <div className="skills-page"><main className="sk-hub"><div className="sk-hub-inner">
+    <header className="sk-head"><div className="sk-head-main"><h1 className="sk-title">Skills</h1><p className="sk-sub">Curated procedural knowledge for reliable, repeatable work.</p></div><div className={'sk-health'+(partial?' partial':'')}><i/>{partial?'Partial source access':'Sources healthy'}</div><button className="sk-primary" onClick={()=>setLearnOpen(true)}>Add skill&nbsp; +</button></header>
+    <section className="sk-stats" aria-label="Skill statistics"><div className="sk-stat"><div className="sk-stat-k">Installed</div><div className="sk-stat-v">{overview&&overview.counts?overview.counts.active:0}</div><div className="sk-stat-note">Ready on demand</div></div><div className="sk-stat"><div className="sk-stat-k">Pending approval</div><div className="sk-stat-v">{overview?overview.pending:0}</div><div className="sk-stat-note">Needs your review</div></div><div className="sk-stat"><div className="sk-stat-k">Archived</div><div className="sk-stat-v">{overview&&overview.counts?overview.counts.archived:0}</div><div className="sk-stat-note">Recoverable</div></div><div className="sk-stat"><div className="sk-stat-k">Curator</div><div className="sk-stat-v" style={{fontSize:18}}>{overview&&overview.curator&&overview.curator.paused?'Paused':'Healthy'}</div><div className="sk-stat-note">7-day review cadence</div></div></section>
+    <div className="sk-toolbar"><label className="sk-search"><IcSearch size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={tab==='discover'?'Search live skill inventories':'Search installed skills'} aria-label="Search skills"/></label>{tab==='discover'&&<VSelect className="sk-filter" value={ranking} onValueChange={setRanking} options={SKILL_RANKING_OPTIONS} ariaLabel="Discovery ranking" menuWidth={190}/>} {tab==='discover'&&<VSelect className="sk-filter" value={source} onValueChange={setSource} options={SKILL_SOURCE_OPTIONS} ariaLabel="Skill source" menuWidth={210}/>}<VSelect className="sk-filter" value={category} onValueChange={setCategory} options={SKILL_CATEGORY_OPTIONS} ariaLabel="Skill category" menuWidth={190}/></div>
+    <nav className="sk-tabs" aria-label="Skill views">{SKILL_TABS.map(([k,l])=><button key={k} className={'sk-tab'+(tab===k?' on':'')} onClick={()=>{setTab(k);setSelected(null);setDetail(null);}}>{l}{countFor(k)>0&&<span className="sk-count">{countFor(k)}</span>}</button>)}</nav>
+    {tab==='pending'&&items.length>0&&<div className="sk-banner"><strong>{items.length} change{items.length===1?'':'s'} waiting for approval</strong><span>Review the immutable diff before applying.</span></div>}{error&&<div className="sk-error" role="alert">{error}</div>}
+    <section className="sk-list" aria-live="polite">{loading?[0,1,2,3].map(i=><div key={i} className="sk-skeleton"/>):orderedVisible.length===0?<div className="sk-empty">{navigator.onLine?(tab==='discover'?(query?'No live marketplace skills match these filters.':`${SKILL_DISCOVERY_SECTIONS[ranking]} skills are temporarily unavailable from ${source==='all'?'the connected sources':SKILL_SOURCE_OPTIONS.find(option=>option.value===source)?.label||source}.`):'No skills match this view.'):'Offline. Marketplace results are unavailable.'}</div>:orderedVisible.map((item,index)=>{const name=skillName(item),trust=item.trust_level||item.source||item.state||'local',origin=item.origin,previous=index?orderedVisible[index-1].origin:null;return <React.Fragment key={item.id||item.identifier||`${item.source}:${name}:${item.author||''}`}>{tab==='installed'&&origin!==previous&&<div className="sk-origin-head">{SKILL_ORIGINS[origin]||'Other skills'}<span>{orderedVisible.filter(row=>row.origin===origin).length} skills</span></div>}<button className={'sk-row'+(selected&&selected.identifier===item.identifier?' on':'')} onClick={()=>openItem(item)}><div><div className="sk-row-name">{name}{item.is_external&&<span title="Read-only external">↗</span>}{tab==='pending'&&<span className="sk-origin-tag">{item.origin==='hub'?'Hub install':item.origin==='background_review'?'Suggested by Vellum':'Created by you'}</span>}</div><div className="sk-row-desc">{skillDescription(item)}{item.author?` · by ${item.author}`:''}</div></div><div className="sk-row-meta"><span className={'sk-trust'+(/community|candidate/.test(trust)?' warn':'')}>● {trust}</span><br/>{item.category||item.updated_at||item.created_at||item.action||''}</div><span className="sk-row-action">{tab==='discover'?'Inspect':tab==='pending'?'Review diff':tab==='duplicates'?'Resolve':'Open'}</span></button></React.Fragment>})}</section>
+    {cursor&&<button className="sk-btn sk-loadmore" onClick={()=>loadList(true,cursor)} disabled={loading}>Load more</button>}<div className="sk-sourcebar"><span className="dot"/><span>{partial?'Some registries are offline or rate-limited. Results may be incomplete.':'All configured skill sources are available.'}</span><span>{tab==='discover'&&refreshedAt?`Live ranking refreshed ${new Date(refreshedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`:'Local catalog remains available'}</span></div>
+  </div></main>
+  {selected&&<aside className="sk-drawer" ref={drawerRef} tabIndex="-1" role="dialog" aria-modal="true" aria-label={`Skill details for ${skillName(selected)}`}><div className="sk-drawer-head"><div className="sk-drawer-title"><h3>{skillName(selected)}</h3><p>{detail&&detail.provenance?`${detail.provenance.source} · ${detail.provenance.trust_level}`:(selected.source||selected.action||selected.state||tab)}</p></div><button className="sk-close" onClick={()=>{setSelected(null);setDetail(null);setSkillMdOpen(false);}} aria-label="Close details">×</button></div>
+    <div className="sk-drawer-actions">{tab==='discover'&&<button className="sk-primary" disabled={mutating||detailLoading||!detail||!!detail.error} onClick={()=>mutate('install',selected)}>{detailLoading?'Inspecting…':'Install'}</button>}{tab==='pending'&&<React.Fragment><button className="sk-primary" disabled={mutating||detailLoading||!!(detail&&detail.error)} onClick={()=>mutate('approve',selected)}>Approve</button><button className="sk-btn" disabled={mutating} onClick={()=>mutate('reject',selected)}>Reject</button></React.Fragment>}{tab==='duplicates'&&['merge','replace','distinct'].map(a=><button key={a} className="sk-btn" disabled={mutating} onClick={()=>mutate(a,selected)}>{a==='distinct'?'Keep distinct':a[0].toUpperCase()+a.slice(1)}</button>)}{tab==='installed'&&detail&&!detail.error&&<React.Fragment>{detail.provenance&&detail.provenance.source==='external'?<button className="sk-primary" disabled={mutating} onClick={()=>mutate('import_local',{name:skillName(selected)})}>Import locally</button>:detail.provenance&&detail.provenance.source!=='local'?<React.Fragment><button className="sk-primary" disabled={mutating} onClick={()=>mutate('update',{name:skillName(selected)})}>Update</button><button className="sk-btn" disabled={mutating} onClick={()=>setConfirmAction({type:'uninstall',name:skillName(selected)})}>Uninstall</button></React.Fragment>:<button className="sk-btn" disabled={mutating} onClick={()=>mutate('archive',{name:skillName(selected)})}>Archive</button>}{!(detail.provenance&&detail.provenance.source==='external')&&<button className="sk-btn danger" disabled={mutating} onClick={()=>detail.origin==='builtin'?setError("Built-in skills can't be removed"):mutate('delete',{name:skillName(selected)})}>Delete</button>}</React.Fragment>}{tab==='archived'&&<button className="sk-primary" disabled={mutating} onClick={()=>mutate('restore',{name:skillName(selected)})}>Restore</button>}</div>
+    <div className="sk-drawer-body">{detailLoading?<div className="sk-detail-skeleton" aria-label="Loading skill details"><i/><i/><i/><i/></div>:detail&&detail.error?<div className="sk-detail-fallback" role="alert"><h4>Skill details unavailable</h4><p>{skillDescription(selected)}</p><div className="sk-error">{detail.error}</div>{selected&&selected.repository_url&&<p><a className="sk-repo" href={selected.repository_url} target="_blank" rel="noreferrer">Open source repository</a></p>}<button className="sk-btn" onClick={()=>openItem(selected)}>Retry inspection</button></div>:detail&&<React.Fragment><section className="sk-sec"><h4>Description</h4><p>{detail.description||skillDescription(selected)}</p>{detail.origin&&<p><span className="sk-origin-tag">{SKILL_ORIGINS[detail.origin]||detail.origin}</span></p>}</section>{detail.usage_intelligence&&<section className="sk-sec"><div className="sk-kv"><div>Success rate<strong>{detail.usage_intelligence.success_rate==null?'—':Math.round(detail.usage_intelligence.success_rate*100)+'%'}</strong></div><div>Uses<strong>{detail.usage_intelligence.total_uses||0}</strong></div></div></section>}{detail.recent_usage&&<section className="sk-sec"><h4>Recent scrubbed tasks</h4>{detail.recent_usage.length?<ul>{detail.recent_usage.slice(0,5).map(u=><li key={u.id}>{u.task_summary} · {u.outcome}</li>)}</ul>:<p>No recent task history.</p>}</section>}{detail.provenance&&<section className="sk-sec"><h4>Provenance</h4><p>{detail.provenance.repository_url?<a className="sk-repo" href={detail.provenance.repository_url} target="_blank" rel="noreferrer">{detail.provenance.repository_url}</a>:'Local package'}</p><p>{detail.provenance.source_ref&&`Verified ref: ${detail.provenance.source_ref}`}{detail.provenance.content_hash&&` · ${detail.provenance.content_hash.slice(0,12)}`}</p></section>}<section className="sk-sec"><h4>Security findings</h4><p>{detail.findings&&detail.findings.length?detail.findings.map(f=>f.description).join(' · '):(detail.provenance&&detail.provenance.scan_verdict)||detail.scan_verdict||'No critical findings recorded.'}</p></section>{detail.support_files&&<section className="sk-sec"><h4>Support files</h4><div className="sk-files">{detail.support_files.length?detail.support_files.map(f=><span className="sk-file" key={f}>{f}</span>):<span className="sk-file">None</span>}</div></section>}{detail.diff?<section className="sk-sec"><h4>Pending diff</h4><pre className="sk-code">{detail.diff}</pre></section>:<section className="sk-sec"><h4>Skill source</h4><div className="sk-code-tabs">{SKILL_DETAIL_TABS.map(item=><button key={item.id} className={codeTab===item.id?'on':''} onClick={()=>setCodeTab(item.id)}>{item.label}</button>)}</div>{codeTab==='skill-md'?(detail.skill_md?<div className="sk-source-choice"><p>Open the complete SKILL.md in a full-size reader.</p><button className="sk-primary" onClick={()=>setSkillMdOpen(true)}>Open SKILL.md</button></div>:<div className="sk-source-unavailable">SKILL.md is unavailable for this source.</div>):codeTab==='install-cli'?(detail.install_cli?<pre className="sk-code">{detail.install_cli}</pre>:<div className="sk-source-unavailable">This source does not provide a CLI installation command.</div>):detail.prompt?<pre className="sk-code">{detail.prompt}</pre>:<div className="sk-source-unavailable">No installation prompt is available.</div>}</section>}</React.Fragment>}</div>
+  </aside>}
+  {skillMdOpen&&detail&&detail.skill_md&&<div className="sk-source-modal" onMouseDown={e=>{if(e.target===e.currentTarget)setSkillMdOpen(false);}}><section className="sk-source-panel" ref={skillMdRef} tabIndex="-1" role="dialog" aria-modal="true" aria-labelledby="skill-md-title"><div className="sk-source-head"><h3 id="skill-md-title">{skillName(selected)} · SKILL.md</h3><button className="sk-btn" onClick={()=>copyDetail(detail.skill_md)}>{copied?'Copied':'Copy'}</button><button className="sk-close" onClick={()=>setSkillMdOpen(false)} aria-label="Close SKILL.md reader">×</button></div><pre className="sk-source-full">{detail.skill_md}</pre></section></div>}
+  {learnOpen&&<div className="sk-learn" role="dialog" aria-modal="true" aria-label="Create a skill"><form className="sk-learn-card" onSubmit={submitLearn}><h3>Teach Vellum a skill</h3><p>Provide a public skill URL or a meaningful demonstrated procedure. Private details are scrubbed locally before authoring.</p><textarea autoFocus value={learnSource} aria-invalid={!!learnError} onChange={e=>{setLearnSource(e.target.value);if(learnError)setLearnError('');}} placeholder="https://skills.sh/anthropics/skills/frontend-design"/>{learnError&&<div className="sk-field-error" role="alert">{learnError}</div>}<div className="sk-learn-actions"><button type="button" className="sk-btn" onClick={()=>{setLearnOpen(false);setLearnError('');}}>Cancel</button><button className="sk-primary" disabled={!learnSource.trim()}>Prepare skill</button></div></form></div>}
+  {confirmAction&&<div className="sk-learn" role="dialog" aria-modal="true" aria-label="Confirm skill removal"><section className="sk-learn-card"><h3>Remove {confirmAction.name}?</h3><p>This immediately uninstalls the skill without creating a Pending item. A recoverable snapshot is taken first.</p><div className="sk-learn-actions"><button className="sk-btn" disabled={mutating} onClick={()=>setConfirmAction(null)}>Cancel</button><button className="sk-primary" disabled={mutating} onClick={()=>mutate('uninstall_confirm',{name:confirmAction.name})}>{mutating?'Removing…':'Remove skill'}</button></div></section></div>}
+  </div>;
+};
+
 const MEM_SOURCES = [{ id: 'vellum', name: 'Vellum', icon: IcBrain }].concat(AGENTS.map(a => ({ id: a.id, name: a.name, icon: a.icon })));
 
 const MemoryView = ({memory, onForget}) => {
@@ -5818,6 +5968,88 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   );
 };
 
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','ledger','skills','apps','memory','kg','archive','agent']);
+const isNotFoundLocation = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.replace(/\/+$/,'');
+    return params.get('view') === '404' || params.has('404') || window.location.hash === '#404' || path.endsWith('/404');
+  } catch {
+    return false;
+  }
+};
+
+const NotFoundView = ({onBack}) => {
+  const rootRef = useRef(null);
+  useEffect(() => { rootRef.current?.focus(); }, []);
+  return (
+    <section ref={rootRef} className="not-found-page" role="main" tabIndex="-1" aria-labelledby="not-found-title">
+      <h1 id="not-found-title" className="nf-sr">404 — Page not found</h1>
+      <div className="nf-center">
+        <div className="nf-scene" aria-hidden="true">
+          <div className="nf-shadow"/>
+          <div className="nf-character-flight">
+            <div className="nf-beams"/>
+            <div className="nf-character">
+              <svg viewBox="0 0 190 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="nf-shell" x1="58" y1="31" x2="134" y2="145" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#f3f1f1"/>
+                    <stop offset=".18" stopColor="#8f8b8b"/>
+                    <stop offset=".48" stopColor="#171616"/>
+                    <stop offset=".78" stopColor="#030303"/>
+                    <stop offset="1" stopColor="#504b4b"/>
+                  </linearGradient>
+                  <radialGradient id="nf-gloss" cx="0" cy="0" r="1" gradientTransform="translate(78 51) rotate(52) scale(66 58)" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="white" stopOpacity=".82"/>
+                    <stop offset=".34" stopColor="#c8c4c4" stopOpacity=".25"/>
+                    <stop offset="1" stopColor="#090909" stopOpacity="0"/>
+                  </radialGradient>
+                  <linearGradient id="nf-face" x1="73" y1="47" x2="119" y2="92" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#060606"/>
+                    <stop offset=".72" stopColor="#232020"/>
+                    <stop offset="1" stopColor="#020202"/>
+                  </linearGradient>
+                  <filter id="nf-eye-glow" x="-200%" y="-200%" width="500%" height="500%">
+                    <feGaussianBlur stdDeviation="2.4" result="blur"/>
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+                <g opacity=".92" stroke="#888383" strokeWidth="1.2">
+                  <circle cx="52" cy="53" r="25" fill="url(#nf-shell)"/>
+                  <path d="M36 48c7-14 26-19 38-7" stroke="white" strokeOpacity=".28" strokeLinecap="round"/>
+                  <rect x="35" y="46" width="35" height="17" rx="8.5" fill="#080808"/>
+                  <circle cx="45" cy="54" r="2.5" fill="#f0ecec" stroke="none"/>
+                  <circle cx="60" cy="54" r="2.5" fill="#f0ecec" stroke="none"/>
+                  <circle cx="139" cy="56" r="27" fill="url(#nf-shell)"/>
+                  <path d="M122 48c8-14 27-17 39-5" stroke="white" strokeOpacity=".26" strokeLinecap="round"/>
+                  <rect x="121" y="48" width="37" height="18" rx="9" fill="#080808"/>
+                  <circle cx="132" cy="57" r="2.6" fill="#f0ecec" stroke="none"/>
+                  <circle cx="148" cy="57" r="2.6" fill="#f0ecec" stroke="none"/>
+                </g>
+                <rect x="53" y="43" width="85" height="101" rx="41" fill="url(#nf-shell)" stroke="#8d8888" strokeWidth="1.4"/>
+                <rect x="53" y="43" width="85" height="101" rx="41" fill="url(#nf-gloss)"/>
+                <path d="M62 105c6 25 22 34 39 35 17 1 27-5 35-18" stroke="white" strokeOpacity=".18" strokeLinecap="round"/>
+                <rect x="67" y="55" width="58" height="37" rx="18.5" fill="url(#nf-face)" stroke="#777171"/>
+                <path d="M76 63c12-9 29-9 40-2" stroke="white" strokeOpacity=".16" strokeLinecap="round"/>
+                <rect x="78" y="68" width="13" height="8" rx="4" fill="#f4f1f1" filter="url(#nf-eye-glow)"/>
+                <rect x="101" y="68" width="13" height="8" rx="4" fill="#f4f1f1" filter="url(#nf-eye-glow)"/>
+                <path d="M76 110c8 8 13 12 20 18 6-6 12-12 19-20" stroke="#d6d1d1" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity=".72"/>
+                <rect x="43" y="93" width="17" height="36" rx="8.5" fill="#171616" stroke="#817b7b"/>
+                <rect x="131" y="92" width="17" height="36" rx="8.5" fill="#171616" stroke="#817b7b"/>
+                <path d="M48 100h7M136 100h7" stroke="white" strokeOpacity=".35" strokeLinecap="round"/>
+                <ellipse cx="95" cy="148" rx="31" ry="7" fill="#030303" stroke="#5f5a5a" strokeOpacity=".7"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <p className="nf-copy">You’re not supposed to be here…</p>
+      </div>
+      <button type="button" className="nf-back" onClick={onBack}>Go back</button>
+    </section>
+  );
+};
+
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -5841,7 +6073,16 @@ const App = () => {
   const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
   useEffect(() => { try { localStorage.setItem('vellum-dock-locked', dockLocked ? '1' : '0'); } catch {} }, [dockLocked]);
-  const [view, setView] = useState('chat');
+  const [view, setView] = useState(() => isNotFoundLocation() ? '404' : 'chat');
+  useEffect(() => {
+    const syncLocation = () => setView(current => isNotFoundLocation() ? '404' : (current === '404' ? 'chat' : current));
+    window.addEventListener('popstate', syncLocation);
+    window.addEventListener('hashchange', syncLocation);
+    return () => {
+      window.removeEventListener('popstate', syncLocation);
+      window.removeEventListener('hashchange', syncLocation);
+    };
+  }, []);
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activeAgentId, setActiveAgentId] = useState(null);
@@ -5854,7 +6095,7 @@ const App = () => {
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState([]);
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
-  const [skills, setSkills] = useState(SEED_SKILLS);
+  const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(DEFAULT_MODEL);
   const [models, setModels] = useState(MODELS);
@@ -5998,12 +6239,11 @@ const App = () => {
     let alive = true;
     (async () => {
       try {
-        const [conv, modelData, settingsData, pluginData, skillsData, automationData, subagentData] = await Promise.all([
+        const [conv, modelData, settingsData, pluginData, automationData, subagentData] = await Promise.all([
           API.conversations.list(),
           API.settings.models(),
           API.settings.get(),
           API.plugins.list(),
-          API.plugins.skills(),
           API.automations.list(),
           API.runtimes.subagents(),
         ]);
@@ -6028,7 +6268,6 @@ const App = () => {
         if (pluginData && Array.isArray(pluginData.plugins)) {
           setApps(pluginData.plugins.map(p => ({...p, state: p.configured ? 'ready' : 'off', note: p.notes || p.status})));
         }
-        if (skillsData && skillsData.skills) setSkills(skillsData.skills);
         if (automationData && Array.isArray(automationData.automations)) setAutomations(automationData.automations);
         if (subagentData && Array.isArray(subagentData.subagents)) setSubagents(subagentData.subagents);
         await refreshMemoryData();
@@ -6049,8 +6288,30 @@ const App = () => {
   }, []);
 
   const newChat = () => { setView('chat'); setActiveChatId(null); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const leaveNotFound = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      url.searchParams.delete('404');
+      url.hash = '';
+      window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+    } catch {}
+    newChat();
+  };
   const openChat = id => { setView('chat'); setActiveChatId(id); try { localStorage.setItem('vellum-active-chat-id', id); } catch {} setMenu(null); setActivityMsg(null); };
-  const nav = v => { setView(v); setMenu(null); setActivityMsg(null); };
+  const nav = v => {
+    const next = APP_VIEW_IDS.has(v) ? v : '404';
+    if (next === '404') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', '404');
+        window.history.replaceState(null, '', url.pathname + '?' + url.searchParams.toString());
+      } catch {}
+    }
+    setView(next);
+    setMenu(null);
+    setActivityMsg(null);
+  };
   const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
@@ -6290,17 +6551,6 @@ const App = () => {
       if (activeProjectId === id && view === 'project') setView('projects');
     }
   };
-  const approveSkill = id => setSkills(sk => {
-    const s = sk.proposed.find(x => x.id === id);
-    if (!s) return sk;
-    return {...sk, proposed: sk.proposed.filter(x => x.id !== id),
-      active: [{...s, uses: 0, last: 'Today'}, ...sk.active]};
-  });
-  const retireSkill = id => setSkills(sk => {
-    const s = sk.active.find(x => x.id === id);
-    if (!s) return sk;
-    return {...sk, active: sk.active.filter(x => x.id !== id), retired: [s, ...sk.retired]};
-  });
   const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
   const restoreChat = id => {
     setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
@@ -6832,6 +7082,8 @@ const App = () => {
       <div className="cursor-glow"></div>
       <div className="win">
         <AppBackground backgroundId={backgroundId}/>
+        {view !== '404' && <React.Fragment>
+        <SkillsActivityFeed onOpenSkills={() => nav('skills')}/>
         <div className="body">
           {sidebarPinned && <Sidebar chats={chats} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
@@ -6872,7 +7124,7 @@ const App = () => {
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'ledger' && <LedgerView/>}
-            {view === 'skills' && <SkillsView skills={skills} onApprove={approveSkill} onRetire={retireSkill}/>}
+            {view === 'skills' && <SkillsHubView/>}
             {view === 'apps' && <BackendConnectorsView apps={apps}/>}
             {view === 'memory' && <MemoryConsole page onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()}/>}
@@ -6884,6 +7136,8 @@ const App = () => {
           onNewChat={newChat} onSearch={() => setSearchOpen(true)} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
+        </React.Fragment>}
+        {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {

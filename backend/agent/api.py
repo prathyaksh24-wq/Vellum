@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 import importlib.util
 import inspect
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,7 +23,7 @@ import urllib.parse
 import urllib.request
 from uuid import uuid4
 
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from langchain_core.messages import ToolMessage
@@ -71,7 +72,7 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
-from agent.skills import SkillSurfaceService, create_skill_source_router
+from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
@@ -127,7 +128,7 @@ def _skill_surface() -> SkillSurfaceService:
         _skill_surface_singleton = SkillSurfaceService(
             REPO_ROOT / ".skills",
             logs_root=REPO_ROOT / "data" / "logs" / "curator",
-            sources=create_skill_source_router(),
+            sources=create_skill_source_router(skills_root=REPO_ROOT / ".skills"),
         )
     return _skill_surface_singleton
 
@@ -1264,18 +1265,34 @@ async def _run_agent(
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
         agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
 
-    async with _agent_runtime_lock:
-        try:
-            await _ensure_model(model)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from agent.skills.usage_intelligence import usage_scope
 
-        await _repair_incomplete_tool_history(active_thread_id)
-        agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
-        result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
-            config=_thread_config(active_thread_id),
-        )
+    skill_usage_scope = usage_scope(clean_message, active_thread_id)
+    skill_usage_scope.__enter__()
+    direct_skill = re.match(r"Load ([a-z][a-z0-9_-]*) with skill_view", clean_message, re.I)
+    if direct_skill:
+        skill_usage_scope.activate(direct_skill.group(1), "direct_slash")
+    try:
+        async with _agent_runtime_lock:
+            try:
+                await _ensure_model(model)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+            await _repair_incomplete_tool_history(active_thread_id)
+            agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
+            result = await agent.ainvoke(
+                {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
+                config=_thread_config(active_thread_id),
+            )
+    except asyncio.CancelledError:
+        skill_usage_scope.finish("cancelled")
+        skill_usage_scope.__exit__(None, None, None)
+        raise
+    except Exception:
+        skill_usage_scope.finish("failed")
+        skill_usage_scope.__exit__(None, None, None)
+        raise
     capture_from_invoke_result(
         ledger=_api_ledger,
         result=result,
@@ -1286,6 +1303,8 @@ async def _run_agent(
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _message_content(messages[-1] if messages else None) or "No response."
     tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
+    skill_usage_scope.finish("completed", tool_count=len(tools))
+    skill_usage_scope.__exit__(None, None, None)
     seen_source_urls = {source.url for source in delegated_sources if source.url}
     sources = list(delegated_sources)
     for source in _sources_from_messages(messages):
@@ -1382,6 +1401,19 @@ async def _background_learn(
         )
         if pending and memory_settings.get("dreaming_enabled", True):
             await _maybe_run_dreaming(reason="background_learn")
+        try:
+            from agent.skills.learning import SkillLearningWorkflow
+
+            learning = SkillLearningWorkflow(Path(".skills"))
+            turn = await asyncio.to_thread(
+                learning.record_successful_turn,
+                clean_query[:1000],
+                complex_task=bool(tools) or len(clean_query) >= 240,
+            )
+            if turn["review_due"]:
+                await asyncio.to_thread(learning.review_candidates)
+        except Exception:
+            pass
         # Hermes-style: refresh the cached user model (Honcho dialectic) on a
         # cadence so the next turn's prompt reflects a deeper understanding.
         try:
@@ -1653,6 +1685,9 @@ async def capabilities() -> dict[str, Any]:
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
+    from agent.skills.curator_runtime import get_curator_runtime
+
+    get_curator_runtime().mark_activity()
     return await _run_agent(request.message, request.thread_id, request.model, request.attachments)
 
 
@@ -1752,10 +1787,44 @@ async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
 
 @router.post("/skills/learn")
 async def learn_skill(payload: dict[str, Any]) -> dict[str, Any]:
+    from agent.skills.intake import resolve_skill_intake, validate_skill_learn_input
+
     source = str(payload.get("source") or "").strip()
     if not source:
         raise HTTPException(status_code=400, detail="learn source is required")
-    return _skill_surface().slash(f"/learn {source}")
+    try:
+        validate_skill_learn_input(source)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "invalid_skill_source", "message": str(exc)},
+        ) from exc
+    target = resolve_skill_intake(source)
+    if target.kind == "marketplace":
+        result = json.loads(skill_hub.invoke({
+            "action": "install",
+            "identifier": target.value,
+            "category": str(payload.get("category") or "community"),
+            "force": payload.get("force") is True,
+        }))
+        if result.get("ok") is False:
+            raise HTTPException(status_code=400, detail={"code": "skill_intake_failed", "message": result.get("error")})
+        mutation_id = str(result.get("id") or "")
+        if not mutation_id or not any(item["id"] == mutation_id for item in _skill_surface().mutations.list_pending()):
+            raise HTTPException(status_code=500, detail={"code": "pending_not_persisted", "message": "Skill installation was not persisted for approval."})
+        return {"ok": True, "mode": "hub_install", "status": "pending", "mutation": result}
+
+    before = {item["id"] for item in _skill_surface().mutations.list_pending()}
+    response = await _run_agent(f"/learn {source}", str(payload.get("thread_id") or "skills-hub"))
+    pending = _skill_surface().mutations.list_pending()
+    created = [item for item in pending if item["id"] not in before]
+    if not created:
+        raise HTTPException(status_code=422, detail={
+            "code": "skill_not_staged",
+            "message": "Vellum completed the learning turn but did not create an approval draft.",
+            "answer": response.answer,
+        })
+    return {"ok": True, "mode": "authored", "status": "pending", "mutation": created[-1], "answer": response.answer}
 
 
 @router.post("/skills/bundles")
@@ -1771,6 +1840,216 @@ async def skill_hub_action(payload: dict[str, Any]) -> dict[str, Any]:
 @router.post("/skills/curator")
 async def skill_curator_action(payload: dict[str, Any]) -> dict[str, Any]:
     return json.loads(skill_curator.invoke(payload))
+
+
+class SkillHubSearchRequest(BaseModel):
+    query: str = ""
+    source: str | None = None
+    category: str = "all"
+    ranking: Literal["most-popular", "trending", "most-downloaded"] = "most-popular"
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class SkillHubMutationRequest(BaseModel):
+    identifier: str = ""
+    name: str = ""
+    category: str = "uncategorized"
+    force: bool = False
+    confirm: bool = False
+
+
+class DuplicateDecisionRequest(BaseModel):
+    decision: Literal["merge", "replace", "distinct"]
+    reason: str = ""
+
+
+class UsageFeedbackRequest(BaseModel):
+    outcome: Literal["corrected", "completed", "failed", "cancelled"]
+
+
+def _skill_cursor_encode(after: str, view: str, query: str) -> str:
+    raw = json.dumps({"after": after, "view": view, "query": query}, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _skill_cursor_decode(cursor: str, view: str, query: str) -> str:
+    if not cursor:
+        return ""
+    try:
+        loaded = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail={"code": "invalid_cursor", "message": "Skill cursor is invalid."}) from exc
+    if loaded.get("view") != view or loaded.get("query") != query:
+        raise HTTPException(status_code=400, detail={"code": "cursor_scope_mismatch", "message": "Cursor does not match this search."})
+    return str(loaded.get("after") or "")
+
+
+def _etag_response(request: Request, response: Response, payload: Any) -> None:
+    encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    etag = f'"{hashlib.sha256(encoded).hexdigest()}"'
+    response.headers["ETag"] = etag
+    response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    if request.headers.get("if-none-match") == etag:
+        response.status_code = 304
+
+
+@router.get("/skills/v2/overview")
+async def skills_v2_overview(request: Request, response: Response) -> dict[str, Any]:
+    catalog = _skill_surface().catalog()
+    states = catalog["skills"]
+    payload = {
+        "counts": {name: len(items) for name, items in states.items()},
+        "pending": len(catalog["pending_writes"]),
+        "installed_from_hub": len(catalog["hub_installed"]),
+        "curator": catalog["curator"],
+        "write_approval": catalog["write_approval"],
+        "external_diagnostics": catalog["external_diagnostics"],
+    }
+    payload["counts"]["duplicates"] = len(SkillCatalog(_skill_surface().root).duplicate_reviews())
+    _etag_response(request, response, payload)
+    return payload
+
+
+@router.get("/skills/v2/catalog")
+async def skills_v2_catalog(
+    request: Request,
+    response: Response,
+    view: Literal["installed", "proposed", "retired", "archived", "pending", "duplicates"] = "installed",
+    query: str = "",
+    limit: int = Query(default=50, ge=1, le=200),
+    cursor: str = "",
+) -> dict[str, Any]:
+    after = _skill_cursor_decode(cursor, view, query)
+    surface = _skill_surface()
+    if view == "pending":
+        items = sorted(surface.mutations.list_pending(), key=lambda item: item["id"])
+        if query:
+            items = [item for item in items if query.casefold() in f"{item.get('identity','')} {item.get('gist','')}".casefold()]
+        if after:
+            items = [item for item in items if item["id"] > after]
+    elif view == "duplicates":
+        items = SkillCatalog(surface.root).duplicate_reviews()
+        if after:
+            items = [item for item in items if str(item["id"]) > after]
+    else:
+        state = {"installed": "active", "proposed": "proposed", "retired": "retired", "archived": "archived"}[view]
+        items = SkillCatalog(surface.root).search(query, state=state, limit=limit + 1, after=after)
+    page = items[:limit]
+    next_cursor = None
+    if len(items) > limit and page:
+        next_cursor = _skill_cursor_encode(str(page[-1].get("normalized_name") or page[-1].get("id") or ""), view, query)
+    payload = {"items": page, "next_cursor": next_cursor, "view": view, "source_health": _skills_source_health(surface)}
+    _etag_response(request, response, payload)
+    return payload
+
+
+def _skills_source_health(surface: SkillSurfaceService) -> list[dict[str, Any]]:
+    health = []
+    for source in surface.hub.sources:
+        http = getattr(source, "http", None)
+        source_id = getattr(source, "source_id", "unknown")
+        recent = dict(surface.hub.last_search_health.get(source_id) or {})
+        circuit_open = any(value >= 5 for value in getattr(http, "_failures", {}).values())
+        health.append({
+            "source": source_id,
+            "status": "circuit_open" if circuit_open else recent.get("status", "available"),
+            "searchable": bool(getattr(source, "searchable", False)),
+            "error": recent.get("error"),
+            "rate_limit": dict(getattr(source, "quota", {}) or getattr(http, "rate_limit", {}) or {}),
+        })
+    return health
+
+
+@router.post("/skills/v2/hub/search")
+async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]:
+    from agent.skills.privacy import SkillPrivacyGate
+
+    query = SkillPrivacyGate.marketplace_query(request.query)
+    surface = _skill_surface()
+    if not query:
+        discovery = await asyncio.to_thread(
+            surface.hub.discover,
+            source_filter=request.source or "all",
+            ranking=request.ranking,
+            limit_per_section=max(1, min(40, request.limit)),
+        )
+        items = discovery["items"]
+    else:
+        discovery = {"sections": [], "ranking": request.ranking, "refreshed_at": None}
+        items = await asyncio.to_thread(
+            surface.hub.search,
+            query,
+            source_filter=request.source or "all",
+            limit=request.limit,
+        )
+    if request.category != "all":
+        items = [item for item in items if item.get("category") == request.category]
+    return {
+        "items": items,
+        "sections": discovery["sections"],
+        "ranking": discovery.get("ranking", request.ranking),
+        "refreshed_at": discovery.get("refreshed_at"),
+        "source_health": _skills_source_health(surface),
+    }
+
+
+@router.post("/skills/v2/hub/inspect")
+async def skills_v2_hub_inspect(request: SkillHubMutationRequest) -> dict[str, Any]:
+    try:
+        return {"skill": await asyncio.to_thread(_skill_surface().hub.inspect, request.identifier)}
+    except (ValueError, OSError, KeyError) as exc:
+        raise HTTPException(status_code=400, detail={"code": "hub_inspection_failed", "message": str(exc)}) from exc
+
+
+@router.post("/skills/v2/hub/{action}")
+async def skills_v2_hub_mutation(action: Literal["install", "update", "uninstall", "import_local"], request: SkillHubMutationRequest) -> dict[str, Any]:
+    payload = {
+        "action": action,
+        "identifier": request.identifier,
+        "name": request.name,
+        "category": request.category,
+        "force": request.force,
+        "confirm": request.confirm,
+    }
+    result = await asyncio.to_thread(lambda: json.loads(skill_hub.invoke(payload)))
+    if result.get("ok") is False:
+        raise HTTPException(status_code=400, detail={"code": "hub_mutation_failed", "message": result.get("error")})
+    return {"result": result}
+
+
+@router.get("/skills/v2/curator")
+async def skills_v2_curator_status() -> dict[str, Any]:
+    return _skill_surface().curator.status()
+
+
+@router.post("/skills/v2/pending/{mutation_id}/approve")
+async def skills_v2_pending_approve(mutation_id: str) -> dict[str, Any]:
+    try:
+        return {"result": _skill_surface().mutations.approve(mutation_id)}
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail={"code": "mutation_conflict", "message": str(exc)}) from exc
+
+
+@router.post("/skills/v2/pending/{mutation_id}/reject")
+async def skills_v2_pending_reject(mutation_id: str) -> dict[str, Any]:
+    try:
+        return {"result": _skill_surface().mutations.reject(mutation_id)}
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=409, detail={"code": "mutation_conflict", "message": str(exc)}) from exc
+
+
+@router.post("/skills/v2/duplicates/{review_id}/decision")
+async def skills_v2_duplicate_decision(review_id: int, request: DuplicateDecisionRequest) -> dict[str, Any]:
+    try:
+        return {"result": SkillCatalog(_skill_surface().root).decide_duplicate(review_id, request.decision, distinct_reason=request.reason)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"code": "invalid_duplicate_decision", "message": str(exc)}) from exc
+
+
+@router.post("/skills/v2/usage/{event_id}/feedback")
+async def skills_v2_usage_feedback(event_id: str, request: UsageFeedbackRequest) -> dict[str, bool]:
+    SkillUsageIntelligence(_skill_surface().root).finish(event_id, outcome=request.outcome)
+    return {"ok": True}
 
 
 @router.get("/skills/{skill_name}")
@@ -2717,6 +2996,13 @@ async def _stream_agent_turn(
             yield _sse("final", response.model_dump_json())
             return
 
+    from agent.skills.usage_intelligence import usage_scope
+
+    stream_skill_usage = usage_scope(clean_message, active_thread_id)
+    stream_skill_usage.__enter__()
+    direct_skill = re.match(r"Load ([a-z][a-z0-9_-]*) with skill_view", clean_message, re.I)
+    if direct_skill:
+        stream_skill_usage.activate(direct_skill.group(1), "direct_slash")
     async with _agent_runtime_lock:
         answer_parts: list[str] = []
         tool_names: list[str] = list(delegated_tools)
@@ -2994,6 +3280,8 @@ async def _stream_agent_turn(
                     )
                     item["status"] = "completed"
             answer = "".join(answer_parts).strip() or "No response."
+            stream_skill_usage.finish("completed", tool_count=len(set(tool_names)))
+            stream_skill_usage.__exit__(None, None, None)
             source_models = [Source(**record) for record in sources]
             if voice:
                 response: ChatResponse = VoiceChatResponse(answer=answer, thread_id=active_thread_id, tools=tool_names, sources=source_models)
@@ -3041,9 +3329,13 @@ async def _stream_agent_turn(
                 async for audio_event in _synthesize_audio_event(answer):
                     yield audio_event
         except asyncio.CancelledError:
+            stream_skill_usage.finish("cancelled", tool_count=len(set(tool_names)))
+            stream_skill_usage.__exit__(None, None, None)
             await asyncio.shield(_repair_incomplete_tool_history(active_thread_id))
             raise
         except Exception as exc:
+            stream_skill_usage.finish("failed", tool_count=len(set(tool_names)))
+            stream_skill_usage.__exit__(None, None, None)
             await _repair_incomplete_tool_history(active_thread_id)
             yield _response_error(response_id=response_id, thread_id=active_thread_id, message=str(exc))
             yield _sse("error", {"error": str(exc)})
@@ -3272,6 +3564,9 @@ async def computer_use_events() -> StreamingResponse:
 
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    from agent.skills.curator_runtime import get_curator_runtime
+
+    get_curator_runtime().mark_activity()
     clean_message = request.message.strip()
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")

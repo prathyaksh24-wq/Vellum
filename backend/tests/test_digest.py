@@ -79,7 +79,7 @@ def test_start_scheduler_registers_nightly_job(monkeypatch):
     assert result is scheduler
     assert scheduler.started is True
     jobs = {job[2]["id"]: job for job in scheduler.jobs}
-    assert set(jobs) == {"memory_dreaming", "nightly_digest", "vault_retention"}
+    assert set(jobs) == {"memory_dreaming", "nightly_digest", "vault_retention", "skill_curator_tick"}
     assert jobs["memory_dreaming"][2]["hour"] == 2
     assert jobs["nightly_digest"][2]["minute"] == 15
     assert jobs["vault_retention"][2]["hour"] == 3

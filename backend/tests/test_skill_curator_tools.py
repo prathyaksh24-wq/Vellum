@@ -41,8 +41,10 @@ def test_curator_tool_pins_and_lists_archived_skills(tmp_path, monkeypatch) -> N
     archived = json.loads(
         curator_tools.skill_curator.invoke({"action": "archive", "name": "agent-skill", "confirm": True})
     )
+    applied = curator.mutations.approve(archived["id"])
     listed = json.loads(curator_tools.skill_curator.invoke({"action": "list_archived"}))
 
     assert pinned["ok"] is True
-    assert archived["state"] == "archived"
+    assert archived["status"] == "pending"
+    assert applied["state"] == "archived"
     assert listed["skills"] == ["agent-skill"]

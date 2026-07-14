@@ -13,6 +13,7 @@
       try {
         var body = await response.json();
         detail = body.detail || body.message || detail;
+        if (detail && typeof detail === "object") detail = detail.message || detail.code || JSON.stringify(detail);
       } catch (_) {}
       var error = new Error(detail);
       error.status = response.status;

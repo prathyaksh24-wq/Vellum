@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import logging
+from pathlib import Path
 from collections.abc import Callable
 from typing import Awaitable
 
@@ -80,6 +81,15 @@ async def run_digest(
     except Exception as exc:  # noqa: BLE001
         logger.warning("[DIGEST] sports calibration step failed: %s", exc)
 
+    try:
+        from agent.skills.learning import SkillLearningWorkflow
+
+        learning = SkillLearningWorkflow(Path(".skills"))
+        learning.record_signal(summary, kind="nightly_digest", successful=True)
+        learning.review_candidates()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[DIGEST] skill learning review failed: %s", exc)
+
     return str(note_path)
 
 
@@ -103,6 +113,9 @@ def start_scheduler(
         from agent.scheduler.retention import run_retention
 
         scheduler.add_job(run_retention, "cron", hour=3, minute=0, id="vault_retention", replace_existing=True)
+    from agent.skills.curator_runtime import install_curator_ticker
+
+    install_curator_ticker(scheduler)
     scheduler.start()
     logger.info("[SCHEDULER] Dreaming/digest/retention scheduler started.")
     return scheduler

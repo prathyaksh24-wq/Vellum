@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 import re
 from typing import Any
@@ -34,9 +33,6 @@ class SkillStore:
                 "instructions": package.body,
                 "skill_package": str(package.root),
             }
-        legacy = self._load_legacy_skills()
-        for skill in legacy:
-            canonical.setdefault(str(skill.get("id") or ""), skill)
         return [canonical[name] for name in sorted(canonical)]
 
     def matching_skills(self, query: str) -> list[dict[str, Any]]:
@@ -63,21 +59,6 @@ class SkillStore:
         for skill in matches:
             sections.append(f"### {skill.get('name', skill.get('id', 'Skill'))}\n{skill['instructions']}")
         return "\n\n".join(sections)
-
-    def _load_legacy_skills(self) -> list[dict[str, Any]]:
-        active = self.root / "active"
-        if not active.exists():
-            return []
-        skills: list[dict[str, Any]] = []
-        for path in sorted(active.glob("*.json")):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            if isinstance(data, dict) and data.get("instructions"):
-                skills.append(data)
-        return skills
-
 
 def _terms(text: str) -> list[str]:
     return [term.casefold() for term in re.findall(r"[A-Za-z0-9]+", text) if len(term) > 2]

@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import asyncio
 import json
+import sqlite3
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
@@ -470,9 +471,12 @@ def test_background_learn_records_tool_backed_answers_as_resolved_memory(monkeyp
         )
     )
 
-    related = resolved.find_related("Who were the players traded for Giannis?")
+    with sqlite3.connect(resolved.db_path) as connection:
+        stored = connection.execute("SELECT query, answer_summary FROM resolved_questions").fetchone()
 
-    assert related is not None
+    assert stored is not None
+    assert "Giannis" not in stored[0]
+    assert "Tyler Herro" not in stored[1]
     assert "Tyler Herro" in related["answer_summary"]
 
 
@@ -904,23 +908,56 @@ def test_skill_api_persists_actions_exposes_detail_and_builds_learn_prompt(monke
         "_skill_surface_singleton",
         SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[]),
     )
+    async def no_skill_created(*_args, **_kwargs):
+        return api.ChatResponse(answer="No mutation was created.", thread_id="skills-hub", tools=[])
+
+    monkeypatch.setattr(api, "_run_agent", no_skill_created)
 
     with TestClient(api.app) as client:
-        blocked = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
-        approved = client.post(
-            "/api/skills/action",
-            json={"action": "approve", "name": "api-skill", "confirm": True},
-        )
+        staged = client.post("/api/skills/action", json={"action": "approve", "name": "api-skill"})
+        approved = client.post("/api/skills/action", json={"action": "pending_approve", "name": staged.json()["result"]["id"]})
         detail = client.get("/api/skills/api-skill")
         learned = client.post("/api/skills/learn", json={"source": "this conversation"})
 
-    assert blocked.status_code == 400
+    assert staged.status_code == 200
+    assert staged.json()["result"]["status"] == "pending"
     assert approved.status_code == 200
+    assert approved.json()["result"]["status"] == "applied"
     assert approved.json()["result"]["state"] == "active"
     assert detail.status_code == 200
     assert "Run it" in detail.json()["content"]
-    assert learned.json()["handled"] is False
-    assert 'skill_manage(action="create"' in learned.json()["expanded"]
+    assert learned.status_code == 422
+    assert learned.json()["detail"]["code"] == "skill_not_staged"
+
+
+def test_typed_skill_catalog_paginates_and_detail_exposes_skill_md(monkeypatch, tmp_path):
+    from agent.skills import SkillCatalog, SkillManager, SkillSurfaceService
+
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    for name in ("alpha-skill", "beta-skill"):
+        manager.create(f"---\nname: {name}\ndescription: {name}\n---\n# {name}\n\n## Procedure\nRun safely.\n", confirm=True)
+    surface = SkillSurfaceService(root, logs_root=tmp_path / "logs", sources=[])
+    SkillCatalog(root).reconcile(embed_semantics=False)
+    monkeypatch.setattr(api, "_skill_surface_singleton", surface)
+
+    with TestClient(api.app) as client:
+        first = client.get("/api/skills/v2/catalog", params={"limit": 1})
+        second = client.get("/api/skills/v2/catalog", params={"limit": 1, "cursor": first.json()["next_cursor"]})
+        cached = client.get("/api/skills/v2/catalog", params={"limit": 1}, headers={"If-None-Match": first.headers["etag"]})
+        detail = client.get("/api/skills/alpha-skill")
+        overview = client.get("/api/skills/v2/overview")
+
+    assert first.status_code == 200
+    assert first.headers["etag"]
+    assert first.json()["items"][0]["normalized_name"] == "alpha-skill"
+    assert second.json()["items"][0]["normalized_name"] == "beta-skill"
+    assert cached.status_code == 304
+    assert "name: alpha-skill" in detail.json()["skill_md"]
+    assert detail.json()["provenance"]["source"] == "local"
+    assert detail.json()["install_cli"] is None
+    assert 'Use the installed "alpha-skill" skill' in detail.json()["prompt"]
+    assert overview.json()["counts"]["active"] == 2
 
 
 def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monkeypatch, tmp_path):

@@ -10,6 +10,8 @@ data/memory/*.db-*
 data/memory/audit_log.jsonl
 data/llm-routing/*.db
 data/llm-routing/*.db-*
+data/skills/*.db
+data/skills/*.db-*
 data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
@@ -28,6 +30,12 @@ ui-dist/
 .api-runtime/
 .desktop-runtime/
 .worktrees/
+.skills/.migration_snapshots/
+.skills/.migration_state.json
+.skills/.locks/
+.skills/.staging/
+.skills/.curator_state.json
+.skills/.curator_backups/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml

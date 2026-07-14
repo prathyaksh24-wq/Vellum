@@ -1,0 +1,14 @@
+{
+  "completed_at": "2026-07-14T07:21:20.557094+00:00",
+  "id": "fee1998f646049b4a845d8cc5ae588ca",
+  "idempotency_key": "2fd5485ab2e91b96144057afe5ca86a57897533e3c7cbb776fd654cad3767f0d",
+  "result": {
+    "action": "archive",
+    "id": "fee1998f646049b4a845d8cc5ae588ca",
+    "idempotency_key": "2fd5485ab2e91b96144057afe5ca86a57897533e3c7cbb776fd654cad3767f0d",
+    "name": "skill-browser-automation-v1",
+    "ok": true,
+    "state": "archived",
+    "status": "applied"
+  }
+}
