@@ -8,6 +8,14 @@
     return client.request("/api/knowledge/query?" + params.toString());
   }
 
+  function search(value, scope, limit) {
+    var params = new URLSearchParams();
+    params.set("q", String(value || "").trim());
+    params.set("scope", scope || "all");
+    if (limit !== undefined) params.set("limit", String(limit));
+    return client.request("/api/knowledge/search?" + params.toString());
+  }
+
   function lint(staleDays) {
     return client.request("/api/knowledge/lint", client.jsonOptions("POST", {
       stale_days: staleDays === undefined ? 120 : staleDays,
@@ -21,6 +29,8 @@
   window.VellumApi.knowledge = {
     status: function () { return client.request("/api/knowledge/status"); },
     query: query,
+    search: search,
+    vaultNote: function (ref) { return client.request("/api/knowledge/vault-note?ref=" + encodeURIComponent(ref)); },
     page: function (ref) { return client.request("/api/knowledge/pages/" + encodeURIComponent(ref)); },
     lint: lint,
     indexRebuild: rebuildIndex,

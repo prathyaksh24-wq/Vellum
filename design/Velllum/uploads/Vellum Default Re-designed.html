@@ -5011,7 +5011,7 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-function KnowledgeGraphView({ onBack }){
+function KnowledgeGraphView({ onBack, onAttachContext }){
   const [status, setStatus] = useState(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
@@ -5023,6 +5023,7 @@ function KnowledgeGraphView({ onBack }){
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [lintReport, setLintReport] = useState(null);
+  const [scope, setScope] = useState('all');
 
   const loadStatus = async () => {
     setLoading(true);
@@ -5039,15 +5040,18 @@ function KnowledgeGraphView({ onBack }){
     if (!value) { setResults([]); setSubmittedQuery(''); return; }
     setSearching(true); setError(''); setPage(null); setSubmittedQuery(value);
     try {
-      const body = await API.knowledge.query(value, 12);
+      const body = await API.knowledge.search(value, scope, 20);
       setResults(Array.isArray(body && body.results) ? body.results : []);
     } catch (err) { setResults([]); setError((err && err.message) || 'Wiki search failed.'); }
     finally { setSearching(false); }
   };
-  const openPage = async ref => {
-    if (!ref) return;
+  const openPage = async item => {
+    if (!item || !item.ref) return;
     setPageLoading(true); setError('');
-    try { setPage(await API.knowledge.page(ref)); }
+    try {
+      const opened = item.kind === 'vault_note' ? await API.knowledge.vaultNote(item.ref) : await API.knowledge.page(item.ref);
+      setPage({...opened, kind:item.kind || 'wiki_page', ref:item.ref});
+    }
     catch (err) { setError((err && err.message) || 'Could not open that wiki page.'); }
     finally { setPageLoading(false); }
   };
@@ -5071,6 +5075,7 @@ function KnowledgeGraphView({ onBack }){
           {onBack && <button className="btn" onClick={onBack}>Back</button>}
         </div>
         {error && <div className="wiki-state error" role="alert">{error}</div>}
+        <div className="tab-row" style={{padding:'0 0 12px'}}>{[['all','All'],['vault','Vault'],['wiki','Wiki']].map(([key,label]) => <button key={key} className={'tab' + (scope === key ? ' on' : '')} onClick={() => setScope(key)}>{label}</button>)}</div>
         <form className="wiki-search" onSubmit={search}>
           <IcSearch size={16}/><input aria-label="Search knowledge wiki" placeholder="Search your knowledge wiki" value={query} onChange={e => setQuery(e.target.value)}/><button className="btn primary" disabled={searching || !query.trim()}>{searching ? 'Searching…' : 'Search'}</button>
         </form>
@@ -5084,38 +5089,36 @@ function KnowledgeGraphView({ onBack }){
             <div className="wiki-section-label">{submittedQuery ? 'Results for “' + submittedQuery + '”' : 'Wiki status'}</div>
             {!submittedQuery && (loading ? <div className="wiki-state">Loading wiki status…</div> : status ? <div className="wiki-status-list"><div><b>{status.page_count || 0}</b><span>pages</span></div><div><b>{status.inbox_count || 0}</b><span>inbox</span></div><div><b>{status.lint_report_count || 0}</b><span>lint reports</span></div></div> : <div className="wiki-state">No status to show.</div>)}
             {!searching && submittedQuery && results.length === 0 && <div className="wiki-state">No wiki pages matched that search.</div>}
-            {results.map(item => <button key={item.ref} className={'wiki-result' + (page && page.ref === item.ref ? ' on' : '')} onClick={() => openPage(item.ref)}><span className="wiki-result-title">{item.title || item.ref}</span><span className="wiki-result-meta">{item.type || 'page'} · {item.status || 'draft'}{item.updated ? ' · ' + memoryEntryDate({date:item.updated}) : ''}</span>{item.description && <span className="wiki-result-description">{item.description}</span>}</button>)}
+            {results.map(item => <button key={item.kind + ':' + item.ref} className={'wiki-result' + (page && page.ref === item.ref ? ' on' : '')} onClick={() => openPage(item)}><span className="wiki-result-title">{item.title || item.ref}</span><span className="wiki-result-meta">{item.scope || item.type || 'page'} · {item.status || 'ready'}{item.updated ? ' · ' + memoryEntryDate({date:item.updated}) : ''}</span>{item.description && <span className="wiki-result-description">{item.description}</span>}</button>)}
             {counts.length > 0 && <div className="wiki-counts">{counts.map(([type, count]) => <span key={type}>{type} {count}</span>)}</div>}
           </section>
           <section className="wiki-page-view" aria-label="Wiki page">
             {pageLoading && <div className="wiki-state">Loading page…</div>}
             {!pageLoading && !page && <div className="wiki-state">Choose a search result to read its page.</div>}
-            {!pageLoading && page && <React.Fragment><div className="wiki-page-title">{page.title}</div><div className="wiki-page-meta">{page.type || 'page'} · {page.status || 'draft'}{page.updated ? ' · updated ' + memoryEntryDate({date:page.updated}) : ''}</div>{page.description && <p className="wiki-page-description">{page.description}</p>}<div className="wiki-page-content">{page.content || 'This page has no content.'}</div>{Array.isArray(page.sources) && page.sources.length > 0 && <div className="wiki-page-sources"><span>Sources</span>{page.sources.map(source => <code key={source}>{source}</code>)}</div>}</React.Fragment>}
+            {!pageLoading && page && <React.Fragment><div className="wiki-page-title">{page.title}</div><div className="wiki-page-meta">{page.type || 'page'} · {page.status || 'draft'}{page.updated ? ' · updated ' + memoryEntryDate({date:page.updated}) : ''}</div><div className="wiki-action-buttons" style={{margin:'10px 0 14px'}}><button className="btn primary" onClick={() => onAttachContext && onAttachContext(page, false)}>Add to chat</button><button className="btn" onClick={() => onAttachContext && onAttachContext(page, true)}>New chat with context</button></div>{page.description && <p className="wiki-page-description">{page.description}</p>}<div className="wiki-page-content">{page.content || 'This page has no content.'}</div>{Array.isArray(page.sources) && page.sources.length > 0 && <div className="wiki-page-sources"><span>Sources</span>{page.sources.map(source => <code key={source}>{source}</code>)}</div>}</React.Fragment>}
           </section>
         </div>
       </div>
     </div>
   );
 }
-function MemoryConsole({ onClose, onBack, page, onDreamComplete }){
+function MemoryConsole({ onClose, onBack, page, memoryData, onRefresh, onDreamComplete }){
   const [tab, setTab] = useState('summary');
   const [q, setQ] = useState('');
-  const [data, setData] = useState({summary:null, saved:[], archived:[], recent:[], settings:null});
   const [dreamStatus, setDreamStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const data = memoryData || {summary:null, saved:[], archived:[], entries:[], loading:true, error:''};
+  const loading = !!data.loading;
+  const error = data.error || '';
 
   const load = async () => {
-    setLoading(true); setError('');
     try {
-      const [summary, saved, archived, settings, dreaming] = await Promise.all([
-        API.settings.memorySummary(), API.settings.memorySaved(), API.settings.memoryEntries(), API.settings.memorySettings(), API.settings.memoryDreamingStatus(),
+      const [dreaming] = await Promise.all([
+        API.settings.memoryDreamingStatus(),
+        onRefresh ? onRefresh() : Promise.resolve(),
       ]);
-      setData({summary: summary || null, saved: (saved && (saved.memories || saved.entries)) || [], archived: (archived && (archived.memories || archived.entries)) || [], recent: (summary && summary.recent_context) || [], settings: settings && settings.settings});
       setDreamStatus(dreaming || null);
-    } catch (err) { setError((err && err.message) || 'Memory backend unavailable.'); }
-    finally { setLoading(false); }
+    } catch (err) { console.warn('Memory refresh failed', err); }
   };
   useEffect(() => { load(); }, []);
   const runDream = async () => {
@@ -5129,8 +5132,8 @@ function MemoryConsole({ onClose, onBack, page, onDreamComplete }){
     finally { setBusy(false); }
   };
   const filterItems = items => items.filter(item => !q || String(item.text || item.content || '').toLowerCase().includes(q.toLowerCase()));
-  const saved = filterItems(data.saved);
-  const archived = filterItems(data.archived);
+  const saved = filterItems(data.saved || []);
+  const archived = filterItems(data.archived || []);
   const audit = data.summary && Array.isArray(data.summary.audit_log) ? data.summary.audit_log : [];
   const lastResult = dreamStatus && dreamStatus.last_result;
   const resultCount = key => Array.isArray(lastResult && lastResult[key]) ? lastResult[key].length : 0;
@@ -5140,7 +5143,7 @@ function MemoryConsole({ onClose, onBack, page, onDreamComplete }){
     <div className={page ? "hc-card hc-card-page" : "hc-card"}>
       <div className="hc-hd">
         <div className="hc-title">{page && <button className="hc-back" title="Back to chat" onClick={onBack}><I d="M15 18l-6-6 6-6" size={18}/></button>}<span className="hc-logo"><IcBrain size={17}/></span>Memory <span className="hc-badge">backend</span></div>
-        <div className="hc-status"><span className={'hc-dot' + (loading ? '' : ' ok')}/><span>{loading ? 'loading' : data.saved.length + ' saved'}</span><span className="hc-sdiv"/><span>{data.archived.length} old</span><span className="hc-sdiv"/><span className="hc-queue">Dreaming {statusLabel}</span></div>
+        <div className="hc-status"><span className={'hc-dot' + (loading ? '' : ' ok')}/><span>{loading ? 'loading' : (data.saved || []).length + ' saved'}</span><span className="hc-sdiv"/><span>{(data.archived || []).length} old</span><span className="hc-sdiv"/><span className="hc-queue">Dreaming {statusLabel}</span></div>
         <button className="mem-iconbtn" title="Refresh memory" disabled={loading || busy} onClick={load}><IcRefresh size={16}/></button>
         {!page && <button className="mem-iconbtn" onClick={onClose}><IcX size={16}/></button>}
       </div>
@@ -5261,7 +5264,12 @@ const parseRecentMemoryRecord = memory => {
 };
 
 const MemorySummaryDocument = ({summary}) => {
-  const sections = buildMemorySummarySections(summary);
+  const sections = summary && Array.isArray(summary.sections) && summary.sections.length
+    ? summary.sections.map(section => ({
+        title: section.title || 'Memory',
+        paragraphs: (section.items || []).map(item => cleanMemoryDisplayText(item && item.text)).filter(Boolean),
+      })).filter(section => section.paragraphs.length)
+    : buildMemorySummarySections(summary);
   if (!sections.length) return <div className="s-none">No global summary yet. Add a memory or run Dreaming to build one.</div>;
   return <div className="mem-doc" data-testid="memory-summary-document">
     {sections.map(section => <section className="mem-doc-section" key={section.title}>
@@ -5380,41 +5388,30 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
   );
 };
 
-const SavedMemoriesCard = ({onClose, onChanged}) => {
+const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
   const [q, setQ] = useState('');
-  const [items, setItems] = useState([]);
-  const [archived, setArchived] = useState([]);
-  const [recent, setRecent] = useState([]);
   const [tab, setTab] = useState('saved');
   const [menuOpen, setMenuOpen] = useState(false);
   const [autoManage, setAutoManage] = useState(true);
   const [rowMenu, setRowMenu] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [history, setHistory] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const items = (memoryData && memoryData.saved) || [];
+  const archived = (memoryData && memoryData.archived) || [];
+  const recent = (memoryData && memoryData.entries) || [];
+  const history = (memoryData && memoryData.summary && memoryData.summary.audit_log) || [];
+  const loading = !!(memoryData && memoryData.loading);
   const load = async () => {
-    setLoading(true);
     setError('');
     try {
-      const [savedBody, archivedBody, summaryBody, settingsBody] = await Promise.all([
-        API.settings.memorySaved(),
-        API.settings.memoryEntries(),
-        API.settings.memoryRecent(),
-        API.settings.memorySettings(),
-      ]);
-      setItems(savedBody.entries || []);
-      setArchived(archivedBody.entries || []);
-      setRecent((summaryBody.entries || []).filter(item => item.kind === 'recent'));
-      setHistory((summaryBody.summary && summaryBody.summary.audit_log) || []);
-      setAutoManage(!settingsBody.settings || settingsBody.settings.dreaming_enabled !== false);
       if (onChanged) await onChanged();
     } catch (err) {
       setError('Memory backend unavailable.');
-    } finally { setLoading(false); }
+    }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => setAutoManage(!memoryData || !memoryData.settings || memoryData.settings.dreaming_enabled !== false), [memoryData && memoryData.settings]);
   const runAction = async action => {
     setBusy(true);
     setError('');
@@ -5875,11 +5872,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="set-h">Saved</div>
               {memoryData && memoryData.loading && <div className="set-note">Loading saved memories…</div>}
               {memoryData && !memoryData.loading && memoryData.error && <div className="set-note" style={{color:'var(--danger)'}}>{memoryData.error}</div>}
-              {memoryData && !memoryData.loading && !memoryData.error && ((memoryData.saved || (memoryData.summary && memoryData.summary.saved_memories)) || []).map(s => (
-                <div key={s.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div><span style={{color: 'var(--dim)', fontSize: 11.5}}>{memoryEntryDate(s)}</span><span className="sr-sub" style={{color: 'var(--txt)', fontSize: 12.5}}>{s.text || 'Saved memory'}</span></div>
-                </div>
-              ))}
+              {memoryData && !memoryData.loading && !memoryData.error && ((memoryData.saved || (memoryData.summary && memoryData.summary.saved_memories)) || []).map(s => <MemoryListRow key={s.id} memory={s} tab="saved"/>)}
               {memoryData && !memoryData.loading && !memoryData.error && (!Array.isArray(memoryData.saved) || memoryData.saved.length === 0) && <div className="set-note">No saved memories yet.</div>}
               <div className="set-note">Memories returned by the backend.</div>
             </React.Fragment>
@@ -5963,7 +5956,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
         </div>
       </div>
       {memCardOpen && <MemorySummaryCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setMemoryToggle('memory', 'memory_enabled', false); setMemCardOpen(false); }}/>} 
-      {savedMemOpen && <SavedMemoriesCard onChanged={onMemoryChanged} onClose={() => setSavedMemOpen(false)}/>} 
+      {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setSavedMemOpen(false)}/>}
     </React.Fragment>
   );
 };
@@ -6083,6 +6076,7 @@ const App = () => {
       window.removeEventListener('hashchange', syncLocation);
     };
   }, []);
+
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activeAgentId, setActiveAgentId] = useState(null);
@@ -6218,6 +6212,10 @@ const App = () => {
       return null;
     }
   }
+
+  useEffect(() => {
+    if (settingsOpen || view === 'memory') refreshMemoryData();
+  }, [settingsOpen, view]);
 
   async function maybeRunDreaming() {
     try {
@@ -6586,6 +6584,33 @@ const App = () => {
   const saveConversation = conversation => {
     if (!FEATURE_FLAGS.realConversations || !conversation) return;
     API.conversations.save(conversation).catch(err => console.warn('conversation save failed', err));
+  };
+
+  const attachKnowledgeContext = async (page, forceNew) => {
+    if (!page || !page.ref) return;
+    let chatId = forceNew ? null : activeChatId;
+    const contextMessage = {id:uid(), role:'assistant', text:'Using “' + (page.title || 'Knowledge') + '” as live ' + (page.kind === 'vault_note' ? 'Vault' : 'wiki') + ' context.', streaming:false, phase:'done', sources:[], tools:[]};
+    if (!chatId) {
+      chatId = uid();
+      const record = {id: chatId, thread_id: chatId, title: 'Context: ' + (page.title || 'Knowledge'), pinned:false, archived:false, projectId:null, created:'Today', appIds:[], messages:[contextMessage]};
+      threadRef.current[chatId] = chatId;
+      setChats(items => [record, ...items]);
+      saveConversation(record);
+    }
+    try {
+      await API.conversations.attachContext(threadRef.current[chatId] || chatId, {
+        kind: page.kind === 'vault_note' ? 'vault_note' : 'wiki_page',
+        ref: page.ref,
+        mode: 'live',
+      });
+      if (!forceNew && activeChatId) updateChat(chatId, chat => ({...chat, messages:[...(chat.messages || []), contextMessage]}), true);
+      setActiveChatId(chatId);
+      setView('chat');
+      try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
+      pushToast((page.title || 'Knowledge') + ' added to chat');
+    } catch (err) {
+      pushToast((err && err.message) || 'Could not add knowledge context');
+    }
   };
 
   const updateChat = (chatId, mapper, persist = false) => {
@@ -7126,8 +7151,8 @@ const App = () => {
             {view === 'ledger' && <LedgerView/>}
             {view === 'skills' && <SkillsHubView/>}
             {view === 'apps' && <BackendConnectorsView apps={apps}/>}
-            {view === 'memory' && <MemoryConsole page onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
-            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()}/>}
+            {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
+            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>

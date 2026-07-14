@@ -93,7 +93,10 @@ def build_capability_contract() -> CapabilityContract:
                 endpoints={
                     "status": "/api/knowledge/status",
                     "query": "/api/knowledge/query",
+                    "search": "/api/knowledge/search",
+                    "vault_note": "/api/knowledge/vault-note",
                     "read_page": "/api/knowledge/pages/{ref}",
+                    "conversation_context": "/api/conversations/{id}/context",
                     "history": "/api/knowledge/pages/{ref}/history",
                     "upsert_page": "/api/knowledge/pages",
                     "ingest": "/api/knowledge/ingest",

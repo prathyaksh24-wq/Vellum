@@ -256,6 +256,7 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
 
     assert len(candidates) == 1
     assert candidates[0]["status"] == "pending"
+    assert candidates[0]["scope"] == "global"
     assert store.list_saved() == []
 
     dream = orchestrator.run_dreaming()
@@ -265,6 +266,63 @@ def test_extractor_stores_pending_memories_before_dreaming_promotes(tmp_path: Pa
     assert store.list_saved()[0]["status"] == "saved"
     assert "Evidence sections" in dream["global_summary"]
     assert dream["audit_log"]
+
+    specialist = orchestrator.extract_memory_candidates(
+        thread_id="sports-thread",
+        user_message="I prefer sports answers to begin with the score.",
+        agent_name="SportsAgent",
+    )
+    assert specialist[0]["scope"] == "shared"
+
+
+def test_memory_intake_keeps_operational_queries_out_of_durable_memory(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+
+    for message in (
+        "hi",
+        "[Vellum UI context: settings open] what skills did I install yesterday?",
+        "Can you show me the current backend skills?",
+        "Archive the ontology skill now.",
+    ):
+        assert orchestrator.extract_memory_candidates(thread_id="t1", user_message=message) == []
+    assert store.list_pending() == []
+
+
+def test_summary_view_is_structured_and_dreaming_archives_legacy_noise(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    good_id = store.save_memory(
+        kind="preference",
+        text="User prefers concise answers with useful context.",
+        source_thread_id="t1",
+        confidence=0.9,
+    )
+    noise_id = store.save_memory(
+        kind="project",
+        text="[Vellum UI context: plugins] install the ontology skill.",
+        source_thread_id="t2",
+        confidence=0.8,
+    )
+    orchestrator = MemoryOrchestrator(
+        fts5=FTS5Memory(tmp_path / "fts5.db"),
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db"),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+
+    summary = orchestrator.summary_view()
+    assert [item["id"] for item in summary["saved_memories"]] == [good_id]
+    assert summary["sections"][0]["title"] == "Preferences"
+
+    orchestrator.run_dreaming(stale_days=30)
+    assert store.get_memory(noise_id)["status"] == "archived"
 
 
 def test_dreaming_writes_hermes_style_user_and_memory_files(tmp_path: Path) -> None:

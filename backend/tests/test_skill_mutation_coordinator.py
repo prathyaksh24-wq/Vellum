@@ -10,6 +10,7 @@ import pytest
 from agent.skills import (
     HubLockFile,
     PreparedMutation,
+    SkillCatalog,
     SkillLockManager,
     SkillManager,
     SkillMutationCoordinator,
@@ -39,6 +40,9 @@ def test_create_is_persisted_until_approved_and_retry_is_idempotent(tmp_path: Pa
     assert applied["status"] == "applied"
     assert retried == applied
     assert (root / "packages" / "tests" / "queued-skill" / "SKILL.md").is_file()
+    events = SkillCatalog(root).events(event="create", skill_name="queued-skill")
+    assert len(events) == 1
+    assert events[0]["details"]["new_state"] == "active"
 
 
 def test_reject_removes_pending_without_mutating_package(tmp_path: Path) -> None:

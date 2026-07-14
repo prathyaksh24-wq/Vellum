@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import importlib.util
 import inspect
 import hashlib
@@ -22,6 +22,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +56,7 @@ from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
+from agent.obsidian.conversation_context import ConversationContextStore
 from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
 from agent.plugins.agent_reach import agent_reach_plugin_status
@@ -90,6 +92,7 @@ from agent.voice.tts import get_tts_engine
 
 _api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
 _memory_orchestrator = get_memory_orchestrator()
+_conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
@@ -112,6 +115,10 @@ SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback
 
 _project_context_singleton: ProjectContext | None = None
 _skill_surface_singleton: SkillSurfaceService | None = None
+
+
+def _context_vault_root() -> Path:
+    return Path(getattr(get_settings(), "obsidian_vault_path", REPO_ROOT / "Vault"))
 
 
 def _project_context() -> ProjectContext:
@@ -308,6 +315,12 @@ class CodingSessionBody(BaseModel):
 
 class CodingTurnBody(BaseModel):
     prompt: str = Field(min_length=1)
+
+
+class ConversationContextRequest(BaseModel):
+    kind: Literal["vault_note", "wiki_page"]
+    ref: str = Field(min_length=1)
+    mode: Literal["live", "snapshot"] = "live"
 
 
 def _computer_use_overlay() -> DesktopActivityOverlay:
@@ -1227,6 +1240,11 @@ async def _run_agent(
         )
     clean_message = str(skill_command.get("expanded") or clean_message)
 
+    skill_system_result = _skill_system_answer(clean_message)
+    if skill_system_result is not None:
+        answer, tools = skill_system_result
+        return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools)
+
     if clean_message.startswith("/project"):
         parts = clean_message.split()
         args = parts[1:]
@@ -1238,11 +1256,18 @@ async def _run_agent(
             answer = f"⚠ {exc}"
         return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
 
-    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id)
+    attached_context = await asyncio.to_thread(
+        _conversation_context_store.resolve,
+        active_thread_id,
+        vault_root=_context_vault_root(),
+    )
+    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id) or (
+        bool(attached_context["context"]) and not _requests_fresh_public_data(clean_message)
+    )
     live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     delegated_tools: list[str] = []
     delegated_sources: list[Source] = []
-    agent_input_message = clean_message
+    agent_input_message = _with_attached_conversation_context(clean_message, attached_context)
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
@@ -1263,7 +1288,10 @@ async def _run_agent(
                     )
                 )
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
-        agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
+        agent_input_message = _with_attached_conversation_context(
+            _delegated_agent_message(clean_message, live_result, live_sources),
+            attached_context,
+        )
 
     from agent.skills.usage_intelligence import usage_scope
 
@@ -1747,9 +1775,10 @@ async def delete_conversation(conversation_id: str) -> dict[str, Any]:
     if not deleted:
         return {"ok": True, "found": False, "obsidian_projection": {"ok": True, "found": False}}
     thread_id = str(deleted.get("thread_id") or deleted.get("id") or conversation_id)
-    projection, deleted_fts = await asyncio.gather(
+    projection, deleted_fts, deleted_context = await asyncio.gather(
         asyncio.to_thread(_archive_ui_conversation, deleted),
         asyncio.to_thread(_fts5_memory.delete_thread, thread_id),
+        asyncio.to_thread(_conversation_context_store.clear, thread_id),
     )
     await asyncio.to_thread(
         SessionsReader(
@@ -1762,8 +1791,38 @@ async def delete_conversation(conversation_id: str) -> dict[str, Any]:
         "ok": True,
         "found": True,
         "deleted_fts_rows": deleted_fts,
+        "deleted_context_refs": deleted_context,
         "obsidian_projection": projection,
     }
+
+
+@router.get("/conversations/{conversation_id}/context")
+async def conversation_context(conversation_id: str) -> dict[str, Any]:
+    return {"attachments": await asyncio.to_thread(_conversation_context_store.list, conversation_id)}
+
+
+@router.post("/conversations/{conversation_id}/context")
+async def attach_conversation_context(conversation_id: str, request: ConversationContextRequest) -> dict[str, Any]:
+    try:
+        attachment = await asyncio.to_thread(
+            _conversation_context_store.attach,
+            conversation_id=conversation_id,
+            kind=request.kind,
+            ref=request.ref,
+            mode=request.mode,
+            vault_root=_context_vault_root(),
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Vault or wiki reference was not found.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"attachment": attachment}
+
+
+@router.delete("/conversations/{conversation_id}/context/{attachment_id}")
+async def remove_conversation_context(conversation_id: str, attachment_id: str) -> dict[str, Any]:
+    removed = await asyncio.to_thread(_conversation_context_store.remove, conversation_id, attachment_id)
+    return {"ok": True, "removed": removed}
 
 
 @router.get("/skills")
@@ -1884,6 +1943,118 @@ def _skill_cursor_decode(cursor: str, view: str, query: str) -> str:
     return str(loaded.get("after") or "")
 
 
+_SKILL_INVENTORY_RE = re.compile(
+    r"\b(?:show|list|tell me)\b.*\bskills?\b|"
+    r"\b(?:what|which)\s+skills?\s+(?:do i have|are (?:installed|active|available|current)|have i got)\b|"
+    r"\bdo i have\b.*\bskills?\b|\bskills?\b.*\b(?:installed|active|available|current)\b",
+    re.IGNORECASE,
+)
+_SKILL_HISTORY_RE = re.compile(
+    r"\b(?:skills?\b.*\b(?:install(?:ed)?|download(?:ed)?|add(?:ed)?|archive(?:d)?|delete(?:d)?|remove(?:d)?|restore(?:d)?|uninstall(?:ed)?|update(?:d)?)|(?:install(?:ed)?|download(?:ed)?|add(?:ed)?|archive(?:d)?|delete(?:d)?|remove(?:d)?|restore(?:d)?|uninstall(?:ed)?|update(?:d)?)\b.*\bskills?)\b",
+    re.IGNORECASE,
+)
+
+
+def _skill_history_window(message: str) -> tuple[str, str, str]:
+    local_tz = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
+    now = datetime.now(local_tz)
+    lowered = message.casefold()
+    if "yesterday" in lowered:
+        start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+        label = "yesterday"
+    elif "today" in lowered:
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+        label = "today"
+    elif "last week" in lowered:
+        this_week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = this_week - timedelta(days=7)
+        end = this_week
+        label = "last week"
+    elif "this week" in lowered:
+        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now + timedelta(seconds=1)
+        label = "this week"
+    else:
+        start = now - timedelta(days=30)
+        end = now + timedelta(seconds=1)
+        label = "the last 30 days"
+    return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat(), label
+
+
+def _skill_system_answer(message: str) -> tuple[str, list[str]] | None:
+    """Answer operational skill inventory/history questions from canonical state."""
+    clean = " ".join(message.split())
+    history_match = bool(_SKILL_HISTORY_RE.search(clean))
+    inventory_match = bool(_SKILL_INVENTORY_RE.search(clean))
+    if not history_match and not inventory_match:
+        return None
+
+    surface = _skill_surface()
+    catalog = SkillCatalog(surface.root)
+    catalog.reconcile(embed_semantics=False)
+    if history_match:
+        catalog.backfill_events()
+        since, until, label = _skill_history_window(clean)
+        events = catalog.events(since=since, until=until, limit=200)
+        lowered = clean.casefold()
+        wanted: set[str] = set()
+        if any(term in lowered for term in ("install", "download", "add")):
+            wanted.update({"install", "create", "approve_proposed"})
+        if any(term in lowered for term in ("archive", "retire")):
+            wanted.update({"archive", "retire"})
+        if "restore" in lowered:
+            wanted.add("restore")
+        if any(term in lowered for term in ("delete", "remove", "uninstall")):
+            wanted.update({"delete", "uninstall"})
+        if "update" in lowered:
+            wanted.add("update")
+        if wanted:
+            events = [item for item in events if item.get("event") in wanted]
+        if not events:
+            return f"I found no matching skill changes {label} in Vellum's skill ledger.", ["skills_history"]
+        lines = [f"Here are the skill changes I found {label}:"]
+        for item in events[:30]:
+            details = item.get("details") or {}
+            source = details.get("source") or details.get("origin") or "local"
+            stamp = str(item.get("created_at") or "")
+            try:
+                stamp = datetime.fromisoformat(stamp.replace("Z", "+00:00")).astimezone(ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))).strftime("%d %b %Y, %I:%M %p")
+            except ValueError:
+                pass
+            lines.append(f"- **{item.get('skill_name') or 'Unknown skill'}**: {str(item.get('event') or 'changed').replace('_', ' ')} on {stamp} ({source})")
+        return "\n".join(lines), ["skills_history"]
+
+    state = surface.catalog()["skills"]
+    active = list(state.get("active") or [])
+    if not active:
+        return "Vellum currently has no active skills installed.", ["skills_list"]
+    lines = [f"Vellum currently has **{len(active)} active skills**:"]
+    for item in sorted(active, key=lambda value: str(value.get("name") or "").casefold()):
+        description = " ".join(str(item.get("description") or item.get("summary") or "").split())
+        suffix = f" — {description}" if description else ""
+        lines.append(f"- **{item.get('name')}**{suffix}")
+    return "\n".join(lines), ["skills_list"]
+
+
+def _skill_system_stream(answer: str, tools: list[str], thread_id: str):
+    async def events():
+        activity_id = f"skill-{uuid4().hex[:10]}"
+        label = "Checking skill history..." if "skills_history" in tools else "Reading current skills..."
+        yield _sse("meta", {"thread_id": thread_id})
+        yield _sse("activity_start", {"id": activity_id, "kind": "tool", "label": label})
+        yield _sse("tool_call_started", {"id": activity_id, "tool_name": tools[0], "label": label})
+        yield _sse("tool_call_completed", {"id": activity_id, "tool_name": tools[0], "label": label})
+        yield _sse("activity_complete", {"id": activity_id, "kind": "tool", "label": label})
+        yield _sse("final_answer_started", {"id": activity_id})
+        yield _sse("token", {"text": answer})
+        response = ChatResponse(answer=answer, thread_id=thread_id, tools=tools)
+        yield _sse("final", json.loads(response.model_dump_json()))
+
+    return events()
+
+
 def _etag_response(request: Request, response: Response, payload: Any) -> None:
     encoded = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
     etag = f'"{hashlib.sha256(encoded).hexdigest()}"'
@@ -1941,6 +2112,27 @@ async def skills_v2_catalog(
     payload = {"items": page, "next_cursor": next_cursor, "view": view, "source_health": _skills_source_health(surface)}
     _etag_response(request, response, payload)
     return payload
+
+
+@router.get("/skills/v2/events")
+async def skills_v2_events(
+    since: str = "",
+    until: str = "",
+    action: str = "",
+    skill_name: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    catalog = SkillCatalog(_skill_surface().root)
+    catalog.backfill_events()
+    return {
+        "events": catalog.events(
+            since=since,
+            until=until,
+            event=action,
+            skill_name=skill_name,
+            limit=limit,
+        )
+    }
 
 
 def _skills_source_health(surface: SkillSurfaceService) -> list[dict[str, Any]]:
@@ -2681,6 +2873,22 @@ def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str
     return f"{clean_message}\n\n{context}"
 
 
+def _with_attached_conversation_context(clean_message: str, resolved: dict[str, Any]) -> str:
+    context = str(resolved.get("context") or "").strip()
+    if not context:
+        return clean_message
+    return (
+        f"{clean_message}\n\n[Conversation knowledge context]\n"
+        "The user explicitly attached these private Vault/wiki references to this conversation. "
+        "Use them as primary context. Do not use public web tools unless the user asks for fresh or current information.\n\n"
+        f"{context}"
+    )
+
+
+def _requests_fresh_public_data(message: str) -> bool:
+    return bool(re.search(r"\b(?:latest|live|fresh|currently|right now|today's|todays|breaking|updated score)\b", message, re.IGNORECASE))
+
+
 def _with_forced_web_search_context(clean_message: str) -> str:
     return (
         "[Vellum UI mode: Web search is enabled for this turn. Use web_search for public/current facts "
@@ -2771,12 +2979,19 @@ async def _stream_agent_turn(
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
-    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id)
+    attached_context = await asyncio.to_thread(
+        _conversation_context_store.resolve,
+        active_thread_id,
+        vault_root=_context_vault_root(),
+    )
+    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id) or (
+        bool(attached_context["context"]) and not _requests_fresh_public_data(clean_message)
+    )
     live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None
-    agent_input_message = clean_message
+    agent_input_message = _with_attached_conversation_context(clean_message, attached_context)
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
     yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
     yield _agent_activity_event(
@@ -2787,10 +3002,28 @@ async def _stream_agent_turn(
         detail=clean_message[:200],
     )
     yield _sse("meta", {"thread_id": active_thread_id})
+    for context_item in attached_context["attachments"]:
+        if context_item.get("status") != "ready":
+            continue
+        context_label = "Using Obsidian note..." if context_item.get("kind") == "vault_note" else "Reading knowledge wiki..."
+        yield _agent_activity_event(
+            response_id=response_id,
+            thread_id=active_thread_id,
+            activity_type="memory_retrieved",
+            label=context_label,
+            detail=str(context_item.get("title") or context_item.get("ref") or ""),
+            status="completed",
+            item_id=str(context_item.get("id") or _stream_id("context")),
+            name=str(context_item.get("kind") or "knowledge"),
+            metadata={"ref": context_item.get("ref"), "mode": context_item.get("mode")},
+        )
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
-        agent_input_message = _delegated_agent_message(clean_message, live_result, live_sources)
+        agent_input_message = _with_attached_conversation_context(
+            _delegated_agent_message(clean_message, live_result, live_sources),
+            attached_context,
+        )
         subagent_item = {
             "id": _stream_id("item"),
             "type": "subagent_call",
@@ -3584,6 +3817,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
         return StreamingResponse(skill_event(), media_type="text/event-stream")
     clean_message = str(skill_command.get("expanded") or clean_message)
+    skill_system_result = _skill_system_answer(clean_message)
+    if skill_system_result is not None:
+        answer, tools = skill_system_result
+        return StreamingResponse(
+            _skill_system_stream(answer, tools, active_thread_id),
+            media_type="text/event-stream",
+        )
     if request.force_web_search:
         clean_message = _with_forced_web_search_context(clean_message)
     computer_use_intent = _computer_use_mode_intent(clean_message)
@@ -3756,33 +3996,19 @@ class MemorySettingsRequest(BaseModel):
 
 @router.get("/memory/summary")
 async def memory_summary() -> dict[str, Any]:
-    store = _memory_orchestrator.store
     recent_context = await asyncio.to_thread(_memory_orchestrator.fts5.recent_documents, limit=25)
-    if store is None:
-        return {
-            "global_summary": "",
-            "saved_memories": [],
-            "archived_memories": [],
-            "recent_context": recent_context,
-            "pending_count": 0,
-            "audit_log": [],
-            "conversation_import": {"mode": "write_through"},
-        }
+    summary = await asyncio.to_thread(_memory_orchestrator.summary_view)
     return {
-        "global_summary": store.global_summary(),
-        "saved_memories": store.list_saved(),
-        "archived_memories": store.list_archived(),
+        **summary,
         "recent_context": recent_context,
-        "pending_count": len(store.list_pending()),
-        "audit_log": store.audit_log(limit=25),
         "conversation_import": {"mode": "write_through"},
     }
 
 
 @router.get("/memory/saved")
 async def saved_memories() -> dict[str, list[dict[str, Any]]]:
-    store = _memory_orchestrator.store
-    return {"memories": store.list_saved() if store is not None else []}
+    summary = await asyncio.to_thread(_memory_orchestrator.summary_view)
+    return {"memories": summary["saved_memories"]}
 
 
 @router.get("/memory/archived")

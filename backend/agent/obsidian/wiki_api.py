@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from agent.obsidian.wiki import KnowledgeWikiError
 from agent.obsidian.wiki_runtime import get_knowledge_wiki
+from agent.obsidian.vault import ObsidianVault
+from agent.obsidian.conversation_context import is_sensitive_context
+from agent.config import get_settings
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -80,6 +84,65 @@ async def knowledge_query(q: str = Query(min_length=1), limit: int = Query(defau
         return await asyncio.to_thread(get_knowledge_wiki().query, q, limit=limit)
     except KnowledgeWikiError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/search")
+async def federated_knowledge_search(
+    q: str = Query(min_length=1),
+    scope: Literal["all", "vault", "wiki"] = "all",
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, Any]:
+    """Search private Vault notes and compiled wiki pages through one contract."""
+    results: list[dict[str, Any]] = []
+    if scope in {"all", "wiki"}:
+        try:
+            wiki = await asyncio.to_thread(get_knowledge_wiki().query, q, limit=limit)
+            results.extend({**item, "kind": "wiki_page", "scope": "wiki"} for item in wiki.get("results", []))
+        except KnowledgeWikiError:
+            if scope == "wiki":
+                raise
+    if scope in {"all", "vault"}:
+        vault = ObsidianVault(get_settings().obsidian_vault_path)
+        notes = await asyncio.to_thread(vault.search_notes, q, limit=limit)
+        for item in notes:
+            metadata = dict(item.get("metadata") or {})
+            ref = str(metadata.get("path") or "")
+            if not ref or (scope == "all" and ref.casefold().startswith("knowledge/")):
+                continue
+            text = str(item.get("text") or "")
+            if is_sensitive_context(ref, text):
+                continue
+            title = next((line.lstrip("# ").strip() for line in text.splitlines() if line.startswith("# ")), Path(ref).stem)
+            results.append(
+                {
+                    "kind": "vault_note",
+                    "scope": "vault",
+                    "ref": ref,
+                    "title": title,
+                    "type": "vault note",
+                    "status": "private",
+                    "description": " ".join(text.replace("---", " ").split())[:280],
+                    "score": item.get("score", 0),
+                }
+            )
+    results.sort(key=lambda item: float(item.get("score") or 0), reverse=True)
+    return {"query": q, "scope": scope, "results": results[:limit], "count": min(len(results), limit)}
+
+
+@router.get("/vault-note")
+async def read_vault_note(ref: str = Query(min_length=1)) -> dict[str, Any]:
+    vault = ObsidianVault(get_settings().obsidian_vault_path)
+    try:
+        target = vault._safe_relative(ref)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if target.suffix.casefold() != ".md" or not target.is_file():
+        raise HTTPException(status_code=404, detail="Vault note not found.")
+    content = await asyncio.to_thread(target.read_text, encoding="utf-8", errors="ignore")
+    if is_sensitive_context(ref, content):
+        raise HTTPException(status_code=403, detail="Sensitive Vault notes cannot be exposed to chat context.")
+    title = next((line.lstrip("# ").strip() for line in content.splitlines() if line.startswith("# ")), target.stem)
+    return {"kind": "vault_note", "ref": ref, "title": title, "type": "vault note", "status": "private", "content": content}
 
 
 @router.get("/pages/{page_ref}")
