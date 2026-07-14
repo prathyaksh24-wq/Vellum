@@ -1350,6 +1350,34 @@ body{font-size:14px}
 .galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
 @media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.58}}
 
+/* full-screen 404 */
+.not-found-page{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 48%,#0b0a0a 0,#050505 34%,#020202 74%);color:#f5f3f3;outline:none;isolation:isolate}
+.not-found-page::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.11) .6px,transparent .8px);background-size:41px 41px;opacity:.07;mask-image:radial-gradient(circle at center,#000,transparent 72%)}
+.nf-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.nf-center{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:13px;transform:translateY(-2vh)}
+.nf-scene{position:relative;width:224px;height:214px;display:flex;align-items:center;justify-content:center}
+.nf-pointer{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;transform:translate3d(var(--nf-x,0),var(--nf-y,0),0) rotate(var(--nf-rotate,0deg));transform-origin:center;will-change:transform}
+.nf-character-flight{position:relative;width:190px;height:178px;display:flex;align-items:center;justify-content:center;transform-origin:50% 42%;animation:nfFlight 13.5s cubic-bezier(.55,.05,.45,.95) infinite}
+.nf-character{position:relative;z-index:2;width:176px;height:160px;filter:drop-shadow(0 18px 24px rgba(0,0,0,.7));animation:nfFloat 3.8s ease-in-out infinite}
+.nf-character svg{display:block;width:100%;height:100%;overflow:visible}
+.nf-beams{position:absolute;z-index:1;left:50%;top:63%;width:102px;height:210px;opacity:0;transform:translateX(-50%);animation:nfBeams 13.5s ease-in-out infinite;pointer-events:none}
+.nf-beams::before,.nf-beams::after{content:"";position:absolute;top:0;width:16px;height:205px;border-radius:50%;background:linear-gradient(to bottom,rgba(255,183,158,.92),rgba(226,82,48,.48) 38%,transparent 90%);filter:blur(3px);box-shadow:0 0 17px rgba(255,92,54,.68)}
+.nf-beams::before{left:24px;transform:rotate(10deg);transform-origin:top}
+.nf-beams::after{right:24px;transform:rotate(-10deg);transform-origin:top}
+.nf-shadow{position:absolute;left:50%;bottom:14px;width:104px;height:17px;border-radius:50%;background:rgba(255,255,255,.075);filter:blur(9px);transform:translateX(-50%);animation:nfShadow 3.8s ease-in-out infinite}
+.nf-copy{font-family:var(--font-d);font-size:12px;font-weight:400;letter-spacing:.015em;color:rgba(241,238,238,.66);text-align:center}
+.nf-back{position:absolute;z-index:2;left:50%;bottom:28px;display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:0;background:transparent;color:rgba(242,239,239,.58);font:500 11.5px var(--font-d);letter-spacing:.015em;cursor:pointer;transform:translateX(-50%);transition:color .18s,transform .25s cubic-bezier(.34,1.56,.64,1)}
+.nf-back::before{content:"\2190";font-size:14px;transition:transform .2s}
+.nf-back:hover,.nf-back:focus-visible{color:#fff;transform:translateX(-50%) translateY(-2px);outline:none}
+.nf-back:hover::before,.nf-back:focus-visible::before{transform:translateX(-3px)}
+.nf-back:focus-visible{border-radius:8px;box-shadow:0 0 0 2px rgba(255,255,255,.18)}
+@keyframes nfFloat{0%,100%{transform:translateY(2px) rotate(-.7deg)}50%{transform:translateY(-7px) rotate(.8deg)}}
+@keyframes nfShadow{0%,100%{opacity:.48;transform:translateX(-50%) scale(.88)}50%{opacity:.24;transform:translateX(-50%) scale(1.08)}}
+@keyframes nfFlight{0%,64%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}69%{transform:translate3d(0,5px,0) rotate(1deg) scale(1.02)}76%{opacity:1;transform:translate3d(0,-17px,0) rotate(-3deg) scale(1.02)}86%{opacity:0;transform:translate3d(0,-210px,0) rotate(-7deg) scale(.7)}87%{opacity:0;transform:translate3d(0,64px,0) rotate(3deg) scale(.76)}94%{opacity:1;transform:translate3d(0,8px,0) rotate(0) scale(.98)}100%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}}
+@keyframes nfBeams{0%,66%{opacity:0;transform:translateX(-50%) scaleY(.25)}71%,82%{opacity:.94;transform:translateX(-50%) scaleY(1)}87%,100%{opacity:0;transform:translateX(-50%) scaleY(.35)}}
+@media (max-width:620px){.nf-scene{transform:scale(.84)}.nf-copy{margin-top:-16px}.nf-back{bottom:20px}}
+@media (prefers-reduced-motion:reduce){.nf-pointer{transform:none!important}.nf-character-flight,.nf-character,.nf-shadow,.nf-beams{animation:none!important}.nf-beams{display:none}.nf-character-flight{transform:none!important;opacity:1!important}}
+
 /* reusable edge dock + tooltip */
 .dock-layer{position:absolute;inset:0;z-index:52;pointer-events:none}
 .dock-reveal-zone{position:absolute;z-index:1;pointer-events:auto}
@@ -5940,6 +5968,88 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   );
 };
 
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','ledger','skills','apps','memory','kg','archive','agent']);
+const isNotFoundLocation = () => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.replace(/\/+$/,'');
+    return params.get('view') === '404' || params.has('404') || window.location.hash === '#404' || path.endsWith('/404');
+  } catch {
+    return false;
+  }
+};
+
+const NotFoundView = ({onBack}) => {
+  const rootRef = useRef(null);
+  useEffect(() => { rootRef.current?.focus(); }, []);
+  return (
+    <section ref={rootRef} className="not-found-page" role="main" tabIndex="-1" aria-labelledby="not-found-title">
+      <h1 id="not-found-title" className="nf-sr">404 — Page not found</h1>
+      <div className="nf-center">
+        <div className="nf-scene" aria-hidden="true">
+          <div className="nf-shadow"/>
+          <div className="nf-character-flight">
+            <div className="nf-beams"/>
+            <div className="nf-character">
+              <svg viewBox="0 0 190 170" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="nf-shell" x1="58" y1="31" x2="134" y2="145" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#f3f1f1"/>
+                    <stop offset=".18" stopColor="#8f8b8b"/>
+                    <stop offset=".48" stopColor="#171616"/>
+                    <stop offset=".78" stopColor="#030303"/>
+                    <stop offset="1" stopColor="#504b4b"/>
+                  </linearGradient>
+                  <radialGradient id="nf-gloss" cx="0" cy="0" r="1" gradientTransform="translate(78 51) rotate(52) scale(66 58)" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="white" stopOpacity=".82"/>
+                    <stop offset=".34" stopColor="#c8c4c4" stopOpacity=".25"/>
+                    <stop offset="1" stopColor="#090909" stopOpacity="0"/>
+                  </radialGradient>
+                  <linearGradient id="nf-face" x1="73" y1="47" x2="119" y2="92" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#060606"/>
+                    <stop offset=".72" stopColor="#232020"/>
+                    <stop offset="1" stopColor="#020202"/>
+                  </linearGradient>
+                  <filter id="nf-eye-glow" x="-200%" y="-200%" width="500%" height="500%">
+                    <feGaussianBlur stdDeviation="2.4" result="blur"/>
+                    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                  </filter>
+                </defs>
+                <g opacity=".92" stroke="#888383" strokeWidth="1.2">
+                  <circle cx="52" cy="53" r="25" fill="url(#nf-shell)"/>
+                  <path d="M36 48c7-14 26-19 38-7" stroke="white" strokeOpacity=".28" strokeLinecap="round"/>
+                  <rect x="35" y="46" width="35" height="17" rx="8.5" fill="#080808"/>
+                  <circle cx="45" cy="54" r="2.5" fill="#f0ecec" stroke="none"/>
+                  <circle cx="60" cy="54" r="2.5" fill="#f0ecec" stroke="none"/>
+                  <circle cx="139" cy="56" r="27" fill="url(#nf-shell)"/>
+                  <path d="M122 48c8-14 27-17 39-5" stroke="white" strokeOpacity=".26" strokeLinecap="round"/>
+                  <rect x="121" y="48" width="37" height="18" rx="9" fill="#080808"/>
+                  <circle cx="132" cy="57" r="2.6" fill="#f0ecec" stroke="none"/>
+                  <circle cx="148" cy="57" r="2.6" fill="#f0ecec" stroke="none"/>
+                </g>
+                <rect x="53" y="43" width="85" height="101" rx="41" fill="url(#nf-shell)" stroke="#8d8888" strokeWidth="1.4"/>
+                <rect x="53" y="43" width="85" height="101" rx="41" fill="url(#nf-gloss)"/>
+                <path d="M62 105c6 25 22 34 39 35 17 1 27-5 35-18" stroke="white" strokeOpacity=".18" strokeLinecap="round"/>
+                <rect x="67" y="55" width="58" height="37" rx="18.5" fill="url(#nf-face)" stroke="#777171"/>
+                <path d="M76 63c12-9 29-9 40-2" stroke="white" strokeOpacity=".16" strokeLinecap="round"/>
+                <rect x="78" y="68" width="13" height="8" rx="4" fill="#f4f1f1" filter="url(#nf-eye-glow)"/>
+                <rect x="101" y="68" width="13" height="8" rx="4" fill="#f4f1f1" filter="url(#nf-eye-glow)"/>
+                <path d="M76 110c8 8 13 12 20 18 6-6 12-12 19-20" stroke="#d6d1d1" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" opacity=".72"/>
+                <rect x="43" y="93" width="17" height="36" rx="8.5" fill="#171616" stroke="#817b7b"/>
+                <rect x="131" y="92" width="17" height="36" rx="8.5" fill="#171616" stroke="#817b7b"/>
+                <path d="M48 100h7M136 100h7" stroke="white" strokeOpacity=".35" strokeLinecap="round"/>
+                <ellipse cx="95" cy="148" rx="31" ry="7" fill="#030303" stroke="#5f5a5a" strokeOpacity=".7"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <p className="nf-copy">You’re not supposed to be here…</p>
+      </div>
+      <button type="button" className="nf-back" onClick={onBack}>Go back</button>
+    </section>
+  );
+};
+
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const App = () => {
   const [theme, setTheme] = useState(() => {
@@ -5963,7 +6073,16 @@ const App = () => {
   const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
   useEffect(() => { try { localStorage.setItem('vellum-dock-locked', dockLocked ? '1' : '0'); } catch {} }, [dockLocked]);
-  const [view, setView] = useState('chat');
+  const [view, setView] = useState(() => isNotFoundLocation() ? '404' : 'chat');
+  useEffect(() => {
+    const syncLocation = () => setView(current => isNotFoundLocation() ? '404' : (current === '404' ? 'chat' : current));
+    window.addEventListener('popstate', syncLocation);
+    window.addEventListener('hashchange', syncLocation);
+    return () => {
+      window.removeEventListener('popstate', syncLocation);
+      window.removeEventListener('hashchange', syncLocation);
+    };
+  }, []);
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
   const [activeAgentId, setActiveAgentId] = useState(null);
@@ -6169,8 +6288,30 @@ const App = () => {
   }, []);
 
   const newChat = () => { setView('chat'); setActiveChatId(null); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const leaveNotFound = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('view');
+      url.searchParams.delete('404');
+      url.hash = '';
+      window.history.replaceState(null, '', url.pathname + (url.search ? url.search : ''));
+    } catch {}
+    newChat();
+  };
   const openChat = id => { setView('chat'); setActiveChatId(id); try { localStorage.setItem('vellum-active-chat-id', id); } catch {} setMenu(null); setActivityMsg(null); };
-  const nav = v => { setView(v); setMenu(null); setActivityMsg(null); };
+  const nav = v => {
+    const next = APP_VIEW_IDS.has(v) ? v : '404';
+    if (next === '404') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('view', '404');
+        window.history.replaceState(null, '', url.pathname + '?' + url.searchParams.toString());
+      } catch {}
+    }
+    setView(next);
+    setMenu(null);
+    setActivityMsg(null);
+  };
   const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
@@ -6941,6 +7082,7 @@ const App = () => {
       <div className="cursor-glow"></div>
       <div className="win">
         <AppBackground backgroundId={backgroundId}/>
+        {view !== '404' && <React.Fragment>
         <SkillsActivityFeed onOpenSkills={() => nav('skills')}/>
         <div className="body">
           {sidebarPinned && <Sidebar chats={chats} projects={projects} activeChatId={activeChatId} view={view}
@@ -6994,6 +7136,8 @@ const App = () => {
           onNewChat={newChat} onSearch={() => setSearchOpen(true)} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
+        </React.Fragment>}
+        {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {

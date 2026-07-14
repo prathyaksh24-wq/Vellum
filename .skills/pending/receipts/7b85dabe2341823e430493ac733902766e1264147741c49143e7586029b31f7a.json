@@ -1,0 +1,12 @@
+{
+  "completed_at": "2026-07-14T06:16:52.516853+00:00",
+  "id": "c3b5d6b01d6646cd816a0fabcfe8bddc",
+  "idempotency_key": "5a40fe794d9f094884aa932e7132902d3d134c007bf4d457ee8452e1fa53d101",
+  "result": {
+    "action": "reject",
+    "id": "c3b5d6b01d6646cd816a0fabcfe8bddc",
+    "name": "ontology",
+    "ok": true,
+    "status": "rejected"
+  }
+}

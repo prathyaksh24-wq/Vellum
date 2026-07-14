@@ -1,0 +1,23 @@
+{
+  "completed_at": "2026-07-13T06:46:19.063525+00:00",
+  "id": "54b5d47d78f2455da5edd63f38a5289e",
+  "idempotency_key": "4760cff357d2d8785240542b14bdb31cd38d7851809aa7bb78b7dbebc952da4e",
+  "result": {
+    "content_hash": "0979c6ac916dc27a0c16001213153cd1fad918da569c87997af11e6df36d3ed9",
+    "description": "Typed knowledge graph for structured agent memory and composable skills. Use when creating/querying entities (Person, Project, Task, Event, Document), linkin...",
+    "id": "54b5d47d78f2455da5edd63f38a5289e",
+    "idempotency_key": "4760cff357d2d8785240542b14bdb31cd38d7851809aa7bb78b7dbebc952da4e",
+    "identifier": "clawhub/ontology",
+    "install_path": "packages/community/ontology",
+    "installed_at": "2026-07-13T06:46:18.684910+00:00",
+    "name": "ontology",
+    "ok": true,
+    "repository_url": null,
+    "scan_verdict": "safe",
+    "source": "clawhub",
+    "source_path": null,
+    "source_ref": null,
+    "status": "applied",
+    "trust_level": "community"
+  }
+}
