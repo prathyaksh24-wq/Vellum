@@ -71,6 +71,13 @@ def test_archive_moves_existing_skill_without_reclassifying_its_content(tmp_path
     assert not (root / "packages" / "uncategorized" / "archive-me").exists()
     assert (root / ".archive" / "uncategorized" / "archive-me" / "SKILL.md").is_file()
 
+    restored = coordinator.submit("restore", name="archive-me")
+    restored_result = coordinator.approve(restored["id"])
+
+    assert restored_result["state"] == "active"
+    assert (root / "packages" / "uncategorized" / "archive-me" / "SKILL.md").is_file()
+    assert not (root / ".archive" / "uncategorized" / "archive-me").exists()
+
 
 def test_builtin_delete_returns_specific_protection_message(tmp_path: Path) -> None:
     root = tmp_path / ".skills"

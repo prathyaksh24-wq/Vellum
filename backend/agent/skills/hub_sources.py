@@ -256,6 +256,7 @@ class SkillsShSource:
 
     def __init__(self, http=None):
         token = str(os.getenv("VERCEL_OIDC_TOKEN") or "").strip()
+        self.authenticated = bool(token)
         self.http = http or GuardedHttpClient(headers={"Authorization": f"Bearer {token}"} if token else {})
         self.github = GitHubSource(self.http)
 
@@ -266,16 +267,34 @@ class SkillsShSource:
         from urllib.parse import quote_plus
 
         bounded_limit = min(max(int(limit), 1), 200)
-        if query.strip():
+        if not query.strip():
+            return self.discover("most-popular", bounded_limit)
+        # The public search endpoint is what the skills.sh site uses and works
+        # locally without Vercel OIDC. The documented v1 leaderboard is used
+        # for ranked discovery when credentials are configured.
+        payload = self.http.get_json(
+            f"https://skills.sh/api/search?q={quote_plus(query)}&limit={bounded_limit}"
+        )
+        return self._metadata(payload, bounded_limit)
+
+    def discover(self, ranking: str, limit: int = 10) -> list[HubSkillMeta]:
+        from urllib.parse import quote_plus
+
+        bounded_limit = min(max(int(limit), 1), 200)
+        if self.authenticated:
+            view = "trending" if ranking == "trending" else "all-time"
             payload = self.http.get_json(
-                f"https://skills.sh/api/v1/skills/search?q={quote_plus(query)}&limit={bounded_limit}"
+                f"https://skills.sh/api/v1/skills?view={view}&per_page={bounded_limit}"
             )
         else:
             payload = self.http.get_json(
-                f"https://skills.sh/api/v1/skills?view=all-time&per_page={bounded_limit}"
+                f"https://skills.sh/api/search?q={quote_plus('skill')}&limit={bounded_limit}"
             )
+        return self._metadata(payload, bounded_limit)
+
+    def _metadata(self, payload: dict[str, Any], limit: int) -> list[HubSkillMeta]:
         results = []
-        for item in list(payload.get("data") or payload.get("skills") or [])[:bounded_limit]:
+        for item in list(payload.get("data") or payload.get("skills") or [])[:limit]:
             identifier = str(item.get("id") or "").strip("/")
             name = str(item.get("name") or item.get("skillId") or identifier.rsplit("/", 1)[-1])
             source_repo = str(item.get("source") or "/".join(identifier.split("/")[:2]))
@@ -330,16 +349,26 @@ class ClawHubSource:
         from urllib.parse import quote_plus
 
         bounded_limit = min(max(int(limit), 1), 100)
-        if query.strip():
-            payload = self.http.get_json(
-                f"https://clawhub.ai/api/v1/search?q={quote_plus(query)}&limit={bounded_limit}"
-            )
-        else:
-            payload = self.http.get_json(
-                f"https://clawhub.ai/api/v1/skills?limit={bounded_limit}&sort=trending"
-            )
+        if not query.strip():
+            return self.discover("most-popular", bounded_limit)
+        payload = self.http.get_json(
+            f"https://clawhub.ai/api/v1/search?q={quote_plus(query)}&limit={bounded_limit}"
+        )
+        return self._metadata(payload, bounded_limit)
+
+    def discover(self, ranking: str, limit: int = 10) -> list[HubSkillMeta]:
+        bounded_limit = min(max(int(limit), 1), 100)
+        sort = {"most-popular": "stars", "trending": "trending", "most-downloaded": "downloads"}.get(
+            ranking, "stars"
+        )
+        payload = self.http.get_json(
+            f"https://clawhub.ai/api/v1/skills?limit={bounded_limit}&sort={sort}"
+        )
+        return self._metadata(payload, bounded_limit)
+
+    def _metadata(self, payload: dict[str, Any], limit: int) -> list[HubSkillMeta]:
         results = []
-        for item in list(payload.get("results") or payload.get("items") or [])[:bounded_limit]:
+        for item in list(payload.get("results") or payload.get("items") or [])[:limit]:
             name = str(item.get("displayName") or item.get("slug") or "skill")
             description = str(item.get("summary") or name)
             stats = item.get("stats") if isinstance(item.get("stats"), dict) else {}
@@ -467,17 +496,20 @@ class SkillsMpSource:
         return identifier.startswith("skillsmp/")
 
     def search(self, query: str, limit: int = 10, page: int = 1) -> list[HubSkillMeta]:
+        return self._search(query.strip() or "skill", limit=limit, page=page, sort_by="stars")
+
+    def discover(self, ranking: str, limit: int = 10) -> list[HubSkillMeta]:
+        sort_by = "recent" if ranking == "trending" else "stars"
+        return self._search("skill", limit=limit, page=1, sort_by=sort_by)
+
+    def _search(self, query: str, *, limit: int, page: int, sort_by: str) -> list[HubSkillMeta]:
         from urllib.parse import quote_plus
 
         bounded_limit = min(max(int(limit), 1), 50)
         bounded_page = min(max(int(page), 1), 20)
-        # SkillsMP has no browse endpoint and requires a keyword. Its documented
-        # anonymous search supports star sorting, so use the broad catalog term
-        # only for Vellum's zero-query discovery view.
-        effective_query = query.strip() or "skill"
         payload = self.http.get_json(
-            f"{self.base_url}/skills/search?q={quote_plus(effective_query)}&limit={bounded_limit}"
-            f"&page={bounded_page}&sortBy=stars"
+            f"{self.base_url}/skills/search?q={quote_plus(query)}&limit={bounded_limit}"
+            f"&page={bounded_page}&sortBy={sort_by}"
         )
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
         self.quota.update(dict(payload.get("rate_limit") or payload.get("meta", {}).get("rate_limit") or {}))
@@ -533,8 +565,18 @@ class OfficialSkillSource:
         for name, files in self.catalog.items():
             parsed_name, description = _skill_name(files["SKILL.md"])
             if query.casefold() in f"{parsed_name} {description}".casefold():
-                results.append(HubSkillMeta(parsed_name, description, self.source_id, f"official/{name}", "official"))
+                results.append(HubSkillMeta(
+                    parsed_name,
+                    description,
+                    self.source_id,
+                    f"official/{name}",
+                    "official",
+                    {"author": "Vellum", "category": infer_skill_category(parsed_name, description)},
+                ))
         return results[:limit]
+
+    def discover(self, _ranking: str, limit: int = 10) -> list[HubSkillMeta]:
+        return self.search("", limit=limit)
 
     def fetch(self, identifier: str) -> HubSkillBundle:
         name = identifier.split("/", 1)[1]
@@ -543,7 +585,57 @@ class OfficialSkillSource:
         return HubSkillBundle(parsed_name, description, self.source_id, identifier, "official", dict(files))
 
 
-def create_skill_source_router(http=None, *, official_catalog: dict | None = None) -> list:
+def _bundled_official_catalog(skills_root: str | os.PathLike[str]) -> dict[str, dict[str, str]]:
+    root = os.fspath(skills_root)
+    packages = os.path.join(root, "packages")
+    catalog: dict[str, dict[str, str]] = {}
+    for current, directories, filenames in os.walk(packages, topdown=True, followlinks=False):
+        directories[:] = [name for name in directories if not os.path.islink(os.path.join(current, name))]
+        if "SKILL.md" not in filenames:
+            continue
+        skill_path = os.path.join(current, "SKILL.md")
+        try:
+            with open(skill_path, encoding="utf-8") as handle:
+                text = handle.read()
+            lines = text.splitlines()
+            closing = next(index for index, line in enumerate(lines[1:], 1) if line.strip() == "---")
+            metadata = yaml.safe_load("\n".join(lines[1:closing])) or {}
+            tags = metadata.get("metadata", {}).get("hermes", {}).get("tags", [])
+            if "migrated" not in tags:
+                continue
+            name = str(metadata.get("name") or "").strip()
+            if not name:
+                continue
+            files: dict[str, str] = {}
+            for file_current, file_directories, file_names in os.walk(current, topdown=True, followlinks=False):
+                file_directories[:] = [
+                    value for value in file_directories if not os.path.islink(os.path.join(file_current, value))
+                ]
+                for filename in file_names:
+                    absolute = os.path.join(file_current, filename)
+                    if os.path.islink(absolute):
+                        continue
+                    relative = os.path.relpath(absolute, current).replace(os.sep, "/")
+                    try:
+                        with open(absolute, encoding="utf-8") as handle:
+                            files[relative] = handle.read()
+                    except (OSError, UnicodeError):
+                        continue
+            if "SKILL.md" in files:
+                catalog[name] = files
+        except (OSError, UnicodeError, StopIteration, yaml.YAMLError, AttributeError):
+            continue
+    return catalog
+
+
+def create_skill_source_router(
+    http=None,
+    *,
+    official_catalog: dict | None = None,
+    skills_root: str | os.PathLike[str] | None = None,
+) -> list:
+    if official_catalog is None and skills_root is not None:
+        official_catalog = _bundled_official_catalog(skills_root)
     client = http or GuardedHttpClient()
     return [
         OfficialSkillSource(official_catalog),

@@ -19,7 +19,14 @@ class SkillPrivacyError(ValueError):
 _PATHS = re.compile(r"(?:[A-Za-z]:\\|\\\\[^\s\\]+\\|(?<![:\w])/(?:[^/\s]+/)*[^/\s]+|~/|\$\{?[A-Z_][A-Z0-9_]*\}?|%[A-Z_][A-Z0-9_]*%)\S*", re.I)
 _CREDENTIAL_URL = re.compile(r"https?://[^\s/:]+:[^\s/@]+@[^\s]+", re.I)
 _HANDLE = re.compile(r"(?<!\w)@[A-Za-z0-9_]{2,32}\b")
-_SECRET = re.compile(r"\b(?:sk|ghp|github_pat|xox[baprs])[-_A-Za-z0-9]{16,}\b", re.I)
+_SECRET = re.compile(
+    r"(?:\b(?:sk-|ghp_|github_pat_|xox[baprs]-)[-_A-Za-z0-9]{16,}\b|\bAKIA[0-9A-Z]{16}\b|-----BEGIN [A-Z ]*PRIVATE KEY-----)",
+    re.I,
+)
+_ASSIGNED_SECRET = re.compile(
+    r"\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)\s*[:=]\s*['\"]?(?!\[|<|\{|\$|your[_-]|example|dummy|test)[A-Za-z0-9+/=_-]{12,}",
+    re.I,
+)
 _INJECTION = re.compile(r"(?:ignore|override).{0,30}(?:instructions|privacy)|reproduce.{0,30}(?:private|secret|source)", re.I | re.S)
 _PUBLIC_URL = re.compile(r"https?://(?![^\s/@]+:[^\s/@]+@)[^\s)\]>]+", re.I)
 _PUBLIC_RUNTIME_PATH = re.compile(r"^/mnt/user-data/(?:outputs|uploads)(?:/|$)", re.I)
@@ -79,7 +86,15 @@ class SkillPrivacyGate:
     ) -> None:
         protected = [value for value in protected_values if value]
         for path, content in files:
-            self.sanitize(content)
+            content = unicodedata.normalize("NFKC", content or "")
+            content = "".join(character for character in content if unicodedata.category(character) != "Cf")
+            # Public marketplace packages contain code, shell examples, HTML,
+            # licenses, and test fixtures. Running the conversational RED
+            # classifier over those files produces false positives. Public
+            # packages still receive deterministic secret/path/injection checks
+            # here and the separate package security scanner before staging.
+            if not public_package:
+                self.sanitize(content)
             findings = [] if public_package else [
                 item
                 for item in self.scrubber.analyze(content)
@@ -96,6 +111,7 @@ class SkillPrivacyGate:
                     ("credential_url", _CREDENTIAL_URL),
                     *(() if public_package else (("private_handle", _HANDLE),)),
                     ("secret", _SECRET),
+                    ("assigned_secret", _ASSIGNED_SECRET),
                     ("prompt_injection", _INJECTION),
                 )
                 if pattern.search(content)
@@ -125,12 +141,27 @@ class SkillPrivacyGate:
     @staticmethod
     def _contains_private_path(text: str, *, public_package: bool) -> bool:
         public_url_spans = [(match.start(), match.end()) for match in _PUBLIC_URL.finditer(text)]
+        if public_package:
+            # Only machine/user-specific absolute paths are privacy-sensitive
+            # in public code. Relative routes, HTML closing tags, fixture paths,
+            # and portable runtime paths are normal package content.
+            patterns = (
+                re.compile(r"[A-Za-z]:\\(?:Users|Documents and Settings)\\[^\\\s]+(?:\\\S*)?", re.I),
+                re.compile(r"\\\\[^\s\\]+\\[^\s\\]+(?:\\\S*)?", re.I),
+                re.compile(r"(?<![:\w])/(?:home|Users)/[^/\s]+(?:/\S*)?", re.I),
+                re.compile(r"(?<![:\w])/(?:root|private|Volumes)(?:/\S*)?", re.I),
+                re.compile(r"(?<![:\w])/mnt/[A-Za-z]/Users/[^/\s]+(?:/\S*)?", re.I),
+            )
+            for pattern in patterns:
+                for match in pattern.finditer(text):
+                    if any(match.start() < end and start < match.end() for start, end in public_url_spans):
+                        continue
+                    value = match.group(0).strip("'\"`),.;:")
+                    if _PUBLIC_RUNTIME_PATH.match(value) or _PORTABLE_CODE_PATH.match(value):
+                        continue
+                    return True
+            return False
         for match in _PATHS.finditer(text):
             value = match.group(0).strip("'\"`),.;:")
-            if public_package:
-                if any(match.start() < end and start < match.end() for start, end in public_url_spans):
-                    continue
-                if _PUBLIC_RUNTIME_PATH.match(value) or _PORTABLE_CODE_PATH.match(value):
-                    continue
             return True
         return False

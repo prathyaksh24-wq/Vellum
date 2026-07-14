@@ -160,7 +160,14 @@ class SkillHub:
         self._inspect_cache: dict[str, tuple[float, dict[str, Any]]] = {}
         self._inspect_ttl_seconds = 300
 
-    def search(self, query: str, *, source_filter: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
+    def search(
+        self,
+        query: str,
+        *,
+        source_filter: str | None = None,
+        limit: int = 10,
+        ranking: str | None = None,
+    ) -> list[dict[str, Any]]:
         normalized_filter = str(source_filter or "all").strip().casefold() or "all"
         selected = []
         matched_filter = normalized_filter == "all"
@@ -180,7 +187,10 @@ class SkillHub:
         results: list[dict[str, Any]] = []
         if normalized_filter == "all" and len(selected) > 1:
             with ThreadPoolExecutor(max_workers=min(4, len(selected)), thread_name_prefix="skill-source") as executor:
-                futures = {executor.submit(self._search_source, source, query, limit): source for source in selected}
+                futures = {
+                    executor.submit(self._search_source, source, query, limit, ranking): source
+                    for source in selected
+                }
                 for future in as_completed(futures):
                     rows, health = future.result()
                     source_id = str(getattr(futures[future], "source_id", "unknown")).casefold()
@@ -188,7 +198,7 @@ class SkillHub:
                     results.extend(rows)
         else:
             for source in selected:
-                rows, health = self._search_source(source, query, limit)
+                rows, health = self._search_source(source, query, limit, ranking)
                 source_id = str(getattr(source, "source_id", "unknown")).casefold()
                 self.last_search_health[source_id] = health
                 results.extend(rows)
@@ -200,18 +210,35 @@ class SkillHub:
             key = self._discovery_key(item)
             normalized_name = " ".join(unicodedata.normalize("NFKC", str(item.get("name") or "")).casefold().split())
             creator = self._discovery_creator(item)
-            identity = (normalized_name, creator) if creator else None
-            if key in unique or (identity is not None and identity in unique_identities):
+            identity = (normalized_name, creator or f"source:{item.get('source', 'unknown')}")
+            if key in unique or identity in unique_identities:
                 continue
             unique[key] = item
-            if identity is not None:
-                unique_identities.add(identity)
+            unique_identities.add(identity)
         return list(unique.values())[:limit]
 
-    def discover(self, *, source_filter: str | None = None, limit_per_section: int = 8) -> dict[str, Any]:
-        """Return a zero-query, cross-source discovery feed with stable rankings."""
+    def discover(
+        self,
+        *,
+        source_filter: str | None = None,
+        ranking: str = "most-popular",
+        limit_per_section: int = 8,
+    ) -> dict[str, Any]:
+        """Return one current, deduplicated cross-source ranking."""
+        labels = {
+            "most-popular": "Most Popular",
+            "trending": "Trending",
+            "most-downloaded": "Most Downloaded",
+        }
+        if ranking not in labels:
+            raise SkillHubError(f"unknown discovery ranking: {ranking}")
         section_size = max(1, min(int(limit_per_section), 20))
-        candidates = self.search("", source_filter=source_filter, limit=min(100, section_size * 8))
+        candidates = self.search(
+            "",
+            source_filter=source_filter,
+            limit=min(100, section_size * 8),
+            ranking=ranking,
+        )
 
         def number(item: dict[str, Any], *fields: str) -> float:
             for field in fields:
@@ -227,40 +254,47 @@ class SkillHub:
             raw = str(item.get("updated_at") or "").strip().replace("Z", "+00:00")
             if not raw:
                 return 0.0
+            if raw.isdigit():
+                value = float(raw)
+                return value / 1000 if value > 10_000_000_000 else value
             try:
                 return datetime.fromisoformat(raw).timestamp()
             except ValueError:
                 return 0.0
 
-        rankings = (
-            ("most-popular", "Most Popular", lambda item: (number(item, "installs", "downloads", "stars"), timestamp(item))),
-            ("trending", "Trending", lambda item: (timestamp(item), number(item, "installs", "downloads", "stars"))),
-            ("most-downloaded", "Most Downloaded", lambda item: (number(item, "downloads", "installs"), timestamp(item))),
-        )
-        remaining = {self._discovery_key(item): item for item in candidates}
-        sections: list[dict[str, Any]] = []
-        flattened: list[dict[str, Any]] = []
-        for section_id, label, score in rankings:
-            ranked = sorted(
-                remaining.items(),
-                key=lambda pair: (score(pair[1]), pair[1].get("name", "").casefold()),
-                reverse=True,
-            )[:section_size]
-            rows = []
-            for rank, (key, item) in enumerate(ranked, start=1):
-                remaining.pop(key, None)
-                row = {**item, "section": section_id, "section_label": label, "rank": rank}
-                rows.append(row)
-                flattened.append(row)
-            sections.append({"id": section_id, "label": label, "count": len(rows)})
-        return {"items": flattened, "sections": sections}
+        scores = {
+            "most-popular": lambda item: (number(item, "installs", "downloads", "stars"), timestamp(item)),
+            "trending": lambda item: (timestamp(item), number(item, "installs", "downloads", "stars")),
+            "most-downloaded": lambda item: (number(item, "downloads", "installs"), timestamp(item)),
+        }
+        ranked = sorted(
+            candidates,
+            key=lambda item: (scores[ranking](item), item.get("name", "").casefold()),
+            reverse=True,
+        )[:section_size]
+        rows = [
+            {**item, "section": ranking, "section_label": labels[ranking], "rank": index}
+            for index, item in enumerate(ranked, start=1)
+        ]
+        return {
+            "items": rows,
+            "sections": [{"id": ranking, "label": labels[ranking], "count": len(rows)}],
+            "ranking": ranking,
+            "refreshed_at": datetime.now(timezone.utc).isoformat(),
+        }
 
     @staticmethod
-    def _search_source(source, query: str, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    def _search_source(
+        source,
+        query: str,
+        limit: int,
+        ranking: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         source_id = str(getattr(source, "source_id", "unknown")).casefold()
         search = source.search
         try:
-            found = search(query, limit=limit)
+            discover = getattr(source, "discover", None)
+            found = discover(ranking, limit=limit) if not query and ranking and callable(discover) else search(query, limit=limit)
         except (OSError, ValueError, KeyError) as exc:
             return [], {"status": "error", "searchable": True, "error": str(exc)[:160]}
         rows = []

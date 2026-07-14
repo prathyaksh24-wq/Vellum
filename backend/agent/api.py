@@ -128,7 +128,7 @@ def _skill_surface() -> SkillSurfaceService:
         _skill_surface_singleton = SkillSurfaceService(
             REPO_ROOT / ".skills",
             logs_root=REPO_ROOT / "data" / "logs" / "curator",
-            sources=create_skill_source_router(),
+            sources=create_skill_source_router(skills_root=REPO_ROOT / ".skills"),
         )
     return _skill_surface_singleton
 
@@ -1846,6 +1846,7 @@ class SkillHubSearchRequest(BaseModel):
     query: str = ""
     source: str | None = None
     category: str = "all"
+    ranking: Literal["most-popular", "trending", "most-downloaded"] = "most-popular"
     limit: int = Field(default=20, ge=1, le=100)
 
 
@@ -1969,11 +1970,12 @@ async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]
         discovery = await asyncio.to_thread(
             surface.hub.discover,
             source_filter=request.source or "all",
-            limit_per_section=max(1, min(12, request.limit // 3 or 1)),
+            ranking=request.ranking,
+            limit_per_section=max(1, min(40, request.limit)),
         )
         items = discovery["items"]
     else:
-        discovery = {"sections": []}
+        discovery = {"sections": [], "ranking": request.ranking, "refreshed_at": None}
         items = await asyncio.to_thread(
             surface.hub.search,
             query,
@@ -1982,7 +1984,13 @@ async def skills_v2_hub_search(request: SkillHubSearchRequest) -> dict[str, Any]
         )
     if request.category != "all":
         items = [item for item in items if item.get("category") == request.category]
-    return {"items": items, "sections": discovery["sections"], "source_health": _skills_source_health(surface)}
+    return {
+        "items": items,
+        "sections": discovery["sections"],
+        "ranking": discovery.get("ranking", request.ranking),
+        "refreshed_at": discovery.get("refreshed_at"),
+        "source_health": _skills_source_health(surface),
+    }
 
 
 @router.post("/skills/v2/hub/inspect")

@@ -171,7 +171,7 @@ def test_discovery_deduplicates_same_name_and_creator_but_keeps_other_creators(t
     assert {result["author"] for result in results} == {"alice", "bob"}
 
 
-def test_zero_query_discovery_returns_three_ranked_deduplicated_sections(tmp_path: Path) -> None:
+def test_zero_query_discovery_returns_selected_live_ranking_without_repetition(tmp_path: Path) -> None:
     names = [f"skill-{index}" for index in range(9)]
     metrics = {
         name: {"installs": index * 10, "downloads": index * 5, "updated_at": f"2026-07-{index + 1:02d}T00:00:00Z"}
@@ -179,12 +179,14 @@ def test_zero_query_discovery_returns_three_ranked_deduplicated_sections(tmp_pat
     }
     hub = SkillHub(tmp_path, sources=[SearchSource("registry", names, metrics=metrics)])
 
-    discovery = hub.discover(limit_per_section=3)
+    discovery = hub.discover(ranking="trending", limit_per_section=3)
 
-    assert [section["label"] for section in discovery["sections"]] == ["Most Popular", "Trending", "Most Downloaded"]
-    assert len(discovery["items"]) == 9
-    assert len({item["identifier"] for item in discovery["items"]}) == 9
-    assert {item["section"] for item in discovery["items"]} == {"most-popular", "trending", "most-downloaded"}
+    assert [section["label"] for section in discovery["sections"]] == ["Trending"]
+    assert len(discovery["items"]) == 3
+    assert len({item["identifier"] for item in discovery["items"]}) == 3
+    assert {item["section"] for item in discovery["items"]} == {"trending"}
+    assert discovery["ranking"] == "trending"
+    assert discovery["refreshed_at"]
 
 
 def test_inspection_reuses_cached_scanned_detail(tmp_path: Path) -> None:

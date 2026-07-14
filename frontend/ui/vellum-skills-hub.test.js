@@ -61,6 +61,10 @@ describe("production Skills Hub", () => {
     expect(html).toContain("confirm:true");
     expect(html).toContain("Built-in skills can't be removed");
     expect(html).toContain("startInstallActivity(payload)");
+    expect(html).toContain("SKILL_RANKING_OPTIONS");
+    expect(html).toContain('ariaLabel="Discovery ranking"');
+    expect(html).toContain("setInterval(()=>loadList(false,''),300000)");
+    expect(html).toContain("item.author?` · by ${item.author}`:''");
   });
 
   test("colocated API client supports cancellable typed operations", () => {

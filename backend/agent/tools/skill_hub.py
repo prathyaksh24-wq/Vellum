@@ -18,7 +18,7 @@ _MUTATIONS: SkillMutationCoordinator | None = None
 def _hub() -> SkillHub:
     global _HUB
     if _HUB is None:
-        _HUB = SkillHub(SKILLS_PATH, sources=create_skill_source_router())
+        _HUB = SkillHub(SKILLS_PATH, sources=create_skill_source_router(skills_root=SKILLS_PATH))
     return _HUB
 
 

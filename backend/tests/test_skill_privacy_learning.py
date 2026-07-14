@@ -74,6 +74,11 @@ print(f'Logs saved to: {output}')
             [("examples/private.py", "open('/home/private-user/history.log')")],
             public_package=True,
         )
+    with pytest.raises(SkillPrivacyError, match="private_path"):
+        gate.validate_generated(
+            [("examples/private.py", r"open('C:\Users\private-user\history.log')")],
+            public_package=True,
+        )
     gate.validate_generated(
         [
             ("LICENSE.txt", "Apache License, January 2004. http://www.apache.org/licenses/LICENSE-2.0"),
@@ -88,6 +93,18 @@ print(f'Logs saved to: {output}')
             [("examples/private.py", "api_key=supersecretvalue123456789")],
             public_package=True,
         )
+
+
+def test_public_package_allows_html_routes_and_relative_artifact_paths() -> None:
+    SkillPrivacyGate().validate_generated(
+        [
+            ("assets/review.html", "</title><script src='/assets/viewer.js'></script>"),
+            ("agents/grader.md", "Read ../grading.json and outputs/metrics.json."),
+            ("scripts/server.py", "route = '/api/feedback'\nplaceholder = '/path/to/output.json'"),
+            ("scripts/report.py", "name = 'skill_description_report_' + timestamp"),
+        ],
+        public_package=True,
+    )
 
 
 def test_semantically_consistent_signals_group_and_review_every_ten_turns(tmp_path: Path) -> None:

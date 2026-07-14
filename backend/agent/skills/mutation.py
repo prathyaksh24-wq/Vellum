@@ -157,7 +157,7 @@ class FilesystemSkillBackend:
                     raise SkillMutationError(f"skill not found: {name}")
             else:
                 raise SkillMutationError(f"unsupported skill action: {normalized}")
-            if normalized in {"archive", "retire", "delete"}:
+            if normalized in {"archive", "retire", "restore", "delete"}:
                 self._parse_existing_package(source)
             else:
                 self._validate_package(source, public_package=self._is_hub_skill(name))
