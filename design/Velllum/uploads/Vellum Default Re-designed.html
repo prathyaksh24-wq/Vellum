@@ -90,6 +90,11 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sb-primary .sb-row:first-child .sb-ic{color:var(--ember)}
 .sb-sec{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
 .sb-sec-count{margin-left:auto;font-size:10px;color:var(--dim2);font-family:var(--font-m)}
+.now-group{padding:1px 0 3px}
+.now-subhead{display:flex;align-items:center;gap:6px;padding:8px 9px 3px;color:var(--dim);font-size:10.5px;font-weight:500}
+.now-subhead:first-child{padding-top:3px}
+.now-subhead .space-count{margin-left:auto}
+.now-subempty{padding:4px 9px 5px;color:var(--dim2);font-size:10.5px}
 .sec-chev{display:flex;color:var(--dim2);background:none;border:none;cursor:pointer;padding:2px;border-radius:4px;transition:transform .2s,color .15s}
 .sec-chev:hover{color:var(--txt)}
 .sec-chev.closed{transform:rotate(-90deg)}
@@ -2417,12 +2422,31 @@ const SmartViewIcon = ({id, size = 14}) => {
   return <IcGrid size={size}/>;
 };
 
+const chatIsToday = chat => {
+  const value = String(chat.updated_at || chat.created_at || chat.created || '');
+  if (/^today$/i.test(value.trim())) return true;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  const now = new Date();
+  return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+};
+
 const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
   const sorted = visibleChats(chats);
   const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
-  const smartViews = (conversationLibrary && conversationLibrary.smart_views) || [];
   const [expandedSpace, setExpandedSpace] = useState(null);
   const organizedChats = ((conversationLibrary && conversationLibrary.conversations) || chats).filter(chat => !chat.archived);
+  const serverSmartViews = (conversationLibrary && conversationLibrary.smart_views) || [];
+  const smartById = new Map(serverSmartViews.map(item => [item.id, item]));
+  if (!smartById.has('pinned')) smartById.set('pinned', {id: 'pinned', label: 'Pinned', count: organizedChats.filter(chat => chat.pinned).length});
+  if (!smartById.has('follow-up')) smartById.set('follow-up', {id: 'follow-up', label: 'Needs follow-up', count: organizedChats.filter(chat => chat.organization && chat.organization.status === 'Follow-up').length});
+  const smartViews = [...smartById.values()].sort((left, right) => {
+    const order = ['pinned', 'follow-up', 'calendar', 'slack', 'spotify', 'files'];
+    return order.indexOf(left.id) - order.indexOf(right.id);
+  });
+  const continueChat = sorted.find(chat => chat.id === activeChatId) || sorted.find(chat => (chat.messages || []).length > 0) || sorted[0] || null;
+  const todayChats = sorted.filter(chat => chat.id !== (continueChat && continueChat.id) && chatIsToday(chat));
+  const followUpChats = sorted.filter(chat => chat.organization && chat.organization.status === 'Follow-up');
   const chatsForSpace = spaceId => organizedChats.filter(chat => chat.organization && chat.organization.space_id === spaceId);
   return (
     <div className="sidebar">
@@ -2435,16 +2459,28 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
-        <div className="sb-sec">Now<span className="sb-sec-count">{Math.min(sorted.length, 5)}</span></div>
-        <div className="sb-list">
-          {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
-          {sorted.slice(0, 5).map(c => (
-            <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
-              renaming={renamingId === c.id}
-              onOpen={() => onOpenChat(c.id)}
-              onMenu={e => onChatMenu(c.id, e)}
-              onRename={t => onRename(c.id, t)}/>
-          ))}
+        <div className="sb-sec">Now<span className="sb-sec-count">{sorted.length}</span></div>
+        <div className="now-group">
+          <div className="now-subhead">Continue<span className="space-count">{continueChat ? 1 : 0}</span></div>
+          {continueChat ? <ChatRow chat={continueChat} showMeta active={view === 'chat' && continueChat.id === activeChatId}
+            renaming={renamingId === continueChat.id}
+            onOpen={() => onOpenChat(continueChat.id)}
+            onMenu={e => onChatMenu(continueChat.id, e)}
+            onRename={t => onRename(continueChat.id, t)}/> : <div className="now-subempty">No conversation to continue.</div>}
+          <div className="now-subhead">Today<span className="space-count">{todayChats.length}</span></div>
+          {todayChats.slice(0, 3).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
+            renaming={renamingId === chat.id}
+            onOpen={() => onOpenChat(chat.id)}
+            onMenu={e => onChatMenu(chat.id, e)}
+            onRename={title => onRename(chat.id, title)}/>)}
+          {todayChats.length === 0 && <div className="now-subempty">No other chats today.</div>}
+          <div className="now-subhead">Needs follow-up<span className="space-count">{followUpChats.length}</span></div>
+          {followUpChats.slice(0, 2).map(chat => <ChatRow key={chat.id} chat={chat} showMeta active={view === 'chat' && chat.id === activeChatId}
+            renaming={renamingId === chat.id}
+            onOpen={() => onOpenChat(chat.id)}
+            onMenu={e => onChatMenu(chat.id, e)}
+            onRename={title => onRename(chat.id, title)}/>)}
+          {followUpChats.length === 0 && <div className="now-subempty">Nothing waiting on you.</div>}
         </div>
         <div className="sb-sec">Spaces<span className="sb-sec-count">{spaces.length}</span></div>
         {spaces.length === 0 && <div className="sb-empty">Spaces appear as chats collect.</div>}
@@ -2470,7 +2506,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             </React.Fragment>
           );
         })}
-        {smartViews.length > 0 && <div className="sb-sec">Smart views</div>}
+        <div className="sb-sec">Smart views<span className="sb-sec-count">{smartViews.length}</span></div>
         {smartViews.map(smart => (
           <button key={smart.id} className="sb-row smart-row" onClick={() => onSmartView(smart)}>
             <span className="sb-ic"><SmartViewIcon id={smart.id}/></span>

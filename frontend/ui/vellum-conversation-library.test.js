@@ -17,8 +17,13 @@ describe("conversation library frontend", () => {
 
   test("renders a shallow recent-chat hierarchy without replacing Projects", () => {
     expect(html).toContain('<div className="sb-sec">Now');
+    expect(html).toContain('<div className="now-subhead">Continue');
+    expect(html).toContain('<div className="now-subhead">Today');
+    expect(html).toContain('<div className="now-subhead">Needs follow-up');
     expect(html).toContain('<div className="sb-sec">Spaces');
-    expect(html).toContain('<div className="sb-sec">Smart views</div>');
+    expect(html).toContain('<div className="sb-sec">Smart views');
+    expect(html).toContain("smartById.set('pinned'");
+    expect(html).toContain("smartById.set('follow-up'");
     expect(html).toContain("Projects");
     expect(html).toContain("conversationLibrary.spaces");
   });
