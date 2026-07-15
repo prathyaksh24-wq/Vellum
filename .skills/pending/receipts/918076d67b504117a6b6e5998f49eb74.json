@@ -1,0 +1,23 @@
+{
+  "completed_at": "2026-07-15T02:46:21.180457+00:00",
+  "id": "918076d67b504117a6b6e5998f49eb74",
+  "idempotency_key": "6ae777e6d687e6f8b2801373e28ef6ee0c149ee49b179ddb3839a2f07cc39fbf",
+  "result": {
+    "content_hash": "5a4f4a23df594787fc0be68a0dd7fdcdf931729cb9d0b8b742e210db5db8134d",
+    "description": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
+    "id": "918076d67b504117a6b6e5998f49eb74",
+    "idempotency_key": "6ae777e6d687e6f8b2801373e28ef6ee0c149ee49b179ddb3839a2f07cc39fbf",
+    "identifier": "clawhub/nano-pdf",
+    "install_path": "packages/community/nano-pdf",
+    "installed_at": "2026-07-15T02:46:19.915443+00:00",
+    "name": "nano-pdf",
+    "ok": true,
+    "repository_url": null,
+    "scan_verdict": "safe",
+    "source": "clawhub",
+    "source_path": null,
+    "source_ref": null,
+    "status": "applied",
+    "trust_level": "community"
+  }
+}

@@ -1,6 +1,201 @@
 {
   "conversations": [
     {
+      "id": "ptojfav6",
+      "thread_id": "ptojfav6",
+      "title": "can you see the new skill th?",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "v77qkfaa",
+          "role": "user",
+          "text": "can you see the new skill that was installed?",
+          "attachments": []
+        },
+        {
+          "id": "5y5qkq1i",
+          "role": "assistant",
+          "text": "Let me check what skills are currently installed.\n\n<|tool_calls_section_begin|><|tool_call_begin|>skills_list:0<|tool_call_argument_begin|>{}<|tool_call_end|><|tool_calls_section_end|>",
+          "full": "On \"can you see the new skill that was installed?\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_0b15dae760ce4b03824c2ed5bdcb489a",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "can you see the new skill that was installed?",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T02:39:31+00:00"
+            },
+            {
+              "id": "msg_c8245d58d0884bfeb69a718754276480",
+              "type": "final_answer_completed",
+              "label": "Answer written",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T02:39:54+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_0b15dae760ce4b03824c2ed5bdcb489a",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "can you see the new skill that was installed?",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "msg_c8245d58d0884bfeb69a718754276480",
+              "type": "final_answer_completed",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "kind": "done",
+              "title": "Answer written",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "answering",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        },
+        {
+          "id": "qfaj1ugu",
+          "role": "user",
+          "text": "??",
+          "attachments": []
+        },
+        {
+          "id": "mm7q42r9",
+          "role": "assistant",
+          "text": "<|tool_calls_section_begin|><|tool_call_begin|>skills_list:0<|tool_call_argument_begin|>{}<|tool_call_end|><|tool_calls_section_end|>",
+          "full": "On \"??\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_1127ec79d71345bfab0ba666ca8900f3",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "??",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T02:40:11+00:00"
+            },
+            {
+              "id": "msg_8a130b37279642b290287a80d857bc41",
+              "type": "final_answer_completed",
+              "label": "Answer written",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T02:40:22+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_1127ec79d71345bfab0ba666ca8900f3",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "??",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "msg_8a130b37279642b290287a80d857bc41",
+              "type": "final_answer_completed",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "kind": "done",
+              "title": "Answer written",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "answering",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        }
+      ],
+      "updated_at": "2026-07-15T02:40:22+00:00"
+    },
+    {
       "id": "j8x8bgpj",
       "thread_id": "j8x8bgpj",
       "title": "play song from my liked song?",
