@@ -23,6 +23,13 @@ def conversation(
         "pinned": False,
         "archived": False,
         "summary": "A useful planning conversation.",
+        "organization": {
+            "space_id": "personal",
+            "space_label": "Personal",
+            "topic_id": "travel",
+            "topic_label": "Travel",
+            "assignment": "automatic",
+        },
         "decisions": ["Use the train."],
         "open_loops": ["Book the hotel."],
         "memory_links": ["[[Agent/Memories/travel-preferences]]"],
@@ -51,6 +58,9 @@ def test_export_is_readable_private_and_dry_run_by_default(tmp_path: Path) -> No
     assert 'privacy: "private"' in text
     assert 'conversation_id: "chat-1"' in text
     assert 'thread_id: "thread-chat-1"' in text
+    assert 'space: "Personal"' in text
+    assert 'topic: "Travel"' in text
+    assert 'organization_assignment: "automatic"' in text
     assert "# Plan a trip" in text
     assert "## Summary" in text
     assert "## Conversation / Transcript" in text

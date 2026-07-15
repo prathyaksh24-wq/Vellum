@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass, replace
@@ -111,6 +112,12 @@ ACTIVITY_RULES = (
     ("Planning", {"plan", "planning", "roadmap", "strategy"}),
 )
 
+DYNAMIC_EXCLUDED = STOP_WORDS | {
+    "add", "answer", "assistant", "compare", "create", "discuss", "explain", "find", "first", "give",
+    "improve", "information", "look", "notes", "question", "recent", "return", "search", "show", "summarize",
+    "tell", "today", "tomorrow", "update", "week", "weekly",
+}
+
 
 @dataclass(frozen=True)
 class SearchWeights:
@@ -137,6 +144,10 @@ DEFAULT_SEARCH_WEIGHTS = SearchWeights()
 def _slug(value: str) -> str:
     clean = re.sub(r"[^a-z0-9]+", "-", value.casefold()).strip("-")
     return clean or "unsorted"
+
+
+def organization_id(value: str) -> str:
+    return _slug(value)
 
 
 def _text(message: Any) -> str:
@@ -289,6 +300,7 @@ def organize_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
     topic_id, topic_label = _topic_for(space_id, text)
     existing = conversation.get("organization") if isinstance(conversation.get("organization"), dict) else {}
     assignment = str(existing.get("assignment") or "automatic")
+    preserved_existing = False
     if assignment == "manual":
         space_id = _slug(str(existing.get("space_id") or existing.get("space_label") or space_id))
         space_label = str(existing.get("space_label") or space_label)
@@ -301,8 +313,21 @@ def organize_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
         space_label = str(existing.get("space_label") or space_label)
         topic_id = str(existing.get("topic_id") or topic_id)
         topic_label = str(existing.get("topic_label") or topic_label)
+        preserved_existing = True
 
     tokens = Counter(_tokens(text))
+    segments = _segments(conversation)
+    if preserved_existing:
+        segments = [
+            {
+                **segment,
+                "space_id": space_id if segment["space_id"] == "unsorted" else segment["space_id"],
+                "space_label": space_label if segment["space_id"] == "unsorted" else segment["space_label"],
+                "topic_id": topic_id if segment["space_id"] == "unsorted" else segment["topic_id"],
+                "topic_label": topic_label if segment["space_id"] == "unsorted" else segment["topic_label"],
+            }
+            for segment in segments
+        ]
     return {
         "space_id": space_id,
         "space_label": space_label,
@@ -314,9 +339,130 @@ def organize_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
         "confidence": confidence,
         "assignment": assignment,
         "keywords": [term for term, _count in tokens.most_common(8)],
-        "segments": _segments(conversation),
+        "segments": segments,
         "signals": {key: score for key, score in scores.items() if score > 0},
     }
+
+
+def _dynamic_terms(conversation: dict[str, Any]) -> Counter[str]:
+    counts: Counter[str] = Counter()
+    for token in _tokens(str(conversation.get("title") or "")):
+        if token not in DYNAMIC_EXCLUDED:
+            counts[token] += 3
+    for message in conversation.get("messages") or []:
+        if _role(message) != "user":
+            continue
+        for token in _tokens(_text(message)):
+            if token not in DYNAMIC_EXCLUDED:
+                counts[token] += 1
+    return counts
+
+
+def _apply_dynamic_spaces(enriched: list[dict[str, Any]]) -> None:
+    known_spaces = set(SPACE_RULES) | {"unsorted"}
+    candidates = [
+        (index, item, _dynamic_terms(item))
+        for index, item in enumerate(enriched)
+        if not item.get("archived")
+        and item["organization"]["assignment"] == "automatic"
+        and (
+            item["organization"]["space_id"] == "unsorted"
+            or item["organization"]["space_id"] not in known_spaces
+        )
+    ]
+    if len(candidates) < 2:
+        return
+
+    parent = list(range(len(candidates)))
+
+    def find(index: int) -> int:
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(left: int, right: int) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    documents_by_term: dict[str, list[int]] = defaultdict(list)
+    for candidate_index, (_item_index, _item, counts) in enumerate(candidates):
+        for term, _count in counts.most_common(6):
+            if len(term) >= 3:
+                documents_by_term[term].append(candidate_index)
+        existing_space = str(_item["organization"]["space_id"])
+        if existing_space not in known_spaces:
+            documents_by_term[f"__space__:{existing_space}"].append(candidate_index)
+    max_frequency = max(3, math.ceil(len(candidates) * 0.4))
+    for members in documents_by_term.values():
+        if len(members) < 2 or len(members) > max_frequency:
+            continue
+        first = members[0]
+        for member in members[1:]:
+            union(first, member)
+
+    groups: dict[int, list[int]] = defaultdict(list)
+    for candidate_index in range(len(candidates)):
+        groups[find(candidate_index)].append(candidate_index)
+
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        document_frequency: Counter[str] = Counter()
+        total_frequency: Counter[str] = Counter()
+        for member in members:
+            counts = candidates[member][2]
+            document_frequency.update(counts.keys())
+            total_frequency.update(counts)
+        shared = [
+            term
+            for term, frequency in document_frequency.most_common()
+            if frequency >= 2 and term not in DYNAMIC_EXCLUDED
+        ]
+        if not shared:
+            continue
+        shared.sort(key=lambda term: (-document_frequency[term], -total_frequency[term], term))
+        existing_spaces = Counter(
+            (
+                candidates[member][1]["organization"]["space_id"],
+                candidates[member][1]["organization"]["space_label"],
+            )
+            for member in members
+            if candidates[member][1]["organization"]["space_id"] not in known_spaces
+        )
+        if existing_spaces:
+            (space_id, label), _count = existing_spaces.most_common(1)[0]
+        else:
+            label = shared[0].title()
+            space_id = organization_id(label)
+        for member in members:
+            item_index, item, _counts = candidates[member]
+            organization = dict(enriched[item_index]["organization"])
+            if organization["space_id"] == space_id and organization["topic_id"] != "unsorted":
+                topic_id, topic_label = organization["topic_id"], organization["topic_label"]
+            else:
+                topic_id, topic_label = _topic_for(space_id, _conversation_text(item))
+            organization.update({
+                "space_id": space_id,
+                "space_label": label,
+                "topic_id": topic_id,
+                "topic_label": topic_label,
+                "confidence": max(float(organization.get("confidence") or 0.0), 0.68),
+                "signals": {"dynamic_cluster_size": float(len(members))},
+                "segments": [
+                    {
+                        **segment,
+                        "space_id": space_id if segment["space_id"] == "unsorted" else segment["space_id"],
+                        "space_label": label if segment["space_id"] == "unsorted" else segment["space_label"],
+                        "topic_id": topic_id if segment["space_id"] == "unsorted" else segment["topic_id"],
+                        "topic_label": topic_label if segment["space_id"] == "unsorted" else segment["topic_label"],
+                    }
+                    for segment in organization["segments"]
+                ],
+            })
+            enriched[item_index] = {**item, "organization": organization}
 
 
 def _updated_at(conversation: dict[str, Any]) -> str:
@@ -333,6 +479,12 @@ def build_conversation_library(conversations: Iterable[dict[str, Any]]) -> dict[
         organization = organize_conversation(conversation)
         item = {**conversation, "organization": organization}
         enriched.append(item)
+
+    _apply_dynamic_spaces(enriched)
+
+    for item in enriched:
+        conversation = item
+        organization = item["organization"]
         if conversation.get("archived"):
             smart_counts["archived"] += 1
             continue
@@ -412,7 +564,7 @@ def search_conversations(
     limit: int = 20,
     weights: SearchWeights = DEFAULT_SEARCH_WEIGHTS,
 ) -> list[dict[str, Any]]:
-    ordered = sorted(list(conversations), key=_updated_at, reverse=True)
+    ordered = build_conversation_library(conversations)["conversations"]
     query_clean = query.strip().casefold()
     query_terms = set(_tokens(query))
     results: list[dict[str, Any]] = []

@@ -44,6 +44,13 @@ from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, get_settings
 from agent.contracts.capabilities import public_capability_contract
+from agent.contracts.conversations import (
+    ConversationLibraryResponse,
+    ConversationOrganizationPatch,
+    ConversationOrganizationResponse,
+    ConversationSearchResponse,
+)
+from agent.conversations import build_conversation_library, organization_id, organize_conversation, search_conversations
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
 from agent.memory.honcho_client import HonchoMemory
@@ -620,6 +627,7 @@ def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) ->
     record["projectId"] = record.get("projectId")
     record["messages"] = record.get("messages") if isinstance(record.get("messages"), list) else []
     record["updated_at"] = _conversation_timestamp()
+    record["organization"] = organize_conversation(record)
     return record
 
 
@@ -1729,11 +1737,106 @@ async def list_conversations() -> dict[str, Any]:
     return {"conversations": conversations}
 
 
+@router.get("/conversations/library", response_model=ConversationLibraryResponse)
+async def conversation_library() -> ConversationLibraryResponse:
+    projection = await asyncio.to_thread(build_conversation_library, _read_ui_conversations())
+    return ConversationLibraryResponse.model_validate(projection)
+
+
+@router.get("/conversations/search", response_model=ConversationSearchResponse)
+async def search_conversation_library(
+    q: str = "",
+    space: str | None = None,
+    source: str | None = None,
+    status: str | None = None,
+    archived: bool = False,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> ConversationSearchResponse:
+    hits = await asyncio.to_thread(
+        search_conversations,
+        _read_ui_conversations(),
+        q,
+        space=space,
+        source=source,
+        status=status,
+        archived=archived,
+        limit=limit,
+    )
+    filters = {key: value for key, value in {
+        "space": space,
+        "source": source,
+        "status": status,
+        "archived": archived,
+    }.items() if value not in (None, "", False)}
+    return ConversationSearchResponse(query=q, filters=filters, hits=hits)
+
+
+@router.post("/conversations/organization/rebuild", response_model=ConversationLibraryResponse)
+async def rebuild_conversation_library() -> ConversationLibraryResponse:
+    conversations: list[dict[str, Any]] = []
+    for conversation in _read_ui_conversations():
+        record = dict(conversation)
+        existing = record.get("organization") if isinstance(record.get("organization"), dict) else {}
+        if existing.get("assignment") != "manual":
+            record.pop("organization", None)
+        conversations.append(record)
+    projection = await asyncio.to_thread(build_conversation_library, conversations)
+    await asyncio.to_thread(_write_ui_conversations, projection["conversations"])
+    return ConversationLibraryResponse.model_validate(projection)
+
+
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(conversation_id: str) -> dict[str, Any]:
     for conversation in _read_ui_conversations():
         if str(conversation.get("id")) == conversation_id:
             return {"conversation": conversation}
+    raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
+@router.patch(
+    "/conversations/{conversation_id}/organization",
+    response_model=ConversationOrganizationResponse,
+)
+async def patch_conversation_organization(
+    conversation_id: str,
+    payload: ConversationOrganizationPatch,
+) -> ConversationOrganizationResponse:
+    conversations = _read_ui_conversations()
+    for index, conversation in enumerate(conversations):
+        if str(conversation.get("id")) != conversation_id:
+            continue
+        base = dict(conversation)
+        if payload.assignment == "automatic":
+            base.pop("organization", None)
+        else:
+            current = organize_conversation(base)
+            values = payload.model_dump(exclude_none=True)
+            if payload.space_label and not payload.space_id:
+                values["space_id"] = organization_id(payload.space_label)
+            elif payload.space_id and not payload.space_label:
+                values["space_label"] = payload.space_id.replace("-", " ").title()
+            if payload.topic_label and not payload.topic_id:
+                values["topic_id"] = organization_id(payload.topic_label)
+            elif payload.topic_id and not payload.topic_label:
+                values["topic_label"] = payload.topic_id.replace("-", " ").title()
+            base["organization"] = {
+                **current,
+                **values,
+                "assignment": "manual",
+                "confidence": 1.0,
+            }
+        updated = _normalize_ui_conversation(conversation_id, base)
+        conversations[index] = updated
+        await asyncio.to_thread(_write_ui_conversations, conversations)
+        indexed, projection = await asyncio.gather(
+            asyncio.to_thread(_index_ui_conversation, updated),
+            asyncio.to_thread(_project_ui_conversation, updated),
+        )
+        return ConversationOrganizationResponse(
+            conversation=updated,
+            memory_index=indexed,
+            obsidian_projection=projection,
+        )
     raise HTTPException(status_code=404, detail="Conversation not found.")
 
 

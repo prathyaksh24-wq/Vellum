@@ -102,6 +102,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert features["memory_orchestrator"]["plugin_owned"] is True
     assert features["hermes_skills"]["plugin_owned"] is True
     assert features["openrouter"]["endpoints"]["models"] == "/api/models"
+    assert features["conversation_library"]["endpoints"]["search"] == "/api/conversations/search"
 
     chat_events = body["stream_events"]["chat"]
     assert "response.output_text.delta" in chat_events
@@ -270,12 +271,69 @@ def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path
         deleted = client.delete("/api/conversations/chat-1")
 
     assert saved.status_code == 200
+    assert saved.json()["conversation"]["organization"]["space_id"] == "sports"
     assert listed.json()["conversations"][0]["title"] == "Sports question"
     assert fetched.json()["conversation"]["messages"][1]["text"] == "Live answer"
     assert patched.json()["conversation"]["pinned"] is True
     assert patched.json()["conversation"]["title"] == "Pinned sports"
     assert deleted.json()["ok"] is True
     assert deleted.json()["obsidian_projection"]["archived"] is True
+
+
+def test_conversation_library_search_correction_and_rebuild(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
+    monkeypatch.setattr(api, "_index_ui_conversation", lambda conversation: {"indexed_turns": 0})
+    monkeypatch.setattr(api, "_project_ui_conversation", lambda conversation: {"ok": True, "action": "update"})
+    conversations = [
+        {
+            "id": "f1-calendar",
+            "thread_id": "f1-calendar",
+            "title": "Formula One calendar",
+            "updated_at": "2026-07-15T10:00:00+00:00",
+            "appIds": ["google-calendar"],
+            "messages": [
+                {"id": "u1", "role": "user", "text": "Add the next Formula One Grand Prix to my calendar."},
+                {"id": "a1", "role": "assistant", "text": "The race is scheduled."},
+            ],
+        },
+        {
+            "id": "spotify",
+            "thread_id": "spotify",
+            "title": "Discover Weekly",
+            "updated_at": "2026-07-14T10:00:00+00:00",
+            "appIds": ["spotify"],
+            "messages": [
+                {"id": "u2", "role": "user", "text": "Compare my Spotify Discover Weekly playlist."},
+                {"id": "a2", "role": "assistant", "text": "The playlist has more new artists."},
+            ],
+        },
+    ]
+    api._write_ui_conversations(conversations)
+
+    with TestClient(api.app) as client:
+        library = client.get("/api/conversations/library")
+        search = client.get("/api/conversations/search", params={"q": "next grand prix calendar"})
+        corrected = client.patch(
+            "/api/conversations/f1-calendar/organization",
+            json={"space_label": "Weekend", "topic_label": "Motorsport"},
+        )
+        rebuilt = client.post("/api/conversations/organization/rebuild")
+        reset = client.patch(
+            "/api/conversations/f1-calendar/organization",
+            json={"assignment": "automatic"},
+        )
+
+    assert library.status_code == 200
+    assert {space["id"] for space in library.json()["spaces"]} == {"sports", "music"}
+    assert search.json()["hits"][0]["id"] == "f1-calendar"
+    assert search.json()["hits"][0]["message_id"] == "u1"
+    assert corrected.json()["conversation"]["organization"]["space_id"] == "weekend"
+    assert corrected.json()["conversation"]["organization"]["space_label"] == "Weekend"
+    assert corrected.json()["conversation"]["organization"]["topic_id"] == "motorsport"
+    assert corrected.json()["conversation"]["organization"]["assignment"] == "manual"
+    assert rebuilt.json()["conversations"][0]["organization"]["space_label"] == "Weekend"
+    assert reset.json()["conversation"]["organization"]["space_id"] == "sports"
+    assert reset.json()["conversation"]["organization"]["assignment"] == "automatic"
 
 
 def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatch, tmp_path):

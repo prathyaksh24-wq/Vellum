@@ -17,7 +17,7 @@ DEFAULT_CASES = ROOT / "evals" / "conversation_library_cases.json"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agent.conversations.library import DEFAULT_SEARCH_WEIGHTS, SearchWeights, organize_conversation, search_conversations
+from agent.conversations.library import DEFAULT_SEARCH_WEIGHTS, SearchWeights, build_conversation_library, organize_conversation, search_conversations
 
 
 WEIGHT_NAMES = tuple(asdict(DEFAULT_SEARCH_WEIGHTS))
@@ -41,6 +41,14 @@ def evaluate(cases: dict[str, Any], weights: SearchWeights) -> dict[str, Any]:
         classification_scores.append(sum(checks) / len(checks))
         if not all(checks):
             classification_misses.append(case["id"])
+
+    library = build_conversation_library(conversations.values())
+    organized = {item["id"]: item["organization"] for item in library["conversations"]}
+    for case in cases.get("dynamic_spaces", []):
+        checks = [organized[conversation_id]["space_id"] == case["space"] for conversation_id in case["ids"]]
+        classification_scores.extend(float(check) for check in checks)
+        if not all(checks):
+            classification_misses.extend(conversation_id for conversation_id, check in zip(case["ids"], checks) if not check)
 
     search_scores: list[float] = []
     search_misses: list[dict[str, Any]] = []

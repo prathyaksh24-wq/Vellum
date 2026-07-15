@@ -367,6 +367,7 @@ def render_conversation(conversation: Mapping[str, Any], *, existing: ExistingNo
     title = clean_title(conversation.get("title"), conversation=conversation)
     bucket = conversation_date(conversation)
     guards = _preserved_guards(existing)
+    organization = conversation.get("organization") if isinstance(conversation.get("organization"), Mapping) else {}
     frontmatter: list[tuple[str, Any]] = [
         ("type", PROJECTION_TYPE),
         ("privacy", "private"),
@@ -379,6 +380,9 @@ def render_conversation(conversation: Mapping[str, Any], *, existing: ExistingNo
         ("updated_at", _as_text(conversation.get("updated_at")) or bucket.isoformat()),
         ("pinned", bool(conversation.get("pinned", False))),
         ("archived", bool(conversation.get("archived", False))),
+        ("space", _as_text(organization.get("space_label"))),
+        ("topic", _as_text(organization.get("topic_label"))),
+        ("organization_assignment", _as_text(organization.get("assignment"))),
     ]
     known = {key for key, _value in frontmatter}
     for key, value in guards.items():
