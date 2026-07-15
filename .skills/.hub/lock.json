@@ -1,3 +1,32 @@
 {
-  "skills": {}
+  "skills": {
+    "nano-pdf": {
+      "content_hash": "5a4f4a23df594787fc0be68a0dd7fdcdf931729cb9d0b8b742e210db5db8134d",
+      "description": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
+      "identifier": "clawhub/nano-pdf",
+      "install_path": "packages/community/nano-pdf",
+      "installed_at": "2026-07-15T02:46:19.915443+00:00",
+      "name": "nano-pdf",
+      "repository_url": null,
+      "scan_verdict": "safe",
+      "source": "clawhub",
+      "source_path": null,
+      "source_ref": null,
+      "trust_level": "community"
+    },
+    "spotify-player": {
+      "content_hash": "5edb0dc7b81d97a1a12ee8cc65eb071efda1de31cdf413617bc642071900c9ce",
+      "description": "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
+      "identifier": "clawhub/spotify-player",
+      "install_path": "packages/community/spotify-player",
+      "installed_at": "2026-07-15T02:37:54.707332+00:00",
+      "name": "spotify-player",
+      "repository_url": null,
+      "scan_verdict": "safe",
+      "source": "clawhub",
+      "source_path": null,
+      "source_ref": null,
+      "trust_level": "community"
+    }
+  }
 }

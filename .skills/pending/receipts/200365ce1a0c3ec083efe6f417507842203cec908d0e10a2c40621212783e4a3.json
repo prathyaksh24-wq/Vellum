@@ -1,0 +1,23 @@
+{
+  "completed_at": "2026-07-15T02:37:55.020522+00:00",
+  "id": "0cb5014c7ea84bcfbba96e47151b21ed",
+  "idempotency_key": "2c5206e6794a22031cd0194173f05cda5c1a7de672f7c1d816f87154723e33f5",
+  "result": {
+    "content_hash": "5edb0dc7b81d97a1a12ee8cc65eb071efda1de31cdf413617bc642071900c9ce",
+    "description": "Terminal Spotify playback/search via spogo (preferred) or spotify_player.",
+    "id": "0cb5014c7ea84bcfbba96e47151b21ed",
+    "idempotency_key": "2c5206e6794a22031cd0194173f05cda5c1a7de672f7c1d816f87154723e33f5",
+    "identifier": "clawhub/spotify-player",
+    "install_path": "packages/community/spotify-player",
+    "installed_at": "2026-07-15T02:37:54.707332+00:00",
+    "name": "spotify-player",
+    "ok": true,
+    "repository_url": null,
+    "scan_verdict": "safe",
+    "source": "clawhub",
+    "source_path": null,
+    "source_ref": null,
+    "status": "applied",
+    "trust_level": "community"
+  }
+}
