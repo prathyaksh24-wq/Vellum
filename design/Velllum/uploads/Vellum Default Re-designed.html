@@ -33,6 +33,8 @@
   --stage:radial-gradient(1100px 740px at 13% -8%,rgba(152,134,134,.16),transparent 56%),radial-gradient(1050px 720px at 93% 5%,rgba(92,78,78,.20),transparent 56%),radial-gradient(900px 720px at 60% 122%,rgba(152,134,134,.08),transparent 55%),linear-gradient(155deg,#0c0b0a 0%,#070605 60%,#050404 100%);
   --winborder:rgba(255,255,255,.11);--shadow:0 50px 140px rgba(0,0,0,.74);--scroll:rgba(255,255,255,.14);
   --onember:#ffffff;--danger:#f08a8a;
+  --background-text-shadow:0 1px 2px rgba(0,0,0,.32);--background-surface-shadow:0 18px 55px rgba(0,0,0,.28);
+  --ascii-color:#f3d69b;--ascii-bg:#090b12;
   --font-d:"Clash Grotesk","Poppins","Helvetica Neue",system-ui,sans-serif;
   --font-m:"Spline Sans Mono",ui-monospace,Consolas,monospace;
 }
@@ -361,6 +363,36 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .set-row .sr-sub{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
 .set-row .sr-end{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .set-note{font-size:11.5px;color:var(--dim2);font-style:italic;margin-top:14px}
+.ap-seg{display:inline-flex;padding:3px;border:1px solid var(--line2);border-radius:10px;background:var(--input)}
+.ap-seg-b{display:flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;font-size:11.5px;cursor:pointer;transition:background .16s,color .16s,box-shadow .16s}
+.ap-seg-b:hover{color:var(--txt2)}
+.ap-seg-b.on{background:var(--active);color:var(--txt2);box-shadow:0 1px 6px rgba(0,0,0,.18)}
+.ap-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:8px}
+.ap-card{position:relative;display:flex;align-items:center;gap:10px;min-width:0;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--txt);font:inherit;text-align:left;cursor:pointer;transition:border-color .18s,background .18s,transform .18s}
+.ap-card:hover{border-color:var(--line2);background:var(--hover);transform:translateY(-1px)}
+.ap-card.on{border-color:color-mix(in srgb,var(--ember) 56%,var(--line2));background:color-mix(in srgb,var(--ember) 9%,var(--panel))}
+.ap-sw{display:grid;grid-template-columns:repeat(2,15px);grid-template-rows:repeat(2,15px);overflow:hidden;border-radius:7px;box-shadow:0 0 0 1px var(--line2);flex-shrink:0}
+.ap-sw-c{display:block}
+.ap-name{min-width:0;font-size:11.5px;color:var(--txt2);line-height:1.3}
+.ap-def{display:block;margin-top:2px;color:var(--dim2);font-size:9.5px;text-transform:uppercase;letter-spacing:.06em}
+.ap-check{margin-left:auto;display:flex;color:var(--ember)}
+.appearance-backgrounds{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.appearance-backgrounds-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:9px}
+.appearance-backgrounds-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--dim2)}
+.appearance-backgrounds-note{font-size:10.5px;color:var(--dim2);text-align:right}
+.bg-preview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.bg-preview-card{position:relative;overflow:hidden;border:1px solid var(--line2);border-radius:14px;background:var(--panel);color:var(--txt2);font:inherit;text-align:left;cursor:pointer;outline:none;transition:border-color .2s,transform .22s cubic-bezier(.22,1,.36,1),box-shadow .2s}
+.bg-preview-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember) 44%,var(--line2));box-shadow:0 12px 30px rgba(0,0,0,.22)}
+.bg-preview-card:focus-visible{box-shadow:0 0 0 2px var(--ember),0 12px 30px rgba(0,0,0,.22)}
+.bg-preview-card.on{border-color:color-mix(in srgb,var(--ember) 72%,var(--line2));box-shadow:0 0 0 1px color-mix(in srgb,var(--ember) 22%,transparent),0 12px 30px rgba(0,0,0,.2)}
+.bg-live{position:relative;display:block;height:104px;overflow:hidden;background:#060607;isolation:isolate}
+.bg-live::after{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;background:linear-gradient(to bottom,transparent 55%,rgba(0,0,0,.38));box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+.bg-live .galaxy-container{opacity:.9}
+.bg-preview-copy{position:relative;display:flex;align-items:center;gap:8px;padding:9px 10px;background:color-mix(in srgb,var(--modal) 94%,transparent)}
+.bg-preview-name{font-size:11.5px;font-weight:500;color:var(--txt2)}
+.bg-preview-kind{margin-left:auto;padding:2px 6px;border:1px solid var(--line);border-radius:6px;color:var(--dim2);font:9px var(--font-m);text-transform:uppercase;letter-spacing:.055em}
+.bg-preview-check{position:absolute;right:9px;top:9px;z-index:4;display:flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:rgba(10,9,9,.72);border:1px solid rgba(255,255,255,.2);color:#fff;backdrop-filter:blur(10px)}
+@media(max-width:560px){.ap-grid,.bg-preview-grid{grid-template-columns:1fr}}
 .sw{width:34px;height:19px;border-radius:11px;background:var(--line2);position:relative;cursor:pointer;transition:background .15s;flex-shrink:0}
 .sw::after{content:"";position:absolute;left:2.5px;top:2.5px;width:14px;height:14px;border-radius:50%;background:var(--bg);transition:left .15s}
 .sw.on{background:var(--ember)}
@@ -858,14 +890,26 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .act-btn:hover{background:var(--hover);color:var(--txt2)}
 .act-btn.on{color:var(--ember)}
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
-/* conversation timeline */
-.timeline{position:absolute;right:6px;top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:flex-end;padding:10px 8px}
-.tl-bar{height:2.5px;border-radius:2px;background:var(--dim2);transition:background .15s}
-.timeline:hover .tl-bar{background:var(--dim)}
-.tl-pop{position:absolute;right:28px;top:50%;transform:translateY(-50%);width:270px;max-height:320px;overflow-y:auto;background:var(--modal);border:1px solid var(--line2);border-radius:12px;padding:6px;box-shadow:0 14px 50px rgba(0,0,0,.4)}
-.tl-head{font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:5px 10px 3px}
-.tl-row{padding:7px 10px;border-radius:7px;font-size:12.5px;color:var(--txt);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tl-row:hover{background:var(--hover)}
+/* reusable vertical preview rail - shared by chats and sub-agent chats */
+.preview-rail{position:absolute;inset-block:0;right:4px;z-index:24;width:52px;display:flex;align-items:center;justify-content:flex-end;overflow:visible;isolation:isolate;pointer-events:none}
+.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:center;width:48px;pointer-events:auto}
+.preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;justify-content:flex-end;border:0;background:transparent;color:var(--dim2);padding:0 8px 0 0;cursor:pointer;outline:none}
+.preview-rail-item:focus-visible{border-radius:7px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ember) 62%,transparent),0 0 0 4px var(--bg)}
+.preview-rail-tick{display:block;width:38px;height:2px;border-radius:999px;background:currentColor;opacity:.72;transform:scaleX(var(--rail-scale,.25));transform-origin:right center;transition:transform .42s cubic-bezier(.22,1,.36,1),color .18s ease,opacity .18s ease,box-shadow .18s ease}
+.preview-rail-item.active{color:color-mix(in srgb,var(--ember) 68%,var(--dim))}
+.preview-rail-item.active .preview-rail-tick{opacity:1;box-shadow:0 0 10px color-mix(in srgb,var(--ember) 28%,transparent)}
+.preview-rail-item.displayed{color:var(--txt2)}
+.preview-rail-item.displayed .preview-rail-tick{opacity:1}
+.preview-rail-preview-layer{position:absolute;inset:0;z-index:5;pointer-events:none}
+.preview-rail-preview{position:absolute;right:56px;width:min(330px,calc(100vw - 110px));transform:translateY(-50%);animation:previewRailIn .2s cubic-bezier(.22,1,.36,1) both}
+.preview-rail-card{overflow:hidden;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--modal) 88%,transparent);box-shadow:0 22px 65px rgba(0,0,0,.46),inset 0 1px 0 rgba(255,255,255,.055);backdrop-filter:blur(24px) saturate(155%);-webkit-backdrop-filter:blur(24px) saturate(155%);padding:13px 14px}
+.preview-rail-card-head{display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--dim2);font-size:10px;letter-spacing:.075em;text-transform:uppercase}
+.preview-rail-card-head::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--ember);box-shadow:0 0 9px var(--glow)}
+.preview-rail-card-label{color:var(--txt2);font-size:12.5px;font-weight:500;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.preview-rail-card-response{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@keyframes previewRailIn{from{opacity:0;filter:blur(6px);transform:translate(8px,-50%) scale(.97)}to{opacity:1;filter:blur(0);transform:translate(0,-50%) scale(1)}}
+@media(max-width:760px){.preview-rail{right:0}.preview-rail-preview{right:49px;width:min(280px,calc(100vw - 78px))}.preview-rail-item{padding-right:5px}.preview-rail-tick{width:30px}}
+@media(prefers-reduced-motion:reduce){.preview-rail-tick{transition:none}.preview-rail-preview{animation:none}}
 /* popovers + overlays */
 .backdrop{position:fixed;inset:0;z-index:40}
 .backdrop.dim{background:rgba(0,0,0,.45)}
@@ -903,6 +947,33 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .page-inner{max-width:860px;margin:0 auto}
 .page-head{display:flex;align-items:center;gap:12px;margin-bottom:24px}
 .page-title{font-size:26px;color:var(--txt2);letter-spacing:-.02em;flex:1}
+.page-sub{margin-top:3px;color:var(--dim);font-size:12px;line-height:1.45}
+.page-head-ic{display:flex;align-items:center;justify-content:center;width:34px;height:34px;border:1px solid var(--line2);border-radius:10px;background:var(--glass);color:var(--ember);flex-shrink:0}
+.conn-toolbar{display:flex;align-items:center;gap:10px;margin:-6px 0 16px}
+.conn-search{display:flex;align-items:center;gap:9px;width:min(440px,100%);height:38px;padding:0 12px;border:1px solid var(--line2);border-radius:11px;background:var(--input);color:var(--dim);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);transition:border-color .18s,box-shadow .18s,background .18s}
+.conn-search:focus-within{border-color:color-mix(in srgb,var(--ember) 52%,var(--line2));box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 11%,transparent)}
+.conn-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--txt2);font:inherit;font-size:12.5px}
+.conn-search input::placeholder{color:var(--dim2)}
+.conn-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding-bottom:24px}
+.conn-card{min-width:0;border:1px solid var(--line2);border-radius:15px;background:var(--glass);padding:14px;box-shadow:0 14px 36px rgba(0,0,0,.16),inset 0 1px 0 rgba(255,255,255,.055);backdrop-filter:blur(18px) saturate(145%);-webkit-backdrop-filter:blur(18px) saturate(145%);transition:transform .2s cubic-bezier(.22,1,.36,1),border-color .18s,background .18s,box-shadow .18s}
+.conn-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ember) 38%,var(--line2));box-shadow:0 20px 45px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.075)}
+.conn-card-top{display:flex;align-items:flex-start;gap:11px}
+.conn-ic{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--line);border-radius:11px;background:var(--input);color:var(--txt2);flex-shrink:0;overflow:hidden}
+.conn-ic:has(img){background:rgba(255,255,255,.92);border-color:rgba(255,255,255,.72)}
+.conn-ic img,.conn-ic svg{display:block;max-width:22px;max-height:22px}
+.conn-card-head{flex:1;min-width:0}
+.conn-name{display:flex;align-items:center;gap:7px;min-width:0;color:var(--txt2);font-family:var(--font-d);font-size:14px;font-weight:600;line-height:1.3}
+.conn-meta{margin-top:4px;color:var(--dim2);font:9.5px var(--font-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:.035em}
+.conn-trust{display:inline-flex;align-items:center;gap:4px;min-width:0;padding:2px 6px;border:1px solid var(--line);border-radius:999px;color:var(--dim);font:500 8.5px var(--font-d);white-space:nowrap}
+.conn-trust.verified{border-color:color-mix(in srgb,#65bd83 35%,var(--line));background:color-mix(in srgb,#65bd83 10%,transparent);color:#72c991}
+.conn-trust.unverified{border-color:color-mix(in srgb,var(--danger) 35%,var(--line));background:color-mix(in srgb,var(--danger) 8%,transparent);color:var(--danger)}
+.conn-trust.community{border-color:color-mix(in srgb,var(--ember) 28%,var(--line));background:color-mix(in srgb,var(--ember) 8%,transparent);color:var(--dim)}
+.conn-desc{min-height:38px;margin-top:12px;color:var(--txt);font-size:11.5px;line-height:1.55}
+.conn-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:11px;padding-top:10px;border-top:1px solid var(--line)}
+.conn-tool{display:inline-flex;max-width:100%;padding:3px 7px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--dim);font:9px var(--font-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conn-tool.more{color:var(--ember)}
+.apps-empty{grid-column:1/-1;padding:54px 22px;border:1px dashed var(--line2);border-radius:15px;background:var(--panel);color:var(--dim);font-size:12.5px;text-align:center;line-height:1.55}
+@media(max-width:820px){.page{padding:28px 22px}.conn-grid{grid-template-columns:1fr}}
 .lib-search{display:flex;align-items:center;gap:8px;background:var(--input);border:1px solid var(--line2);border-radius:18px;padding:7px 13px;width:230px}
 .lib-search input{flex:1;background:transparent;border:none;outline:none;color:var(--txt2);font:inherit;font-size:12.5px;min-width:0}
 .lib-search input::placeholder{color:var(--dim)}
@@ -1388,9 +1459,25 @@ body{font-size:14px}
 /* reusable application backgrounds */
 .app-background{position:absolute;inset:0;z-index:0;overflow:hidden;pointer-events:none}
 .app-background-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.galaxy-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;opacity:.72;mix-blend-mode:screen}
+.galaxy-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;opacity:1;mix-blend-mode:normal}
 .galaxy-container canvas{display:block;width:100%;height:100%;pointer-events:none}
-@media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.58}}
+[data-background="galaxy"][data-theme="light"] .galaxy-container{filter:invert(1);mix-blend-mode:multiply}
+.shader-canvas-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;background:#080a10}
+.shader-canvas-container canvas{display:block;width:100%;height:100%;pointer-events:none}
+.rocket-ascii-container{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;background:var(--ascii-bg);color:var(--ascii-color);pointer-events:none}
+.rocket-ascii-content{position:absolute;left:50%;top:50%;transform-origin:center center;will-change:transform}
+.rocket-ascii-pre{display:block;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:8px;font-weight:400;line-height:.8;letter-spacing:0;white-space:pre;color:inherit;text-shadow:0 0 14px color-mix(in srgb,var(--ascii-color) 20%,transparent)}
+.rocket-ascii-status{font:500 10px var(--font-m);letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb,var(--ascii-color) 58%,transparent)}
+[data-background] .main{background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;transition:none}
+[data-background] .win{background:transparent}
+[data-background] .sidebar,[data-background] .rail{background:var(--glass-side);backdrop-filter:blur(28px) saturate(150%);-webkit-backdrop-filter:blur(28px) saturate(150%)}
+[data-background] .bubble,[data-background] .cpill,[data-background] .set-modal,[data-background] .dock,[data-background] .preview-rail-card,[data-background] .profile-card{box-shadow:var(--background-surface-shadow),inset 0 1px 0 rgba(255,255,255,.08)}
+[data-background] .landing .land-greet,[data-background] .areply,[data-background] .turn-lead{text-shadow:var(--background-text-shadow)}
+[data-background] .landing .land-mark{-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;text-shadow:none}
+[data-background-tone="light"] .land-mark{background:linear-gradient(105deg,var(--txt2) 18%,var(--accent2) 54%,var(--ember) 88%);filter:drop-shadow(0 1px 1px rgba(255,255,255,.72))}
+[data-background-tone="dark"] .land-mark{background:linear-gradient(105deg,var(--txt2) 12%,color-mix(in srgb,var(--ember) 86%,white) 52%,var(--accent2) 90%);filter:drop-shadow(0 2px 3px rgba(0,0,0,.78))}
+[data-background] .backdrop.dim{background:color-mix(in srgb,var(--bg) 34%,transparent);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+@media (prefers-reduced-motion:reduce){.galaxy-container{opacity:.82}}
 
 /* full-screen 404 */
 .not-found-page{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;overflow:hidden;background:radial-gradient(circle at 50% 48%,#0b0a0a 0,#050505 34%,#020202 74%);color:#f5f3f3;outline:none;isolation:isolate}
@@ -1956,17 +2043,18 @@ void main() {
 const GalaxyBackground = ({
   focal=GALAXY_FOCAL,
   rotation=GALAXY_ROTATION,
-  starSpeed=0.32,
-  density=0.82,
+  starSpeed=0.5,
+  density=1,
   hueShift=140,
-  speed=0.55,
+  disableAnimation=false,
+  speed=1,
   mouseInteraction=true,
-  glowIntensity=0.22,
-  saturation=0.16,
+  glowIntensity=0.3,
+  saturation=0,
   mouseRepulsion=true,
-  repulsionStrength=1.35,
-  twinkleIntensity=0.2,
-  rotationSpeed=0.025,
+  repulsionStrength=2,
+  twinkleIntensity=0.3,
+  rotationSpeed=0.1,
   autoCenterRepulsion=0,
   transparent=true
 }) => {
@@ -2051,7 +2139,7 @@ const GalaxyBackground = ({
         renderFrame(t);
         animateId = requestAnimationFrame(update);
       };
-      if (reducedMotion) renderer.render({scene:mesh});
+      if (reducedMotion || disableAnimation) renderer.render({scene:mesh});
       else animateId = requestAnimationFrame(update);
 
       const handleMouseMove = event => {
@@ -2087,20 +2175,469 @@ const GalaxyBackground = ({
       disposed = true;
       cleanup();
     };
-  }, [focal,rotation,starSpeed,density,hueShift,speed,mouseInteraction,glowIntensity,saturation,mouseRepulsion,repulsionStrength,twinkleIntensity,rotationSpeed,autoCenterRepulsion,transparent]);
+  }, [focal,rotation,starSpeed,density,hueShift,disableAnimation,speed,mouseInteraction,glowIntensity,saturation,mouseRepulsion,repulsionStrength,twinkleIntensity,rotationSpeed,autoCenterRepulsion,transparent]);
 
   return <div ref={ctnDom} className="galaxy-container" aria-hidden="true"/>;
 };
 
-const AmbientBackground = () => null;
-const BACKGROUND_REGISTRY = {
-  galaxy:{id:'galaxy',label:'Galaxy',render:props => <GalaxyBackground {...props}/>},
-  ambient:{id:'ambient',label:'Ambient',render:() => <AmbientBackground/>}
+const SHADER_VERTEX = `
+  attribute vec2 aPosition;
+  void main(){ gl_Position = vec4(aPosition, 0.0, 1.0); }
+`;
+const SHADER_COMMON = `
+  precision highp float;
+  uniform vec2 resolution;
+  uniform float time;
+  #define TAU 6.28318530718
+  vec2 uv01(){ return gl_FragCoord.xy / max(resolution.xy, vec2(1.0)); }
+  vec2 uvCentered(){
+    vec2 uv = uv01() - 0.5;
+    uv.x *= resolution.x / max(resolution.y, 1.0);
+    return uv;
+  }
+  mat2 rot(float angle){
+    float c = cos(angle);
+    float s = sin(angle);
+    return mat2(c, -s, s, c);
+  }
+  float hash21(vec2 p){
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+  float noise(vec2 p){
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+               mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x), f.y);
+  }
+  float vnoise(vec2 p){ return noise(p); }
+  float fbm(vec2 p){
+    float value = 0.0;
+    float amplitude = 0.5;
+    mat2 rotation = mat2(0.80, 0.60, -0.60, 0.80);
+    for(int octave = 0; octave < 6; octave++){
+      value += amplitude * noise(p);
+      p = rotation * p * 2.03 + vec2(17.1, 9.2);
+      amplitude *= 0.5;
+    }
+    return value;
+  }
+`;
+
+const ShaderCanvas = ({fragmentShader, className='', dpr=1, controls=false}) => {
+  const hostRef = useRef(null);
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', {alpha:false, antialias:false, powerPreference:'high-performance'});
+    if (!gl) { host.dataset.shaderStatus = 'unsupported'; return; }
+    let frame = 0;
+    let disposed = false;
+    const compile = (type, source) => {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const error = gl.getShaderInfoLog(shader) || 'Shader compilation failed';
+        gl.deleteShader(shader);
+        throw new Error(error);
+      }
+      return shader;
+    };
+    let program;
+    let vertex;
+    let fragment;
+    try {
+      vertex = compile(gl.VERTEX_SHADER, SHADER_VERTEX);
+      fragment = compile(gl.FRAGMENT_SHADER, SHADER_COMMON + fragmentShader);
+      program = gl.createProgram();
+      gl.attachShader(program, vertex);
+      gl.attachShader(program, fragment);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'Shader link failed');
+    } catch (error) {
+      host.dataset.shaderStatus = 'error';
+      host.dataset.shaderError = String(error && error.message || error).slice(0, 180);
+      if (vertex) gl.deleteShader(vertex);
+      if (fragment) gl.deleteShader(fragment);
+      return;
+    }
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    gl.useProgram(program);
+    const position = gl.getAttribLocation(program, 'aPosition');
+    gl.enableVertexAttribArray(position);
+    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0);
+    const resolutionUniform = gl.getUniformLocation(program, 'resolution');
+    const timeUniform = gl.getUniformLocation(program, 'time');
+    canvas.setAttribute('aria-hidden','true');
+    canvas.setAttribute('role','presentation');
+    host.appendChild(canvas);
+    host.dataset.shaderStatus = 'ready';
+    const pixelRatio = Math.max(.5, Math.min(Number(dpr) || 1, 1.5));
+    const resize = () => {
+      const rect = host.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width * pixelRatio));
+      const height = Math.max(1, Math.round(rect.height * pixelRatio));
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+        gl.viewport(0, 0, width, height);
+      }
+    };
+    const draw = milliseconds => {
+      if (disposed) return;
+      resize();
+      gl.useProgram(program);
+      gl.uniform2f(resolutionUniform, canvas.width, canvas.height);
+      gl.uniform1f(timeUniform, milliseconds * .001);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    const reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const animate = milliseconds => {
+      draw(milliseconds);
+      if (!disposed) frame = requestAnimationFrame(animate);
+    };
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(() => draw(performance.now())) : null;
+    observer?.observe(host);
+    if (reduced) draw(0); else frame = requestAnimationFrame(animate);
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      if (host.contains(canvas)) host.removeChild(canvas);
+      gl.deleteBuffer(buffer);
+      gl.deleteProgram(program);
+      gl.deleteShader(vertex);
+      gl.deleteShader(fragment);
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    };
+  }, [fragmentShader, dpr]);
+  return <div ref={hostRef} className={'shader-canvas-container ' + className} data-controls={controls ? 'true' : 'false'} aria-hidden="true"/>;
 };
-const resolveBackground = id => BACKGROUND_REGISTRY[id] || BACKGROUND_REGISTRY.galaxy;
-const AppBackground = ({backgroundId='galaxy'}) => {
-  const entry = resolveBackground(backgroundId);
-  return <div className="app-background" aria-hidden="true"><div className="app-background-layer">{entry.render({})}</div></div>;
+
+const LIQUID_METAL_FRAGMENT_SHADER = `
+  void main() {
+    vec2 uv = uv01() * 3.0;
+    float t = time * 0.15;
+    vec2 q = vec2(fbm(uv + t), fbm(uv + vec2(5.2, 1.3)));
+    vec2 r = vec2(
+      fbm(uv + 4.0 * q + vec2(1.7, 9.2) + t * 0.5),
+      fbm(uv + 4.0 * q + vec2(8.3, 2.8))
+    );
+    float f = fbm(uv + 4.0 * r);
+    vec3 col = mix(vec3(0.08, 0.10, 0.15), vec3(0.90, 0.93, 0.99), f);
+    col = mix(col, vec3(0.35, 0.45, 0.70), clamp(length(q), 0.0, 1.0));
+    col = mix(col, vec3(0.97), r.x * 0.55);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const LiquidMetal = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={LIQUID_METAL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+
+const DRIFTING_CLOUDS_FRAGMENT_SHADER = `
+  void main() {
+    vec2 uv = uv01();
+    float aspect = resolution.x / resolution.y;
+    uv.x *= aspect;
+    float t = time * 0.05;
+    float f = fbm(uv * 3.0 + vec2(t, t * 0.5));
+    f = fbm(uv * 3.0 + f + vec2(t * 0.5, 0.0));
+    vec3 sky = vec3(0.25, 0.45, 0.85);
+    vec3 cloud = vec3(1.0);
+    vec3 col = mix(sky, cloud, smoothstep(0.25, 0.85, f));
+    col = mix(col, vec3(0.55, 0.70, 0.95), (1.0 - uv.y) * 0.25);
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const DriftingClouds = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={DRIFTING_CLOUDS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+
+const GOLD_RAYS_FRAGMENT_SHADER = `
+  float rayShape(vec2 uv, float rr, float freq, float sharp) {
+    float a = atan(uv.y, uv.x);
+    vec2 left = vec2(a * freq, rr);
+    vec2 right = vec2(fract(a / TAU) * TAU * freq, rr);
+    float nl = pow(vnoise(left), sharp);
+    float nr = pow(vnoise(right), sharp);
+    return mix(nr, nl, smoothstep(-0.15, 0.15, uv.x));
+  }
+  void main() {
+    vec2 uv = uvCentered();
+    float t = time * 0.2;
+    float r = length(uv);
+    vec3 col = vec3(0.02, 0.025, 0.06);
+    for (int i = 0; i < 3; i++) {
+      float fi = float(i);
+      vec2 ruv = rot(fi + 1.0) * uv;
+      float r1 = r * (1.0 + 0.4 * fi) - 3.0 * t;
+      float r2 = 0.5 * r - 2.0 * t;
+      float ray = rayShape(ruv, r1, 5.0 + fi, 3.0);
+      ray *= rayShape(ruv, r2, 4.0, 3.0);
+      ray *= 0.35 + 0.65 * exp(-r * 1.3);
+      vec3 tint = (i == 0) ? vec3(1.0, 0.85, 0.55)
+                : (i == 1) ? vec3(1.0, 0.65, 0.35)
+                           : vec3(0.95, 0.90, 0.75);
+      col += tint * ray * 0.85;
+    }
+    col += vec3(1.0, 0.92, 0.72) * exp(-r * 4.0);
+    col += (hash21(gl_FragCoord.xy) - 0.5) * 0.015;
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const GoldRays = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={GOLD_RAYS_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+
+const GRAIN_PASTEL_FRAGMENT_SHADER = `
+  void main() {
+    vec2 uv = uv01();
+    uv.x *= resolution.x / max(resolution.y, 1.0);
+    float t = time * 0.055;
+    float broad = fbm(uv * 2.15 + vec2(t, -t * 0.55));
+    float folded = fbm(rot(0.72) * uv * 3.05 + vec2(-t * 0.4, t * 0.65));
+    float veil = fbm(uv * 5.1 + vec2(folded * 1.4, broad * 1.1));
+    vec3 blush = vec3(0.96, 0.67, 0.72);
+    vec3 lilac = vec3(0.70, 0.64, 0.94);
+    vec3 mint = vec3(0.58, 0.86, 0.78);
+    vec3 cream = vec3(1.0, 0.91, 0.72);
+    vec3 col = mix(blush, lilac, smoothstep(0.18, 0.82, broad));
+    col = mix(col, mint, smoothstep(0.34, 0.78, folded) * 0.68);
+    col = mix(col, cream, smoothstep(0.58, 0.9, veil) * 0.72);
+    float grain = (hash21(gl_FragCoord.xy + vec2(time * 61.0)) - 0.5) * 0.075;
+    float vignette = smoothstep(0.95, 0.24, length(uv01() - 0.5));
+    col = col * (0.88 + 0.12 * vignette) + grain;
+    gl_FragColor = vec4(col, 1.0);
+  }
+`;
+const GrainPastel = ({className, dpr, controls}) => <ShaderCanvas fragmentShader={GRAIN_PASTEL_FRAGMENT_SHADER} className={className} dpr={dpr} controls={controls}/>;
+
+const ROCKET_BLAST_REGISTRY_URL = 'https://www.asciistudio.space/r/rocket-blast-2.json';
+let rocketBlastFramesPromise = null;
+const loadRocketBlastFrames = () => {
+  if (rocketBlastFramesPromise) return rocketBlastFramesPromise;
+  rocketBlastFramesPromise = fetch(ROCKET_BLAST_REGISTRY_URL, {cache:'force-cache'})
+    .then(response => {
+      if (!response.ok) throw new Error('Rocket Blast registry returned ' + response.status);
+      return response.json();
+    })
+    .then(manifest => {
+      const file = (manifest.files || []).find(item => /rocket-blast/i.test(item.path || ''));
+      const source = file && file.content;
+      if (!source) throw new Error('Rocket Blast source was not found in the registry');
+      const declaration = source.indexOf('const FRAMES');
+      const start = source.indexOf('[', declaration);
+      const appearance = source.indexOf('const APPEARANCE', start);
+      const end = source.lastIndexOf('];', appearance);
+      if (declaration < 0 || start < 0 || appearance < 0 || end < start) throw new Error('Rocket Blast frames could not be parsed');
+      const literal = source.slice(start, end + 1).replace(/,\s*\]$/, ']');
+      const frames = JSON.parse(literal);
+      if (!Array.isArray(frames) || !frames.length) throw new Error('Rocket Blast has no frames');
+      return frames;
+    })
+    .catch(error => {
+      rocketBlastFramesPromise = null;
+      throw error;
+    });
+  return rocketBlastFramesPromise;
+};
+
+const RocketBlast = ({fps=30}) => {
+  const containerRef = useRef(null);
+  const contentRef = useRef(null);
+  const preRef = useRef(null);
+  const [frames, setFrames] = useState(null);
+  const [scale, setScale] = useState(1);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    loadRocketBlastFrames().then(value => { if (active) setFrames(value); }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!frames || !contentRef.current || !containerRef.current) return;
+    const measure = () => {
+      const container = containerRef.current;
+      const content = contentRef.current;
+      if (!container || !content) return;
+      const naturalWidth = Math.max(1, content.scrollWidth);
+      const naturalHeight = Math.max(1, content.scrollHeight);
+      const fit = Math.min(container.clientWidth / naturalWidth, container.clientHeight / naturalHeight);
+      setScale(Math.max(.04, fit * .985));
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null;
+    observer?.observe(containerRef.current);
+    window.addEventListener('resize', measure, {passive:true});
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [frames]);
+  useEffect(() => {
+    if (!frames || !preRef.current) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+    const pre = preRef.current;
+    let animationId = 0;
+    let index = 0;
+    let last = 0;
+    const duration = 1000 / Math.max(1, Number(fps) || 30);
+    pre.textContent = frames[0];
+    if (reduced) return;
+    const animate = time => {
+      if (document.hidden) last = time;
+      else if (!last || time - last >= duration) {
+        index = (index + 1) % frames.length;
+        pre.textContent = frames[index];
+        last = time - ((time - last) % duration || 0);
+      }
+      animationId = requestAnimationFrame(animate);
+    };
+    animationId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationId);
+  }, [frames, fps]);
+  return (
+    <div ref={containerRef} className="rocket-ascii-container" aria-hidden="true">
+      {!frames && <span className="rocket-ascii-status">{failed ? 'Rocket unavailable' : 'Loading Rocket Blast'}</span>}
+      {frames && <div ref={contentRef} className="rocket-ascii-content" style={{transform:'translate(-50%,-50%) scale(' + scale + ')'}}><pre ref={preRef} className="rocket-ascii-pre">{frames[0]}</pre></div>}
+    </div>
+  );
+};
+
+const BACKGROUND_THEME_PROPS = [
+  '--bg','--panel','--tb','--line','--line2','--txt','--txt2','--dim','--dim2','--ember','--accent2','--glow','--glow-soft','--grad','--hover','--active','--bubble','--modal','--input','--glass','--glass-win','--glass-bar','--glass-side','--menu-solid','--stage','--winborder','--shadow','--scroll','--onember','--accent-faded','--accent-deep','--accent-bg','--background-text-shadow','--background-surface-shadow','--ascii-color','--ascii-bg'
+];
+const backgroundRgb = hex => {
+  const clean = String(hex || '#000').replace('#','');
+  const value = parseInt(clean.length === 3 ? clean.split('').map(char => char + char).join('') : clean, 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255].join(',');
+};
+const backgroundRgba = (rgb, alpha) => 'rgba(' + rgb + ',' + Math.max(0, Math.min(1, alpha)) + ')';
+const backgroundMixHex = (base, tint, tintWeight=.25) => {
+  const parse = value => backgroundRgb(value).split(',').map(Number);
+  const a = parse(base);
+  const b = parse(tint);
+  const mixed = a.map((channel, index) => Math.round(channel * (1 - tintWeight) + b[index] * tintWeight));
+  return '#' + mixed.map(channel => channel.toString(16).padStart(2,'0')).join('');
+};
+const applyBackgroundTheme = (entry, mode='dark') => {
+  const root = document.documentElement;
+  const style = root.style;
+  BACKGROUND_THEME_PROPS.forEach(property => style.removeProperty(property));
+  const themeConfig = entry && entry.theme;
+  const palette = themeConfig && themeConfig.modes ? {...themeConfig, ...(themeConfig.modes[mode] || themeConfig.modes.dark)} : themeConfig;
+  root.dataset.backgroundTone = palette ? palette.tone : mode;
+  if (!palette) return;
+  const density = mode === 'dark' ? (palette.darkDensity || .74) : (palette.lightDensity || .66);
+  const surface = palette.surfaceRgb;
+  const ink = backgroundRgb(palette.foreground);
+  let accent = palette.accent;
+  let accent2 = palette.accent2;
+  try {
+    const selectedAccent = ACCENTS.find(item => item.id === localStorage.getItem('vellum-accent'));
+    if (selectedAccent && selectedAccent.id !== 'default') {
+      accent = backgroundMixHex(palette.accent, selectedAccent.accent, .24);
+      accent2 = backgroundMixHex(palette.accent2, selectedAccent.accent2, .16);
+    }
+  } catch {}
+  const variables = {
+    '--bg':palette.base,
+    '--panel':backgroundRgba(surface, density - .22),
+    '--tb':backgroundRgba(surface, density - .08),
+    '--line':backgroundRgba(ink, .12),
+    '--line2':backgroundRgba(ink, .22),
+    '--txt':palette.foreground,
+    '--txt2':palette.foregroundStrong,
+    '--dim':palette.muted,
+    '--dim2':palette.faint,
+    '--ember':accent,
+    '--accent2':accent2,
+    '--glow':backgroundRgba(backgroundRgb(accent), .36),
+    '--glow-soft':backgroundRgba(backgroundRgb(accent), .16),
+    '--grad':'linear-gradient(135deg,' + accent + ',' + accent2 + ')',
+    '--hover':backgroundRgba(ink, .075),
+    '--active':backgroundRgba(ink, .135),
+    '--bubble':backgroundRgba(surface, density + .08),
+    '--modal':backgroundRgba(surface, Math.min(.97, density + .20)),
+    '--input':backgroundRgba(surface, density + .04),
+    '--glass':backgroundRgba(surface, density),
+    '--glass-win':'transparent',
+    '--glass-bar':backgroundRgba(surface, density - .14),
+    '--glass-side':backgroundRgba(surface, density + .02),
+    '--menu-solid':backgroundRgba(surface, Math.min(.98, density + .22)),
+    '--stage':palette.base,
+    '--winborder':backgroundRgba(ink, .18),
+    '--shadow':'0 34px 100px ' + backgroundRgba(backgroundRgb(palette.shadow || '#000000'), .42),
+    '--scroll':backgroundRgba(ink, .24),
+    '--onember':accentOn(accent),
+    '--accent-faded':accent2,
+    '--accent-deep':accent2,
+    '--accent-bg':palette.base,
+    '--background-text-shadow':palette.textShadow,
+    '--background-surface-shadow':'0 18px 55px ' + backgroundRgba(backgroundRgb(palette.shadow || '#000000'), .30),
+    '--ascii-color':palette.asciiColor || accent,
+    '--ascii-bg':palette.asciiBackground || palette.base
+  };
+  Object.entries(variables).forEach(([property, value]) => style.setProperty(property, value));
+};
+const syncBackgroundTheme = () => {
+  try {
+    const root = document.documentElement;
+    applyBackgroundTheme(resolveBackground(localStorage.getItem('vellum-background') || root.dataset.background || 'galaxy'), root.dataset.theme || 'dark');
+  } catch {}
+};
+const AmbientBackground = () => null;
+
+const BACKGROUND_REGISTRY = [
+  {
+    id:'galaxy', label:'Galaxy', description:'Interactive stars with a quiet cursor response.', kind:'shader', component:GalaxyBackground,
+    installCmd:'npx shadcn@latest add @react-bits/Galaxy-JS-CSS', previewProps:{mouseInteraction:false},
+    tokens:{dark:{cover:'0%',sideCover:'70%',blur:'0px'},light:{cover:'0%',sideCover:'80%',blur:'0px'}},
+    theme:{modes:{
+      dark:{tone:'dark',base:'#070606',surfaceRgb:'20,18,18',foreground:'#d1d0d0',foregroundStrong:'#f2f0f0',muted:'#928a88',faint:'#6f6664',accent:'#988686',accent2:'#5c4e4e',shadow:'#000000',darkDensity:.74,lightDensity:.68,textShadow:'0 2px 4px rgba(0,0,0,.92),0 0 18px rgba(0,0,0,.66)'},
+      light:{tone:'light',base:'#f2f0f0',surfaceRgb:'250,249,249',foreground:'#2b2727',foregroundStrong:'#0d0b0b',muted:'#6c6464',faint:'#9a9292',accent:'#7a6a6a',accent2:'#5c4e4e',shadow:'#6c6060',darkDensity:.80,lightDensity:.76,textShadow:'0 1px 1px rgba(255,255,255,.82),0 0 5px rgba(255,255,255,.32)'}
+    }}
+  },
+  {
+    id:'liquid-metal', label:'Liquid Metal', description:'Layered domain warping over a flowing chrome surface.', kind:'shader', component:LiquidMetal,
+    installCmd:'npx shadcn@latest add https://www.pixel-perfect.space/r/liquid-metal.json', previewProps:{dpr:.72,controls:false},
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#101725',surfaceRgb:'18,25,39',foreground:'#edf3ff',foregroundStrong:'#ffffff',muted:'#b5c0d3',faint:'#7e8ba2',accent:'#a9c6ff',accent2:'#dbe4f6',shadow:'#060914',darkDensity:.76,lightDensity:.68,textShadow:'0 2px 4px rgba(0,0,0,.92),0 0 22px rgba(0,0,0,.68)'}
+  },
+  {
+    id:'drifting-clouds', label:'Drifting Clouds', description:'Soft warped clouds rolling across a clear blue sky.', kind:'shader', component:DriftingClouds,
+    installCmd:'npx shadcn@latest add https://www.pixel-perfect.space/r/drifting-clouds.json', previewProps:{dpr:.68,controls:false},
+    tokens:{dark:{cover:'0%',sideCover:'72%',blur:'0px'},light:{cover:'0%',sideCover:'82%',blur:'0px'}},
+    theme:{tone:'light',base:'#79a9ee',surfaceRgb:'231,241,255',foreground:'#263a57',foregroundStrong:'#101d31',muted:'#506887',faint:'#7185a1',accent:'#2f65ad',accent2:'#5f8fcf',shadow:'#315b99',darkDensity:.76,lightDensity:.69,textShadow:'0 1px 1px rgba(255,255,255,.82),0 0 6px rgba(255,255,255,.32)'}
+  },
+  {
+    id:'god-rays', label:'Gold Rays', description:'Warm volumetric rays streaming from a glowing core.', kind:'shader', component:GoldRays,
+    installCmd:'npx shadcn@latest add https://www.pixel-perfect.space/r/god-rays.json', previewProps:{dpr:.68,controls:false},
+    tokens:{dark:{cover:'0%',sideCover:'72%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#080a14',surfaceRgb:'28,24,22',foreground:'#f5eddf',foregroundStrong:'#fffaf0',muted:'#c9bda7',faint:'#938774',accent:'#e6b85f',accent2:'#f2d49a',shadow:'#060403',darkDensity:.80,lightDensity:.72,textShadow:'0 2px 3px rgba(0,0,0,.94),0 0 14px rgba(0,0,0,.72)'}
+  },
+  {
+    id:'grain-pastel', label:'Grain Pastel', description:'A softly animated pastel grain-gradient field.', kind:'shader', component:GrainPastel,
+    installCmd:'npx shadcn add @beui/shader-background', sourceVariant:'grain-gradient', previewProps:{dpr:.68,controls:false},
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'light',base:'#d8bfe2',surfaceRgb:'249,237,246',foreground:'#493b51',foregroundStrong:'#211928',muted:'#6e5b77',faint:'#907d98',accent:'#7b5da9',accent2:'#3d806f',shadow:'#725c7d',darkDensity:.77,lightDensity:.70,textShadow:'0 1px 2px rgba(255,255,255,.95),0 0 18px rgba(255,255,255,.58)'}
+  },
+  {
+    id:'rocket-blast', label:'Rocket Blast', description:'ASCII rocket exhaust rendered from the original 115-frame animation.', kind:'ascii', component:RocketBlast,
+    installCmd:'npx shadcn@latest add https://asciistudio.space/r/rocket-blast-2.json', registryUrl:ROCKET_BLAST_REGISTRY_URL, previewProps:{fps:18},
+    tokens:{dark:{cover:'0%',sideCover:'78%',blur:'0px'},light:{cover:'0%',sideCover:'78%',blur:'0px'}},
+    theme:{tone:'dark',base:'#090b12',surfaceRgb:'13,15,22',foreground:'#f6eddc',foregroundStrong:'#fff9eb',muted:'#c8bba6',faint:'#8d806f',accent:'#ffb45c',accent2:'#ff6f4b',shadow:'#030407',darkDensity:.82,lightDensity:.73,textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 24px rgba(0,0,0,.90)',asciiColor:'#f6c87b',asciiBackground:'#090b12'}
+  },
+  {id:'ambient',label:'Ambient',description:'Vellum\'s theme-only ambient surface.',kind:'static',component:AmbientBackground,selectable:false,tokens:{dark:{cover:'100%',sideCover:'100%',blur:'0px'},light:{cover:'100%',sideCover:'100%',blur:'0px'}}}
+];
+const BACKGROUND_INDEX = Object.fromEntries(BACKGROUND_REGISTRY.map(entry => [entry.id, entry]));
+const resolveBackground = id => BACKGROUND_INDEX[id] || BACKGROUND_INDEX.galaxy;
+const BackgroundContext = React.createContext(null);
+const useBackground = () => React.useContext(BackgroundContext);
+const BackgroundRenderer = ({entry, preview=false}) => {
+  const Component = entry.component;
+  return <Component preview={preview} {...(preview ? (entry.previewProps || {}) : {})}/>;
+};
+const AppBackground = () => {
+  const {background} = useBackground();
+  return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background}/></div></div>;
 };
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
@@ -3449,34 +3986,127 @@ const ActivityDrawer = ({msg, onClose}) => {
   );
 };
 
-const Timeline = ({userMsgs}) => {
-  const [open, setOpen] = useState(false);
-  if (userMsgs.length < 2) return null;
-  const jump = id => {
-    const el = document.getElementById('m-' + id);
-    const box = el && el.closest('.msgs');
-    if (!el || !box) return;
-    const top = el.offsetTop - 20;
-    const bot = top + el.offsetHeight;
-    if (top < box.scrollTop) box.scrollTop = top;
-    else if (bot > box.scrollTop + box.clientHeight) box.scrollTop = bot - box.clientHeight;
+const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPreview, className = '', railClassName = '', previewClassName = ''}) => {
+  const [internalActiveId, setInternalActiveId] = useState(defaultActiveId || (items[0] && items[0].id) || '');
+  const [hoveredId, setHoveredId] = useState(null);
+  const [focusedId, setFocusedId] = useState(null);
+  const requestedActiveId = activeId === undefined ? internalActiveId : activeId;
+  const selectedId = items.some(item => item.id === requestedActiveId) ? requestedActiveId : ((items[0] && items[0].id) || '');
+  const displayedId = hoveredId || focusedId || '';
+  const displayedIndex = items.findIndex(item => item.id === displayedId);
+  const displayedItem = displayedIndex >= 0 ? items[displayedIndex] : null;
+  const canHover = typeof window !== 'undefined' && window.matchMedia('(hover:hover) and (pointer:fine)').matches;
+  const choose = id => {
+    if (activeId === undefined) setInternalActiveId(id);
+    if (onActiveChange) onActiveChange(id);
   };
+  const previewOffset = displayedIndex < 0 ? 0 : (displayedIndex - (items.length - 1) / 2) * 20;
   return (
-    <div className="timeline" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      {userMsgs.map(m => (
-        <div key={m.id} className="tl-bar" style={{width: Math.min(22, 8 + Math.floor(m.text.length / 12))}}
-          onClick={() => jump(m.id)}/>
-      ))}
-      {open && (
-        <div className="tl-pop">
-          <div className="tl-head">From the beginning</div>
-          {userMsgs.map(m => (
-            <div key={m.id} className="tl-row" onClick={() => jump(m.id)}>
-              {m.text.length > 44 ? m.text.slice(0, 44).trimEnd() + '?' : m.text}
-            </div>
-          ))}
+    <div className={'preview-rail ' + className}>
+      <nav aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
+        {items.map((item, index) => {
+          const distance = displayedIndex < 0 ? Infinity : Math.abs(index - displayedIndex);
+          const scale = distance === 0 ? 1 : distance === 1 ? .68 : distance === 2 ? .44 : .25;
+          const selected = item.id === selectedId;
+          const displayed = item.id === displayedId;
+          return (
+            <button key={item.id} type="button" aria-label={item.label} aria-current={selected ? 'location' : undefined}
+              className={'preview-rail-item' + (selected ? ' active' : '') + (displayed ? ' displayed' : '')}
+              style={{'--rail-scale': scale}}
+              onPointerEnter={() => { if (canHover) setHoveredId(item.id); }}
+              onPointerDown={() => setFocusedId(null)}
+              onFocus={e => { if (e.currentTarget.matches(':focus-visible')) setFocusedId(item.id); }}
+              onBlur={e => { if (!e.currentTarget.parentElement.contains(e.relatedTarget)) setFocusedId(null); }}
+              onClick={() => choose(item.id)}>
+              <span aria-hidden="true" className="preview-rail-tick"/>
+            </button>
+          );
+        })}
+      </nav>
+      {displayedItem && (
+        <div className="preview-rail-preview-layer" aria-hidden="true">
+          <div key={displayedItem.id} className={'preview-rail-preview ' + previewClassName}
+            style={{top: `clamp(76px, calc(50% + ${previewOffset}px), calc(100% - 76px))`}}>
+            {renderPreview ? renderPreview(displayedItem) : (
+              <div className="preview-rail-card">
+                <div className="preview-rail-card-head">{displayedItem.label}</div>
+                <div className="preview-rail-card-label">{displayedItem.description}</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const ConversationPreviewRail = ({messages}) => {
+  const rootRef = useRef(null);
+  const userTurns = messages.reduce((turns, message, index) => {
+    if (message.role !== 'user') return turns;
+    const response = messages.slice(index + 1).find(next => next.role !== 'user');
+    turns.push({
+      id: String(message.id),
+      label: `Prompt ${turns.length + 1}`,
+      description: (message.text || '').replace(/\s+/g, ' ').trim() || 'Attached content',
+      response: response ? (response.text || '').replace(/\s+/g, ' ').trim() : '',
+    });
+    return turns;
+  }, []);
+  const [activeId, setActiveId] = useState((userTurns[0] && userTurns[0].id) || '');
+  const itemIds = userTurns.map(item => item.id).join('|');
+
+  useEffect(() => {
+    if (!userTurns.some(item => item.id === activeId)) setActiveId((userTurns[0] && userTurns[0].id) || '');
+  }, [itemIds]);
+
+  useEffect(() => {
+    const thread = rootRef.current && rootRef.current.closest('.thread-col');
+    const box = thread && thread.querySelector('.msgs');
+    if (!box || userTurns.length < 2) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const threshold = box.getBoundingClientRect().top + Math.min(190, box.clientHeight * .34);
+      let current = userTurns[0].id;
+      const nodes = Array.from(thread.querySelectorAll('[data-preview-message-id]'));
+      userTurns.forEach(item => {
+        const node = nodes.find(el => el.dataset.previewMessageId === item.id);
+        if (node && node.getBoundingClientRect().top <= threshold) current = item.id;
+      });
+      setActiveId(current);
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
+    update();
+    box.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll);
+    return () => {
+      box.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [itemIds]);
+
+  if (userTurns.length < 2) return null;
+  const jump = id => {
+    const thread = rootRef.current && rootRef.current.closest('.thread-col');
+    const box = thread && thread.querySelector('.msgs');
+    const node = thread && Array.from(thread.querySelectorAll('[data-preview-message-id]')).find(el => el.dataset.previewMessageId === id);
+    if (!box || !node) return;
+    const top = node.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - 24;
+    box.scrollTo({top: Math.max(0, top), behavior: window.matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+    setActiveId(id);
+  };
+  return (
+    <div ref={rootRef}>
+      <PreviewRail items={userTurns} activeId={activeId} onActiveChange={jump}
+        renderPreview={item => (
+          <div className="preview-rail-card">
+            <div className="preview-rail-card-head">{item.label}</div>
+            <div className="preview-rail-card-label">{item.description}</div>
+            {item.response && <div className="preview-rail-card-response">{item.response}</div>}
+          </div>
+        )}/>
     </div>
   );
 };
@@ -3619,9 +4249,10 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
         <div className="agent-id-meta"><div className="agent-bar-name">{agent.name}</div><div className="agent-bar-tag">{agent.tag}</div></div>
         <button className="tbtn agent-head-set" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
       </div>
+      <ConversationPreviewRail messages={msgs}/>
       <div className="msgs"><div className="msgs-inner">
         {msgs.map(m => m.role === 'user' ? (
-          <div key={m.id} className="bubble-wrap">
+          <div key={m.id} id={'m-' + m.id} data-preview-message-id={String(m.id)} className="bubble-wrap">
             {m.attachments && m.attachments.length > 0 && (<div className="attach-strip">{m.attachments.map((a, i) => a.url ? <span key={i} className="msg-att-img" onClick={() => onViewImage && onViewImage(a.url)}><img src={a.url} alt={a.name}/></span> : <span key={i} className="attach-chip"><IcFile size={12}/>{a.name}</span>)}</div>)}
             <div className="bubble">{m.text}</div>
           </div>
@@ -4165,11 +4796,11 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
         <button className="ch-share" title="Sharing is not in this preview"><IcShare size={14}/>Share</button>
         <button className="tbtn" title="Chat options" onClick={e => onHeadMenu(e)}><IcDots size={16}/></button>
       </div>
-      <Timeline userMsgs={msgs.filter(m => m.role === 'user')}/>
+      <ConversationPreviewRail messages={msgs}/>
       <div className="msgs">
         <div className="msgs-inner">
           {msgs.map(m => m.role === 'user' ? (
-            <div key={m.id} id={'m-' + m.id} className="bubble-wrap">
+            <div key={m.id} id={'m-' + m.id} data-preview-message-id={String(m.id)} className="bubble-wrap">
               {m.attachments && m.attachments.length > 0 && (
                 <div className="attach-strip">
                   {m.attachments.map((a, i) => a.url
@@ -4788,14 +5419,33 @@ const APP_BLURB = { airtable:'Bases, tables and records.', github:'Repos, issues
 
 // 1) Local connector registry ? normalized MCP server descriptors.
 const CONNECTOR_ICONS = { github:IcGitHub, gmail:IcGmail, gcal:IcGCal, slack:IcGrid, notion:IcBook, linear:IcLinear, filesystem:IcFolder, postgres:IcGrid, brave:IcGlobe, sentry:IcGrid, stripe:IcGrid, obsidian:IcBook, todoist:IcCheck, puppeteer:IcGlobe, memory:IcBrain, youtube:IcGlobe, 'agent-reach':IcXCircle };
-// Real brand logos via logo service, keyed by domain. Falls back to hand-drawn icon if a logo fails.
-const CONNECTOR_DOMAINS = { github:'github.com', gmail:'gmail.com', gcal:'calendar.google.com', slack:'slack.com', notion:'notion.so', linear:'linear.app', filesystem:'', postgres:'postgresql.org', brave:'brave.com', sentry:'sentry.io', stripe:'stripe.com', obsidian:'obsidian.md', todoist:'todoist.com', puppeteer:'pptr.dev', memory:'', youtube:'youtube.com', 'agent-reach':'x.com', figma:'figma.com', jira:'atlassian.com', discord:'discord.com', cloudflare:'cloudflare.com', supabase:'supabase.com', vercel:'vercel.com', mongodb:'mongodb.com', airtable:'airtable.com', asana:'asana.com', hubspot:'hubspot.com', shopify:'shopify.com' };
+// Shared brand-source registry. Branded plugins use the actual vendor mark from
+// Simple Icons (or the vendor's own CDN); Vellum-only plugins keep local icons.
+const SIMPLE_ICON_ROOT = 'https://cdn.simpleicons.org/';
+const CONNECTOR_ICON_SLUGS = {
+  github:'github', gmail:'gmail', gcal:'googlecalendar', 'google-calendar':'googlecalendar',
+  notion:'notion', linear:'linear', postgres:'postgresql', postgresql:'postgresql',
+  brave:'brave', sentry:'sentry', stripe:'stripe', obsidian:'obsidian', todoist:'todoist',
+  puppeteer:'puppeteer', youtube:'youtube', 'agent-reach':'x', figma:'figma', jira:'jira',
+  discord:'discord', cloudflare:'cloudflare', supabase:'supabase', vercel:'vercel',
+  mongodb:'mongodb', airtable:'airtable', asana:'asana', hubspot:'hubspot',
+  shopify:'shopify', box:'box', dropbox:'dropbox', spotify:'spotify'
+};
+const CONNECTOR_ICON_SOURCES = {
+  slack:'https://a.slack-edge.com/80588/marketing/img/icons/icon_slack_hash_colored.png'
+};
+const connectorIconSource = (c) => {
+  const id = String(c?.id || '').toLowerCase();
+  if (CONNECTOR_ICON_SOURCES[id]) return CONNECTOR_ICON_SOURCES[id];
+  const slug = CONNECTOR_ICON_SLUGS[id];
+  return slug ? SIMPLE_ICON_ROOT + encodeURIComponent(slug) : '';
+};
 const ConnLogo = ({c, size=20}) => {
-  const dom = (c && CONNECTOR_DOMAINS[c.id]) || (c && c.domain) || '';
+  const src = connectorIconSource(c);
   const Fallback = (c && (CONNECTOR_ICONS[c.id])) || IcMcp;
   const [failed, setFailed] = useState(false);
-  if (!dom || failed) return <Fallback size={size}/>;
-  return <img className="conn-logo-img" src={'https://www.google.com/s2/favicons?sz=64&domain=' + encodeURIComponent(dom)} alt="" width={size} height={size} onError={() => setFailed(true)}/>;
+  if (!src || failed) return <Fallback size={size}/>;
+  return <img className="conn-logo-img" src={src} alt="" width={size} height={size} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)}/>;
 };
 function mcp(o){ return Object.assign({ source:'official', category:'Other', authType:'None', install:'npm', trust:'community', tools:[], state:'available' }, o); }
 const REQUIRED_CONNECTORS = [
@@ -4999,8 +5649,8 @@ const BackendConnectorsView = ({apps = []}) => {
         <div className="page-head">
           <span className="page-head-ic"><IcGrid/></span>
           <div style={{flex: 1}}>
-            <div className="page-title">Connectors</div>
-            <div className="page-sub">Live connector and MCP plugin status from the Vellum backend.</div>
+            <div className="page-title">Plugins</div>
+            <div className="page-sub">Live connector, MCP, and system plugin status from the Vellum backend.</div>
           </div>
           <span className="cu-pill">{ready}/{rows.length} ready</span>
         </div>
@@ -5018,7 +5668,7 @@ const BackendConnectorsView = ({apps = []}) => {
                   <span className="conn-ic"><ConnLogo c={app} size={20}/></span>
                   <div className="conn-card-head">
                     <div className="conn-name">{app.name || app.id}<span className={'conn-trust ' + (readyState ? 'verified' : st === 'error' ? 'unverified' : 'community')}><IcShield size={11}/>{statusText}</span></div>
-                    <div className="conn-meta">{app.category} Â· {app.type} Â· {app.id}</div>
+                    <div className="conn-meta">{app.category} · {app.type} · {app.id}</div>
                   </div>
                 </div>
                 <div className="conn-desc">{connectorSetupNote(app)}</div>
@@ -5761,7 +6411,7 @@ function applyAccent(id){
   const st = document.documentElement.style;
   const props = ['--ember','--accent2','--glow','--glow-soft','--grad','--onember','--accent-faded','--accent-deep','--accent-bg','--stage'];
   const a = ACCENTS.find(x=>x.id===id);
-  if (!a || a.id === 'default') { props.forEach(p => st.removeProperty(p)); return; }
+  if (!a || a.id === 'default') { props.forEach(p => st.removeProperty(p)); syncBackgroundTheme(); return; }
   const sorted = [...a.swatch].sort((x,y)=>relLum(y)-relLum(x));
   const bright = a.accent;
   const faded = sorted[1] || a.accent2;
@@ -5781,6 +6431,7 @@ function applyAccent(id){
     'radial-gradient(1050px 720px at 93% 5%,'+accentRgba(deep,0.24)+',transparent 56%),' +
     'radial-gradient(900px 720px at 60% 112%,'+accentRgba(bright,0.10)+',transparent 60%),' +
     'linear-gradient(155deg,'+accentRgba(back,0.60)+' 0%,var(--bg) 58%,'+accentRgba(back,0.45)+' 100%)');
+  syncBackgroundTheme();
 }
 
 const SpotifyConnectModal = ({onClose, onConnected}) => {
@@ -5925,6 +6576,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
 
 const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
+  const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
@@ -6010,7 +6662,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
           {tab === 'Appearance' && (
             <React.Fragment>
               <div className="set-h">Appearance</div>
-              <div className="cfg-note">Choose light or dark, then pick an accent palette. The accent applies across the whole app.</div>
+              <div className="cfg-note">Choose a live background and Vellum will match its text contrast, glass surfaces, borders, controls, and accent across the entire app.</div>
               <div className="set-row">Theme
                 <span className="sr-end">
                   <div className="ap-seg">
@@ -6018,6 +6670,23 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
                     <button className={'ap-seg-b' + (theme === 'dark' ? ' on' : '')} onClick={() => { if (theme !== 'dark') onTheme(); }}><IcMoon size={13}/>Dark</button>
                   </div>
                 </span>
+              </div>
+              <div className="appearance-backgrounds">
+                <div className="appearance-backgrounds-head">
+                  <div className="appearance-backgrounds-title">Animated background</div>
+                  <div className="appearance-backgrounds-note">Live previews · saved on this device</div>
+                </div>
+                <div className="bg-preview-grid" role="radiogroup" aria-label="Application background">
+                  {selectableBackgrounds.map(entry => (
+                    <button key={entry.id} type="button" role="radio" aria-checked={backgroundId === entry.id}
+                      className={'bg-preview-card' + (backgroundId === entry.id ? ' on' : '')}
+                      onClick={() => setBackgroundId(entry.id)}>
+                      <span className="bg-live"><BackgroundRenderer entry={entry} preview/></span>
+                      <span className="bg-preview-copy"><span className="bg-preview-name">{entry.label}</span><span className="bg-preview-kind">{entry.kind}</span></span>
+                      {backgroundId === entry.id && <span className="bg-preview-check"><IcCheck size={13}/></span>}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="set-row">
                 <div>Dock position<span className="sr-sub">Auto uses the top in conversations and the right edge in tools.</span></div>
@@ -6039,7 +6708,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
                   </button>
                 ))}
               </div>
-              <div className="quiet-foot">Saved on this device. Accent recolors buttons, highlights, and glows everywhere.</div>
+              <div className="quiet-foot">Saved on this device. Accent choices are blended into each background's matched palette so contrast and color harmony stay intact.</div>
             </React.Fragment>
           )}
           {tab === 'Personalization' && (
@@ -6295,15 +6964,28 @@ const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
   });
-  const [backgroundId] = useState(() => {
+  const [backgroundId, setBackgroundIdState] = useState(() => {
     try { return resolveBackground(localStorage.getItem('vellum-background') || 'galaxy').id; }
     catch { return 'galaxy'; }
   });
+  const setBackgroundId = id => setBackgroundIdState(resolveBackground(id).id);
+  const background = resolveBackground(backgroundId);
+  const selectableBackgrounds = BACKGROUND_REGISTRY.filter(entry => entry.selectable !== false);
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem('vellum-theme', theme); } catch {}
   }, [theme]);
-  useEffect(() => { try { localStorage.setItem('vellum-background', backgroundId); } catch {} }, [backgroundId]);
+  useEffect(() => {
+    const root = document.documentElement;
+    const entry = resolveBackground(backgroundId);
+    const tokens = (entry.tokens && entry.tokens[theme]) || {};
+    root.dataset.background = entry.id;
+    root.style.setProperty('--background-cover', tokens.cover || '80%');
+    root.style.setProperty('--background-side-cover', tokens.sideCover || tokens.cover || '78%');
+    root.style.setProperty('--background-blur', tokens.blur || '7px');
+    applyBackgroundTheme(entry, theme);
+    try { localStorage.setItem('vellum-background', entry.id); } catch {}
+  }, [backgroundId, theme]);
   useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
 
   const [sidebarPinned, setSidebarPinned] = useState(() => { try { const v = localStorage.getItem('vellum-sb-open'); return v === null ? true : v === '1'; } catch { return true; } });
@@ -7416,6 +8098,7 @@ const App = () => {
   const dockSide = dockPosition === 'auto' ? (['library','ledger','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   return (
+    <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds}}>
     <div className="stage" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <div className="bg-orb orb1"></div>
@@ -7423,7 +8106,7 @@ const App = () => {
       <div className="bg-orb orb3"></div>
       <div className="cursor-glow"></div>
       <div className="win">
-        <AppBackground backgroundId={backgroundId}/>
+        <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div className="body">
@@ -7525,6 +8208,7 @@ const App = () => {
         {toast && <div className="toast">{toast}</div>}
       </div>
     </div>
+    </BackgroundContext.Provider>
   );
 };
 
@@ -7592,6 +8276,13 @@ const CustomInstructionsModal = ({value, onSave, onClose}) => {
   );
 };
 
+try {
+  const bootTheme = localStorage.getItem('vellum-theme') || 'dark';
+  const bootBackground = resolveBackground(localStorage.getItem('vellum-background') || 'galaxy');
+  document.documentElement.setAttribute('data-theme', bootTheme);
+  document.documentElement.dataset.background = bootBackground.id;
+  applyBackgroundTheme(bootBackground, bootTheme);
+} catch {}
 ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>

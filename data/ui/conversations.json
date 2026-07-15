@@ -1,6 +1,513 @@
 {
   "conversations": [
     {
+      "id": "kyvezt2s",
+      "thread_id": "kyvezt2s",
+      "title": "hye",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "edvmblnk",
+          "role": "user",
+          "text": "hye",
+          "attachments": []
+        },
+        {
+          "id": "uw2kr98k",
+          "role": "assistant",
+          "text": "Stopped.",
+          "full": "On \"hye\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "thinking",
+              "status": "in_progress",
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live activity",
+              "text": "Done"
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        }
+      ],
+      "updated_at": "2026-07-15T07:44:09+00:00",
+      "organization": {
+        "space_id": "unsorted",
+        "space_label": "Unsorted",
+        "topic_id": "unsorted",
+        "topic_label": "Unsorted",
+        "sources": [],
+        "activities": [
+          "Conversation"
+        ],
+        "status": "Active",
+        "confidence": 0.0,
+        "assignment": "automatic",
+        "keywords": [
+          "hye"
+        ],
+        "segments": [
+          {
+            "id": "segment-1",
+            "start_message_id": "edvmblnk",
+            "end_message_id": "edvmblnk",
+            "message_count": 1,
+            "space_id": "unsorted",
+            "space_label": "Unsorted",
+            "topic_id": "unsorted",
+            "topic_label": "Unsorted",
+            "confidence": 0.0
+          }
+        ],
+        "signals": {}
+      }
+    },
+    {
+      "id": "ir5fz3fn",
+      "thread_id": "ir5fz3fn",
+      "title": "what is going on in fifa? wh?",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "4okc9bqs",
+          "role": "user",
+          "text": "what is going on in fifa? who is leding scorer when is is the finals",
+          "attachments": []
+        },
+        {
+          "id": "yqm974qr",
+          "role": "assistant",
+          "text": "Spain just beat France 2-0 to book their spot in the 2026 World Cup final. They’ll face the winner of England vs. Argentina. The final is set for **Sunday, July 19, 2026** at MetLife Stadium in New Jersey.\n\nAs for the leading scorer, the Golden Boot race is still wide open. Lamine Yamal has 6 goals so far, but with the final and third-place match still to play, it’s not decided yet.",
+          "full": "On \"what is going on in fifa? who is leding scorer when is is th\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_437e65e98f674a06b3ace27f0ca8bcbb",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "what is going on in fifa? who is leding scorer when is is the finals",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_91828ce534d049be97c777a0ca7caa16",
+              "type": "sub_agent_completed",
+              "label": "Called Sports Agent",
+              "detail": "",
+              "name": "SportsAgent",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_91828ce534d049be97c777a0ca7caa16",
+              "type": "subagent_call",
+              "label": "Routed to SportsAgent",
+              "detail": "what is going on in fifa? who is leding scorer when is is the finals",
+              "name": "SportsAgent",
+              "status": "completed"
+            },
+            {
+              "id": "item_e8b64a32e8ab4a6dbd061e8a1721a786",
+              "type": "tool_call_completed",
+              "label": "Called Sports Agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_e8b64a32e8ab4a6dbd061e8a1721a786",
+              "type": "tool_call",
+              "label": "Used sports_agent",
+              "detail": "",
+              "name": "sports_agent",
+              "status": "completed"
+            },
+            {
+              "id": "item_0f592c8aa2ea45ef9c09d8b83e5b011e",
+              "type": "tool_call_completed",
+              "label": "Searched the web",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_0f592c8aa2ea45ef9c09d8b83e5b011e",
+              "type": "tool_call",
+              "label": "Used web_search",
+              "detail": "",
+              "name": "web_search",
+              "status": "completed"
+            },
+            {
+              "id": "item_3e5c93fcc0634c54ac067fdb63bd7092",
+              "type": "tool_call_completed",
+              "label": "Searched with SerpAPI",
+              "detail": "",
+              "name": "serpapi",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_3e5c93fcc0634c54ac067fdb63bd7092",
+              "type": "tool_call",
+              "label": "Used serpapi",
+              "detail": "",
+              "name": "serpapi",
+              "status": "completed"
+            },
+            {
+              "id": "item_6471c5f6832b4adbaf3aab957bff3c76",
+              "type": "source_discovered",
+              "label": "Found ESPN",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": {
+                "url": "https://www.espn.com/soccer/story/_/id/49363150/fifa-world-cup-2026-stats-lamine-yamal-6-0-kylian-mbappe-spain-unai-simon-set-wc-record-6-france-worst-60-years",
+                "title": "FIFA World Cup 2026 stats: Yamal 6 - 0 Mbappé; Spain, Simón set WC record with 6; France's 0.3 worst in 60 years",
+                "snippet": "",
+                "domain": "espn.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 1,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=espn.com&sz=64",
+                "provider_label": "ESPN"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_6471c5f6832b4adbaf3aab957bff3c76-reading",
+              "type": "source_reading",
+              "label": "Reading ESPN",
+              "detail": "FIFA World Cup 2026 stats: Yamal 6 - 0 Mbappé; Spain, Simón set WC record with 6; France's 0.3 worst in 60 years",
+              "name": "",
+              "status": "in_progress",
+              "source": {
+                "url": "https://www.espn.com/soccer/story/_/id/49363150/fifa-world-cup-2026-stats-lamine-yamal-6-0-kylian-mbappe-spain-unai-simon-set-wc-record-6-france-worst-60-years",
+                "title": "FIFA World Cup 2026 stats: Yamal 6 - 0 Mbappé; Spain, Simón set WC record with 6; France's 0.3 worst in 60 years",
+                "snippet": "",
+                "domain": "espn.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 1,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=espn.com&sz=64",
+                "provider_label": "ESPN"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_5f06c4c56770473d9ab0bb9a284e6ee1",
+              "type": "source_discovered",
+              "label": "Found FIFA",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": {
+                "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/france-spain-match-report-highlights",
+                "title": "Spain outplay France to reach final | Match report & highlights - FIFA",
+                "snippet": "",
+                "domain": "fifa.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 2,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=fifa.com&sz=64",
+                "provider_label": "FIFA"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_5f06c4c56770473d9ab0bb9a284e6ee1-reading",
+              "type": "source_reading",
+              "label": "Reading FIFA",
+              "detail": "Spain outplay France to reach final | Match report & highlights - FIFA",
+              "name": "",
+              "status": "in_progress",
+              "source": {
+                "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/france-spain-match-report-highlights",
+                "title": "Spain outplay France to reach final | Match report & highlights - FIFA",
+                "snippet": "",
+                "domain": "fifa.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 2,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=fifa.com&sz=64",
+                "provider_label": "FIFA"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_e3f033ec17d84fe788456730eaab51c6",
+              "type": "source_discovered",
+              "label": "Found web",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": {
+                "url": "https://www.unlvtickets.com/eventInfo/spe/886/nba-summer-league-2026",
+                "title": "NBA Summer League 2026 | UNLVtickets.com",
+                "snippet": "",
+                "domain": "unlvtickets.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 3,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=unlvtickets.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_e3f033ec17d84fe788456730eaab51c6-reading",
+              "type": "source_reading",
+              "label": "Reading web",
+              "detail": "NBA Summer League 2026 | UNLVtickets.com",
+              "name": "",
+              "status": "in_progress",
+              "source": {
+                "url": "https://www.unlvtickets.com/eventInfo/spe/886/nba-summer-league-2026",
+                "title": "NBA Summer League 2026 | UNLVtickets.com",
+                "snippet": "",
+                "domain": "unlvtickets.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 3,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=unlvtickets.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_fad1971867594b5d99d656f0a57e90d6",
+              "type": "source_discovered",
+              "label": "Found web",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": {
+                "url": "https://www.aljazeera.com/sports/liveblog/2026/7/11/argentina-vs-switzerland-live-fifa-world-cup-2026",
+                "title": "Argentina 3-1 Switzerland (aet): FIFA World Cup 2026 – as it happened",
+                "snippet": "",
+                "domain": "aljazeera.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 4,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_fad1971867594b5d99d656f0a57e90d6-reading",
+              "type": "source_reading",
+              "label": "Reading web",
+              "detail": "Argentina 3-1 Switzerland (aet): FIFA World Cup 2026 – as it happened",
+              "name": "",
+              "status": "in_progress",
+              "source": {
+                "url": "https://www.aljazeera.com/sports/liveblog/2026/7/11/argentina-vs-switzerland-live-fifa-world-cup-2026",
+                "title": "Argentina 3-1 Switzerland (aet): FIFA World Cup 2026 – as it happened",
+                "snippet": "",
+                "domain": "aljazeera.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 4,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_afc58e41e0d4415fb5cc2c40ef942679",
+              "type": "source_discovered",
+              "label": "Found web",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": {
+                "url": "https://www.aljazeera.com/sports/liveblog/2026/7/14/france-vs-spain-live-fifa-world-cup-2026-semifinal",
+                "title": "France vs Spain 0-2: FIFA World Cup 2026 semifinal – as it happened",
+                "snippet": "",
+                "domain": "aljazeera.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 5,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "item_afc58e41e0d4415fb5cc2c40ef942679-reading",
+              "type": "source_reading",
+              "label": "Reading web",
+              "detail": "France vs Spain 0-2: FIFA World Cup 2026 semifinal – as it happened",
+              "name": "",
+              "status": "in_progress",
+              "source": {
+                "url": "https://www.aljazeera.com/sports/liveblog/2026/7/14/france-vs-spain-live-fifa-world-cup-2026-semifinal",
+                "title": "France vs Spain 0-2: FIFA World Cup 2026 semifinal – as it happened",
+                "snippet": "",
+                "domain": "aljazeera.com",
+                "fetched_at": "2026-07-15T06:07:07+00:00",
+                "source_index": 5,
+                "source_type": "web",
+                "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64",
+                "provider_label": "web"
+              },
+              "metadata": {},
+              "at": "2026-07-15T06:07:07+00:00"
+            },
+            {
+              "id": "msg_1736fcd2074a4536b2fd2d1579b647c0",
+              "type": "final_answer_completed",
+              "label": "Answer written",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T06:08:37+00:00"
+            }
+          ],
+          "sources": [
+            {
+              "pub": "ESPN",
+              "dom": "espn.com",
+              "url": "https://www.espn.com/soccer/story/_/id/49363150/fifa-world-cup-2026-stats-lamine-yamal-6-0-kylian-mbappe-spain-unai-simon-set-wc-record-6-france-worst-60-years",
+              "title": "FIFA World Cup 2026 stats: Yamal 6 - 0 Mbappé; Spain, Simón set WC record with 6; France's 0.3 worst in 60 years",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=espn.com&sz=64"
+            },
+            {
+              "pub": "FIFA",
+              "dom": "fifa.com",
+              "url": "https://www.fifa.com/en/tournaments/mens/worldcup/canadamexicousa2026/articles/france-spain-match-report-highlights",
+              "title": "Spain outplay France to reach final | Match report & highlights - FIFA",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=fifa.com&sz=64"
+            },
+            {
+              "pub": "web",
+              "dom": "unlvtickets.com",
+              "url": "https://www.unlvtickets.com/eventInfo/spe/886/nba-summer-league-2026",
+              "title": "NBA Summer League 2026 | UNLVtickets.com",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=unlvtickets.com&sz=64"
+            },
+            {
+              "pub": "web",
+              "dom": "aljazeera.com",
+              "url": "https://www.aljazeera.com/sports/liveblog/2026/7/11/argentina-vs-switzerland-live-fifa-world-cup-2026",
+              "title": "Argentina 3-1 Switzerland (aet): FIFA World Cup 2026 – as it happened",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64"
+            },
+            {
+              "pub": "web",
+              "dom": "aljazeera.com",
+              "url": "https://www.aljazeera.com/sports/liveblog/2026/7/14/france-vs-spain-live-fifa-world-cup-2026-semifinal",
+              "title": "France vs Spain 0-2: FIFA World Cup 2026 semifinal – as it happened",
+              "date": "",
+              "snippet": "",
+              "favicon_url": "https://www.google.com/s2/favicons?domain=aljazeera.com&sz=64"
+            }
+          ],
+          "tools": [
+            "sports_agent",
+            "web_search",
+            "serpapi"
+          ],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "kind": "search",
+              "title": "Searching live sources",
+              "chips": [
+                {
+                  "dom": "espn.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=espn.com&sz=64"
+                },
+                {
+                  "dom": "fifa.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=fifa.com&sz=64"
+                },
+                {
+                  "dom": "unlvtickets.com",
+                  "favicon_url": "https://www.google.com/s2/favicons?domain=unlvtickets.com&sz=64"
+                }
+              ],
+              "more": 2
+            },
+            {
+              "kind": "eval",
+              "title": "Evaluating sources for the answer",
+              "text": "Checking the live results and using the most relevant source details in the final response."
+            },
+            {
+              "kind": "done",
+              "title": "Worked with live context",
+              "text": "Done"
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": false
+        }
+      ],
+      "updated_at": "2026-07-15T06:08:41+00:00"
+    },
+    {
       "id": "8ah31dya",
       "thread_id": "8ah31dya",
       "title": "hey",
@@ -303,7 +810,7 @@
       "id": "j8x8bgpj",
       "thread_id": "j8x8bgpj",
       "title": "play song from my liked song?",
-      "pinned": false,
+      "pinned": true,
       "archived": false,
       "projectId": null,
       "created": "Today",
@@ -583,7 +1090,7 @@
           "suppressActivity": false
         }
       ],
-      "updated_at": "2026-07-14T10:17:44+00:00"
+      "updated_at": "2026-07-15T06:08:28+00:00"
     },
     {
       "id": "3390q7a9",
@@ -24616,7 +25123,7 @@
       "thread_id": "u2tvdgiw",
       "title": "when did neymar join psg?",
       "pinned": true,
-      "archived": false,
+      "archived": true,
       "projectId": null,
       "created": "Today",
       "appIds": [],
@@ -30341,13 +30848,13 @@
           "suppressActivity": false
         }
       ],
-      "updated_at": "2026-06-22T12:55:13+00:00"
+      "updated_at": "2026-07-15T06:04:37+00:00"
     },
     {
       "id": "ko0qta5l",
       "thread_id": "ko0qta5l",
       "title": "sup",
-      "pinned": true,
+      "pinned": false,
       "archived": false,
       "projectId": null,
       "created": "Today",
@@ -33839,7 +34346,7 @@
           "leadIn": ""
         }
       ],
-      "updated_at": "2026-06-20T11:55:41+00:00"
+      "updated_at": "2026-07-15T06:04:46+00:00"
     },
     {
       "id": "f8k96nxn",
