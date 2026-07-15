@@ -1,0 +1,110 @@
+{
+  "conversations": [
+    {
+      "id": "f1-calendar",
+      "thread_id": "f1-calendar",
+      "title": "Add the next Formula One race",
+      "updated_at": "2026-07-15T10:00:00+00:00",
+      "appIds": ["google-calendar"],
+      "messages": [
+        {"id": "f1-u1", "role": "user", "text": "Check the Formula One calendar and add the next Grand Prix to my calendar."},
+        {"id": "f1-a1", "role": "assistant", "text": "The race event is ready.", "tools": ["calendar.create_event"]}
+      ]
+    },
+    {
+      "id": "spotify-discovery",
+      "thread_id": "spotify-discovery",
+      "title": "Spotify discovery playlists",
+      "updated_at": "2026-07-14T10:00:00+00:00",
+      "appIds": ["spotify"],
+      "messages": [
+        {"id": "sp-u1", "role": "user", "text": "Compare Discover Weekly with my release radar playlist."},
+        {"id": "sp-a1", "role": "assistant", "text": "Discover Weekly has broader artist discovery."}
+      ]
+    },
+    {
+      "id": "vellum-chat-library",
+      "thread_id": "vellum-chat-library",
+      "title": "Recent chat organization",
+      "updated_at": "2026-07-13T10:00:00+00:00",
+      "messages": [
+        {"id": "vc-u1", "role": "user", "text": "Design automatic Spaces so Vellum can organize recent conversations and make them easy to search."},
+        {"id": "vc-a1", "role": "assistant", "text": "Use shallow topic spaces with smart views."}
+      ]
+    },
+    {
+      "id": "vellum-slack-summary",
+      "thread_id": "vellum-slack-summary",
+      "title": "Summarize Vellum Slack feedback",
+      "updated_at": "2026-07-12T10:00:00+00:00",
+      "appIds": ["slack"],
+      "messages": [
+        {"id": "vs-u1", "role": "user", "text": "Summarize the Slack discussion about Vellum memory routing."},
+        {"id": "vs-a1", "role": "assistant", "text": "The team wants clearer fallback behavior.", "tools": ["slack.search"]}
+      ]
+    },
+    {
+      "id": "arsenal-fixtures",
+      "thread_id": "arsenal-fixtures",
+      "title": "Arsenal fixtures",
+      "updated_at": "2026-07-11T10:00:00+00:00",
+      "messages": [
+        {"id": "af-u1", "role": "user", "text": "Find Arsenal's next Premier League football match."},
+        {"id": "af-a1", "role": "assistant", "text": "Here is the next fixture."}
+      ]
+    },
+    {
+      "id": "mixed-topic",
+      "thread_id": "mixed-topic",
+      "title": "Weekend and Vellum",
+      "updated_at": "2026-07-10T10:00:00+00:00",
+      "messages": [
+        {"id": "mix-u1", "role": "user", "text": "Which Formula One driver won the last race?"},
+        {"id": "mix-a1", "role": "assistant", "text": "The winner was confirmed."},
+        {"id": "mix-u2", "role": "user", "text": "Now return to Vellum and improve the recent chat sidebar organization."},
+        {"id": "mix-a2", "role": "assistant", "text": "I will update the interface."}
+      ]
+    },
+    {
+      "id": "personal-trip",
+      "thread_id": "personal-trip",
+      "title": "New Zealand trip planning",
+      "updated_at": "2026-07-09T10:00:00+00:00",
+      "appIds": ["outlook-calendar"],
+      "messages": [
+        {"id": "pt-u1", "role": "user", "text": "Plan a quiet New Zealand travel itinerary and reserve calendar time later."},
+        {"id": "pt-a1", "role": "assistant", "text": "The trip outline is ready."}
+      ]
+    },
+    {
+      "id": "fallback-meeting-notes",
+      "thread_id": "fallback-meeting-notes",
+      "title": "Fallback behavior notes",
+      "updated_at": "2026-07-15T11:00:00+00:00",
+      "messages": [
+        {"id": "fm-u1", "role": "user", "text": "Prepare the agenda for tomorrow's team meeting."},
+        {"id": "fm-a1", "role": "assistant", "text": "The meeting agenda is prepared."}
+      ]
+    }
+  ],
+  "classification": [
+    {"id": "f1-calendar", "space": "sports", "topic": "formula-one", "sources": ["Calendar"]},
+    {"id": "spotify-discovery", "space": "music", "topic": "spotify", "sources": ["Spotify"]},
+    {"id": "vellum-chat-library", "space": "vellum", "topic": "chat-organization", "sources": []},
+    {"id": "vellum-slack-summary", "space": "vellum", "topic": "memory", "sources": ["Slack"]},
+    {"id": "arsenal-fixtures", "space": "sports", "topic": "football", "sources": []},
+    {"id": "personal-trip", "space": "personal", "topic": "travel", "sources": ["Calendar"]}
+  ],
+  "search": [
+    {"query": "Discover Weekly release radar", "expected_first": "spotify-discovery"},
+    {"query": "next grand prix calendar", "expected_first": "f1-calendar"},
+    {"query": "automatic Spaces recent conversations", "expected_first": "vellum-chat-library"},
+    {"query": "team fallback behavior", "expected_first": "vellum-slack-summary"},
+    {"query": "what did the team want about fallback behavior", "expected_first": "vellum-slack-summary"},
+    {"query": "Premier League match", "expected_first": "arsenal-fixtures"},
+    {"query": "New Zealand travel", "expected_first": "personal-trip"}
+  ],
+  "segmentation": [
+    {"id": "mixed-topic", "expected_spaces": ["sports", "vellum"]}
+  ]
+}
