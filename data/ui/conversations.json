@@ -1,6 +1,110 @@
 {
   "conversations": [
     {
+      "id": "8ah31dya",
+      "thread_id": "8ah31dya",
+      "title": "hey",
+      "pinned": false,
+      "archived": false,
+      "projectId": null,
+      "created": "Today",
+      "appIds": [],
+      "messages": [
+        {
+          "id": "hk40s4pb",
+          "role": "user",
+          "text": "hey",
+          "attachments": []
+        },
+        {
+          "id": "r0xess2z",
+          "role": "assistant",
+          "text": "Hey, pratyakksh. What's on your mind?",
+          "full": "On \"hey\" ? a few words. The question is quieter than it looks. What you are actually deciding is what to leave out. Decide that first.",
+          "streaming": false,
+          "activity": [
+            {
+              "id": "activity_c26180e28c724054b0a9d2c54669a03f",
+              "type": "thinking_started",
+              "label": "Thinking",
+              "detail": "hey",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T05:20:47+00:00"
+            },
+            {
+              "id": "msg_1d2a29bd24f244688010a1766ecb1026",
+              "type": "final_answer_completed",
+              "label": "Answer written",
+              "detail": "",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "metadata": {},
+              "at": "2026-07-15T05:21:29+00:00"
+            }
+          ],
+          "sources": [],
+          "tools": [],
+          "phase": "done",
+          "refShown": 0,
+          "refLines": [],
+          "steps": [
+            {
+              "id": "thinking",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Thinking",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "activity_c26180e28c724054b0a9d2c54669a03f",
+              "type": "thinking_started",
+              "name": "",
+              "status": "in_progress",
+              "source": null,
+              "kind": "eval",
+              "title": "Thinking",
+              "text": "hey",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "msg_1d2a29bd24f244688010a1766ecb1026",
+              "type": "final_answer_completed",
+              "name": "",
+              "status": "completed",
+              "source": null,
+              "kind": "done",
+              "title": "Answer written",
+              "text": "",
+              "chips": [],
+              "more": 0
+            },
+            {
+              "id": "answering",
+              "type": "activity",
+              "status": "completed",
+              "kind": "done",
+              "title": "Answering from gathered context",
+              "text": "",
+              "chips": [],
+              "more": 0
+            }
+          ],
+          "duration": 0,
+          "leadIn": "",
+          "suppressActivity": true
+        }
+      ],
+      "updated_at": "2026-07-15T05:21:29+00:00"
+    },
+    {
       "id": "ptojfav6",
       "thread_id": "ptojfav6",
       "title": "can you see the new skill th?",
