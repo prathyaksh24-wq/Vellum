@@ -84,7 +84,12 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sb-row.active{background:var(--active);color:var(--txt2)}
 .sb-row .sb-ic{color:var(--dim);flex-shrink:0;display:flex}
 .sb-row.active .sb-ic{color:var(--txt)}
+.sb-primary{margin-bottom:2px}
+.sb-primary .sb-row{padding:8px 9px}
+.sb-primary .sb-row:first-child{color:var(--txt2)}
+.sb-primary .sb-row:first-child .sb-ic{color:var(--ember)}
 .sb-sec{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sb-sec-count{margin-left:auto;font-size:10px;color:var(--dim2);font-family:var(--font-m)}
 .sec-chev{display:flex;color:var(--dim2);background:none;border:none;cursor:pointer;padding:2px;border-radius:4px;transition:transform .2s,color .15s}
 .sec-chev:hover{color:var(--txt)}
 .sec-chev.closed{transform:rotate(-90deg)}
@@ -99,7 +104,12 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .chat-row{position:relative;display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:7px;color:var(--txt);font-size:12.5px;cursor:pointer}
 .chat-row:hover{background:var(--hover)}
 .chat-row.active{background:var(--active);color:var(--txt2)}
-.chat-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.chat-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-meta{display:flex;align-items:center;gap:5px;min-width:0;color:var(--dim2);font-size:10px;line-height:1.2}
+.chat-topic{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-marks{display:flex;align-items:center;gap:3px;flex-shrink:0}
+.source-mark{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:14px;padding:0 4px;border:1px solid var(--line);border-radius:4px;color:var(--dim);font-size:8px;text-transform:uppercase}
 .chat-pin{color:var(--dim);display:flex;flex-shrink:0}
 .chat-dots{display:none;background:none;border:none;color:var(--dim);cursor:pointer;border-radius:5px;padding:2px;flex-shrink:0}
 .chat-row:hover .chat-dots{display:flex}
@@ -107,6 +117,13 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .rename-input{flex:1;background:var(--input);border:1px solid var(--line2);border-radius:5px;color:var(--txt2);font:inherit;font-size:12.5px;padding:2px 6px;outline:none;min-width:0}
 .sb-empty{padding:8px 9px;color:var(--dim2);font-size:12px;font-style:italic}
 .chat-row.nested{margin-left:22px}
+.space-row,.smart-row{justify-content:flex-start}
+.space-row .space-count,.smart-row .space-count{margin-left:auto;color:var(--dim2);font:10px var(--font-m)}
+.space-row.open{background:var(--hover);color:var(--txt2)}
+.space-row .sec-chev{margin-left:-3px}
+.space-chat-list{border-left:1px solid var(--line);margin-left:16px;padding-left:2px}
+.space-chat-list .chat-row.nested{margin-left:4px}
+.sb-tools{border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
 .crumb{display:flex;align-items:center;gap:8px;padding:10px 18px;font-size:12.5px;color:var(--dim);border-bottom:1px solid var(--line);flex-shrink:0}
 /* project page */
 .proj-head{display:flex;align-items:center;gap:12px;margin-top:6px}
@@ -859,13 +876,22 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .ctx-hint{font-size:11px;color:var(--dim2);padding:2px 10px 6px;font-style:italic}
 .ctx-check{margin-left:auto;color:var(--ember);display:flex}
 /* search overlay */
-.search-card{position:fixed;left:50%;top:18%;transform:translateX(-50%);z-index:50;width:560px;max-width:90vw;background:var(--modal);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 80px rgba(0,0,0,.5);overflow:hidden}
+.search-card{position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:50;width:680px;max-width:92vw;background:var(--modal);border:1px solid var(--line2);border-radius:12px;box-shadow:0 24px 80px rgba(0,0,0,.5);overflow:hidden}
 .search-input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--line);outline:none;color:var(--txt2);font:inherit;font-size:14px;padding:14px 16px}
 .search-input::placeholder{color:var(--dim)}
-.s-list{max-height:320px;overflow-y:auto;padding:7px}
-.s-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:var(--txt);font-size:13px;cursor:pointer}
+.search-scope{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);color:var(--dim);font-size:11px}
+.search-scope-chip{display:flex;align-items:center;gap:5px;border:1px solid var(--line2);border-radius:5px;padding:3px 7px;color:var(--txt)}
+.s-list{max-height:420px;overflow-y:auto;padding:7px}
+.s-row{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:8px;color:var(--txt);font-size:13px;cursor:pointer}
 .s-row:hover{background:var(--hover)}
 .s-row .sb-ic{color:var(--dim);display:flex}
+.s-result-copy{flex:1;min-width:0}
+.s-result-head{display:flex;align-items:center;gap:8px;color:var(--txt2)}
+.s-result-title{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s-result-path{font-size:10.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.s-result-snippet{font-size:11.5px;color:var(--dim);line-height:1.45;margin-top:5px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.s-result-time{margin-left:auto;color:var(--dim2);font:10px var(--font-m);flex-shrink:0}
+.s-loading{padding:14px;color:var(--dim);font-size:12px;text-align:center}
 .s-none{padding:14px;color:var(--dim2);font-size:12.5px;font-style:italic;text-align:center}
 /* pages (library/projects) */
 .page{flex:1;overflow-y:auto;padding:34px 40px}
@@ -929,6 +955,11 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .m-field input{width:100%;background:transparent;border:none;outline:none;color:var(--txt2);font:inherit;font-size:13.5px}
 .m-help{font-size:11.5px;color:var(--dim);text-align:center;margin:6px 0 18px}
 .m-actions{display:flex;justify-content:flex-end;gap:9px}
+.radio-stack{max-height:250px;overflow-y:auto;border-top:1px solid var(--line)}
+.radio-row{display:flex;align-items:center;gap:9px;width:100%;padding:9px 3px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--txt);font:inherit;text-align:left;cursor:pointer}
+.radio-row:hover{color:var(--txt2)}
+.radio-dot{width:14px;height:14px;border:1px solid var(--line2);border-radius:50%;position:relative;flex-shrink:0}
+.radio-row.on .radio-dot::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--ember)}
 .btn{padding:8px 18px;border-radius:18px;border:1px solid var(--line2);background:none;color:var(--txt);font:inherit;font-size:12.5px;cursor:pointer}
 .btn:hover{background:var(--hover)}
 .btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
@@ -1341,6 +1372,12 @@ body{font-size:14px}
   .set-modal{width:min(660px,96vw)}
 }
 @media(max-width:560px){
+}
+@media(max-width:720px){
+  .sidebar{position:absolute;inset:0 auto 0 0;z-index:120;width:min(300px,calc(100vw - 52px));background:color-mix(in srgb,var(--bg) 96%,transparent);box-shadow:24px 0 60px rgba(0,0,0,.48)}
+  .search-card{top:4%;max-height:92vh}
+  .s-list{max-height:calc(92vh - 108px)}
+  .s-result-time{display:none}
 }
 
 /* reusable application backgrounds */
@@ -2308,8 +2345,15 @@ const SEED_FEEDS = [
 ];
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ sidebar Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
-const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => {
+const SourceMarks = ({sources = [], limit = 2}) => (
+  <span className="source-marks">
+    {sources.slice(0, limit).map(source => <span key={source} className="source-mark" title={source}>{source.slice(0, 2)}</span>)}
+  </span>
+);
+
+const ChatRow = ({chat, active, renaming, nested, showMeta = false, onOpen, onMenu, onRename}) => {
   const [draft, setDraft] = useState(chat.title);
+  const organization = chat.organization || {};
   useEffect(() => { if (renaming) setDraft(chat.title); }, [renaming]);
   if (renaming) {
     return (
@@ -2324,7 +2368,15 @@ const ChatRow = ({chat, active, renaming, nested, onOpen, onMenu, onRename}) => 
   return (
     <div className={'chat-row' + (active ? ' active' : '') + (nested ? ' nested' : '')} onClick={onOpen}>
       {chat.pinned && <span className="chat-pin"><IcPin size={12}/></span>}
-      <span className="chat-title">{chat.title}</span>
+      <span className="chat-copy">
+        <span className="chat-title">{chat.title}</span>
+        {showMeta && (organization.topic_label || (organization.sources || []).length > 0) && (
+          <span className="chat-meta">
+            {organization.topic_label && <span className="chat-topic">{organization.topic_label}</span>}
+            <SourceMarks sources={organization.sources || []}/>
+          </span>
+        )}
+      </span>
       <button className="chat-dots" title="Options"
         onClick={e => { e.stopPropagation(); onMenu(e); }}><IcDots size={14}/></button>
     </div>
@@ -2357,8 +2409,21 @@ const ProjectRow = ({proj, renaming, open, onToggle, onMenu, onOpen, onRename}) 
   );
 };
 
-const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, pinned, hover, onHoverEnter, onHoverLeave, onNewChat, onSearch, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onOpenAgent, activeAgentId}) => {
+const SmartViewIcon = ({id, size = 14}) => {
+  if (id === 'calendar') return <IcGCal size={size}/>;
+  if (id === 'pinned') return <IcPin size={size}/>;
+  if (id === 'follow-up') return <IcCheck size={size}/>;
+  if (id === 'files') return <IcFile size={size}/>;
+  return <IcGrid size={size}/>;
+};
+
+const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
   const sorted = visibleChats(chats);
+  const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
+  const smartViews = (conversationLibrary && conversationLibrary.smart_views) || [];
+  const [expandedSpace, setExpandedSpace] = useState(null);
+  const organizedChats = ((conversationLibrary && conversationLibrary.conversations) || chats).filter(chat => !chat.archived);
+  const chatsForSpace = spaceId => organizedChats.filter(chat => chat.organization && chat.organization.space_id === spaceId);
   return (
     <div className="sidebar">
       <div className="sb-head">
@@ -2366,12 +2431,53 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
         <button className="tbtn" title="Hide sidebar" onClick={onTogglePin}><IcPanel/></button>
       </div>
       <div className="sb-scroll">
-        <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger<span className="sb-kbd"><kbd>Ctrl ? G</kbd></span></button>
-        <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
-        <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
-        <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills<span className="sb-kbd"><kbd>Ctrl ? K</kbd></span></button>
-        <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory<span className="sb-kbd"><kbd>Ctrl+Shift+E</kbd></span></button>
-        <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
+        <div className="sb-primary">
+          <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
+          <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
+        </div>
+        <div className="sb-sec">Now<span className="sb-sec-count">{Math.min(sorted.length, 5)}</span></div>
+        <div className="sb-list">
+          {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
+          {sorted.slice(0, 5).map(c => (
+            <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
+              renaming={renamingId === c.id}
+              onOpen={() => onOpenChat(c.id)}
+              onMenu={e => onChatMenu(c.id, e)}
+              onRename={t => onRename(c.id, t)}/>
+          ))}
+        </div>
+        <div className="sb-sec">Spaces<span className="sb-sec-count">{spaces.length}</span></div>
+        {spaces.length === 0 && <div className="sb-empty">Spaces appear as chats collect.</div>}
+        {spaces.slice(0, 8).map(space => {
+          const open = expandedSpace === space.id;
+          return (
+            <React.Fragment key={space.id}>
+              <button className={'sb-row space-row' + (open ? ' open' : '')} onClick={() => setExpandedSpace(open ? null : space.id)}>
+                <span className={'sec-chev' + (open ? '' : ' closed')}><IcChevD size={12}/></span>
+                <span className="sb-ic"><FolderIcon open={open}/></span>
+                <span className="chat-title">{space.label}</span>
+                <span className="space-count">{space.count}</span>
+              </button>
+              {open && <div className="space-chat-list">
+                {chatsForSpace(space.id).map(c => (
+                  <ChatRow key={c.id} chat={c} nested showMeta active={view === 'chat' && c.id === activeChatId}
+                    renaming={renamingId === c.id}
+                    onOpen={() => onOpenChat(c.id)}
+                    onMenu={e => onChatMenu(c.id, e)}
+                    onRename={t => onRename(c.id, t)}/>
+                ))}
+              </div>}
+            </React.Fragment>
+          );
+        })}
+        {smartViews.length > 0 && <div className="sb-sec">Smart views</div>}
+        {smartViews.map(smart => (
+          <button key={smart.id} className="sb-row smart-row" onClick={() => onSmartView(smart)}>
+            <span className="sb-ic"><SmartViewIcon id={smart.id}/></span>
+            <span className="chat-title">{smart.label}</span>
+            <span className="space-count">{smart.count}</span>
+          </button>
+        ))}
         <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
           Projects
           <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
@@ -2398,23 +2504,14 @@ const Sidebar = ({chats, projects, activeChatId, view, renamingId, projRenamingI
             ))}
           </React.Fragment>
         )}
-        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('recents')}>
-          Recents
-          <button className={'sec-chev' + (secOpen.recents ? '' : ' closed')} title={secOpen.recents ? 'Collapse' : 'Expand'}
-            onClick={e => { e.stopPropagation(); onToggleSec('recents'); }}><IcChevD size={12}/></button>
+        <div className="sb-tools">
+          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
+          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
+          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
+          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
+          <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
         </div>
-        {secOpen.recents && (
-          <div className="sb-list">
-            {sorted.length === 0 && <div className="sb-empty">No chats yet.</div>}
-            {sorted.map(c => (
-              <ChatRow key={c.id} chat={c} active={view === 'chat' && c.id === activeChatId}
-                renaming={renamingId === c.id}
-                onOpen={() => onOpenChat(c.id)}
-                onMenu={e => onChatMenu(c.id, e)}
-                onRename={t => onRename(c.id, t)}/>
-            ))}
-          </div>
-        )}
       </div>
       <div className="profile-row" onClick={onProfile}>
         <div className="avatar">{initials(profile.displayName)}</div>
@@ -2758,6 +2855,7 @@ const ChatHeadMenu = ({chat, projects, pos, onAction, onMove, onNewProject, onCl
     <Popover portal className="ctx-menu" style={{right: 14, top: Math.min(pos.y + 8, window.innerHeight - 300), left: 'auto', position: 'fixed'}} onClose={onClose}>
       <div className="ctx-item dim" title="Not in this preview" onMouseEnter={() => setSub(false)}><span className="sb-ic"><IcUserPlus size={14}/></span>Start a group chat</div>
       <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('files')}><span className="sb-ic"><IcLibrary size={14}/></span>View files in chat</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('organize')}><span className="sb-ic"><IcFolder size={14}/></span>Change Space</div>
       <div className="ctx-item" onMouseEnter={() => setSub(true)} style={{position: 'relative'}}>
         <span className="sb-ic"><IcFolder size={14}/></span>Move to project<span className="p-arr"><IcChevR size={13}/></span>
         {sub && (
@@ -4064,24 +4162,91 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
 };
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ search overlay Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
-const SearchOverlay = ({chats, onNewChat, onOpenChat, onClose}) => {
+const searchFallback = (chats, query, preset) => {
+  const needle = query.trim().toLowerCase();
+  return chats.filter(chat => {
+    if (chat.archived) return false;
+    const organization = chat.organization || {};
+    if (preset && preset.id === 'pinned' && !chat.pinned) return false;
+    if (preset && preset.id === 'follow-up' && organization.status !== 'Follow-up') return false;
+    if (preset && !['pinned', 'follow-up'].includes(preset.id) && !(organization.sources || []).some(source => source.toLowerCase() === preset.id)) return false;
+    return !needle || [chat.title, ...(chat.messages || []).map(message => message.text || '')].join(' ').toLowerCase().includes(needle);
+  }).map(chat => {
+    const message = (chat.messages || []).find(item => !needle || String(item.text || '').toLowerCase().includes(needle));
+    const organization = chat.organization || {};
+    return {
+      id: chat.id,
+      title: chat.title,
+      space_label: organization.space_label || 'Unsorted',
+      topic_label: organization.topic_label || 'General',
+      sources: organization.sources || [],
+      updated_at: chat.updated_at || chat.created || '',
+      message_id: message && message.id,
+      snippet: message ? String(message.text || '').replace(/\s+/g, ' ').slice(0, 220) : chat.title,
+      pinned: !!chat.pinned,
+    };
+  }).slice(0, 30);
+};
+
+const shortSearchDate = value => {
+  if (!value || value === 'Today') return value || '';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+};
+
+const SearchOverlay = ({chats, initialPreset, onNewChat, onOpenChat, onClose}) => {
   const [q, setQ] = useState('');
-  const hits = chats.filter(c => !c.archived && c.title.toLowerCase().includes(q.toLowerCase()));
+  const [hits, setHits] = useState(() => searchFallback(chats, '', initialPreset));
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    const timer = setTimeout(async () => {
+      const filters = {};
+      if (initialPreset && initialPreset.id === 'follow-up') filters.status = 'Follow-up';
+      else if (initialPreset && initialPreset.id && initialPreset.id !== 'pinned') filters.source = initialPreset.id;
+      try {
+        const result = await API.conversations.search(q, filters);
+        if (!alive) return;
+        let next = result && Array.isArray(result.hits) ? result.hits : [];
+        if (initialPreset && initialPreset.id === 'pinned') next = next.filter(hit => hit.pinned);
+        setHits(next);
+      } catch (_) {
+        if (alive) setHits(searchFallback(chats, q, initialPreset));
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }, 160);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [q, initialPreset, chats]);
   return (
     <React.Fragment>
       <div className="backdrop dim" onClick={onClose}/>
       <div className="search-card">
-        <input className="search-input" autoFocus placeholder="Search chats?" value={q}
+        <input className="search-input" autoFocus placeholder="Search titles and messages" value={q}
           onChange={e => setQ(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && hits.length) onOpenChat(hits[0].id); }}/>
+          onKeyDown={e => { if (e.key === 'Enter' && hits.length) onOpenChat(hits[0].id, hits[0].message_id); }}/>
+        {initialPreset && <div className="search-scope">
+          Showing <span className="search-scope-chip"><SmartViewIcon id={initialPreset.id} size={12}/>{initialPreset.label}</span>
+        </div>}
         <div className="s-list">
           <div className="s-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq size={14}/></span>New chat</div>
-          {hits.map(c => (
-            <div key={c.id} className="s-row" onClick={() => onOpenChat(c.id)}>
-              <span className="sb-ic"><IcSearch size={14}/></span>{c.title}
+          {hits.map(hit => (
+            <div key={hit.id} className="s-row" onClick={() => onOpenChat(hit.id, hit.message_id)}>
+              <span className="sb-ic"><IcChat size={14}/></span>
+              <span className="s-result-copy">
+                <span className="s-result-head">
+                  <span className="s-result-title">{hit.title}</span>
+                  {hit.pinned && <IcPin size={11}/>}<SourceMarks sources={hit.sources || []}/>
+                </span>
+                <span className="s-result-path">{hit.space_label} / {hit.topic_label}</span>
+                {hit.snippet && <span className="s-result-snippet">{hit.snippet}</span>}
+              </span>
+              <span className="s-result-time">{shortSearchDate(hit.updated_at)}</span>
             </div>
           ))}
-          {hits.length === 0 && <div className="s-none">Nothing by that name.</div>}
+          {loading && <div className="s-loading">Searching conversations...</div>}
+          {!loading && hits.length === 0 && <div className="s-none">No matching conversations.</div>}
         </div>
       </div>
     </React.Fragment>
@@ -4861,6 +5026,7 @@ const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
     <div className="ctx-hint">sharing is not in this preview</div>
     <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
+    <div className="ctx-item" onClick={() => onAction('organize')}><span className="sb-ic"><IcFolder size={14}/></span>Change Space</div>
     {projectName && (
       <div className="ctx-item" onClick={() => onAction('removeproj')}>
         <span className="sb-ic"><IcFolder size={14}/></span>Remove from {projectName}
@@ -4872,6 +5038,42 @@ const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
     <div className="ctx-item danger" onClick={() => onAction('delete')}><span className="sb-ic"><IcTrash size={14}/></span>Delete</div>
   </Popover>
 );
+
+const SpacePickerModal = ({chat, spaces, onSave, onAutomatic, onClose}) => {
+  const current = (chat && chat.organization) || {};
+  const [selected, setSelected] = useState(current.space_id || '');
+  const [custom, setCustom] = useState('');
+  const save = () => {
+    if (custom.trim()) return onSave({space_label: custom.trim()});
+    const space = spaces.find(item => item.id === selected);
+    if (space) onSave({space_id: space.id, space_label: space.label});
+  };
+  return (
+    <React.Fragment>
+      <div className="backdrop dim" onClick={onClose}/>
+      <div className="modal" style={{width: 440}}>
+        <div className="m-title">Change Space</div>
+        <div className="m-sub" style={{marginBottom: 14}}>Keep this conversation where it belongs. Manual choices stay fixed.</div>
+        <div className="radio-stack">
+          {spaces.map(space => (
+            <button key={space.id} className={'radio-row' + (selected === space.id && !custom ? ' on' : '')} onClick={() => { setSelected(space.id); setCustom(''); }}>
+              <span className="radio-dot"/><span>{space.label}</span><span className="lt-dim" style={{marginLeft: 'auto'}}>{space.count}</span>
+            </button>
+          ))}
+        </div>
+        <div className="m-field" style={{marginTop: 14}}>
+          <label>New Space</label>
+          <input placeholder="e.g. Travel planning" value={custom} onChange={event => setCustom(event.target.value.slice(0, 80))}
+            onKeyDown={event => { if (event.key === 'Enter' && custom.trim()) save(); }}/>
+        </div>
+        <div className="m-actions" style={{justifyContent: 'space-between'}}>
+          <button className="btn" onClick={onAutomatic}><IcRefresh size={13}/>Use automatic</button>
+          <span style={{display: 'flex', gap: 8}}><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!custom.trim() && !selected} onClick={save}>Move</button></span>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+};
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ create project modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
 const CreateProjectModal = ({onCreate, onClose}) => {
@@ -6071,6 +6273,13 @@ const App = () => {
   const [sidebarPinned, setSidebarPinned] = useState(() => { try { const v = localStorage.getItem('vellum-sb-open'); return v === null ? true : v === '1'; } catch { return true; } });
   const [sidebarHover, setSidebarHover] = useState(false);
   useEffect(() => { try { localStorage.setItem('vellum-sb-open', sidebarPinned ? '1' : '0'); } catch {} }, [sidebarPinned]);
+  useEffect(() => {
+    const narrow = window.matchMedia('(max-width: 720px)');
+    const collapse = event => { if (event.matches) setSidebarPinned(false); };
+    collapse(narrow);
+    narrow.addEventListener('change', collapse);
+    return () => narrow.removeEventListener('change', collapse);
+  }, []);
   const [dockPosition, setDockPosition] = useState(() => { try { return localStorage.getItem('vellum-dock-position') || 'auto'; } catch { return 'auto'; } });
   const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
@@ -6095,6 +6304,7 @@ const App = () => {
   const [agentCfg, setAgentCfg] = useState(() => Object.fromEntries(AGENTS.map(a => [a.id, {model: DEFAULT_MODEL, autonomy: 'ask', tone: '', enabled: true, memory: true}])));
   const [createOpen, setCreateOpen] = useState(false);
   const [chats, setChats] = useState([]);
+  const [conversationLibrary, setConversationLibrary] = useState({spaces: [], smart_views: [], conversations: []});
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState([]);
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
@@ -6156,6 +6366,8 @@ const App = () => {
   const [renamingId, setRenamingId] = useState(null);
   const [projRenamingId, setProjRenamingId] = useState(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchPreset, setSearchPreset] = useState(null);
+  const [spacePickerChatId, setSpacePickerChatId] = useState(null);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [devMode, setDevMode] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -6163,6 +6375,7 @@ const App = () => {
   const [customInstr, setCustomInstr] = useState('');
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+  const libraryRefreshTimer = useRef(null);
   const shortcutRef = useRef(null);
 
   const refreshSpotify = async () => {
@@ -6246,7 +6459,8 @@ const App = () => {
     let alive = true;
     (async () => {
       try {
-        const [conv, modelData, settingsData, pluginData, automationData, subagentData] = await Promise.all([
+        const [organized, conv, modelData, settingsData, pluginData, automationData, subagentData] = await Promise.all([
+          API.conversations.library().catch(() => null),
           API.conversations.list(),
           API.settings.models(),
           API.settings.get(),
@@ -6255,12 +6469,14 @@ const App = () => {
           API.runtimes.subagents(),
         ]);
         if (!alive) return;
-        if (conv && Array.isArray(conv.conversations)) {
-          setChats(conv.conversations);
-          conv.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
+        const conversationData = organized && Array.isArray(organized.conversations) ? organized : conv;
+        if (organized && Array.isArray(organized.conversations)) setConversationLibrary(organized);
+        if (conversationData && Array.isArray(conversationData.conversations)) {
+          setChats(conversationData.conversations);
+          conversationData.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
           try {
             const lastChatId = localStorage.getItem('vellum-active-chat-id');
-            if (lastChatId && conv.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
+            if (lastChatId && conversationData.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
           } catch {}
         }
         if (modelData && Array.isArray(modelData.models)) {
@@ -6286,9 +6502,43 @@ const App = () => {
     return () => { alive = false; };
   }, []);
 
+  const refreshConversationLibrary = async () => {
+    if (!FEATURE_FLAGS.realConversations) return null;
+    try {
+      const next = await API.conversations.library();
+      if (next && Array.isArray(next.conversations)) {
+        setConversationLibrary(next);
+        setChats(current => {
+          const localById = new Map(current.map(chat => [chat.id, chat]));
+          return next.conversations.map(serverChat => {
+            const localChat = localById.get(serverChat.id);
+            if (!localChat) return serverChat;
+            return {
+              ...localChat,
+              title: serverChat.title,
+              pinned: serverChat.pinned,
+              archived: serverChat.archived,
+              updated_at: serverChat.updated_at,
+              organization: serverChat.organization,
+            };
+          });
+        });
+      }
+      return next;
+    } catch (err) {
+      console.warn('conversation library refresh failed', err);
+      return null;
+    }
+  };
+  const scheduleConversationLibraryRefresh = () => {
+    clearTimeout(libraryRefreshTimer.current);
+    libraryRefreshTimer.current = setTimeout(refreshConversationLibrary, 220);
+  };
+  useEffect(() => () => clearTimeout(libraryRefreshTimer.current), []);
+
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setSearchPreset(null); setSpacePickerChatId(null); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -6305,7 +6555,14 @@ const App = () => {
     } catch {}
     newChat();
   };
-  const openChat = id => { setView('chat'); setActiveChatId(id); try { localStorage.setItem('vellum-active-chat-id', id); } catch {} setMenu(null); setActivityMsg(null); };
+  const openChat = (id, messageId) => {
+    setView('chat'); setActiveChatId(id);
+    try { localStorage.setItem('vellum-active-chat-id', id); } catch {}
+    setMenu(null); setActivityMsg(null);
+    if (window.matchMedia('(max-width: 720px)').matches) setSidebarPinned(false);
+    if (messageId) setTimeout(() => document.getElementById('m-' + messageId)?.scrollIntoView({behavior: 'smooth', block: 'center'}), 80);
+  };
+  const openSearch = (preset = null) => { setSearchPreset(preset); setSearchOpen(true); };
   const nav = v => {
     const next = APP_VIEW_IDS.has(v) ? v : '404';
     if (next === '404') {
@@ -6502,6 +6759,7 @@ const App = () => {
       setRenamingId(id);
       return;
     }
+    if (action === 'organize') { setSpacePickerChatId(id); return; }
     if (action === 'share') return;
     setChats(cs => {
       if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
@@ -6511,21 +6769,35 @@ const App = () => {
       return cs;
     });
     if (FEATURE_FLAGS.realConversations) {
-      if (action === 'delete') API.conversations.remove(id).catch(() => {});
+      let request = null;
+      if (action === 'delete') request = API.conversations.remove(id);
       else if (action === 'pin') {
         const chat = chats.find(c => c.id === id);
-        API.conversations.patch(id, {pinned: !(chat && chat.pinned)}).catch(() => {});
-      } else if (action === 'archive') API.conversations.patch(id, {archived: true}).catch(() => {});
-      else if (action === 'removeproj') API.conversations.patch(id, {projectId: null}).catch(() => {});
+        request = API.conversations.patch(id, {pinned: !(chat && chat.pinned)});
+      } else if (action === 'archive') request = API.conversations.patch(id, {archived: true});
+      else if (action === 'removeproj') request = API.conversations.patch(id, {projectId: null});
+      if (request) request.then(scheduleConversationLibraryRefresh).catch(() => {});
     }
     if ((action === 'archive' || action === 'delete') && activeChatId === id) setActiveChatId(null);
+  };
+
+  const updateConversationOrganization = async (id, patch) => {
+    try {
+      const result = await API.conversations.organize(id, patch);
+      if (result && result.conversation) setChats(cs => cs.map(chat => chat.id === id ? result.conversation : chat));
+      setSpacePickerChatId(null);
+      await refreshConversationLibrary();
+      pushToast(patch.assignment === 'automatic' ? 'Automatic organization restored' : 'Space updated');
+    } catch (err) {
+      pushToast('Space update failed');
+    }
   };
 
   const renameChat = (id, title) => {
     setRenamingId(null);
     if (title && title.trim()) {
       setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
-      if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {title: title.trim()}).catch(() => {});
+      if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {title: title.trim()}).then(scheduleConversationLibraryRefresh).catch(() => {});
     }
   };
 
@@ -6561,11 +6833,11 @@ const App = () => {
   const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
   const restoreChat = id => {
     setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
-    if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {archived: false}).catch(() => {});
+    if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {archived: false}).then(scheduleConversationLibraryRefresh).catch(() => {});
   };
   const deleteChat = id => {
     setChats(cs => cs.filter(c => c.id !== id));
-    if (FEATURE_FLAGS.realConversations) API.conversations.remove(id).catch(() => {});
+    if (FEATURE_FLAGS.realConversations) API.conversations.remove(id).then(scheduleConversationLibraryRefresh).catch(() => {});
   };
 
   const addSource = (projId, file) => {
@@ -6592,7 +6864,7 @@ const App = () => {
 
   const saveConversation = conversation => {
     if (!FEATURE_FLAGS.realConversations || !conversation) return;
-    API.conversations.save(conversation).catch(err => console.warn('conversation save failed', err));
+    API.conversations.save(conversation).then(scheduleConversationLibraryRefresh).catch(err => console.warn('conversation save failed', err));
   };
 
   const attachKnowledgeContext = async (page, forceNew) => {
@@ -7074,7 +7346,7 @@ const App = () => {
       return;
     }
     if (c === 'Comma') { e.preventDefault(); setSettingsOpen(true); }
-    else if (c === 'KeyK') { e.preventDefault(); setSearchOpen(true); }
+    else if (c === 'KeyK') { e.preventDefault(); openSearch(); }
     else if (c === 'KeyU') { e.preventDefault(); window.dispatchEvent(new CustomEvent('vellum-composer', {detail: 'addfiles'})); }
     else if (c === 'Slash') { e.preventDefault(); setShortcutsOpen(s => !s); }
     else if (c === 'Period') { e.preventDefault(); setDevMode(d => !d); pushToast(devMode ? 'Dev mode off' : 'Dev mode on'); }
@@ -7119,10 +7391,11 @@ const App = () => {
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
         <div className="body">
-          {sidebarPinned && <Sidebar chats={chats} projects={projects} activeChatId={activeChatId} view={view}
+          {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
-                onTogglePin={() => setSidebarPinned(p => !p)} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => setSearchOpen(true)}
+                onTogglePin={() => setSidebarPinned(p => !p)} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
+                onSmartView={openSearch}
                 onNav={nav} onOpenChat={openChat} onOpenAgent={openAgent} activeAgentId={activeAgentId}
                 onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
                 onRename={renameChat} onProfile={openProfileMenu}
@@ -7131,7 +7404,7 @@ const App = () => {
                 onProjectRename={renameProject} onOpenProject={openProject}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
-            onExpand={() => setSidebarPinned(true)} onNewChat={newChat} onSearch={() => setSearchOpen(true)}
+            onExpand={() => setSidebarPinned(true)} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={nav} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
@@ -7167,7 +7440,7 @@ const App = () => {
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen}
-          onNewChat={newChat} onSearch={() => setSearchOpen(true)} onNav={nav} onOpenAgent={openAgent}
+          onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
         </React.Fragment>}
@@ -7184,10 +7457,15 @@ const App = () => {
         {createOpen && <CreateProjectModal onCreate={createProject} onClose={() => setCreateOpen(false)}/>}
         {agentSettingsOpen && activeAgentId && <AgentSettingsModal agent={AGENTS.find(a => a.id === activeAgentId)} cfg={agentCfg[activeAgentId]} onClose={() => setAgentSettingsOpen(false)} onSave={c => { setAgentCfg(m => ({...m, [activeAgentId]: c})); setAgentSettingsOpen(false); }}/>}
         {menu && menu.type === 'project' && <ProjectMenu pos={menu} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
-        {searchOpen && <SearchOverlay chats={chats}
-          onNewChat={() => { setSearchOpen(false); newChat(); }}
-          onOpenChat={id => { setSearchOpen(false); openChat(id); }}
-          onClose={() => setSearchOpen(false)}/>}
+        {searchOpen && <SearchOverlay chats={chats} initialPreset={searchPreset}
+          onNewChat={() => { setSearchOpen(false); setSearchPreset(null); newChat(); }}
+          onOpenChat={(id, messageId) => { setSearchOpen(false); setSearchPreset(null); openChat(id, messageId); }}
+          onClose={() => { setSearchOpen(false); setSearchPreset(null); }}
+        />}
+        {spacePickerChatId && <SpacePickerModal chat={chats.find(chat => chat.id === spacePickerChatId)} spaces={conversationLibrary.spaces || []}
+          onSave={patch => updateConversationOrganization(spacePickerChatId, {assignment: 'manual', ...patch})}
+          onAutomatic={() => updateConversationOrganization(spacePickerChatId, {assignment: 'automatic'})}
+          onClose={() => setSpacePickerChatId(null)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
           onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
           onSettings={() => { setMenu(null); setSettingsTab('General'); setSettingsOpen(true); }}
