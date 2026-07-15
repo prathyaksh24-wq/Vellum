@@ -58,6 +58,40 @@ def test_library_is_a_projection_with_shallow_spaces_and_smart_views() -> None:
     assert {view["id"] for view in library["smart_views"]} >= {"calendar", "slack", "spotify"}
 
 
+def test_repeated_unknown_subjects_form_a_dynamic_space_but_one_offs_do_not() -> None:
+    conversations = [
+        CONVERSATIONS["sourdough-starter"],
+        CONVERSATIONS["bread-temperature"],
+        {"id": "one-off", "title": "Repair a fountain pen", "messages": [{"id": "p1", "role": "user", "text": "How do I repair a fountain pen nib?"}]},
+    ]
+
+    library = build_conversation_library(conversations)
+    organizations = {item["id"]: item["organization"] for item in library["conversations"]}
+
+    assert organizations["sourdough-starter"]["space_id"] == "bread"
+    assert organizations["bread-temperature"]["space_id"] == "bread"
+    assert organizations["one-off"]["space_id"] == "unsorted"
+    assert next(space for space in library["spaces"] if space["id"] == "bread")["count"] == 2
+
+
+def test_persisted_dynamic_space_anchors_future_matching_chats() -> None:
+    first = build_conversation_library([
+        CONVERSATIONS["sourdough-starter"],
+        CONVERSATIONS["bread-temperature"],
+    ])
+    third = {
+        "id": "rye-loaf",
+        "title": "Rye bread loaf",
+        "messages": [{"id": "rye-u1", "role": "user", "text": "How long should rye bread proof before baking?"}],
+    }
+
+    second = build_conversation_library([*first["conversations"], third])
+    organizations = {item["id"]: item["organization"] for item in second["conversations"]}
+
+    assert organizations["rye-loaf"]["space_id"] == "bread"
+    assert next(space for space in second["spaces"] if space["id"] == "bread")["count"] == 3
+
+
 def test_search_ranks_expected_chat_and_returns_exact_message_target() -> None:
     conversations = list(CONVERSATIONS.values())
     for case in CASES["search"]:

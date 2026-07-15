@@ -85,6 +85,26 @@
         {"id": "fm-u1", "role": "user", "text": "Prepare the agenda for tomorrow's team meeting."},
         {"id": "fm-a1", "role": "assistant", "text": "The meeting agenda is prepared."}
       ]
+    },
+    {
+      "id": "sourdough-starter",
+      "thread_id": "sourdough-starter",
+      "title": "Sourdough starter",
+      "updated_at": "2026-07-08T10:00:00+00:00",
+      "messages": [
+        {"id": "sd-u1", "role": "user", "text": "How do I feed a sourdough bread starter?"},
+        {"id": "sd-a1", "role": "assistant", "text": "Use equal weights of flour and water."}
+      ]
+    },
+    {
+      "id": "bread-temperature",
+      "thread_id": "bread-temperature",
+      "title": "Bread baking temperature",
+      "updated_at": "2026-07-07T10:00:00+00:00",
+      "messages": [
+        {"id": "bt-u1", "role": "user", "text": "What oven temperature should I use when baking bread?"},
+        {"id": "bt-a1", "role": "assistant", "text": "Preheat the oven before baking."}
+      ]
     }
   ],
   "classification": [
@@ -106,5 +126,8 @@
   ],
   "segmentation": [
     {"id": "mixed-topic", "expected_spaces": ["sports", "vellum"]}
+  ],
+  "dynamic_spaces": [
+    {"ids": ["sourdough-starter", "bread-temperature"], "space": "bread"}
   ]
 }

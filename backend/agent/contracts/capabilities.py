@@ -52,6 +52,18 @@ def build_capability_contract() -> CapabilityContract:
                     "models": "/api/models",
                 },
             ),
+            "conversation_library": FeatureContract(
+                enabled=True,
+                source="backend.agent.conversations",
+                endpoints={
+                    "list": "/api/conversations",
+                    "library": "/api/conversations/library",
+                    "search": "/api/conversations/search",
+                    "organization": "/api/conversations/{conversation_id}/organization",
+                    "rebuild": "/api/conversations/organization/rebuild",
+                },
+                notes="Local derived Spaces, topics, source facets, segments, and message-level search.",
+            ),
             "plugins": FeatureContract(
                 enabled=True,
                 source="plugin_registry",
