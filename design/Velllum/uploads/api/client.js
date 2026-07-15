@@ -1,8 +1,23 @@
 (function () {
+  function loopbackBackendOverride() {
+    try {
+      var loopback = ["localhost", "127.0.0.1", "::1", "[::1]"];
+      if (loopback.indexOf(window.location.hostname.toLowerCase()) < 0) return "";
+      var requested = new URLSearchParams(window.location.search).get("backend");
+      if (!requested) return "";
+      var target = new URL(requested);
+      if (loopback.indexOf(target.hostname.toLowerCase()) < 0) return "";
+      if (target.protocol !== "http:" && target.protocol !== "https:") return "";
+      return target.origin;
+    } catch (_) {
+      return "";
+    }
+  }
+
   function backendBase() {
     var stored = "";
     try { stored = localStorage.getItem("vellum-backend-url") || ""; } catch (_) {}
-    var base = stored || window.VELLUM_BACKEND_URL || "http://127.0.0.1:8000";
+    var base = loopbackBackendOverride() || stored || window.VELLUM_BACKEND_URL || "http://127.0.0.1:8000";
     return String(base).trim().replace(/\/+$/, "");
   }
 
