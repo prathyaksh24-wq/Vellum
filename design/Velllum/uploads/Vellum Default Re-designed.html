@@ -831,13 +831,16 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .turn{display:flex;flex-direction:column;gap:10px}
 .think-line{font-size:15px;font-weight:500;width:fit-content;letter-spacing:.01em}
 .activity-inline{display:flex;align-items:center;margin:0 0 8px}
-.activity-status{display:inline-flex;align-items:center;gap:8px;width:fit-content;max-width:100%;font-size:14px;line-height:1.4;color:rgba(255,255,255,.68)}
-.activity-icon{width:8px;height:8px;border-radius:999px;background:currentColor;animation:vellumPulse 1.4s ease-in-out infinite;flex-shrink:0}
-.activity-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:vellumGlow 1.8s ease-in-out infinite}
-@keyframes vellumPulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
-@keyframes vellumGlow{0%,100%{opacity:.55;filter:blur(0)}50%{opacity:1;text-shadow:0 0 10px rgba(255,255,255,.25)}}
-[data-theme="light"] .activity-status{color:rgba(0,0,0,.58)}
-[data-theme="light"] .activity-text{animation:none}
+.activity-status{display:inline-flex;align-items:center;gap:10px;width:fit-content;max-width:100%;font-size:14px;line-height:1.4;color:var(--txt2)}
+.activity-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Limelight spotlight — shared by every live agent activity label. */
+.fx-spotlight{--ink:var(--txt2);--ink-2:var(--ember);--ink-3:var(--accent2);font:600 14px/1.4 var(--font-m);letter-spacing:.045em;background:radial-gradient(3.5ch 100% at 50% 50%,var(--ink) 20%,color-mix(in srgb,var(--ink) 14%,transparent) 75%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;animation:fx-spotlight 3.4s ease-in-out infinite alternate}
+@keyframes fx-spotlight{0%{background-position:100% 0}100%{background-position:0 0}}
+/* Dot Matrix Square 3 / Core Spiral, adapted to Vellum's background tokens. */
+.dotm-square-3{display:inline-grid;grid-template-columns:repeat(5,var(--dmx-dot-size));grid-template-rows:repeat(5,var(--dmx-dot-size));gap:var(--dmx-gap);width:var(--dmx-size);height:var(--dmx-size);flex:none;color:color-mix(in srgb,var(--ember) 84%,var(--txt2));filter:drop-shadow(0 0 5px color-mix(in srgb,currentColor 32%,transparent))}
+.dotm-square-3-dot{width:var(--dmx-dot-size);height:var(--dmx-dot-size);border-radius:50%;background:currentColor;opacity:.08;animation:dotm-square-3-spiral 1.35s linear infinite;animation-delay:calc(var(--dmx-order) * -.054s);will-change:opacity,transform,box-shadow}
+@keyframes dotm-square-3-spiral{0%,100%{opacity:.08;transform:scale(.82);box-shadow:none}8%{opacity:1;transform:scale(1.15);box-shadow:0 0 6px currentColor}16%{opacity:.72;transform:scale(1.04);box-shadow:0 0 3px currentColor}24%{opacity:.44;transform:scale(.96);box-shadow:none}32%{opacity:.22;transform:scale(.9)}40%{opacity:.08;transform:scale(.82)}}
+@media(prefers-reduced-motion:reduce){.fx-spotlight{animation:none;background-position:50% 0}.dotm-square-3-dot{animation:none;opacity:.45;transform:none}}
 .turn-lead{font-size:15px;line-height:1.7;color:var(--txt)}
 .ref-list{display:flex;flex-direction:column;gap:9px}
 .ref-list.inset{margin:2px 0 4px;padding:10px 12px;border-left:2px solid var(--line2);background:var(--panel);border-radius:0 10px 10px 0}
@@ -4633,6 +4636,29 @@ const sourcesForMsg = msg => {
     return true;
   });
 };
+const DOTM_SQUARE_3_SPIRAL = [
+  0, 1, 2, 3, 4,
+  15, 16, 17, 18, 5,
+  14, 23, 24, 19, 6,
+  13, 22, 21, 20, 7,
+  12, 11, 10, 9, 8,
+];
+const DotmSquare3 = ({size=18, dotSize=2.5, className=''}) => {
+  const safeSize = Math.max(12, Number(size) || 18);
+  const safeDot = Math.max(1.5, Math.min(Number(dotSize) || 2.5, safeSize / 5));
+  const gap = Math.max(0, (safeSize - safeDot * 5) / 4);
+  return (
+    <span
+      className={'dotm-square-3' + (className ? ' ' + className : '')}
+      style={{'--dmx-size':safeSize+'px','--dmx-dot-size':safeDot+'px','--dmx-gap':gap+'px'}}
+      aria-hidden="true"
+    >
+      {DOTM_SQUARE_3_SPIRAL.map((order,index) => (
+        <span key={index} className="dotm-square-3-dot" style={{'--dmx-order':order}}/>
+      ))}
+    </span>
+  );
+};
 const ActivityStatus = ({item}) => {
   const [thinkingIndex, setThinkingIndex] = useState(0);
   const [typingText, setTypingText] = useState(THINKING_ROTATION_LABELS[0]);
@@ -4662,8 +4688,8 @@ const ActivityStatus = ({item}) => {
   const label = (thinking ? (typingText || THINKING_ROTATION_LABELS[thinkingIndex]) : (item.label || 'Thinking')).replace(/\.+$/, '');
   return (
     <div className="activity-status" aria-live="polite">
-      <span className="activity-icon"></span>
-      <span className="activity-text">{label}</span>
+      <DotmSquare3 size={18} dotSize={2.5}/>
+      <span className="activity-text fx-spotlight">{label}</span>
     </div>
   );
 };
