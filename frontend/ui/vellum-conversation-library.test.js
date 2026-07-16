@@ -15,17 +15,39 @@ describe("conversation library frontend", () => {
     expect(api).toContain('client.request("/api/conversations/organization/rebuild"');
   });
 
-  test("renders a shallow recent-chat hierarchy without replacing Projects", () => {
-    expect(html).toContain('<div className="sb-sec">Now');
+  test("renders utilities first and keeps the organized chat hierarchy", () => {
+    expect(html).toContain('<SidebarSection id="now" label="Now"');
     expect(html).toContain('<div className="now-subhead">Continue');
     expect(html).toContain('<div className="now-subhead">Today');
     expect(html).toContain('<div className="now-subhead">Needs follow-up');
-    expect(html).toContain('<div className="sb-sec">Spaces');
-    expect(html).toContain('<div className="sb-sec">Smart views');
+    expect(html).toContain('<SidebarSection id="spaces" label="Spaces"');
+    expect(html).toContain('<SidebarSection id="smart-views" label="Smart views"');
+    expect(html).toContain('<SidebarSection id="projects" label="Projects"');
     expect(html).toContain("smartById.set('pinned'");
     expect(html).toContain("smartById.set('follow-up'");
-    expect(html).toContain("Projects");
     expect(html).toContain("conversationLibrary.spaces");
+
+    const searchIndex = html.indexOf('>Search chats<span');
+    const toolsIndex = html.indexOf('<div className="sb-tools">', searchIndex);
+    const nowIndex = html.indexOf('<SidebarSection id="now"', toolsIndex);
+    const spacesIndex = html.indexOf('<SidebarSection id="spaces"', nowIndex);
+    const smartIndex = html.indexOf('<SidebarSection id="smart-views"', spacesIndex);
+    const projectsIndex = html.indexOf('<SidebarSection id="projects"', smartIndex);
+    expect([searchIndex, toolsIndex, nowIndex, spacesIndex, smartIndex, projectsIndex].every((index) => index >= 0)).toBe(true);
+    expect(searchIndex).toBeLessThan(toolsIndex);
+    expect(toolsIndex).toBeLessThan(nowIndex);
+    expect(nowIndex).toBeLessThan(spacesIndex);
+    expect(spacesIndex).toBeLessThan(smartIndex);
+    expect(smartIndex).toBeLessThan(projectsIndex);
+  });
+
+  test("uses accessible animated collapsible sections with persisted state", () => {
+    expect(html).toContain("const SidebarSection = ({id, label, count, open, onToggle, children})");
+    expect(html).toContain('aria-expanded={open} aria-controls={regionId}');
+    expect(html).toContain(".sb-section-collapse{display:grid;grid-template-rows:0fr");
+    expect(html).toContain(".sb-section-collapse.open{grid-template-rows:1fr");
+    expect(html).toContain("{now: true, spaces: true, smartViews: true, projects: true}");
+    expect(html).toContain("'vellum-sidebar-sections'");
   });
 
   test("searches message content and jumps to the matching message", () => {

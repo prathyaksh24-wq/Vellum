@@ -90,14 +90,20 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sb-primary .sb-row{padding:8px 9px}
 .sb-primary .sb-row:first-child{color:var(--txt2)}
 .sb-primary .sb-row:first-child .sb-ic{color:var(--ember)}
-.sb-sec{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sb-sec{display:flex;align-items:center;gap:5px;width:100%;font:inherit;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sb-sec-toggle{border:0;background:none;text-align:left;cursor:pointer;border-radius:7px;transition:color .16s ease,background .16s ease}
+.sb-sec-toggle:hover{color:var(--txt);background:color-mix(in srgb,var(--hover) 48%,transparent)}
+.sb-sec-toggle:focus-visible{outline:1px solid color-mix(in srgb,var(--ember) 65%,transparent);outline-offset:-1px}
 .sb-sec-count{margin-left:auto;font-size:10px;color:var(--dim2);font-family:var(--font-m)}
 .now-group{padding:1px 0 3px}
+.sb-section-collapse{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows .28s cubic-bezier(.22,1,.36,1),opacity .18s ease,visibility 0s linear .28s}
+.sb-section-collapse.open{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.22,1,.36,1),opacity .22s ease,visibility 0s}
+.sb-section-inner{min-height:0;overflow:hidden}
 .now-subhead{display:flex;align-items:center;gap:6px;padding:8px 9px 3px;color:var(--dim);font-size:10.5px;font-weight:500}
 .now-subhead:first-child{padding-top:3px}
 .now-subhead .space-count{margin-left:auto}
 .now-subempty{padding:4px 9px 5px;color:var(--dim2);font-size:10.5px}
-.sec-chev{display:flex;color:var(--dim2);background:none;border:none;cursor:pointer;padding:2px;border-radius:4px;transition:transform .2s,color .15s}
+.sec-chev{display:flex;color:var(--dim2);background:none;border:none;padding:2px;border-radius:4px;transition:transform .25s cubic-bezier(.22,1,.36,1),color .15s}
 .sec-chev:hover{color:var(--txt)}
 .sec-chev.closed{transform:rotate(-90deg)}
 .sb-scroll{flex:1;overflow-y:auto;min-height:0}
@@ -130,7 +136,8 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .space-row .sec-chev{margin-left:-3px}
 .space-chat-list{border-left:1px solid var(--line);margin-left:16px;padding-left:2px}
 .space-chat-list .chat-row.nested{margin-left:4px}
-.sb-tools{border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
+.sb-tools{border-bottom:1px solid var(--line);margin:2px 0 0;padding:4px 0 8px}
+@media(prefers-reduced-motion:reduce){.sb-section-collapse,.sec-chev{transition:none}}
 .crumb{display:flex;align-items:center;gap:8px;padding:10px 18px;font-size:12.5px;color:var(--dim);border-bottom:1px solid var(--line);flex-shrink:0}
 /* project page */
 .proj-head{display:flex;align-items:center;gap:12px;margin-top:6px}
@@ -2981,6 +2988,30 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
     const order = ['pinned', 'follow-up', 'calendar', 'slack', 'spotify', 'files'];
     return order.indexOf(left.id) - order.indexOf(right.id);
   });
+const CollapsibleRegion = ({open, id, labelledBy, children}) => (
+  <div id={id} role={labelledBy ? 'region' : undefined} aria-labelledby={labelledBy} aria-hidden={!open}
+    className={'sb-section-collapse' + (open ? ' open' : '')}>
+    <div className="sb-section-inner">{children}</div>
+  </div>
+);
+
+const SidebarSection = ({id, label, count, open, onToggle, children}) => {
+  const buttonId = `sidebar-section-${id}-button`;
+  const regionId = `sidebar-section-${id}`;
+  return (
+    <section className="sb-section">
+      <button type="button" id={buttonId} className="sb-sec sb-sec-toggle"
+        aria-expanded={open} aria-controls={regionId} onClick={onToggle}
+        title={open ? `Collapse ${label}` : `Expand ${label}`}>
+        <span>{label}</span>
+        {count !== undefined && count !== null && <span className="sb-sec-count">{count}</span>}
+        <span className={'sec-chev' + (open ? '' : ' closed')} aria-hidden="true"><IcChevD size={12}/></span>
+      </button>
+      <CollapsibleRegion open={open} id={regionId} labelledBy={buttonId}>{children}</CollapsibleRegion>
+    </section>
+  );
+};
+
   const continueChat = sorted.find(chat => chat.id === activeChatId) || sorted.find(chat => (chat.messages || []).length > 0) || sorted[0] || null;
   const todayChats = sorted.filter(chat => chat.id !== (continueChat && continueChat.id) && chatIsToday(chat));
   const followUpChats = sorted.filter(chat => chat.organization && chat.organization.status === 'Follow-up');
@@ -2996,8 +3027,16 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
-        <div className="sb-sec">Now<span className="sb-sec-count">{sorted.length}</span></div>
-        <div className="now-group">
+        <div className="sb-tools">
+          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
+          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
+          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
+          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
+          <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
+        </div>
+        <SidebarSection id="now" label="Now" count={sorted.length} open={secOpen.now} onToggle={() => onToggleSec('now')}>
+          <div className="now-group">
           <div className="now-subhead">Continue<span className="space-count">{continueChat ? 1 : 0}</span></div>
           {continueChat ? <ChatRow chat={continueChat} showMeta active={view === 'chat' && continueChat.id === activeChatId}
             renaming={renamingId === continueChat.id}
@@ -3018,8 +3057,9 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             onMenu={e => onChatMenu(chat.id, e)}
             onRename={title => onRename(chat.id, title)}/>)}
           {followUpChats.length === 0 && <div className="now-subempty">Nothing waiting on you.</div>}
-        </div>
-        <div className="sb-sec">Spaces<span className="sb-sec-count">{spaces.length}</span></div>
+          </div>
+        </SidebarSection>
+        <SidebarSection id="spaces" label="Spaces" count={spaces.length} open={secOpen.spaces} onToggle={() => onToggleSec('spaces')}>
         {spaces.length === 0 && <div className="sb-empty">Spaces appear as chats collect.</div>}
         {spaces.slice(0, 8).map(space => {
           const open = expandedSpace === space.id;
@@ -3043,7 +3083,8 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             </React.Fragment>
           );
         })}
-        <div className="sb-sec">Smart views<span className="sb-sec-count">{smartViews.length}</span></div>
+        </SidebarSection>
+        <SidebarSection id="smart-views" label="Smart views" count={smartViews.length} open={secOpen.smartViews} onToggle={() => onToggleSec('smartViews')}>
         {smartViews.map(smart => (
           <button key={smart.id} className="sb-row smart-row" onClick={() => onSmartView(smart)}>
             <span className="sb-ic"><SmartViewIcon id={smart.id}/></span>
@@ -3051,13 +3092,8 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             <span className="space-count">{smart.count}</span>
           </button>
         ))}
-        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
-          Projects
-          <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
-            onClick={e => { e.stopPropagation(); onToggleSec('projects'); }}><IcChevD size={12}/></button>
-        </div>
-        {secOpen.projects && (
-          <React.Fragment>
+        </SidebarSection>
+        <SidebarSection id="projects" label="Projects" count={projects.length} open={secOpen.projects} onToggle={() => onToggleSec('projects')}>
             <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
             {projects.map(p => (
               <React.Fragment key={p.id}>
@@ -3075,16 +3111,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
                 ))}
               </React.Fragment>
             ))}
-          </React.Fragment>
-        )}
-        <div className="sb-tools">
-          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
-          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
-          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
-          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
-          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
-          <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
-        </div>
+        </SidebarSection>
       </div>
       <div className="profile-row" onClick={onProfile}>
         <div className="avatar">{initials(profile.displayName)}</div>
@@ -7015,6 +7042,9 @@ const App = () => {
 
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
+const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
+const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
+
   const [activeAgentId, setActiveAgentId] = useState(null);
   const [agentConvos, setAgentConvos] = useState({});
   const [activeConvo, setActiveConvo] = useState({});
@@ -7072,7 +7102,17 @@ const App = () => {
   };
   const canBack = hist.current.idx > 0;
   const canFwd = hist.current.idx < hist.current.stack.length - 1;
-  const [secOpen, setSecOpen] = useState({projects: true, recents: true, agents: true});
+  const [secOpen, setSecOpen] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY) || '{}');
+      return {...SIDEBAR_SECTION_DEFAULTS, ...saved};
+    } catch {
+      return SIDEBAR_SECTION_DEFAULTS;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify(secOpen)); } catch {}
+  }, [secOpen]);
   const [viewer, setViewer] = useState(null);
   const [expandedProj, setExpandedProj] = useState({});
   const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));
