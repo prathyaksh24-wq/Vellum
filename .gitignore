@@ -41,6 +41,7 @@ desktop/dist/
 desktop/src-tauri/.cargo/config.toml
 desktop/src-tauri/target/
 .playwright-mcp/
+.codex-activity-qa-profile/
 .DS_Store
 
 # Personal data — never commit
