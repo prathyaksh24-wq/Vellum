@@ -6,16 +6,18 @@ const htmlPath = path.resolve("../design/Velllum/uploads/Vellum Default Re-desig
 const settingsClientPath = path.resolve("../design/Velllum/uploads/api/settings.js");
 
 describe("Vellum default activity status", () => {
-  test("rotates thinking copy in the visible activity row while waiting", () => {
+  test("shows complete live activity labels with semantic loaders and no typing loop", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
 
-    expect(html).toContain("THINKING_ROTATION_LABELS");
     expect(html).toContain("isThinkingActivity");
-    expect(html).toContain("setInterval(() => setThinkingIndex");
-    expect(html).toContain("clearInterval(id)");
-    expect(html).toContain("Cooking up your answer");
-    expect(html).toContain("typingLabel");
-    expect(html).toContain("typingText");
+    expect(html).toContain("activityVisualKind");
+    expect(html).toContain("ActivityLoader");
+    expect(html).toContain("activity-text fx-spotlight");
+    expect(html).toContain('aria-atomic="true"');
+    expect(html).not.toContain("THINKING_ROTATION_LABELS");
+    expect(html).not.toContain("Cooking up your answer");
+    expect(html).not.toContain("typingLabel");
+    expect(html).not.toContain("typingText");
   });
 
   test("composer exposes stop answering control and abort plumbing", () => {
