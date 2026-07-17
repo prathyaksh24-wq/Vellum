@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from pathlib import Path
 
 from agent.coding.adapters.base import CodingProviderAdapter
@@ -17,6 +18,7 @@ from agent.coding.models import (
     ProviderName,
 )
 from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
+from agent.coding.workspace import CodingWorkspaceError, CodingWorkspaceManager, WorkspaceProvision
 
 
 class CodingServiceError(RuntimeError):
@@ -35,12 +37,14 @@ class CodingSessionService:
         self,
         store: CodingSessionStore | None = None,
         adapters: dict[ProviderName, CodingProviderAdapter] | None = None,
+        workspace_manager: CodingWorkspaceManager | None = None,
     ) -> None:
         self.store = store or CodingSessionStore()
         self.adapters = adapters if adapters is not None else {
             ProviderName.codex: CodexAdapter(),
             ProviderName.claude: ClaudeAdapter(),
         }
+        self.workspace_manager = workspace_manager or CodingWorkspaceManager()
         self._cleanup_stale_running_state()
 
     def health(self) -> list[ProviderHealth]:
@@ -61,8 +65,25 @@ class CodingSessionService:
             raise CodingServiceError("Project not found.")
         adapter = self._adapter(request.provider)
         session = self.store.create_session(request)
+        workspace: WorkspaceProvision | None = None
         try:
-            provider_session_id = await adapter.start_session(request)
+            workspace = await asyncio.to_thread(
+                self.workspace_manager.provision,
+                session_id=session.id,
+                source_cwd=str(cwd),
+                access_mode=request.access_mode,
+            )
+            session = self.store.set_session_workspace(
+                session.id,
+                source_cwd=workspace.source_cwd,
+                cwd=workspace.cwd,
+                workspace_kind=workspace.kind,
+                workspace_root=workspace.workspace_root,
+                workspace_repository_root=workspace.repository_root,
+                workspace_branch=workspace.branch,
+                workspace_base_commit=workspace.base_commit,
+            )
+            provider_session_id = await adapter.start_session(replace(request, cwd=session.cwd))
             if provider_session_id:
                 session = self.store.set_provider_session_id(session.id, provider_session_id)
             self.store.record_event(
@@ -70,11 +91,73 @@ class CodingSessionService:
                 provider=session.provider,
                 event_type="session.started",
                 message="Coding session started",
-                payload={"cwd": session.cwd, "provider_session_id": session.provider_session_id},
+                payload={
+                    "cwd": session.cwd,
+                    "source_cwd": session.source_cwd,
+                    "provider_session_id": session.provider_session_id,
+                    "workspace": {
+                        "kind": session.workspace_kind.value,
+                        "root": session.workspace_root,
+                        "branch": session.workspace_branch,
+                        "base_commit": session.workspace_base_commit,
+                    },
+                },
             )
+        except CodingWorkspaceError as exc:
+            self.store.delete_session(session.id)
+            raise CodingServiceError(str(exc)) from exc
         except Exception as exc:
+            if workspace is not None:
+                try:
+                    await asyncio.to_thread(
+                        self.workspace_manager.release,
+                        workspace,
+                        force=True,
+                        delete_branch=True,
+                    )
+                except Exception:
+                    pass
             self.store.delete_session(session.id)
             raise CodingServiceError("Coding session failed to start.") from exc
+        return session
+
+    async def close_session(self, session_id: str, *, discard_changes: bool = False) -> CodingSession:
+        session = self.get_session(session_id)
+        if session.status == "running" or self.store.get_running_turn(session.id) is not None:
+            raise CodingServiceError("Stop the running coding turn before closing this session.")
+        if session.status == "closed":
+            return session
+        provision = WorkspaceProvision(
+            source_cwd=session.source_cwd or session.cwd,
+            cwd=session.cwd,
+            kind=session.workspace_kind,
+            workspace_root=session.workspace_root or session.cwd,
+            repository_root=session.workspace_repository_root,
+            branch=session.workspace_branch,
+            base_commit=session.workspace_base_commit,
+        )
+        try:
+            await asyncio.to_thread(
+                self.workspace_manager.release,
+                provision,
+                force=discard_changes,
+                delete_branch=False,
+            )
+        except CodingWorkspaceError as exc:
+            raise CodingServiceError(
+                "Workspace has uncommitted changes. Review them or explicitly discard changes before closing."
+            ) from exc
+        session = self.store.set_session_status(session.id, "closed")
+        self.store.record_event(
+            session_id=session.id,
+            provider=session.provider,
+            event_type="session.closed",
+            message="Coding session closed",
+            payload={
+                "discarded_uncommitted_changes": discard_changes,
+                "preserved_branch": session.workspace_branch,
+            },
+        )
         return session
 
     async def run_turn(
@@ -85,6 +168,8 @@ class CodingSessionService:
         limits: CodingTurnLimits | None = None,
     ) -> AsyncIterator[CodingEvent]:
         session = self.get_session(session_id)
+        if session.status == "closed":
+            raise CodingServiceError("Coding session is closed. Start a new session for more changes.")
         if session.status == "running":
             raise CodingServiceError("Coding session already has a running turn.")
         adapter = self._adapter(session.provider)

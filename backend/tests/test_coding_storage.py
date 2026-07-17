@@ -6,7 +6,7 @@ import sqlite3
 import pytest
 
 from agent.coding.events import event_name, sse
-from agent.coding.models import AccessMode, CodingSessionCreate, ProviderName
+from agent.coding.models import AccessMode, CodingSessionCreate, ProviderName, WorkspaceKind
 from agent.coding import storage as coding_storage
 from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
 
@@ -27,9 +27,36 @@ def test_coding_store_creates_and_lists_sessions(tmp_path: Path):
     assert session.cwd == str(tmp_path.resolve())
     assert session.access_mode == AccessMode.read_only
     assert session.status == "idle"
+    assert session.source_cwd == str(tmp_path.resolve())
+    assert session.workspace_kind == WorkspaceKind.direct
+    assert session.workspace_root == str(tmp_path.resolve())
 
     listed = store.list_sessions()
     assert [item.id for item in listed] == [session.id]
+
+
+def test_coding_store_updates_session_workspace_metadata(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))
+    isolated = tmp_path / "worktrees" / session.id
+
+    updated = store.set_session_workspace(
+        session.id,
+        source_cwd=str(tmp_path.resolve()),
+        cwd=str(isolated),
+        workspace_kind=WorkspaceKind.git_worktree,
+        workspace_root=str(isolated),
+        workspace_repository_root=str(tmp_path.resolve()),
+        workspace_branch=f"vellum/session/{session.id}",
+        workspace_base_commit="abc123",
+    )
+
+    assert updated.cwd == str(isolated)
+    assert updated.source_cwd == str(tmp_path.resolve())
+    assert updated.workspace_kind == WorkspaceKind.git_worktree
+    assert updated.workspace_repository_root == str(tmp_path.resolve())
+    assert updated.workspace_branch == f"vellum/session/{session.id}"
+    assert updated.workspace_base_commit == "abc123"
 
 
 def test_coding_store_updates_provider_session_and_records_turn_events(tmp_path: Path):
@@ -289,6 +316,9 @@ def test_coding_store_migrates_legacy_database_without_losing_events(tmp_path: P
     assert session is not None
     assert session.tenant_id == "local"
     assert session.principal_id == "local-user"
+    assert session.source_cwd == "D:\\Vellum"
+    assert session.workspace_kind == WorkspaceKind.direct
+    assert session.workspace_root == "D:\\Vellum"
     assert session.trace_id.startswith("trace_")
     assert turn is not None
     assert turn.trace_id.startswith("trace_")

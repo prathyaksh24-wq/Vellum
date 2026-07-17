@@ -34,6 +34,11 @@ class AccessMode(StrEnum):
     ask_every_time = "ask_every_time"
 
 
+class WorkspaceKind(StrEnum):
+    direct = "direct"
+    git_worktree = "git_worktree"
+
+
 @dataclass(frozen=True)
 class ProviderHealth:
     provider: ProviderName
@@ -76,6 +81,12 @@ class CodingSession:
     title: str
     status: str = "idle"
     provider_session_id: str | None = None
+    source_cwd: str = ""
+    workspace_kind: WorkspaceKind = WorkspaceKind.direct
+    workspace_root: str = ""
+    workspace_repository_root: str = ""
+    workspace_branch: str = ""
+    workspace_base_commit: str = ""
     created_at: str = field(default_factory=utc_now)
     updated_at: str = field(default_factory=utc_now)
     tenant_id: str = DEFAULT_TENANT_ID

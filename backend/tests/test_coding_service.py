@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 import asyncio
 from pathlib import Path
+import subprocess
 
 from agent.coding.models import (
     AccessMode,
@@ -14,6 +15,7 @@ from agent.coding.models import (
 )
 from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.coding.storage import CodingSessionStore
+from agent.coding.workspace import CodingWorkspaceManager
 
 
 class FakeAdapter:
@@ -44,6 +46,36 @@ class FakeAdapter:
 class FailingStartAdapter(FakeAdapter):
     async def start_session(self, request: CodingSessionCreate):
         raise RuntimeError("sdk unavailable")
+
+
+class RequestRecordingAdapter(FakeAdapter):
+    def __init__(self) -> None:
+        self.requests: list[CodingSessionCreate] = []
+
+    async def start_session(self, request: CodingSessionCreate):
+        self.requests.append(request)
+        return await super().start_session(request)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _git_repository(path: Path) -> Path:
+    path.mkdir()
+    _git(path, "init")
+    _git(path, "config", "user.name", "Vellum Tests")
+    _git(path, "config", "user.email", "vellum-tests@example.invalid")
+    (path / "app.py").write_text("print('ready')\n", encoding="utf-8")
+    _git(path, "add", ".")
+    _git(path, "commit", "-m", "initial")
+    return path
 
 
 class ResumingAdapter(FakeAdapter):
@@ -180,7 +212,117 @@ def test_service_creates_session_and_records_provider_id(tmp_path: Path):
     assert session.cwd == str(tmp_path.resolve())
     [event] = service.list_events(session.id)
     assert event.type == "session.started"
-    assert event.payload == {"cwd": str(tmp_path.resolve()), "provider_session_id": "provider-thread-1"}
+    assert event.payload == {
+        "cwd": str(tmp_path.resolve()),
+        "source_cwd": str(tmp_path.resolve()),
+        "provider_session_id": "provider-thread-1",
+        "workspace": {
+            "kind": "direct",
+            "root": str(tmp_path.resolve()),
+            "branch": "",
+            "base_commit": "",
+        },
+    }
+
+
+def test_service_provisions_writable_git_worktree_before_starting_provider(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    adapter = RequestRecordingAdapter()
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: adapter},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    assert session.source_cwd == str(repository.resolve())
+    assert session.workspace_kind.value == "git_worktree"
+    assert session.workspace_branch == f"vellum/session/{session.id}"
+    assert session.workspace_base_commit == _git(repository, "rev-parse", "HEAD")
+    assert Path(session.cwd).parent == (tmp_path / "worktrees").resolve()
+    assert adapter.requests[0].cwd == session.cwd
+
+
+def test_service_rejects_writable_non_git_project_without_persisting_session(tmp_path: Path):
+    source = tmp_path / "project"
+    source.mkdir()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FakeAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+
+    try:
+        asyncio.run(
+            service.create_session(
+                CodingSessionCreate(
+                    provider=ProviderName.codex,
+                    cwd=str(source),
+                    access_mode=AccessMode.workspace_write,
+                )
+            )
+        )
+    except CodingServiceError as exc:
+        assert "require a Git repository" in str(exc)
+    else:
+        raise AssertionError("expected writable non-Git project failure")
+
+    assert store.list_sessions() == []
+
+
+def test_service_close_requires_discard_for_dirty_worktree_and_preserves_branch(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FakeAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+    (Path(session.cwd) / "agent-change.txt").write_text("pending\n", encoding="utf-8")
+
+    try:
+        asyncio.run(service.close_session(session.id))
+    except CodingServiceError as exc:
+        assert "uncommitted changes" in str(exc)
+    else:
+        raise AssertionError("expected dirty workspace close failure")
+
+    assert Path(session.workspace_root).exists()
+    closed = asyncio.run(service.close_session(session.id, discard_changes=True))
+
+    assert closed.status == "closed"
+    assert not Path(session.workspace_root).exists()
+    assert _git(repository, "branch", "--list", session.workspace_branch) == f"{session.workspace_branch}"
+    assert store.list_events(session.id)[-1].type == "session.closed"
+
+    async def collect_closed_turn():
+        return [event async for event in service.run_turn(session.id, "continue")]
+
+    try:
+        asyncio.run(collect_closed_turn())
+    except CodingServiceError as exc:
+        assert "session is closed" in str(exc)
+    else:
+        raise AssertionError("expected closed session turn failure")
 
 
 def test_service_reports_health_from_configured_adapters(tmp_path: Path):
@@ -270,6 +412,36 @@ def test_service_does_not_persist_session_when_provider_start_fails(tmp_path: Pa
         raise AssertionError("expected provider start failure")
 
     assert store.list_sessions() == []
+
+
+def test_service_releases_created_worktree_when_provider_start_fails(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    worktree_root = tmp_path / "worktrees"
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FailingStartAdapter()},
+        workspace_manager=CodingWorkspaceManager(worktree_root),
+    )
+
+    try:
+        asyncio.run(
+            service.create_session(
+                CodingSessionCreate(
+                    provider=ProviderName.codex,
+                    cwd=str(repository),
+                    access_mode=AccessMode.workspace_write,
+                )
+            )
+        )
+    except CodingServiceError as exc:
+        assert str(exc) == "Coding session failed to start."
+    else:
+        raise AssertionError("expected provider start failure")
+
+    assert store.list_sessions() == []
+    assert list(worktree_root.iterdir()) == []
+    assert _git(repository, "branch", "--list", "vellum/session/*") == ""
 
 
 def test_service_honors_empty_adapter_map(tmp_path: Path):

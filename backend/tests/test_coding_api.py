@@ -12,6 +12,7 @@ class FakeCodingService:
     def __init__(self):
         self.last_limits = None
         self.last_after_sequence = None
+        self.last_discard_changes = None
 
     def health(self):
         return [
@@ -75,6 +76,12 @@ class FakeCodingService:
 
     async def stop_turn(self, session_id: str):
         return None
+
+    async def close_session(self, session_id: str, *, discard_changes: bool = False):
+        self.last_discard_changes = discard_changes
+        session = self.get_session(session_id)
+        session.status = "closed"
+        return session
 
 
 class MissingSessionCodingService(FakeCodingService):
@@ -160,6 +167,21 @@ def test_coding_session_create_provider_unavailable_returns_503(monkeypatch, tmp
         )
 
     assert response.status_code == 503
+
+
+def test_coding_session_close_endpoint_records_explicit_discard(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/close",
+            json={"discard_changes": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "closed"
+    assert service.last_discard_changes is True
 
 
 def test_coding_session_create_preflights_unavailable_provider(monkeypatch, tmp_path):

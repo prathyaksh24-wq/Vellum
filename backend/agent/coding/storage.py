@@ -17,6 +17,7 @@ from agent.coding.models import (
     DEFAULT_MAX_PROVIDER_EVENTS,
     DEFAULT_MAX_RUNTIME_SECONDS,
     ProviderName,
+    WorkspaceKind,
     new_trace_id,
     utc_now,
 )
@@ -65,7 +66,13 @@ class CodingSessionStore:
                     tenant_id TEXT NOT NULL DEFAULT 'local',
                     principal_id TEXT NOT NULL DEFAULT 'local-user',
                     workspace_generation INTEGER NOT NULL DEFAULT 1,
-                    trace_id TEXT NOT NULL DEFAULT ''
+                    trace_id TEXT NOT NULL DEFAULT '',
+                    source_cwd TEXT NOT NULL DEFAULT '',
+                    workspace_kind TEXT NOT NULL DEFAULT 'direct',
+                    workspace_root TEXT NOT NULL DEFAULT '',
+                    workspace_repository_root TEXT NOT NULL DEFAULT '',
+                    workspace_branch TEXT NOT NULL DEFAULT '',
+                    workspace_base_commit TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS coding_turns (
                     id TEXT PRIMARY KEY,
@@ -105,6 +112,27 @@ class CodingSessionStore:
             self._ensure_column(conn, "coding_sessions", "principal_id", "TEXT NOT NULL DEFAULT 'local-user'")
             self._ensure_column(conn, "coding_sessions", "workspace_generation", "INTEGER NOT NULL DEFAULT 1")
             self._ensure_column(conn, "coding_sessions", "trace_id", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "coding_sessions", "source_cwd", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                conn,
+                "coding_sessions",
+                "workspace_kind",
+                "TEXT NOT NULL DEFAULT 'direct'",
+            )
+            self._ensure_column(conn, "coding_sessions", "workspace_root", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                conn,
+                "coding_sessions",
+                "workspace_repository_root",
+                "TEXT NOT NULL DEFAULT ''",
+            )
+            self._ensure_column(conn, "coding_sessions", "workspace_branch", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(
+                conn,
+                "coding_sessions",
+                "workspace_base_commit",
+                "TEXT NOT NULL DEFAULT ''",
+            )
             self._ensure_column(conn, "coding_turns", "trace_id", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(
                 conn,
@@ -122,6 +150,8 @@ class CodingSessionStore:
             self._ensure_column(conn, "coding_events", "trace_id", "TEXT NOT NULL DEFAULT ''")
             self._ensure_column(conn, "coding_events", "sequence", "INTEGER NOT NULL DEFAULT 0")
             self._backfill_runtime_metadata(conn)
+            conn.execute("UPDATE coding_sessions SET source_cwd = cwd WHERE source_cwd = ''")
+            conn.execute("UPDATE coding_sessions SET workspace_root = cwd WHERE workspace_root = ''")
             conn.execute(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_coding_events_session_sequence
@@ -189,6 +219,8 @@ class CodingSessionStore:
             cwd=cwd,
             access_mode=body.access_mode,
             title=title,
+            source_cwd=cwd,
+            workspace_root=cwd,
             created_at=now,
             updated_at=now,
             tenant_id=body.tenant_id,
@@ -199,8 +231,9 @@ class CodingSessionStore:
                 """
                 INSERT INTO coding_sessions
                 (id, provider, provider_session_id, cwd, access_mode, title, status, created_at, updated_at,
-                 tenant_id, principal_id, workspace_generation, trace_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 tenant_id, principal_id, workspace_generation, trace_id, source_cwd, workspace_kind,
+                 workspace_root, workspace_repository_root, workspace_branch, workspace_base_commit)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     session.id,
@@ -216,8 +249,54 @@ class CodingSessionStore:
                     session.principal_id,
                     session.workspace_generation,
                     session.trace_id,
+                    session.source_cwd,
+                    session.workspace_kind.value,
+                    session.workspace_root,
+                    session.workspace_repository_root,
+                    session.workspace_branch,
+                    session.workspace_base_commit,
                 ),
             )
+        return session
+
+    def set_session_workspace(
+        self,
+        session_id: str,
+        *,
+        source_cwd: str,
+        cwd: str,
+        workspace_kind: WorkspaceKind,
+        workspace_root: str,
+        workspace_repository_root: str = "",
+        workspace_branch: str = "",
+        workspace_base_commit: str = "",
+    ) -> CodingSession:
+        now = utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE coding_sessions
+                SET source_cwd = ?, cwd = ?, workspace_kind = ?, workspace_root = ?,
+                    workspace_repository_root = ?, workspace_branch = ?, workspace_base_commit = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    source_cwd,
+                    cwd,
+                    workspace_kind.value,
+                    workspace_root,
+                    workspace_repository_root,
+                    workspace_branch,
+                    workspace_base_commit,
+                    now,
+                    session_id,
+                ),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        session = self.get_session(session_id)
+        if session is None:
+            raise KeyError(session_id)
         return session
 
     def get_session(self, session_id: str) -> CodingSession | None:
@@ -505,6 +584,12 @@ class CodingSessionStore:
             access_mode=AccessMode(row["access_mode"]),
             title=row["title"],
             status=row["status"],
+            source_cwd=row["source_cwd"],
+            workspace_kind=WorkspaceKind(row["workspace_kind"]),
+            workspace_root=row["workspace_root"],
+            workspace_repository_root=row["workspace_repository_root"],
+            workspace_branch=row["workspace_branch"],
+            workspace_base_commit=row["workspace_base_commit"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             tenant_id=row["tenant_id"],

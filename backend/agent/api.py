@@ -334,6 +334,10 @@ class CodingTurnBody(BaseModel):
     max_provider_events: int = Field(default=DEFAULT_MAX_PROVIDER_EVENTS, ge=1, le=100_000)
 
 
+class CodingSessionCloseBody(BaseModel):
+    discard_changes: bool = False
+
+
 class ConversationContextRequest(BaseModel):
     kind: Literal["vault_note", "wiki_page"]
     ref: str = Field(min_length=1)
@@ -1581,11 +1585,18 @@ def _embedding_health() -> dict[str, Any]:
 
 
 def _coding_session_json(session: CodingSession) -> dict[str, Any]:
+    workspace_kind = getattr(session, "workspace_kind", "direct")
     return {
         "id": session.id,
         "provider": session.provider.value,
         "provider_session_id": session.provider_session_id,
         "cwd": session.cwd,
+        "source_cwd": getattr(session, "source_cwd", session.cwd) or session.cwd,
+        "workspace_kind": getattr(workspace_kind, "value", str(workspace_kind)),
+        "workspace_root": getattr(session, "workspace_root", session.cwd) or session.cwd,
+        "workspace_repository_root": getattr(session, "workspace_repository_root", ""),
+        "workspace_branch": getattr(session, "workspace_branch", ""),
+        "workspace_base_commit": getattr(session, "workspace_base_commit", ""),
         "access_mode": session.access_mode.value,
         "title": session.title,
         "status": session.status,
@@ -1634,6 +1645,8 @@ def _coding_project_roots() -> list[Path]:
     try:
         for session in coding_service.list_sessions():
             roots.add(Path(session.cwd).expanduser().resolve())
+            if getattr(session, "source_cwd", ""):
+                roots.add(Path(session.source_cwd).expanduser().resolve())
     except Exception:
         pass
     return sorted(roots, key=lambda path: str(path).casefold())
@@ -1716,7 +1729,11 @@ def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
     searchable = f"{message} {cause_message}".casefold()
     if "not found" in searchable:
         return HTTPException(status_code=404, detail=message)
-    if "already has a running turn" in searchable:
+    if (
+        "already has a running turn" in searchable
+        or "running coding turn" in searchable
+        or "session is closed" in searchable
+    ):
         return HTTPException(status_code=409, detail=message)
     if (
         "not installed" in searchable
@@ -4701,6 +4718,18 @@ async def coding_session_stop(session_id: str) -> dict[str, Any]:
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
     return {"ok": True}
+
+
+@router.post("/coding/sessions/{session_id}/close")
+async def coding_session_close(session_id: str, body: CodingSessionCloseBody) -> dict[str, Any]:
+    try:
+        session = await coding_service.close_session(
+            session_id,
+            discard_changes=body.discard_changes,
+        )
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    return _coding_session_json(session)
 
 
 @router.get("/coding/sessions/{session_id}/events")

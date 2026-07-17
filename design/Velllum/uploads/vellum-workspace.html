@@ -566,6 +566,7 @@ function createCodingApi(apiBase){
     projectTree:(root)=>json("/api/coding/projects/tree?root="+encodeURIComponent(root)),
     projectFile:(root,path)=>json("/api/coding/projects/file?root="+encodeURIComponent(root)+"&path="+encodeURIComponent(path)),
     stop:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/stop",{method:"POST"}),
+    closeSession:(id,discardChanges=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/close",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({discard_changes:discardChanges})}),
     async runTurn(id,prompt,onEvent,{signal,maxRuntimeSeconds=1800,maxProviderEvents=10000}={}){
       const response=await fetch(base+"/api/coding/sessions/"+encodeURIComponent(id)+"/turns/stream",{
         method:"POST",signal,headers:{"Content-Type":"application/json"},
@@ -1458,7 +1459,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     saveLocalPref("vellum.coding.root",codingProjectRoot);
     saveLocalPref("vellum.coding.access",codingAccessMode);
     const session=codingSessionRef.current;
-    const matches=session&&session.provider===codingProvider&&normalizedPath(session.cwd)===normalizedPath(codingProjectRoot)&&session.access_mode===codingAccessMode;
+    const matches=session&&session.provider===codingProvider&&normalizedPath(sessionProjectRoot(session))===normalizedPath(codingProjectRoot)&&session.access_mode===codingAccessMode;
     if(!matches){ codingSessionRef.current=null; setCodingSession(null); }
     setCodingError("");
   },[codingProvider,codingProjectRoot,codingAccessMode]);
@@ -1470,6 +1471,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function emptyProgress(){ return { status:"idle", turnId:null, reason:"", tasks:[], outputs:[], sources:[] }; }
   function setProgFor(chatId, fn){ setProgressByChat(prev=> ({...prev, [chatId]: fn(prev[chatId]||emptyProgress())})); }
   function normalizedPath(value){ return String(value||"").trim().replace(/[\\/]+$/,"").toLowerCase(); }
+  function sessionProjectRoot(session){ return (session&&session.source_cwd)||((session&&session.cwd)||""); }
   function healthFor(provider){ return (codingHealth.providers||[]).find(item=>item.provider===provider); }
   async function refreshCodingHealth(){
     const api=codingApiRef.current; if(!api) return;
@@ -1517,15 +1519,15 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(!health||!health.available) throw new Error((health&&health.message)||("The "+codingProvider+" runtime is not installed."));
     if(!health.configured) throw new Error((health&&health.message)||("The "+codingProvider+" runtime needs authentication."));
     const cached=codingSessionRef.current;
-    if(cached&&cached.provider===codingProvider&&normalizedPath(cached.cwd)===normalizedPath(root)&&cached.access_mode===codingAccessMode) return cached;
+    if(cached&&cached.provider===codingProvider&&normalizedPath(sessionProjectRoot(cached))===normalizedPath(root)&&cached.access_mode===codingAccessMode&&cached.status!=="closed") return cached;
     const listed=await api.sessions(); const sessions=listed.sessions||[]; setCodingSessions(sessions);
-    let session=sessions.find(item=>item.provider===codingProvider&&normalizedPath(item.cwd)===normalizedPath(root)&&item.access_mode===codingAccessMode&&item.status!=="running");
+    let session=sessions.find(item=>item.provider===codingProvider&&normalizedPath(sessionProjectRoot(item))===normalizedPath(root)&&item.access_mode===codingAccessMode&&item.status!=="running"&&item.status!=="closed");
     if(!session){ session=await api.createSession({provider:codingProvider,cwd:root,access_mode:codingAccessMode,title:chatTitleFor(activeChat)||"Vellum coding session"}); setCodingSessions(prev=>[session,...prev]); }
     codingSessionRef.current=session; setCodingSession(session); return session;
   }
   async function openCodingSession(session){
     if(running||!session) return;
-    setCodingProvider(session.provider); setCodingProjectRoot(session.cwd); setCodingAccessMode(session.access_mode);
+    setCodingProvider(session.provider); setCodingProjectRoot(sessionProjectRoot(session)); setCodingAccessMode(session.access_mode);
     codingSessionRef.current=session; setCodingSession(session); setCodingError("");
     const chatId="coding-"+session.id; const title=session.title||session.provider+" session";
     setNewChats(prev=>prev.some(item=>item.id===chatId)?prev:[{id:chatId,title,age:"saved"},...prev]);
@@ -1551,6 +1553,19 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       });
       setMsgsFor(chatId,()=>messages.filter(item=>item.type!=="user"||item.text)); setCodingStatus("ready");
     }catch(e){ setCodingStatus("error"); setCodingError((e&&e.message)||"Could not restore the coding session."); }
+  }
+  async function closeCodingSession(session,event){
+    if(event) event.stopPropagation();
+    if(!session||session.status==="closed") return;
+    if(session.status==="running"){ setCodingError("Stop the active run before closing its workspace."); return; }
+    const confirmed=window.confirm("Close this coding workspace and discard any uncommitted worktree changes? Committed branch history will be preserved.");
+    if(!confirmed) return;
+    try{
+      const closed=await codingApiRef.current.closeSession(session.id,true);
+      setCodingSessions(prev=>prev.map(item=>item.id===closed.id?closed:item));
+      if(codingSessionRef.current&&codingSessionRef.current.id===closed.id){ codingSessionRef.current=null; setCodingSession(null); }
+      setCodingError("");
+    }catch(e){ setCodingError((e&&e.message)||"Could not close the coding workspace."); }
   }
   function applyCodingEvent(chatId,aid,frame,answerRef){
     const data=frame.data||{}; if(data.sequence) lastSequenceRef.current[data.session_id]=data.sequence;
@@ -1840,7 +1855,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const q = paletteQ.trim().toLowerCase();
   const cmdMatches  = COMMANDS.filter(c=> !q || c.title.toLowerCase().includes(q));
   const chatMatches = allChats.filter(c=> !q || c.title.toLowerCase().includes(q));
-  const sessionMatches = codingSessions.filter(session=>!q||(session.title||session.provider).toLowerCase().includes(q)||session.cwd.toLowerCase().includes(q));
+  const sessionMatches = codingSessions.filter(session=>!q||(session.title||session.provider).toLowerCase().includes(q)||sessionProjectRoot(session).toLowerCase().includes(q));
   const flat = [...cmdMatches.map(c=>({kind:"cmd", item:c})), ...chatMatches.map(c=>({kind:"chat", item:c})), ...sessionMatches.map(session=>({kind:"session",item:session}))];
   function runPalette(entry){ if(!entry) return; if(entry.kind==="cmd") entry.item.run(); else if(entry.kind==="session") openCodingSession(entry.item); else setActiveChat(entry.item.id); setShowPalette(false); setPaletteQ(""); }
   function paletteKey(e){
@@ -1942,7 +1957,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           <div className="coding-permissions" aria-label="Workspace access">
             {providerAccessModes.map(mode=><button key={mode.id} className={"coding-access-btn"+(codingAccessMode===mode.id?" active":"")} title={mode.title} disabled={running} onClick={()=>setCodingAccessMode(mode.id)}>{mode.label}</button>)}
           </div>
-          <div style={{fontSize:10.5,color:"#56565c"}}>One agent writes at a time · local session state</div>
+          <div style={{fontSize:10.5,color:"#56565c"}}>{codingSession&&codingSession.workspace_kind==="git_worktree"?"Isolated Git worktree · "+codingSession.workspace_branch:"Read-only source · local session state"}</div>
         </div>
         <div className={"coding-health"+(codingError?" error":"")}>
           <span className="web-context-dot" style={(codingStatus==="offline"||codingStatus==="error")?{background:"#b85b51",boxShadow:"none"}:undefined}/>
@@ -2100,7 +2115,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <div className="sb-section-lbl">Coding sessions</div>
             {codingSessions.length===0
               ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No saved runs</div>
-              : codingSessions.slice(0,12).map(session=><div key={session.id} className={"chat-row"+(codingSession&&codingSession.id===session.id?" active":"")} style={{paddingLeft:10}} onClick={()=>openCodingSession(session)}><span className="chat-row-title">{session.title||session.provider}</span><span className="chat-row-age">{session.provider} · {session.status}</span></div>)}
+              : codingSessions.slice(0,12).map(session=><div key={session.id} className={"chat-row"+(codingSession&&codingSession.id===session.id?" active":"")} style={{paddingLeft:10}} onClick={()=>openCodingSession(session)}><span className="chat-row-title">{session.title||session.provider}</span>{session.status!=="closed"&&<div className="chat-row-actions"><button className="cr-act" title="Close workspace" onClick={(event)=>closeCodingSession(session,event)}><IcX size={12}/></button></div>}<span className="chat-row-age">{session.provider} · {session.status}</span></div>)}
           </div>
         </div>
         <div className="sb-bottom">
@@ -2471,7 +2486,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
               {chatMatches.length>0 && <div className="palette-sec">Chats</div>}
               {chatMatches.map((c)=>{ const gi = flat.findIndex(f=>f.kind==="chat" && f.item.id===c.id); return (<div key={c.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"chat",item:c})}><div className="palette-item-l">{c.age?<span style={{color:"#444"}}>◷</span>:<Spinner/>}<span className="palette-item-title">{c.title}</span><span className="palette-item-sub">{c.project}</span></div>{c.age && <span className="kbd">{c.age}</span>}</div>); })}
               {sessionMatches.length>0 && <div className="palette-sec">Saved coding sessions</div>}
-              {sessionMatches.map(session=>{ const gi=flat.findIndex(f=>f.kind==="session"&&f.item.id===session.id); return (<div key={session.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"session",item:session})}><div className="palette-item-l"><IcTerminal size={13}/><span className="palette-item-title">{session.title||session.provider}</span><span className="palette-item-sub">{session.cwd}</span></div><span className="kbd">{session.provider} · {session.status}</span></div>); })}
+              {sessionMatches.map(session=>{ const gi=flat.findIndex(f=>f.kind==="session"&&f.item.id===session.id); return (<div key={session.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"session",item:session})}><div className="palette-item-l"><IcTerminal size={13}/><span className="palette-item-title">{session.title||session.provider}</span><span className="palette-item-sub">{sessionProjectRoot(session)}</span></div><span className="kbd">{session.provider} · {session.status}</span></div>); })}
             </div>
           </div>
         </div>

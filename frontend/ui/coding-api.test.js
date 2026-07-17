@@ -70,6 +70,24 @@ describe("createCodingApi", () => {
     ]);
   });
 
+  test("closes an isolated coding session with an explicit discard decision", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: "code 1", status: "closed" }),
+    }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.close("code 1", { discardChanges: true });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/close",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ discard_changes: true }),
+      }),
+    );
+  });
+
   test("parses text fallback when response body is unavailable", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
