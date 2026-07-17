@@ -99,6 +99,21 @@ describe("createCodingApi", () => {
     expect(fetchImpl.mock.calls[1][0]).toContain("code%201/checkpoints/checkpoint%201");
   });
 
+  test("rewinds only with an explicit phase and discard confirmation", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ status: "idle" }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.rewind("code 1", "checkpoint 1", { phase: "before", confirmDiscard: true });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/rewind/checkpoint%201",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ phase: "before", confirm_discard: true }),
+      }),
+    );
+  });
+
   test("parses text fallback when response body is unavailable", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,

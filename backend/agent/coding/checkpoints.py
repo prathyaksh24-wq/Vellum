@@ -46,6 +46,7 @@ def snapshot_from_payload(payload: dict[str, Any]) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         captured_at=str(payload.get("captured_at") or ""),
         git_head=str(payload.get("git_head") or ""),
+        snapshot_commit=str(payload.get("snapshot_commit") or ""),
         changed_files=tuple(str(value) for value in payload.get("changed_files") or ()),
         patch=str(payload.get("patch") or ""),
         files_truncated=bool(payload.get("files_truncated")),

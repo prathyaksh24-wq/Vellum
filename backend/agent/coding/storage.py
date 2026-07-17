@@ -378,6 +378,27 @@ class CodingSessionStore:
             raise KeyError(session_id)
         return session
 
+    def rewind_session(self, session_id: str) -> CodingSession:
+        now = utc_now()
+        with self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE coding_sessions
+                SET provider_session_id = NULL,
+                    workspace_generation = workspace_generation + 1,
+                    status = 'idle',
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (now, session_id),
+            )
+        if cursor.rowcount == 0:
+            raise KeyError(session_id)
+        session = self.get_session(session_id)
+        if session is None:
+            raise KeyError(session_id)
+        return session
+
     def create_turn(
         self,
         session_id: str,

@@ -15,6 +15,7 @@ class FakeCodingService:
         self.last_limits = None
         self.last_after_sequence = None
         self.last_discard_changes = None
+        self.last_rewind = None
 
     def health(self):
         return [
@@ -98,6 +99,13 @@ class FakeCodingService:
         self.last_discard_changes = discard_changes
         session = self.get_session(session_id)
         session.status = "closed"
+        return session
+
+    async def rewind_session(self, session_id, checkpoint_id, *, phase, confirm_discard):
+        self.last_rewind = (session_id, checkpoint_id, phase, confirm_discard)
+        session = self.get_session(session_id)
+        session.provider_session_id = None
+        session.workspace_generation = 2
         return session
 
 
@@ -213,6 +221,22 @@ def test_coding_checkpoint_endpoints_keep_patch_out_of_list(monkeypatch):
     assert listed.json()["checkpoints"][0]["after"]["patch_bytes"] == 4
     assert detail.status_code == 200
     assert detail.json()["after"]["patch"] == "diff"
+
+
+def test_coding_rewind_endpoint_requires_explicit_payload(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/rewind/checkpoint_1",
+            json={"phase": "before", "confirm_discard": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["provider_session_id"] is None
+    assert response.json()["workspace_generation"] == 2
+    assert service.last_rewind == ("code_1", "checkpoint_1", "before", True)
 
 
 def test_coding_session_create_preflights_unavailable_provider(monkeypatch, tmp_path):

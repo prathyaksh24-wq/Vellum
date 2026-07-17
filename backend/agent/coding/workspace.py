@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
+import tempfile
 import threading
 
 from agent.coding.models import AccessMode, WorkspaceKind, utc_now
@@ -15,6 +16,7 @@ GIT_TIMEOUT_SECONDS = 30
 DEFAULT_MAX_CHECKPOINT_PATCH_BYTES = 256 * 1024
 DEFAULT_MAX_CHECKPOINT_FILE_BYTES = 256 * 1024
 DEFAULT_MAX_CHECKPOINT_FILES = 2_000
+MAX_REWIND_FILE_LIST_BYTES = 4 * 1024 * 1024
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}")
 _CHECKPOINT_DIFF_PATHS = (
     ".",
@@ -70,6 +72,7 @@ class WorkspaceProvision:
 class WorkspaceSnapshot:
     captured_at: str
     git_head: str = ""
+    snapshot_commit: str = ""
     changed_files: tuple[str, ...] = ()
     patch: str = ""
     files_truncated: bool = False
@@ -80,6 +83,7 @@ class WorkspaceSnapshot:
         return {
             "captured_at": self.captured_at,
             "git_head": self.git_head,
+            "snapshot_commit": self.snapshot_commit,
             "changed_files": list(self.changed_files),
             "files_truncated": self.files_truncated,
             "patch_truncated": self.patch_truncated,
@@ -250,16 +254,79 @@ class CodingWorkspaceManager:
                 *_CHECKPOINT_DIFF_PATHS,
                 limit=max_patch_bytes,
             )
+            snapshot_commit = ""
+            capture_error = ""
+            try:
+                snapshot_commit = self._create_snapshot_commit(root, git_head, captured_at)
+            except CodingWorkspaceError as exc:
+                capture_error = f"Recovery point unavailable: {exc}"
             return WorkspaceSnapshot(
                 captured_at=captured_at,
                 git_head=git_head,
+                snapshot_commit=snapshot_commit,
                 changed_files=tuple(changed_files),
                 patch=patch_bytes.decode("utf-8", errors="replace"),
                 files_truncated=files_truncated,
                 patch_truncated=patch_truncated,
+                capture_error=capture_error,
             )
         except CodingWorkspaceError as exc:
             return WorkspaceSnapshot(captured_at=captured_at, capture_error=str(exc))
+
+    def restore_snapshot(self, workspace_root: str, snapshot: WorkspaceSnapshot) -> str:
+        root = Path(workspace_root).expanduser().resolve()
+        if root.parent != self.root:
+            raise CodingWorkspaceError("Refusing to rewind a workspace outside the managed worktree root.")
+        if not snapshot.snapshot_commit:
+            raise CodingWorkspaceError("This checkpoint does not contain a recoverable Git snapshot.")
+        self._git(root, "cat-file", "-e", f"{snapshot.snapshot_commit}^{{commit}}")
+
+        working_files = self._required_file_list(root, "diff", "--name-only", "-z", "HEAD", "--")
+        committed_files = self._required_file_list(
+            root,
+            "diff",
+            "--name-only",
+            "-z",
+            snapshot.snapshot_commit,
+            "HEAD",
+            "--",
+        )
+        untracked_files = self._required_file_list(
+            root,
+            "ls-files",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        )
+        protected_changes = sorted(
+            value
+            for value in {*working_files, *committed_files, *untracked_files}
+            if self._checkpoint_path_protected(value)
+        )
+        if protected_changes:
+            raise CodingWorkspaceError(
+                "Protected credential files changed after this checkpoint and must be handled manually before rewind."
+            )
+
+        target_files = set(
+            self._required_file_list(
+                root,
+                "ls-tree",
+                "-r",
+                "--name-only",
+                "-z",
+                snapshot.snapshot_commit,
+            )
+        )
+        removable_untracked = [
+            value
+            for value in untracked_files
+            if value not in target_files and not self._checkpoint_path_protected(value)
+        ]
+        self._git(root, "reset", "--hard", snapshot.snapshot_commit)
+        for value in removable_untracked:
+            self._delete_managed_untracked(root, value)
+        return self._git(root, "rev-parse", "HEAD")
 
     def _repository_root(self, source: Path) -> Path:
         try:
@@ -279,8 +346,64 @@ class CodingWorkspaceManager:
         if branch:
             self._git(repository_root, "branch", "-D", branch, check=False)
 
+    def _create_snapshot_commit(self, root: Path, git_head: str, captured_at: str) -> str:
+        with tempfile.TemporaryDirectory(prefix="vellum-checkpoint-") as temporary_directory:
+            index_path = Path(temporary_directory) / "index"
+            environment = os.environ.copy()
+            environment["GIT_INDEX_FILE"] = str(index_path)
+            environment["GIT_AUTHOR_NAME"] = "Vellum Checkpoint"
+            environment["GIT_AUTHOR_EMAIL"] = "checkpoint@vellum.local"
+            environment["GIT_COMMITTER_NAME"] = "Vellum Checkpoint"
+            environment["GIT_COMMITTER_EMAIL"] = "checkpoint@vellum.local"
+            self._git(root, "read-tree", git_head, env=environment)
+            self._git(root, "add", "-A", "--", *_CHECKPOINT_DIFF_PATHS, env=environment)
+            tree = self._git(root, "write-tree", env=environment)
+            return self._git(
+                root,
+                "commit-tree",
+                tree,
+                "-p",
+                git_head,
+                "-m",
+                f"Vellum checkpoint {captured_at}",
+                env=environment,
+            )
+
+    def _required_file_list(self, root: Path, *args: str) -> list[str]:
+        output, truncated = self._git_bounded(root, *args, limit=MAX_REWIND_FILE_LIST_BYTES)
+        if truncated:
+            raise CodingWorkspaceError("Workspace file list is too large for a safe rewind.")
+        return [value for value in self._bounded_nul_values(output, truncated=False) if value]
+
     @staticmethod
-    def _git(cwd: Path, *args: str, check: bool = True) -> str:
+    def _delete_managed_untracked(root: Path, value: str) -> None:
+        relative = PurePosixPath(value)
+        if relative.is_absolute() or not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            raise CodingWorkspaceError("Git returned an unsafe untracked path during rewind.")
+        candidate = root.joinpath(*relative.parts)
+        if candidate.is_symlink():
+            candidate.unlink()
+            return
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(root):
+            raise CodingWorkspaceError("Refusing to remove an untracked file outside the coding workspace.")
+        if resolved.exists() and resolved.is_file():
+            resolved.unlink()
+        parent = resolved.parent
+        while parent != root and parent.is_relative_to(root):
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
+
+    @staticmethod
+    def _git(
+        cwd: Path,
+        *args: str,
+        check: bool = True,
+        env: dict[str, str] | None = None,
+    ) -> str:
         try:
             result = subprocess.run(
                 ["git", "-C", str(cwd), *args],
@@ -288,6 +411,7 @@ class CodingWorkspaceManager:
                 capture_output=True,
                 text=True,
                 timeout=GIT_TIMEOUT_SECONDS,
+                env=env,
             )
         except FileNotFoundError as exc:
             raise CodingWorkspaceError("Git is not installed or is not available on PATH.") from exc

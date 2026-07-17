@@ -58,6 +58,16 @@ export function createCodingApi({ apiBase = "http://127.0.0.1:8000", fetchImpl =
         `/api/coding/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(checkpointId)}`,
       );
     },
+    rewind(sessionId, checkpointId, { phase = "after", confirmDiscard = false } = {}) {
+      return json(
+        `/api/coding/sessions/${encodeURIComponent(sessionId)}/rewind/${encodeURIComponent(checkpointId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase, confirm_discard: confirmDiscard }),
+        },
+      );
+    },
     stop(sessionId) {
       return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/stop`, { method: "POST" });
     },

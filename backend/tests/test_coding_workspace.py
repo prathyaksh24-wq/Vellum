@@ -116,6 +116,7 @@ def test_workspace_snapshot_captures_changed_files_and_bounded_patch(tmp_path: P
     snapshot = manager.capture_snapshot(str(repository), max_patch_bytes=16 * 1024)
 
     assert snapshot.git_head == _git(repository, "rev-parse", "HEAD")
+    assert snapshot.snapshot_commit
     assert snapshot.changed_files == ("src/app.py", "src/new.py")
     assert "print('changed')" in snapshot.patch
     assert snapshot.patch_truncated is False
@@ -148,3 +149,48 @@ def test_workspace_snapshot_excludes_secret_files_and_patch_content(tmp_path: Pa
     assert "private.pem" not in snapshot.changed_files
     assert "do-not-expose" not in snapshot.patch
     assert "private-material" not in snapshot.patch
+
+
+def test_workspace_rewind_restores_checkpoint_and_removes_later_untracked_files(tmp_path: Path) -> None:
+    repository = _repository(tmp_path / "project")
+    manager = CodingWorkspaceManager(tmp_path / "worktrees")
+    provision = manager.provision(
+        session_id="code_rewind",
+        source_cwd=str(repository),
+        access_mode=AccessMode.workspace_write,
+    )
+    workspace = Path(provision.workspace_root)
+    (workspace / "src" / "app.py").write_text("print('checkpoint')\n", encoding="utf-8")
+    (workspace / "src" / "checkpoint_only.py").write_text("VALUE = 1\n", encoding="utf-8")
+    snapshot = manager.capture_snapshot(str(workspace))
+    (workspace / "src" / "app.py").write_text("print('later')\n", encoding="utf-8")
+    (workspace / "src" / "later_only.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+    restored_commit = manager.restore_snapshot(str(workspace), snapshot)
+
+    assert restored_commit == snapshot.snapshot_commit
+    assert (workspace / "src" / "app.py").read_text(encoding="utf-8") == "print('checkpoint')\n"
+    assert (workspace / "src" / "checkpoint_only.py").read_text(encoding="utf-8") == "VALUE = 1\n"
+    assert not (workspace / "src" / "later_only.py").exists()
+
+    manager.release(provision, force=True, delete_branch=True)
+
+
+def test_workspace_rewind_refuses_changed_protected_credentials(tmp_path: Path) -> None:
+    repository = _repository(tmp_path / "project")
+    (repository / ".env").write_text("TOKEN=original\n", encoding="utf-8")
+    _git(repository, "add", ".env")
+    _git(repository, "commit", "-m", "tracked environment")
+    manager = CodingWorkspaceManager(tmp_path / "worktrees")
+    provision = manager.provision(
+        session_id="code_protected",
+        source_cwd=str(repository),
+        access_mode=AccessMode.workspace_write,
+    )
+    snapshot = manager.capture_snapshot(provision.workspace_root)
+    (Path(provision.workspace_root) / ".env").write_text("TOKEN=changed\n", encoding="utf-8")
+
+    with pytest.raises(CodingWorkspaceError, match="Protected credential files changed"):
+        manager.restore_snapshot(provision.workspace_root, snapshot)
+
+    manager.release(provision, force=True, delete_branch=True)

@@ -338,6 +338,11 @@ class CodingSessionCloseBody(BaseModel):
     discard_changes: bool = False
 
 
+class CodingSessionRewindBody(BaseModel):
+    phase: Literal["before", "after"] = "after"
+    confirm_discard: bool = False
+
+
 class ConversationContextRequest(BaseModel):
     kind: Literal["vault_note", "wiki_page"]
     ref: str = Field(min_length=1)
@@ -4767,6 +4772,24 @@ async def coding_session_checkpoint(session_id: str, checkpoint_id: str) -> dict
         return coding_service.get_checkpoint(session_id, checkpoint_id).payload(include_patch=True)
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
+
+
+@router.post("/coding/sessions/{session_id}/rewind/{checkpoint_id}")
+async def coding_session_rewind(
+    session_id: str,
+    checkpoint_id: str,
+    body: CodingSessionRewindBody,
+) -> dict[str, Any]:
+    try:
+        session = await coding_service.rewind_session(
+            session_id,
+            checkpoint_id,
+            phase=body.phase,
+            confirm_discard=body.confirm_discard,
+        )
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    return _coding_session_json(session)
 
 
 @router.get("/coding/projects/tree")

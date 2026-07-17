@@ -527,6 +527,71 @@ def test_service_captures_before_and_after_workspace_checkpoint(tmp_path: Path):
     assert service.list_checkpoints(session.id) == [checkpoint]
 
 
+def test_service_rewind_restores_files_and_resets_provider_conversation(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: WritingAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "Update app")]
+
+    events = asyncio.run(collect())
+    checkpoint_id = events[0].payload["checkpoint_id"]
+    (Path(session.cwd) / "app.py").write_text("print('later drift')\n", encoding="utf-8")
+
+    rewound = asyncio.run(
+        service.rewind_session(
+            session.id,
+            checkpoint_id,
+            phase="after",
+            confirm_discard=True,
+        )
+    )
+
+    assert (Path(session.cwd) / "app.py").read_text(encoding="utf-8") == "print('agent changed this')\n"
+    assert rewound.provider_session_id is None
+    assert rewound.workspace_generation == 2
+    assert rewound.status == "idle"
+    rewind_event = store.list_events(session.id)[-1]
+    assert rewind_event.type == "session.rewound"
+    assert rewind_event.payload["provider_session_reset"] is True
+
+
+def test_service_rewind_requires_explicit_confirmation(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    try:
+        asyncio.run(
+            service.rewind_session(
+                session.id,
+                "checkpoint_missing",
+                phase="after",
+                confirm_discard=False,
+            )
+        )
+    except CodingServiceError as exc:
+        assert "explicit confirmation" in str(exc)
+    else:
+        raise AssertionError("expected rewind confirmation failure")
+
+
 def test_service_rejects_concurrent_turn_for_session(tmp_path: Path):
     store = CodingSessionStore(tmp_path / "coding.db")
     service = CodingSessionService(store=store, adapters={ProviderName.codex: FakeAdapter()})

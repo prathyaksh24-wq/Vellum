@@ -90,6 +90,19 @@ def test_coding_store_updates_provider_session_and_records_turn_events(tmp_path:
     assert store.list_events(session.id)[0].id == event.id
 
 
+def test_coding_store_rewind_resets_provider_session_and_increments_generation(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))
+    session = store.set_provider_session_id(session.id, "provider-thread-1")
+    store.set_session_status(session.id, "error")
+
+    rewound = store.rewind_session(session.id)
+
+    assert rewound.provider_session_id is None
+    assert rewound.workspace_generation == session.workspace_generation + 1
+    assert rewound.status == "idle"
+
+
 def test_coding_store_finish_running_turn_only_allows_one_terminal_transition(tmp_path: Path):
     store = CodingSessionStore(tmp_path / "coding.db")
     session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))

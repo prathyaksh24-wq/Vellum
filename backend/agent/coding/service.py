@@ -17,6 +17,7 @@ from agent.coding.models import (
     CodingTurnLimits,
     ProviderHealth,
     ProviderName,
+    WorkspaceKind,
     utc_now,
 )
 from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
@@ -308,6 +309,54 @@ class CodingSessionService:
                 if stopped_turn is not None:
                     self.store.set_session_status(session.id, "stopped")
                     await self._finalize_checkpoint(session, turn, status="stopped")
+
+    async def rewind_session(
+        self,
+        session_id: str,
+        checkpoint_id: str,
+        *,
+        phase: str,
+        confirm_discard: bool,
+    ) -> CodingSession:
+        session = self.get_session(session_id)
+        if not confirm_discard:
+            raise CodingServiceError("Rewind requires explicit confirmation that later workspace changes may be discarded.")
+        if phase not in {"before", "after"}:
+            raise CodingServiceError("Checkpoint phase must be before or after.")
+        if session.status == "running" or self.store.get_running_turn(session.id) is not None:
+            raise CodingServiceError("Stop the running coding turn before rewinding this session.")
+        if session.status == "closed":
+            raise CodingServiceError("Closed coding sessions cannot be rewound.")
+        if session.workspace_kind != WorkspaceKind.git_worktree:
+            raise CodingServiceError("Only isolated writable Git workspaces can be rewound.")
+        checkpoint = self.get_checkpoint(session.id, checkpoint_id)
+        snapshot = checkpoint.before if phase == "before" else checkpoint.after
+        if snapshot is None:
+            raise CodingServiceError("The requested checkpoint phase has not been captured.")
+        try:
+            restored_commit = await asyncio.to_thread(
+                self.workspace_manager.restore_snapshot,
+                session.workspace_root,
+                snapshot,
+            )
+        except CodingWorkspaceError as exc:
+            raise CodingServiceError(str(exc)) from exc
+        session = self.store.rewind_session(session.id)
+        self._checkpoint_git_capability[session.id] = True
+        self.store.record_event(
+            session_id=session.id,
+            provider=session.provider,
+            event_type="session.rewound",
+            message="Coding workspace rewound",
+            payload={
+                "checkpoint_id": checkpoint.id,
+                "phase": phase,
+                "restored_commit": restored_commit,
+                "workspace_generation": session.workspace_generation,
+                "provider_session_reset": True,
+            },
+        )
+        return session
 
     async def stop_turn(self, session_id: str, turn_id: str | None = None) -> None:
         session = self.get_session(session_id)
