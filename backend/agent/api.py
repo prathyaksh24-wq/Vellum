@@ -36,7 +36,15 @@ from agent.cli.project_commands import (
     handle_project_command,
 )
 from agent.coding.events import event_payload, sse as coding_sse
-from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName
+from agent.coding.models import (
+    AccessMode,
+    CodingSession,
+    CodingSessionCreate,
+    CodingTurnLimits,
+    DEFAULT_MAX_PROVIDER_EVENTS,
+    DEFAULT_MAX_RUNTIME_SECONDS,
+    ProviderName,
+)
 from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
@@ -322,6 +330,8 @@ class CodingSessionBody(BaseModel):
 
 class CodingTurnBody(BaseModel):
     prompt: str = Field(min_length=1)
+    max_runtime_seconds: int = Field(default=DEFAULT_MAX_RUNTIME_SECONDS, ge=1, le=24 * 60 * 60)
+    max_provider_events: int = Field(default=DEFAULT_MAX_PROVIDER_EVENTS, ge=1, le=100_000)
 
 
 class ConversationContextRequest(BaseModel):
@@ -1581,6 +1591,10 @@ def _coding_session_json(session: CodingSession) -> dict[str, Any]:
         "status": session.status,
         "created_at": session.created_at,
         "updated_at": session.updated_at,
+        "tenant_id": getattr(session, "tenant_id", "local"),
+        "principal_id": getattr(session, "principal_id", "local-user"),
+        "workspace_generation": getattr(session, "workspace_generation", 1),
+        "trace_id": getattr(session, "trace_id", ""),
     }
 
 
@@ -4613,7 +4627,14 @@ async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> Streaming
         if session.status == "running":
             raise CodingServiceError("Coding session already has a running turn.")
         _ensure_coding_provider_ready(session.provider)
-        stream = coding_service.run_turn(session_id, body.prompt)
+        stream = coding_service.run_turn(
+            session_id,
+            body.prompt,
+            limits=CodingTurnLimits(
+                max_runtime_seconds=body.max_runtime_seconds,
+                max_provider_events=body.max_provider_events,
+            ),
+        )
         first_event = await anext(stream)
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
@@ -4645,9 +4666,17 @@ async def coding_session_stop(session_id: str) -> dict[str, Any]:
 
 
 @router.get("/coding/sessions/{session_id}/events")
-async def coding_session_events(session_id: str) -> dict[str, Any]:
+async def coding_session_events(
+    session_id: str,
+    after_sequence: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
     try:
-        return {"events": [event_payload(event) for event in coding_service.list_events(session_id)]}
+        return {
+            "events": [
+                event_payload(event)
+                for event in coding_service.list_events(session_id, after_sequence=after_sequence)
+            ]
+        }
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
 

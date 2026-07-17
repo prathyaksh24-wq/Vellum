@@ -7,6 +7,7 @@ from agent.coding.models import (
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    CodingTurnLimits,
     ProviderHealth,
     ProviderName,
     utc_now,
@@ -131,6 +132,32 @@ class FailingStopAdapter(StopRecordingAdapter):
     async def stop_turn(self, session: CodingSession, turn_id: str) -> None:
         await super().stop_turn(session, turn_id)
         raise RuntimeError("stop failed")
+
+
+class BurstAdapter(StopRecordingAdapter):
+    def __init__(self, event_count: int):
+        super().__init__()
+        self.event_count = event_count
+
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        for index in range(self.event_count):
+            yield CodingEvent(
+                "",
+                session.id,
+                turn_id,
+                self.provider,
+                "assistant.delta",
+                str(index),
+                {"text": str(index)},
+                utc_now(),
+            )
+
+
+class SlowAdapter(StopRecordingAdapter):
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        await asyncio.sleep(60)
+        if False:
+            yield CodingEvent("", session.id, turn_id, self.provider, "assistant.final", "done", {}, utc_now())
 
 
 def test_service_creates_session_and_records_provider_id(tmp_path: Path):
@@ -572,3 +599,86 @@ def test_service_marks_turn_stopped_when_stream_is_closed(tmp_path: Path):
     assert turn is not None
     assert turn.status == "stopped"
     assert turn.error == "Coding turn cancelled."
+
+
+def test_service_propagates_trace_and_sequence_across_turn_events(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: FakeAdapter()})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "hello")]
+
+    events = asyncio.run(collect())
+    persisted = store.list_events(session.id)
+    turn_events = [event for event in persisted if event.turn_id == events[0].turn_id]
+
+    assert len({event.trace_id for event in turn_events}) == 1
+    assert turn_events[0].trace_id.startswith("trace_")
+    assert [event.sequence for event in persisted] == list(range(1, len(persisted) + 1))
+    assert events[0].payload["trace_id"] == turn_events[0].trace_id
+
+
+def test_service_stops_provider_at_event_limit(tmp_path: Path):
+    adapter = BurstAdapter(event_count=3)
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [
+            event
+            async for event in service.run_turn(
+                session.id,
+                "hello",
+                limits=CodingTurnLimits(max_runtime_seconds=30, max_provider_events=2),
+            )
+        ]
+
+    events = asyncio.run(collect())
+    turn = store.get_turn(events[0].turn_id)
+
+    assert [event.type for event in events] == [
+        "turn.started",
+        "assistant.delta",
+        "assistant.delta",
+        "turn.limit_reached",
+    ]
+    assert events[-1].payload == {
+        "reason": "provider_event_count",
+        "limit": 2,
+        "provider_event_count": 2,
+    }
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert turn.provider_event_count == 2
+    assert service.get_session(session.id).status == "stopped"
+    assert adapter.stopped == [(session.id, turn.id)]
+
+
+def test_service_stops_provider_at_runtime_limit(tmp_path: Path):
+    adapter = SlowAdapter()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [
+            event
+            async for event in service.run_turn(
+                session.id,
+                "hello",
+                limits=CodingTurnLimits(max_runtime_seconds=1, max_provider_events=10),
+            )
+        ]
+
+    events = asyncio.run(collect())
+    turn = store.get_turn(events[0].turn_id)
+
+    assert [event.type for event in events] == ["turn.started", "turn.limit_reached"]
+    assert events[-1].payload["reason"] == "runtime_seconds"
+    assert events[-1].payload["limit"] == 1
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert service.get_session(session.id).status == "stopped"
+    assert adapter.stopped == [(session.id, turn.id)]

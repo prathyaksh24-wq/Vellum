@@ -1,17 +1,33 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 
-from agent.coding.adapters.base import CodingAdapterError, CodingProviderAdapter
+from agent.coding.adapters.base import CodingProviderAdapter
 from agent.coding.adapters.claude import ClaudeAdapter
 from agent.coding.adapters.codex import CodexAdapter
-from agent.coding.models import CodingEvent, CodingSession, CodingSessionCreate, ProviderHealth, ProviderName
-from agent.coding.storage import CodingSessionStore
+from agent.coding.models import (
+    CodingEvent,
+    CodingSession,
+    CodingSessionCreate,
+    CodingTurn,
+    CodingTurnLimits,
+    ProviderHealth,
+    ProviderName,
+)
+from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
 
 
 class CodingServiceError(RuntimeError):
     pass
+
+
+class CodingRunLimitReached(RuntimeError):
+    def __init__(self, *, reason: str, limit: int) -> None:
+        self.reason = reason
+        self.limit = limit
+        super().__init__(f"Coding turn reached its {reason} limit ({limit}).")
 
 
 class CodingSessionService:
@@ -61,13 +77,21 @@ class CodingSessionService:
             raise CodingServiceError("Coding session failed to start.") from exc
         return session
 
-    async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
+    async def run_turn(
+        self,
+        session_id: str,
+        prompt: str,
+        *,
+        limits: CodingTurnLimits | None = None,
+    ) -> AsyncIterator[CodingEvent]:
         session = self.get_session(session_id)
         if session.status == "running":
             raise CodingServiceError("Coding session already has a running turn.")
         adapter = self._adapter(session.provider)
-        turn = self.store.create_turn(session.id, prompt)
-        self.store.set_session_status(session.id, "running")
+        try:
+            turn = self.store.create_turn(session.id, prompt, limits=limits)
+        except CodingTurnConflictError as exc:
+            raise CodingServiceError(str(exc)) from exc
         final_text = ""
         turn_finished = False
         try:
@@ -77,26 +101,39 @@ class CodingSessionService:
                 provider=session.provider,
                 event_type="turn.started",
                 message="Coding turn started",
-                payload={"prompt": prompt},
+                payload={
+                    "prompt": prompt,
+                    "trace_id": turn.trace_id,
+                    "limits": {
+                        "max_runtime_seconds": turn.max_runtime_seconds,
+                        "max_provider_events": turn.max_provider_events,
+                    },
+                },
             )
-            async for raw_event in adapter.run_turn(session, prompt, turn.id):
-                current_turn = self.store.get_turn(turn.id)
-                if current_turn is not None and current_turn.status == "stopped":
-                    turn_finished = True
-                    return
-                event = self.store.record_event(
-                    session_id=session.id,
-                    turn_id=turn.id,
-                    provider=session.provider,
-                    event_type=raw_event.type,
-                    message=raw_event.message,
-                    payload=raw_event.payload,
-                )
-                if event.type == "session.resumed" and event.payload.get("provider_session_id"):
-                    self.store.set_provider_session_id(session.id, str(event.payload["provider_session_id"]))
-                if event.type == "assistant.final":
-                    final_text = str(event.payload.get("text") or "")
-                yield event
+            async with asyncio.timeout(turn.max_runtime_seconds):
+                async for raw_event in adapter.run_turn(session, prompt, turn.id):
+                    current_turn = self.store.get_turn(turn.id)
+                    if current_turn is not None and current_turn.status == "stopped":
+                        turn_finished = True
+                        return
+                    if not self.store.claim_provider_event(turn.id):
+                        raise CodingRunLimitReached(
+                            reason="provider_event_count",
+                            limit=turn.max_provider_events,
+                        )
+                    event = self.store.record_event(
+                        session_id=session.id,
+                        turn_id=turn.id,
+                        provider=session.provider,
+                        event_type=raw_event.type,
+                        message=raw_event.message,
+                        payload=raw_event.payload,
+                    )
+                    if event.type == "session.resumed" and event.payload.get("provider_session_id"):
+                        self.store.set_provider_session_id(session.id, str(event.payload["provider_session_id"]))
+                    if event.type == "assistant.final":
+                        final_text = str(event.payload.get("text") or "")
+                    yield event
             current_turn = self.store.get_turn(turn.id)
             if current_turn is not None and current_turn.status == "stopped":
                 turn_finished = True
@@ -115,7 +152,29 @@ class CodingSessionService:
                 message="Coding turn completed",
                 payload={"final_response": final_text},
             )
-        except (CodingAdapterError, Exception) as exc:
+        except TimeoutError:
+            limit_event = await self._finish_limited_turn(
+                session=session,
+                turn=turn,
+                adapter=adapter,
+                reason="runtime_seconds",
+                limit=turn.max_runtime_seconds,
+            )
+            turn_finished = True
+            if limit_event is not None:
+                yield limit_event
+        except CodingRunLimitReached as exc:
+            limit_event = await self._finish_limited_turn(
+                session=session,
+                turn=turn,
+                adapter=adapter,
+                reason=exc.reason,
+                limit=exc.limit,
+            )
+            turn_finished = True
+            if limit_event is not None:
+                yield limit_event
+        except Exception as exc:
             current_turn = self.store.get_turn(turn.id)
             if current_turn is not None and current_turn.status == "stopped":
                 turn_finished = True
@@ -176,9 +235,46 @@ class CodingSessionService:
             self.store.set_session_status(session.id, "stopped")
         await self._adapter(session.provider).stop_turn(session, active_turn_id)
 
-    def list_events(self, session_id: str) -> list[CodingEvent]:
+    def list_events(self, session_id: str, *, after_sequence: int = 0) -> list[CodingEvent]:
         self.get_session(session_id)
-        return self.store.list_events(session_id)
+        return self.store.list_events(session_id, after_sequence=after_sequence)
+
+    async def _finish_limited_turn(
+        self,
+        *,
+        session: CodingSession,
+        turn: CodingTurn,
+        adapter: CodingProviderAdapter,
+        reason: str,
+        limit: int,
+    ) -> CodingEvent | None:
+        message = f"Coding turn stopped after reaching its {reason} limit ({limit})."
+        stopped_turn = self.store.finish_running_turn(turn.id, status="stopped", error=message)
+        if stopped_turn is None:
+            return None
+        self.store.set_session_status(session.id, "stopped")
+
+        stop_error = ""
+        try:
+            await asyncio.wait_for(adapter.stop_turn(session, turn.id), timeout=5.0)
+        except Exception as exc:
+            stop_error = str(exc) or exc.__class__.__name__
+
+        payload = {
+            "reason": reason,
+            "limit": limit,
+            "provider_event_count": stopped_turn.provider_event_count,
+        }
+        if stop_error:
+            payload["provider_stop_error"] = stop_error
+        return self.store.record_event(
+            session_id=session.id,
+            turn_id=turn.id,
+            provider=session.provider,
+            event_type="turn.limit_reached",
+            message=message,
+            payload=payload,
+        )
 
     def _adapter(self, provider: ProviderName) -> CodingProviderAdapter:
         adapter = self.adapters.get(provider)

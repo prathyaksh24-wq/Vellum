@@ -9,6 +9,10 @@ from agent.coding.service import CodingServiceError
 
 
 class FakeCodingService:
+    def __init__(self):
+        self.last_limits = None
+        self.last_after_sequence = None
+
     def health(self):
         return [
             ProviderHealth(ProviderName.codex, True, True, "Codex ready."),
@@ -52,7 +56,8 @@ class FakeCodingService:
             },
         )()
 
-    async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
+        self.last_limits = limits
         yield CodingEvent(
             "evt_1",
             session_id,
@@ -64,7 +69,8 @@ class FakeCodingService:
             utc_now(),
         )
 
-    def list_events(self, session_id):
+    def list_events(self, session_id, *, after_sequence=0):
+        self.last_after_sequence = after_sequence
         return []
 
     async def stop_turn(self, session_id: str):
@@ -75,7 +81,7 @@ class MissingSessionCodingService(FakeCodingService):
     def get_session(self, session_id):
         raise CodingServiceError("Coding session not found.")
 
-    async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
         raise CodingServiceError("Coding session not found.")
         yield
 
@@ -214,3 +220,41 @@ def test_coding_stop_missing_session_returns_404(monkeypatch):
         response = client.post("/api/coding/sessions/missing/stop")
 
     assert response.status_code == 404
+
+
+def test_coding_turn_stream_passes_bounded_run_limits(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/turns/stream",
+            json={"prompt": "hello", "max_runtime_seconds": 45, "max_provider_events": 250},
+        )
+
+    assert response.status_code == 200
+    assert service.last_limits.max_runtime_seconds == 45
+    assert service.last_limits.max_provider_events == 250
+
+
+def test_coding_turn_stream_rejects_invalid_run_limits(monkeypatch):
+    monkeypatch.setattr(api, "coding_service", FakeCodingService())
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/turns/stream",
+            json={"prompt": "hello", "max_runtime_seconds": 0, "max_provider_events": 0},
+        )
+
+    assert response.status_code == 422
+
+
+def test_coding_event_replay_passes_sequence_cursor(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/coding/sessions/code_1/events?after_sequence=17")
+
+    assert response.status_code == 200
+    assert service.last_after_sequence == 17
