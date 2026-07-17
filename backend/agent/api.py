@@ -4645,6 +4645,7 @@ async def coding_health() -> dict[str, Any]:
                 "available": health.available,
                 "configured": health.configured,
                 "message": health.message,
+                "capabilities": health.capabilities.payload() if health.capabilities else None,
             }
         )
     return {"providers": providers}

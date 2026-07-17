@@ -23,6 +23,7 @@ from agent.coding.models import (
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    ProviderCapabilities,
     ProviderHealth,
     ProviderName,
     utc_now,
@@ -181,6 +182,22 @@ class ClaudeAdapter:
     def __init__(self) -> None:
         self._active_turns: dict[str, _ActiveClaudeTurn] = {}
 
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            access_modes=(
+                AccessMode.read_only,
+                AccessMode.workspace_write,
+                AccessMode.full_access,
+                AccessMode.ask_every_time,
+            ),
+            session_resume=True,
+            cancellation=True,
+            structured_tool_events=True,
+            usage_events=True,
+            file_change_events=False,
+            native_approval_events=False,
+        )
+
     def health(self) -> ProviderHealth:
         available = importlib.util.find_spec(self.sdk_module_name) is not None
         configured = available and claude_auth_configured()
@@ -195,6 +212,7 @@ class ClaudeAdapter:
                 if available
                 else "Claude Agent SDK is not installed."
             ),
+            capabilities=self.capabilities(),
         )
 
     async def start_session(self, request: CodingSessionCreate) -> str | None:

@@ -28,6 +28,23 @@ def test_adapter_dependency_module_names_are_stable():
     assert ClaudeAdapter().sdk_module_name == "claude_agent_sdk"
 
 
+def test_adapter_capabilities_are_explicit_and_provider_specific():
+    codex = CodexAdapter().capabilities()
+    claude = ClaudeAdapter().capabilities()
+
+    assert codex.access_modes == (
+        AccessMode.read_only,
+        AccessMode.workspace_write,
+        AccessMode.full_access,
+    )
+    assert AccessMode.ask_every_time not in codex.access_modes
+    assert AccessMode.ask_every_time in claude.access_modes
+    assert codex.file_change_events is True
+    assert claude.file_change_events is False
+    assert codex.native_approval_events is False
+    assert claude.native_approval_events is False
+
+
 def test_codex_health_reports_missing_dependency(monkeypatch):
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
 

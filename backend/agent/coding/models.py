@@ -40,11 +40,34 @@ class WorkspaceKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class ProviderCapabilities:
+    access_modes: tuple[AccessMode, ...] = (AccessMode.read_only,)
+    session_resume: bool = False
+    cancellation: bool = False
+    structured_tool_events: bool = False
+    usage_events: bool = False
+    file_change_events: bool = False
+    native_approval_events: bool = False
+
+    def payload(self) -> dict[str, Any]:
+        return {
+            "access_modes": [mode.value for mode in self.access_modes],
+            "session_resume": self.session_resume,
+            "cancellation": self.cancellation,
+            "structured_tool_events": self.structured_tool_events,
+            "usage_events": self.usage_events,
+            "file_change_events": self.file_change_events,
+            "native_approval_events": self.native_approval_events,
+        }
+
+
+@dataclass(frozen=True)
 class ProviderHealth:
     provider: ProviderName
     available: bool
     configured: bool
     message: str
+    capabilities: ProviderCapabilities | None = None
 
 
 @dataclass(frozen=True)

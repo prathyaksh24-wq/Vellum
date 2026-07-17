@@ -1477,6 +1477,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function normalizedPath(value){ return String(value||"").trim().replace(/[\\/]+$/,"").toLowerCase(); }
   function sessionProjectRoot(session){ return (session&&session.source_cwd)||((session&&session.cwd)||""); }
   function healthFor(provider){ return (codingHealth.providers||[]).find(item=>item.provider===provider); }
+  function supportedAccessModeIds(provider){ const capabilities=(healthFor(provider)||{}).capabilities||{}; return capabilities.access_modes||["read_only"]; }
   async function refreshCodingHealth(){
     const api=codingApiRef.current; if(!api) return;
     try{ const health=await api.health(); setCodingHealth(health); setCodingStatus("ready"); setCodingError(""); }
@@ -1918,7 +1919,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     return [...cmds, ...sk];
   }
   function runSlash(item){ if(item && item.run) item.run(); }
-  const providerAccessModes=CODING_ACCESS_MODES.filter(item=>item.id!=="ask_every_time"||codingProvider==="claude");
+  const providerAccessModes=CODING_ACCESS_MODES.filter(item=>supportedAccessModeIds(codingProvider).includes(item.id));
   const codingAccess=(providerAccessModes.find(item=>item.id===codingAccessMode)||providerAccessModes[0]);
   const composerApi = {
     accessLabel:codingAccess.label, accessMode:codingAccessMode, setAccessMode:setCodingAccessMode, accessModes:providerAccessModes,
@@ -1954,7 +1955,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(health&&health.available&&health.configured) cls+=" ready"; else if(health&&health.available) cls+=" warn";
     return cls;
   }
-  function chooseCodingProvider(provider){ if(running) return; if(provider==="codex"&&codingAccessMode==="ask_every_time") setCodingAccessMode("read_only"); setCodingProvider(provider); }
+  function chooseCodingProvider(provider){ if(running) return; const supported=supportedAccessModeIds(provider); if(!supported.includes(codingAccessMode)) setCodingAccessMode(supported[0]||"read_only"); setCodingProvider(provider); }
   function codingHealthText(){
     if(codingStatus==="offline") return codingError||"Local coding backend is offline.";
     if(codingStatus==="checking") return "Checking installed coding runtimes…";

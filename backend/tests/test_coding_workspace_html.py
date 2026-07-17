@@ -24,6 +24,8 @@ def test_workspace_html_uses_web_native_coding_runtime() -> None:
     assert "Checkpoint captured" in html
     assert "rewindCodingCheckpoint" in html
     assert "provider will start with a fresh session" in html
+    assert "supportedAccessModeIds" in html
+    assert 'item.id!=="ask_every_time"||codingProvider==="claude"' not in html
     assert "PLANNER_SYS" not in html
     assert "async function streamModel" not in html
     assert "? <ChromeBrowser" not in html

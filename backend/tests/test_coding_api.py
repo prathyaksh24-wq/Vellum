@@ -166,6 +166,7 @@ def test_coding_health_endpoint(monkeypatch):
     assert response.status_code == 200
     assert response.json()["providers"][0]["provider"] == "codex"
     assert response.json()["providers"][1]["available"] is False
+    assert response.json()["providers"][0]["capabilities"] is None
 
 
 def test_coding_session_create_endpoint(monkeypatch, tmp_path):
