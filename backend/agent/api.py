@@ -4748,6 +4748,27 @@ async def coding_session_events(
         raise _coding_http_exception(exc) from exc
 
 
+@router.get("/coding/sessions/{session_id}/checkpoints")
+async def coding_session_checkpoints(session_id: str) -> dict[str, Any]:
+    try:
+        return {
+            "checkpoints": [
+                checkpoint.payload(include_patch=False)
+                for checkpoint in coding_service.list_checkpoints(session_id)
+            ]
+        }
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.get("/coding/sessions/{session_id}/checkpoints/{checkpoint_id}")
+async def coding_session_checkpoint(session_id: str, checkpoint_id: str) -> dict[str, Any]:
+    try:
+        return coding_service.get_checkpoint(session_id, checkpoint_id).payload(include_patch=True)
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
 @router.get("/coding/projects/tree")
 async def coding_project_tree(root: str) -> dict[str, Any]:
     return _project_tree(root)

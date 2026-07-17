@@ -4,8 +4,10 @@ from fastapi.testclient import TestClient
 
 from agent import api
 from agent.coding.adapters.base import CodingAdapterError
+from agent.coding.checkpoints import CodingCheckpoint
 from agent.coding.models import AccessMode, CodingEvent, ProviderHealth, ProviderName, utc_now
 from agent.coding.service import CodingServiceError
+from agent.coding.workspace import WorkspaceSnapshot
 
 
 class FakeCodingService:
@@ -73,6 +75,21 @@ class FakeCodingService:
     def list_events(self, session_id, *, after_sequence=0):
         self.last_after_sequence = after_sequence
         return []
+
+    def list_checkpoints(self, session_id):
+        return [self.get_checkpoint(session_id, "checkpoint_1")]
+
+    def get_checkpoint(self, session_id, checkpoint_id):
+        return CodingCheckpoint(
+            id=checkpoint_id,
+            session_id=session_id,
+            turn_id="turn_1",
+            status="completed",
+            before=WorkspaceSnapshot(captured_at="t0", git_head="abc"),
+            after=WorkspaceSnapshot(captured_at="t1", git_head="abc", patch="diff"),
+            created_at="t0",
+            finalized_at="t1",
+        )
 
     async def stop_turn(self, session_id: str):
         return None
@@ -182,6 +199,20 @@ def test_coding_session_close_endpoint_records_explicit_discard(monkeypatch):
     assert response.status_code == 200
     assert response.json()["status"] == "closed"
     assert service.last_discard_changes is True
+
+
+def test_coding_checkpoint_endpoints_keep_patch_out_of_list(monkeypatch):
+    monkeypatch.setattr(api, "coding_service", FakeCodingService())
+
+    with TestClient(api.app) as client:
+        listed = client.get("/api/coding/sessions/code_1/checkpoints")
+        detail = client.get("/api/coding/sessions/code_1/checkpoints/checkpoint_1")
+
+    assert listed.status_code == 200
+    assert "patch" not in listed.json()["checkpoints"][0]["after"]
+    assert listed.json()["checkpoints"][0]["after"]["patch_bytes"] == 4
+    assert detail.status_code == 200
+    assert detail.json()["after"]["patch"] == "diff"
 
 
 def test_coding_session_create_preflights_unavailable_provider(monkeypatch, tmp_path):

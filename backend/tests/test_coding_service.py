@@ -102,6 +102,21 @@ class FailingTurnAdapter(FakeAdapter):
         yield
 
 
+class WritingAdapter(FakeAdapter):
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        (Path(session.cwd) / "app.py").write_text("print('agent changed this')\n", encoding="utf-8")
+        yield CodingEvent(
+            "",
+            session.id,
+            turn_id,
+            self.provider,
+            "assistant.final",
+            "done",
+            {"text": "updated"},
+            utc_now(),
+        )
+
+
 class StopRecordingAdapter(FakeAdapter):
     def __init__(self):
         self.stopped = []
@@ -477,6 +492,41 @@ def test_service_streams_turn_and_persists_events(tmp_path: Path):
     assert assistant_event.payload == {"text": "answer: hello"}
 
 
+def test_service_captures_before_and_after_workspace_checkpoint(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: WritingAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "Update app")]
+
+    events = asyncio.run(collect())
+    checkpoint_id = events[0].payload["checkpoint_id"]
+    checkpoint = service.get_checkpoint(session.id, checkpoint_id)
+
+    assert checkpoint.status == "completed"
+    assert checkpoint.before.changed_files == ()
+    assert checkpoint.after is not None
+    assert checkpoint.after.changed_files == ("app.py",)
+    assert "agent changed this" in checkpoint.after.patch
+    assert events[-1].payload["checkpoint"]["id"] == checkpoint_id
+    assert "patch" not in events[-1].payload["checkpoint"]["after"]
+    assert service.list_checkpoints(session.id) == [checkpoint]
+
+
 def test_service_rejects_concurrent_turn_for_session(tmp_path: Path):
     store = CodingSessionStore(tmp_path / "coding.db")
     service = CodingSessionService(store=store, adapters={ProviderName.codex: FakeAdapter()})
@@ -524,7 +574,8 @@ def test_service_persists_turn_error_and_status(tmp_path: Path):
     events = asyncio.run(collect())
 
     assert [event.type for event in events] == ["turn.started", "turn.error"]
-    assert events[-1].payload == {"error": "turn failed"}
+    assert events[-1].payload["error"] == "turn failed"
+    assert events[-1].payload["checkpoint"]["status"] == "error"
     assert service.get_session(session.id).status == "error"
 
 
@@ -816,11 +867,10 @@ def test_service_stops_provider_at_event_limit(tmp_path: Path):
         "assistant.delta",
         "turn.limit_reached",
     ]
-    assert events[-1].payload == {
-        "reason": "provider_event_count",
-        "limit": 2,
-        "provider_event_count": 2,
-    }
+    assert events[-1].payload["reason"] == "provider_event_count"
+    assert events[-1].payload["limit"] == 2
+    assert events[-1].payload["provider_event_count"] == 2
+    assert events[-1].payload["checkpoint"]["status"] == "stopped"
     assert turn is not None
     assert turn.status == "stopped"
     assert turn.provider_event_count == 2

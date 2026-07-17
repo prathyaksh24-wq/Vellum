@@ -88,6 +88,17 @@ describe("createCodingApi", () => {
     );
   });
 
+  test("loads bounded checkpoint summaries and one detailed patch", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ checkpoints: [] }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.checkpoints("code 1");
+    await api.checkpoint("code 1", "checkpoint 1");
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("code%201/checkpoints");
+    expect(fetchImpl.mock.calls[1][0]).toContain("code%201/checkpoints/checkpoint%201");
+  });
+
   test("parses text fallback when response body is unavailable", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,

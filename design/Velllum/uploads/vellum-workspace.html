@@ -563,6 +563,8 @@ function createCodingApi(apiBase){
     session:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)),
     createSession:(body)=>json("/api/coding/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),
     events:(id,afterSequence=0)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/events?after_sequence="+encodeURIComponent(afterSequence)),
+    checkpoints:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/checkpoints"),
+    checkpoint:(id,checkpointId)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/checkpoints/"+encodeURIComponent(checkpointId)),
     projectTree:(root)=>json("/api/coding/projects/tree?root="+encodeURIComponent(root)),
     projectFile:(root,path)=>json("/api/coding/projects/file?root="+encodeURIComponent(root)+"&path="+encodeURIComponent(path)),
     stop:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/stop",{method:"POST"}),
@@ -1504,6 +1506,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(type.startsWith("tool.")){
       const item=payload.item||{}; const detail=payload.name||item.name||item.tool_name||payload.input||"Provider tool";
       return {id:data.id,type:"tool",label:type.endsWith("completed")?"Tool completed":"Tool started",detail:compactValue(detail),state:type.endsWith("completed")?"complete":"running"};
+    }
+    if(payload.checkpoint&&(type==="turn.completed"||type==="turn.error"||type==="turn.limit_reached"||type==="turn.stopped")){
+      const after=payload.checkpoint.after||{}, files=after.changed_files||[], suffix=after.files_truncated?"+":"";
+      return {id:data.id+"-checkpoint",type:"file",label:"Checkpoint captured",detail:files.length+suffix+" changed file"+(files.length===1?"":"s"),state:"complete"};
     }
     if(type==="provider.warning") return {id:data.id,type:"warning",label:"Provider warning",detail:compactValue(payload)||data.message,state:"error"};
     return null;

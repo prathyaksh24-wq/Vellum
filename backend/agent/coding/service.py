@@ -8,6 +8,7 @@ from pathlib import Path
 from agent.coding.adapters.base import CodingProviderAdapter
 from agent.coding.adapters.claude import ClaudeAdapter
 from agent.coding.adapters.codex import CodexAdapter
+from agent.coding.checkpoints import CodingCheckpoint
 from agent.coding.models import (
     CodingEvent,
     CodingSession,
@@ -16,9 +17,15 @@ from agent.coding.models import (
     CodingTurnLimits,
     ProviderHealth,
     ProviderName,
+    utc_now,
 )
 from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
-from agent.coding.workspace import CodingWorkspaceError, CodingWorkspaceManager, WorkspaceProvision
+from agent.coding.workspace import (
+    CodingWorkspaceError,
+    CodingWorkspaceManager,
+    WorkspaceProvision,
+    WorkspaceSnapshot,
+)
 
 
 class CodingServiceError(RuntimeError):
@@ -45,6 +52,7 @@ class CodingSessionService:
             ProviderName.claude: ClaudeAdapter(),
         }
         self.workspace_manager = workspace_manager or CodingWorkspaceManager()
+        self._checkpoint_git_capability: dict[str, bool] = {}
         self._cleanup_stale_running_state()
 
     def health(self) -> list[ProviderHealth]:
@@ -158,6 +166,7 @@ class CodingSessionService:
                 "preserved_branch": session.workspace_branch,
             },
         )
+        self._checkpoint_git_capability.pop(session.id, None)
         return session
 
     async def run_turn(
@@ -180,6 +189,7 @@ class CodingSessionService:
         final_text = ""
         turn_finished = False
         try:
+            checkpoint = await self._start_checkpoint(session, turn)
             yield self.store.record_event(
                 session_id=session.id,
                 turn_id=turn.id,
@@ -189,6 +199,7 @@ class CodingSessionService:
                 payload={
                     "prompt": prompt,
                     "trace_id": turn.trace_id,
+                    "checkpoint_id": checkpoint.id,
                     "limits": {
                         "max_runtime_seconds": turn.max_runtime_seconds,
                         "max_provider_events": turn.max_provider_events,
@@ -228,6 +239,7 @@ class CodingSessionService:
                 turn_finished = True
                 return
             self.store.set_session_status(session.id, "idle")
+            checkpoint = await self._finalize_checkpoint(session, turn, status="completed")
             turn_finished = True
             yield self.store.record_event(
                 session_id=session.id,
@@ -235,7 +247,10 @@ class CodingSessionService:
                 provider=session.provider,
                 event_type="turn.completed",
                 message="Coding turn completed",
-                payload={"final_response": final_text},
+                payload={
+                    "final_response": final_text,
+                    "checkpoint": checkpoint.payload(include_patch=False) if checkpoint else None,
+                },
             )
         except TimeoutError:
             limit_event = await self._finish_limited_turn(
@@ -270,6 +285,7 @@ class CodingSessionService:
                 turn_finished = True
                 return
             self.store.set_session_status(session.id, "error")
+            checkpoint = await self._finalize_checkpoint(session, turn, status="error")
             turn_finished = True
             yield self.store.record_event(
                 session_id=session.id,
@@ -277,7 +293,10 @@ class CodingSessionService:
                 provider=session.provider,
                 event_type="turn.error",
                 message=message,
-                payload={"error": message},
+                payload={
+                    "error": message,
+                    "checkpoint": checkpoint.payload(include_patch=False) if checkpoint else None,
+                },
             )
         finally:
             if not turn_finished:
@@ -288,6 +307,7 @@ class CodingSessionService:
                 )
                 if stopped_turn is not None:
                     self.store.set_session_status(session.id, "stopped")
+                    await self._finalize_checkpoint(session, turn, status="stopped")
 
     async def stop_turn(self, session_id: str, turn_id: str | None = None) -> None:
         session = self.get_session(session_id)
@@ -308,21 +328,46 @@ class CodingSessionService:
             if stopped_turn is None:
                 return
             self.store.set_session_status(session.id, "stopped")
+        else:
+            self.store.set_session_status(session.id, "stopped")
+        stop_error: Exception | None = None
+        try:
+            await self._adapter(session.provider).stop_turn(session, active_turn_id)
+        except Exception as exc:
+            stop_error = exc
+        if active_turn:
+            checkpoint = await self._finalize_checkpoint(session, active_turn, status="stopped")
+            payload = {
+                "turn_id": active_turn.id,
+                "checkpoint": checkpoint.payload(include_patch=False) if checkpoint else None,
+            }
+            if stop_error is not None:
+                payload["provider_stop_error"] = str(stop_error) or stop_error.__class__.__name__
             self.store.record_event(
                 session_id=session.id,
                 turn_id=active_turn.id,
                 provider=session.provider,
                 event_type="turn.stopped",
                 message="Coding turn stopped",
-                payload={"turn_id": active_turn.id},
+                payload=payload,
             )
-        else:
-            self.store.set_session_status(session.id, "stopped")
-        await self._adapter(session.provider).stop_turn(session, active_turn_id)
+        if stop_error is not None:
+            raise stop_error
 
     def list_events(self, session_id: str, *, after_sequence: int = 0) -> list[CodingEvent]:
         self.get_session(session_id)
         return self.store.list_events(session_id, after_sequence=after_sequence)
+
+    def list_checkpoints(self, session_id: str) -> list[CodingCheckpoint]:
+        self.get_session(session_id)
+        return self.store.list_checkpoints(session_id)
+
+    def get_checkpoint(self, session_id: str, checkpoint_id: str) -> CodingCheckpoint:
+        self.get_session(session_id)
+        checkpoint = self.store.get_checkpoint(checkpoint_id)
+        if checkpoint is None or checkpoint.session_id != session_id:
+            raise CodingServiceError("Coding checkpoint not found.")
+        return checkpoint
 
     async def _finish_limited_turn(
         self,
@@ -352,6 +397,8 @@ class CodingSessionService:
         }
         if stop_error:
             payload["provider_stop_error"] = stop_error
+        checkpoint = await self._finalize_checkpoint(session, turn, status="stopped")
+        payload["checkpoint"] = checkpoint.payload(include_patch=False) if checkpoint else None
         return self.store.record_event(
             session_id=session.id,
             turn_id=turn.id,
@@ -360,6 +407,51 @@ class CodingSessionService:
             message=message,
             payload=payload,
         )
+
+    async def _start_checkpoint(self, session: CodingSession, turn: CodingTurn) -> CodingCheckpoint:
+        before = await self._capture_snapshot(session)
+        return self.store.create_checkpoint(
+            session_id=session.id,
+            turn_id=turn.id,
+            before=before,
+        )
+
+    async def _finalize_checkpoint(
+        self,
+        session: CodingSession,
+        turn: CodingTurn,
+        *,
+        status: str,
+    ) -> CodingCheckpoint | None:
+        existing = self.store.get_checkpoint_for_turn(turn.id)
+        if existing is None or existing.finalized_at is not None:
+            return existing
+        after = await self._capture_snapshot(session)
+        return self.store.finish_checkpoint(turn.id, status=status, after=after)
+
+    async def _capture_snapshot(self, session: CodingSession) -> WorkspaceSnapshot:
+        git_available = self._checkpoint_git_capability.get(session.id)
+        if git_available is None:
+            git_available = bool(session.workspace_repository_root) or await asyncio.to_thread(
+                self.workspace_manager.is_git_workspace,
+                session.workspace_root or session.cwd,
+            )
+            self._checkpoint_git_capability[session.id] = git_available
+        if not git_available:
+            return WorkspaceSnapshot(
+                captured_at=utc_now(),
+                capture_error="Git checkpoint unavailable because this project is not a Git repository.",
+            )
+        try:
+            return await asyncio.to_thread(
+                self.workspace_manager.capture_snapshot,
+                session.workspace_root or session.cwd,
+            )
+        except Exception as exc:
+            return WorkspaceSnapshot(
+                captured_at=utc_now(),
+                capture_error=str(exc) or exc.__class__.__name__,
+            )
 
     def _adapter(self, provider: ProviderName) -> CodingProviderAdapter:
         adapter = self.adapters.get(provider)
@@ -371,6 +463,14 @@ class CodingSessionService:
         stale_session_ids = set()
         for turn in self.store.list_running_turns():
             self.store.finish_turn(turn.id, status="stopped", error="Coding turn interrupted by restart.")
+            self.store.finish_checkpoint(
+                turn.id,
+                status="stopped",
+                after=WorkspaceSnapshot(
+                    captured_at=utc_now(),
+                    capture_error="Backend restarted before the after-turn checkpoint could be captured.",
+                ),
+            )
             stale_session_ids.add(turn.session_id)
         for session in self.store.list_sessions():
             if session.status == "running" or session.id in stale_session_ids:

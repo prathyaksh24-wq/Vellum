@@ -7,6 +7,12 @@ from pathlib import Path
 from typing import Iterator
 from uuid import uuid4
 
+from agent.coding.checkpoints import (
+    DEFAULT_MAX_CHECKPOINTS_PER_SESSION,
+    CodingCheckpoint,
+    snapshot_from_payload,
+    snapshot_payload,
+)
 from agent.coding.models import (
     AccessMode,
     CodingEvent,
@@ -21,6 +27,7 @@ from agent.coding.models import (
     new_trace_id,
     utc_now,
 )
+from agent.coding.workspace import WorkspaceSnapshot
 
 
 class CodingTurnConflictError(RuntimeError):
@@ -106,6 +113,20 @@ class CodingSessionStore:
                     FOREIGN KEY(turn_id) REFERENCES coding_turns(id),
                     FOREIGN KEY(turn_id, session_id) REFERENCES coding_turns(id, session_id)
                 );
+                CREATE TABLE IF NOT EXISTS coding_checkpoints (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    turn_id TEXT NOT NULL UNIQUE,
+                    status TEXT NOT NULL,
+                    before_snapshot_json TEXT NOT NULL,
+                    after_snapshot_json TEXT,
+                    created_at TEXT NOT NULL,
+                    finalized_at TEXT,
+                    FOREIGN KEY(session_id) REFERENCES coding_sessions(id),
+                    FOREIGN KEY(turn_id, session_id) REFERENCES coding_turns(id, session_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_coding_checkpoints_session_created
+                ON coding_checkpoints(session_id, created_at DESC);
                 """
             )
             self._ensure_column(conn, "coding_sessions", "tenant_id", "TEXT NOT NULL DEFAULT 'local'")
@@ -307,6 +328,7 @@ class CodingSessionStore:
     def delete_session(self, session_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM coding_events WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM coding_checkpoints WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM coding_turns WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM coding_sessions WHERE id = ?", (session_id,))
 
@@ -490,6 +512,113 @@ class CodingSessionStore:
             ).fetchone()
         return self._turn_from_row(row) if row else None
 
+    def create_checkpoint(
+        self,
+        *,
+        session_id: str,
+        turn_id: str,
+        before: WorkspaceSnapshot,
+        max_per_session: int = DEFAULT_MAX_CHECKPOINTS_PER_SESSION,
+    ) -> CodingCheckpoint:
+        if max_per_session < 1:
+            raise ValueError("max_per_session must be positive")
+        checkpoint = CodingCheckpoint(
+            id=f"checkpoint_{uuid4().hex}",
+            session_id=session_id,
+            turn_id=turn_id,
+            status="started",
+            before=before,
+            after=None,
+            created_at=utc_now(),
+        )
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO coding_checkpoints
+                (id, session_id, turn_id, status, before_snapshot_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    checkpoint.id,
+                    checkpoint.session_id,
+                    checkpoint.turn_id,
+                    checkpoint.status,
+                    json.dumps(snapshot_payload(before, include_patch=True), ensure_ascii=False),
+                    checkpoint.created_at,
+                ),
+            )
+            stale_rows = conn.execute(
+                """
+                SELECT id FROM coding_checkpoints
+                WHERE session_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT -1 OFFSET ?
+                """,
+                (session_id, max_per_session),
+            ).fetchall()
+            if stale_rows:
+                conn.executemany(
+                    "DELETE FROM coding_checkpoints WHERE id = ?",
+                    [(row["id"],) for row in stale_rows],
+                )
+        return checkpoint
+
+    def finish_checkpoint(
+        self,
+        turn_id: str,
+        *,
+        status: str,
+        after: WorkspaceSnapshot,
+    ) -> CodingCheckpoint | None:
+        finalized_at = utc_now()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE coding_checkpoints
+                SET status = ?, after_snapshot_json = ?, finalized_at = ?
+                WHERE turn_id = ? AND finalized_at IS NULL
+                """,
+                (
+                    status,
+                    json.dumps(snapshot_payload(after, include_patch=True), ensure_ascii=False),
+                    finalized_at,
+                    turn_id,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM coding_checkpoints WHERE turn_id = ?",
+                (turn_id,),
+            ).fetchone()
+        return self._checkpoint_from_row(row) if row else None
+
+    def get_checkpoint(self, checkpoint_id: str) -> CodingCheckpoint | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM coding_checkpoints WHERE id = ?",
+                (checkpoint_id,),
+            ).fetchone()
+        return self._checkpoint_from_row(row) if row else None
+
+    def get_checkpoint_for_turn(self, turn_id: str) -> CodingCheckpoint | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM coding_checkpoints WHERE turn_id = ?",
+                (turn_id,),
+            ).fetchone()
+        return self._checkpoint_from_row(row) if row else None
+
+    def list_checkpoints(self, session_id: str) -> list[CodingCheckpoint]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM coding_checkpoints
+                WHERE session_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                """,
+                (session_id,),
+            ).fetchall()
+        return [self._checkpoint_from_row(row) for row in rows]
+
     def list_running_turns(self) -> list[CodingTurn]:
         with self._connect() as conn:
             rows = conn.execute(
@@ -626,4 +755,18 @@ class CodingSessionStore:
             created_at=row["created_at"],
             trace_id=row["trace_id"],
             sequence=row["sequence"],
+        )
+
+    def _checkpoint_from_row(self, row: sqlite3.Row) -> CodingCheckpoint:
+        before = snapshot_from_payload(json.loads(row["before_snapshot_json"]))
+        after_payload = json.loads(row["after_snapshot_json"]) if row["after_snapshot_json"] else None
+        return CodingCheckpoint(
+            id=row["id"],
+            session_id=row["session_id"],
+            turn_id=row["turn_id"],
+            status=row["status"],
+            before=before,
+            after=snapshot_from_payload(after_payload) if after_payload else None,
+            created_at=row["created_at"],
+            finalized_at=row["finalized_at"],
         )

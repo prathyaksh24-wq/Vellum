@@ -9,6 +9,7 @@ from agent.coding.events import event_name, sse
 from agent.coding.models import AccessMode, CodingSessionCreate, ProviderName, WorkspaceKind
 from agent.coding import storage as coding_storage
 from agent.coding.storage import CodingSessionStore, CodingTurnConflictError
+from agent.coding.workspace import WorkspaceSnapshot
 
 
 def test_coding_store_creates_and_lists_sessions(tmp_path: Path):
@@ -105,6 +106,61 @@ def test_coding_store_finish_running_turn_only_allows_one_terminal_transition(tm
     assert persisted is not None
     assert persisted.status == "stopped"
     assert persisted.error == "first stop"
+
+
+def test_coding_store_persists_bounded_checkpoint_lifecycle(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))
+    turn = store.create_turn(session.id, "Change app")
+    before = WorkspaceSnapshot(captured_at="t0", git_head="abc", changed_files=(), patch="")
+    checkpoint = store.create_checkpoint(session_id=session.id, turn_id=turn.id, before=before)
+    after = WorkspaceSnapshot(
+        captured_at="t1",
+        git_head="abc",
+        changed_files=("app.py",),
+        patch="diff --git a/app.py b/app.py\n",
+        patch_truncated=True,
+    )
+
+    finalized = store.finish_checkpoint(turn.id, status="completed", after=after)
+
+    assert finalized is not None
+    assert finalized.id == checkpoint.id
+    assert finalized.status == "completed"
+    assert finalized.after == after
+    assert store.get_checkpoint(checkpoint.id) == finalized
+    assert store.get_checkpoint_for_turn(turn.id) == finalized
+    assert store.list_checkpoints(session.id) == [finalized]
+    summary = finalized.payload(include_patch=False)
+    assert "patch" not in summary["after"]
+    assert summary["after"]["patch_bytes"] == len(after.patch.encode("utf-8"))
+
+
+def test_coding_store_prunes_old_checkpoints_per_session(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    session = store.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path)))
+    checkpoint_ids = []
+    for index in range(3):
+        turn = store.create_turn(session.id, f"Turn {index}")
+        checkpoint = store.create_checkpoint(
+            session_id=session.id,
+            turn_id=turn.id,
+            before=WorkspaceSnapshot(captured_at=f"t{index}"),
+            max_per_session=2,
+        )
+        checkpoint_ids.append(checkpoint.id)
+        store.finish_checkpoint(
+            turn.id,
+            status="completed",
+            after=WorkspaceSnapshot(captured_at=f"t{index}-after"),
+        )
+        store.finish_turn(turn.id, status="completed")
+        store.set_session_status(session.id, "idle")
+
+    retained = store.list_checkpoints(session.id)
+
+    assert [checkpoint.id for checkpoint in retained] == list(reversed(checkpoint_ids[-2:]))
+    assert store.get_checkpoint(checkpoint_ids[0]) is None
 
 
 def test_coding_store_rejects_orphan_turns_and_events(tmp_path: Path):

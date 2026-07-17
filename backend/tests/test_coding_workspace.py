@@ -105,3 +105,46 @@ def test_workspace_manager_enforces_active_worktree_limit(tmp_path: Path) -> Non
             )
     finally:
         manager.release(first, force=True, delete_branch=True)
+
+
+def test_workspace_snapshot_captures_changed_files_and_bounded_patch(tmp_path: Path) -> None:
+    repository = _repository(tmp_path / "project")
+    manager = CodingWorkspaceManager(tmp_path / "worktrees")
+    (repository / "src" / "app.py").write_text("print('changed')\n", encoding="utf-8")
+    (repository / "src" / "new.py").write_text("NEW = True\n", encoding="utf-8")
+
+    snapshot = manager.capture_snapshot(str(repository), max_patch_bytes=16 * 1024)
+
+    assert snapshot.git_head == _git(repository, "rev-parse", "HEAD")
+    assert snapshot.changed_files == ("src/app.py", "src/new.py")
+    assert "print('changed')" in snapshot.patch
+    assert snapshot.patch_truncated is False
+    assert snapshot.capture_error == ""
+
+
+def test_workspace_snapshot_stops_git_diff_at_patch_limit(tmp_path: Path) -> None:
+    repository = _repository(tmp_path / "project")
+    manager = CodingWorkspaceManager(tmp_path / "worktrees")
+    (repository / "src" / "app.py").write_text("x" * 20_000, encoding="utf-8")
+
+    snapshot = manager.capture_snapshot(str(repository), max_patch_bytes=128)
+
+    assert len(snapshot.patch.encode("utf-8")) <= 128
+    assert snapshot.patch_truncated is True
+
+
+def test_workspace_snapshot_excludes_secret_files_and_patch_content(tmp_path: Path) -> None:
+    repository = _repository(tmp_path / "project")
+    manager = CodingWorkspaceManager(tmp_path / "worktrees")
+    (repository / ".env").write_text("TOKEN=original\n", encoding="utf-8")
+    _git(repository, "add", ".env")
+    _git(repository, "commit", "-m", "add env fixture")
+    (repository / ".env").write_text("TOKEN=do-not-expose\n", encoding="utf-8")
+    (repository / "private.pem").write_text("private-material\n", encoding="utf-8")
+
+    snapshot = manager.capture_snapshot(str(repository))
+
+    assert ".env" not in snapshot.changed_files
+    assert "private.pem" not in snapshot.changed_files
+    assert "do-not-expose" not in snapshot.patch
+    assert "private-material" not in snapshot.patch
