@@ -66,6 +66,7 @@ from agent.obsidian.conversation_export import archive_conversation_projection, 
 from agent.obsidian.conversation_context import ConversationContextStore
 from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
+from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.portable import discover_portable_plugins
@@ -98,6 +99,7 @@ from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
 _api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
+_observability = ObservabilityService(REPO_ROOT / "data" / "memory" / "observability.db")
 _memory_orchestrator = get_memory_orchestrator()
 _conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _fts5_memory = _memory_orchestrator.fts5
@@ -2498,6 +2500,11 @@ def _response_event(
         "created_at": _stream_now(),
         **payload,
     }
+    try:
+        _observability.capture(body)
+    except Exception:
+        # Observability is additive and must never interrupt a chat response.
+        pass
     return _sse(event_type, body)
 
 
@@ -2637,6 +2644,77 @@ def _response_error(*, response_id: str, thread_id: str, message: str) -> str:
         response_id=response_id,
         thread_id=thread_id,
         error={"message": message},
+    )
+
+
+def _observability_days(period: str) -> int | None:
+    if period == "today":
+        return 1
+    if period == "7d":
+        return 7
+    if period == "30d":
+        return 30
+    if period == "month":
+        now = datetime.now(timezone.utc)
+        return max(1, (now - now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)).days + 1)
+    return None
+
+
+def _observability_snapshot(period: str) -> dict[str, Any]:
+    days = _observability_days(period)
+    return {
+        "schema_version": 1,
+        "source": "vellum-native",
+        "generated_at": _stream_now(),
+        "period": period,
+        "freshness": {"state": "live", "updated_at": _stream_now()},
+        "usage": _api_ledger.observability_summary(days=days),
+        "runs": _observability.summary(days=days),
+        "recent_runs": _observability.recent_runs(limit=12),
+    }
+
+
+@router.get("/observability/summary")
+async def observability_summary(period: Literal["today", "7d", "30d", "month", "all"] = "7d") -> dict[str, Any]:
+    return await asyncio.to_thread(_observability_snapshot, period)
+
+
+@router.get("/observability/runs")
+async def observability_runs(limit: int = Query(default=20, ge=1, le=100)) -> dict[str, Any]:
+    return {"runs": await asyncio.to_thread(_observability.recent_runs, limit=limit)}
+
+
+@router.post("/observability/refresh")
+async def observability_refresh(period: Literal["today", "7d", "30d", "month", "all"] = "7d") -> dict[str, Any]:
+    return await asyncio.to_thread(_observability_snapshot, period)
+
+
+@router.get("/observability/stream")
+async def observability_stream(request: Request, last_event_id: int = Query(default=0, ge=0)) -> StreamingResponse:
+    header_id = request.headers.get("last-event-id", "").strip()
+    if header_id.isdigit():
+        last_event_id = max(last_event_id, int(header_id))
+
+    async def event_stream():
+        queue = _observability.subscribe()
+        try:
+            for item in await asyncio.to_thread(_observability.events_since, last_event_id):
+                yield _sse("observability.event", item)
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=15)
+                    yield _sse("observability.event", item)
+                except TimeoutError:
+                    yield _sse("observability.heartbeat", {"at": _stream_now()})
+        finally:
+            _observability.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
