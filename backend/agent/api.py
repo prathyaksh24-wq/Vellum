@@ -1671,6 +1671,44 @@ def _project_tree(root: str) -> dict[str, Any]:
     return {"root": str(base), "items": items}
 
 
+def _project_file(root: str, relative_path: str) -> dict[str, Any]:
+    base = Path(root).expanduser().resolve()
+    if not base.exists() or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not _is_allowed_coding_project_root(base):
+        raise HTTPException(status_code=403, detail="Project root is not allowed.")
+    if "\x00" in relative_path:
+        raise HTTPException(status_code=400, detail="Project file path is invalid.")
+    requested = Path(relative_path)
+    if requested.is_absolute() or not requested.parts or any(part in {"", ".", ".."} for part in requested.parts):
+        raise HTTPException(status_code=400, detail="Project file path is invalid.")
+    if any(_hidden_coding_file(part) for part in requested.parts):
+        raise HTTPException(status_code=403, detail="Project file is protected.")
+    target = (base / requested).resolve()
+    if not target.is_relative_to(base):
+        raise HTTPException(status_code=403, detail="Project file is outside the workspace.")
+    if any(_hidden_coding_file(part) for part in target.relative_to(base).parts):
+        raise HTTPException(status_code=403, detail="Project file is protected.")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Project file not found.")
+    try:
+        size = target.stat().st_size
+        limit = 512 * 1024
+        with target.open("rb") as handle:
+            raw = handle.read(limit)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Project file is not readable.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Project file could not be read.") from exc
+    return {
+        "root": str(base),
+        "path": target.relative_to(base).as_posix(),
+        "content": raw.decode("utf-8", errors="replace"),
+        "size": size,
+        "truncated": size > limit,
+    }
+
+
 def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
     message = str(exc)
     cause = exc.__cause__
@@ -4684,6 +4722,11 @@ async def coding_session_events(
 @router.get("/coding/projects/tree")
 async def coding_project_tree(root: str) -> dict[str, Any]:
     return _project_tree(root)
+
+
+@router.get("/coding/projects/file")
+async def coding_project_file(root: str, path: str) -> dict[str, Any]:
+    return _project_file(root, path)
 
 
 @router.get("/coding/projects/recent")

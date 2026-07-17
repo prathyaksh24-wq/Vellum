@@ -258,3 +258,62 @@ def test_coding_event_replay_passes_sequence_cursor(monkeypatch):
 
     assert response.status_code == 200
     assert service.last_after_sequence == 17
+
+
+def test_coding_project_file_returns_bounded_workspace_text(monkeypatch, tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "app.py").write_text("print('vellum')\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "src/app.py"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["path"] == "src/app.py"
+    assert response.json()["content"].replace("\r\n", "\n") == "print('vellum')\n"
+    assert response.json()["truncated"] is False
+
+
+def test_coding_project_file_rejects_traversal(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "../outside.txt"},
+        )
+
+    assert response.status_code == 400
+
+
+def test_coding_project_file_blocks_protected_files(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": ".env"},
+        )
+
+    assert response.status_code == 403
+    assert "SECRET" not in response.text
+
+
+def test_coding_project_file_truncates_large_files(monkeypatch, tmp_path):
+    (tmp_path / "large.txt").write_text("x" * (512 * 1024 + 20), encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "large.txt"},
+        )
+
+    assert response.status_code == 200
+    assert len(response.json()["content"]) == 512 * 1024
+    assert response.json()["truncated"] is True

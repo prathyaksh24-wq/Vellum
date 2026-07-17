@@ -48,9 +48,26 @@ describe("createCodingApi", () => {
     expect(events).toEqual([{ event: "assistant_delta", data: { payload: { text: "hello" } } }]);
     expect(fetchImpl).toHaveBeenCalledWith("http://127.0.0.1:8000/api/coding/sessions/code%201/turns/stream", {
       method: "POST",
+      signal: undefined,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "hello" }),
+      body: JSON.stringify({ prompt: "hello", max_runtime_seconds: 1800, max_provider_events: 10000 }),
     });
+  });
+
+  test("supports replay, file reads, and provider stop", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.events("code 1", 17);
+    await api.projectFile("D:\\Vellum", "src/app.py");
+    await api.stop("code 1");
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("code%201/events?after_sequence=17");
+    expect(fetchImpl.mock.calls[1][0]).toContain("root=D%3A%5CVellum&path=src%2Fapp.py");
+    expect(fetchImpl.mock.calls[2]).toEqual([
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/stop",
+      { method: "POST" },
+    ]);
   });
 
   test("parses text fallback when response body is unavailable", async () => {

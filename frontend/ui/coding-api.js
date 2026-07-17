@@ -44,11 +44,25 @@ export function createCodingApi({ apiBase = "http://127.0.0.1:8000", fetchImpl =
     projectTree(root) {
       return json(`/api/coding/projects/tree?root=${encodeURIComponent(root)}`);
     },
-    async runTurn(sessionId, prompt, onEvent) {
+    projectFile(root, path) {
+      return json(`/api/coding/projects/file?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`);
+    },
+    events(sessionId, afterSequence = 0) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/events?after_sequence=${encodeURIComponent(afterSequence)}`);
+    },
+    stop(sessionId) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/stop`, { method: "POST" });
+    },
+    async runTurn(sessionId, prompt, onEvent, { signal, maxRuntimeSeconds = 1800, maxProviderEvents = 10000 } = {}) {
       const response = await fetchImpl(`${base}/api/coding/sessions/${encodeURIComponent(sessionId)}/turns/stream`, {
         method: "POST",
+        signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          prompt,
+          max_runtime_seconds: maxRuntimeSeconds,
+          max_provider_events: maxProviderEvents,
+        }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
