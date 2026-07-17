@@ -188,7 +188,6 @@ class ClaudeAdapter:
                 AccessMode.read_only,
                 AccessMode.workspace_write,
                 AccessMode.full_access,
-                AccessMode.ask_every_time,
             ),
             session_resume=True,
             cancellation=True,

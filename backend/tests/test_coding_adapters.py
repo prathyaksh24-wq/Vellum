@@ -38,7 +38,7 @@ def test_adapter_capabilities_are_explicit_and_provider_specific():
         AccessMode.full_access,
     )
     assert AccessMode.ask_every_time not in codex.access_modes
-    assert AccessMode.ask_every_time in claude.access_modes
+    assert AccessMode.ask_every_time not in claude.access_modes
     assert codex.file_change_events is True
     assert claude.file_change_events is False
     assert codex.native_approval_events is False
