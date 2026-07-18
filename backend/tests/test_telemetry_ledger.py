@@ -70,6 +70,20 @@ def test_pragma_user_version_is_one(ledger: UsageLedger) -> None:
     assert ledger.user_version() == 1
 
 
+def test_observability_summary_uses_only_rows_in_window(ledger: UsageLedger) -> None:
+    old_ts = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    new_ts = datetime.now(timezone.utc).isoformat()
+    ledger.record(thread_id="old", model="old-model", in_tokens=500, out_tokens=100, source="api", ts=old_ts)
+    ledger.record(thread_id="new", model="new-model", in_tokens=200, out_tokens=50, source="api", ts=new_ts)
+
+    summary = ledger.observability_summary(days=7)
+    assert summary["total_tokens"] == 250
+    assert summary["calls"] == 1
+    assert summary["sessions"] == 1
+    assert summary["models"][0]["model"] == "new-model"
+    assert summary["state"] == "ready"
+
+
 from agent.telemetry.hooks import (
     capture_from_invoke_result,
     capture_from_stream_event,
