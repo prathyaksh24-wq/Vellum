@@ -4,11 +4,19 @@ from fastapi.testclient import TestClient
 
 from agent import api
 from agent.coding.adapters.base import CodingAdapterError
+from agent.coding.checkpoints import CodingCheckpoint
 from agent.coding.models import AccessMode, CodingEvent, ProviderHealth, ProviderName, utc_now
 from agent.coding.service import CodingServiceError
+from agent.coding.workspace import WorkspaceSnapshot
 
 
 class FakeCodingService:
+    def __init__(self):
+        self.last_limits = None
+        self.last_after_sequence = None
+        self.last_discard_changes = None
+        self.last_rewind = None
+
     def health(self):
         return [
             ProviderHealth(ProviderName.codex, True, True, "Codex ready."),
@@ -52,7 +60,8 @@ class FakeCodingService:
             },
         )()
 
-    async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
+        self.last_limits = limits
         yield CodingEvent(
             "evt_1",
             session_id,
@@ -64,18 +73,47 @@ class FakeCodingService:
             utc_now(),
         )
 
-    def list_events(self, session_id):
+    def list_events(self, session_id, *, after_sequence=0):
+        self.last_after_sequence = after_sequence
         return []
+
+    def list_checkpoints(self, session_id):
+        return [self.get_checkpoint(session_id, "checkpoint_1")]
+
+    def get_checkpoint(self, session_id, checkpoint_id):
+        return CodingCheckpoint(
+            id=checkpoint_id,
+            session_id=session_id,
+            turn_id="turn_1",
+            status="completed",
+            before=WorkspaceSnapshot(captured_at="t0", git_head="abc"),
+            after=WorkspaceSnapshot(captured_at="t1", git_head="abc", patch="diff"),
+            created_at="t0",
+            finalized_at="t1",
+        )
 
     async def stop_turn(self, session_id: str):
         return None
+
+    async def close_session(self, session_id: str, *, discard_changes: bool = False):
+        self.last_discard_changes = discard_changes
+        session = self.get_session(session_id)
+        session.status = "closed"
+        return session
+
+    async def rewind_session(self, session_id, checkpoint_id, *, phase, confirm_discard):
+        self.last_rewind = (session_id, checkpoint_id, phase, confirm_discard)
+        session = self.get_session(session_id)
+        session.provider_session_id = None
+        session.workspace_generation = 2
+        return session
 
 
 class MissingSessionCodingService(FakeCodingService):
     def get_session(self, session_id):
         raise CodingServiceError("Coding session not found.")
 
-    async def run_turn(self, session_id: str, prompt: str) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
         raise CodingServiceError("Coding session not found.")
         yield
 
@@ -128,6 +166,7 @@ def test_coding_health_endpoint(monkeypatch):
     assert response.status_code == 200
     assert response.json()["providers"][0]["provider"] == "codex"
     assert response.json()["providers"][1]["available"] is False
+    assert response.json()["providers"][0]["capabilities"] is None
 
 
 def test_coding_session_create_endpoint(monkeypatch, tmp_path):
@@ -154,6 +193,51 @@ def test_coding_session_create_provider_unavailable_returns_503(monkeypatch, tmp
         )
 
     assert response.status_code == 503
+
+
+def test_coding_session_close_endpoint_records_explicit_discard(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/close",
+            json={"discard_changes": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "closed"
+    assert service.last_discard_changes is True
+
+
+def test_coding_checkpoint_endpoints_keep_patch_out_of_list(monkeypatch):
+    monkeypatch.setattr(api, "coding_service", FakeCodingService())
+
+    with TestClient(api.app) as client:
+        listed = client.get("/api/coding/sessions/code_1/checkpoints")
+        detail = client.get("/api/coding/sessions/code_1/checkpoints/checkpoint_1")
+
+    assert listed.status_code == 200
+    assert "patch" not in listed.json()["checkpoints"][0]["after"]
+    assert listed.json()["checkpoints"][0]["after"]["patch_bytes"] == 4
+    assert detail.status_code == 200
+    assert detail.json()["after"]["patch"] == "diff"
+
+
+def test_coding_rewind_endpoint_requires_explicit_payload(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/rewind/checkpoint_1",
+            json={"phase": "before", "confirm_discard": True},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["provider_session_id"] is None
+    assert response.json()["workspace_generation"] == 2
+    assert service.last_rewind == ("code_1", "checkpoint_1", "before", True)
 
 
 def test_coding_session_create_preflights_unavailable_provider(monkeypatch, tmp_path):
@@ -214,3 +298,100 @@ def test_coding_stop_missing_session_returns_404(monkeypatch):
         response = client.post("/api/coding/sessions/missing/stop")
 
     assert response.status_code == 404
+
+
+def test_coding_turn_stream_passes_bounded_run_limits(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/turns/stream",
+            json={"prompt": "hello", "max_runtime_seconds": 45, "max_provider_events": 250},
+        )
+
+    assert response.status_code == 200
+    assert service.last_limits.max_runtime_seconds == 45
+    assert service.last_limits.max_provider_events == 250
+
+
+def test_coding_turn_stream_rejects_invalid_run_limits(monkeypatch):
+    monkeypatch.setattr(api, "coding_service", FakeCodingService())
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/coding/sessions/code_1/turns/stream",
+            json={"prompt": "hello", "max_runtime_seconds": 0, "max_provider_events": 0},
+        )
+
+    assert response.status_code == 422
+
+
+def test_coding_event_replay_passes_sequence_cursor(monkeypatch):
+    service = FakeCodingService()
+    monkeypatch.setattr(api, "coding_service", service)
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/coding/sessions/code_1/events?after_sequence=17")
+
+    assert response.status_code == 200
+    assert service.last_after_sequence == 17
+
+
+def test_coding_project_file_returns_bounded_workspace_text(monkeypatch, tmp_path):
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "app.py").write_text("print('vellum')\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "src/app.py"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["path"] == "src/app.py"
+    assert response.json()["content"].replace("\r\n", "\n") == "print('vellum')\n"
+    assert response.json()["truncated"] is False
+
+
+def test_coding_project_file_rejects_traversal(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "../outside.txt"},
+        )
+
+    assert response.status_code == 400
+
+
+def test_coding_project_file_blocks_protected_files(monkeypatch, tmp_path):
+    (tmp_path / ".env").write_text("SECRET=value\n", encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": ".env"},
+        )
+
+    assert response.status_code == 403
+    assert "SECRET" not in response.text
+
+
+def test_coding_project_file_truncates_large_files(monkeypatch, tmp_path):
+    (tmp_path / "large.txt").write_text("x" * (512 * 1024 + 20), encoding="utf-8")
+    monkeypatch.setattr(api, "_coding_project_roots", lambda: [tmp_path.resolve()])
+
+    with TestClient(api.app) as client:
+        response = client.get(
+            "/api/coding/projects/file",
+            params={"root": str(tmp_path), "path": "large.txt"},
+        )
+
+    assert response.status_code == 200
+    assert len(response.json()["content"]) == 512 * 1024
+    assert response.json()["truncated"] is True

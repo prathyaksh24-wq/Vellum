@@ -14,8 +14,15 @@ EVENT_NAME_BY_TYPE = {
     "assistant.final": "assistant_final",
     "tool.started": "tool",
     "tool.completed": "tool",
+    "command.started": "command",
+    "command.output": "command",
+    "command.completed": "command",
     "file.changed": "file_change",
+    "usage": "usage",
+    "provider.warning": "warning",
     "turn.completed": "done",
+    "turn.stopped": "stopped",
+    "turn.limit_reached": "limit_reached",
     "turn.error": "error",
 }
 
@@ -34,6 +41,8 @@ def event_payload(event: CodingEvent) -> dict[str, Any]:
         "message": event.message,
         "payload": event.payload,
         "created_at": event.created_at,
+        "trace_id": event.trace_id,
+        "sequence": event.sequence,
     }
 
 

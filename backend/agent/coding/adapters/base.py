@@ -3,7 +3,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from agent.coding.models import CodingEvent, CodingSession, CodingSessionCreate, ProviderHealth, ProviderName
+from agent.coding.models import (
+    CodingEvent,
+    CodingSession,
+    CodingSessionCreate,
+    ProviderCapabilities,
+    ProviderHealth,
+    ProviderName,
+)
 
 
 class CodingAdapterError(RuntimeError):
@@ -14,6 +21,9 @@ class CodingProviderAdapter(Protocol):
     provider: ProviderName
 
     def health(self) -> ProviderHealth:
+        ...
+
+    def capabilities(self) -> ProviderCapabilities:
         ...
 
     async def start_session(self, request: CodingSessionCreate) -> str | None:

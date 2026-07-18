@@ -48,9 +48,70 @@ describe("createCodingApi", () => {
     expect(events).toEqual([{ event: "assistant_delta", data: { payload: { text: "hello" } } }]);
     expect(fetchImpl).toHaveBeenCalledWith("http://127.0.0.1:8000/api/coding/sessions/code%201/turns/stream", {
       method: "POST",
+      signal: undefined,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "hello" }),
+      body: JSON.stringify({ prompt: "hello", max_runtime_seconds: 1800, max_provider_events: 10000 }),
     });
+  });
+
+  test("supports replay, file reads, and provider stop", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.events("code 1", 17);
+    await api.projectFile("D:\\Vellum", "src/app.py");
+    await api.stop("code 1");
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("code%201/events?after_sequence=17");
+    expect(fetchImpl.mock.calls[1][0]).toContain("root=D%3A%5CVellum&path=src%2Fapp.py");
+    expect(fetchImpl.mock.calls[2]).toEqual([
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/stop",
+      { method: "POST" },
+    ]);
+  });
+
+  test("closes an isolated coding session with an explicit discard decision", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: "code 1", status: "closed" }),
+    }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.close("code 1", { discardChanges: true });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/close",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ discard_changes: true }),
+      }),
+    );
+  });
+
+  test("loads bounded checkpoint summaries and one detailed patch", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ checkpoints: [] }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.checkpoints("code 1");
+    await api.checkpoint("code 1", "checkpoint 1");
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("code%201/checkpoints");
+    expect(fetchImpl.mock.calls[1][0]).toContain("code%201/checkpoints/checkpoint%201");
+  });
+
+  test("rewinds only with an explicit phase and discard confirmation", async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, json: async () => ({ status: "idle" }) }));
+    const api = createCodingApi({ fetchImpl });
+
+    await api.rewind("code 1", "checkpoint 1", { phase: "before", confirmDiscard: true });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:8000/api/coding/sessions/code%201/rewind/checkpoint%201",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ phase: "before", confirm_discard: true }),
+      }),
+    );
   });
 
   test("parses text fallback when response body is unavailable", async () => {

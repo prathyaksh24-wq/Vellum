@@ -1,18 +1,21 @@
 from collections.abc import AsyncIterator
 import asyncio
 from pathlib import Path
+import subprocess
 
 from agent.coding.models import (
     AccessMode,
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    CodingTurnLimits,
     ProviderHealth,
     ProviderName,
     utc_now,
 )
 from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.coding.storage import CodingSessionStore
+from agent.coding.workspace import CodingWorkspaceManager
 
 
 class FakeAdapter:
@@ -45,6 +48,36 @@ class FailingStartAdapter(FakeAdapter):
         raise RuntimeError("sdk unavailable")
 
 
+class RequestRecordingAdapter(FakeAdapter):
+    def __init__(self) -> None:
+        self.requests: list[CodingSessionCreate] = []
+
+    async def start_session(self, request: CodingSessionCreate):
+        self.requests.append(request)
+        return await super().start_session(request)
+
+
+def _git(cwd: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def _git_repository(path: Path) -> Path:
+    path.mkdir()
+    _git(path, "init")
+    _git(path, "config", "user.name", "Vellum Tests")
+    _git(path, "config", "user.email", "vellum-tests@example.invalid")
+    (path / "app.py").write_text("print('ready')\n", encoding="utf-8")
+    _git(path, "add", ".")
+    _git(path, "commit", "-m", "initial")
+    return path
+
+
 class ResumingAdapter(FakeAdapter):
     async def start_session(self, request: CodingSessionCreate):
         return None
@@ -67,6 +100,21 @@ class FailingTurnAdapter(FakeAdapter):
     async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
         raise RuntimeError("turn failed")
         yield
+
+
+class WritingAdapter(FakeAdapter):
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        (Path(session.cwd) / "app.py").write_text("print('agent changed this')\n", encoding="utf-8")
+        yield CodingEvent(
+            "",
+            session.id,
+            turn_id,
+            self.provider,
+            "assistant.final",
+            "done",
+            {"text": "updated"},
+            utc_now(),
+        )
 
 
 class StopRecordingAdapter(FakeAdapter):
@@ -133,6 +181,32 @@ class FailingStopAdapter(StopRecordingAdapter):
         raise RuntimeError("stop failed")
 
 
+class BurstAdapter(StopRecordingAdapter):
+    def __init__(self, event_count: int):
+        super().__init__()
+        self.event_count = event_count
+
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        for index in range(self.event_count):
+            yield CodingEvent(
+                "",
+                session.id,
+                turn_id,
+                self.provider,
+                "assistant.delta",
+                str(index),
+                {"text": str(index)},
+                utc_now(),
+            )
+
+
+class SlowAdapter(StopRecordingAdapter):
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        await asyncio.sleep(60)
+        if False:
+            yield CodingEvent("", session.id, turn_id, self.provider, "assistant.final", "done", {}, utc_now())
+
+
 def test_service_creates_session_and_records_provider_id(tmp_path: Path):
     service = CodingSessionService(
         store=CodingSessionStore(tmp_path / "coding.db"),
@@ -153,7 +227,117 @@ def test_service_creates_session_and_records_provider_id(tmp_path: Path):
     assert session.cwd == str(tmp_path.resolve())
     [event] = service.list_events(session.id)
     assert event.type == "session.started"
-    assert event.payload == {"cwd": str(tmp_path.resolve()), "provider_session_id": "provider-thread-1"}
+    assert event.payload == {
+        "cwd": str(tmp_path.resolve()),
+        "source_cwd": str(tmp_path.resolve()),
+        "provider_session_id": "provider-thread-1",
+        "workspace": {
+            "kind": "direct",
+            "root": str(tmp_path.resolve()),
+            "branch": "",
+            "base_commit": "",
+        },
+    }
+
+
+def test_service_provisions_writable_git_worktree_before_starting_provider(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    adapter = RequestRecordingAdapter()
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: adapter},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    assert session.source_cwd == str(repository.resolve())
+    assert session.workspace_kind.value == "git_worktree"
+    assert session.workspace_branch == f"vellum/session/{session.id}"
+    assert session.workspace_base_commit == _git(repository, "rev-parse", "HEAD")
+    assert Path(session.cwd).parent == (tmp_path / "worktrees").resolve()
+    assert adapter.requests[0].cwd == session.cwd
+
+
+def test_service_rejects_writable_non_git_project_without_persisting_session(tmp_path: Path):
+    source = tmp_path / "project"
+    source.mkdir()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FakeAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+
+    try:
+        asyncio.run(
+            service.create_session(
+                CodingSessionCreate(
+                    provider=ProviderName.codex,
+                    cwd=str(source),
+                    access_mode=AccessMode.workspace_write,
+                )
+            )
+        )
+    except CodingServiceError as exc:
+        assert "require a Git repository" in str(exc)
+    else:
+        raise AssertionError("expected writable non-Git project failure")
+
+    assert store.list_sessions() == []
+
+
+def test_service_close_requires_discard_for_dirty_worktree_and_preserves_branch(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FakeAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+    (Path(session.cwd) / "agent-change.txt").write_text("pending\n", encoding="utf-8")
+
+    try:
+        asyncio.run(service.close_session(session.id))
+    except CodingServiceError as exc:
+        assert "uncommitted changes" in str(exc)
+    else:
+        raise AssertionError("expected dirty workspace close failure")
+
+    assert Path(session.workspace_root).exists()
+    closed = asyncio.run(service.close_session(session.id, discard_changes=True))
+
+    assert closed.status == "closed"
+    assert not Path(session.workspace_root).exists()
+    assert _git(repository, "branch", "--list", session.workspace_branch) == f"{session.workspace_branch}"
+    assert store.list_events(session.id)[-1].type == "session.closed"
+
+    async def collect_closed_turn():
+        return [event async for event in service.run_turn(session.id, "continue")]
+
+    try:
+        asyncio.run(collect_closed_turn())
+    except CodingServiceError as exc:
+        assert "session is closed" in str(exc)
+    else:
+        raise AssertionError("expected closed session turn failure")
 
 
 def test_service_reports_health_from_configured_adapters(tmp_path: Path):
@@ -245,6 +429,36 @@ def test_service_does_not_persist_session_when_provider_start_fails(tmp_path: Pa
     assert store.list_sessions() == []
 
 
+def test_service_releases_created_worktree_when_provider_start_fails(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    worktree_root = tmp_path / "worktrees"
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: FailingStartAdapter()},
+        workspace_manager=CodingWorkspaceManager(worktree_root),
+    )
+
+    try:
+        asyncio.run(
+            service.create_session(
+                CodingSessionCreate(
+                    provider=ProviderName.codex,
+                    cwd=str(repository),
+                    access_mode=AccessMode.workspace_write,
+                )
+            )
+        )
+    except CodingServiceError as exc:
+        assert str(exc) == "Coding session failed to start."
+    else:
+        raise AssertionError("expected provider start failure")
+
+    assert store.list_sessions() == []
+    assert list(worktree_root.iterdir()) == []
+    assert _git(repository, "branch", "--list", "vellum/session/*") == ""
+
+
 def test_service_honors_empty_adapter_map(tmp_path: Path):
     service = CodingSessionService(store=CodingSessionStore(tmp_path / "coding.db"), adapters={})
 
@@ -276,6 +490,106 @@ def test_service_streams_turn_and_persists_events(tmp_path: Path):
     ]
     assistant_event = next(event for event in persisted if event.type == "assistant.final")
     assert assistant_event.payload == {"text": "answer: hello"}
+
+
+def test_service_captures_before_and_after_workspace_checkpoint(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: WritingAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "Update app")]
+
+    events = asyncio.run(collect())
+    checkpoint_id = events[0].payload["checkpoint_id"]
+    checkpoint = service.get_checkpoint(session.id, checkpoint_id)
+
+    assert checkpoint.status == "completed"
+    assert checkpoint.before.changed_files == ()
+    assert checkpoint.after is not None
+    assert checkpoint.after.changed_files == ("app.py",)
+    assert "agent changed this" in checkpoint.after.patch
+    assert events[-1].payload["checkpoint"]["id"] == checkpoint_id
+    assert "patch" not in events[-1].payload["checkpoint"]["after"]
+    assert service.list_checkpoints(session.id) == [checkpoint]
+
+
+def test_service_rewind_restores_files_and_resets_provider_conversation(tmp_path: Path):
+    repository = _git_repository(tmp_path / "project")
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(
+        store=store,
+        adapters={ProviderName.codex: WritingAdapter()},
+        workspace_manager=CodingWorkspaceManager(tmp_path / "worktrees"),
+    )
+    session = asyncio.run(
+        service.create_session(
+            CodingSessionCreate(
+                provider=ProviderName.codex,
+                cwd=str(repository),
+                access_mode=AccessMode.workspace_write,
+            )
+        )
+    )
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "Update app")]
+
+    events = asyncio.run(collect())
+    checkpoint_id = events[0].payload["checkpoint_id"]
+    (Path(session.cwd) / "app.py").write_text("print('later drift')\n", encoding="utf-8")
+
+    rewound = asyncio.run(
+        service.rewind_session(
+            session.id,
+            checkpoint_id,
+            phase="after",
+            confirm_discard=True,
+        )
+    )
+
+    assert (Path(session.cwd) / "app.py").read_text(encoding="utf-8") == "print('agent changed this')\n"
+    assert rewound.provider_session_id is None
+    assert rewound.workspace_generation == 2
+    assert rewound.status == "idle"
+    rewind_event = store.list_events(session.id)[-1]
+    assert rewind_event.type == "session.rewound"
+    assert rewind_event.payload["provider_session_reset"] is True
+
+
+def test_service_rewind_requires_explicit_confirmation(tmp_path: Path):
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: FakeAdapter()},
+    )
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    try:
+        asyncio.run(
+            service.rewind_session(
+                session.id,
+                "checkpoint_missing",
+                phase="after",
+                confirm_discard=False,
+            )
+        )
+    except CodingServiceError as exc:
+        assert "explicit confirmation" in str(exc)
+    else:
+        raise AssertionError("expected rewind confirmation failure")
 
 
 def test_service_rejects_concurrent_turn_for_session(tmp_path: Path):
@@ -325,7 +639,8 @@ def test_service_persists_turn_error_and_status(tmp_path: Path):
     events = asyncio.run(collect())
 
     assert [event.type for event in events] == ["turn.started", "turn.error"]
-    assert events[-1].payload == {"error": "turn failed"}
+    assert events[-1].payload["error"] == "turn failed"
+    assert events[-1].payload["checkpoint"]["status"] == "error"
     assert service.get_session(session.id).status == "error"
 
 
@@ -572,3 +887,85 @@ def test_service_marks_turn_stopped_when_stream_is_closed(tmp_path: Path):
     assert turn is not None
     assert turn.status == "stopped"
     assert turn.error == "Coding turn cancelled."
+
+
+def test_service_propagates_trace_and_sequence_across_turn_events(tmp_path: Path):
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: FakeAdapter()})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "hello")]
+
+    events = asyncio.run(collect())
+    persisted = store.list_events(session.id)
+    turn_events = [event for event in persisted if event.turn_id == events[0].turn_id]
+
+    assert len({event.trace_id for event in turn_events}) == 1
+    assert turn_events[0].trace_id.startswith("trace_")
+    assert [event.sequence for event in persisted] == list(range(1, len(persisted) + 1))
+    assert events[0].payload["trace_id"] == turn_events[0].trace_id
+
+
+def test_service_stops_provider_at_event_limit(tmp_path: Path):
+    adapter = BurstAdapter(event_count=3)
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [
+            event
+            async for event in service.run_turn(
+                session.id,
+                "hello",
+                limits=CodingTurnLimits(max_runtime_seconds=30, max_provider_events=2),
+            )
+        ]
+
+    events = asyncio.run(collect())
+    turn = store.get_turn(events[0].turn_id)
+
+    assert [event.type for event in events] == [
+        "turn.started",
+        "assistant.delta",
+        "assistant.delta",
+        "turn.limit_reached",
+    ]
+    assert events[-1].payload["reason"] == "provider_event_count"
+    assert events[-1].payload["limit"] == 2
+    assert events[-1].payload["provider_event_count"] == 2
+    assert events[-1].payload["checkpoint"]["status"] == "stopped"
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert turn.provider_event_count == 2
+    assert service.get_session(session.id).status == "stopped"
+    assert adapter.stopped == [(session.id, turn.id)]
+
+
+def test_service_stops_provider_at_runtime_limit(tmp_path: Path):
+    adapter = SlowAdapter()
+    store = CodingSessionStore(tmp_path / "coding.db")
+    service = CodingSessionService(store=store, adapters={ProviderName.codex: adapter})
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [
+            event
+            async for event in service.run_turn(
+                session.id,
+                "hello",
+                limits=CodingTurnLimits(max_runtime_seconds=1, max_provider_events=10),
+            )
+        ]
+
+    events = asyncio.run(collect())
+    turn = store.get_turn(events[0].turn_id)
+
+    assert [event.type for event in events] == ["turn.started", "turn.limit_reached"]
+    assert events[-1].payload["reason"] == "runtime_seconds"
+    assert events[-1].payload["limit"] == 1
+    assert turn is not None
+    assert turn.status == "stopped"
+    assert service.get_session(session.id).status == "stopped"
+    assert adapter.stopped == [(session.id, turn.id)]
