@@ -925,7 +925,8 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
 .preview-rail{position:absolute;inset-block:0;right:4px;z-index:24;width:52px;display:flex;align-items:center;justify-content:flex-end;overflow:visible;isolation:isolate;pointer-events:none}
-.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:center;width:48px;pointer-events:auto}
+.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:safe center;width:48px;max-height:calc(100% - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto}
+.preview-rail-nav::-webkit-scrollbar{display:none}
 .preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;justify-content:flex-end;border:0;background:transparent;color:var(--dim2);padding:0 8px 0 0;cursor:pointer;outline:none}
 .preview-rail-item:focus-visible{border-radius:7px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ember) 62%,transparent),0 0 0 4px var(--bg)}
 .preview-rail-tick{display:block;width:38px;height:2px;border-radius:999px;background:currentColor;opacity:.72;transform:scaleX(var(--rail-scale,.25));transform-origin:right center;transition:transform .42s cubic-bezier(.22,1,.36,1),color .18s ease,opacity .18s ease,box-shadow .18s ease}
@@ -2686,22 +2687,6 @@ const BACKGROUND_REGISTRY = [
     theme:{tone:'dark',base:'#090b12',surfaceRgb:'13,15,22',foreground:'#f6eddc',foregroundStrong:'#fff9eb',muted:'#c8bba6',faint:'#8d806f',accent:'#ffb45c',accent2:'#ff6f4b',shadow:'#030407',darkDensity:.82,lightDensity:.73,textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 24px rgba(0,0,0,.90)',asciiColor:'#f6c87b',asciiBackground:'#090b12'}
   },
   {
-    id:'aether-falls', label:'Aether Falls', description:'A luminous waterfall framed by midnight mountains.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/aether-falls.webp',position:'center'},
-    tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
-    theme:{modes:{
-      dark:{tone:'dark',base:'#07101a',surfaceRgb:'10,20,34',foreground:'#dbeeff',foregroundStrong:'#ffffff',muted:'#a5bed2',faint:'#718da4',accent:'#78cfff',accent2:'#f09a85',shadow:'#02060b',darkDensity:.82,lightDensity:.75,textShadow:'0 2px 5px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'},
-      light:{tone:'light',base:'#dceaf3',surfaceRgb:'239,247,252',foreground:'#25384a',foregroundStrong:'#0d1c2a',muted:'#526b80',faint:'#7b91a3',accent:'#2678aa',accent2:'#b9685c',shadow:'#17354d',darkDensity:.80,lightDensity:.78,textShadow:'0 1px 2px rgba(255,255,255,.92),0 0 7px rgba(255,255,255,.64)'}
-    }}
-  },
-  {
-    id:'rainbow-meadow', label:'Rainbow Meadow', description:'A luminous meadow beneath layered rainbows.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/rainbow-meadow.webp',position:'center'},
-    tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
-    theme:{modes:{
-      dark:{tone:'dark',base:'#171728',surfaceRgb:'24,22,38',foreground:'#f4edff',foregroundStrong:'#ffffff',muted:'#c9bddb',faint:'#9286a7',accent:'#d6a6ff',accent2:'#77d7e8',shadow:'#080711',darkDensity:.80,lightDensity:.73,textShadow:'0 2px 4px rgba(0,0,0,.94),0 0 18px rgba(0,0,0,.72)'},
-      light:{tone:'light',base:'#d8d5e8',surfaceRgb:'250,244,251',foreground:'#44394e',foregroundStrong:'#211a27',muted:'#6f617a',faint:'#96889d',accent:'#8a5aa2',accent2:'#3e8793',shadow:'#594a64',darkDensity:.79,lightDensity:.76,textShadow:'0 1px 2px rgba(255,255,255,.96),0 0 8px rgba(255,255,255,.72)'}
-    }}
-  },
-  {
     id:'ember-clouds', label:'Ember Clouds', description:'Painterly clouds glowing in deep blue and ember light.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/ember-clouds.webp',position:'center'},
     tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
     theme:{modes:{
@@ -4168,6 +4153,7 @@ const ActivityDrawer = ({msg, onClose}) => {
 };
 
 const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPreview, className = '', railClassName = '', previewClassName = ''}) => {
+  const navRef = useRef(null);
   const [internalActiveId, setInternalActiveId] = useState(defaultActiveId || (items[0] && items[0].id) || '');
   const [hoveredId, setHoveredId] = useState(null);
   const [focusedId, setFocusedId] = useState(null);
@@ -4181,10 +4167,17 @@ const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPr
     if (activeId === undefined) setInternalActiveId(id);
     if (onActiveChange) onActiveChange(id);
   };
+  useEffect(() => {
+    const nav = navRef.current;
+    const index = items.findIndex(item => item.id === selectedId);
+    const button = nav && nav.children[index];
+    if (!button || nav.scrollHeight <= nav.clientHeight) return;
+    button.scrollIntoView({block:'nearest', inline:'nearest', behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+  }, [selectedId, items.length]);
   const previewOffset = displayedIndex < 0 ? 0 : (displayedIndex - (items.length - 1) / 2) * 20;
   return (
     <div className={'preview-rail ' + className}>
-      <nav aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
+      <nav ref={navRef} aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
         {items.map((item, index) => {
           const distance = displayedIndex < 0 ? Infinity : Math.abs(index - displayedIndex);
           const scale = distance === 0 ? 1 : distance === 1 ? .68 : distance === 2 ? .44 : .25;
