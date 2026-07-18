@@ -36,7 +36,15 @@ from agent.cli.project_commands import (
     handle_project_command,
 )
 from agent.coding.events import event_payload, sse as coding_sse
-from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName
+from agent.coding.models import (
+    AccessMode,
+    CodingSession,
+    CodingSessionCreate,
+    CodingTurnLimits,
+    DEFAULT_MAX_PROVIDER_EVENTS,
+    DEFAULT_MAX_RUNTIME_SECONDS,
+    ProviderName,
+)
 from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
@@ -66,6 +74,7 @@ from agent.obsidian.conversation_export import archive_conversation_projection, 
 from agent.obsidian.conversation_context import ConversationContextStore
 from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
+from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.portable import discover_portable_plugins
@@ -98,6 +107,7 @@ from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
 _api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
+_observability = ObservabilityService(REPO_ROOT / "data" / "memory" / "observability.db")
 _memory_orchestrator = get_memory_orchestrator()
 _conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _fts5_memory = _memory_orchestrator.fts5
@@ -322,6 +332,17 @@ class CodingSessionBody(BaseModel):
 
 class CodingTurnBody(BaseModel):
     prompt: str = Field(min_length=1)
+    max_runtime_seconds: int = Field(default=DEFAULT_MAX_RUNTIME_SECONDS, ge=1, le=24 * 60 * 60)
+    max_provider_events: int = Field(default=DEFAULT_MAX_PROVIDER_EVENTS, ge=1, le=100_000)
+
+
+class CodingSessionCloseBody(BaseModel):
+    discard_changes: bool = False
+
+
+class CodingSessionRewindBody(BaseModel):
+    phase: Literal["before", "after"] = "after"
+    confirm_discard: bool = False
 
 
 class ConversationContextRequest(BaseModel):
@@ -1571,16 +1592,27 @@ def _embedding_health() -> dict[str, Any]:
 
 
 def _coding_session_json(session: CodingSession) -> dict[str, Any]:
+    workspace_kind = getattr(session, "workspace_kind", "direct")
     return {
         "id": session.id,
         "provider": session.provider.value,
         "provider_session_id": session.provider_session_id,
         "cwd": session.cwd,
+        "source_cwd": getattr(session, "source_cwd", session.cwd) or session.cwd,
+        "workspace_kind": getattr(workspace_kind, "value", str(workspace_kind)),
+        "workspace_root": getattr(session, "workspace_root", session.cwd) or session.cwd,
+        "workspace_repository_root": getattr(session, "workspace_repository_root", ""),
+        "workspace_branch": getattr(session, "workspace_branch", ""),
+        "workspace_base_commit": getattr(session, "workspace_base_commit", ""),
         "access_mode": session.access_mode.value,
         "title": session.title,
         "status": session.status,
         "created_at": session.created_at,
         "updated_at": session.updated_at,
+        "tenant_id": getattr(session, "tenant_id", "local"),
+        "principal_id": getattr(session, "principal_id", "local-user"),
+        "workspace_generation": getattr(session, "workspace_generation", 1),
+        "trace_id": getattr(session, "trace_id", ""),
     }
 
 
@@ -1620,6 +1652,8 @@ def _coding_project_roots() -> list[Path]:
     try:
         for session in coding_service.list_sessions():
             roots.add(Path(session.cwd).expanduser().resolve())
+            if getattr(session, "source_cwd", ""):
+                roots.add(Path(session.source_cwd).expanduser().resolve())
     except Exception:
         pass
     return sorted(roots, key=lambda path: str(path).casefold())
@@ -1657,6 +1691,44 @@ def _project_tree(root: str) -> dict[str, Any]:
     return {"root": str(base), "items": items}
 
 
+def _project_file(root: str, relative_path: str) -> dict[str, Any]:
+    base = Path(root).expanduser().resolve()
+    if not base.exists() or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not _is_allowed_coding_project_root(base):
+        raise HTTPException(status_code=403, detail="Project root is not allowed.")
+    if "\x00" in relative_path:
+        raise HTTPException(status_code=400, detail="Project file path is invalid.")
+    requested = Path(relative_path)
+    if requested.is_absolute() or not requested.parts or any(part in {"", ".", ".."} for part in requested.parts):
+        raise HTTPException(status_code=400, detail="Project file path is invalid.")
+    if any(_hidden_coding_file(part) for part in requested.parts):
+        raise HTTPException(status_code=403, detail="Project file is protected.")
+    target = (base / requested).resolve()
+    if not target.is_relative_to(base):
+        raise HTTPException(status_code=403, detail="Project file is outside the workspace.")
+    if any(_hidden_coding_file(part) for part in target.relative_to(base).parts):
+        raise HTTPException(status_code=403, detail="Project file is protected.")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Project file not found.")
+    try:
+        size = target.stat().st_size
+        limit = 512 * 1024
+        with target.open("rb") as handle:
+            raw = handle.read(limit)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="Project file is not readable.") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail="Project file could not be read.") from exc
+    return {
+        "root": str(base),
+        "path": target.relative_to(base).as_posix(),
+        "content": raw.decode("utf-8", errors="replace"),
+        "size": size,
+        "truncated": size > limit,
+    }
+
+
 def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
     message = str(exc)
     cause = exc.__cause__
@@ -1664,7 +1736,11 @@ def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
     searchable = f"{message} {cause_message}".casefold()
     if "not found" in searchable:
         return HTTPException(status_code=404, detail=message)
-    if "already has a running turn" in searchable:
+    if (
+        "already has a running turn" in searchable
+        or "running coding turn" in searchable
+        or "session is closed" in searchable
+    ):
         return HTTPException(status_code=409, detail=message)
     if (
         "not installed" in searchable
@@ -2498,6 +2574,11 @@ def _response_event(
         "created_at": _stream_now(),
         **payload,
     }
+    try:
+        _observability.capture(body)
+    except Exception:
+        # Observability is additive and must never interrupt a chat response.
+        pass
     return _sse(event_type, body)
 
 
@@ -2637,6 +2718,77 @@ def _response_error(*, response_id: str, thread_id: str, message: str) -> str:
         response_id=response_id,
         thread_id=thread_id,
         error={"message": message},
+    )
+
+
+def _observability_days(period: str) -> int | None:
+    if period == "today":
+        return 1
+    if period == "7d":
+        return 7
+    if period == "30d":
+        return 30
+    if period == "month":
+        now = datetime.now(timezone.utc)
+        return max(1, (now - now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)).days + 1)
+    return None
+
+
+def _observability_snapshot(period: str) -> dict[str, Any]:
+    days = _observability_days(period)
+    return {
+        "schema_version": 1,
+        "source": "vellum-native",
+        "generated_at": _stream_now(),
+        "period": period,
+        "freshness": {"state": "live", "updated_at": _stream_now()},
+        "usage": _api_ledger.observability_summary(days=days),
+        "runs": _observability.summary(days=days),
+        "recent_runs": _observability.recent_runs(limit=12),
+    }
+
+
+@router.get("/observability/summary")
+async def observability_summary(period: Literal["today", "7d", "30d", "month", "all"] = "7d") -> dict[str, Any]:
+    return await asyncio.to_thread(_observability_snapshot, period)
+
+
+@router.get("/observability/runs")
+async def observability_runs(limit: int = Query(default=20, ge=1, le=100)) -> dict[str, Any]:
+    return {"runs": await asyncio.to_thread(_observability.recent_runs, limit=limit)}
+
+
+@router.post("/observability/refresh")
+async def observability_refresh(period: Literal["today", "7d", "30d", "month", "all"] = "7d") -> dict[str, Any]:
+    return await asyncio.to_thread(_observability_snapshot, period)
+
+
+@router.get("/observability/stream")
+async def observability_stream(request: Request, last_event_id: int = Query(default=0, ge=0)) -> StreamingResponse:
+    header_id = request.headers.get("last-event-id", "").strip()
+    if header_id.isdigit():
+        last_event_id = max(last_event_id, int(header_id))
+
+    async def event_stream():
+        queue = _observability.subscribe()
+        try:
+            for item in await asyncio.to_thread(_observability.events_since, last_event_id):
+                yield _sse("observability.event", item)
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=15)
+                    yield _sse("observability.event", item)
+                except TimeoutError:
+                    yield _sse("observability.heartbeat", {"at": _stream_now()})
+        finally:
+            _observability.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -4571,6 +4723,7 @@ async def coding_health() -> dict[str, Any]:
                 "available": health.available,
                 "configured": health.configured,
                 "message": health.message,
+                "capabilities": health.capabilities.payload() if health.capabilities else None,
             }
         )
     return {"providers": providers}
@@ -4613,7 +4766,14 @@ async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> Streaming
         if session.status == "running":
             raise CodingServiceError("Coding session already has a running turn.")
         _ensure_coding_provider_ready(session.provider)
-        stream = coding_service.run_turn(session_id, body.prompt)
+        stream = coding_service.run_turn(
+            session_id,
+            body.prompt,
+            limits=CodingTurnLimits(
+                max_runtime_seconds=body.max_runtime_seconds,
+                max_provider_events=body.max_provider_events,
+            ),
+        )
         first_event = await anext(stream)
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
@@ -4644,17 +4804,81 @@ async def coding_session_stop(session_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
-@router.get("/coding/sessions/{session_id}/events")
-async def coding_session_events(session_id: str) -> dict[str, Any]:
+@router.post("/coding/sessions/{session_id}/close")
+async def coding_session_close(session_id: str, body: CodingSessionCloseBody) -> dict[str, Any]:
     try:
-        return {"events": [event_payload(event) for event in coding_service.list_events(session_id)]}
+        session = await coding_service.close_session(
+            session_id,
+            discard_changes=body.discard_changes,
+        )
     except CodingServiceError as exc:
         raise _coding_http_exception(exc) from exc
+    return _coding_session_json(session)
+
+
+@router.get("/coding/sessions/{session_id}/events")
+async def coding_session_events(
+    session_id: str,
+    after_sequence: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    try:
+        return {
+            "events": [
+                event_payload(event)
+                for event in coding_service.list_events(session_id, after_sequence=after_sequence)
+            ]
+        }
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.get("/coding/sessions/{session_id}/checkpoints")
+async def coding_session_checkpoints(session_id: str) -> dict[str, Any]:
+    try:
+        return {
+            "checkpoints": [
+                checkpoint.payload(include_patch=False)
+                for checkpoint in coding_service.list_checkpoints(session_id)
+            ]
+        }
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.get("/coding/sessions/{session_id}/checkpoints/{checkpoint_id}")
+async def coding_session_checkpoint(session_id: str, checkpoint_id: str) -> dict[str, Any]:
+    try:
+        return coding_service.get_checkpoint(session_id, checkpoint_id).payload(include_patch=True)
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+
+
+@router.post("/coding/sessions/{session_id}/rewind/{checkpoint_id}")
+async def coding_session_rewind(
+    session_id: str,
+    checkpoint_id: str,
+    body: CodingSessionRewindBody,
+) -> dict[str, Any]:
+    try:
+        session = await coding_service.rewind_session(
+            session_id,
+            checkpoint_id,
+            phase=body.phase,
+            confirm_discard=body.confirm_discard,
+        )
+    except CodingServiceError as exc:
+        raise _coding_http_exception(exc) from exc
+    return _coding_session_json(session)
 
 
 @router.get("/coding/projects/tree")
 async def coding_project_tree(root: str) -> dict[str, Any]:
     return _project_tree(root)
+
+
+@router.get("/coding/projects/file")
+async def coding_project_file(root: str, path: str) -> dict[str, Any]:
+    return _project_file(root, path)
 
 
 @router.get("/coding/projects/recent")

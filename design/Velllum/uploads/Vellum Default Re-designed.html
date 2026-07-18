@@ -35,6 +35,7 @@
   --onember:#ffffff;--danger:#f08a8a;
   --background-text-shadow:0 1px 2px rgba(0,0,0,.32);--background-surface-shadow:0 18px 55px rgba(0,0,0,.28);
   --ascii-color:#f3d69b;--ascii-bg:#090b12;
+  --color-1:var(--ember);--color-2:var(--accent2);--color-3:color-mix(in srgb,var(--ember) 55%,var(--txt2));--color-4:var(--txt2);--color-5:color-mix(in srgb,var(--accent2) 70%,var(--ember));
   --font-d:"Clash Grotesk","Poppins","Helvetica Neue",system-ui,sans-serif;
   --font-m:"Spline Sans Mono",ui-monospace,Consolas,monospace;
 }
@@ -90,14 +91,20 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .sb-primary .sb-row{padding:8px 9px}
 .sb-primary .sb-row:first-child{color:var(--txt2)}
 .sb-primary .sb-row:first-child .sb-ic{color:var(--ember)}
-.sb-sec{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sb-sec{display:flex;align-items:center;gap:5px;width:100%;font:inherit;font-size:10.5px;color:var(--dim2);text-transform:uppercase;letter-spacing:.06em;padding:16px 9px 6px;flex-shrink:0}
+.sb-sec-toggle{border:0;background:none;text-align:left;cursor:pointer;border-radius:7px;transition:color .16s ease,background .16s ease}
+.sb-sec-toggle:hover{color:var(--txt);background:color-mix(in srgb,var(--hover) 48%,transparent)}
+.sb-sec-toggle:focus-visible{outline:1px solid color-mix(in srgb,var(--ember) 65%,transparent);outline-offset:-1px}
 .sb-sec-count{margin-left:auto;font-size:10px;color:var(--dim2);font-family:var(--font-m)}
+.sb-section-collapse{display:grid;grid-template-rows:0fr;opacity:0;visibility:hidden;transition:grid-template-rows .28s cubic-bezier(.22,1,.36,1),opacity .18s ease,visibility 0s linear .28s}
+.sb-section-collapse.open{grid-template-rows:1fr;opacity:1;visibility:visible;transition:grid-template-rows .3s cubic-bezier(.22,1,.36,1),opacity .22s ease,visibility 0s}
+.sb-section-inner{min-height:0;overflow:hidden}
 .now-group{padding:1px 0 3px}
 .now-subhead{display:flex;align-items:center;gap:6px;padding:8px 9px 3px;color:var(--dim);font-size:10.5px;font-weight:500}
 .now-subhead:first-child{padding-top:3px}
 .now-subhead .space-count{margin-left:auto}
 .now-subempty{padding:4px 9px 5px;color:var(--dim2);font-size:10.5px}
-.sec-chev{display:flex;color:var(--dim2);background:none;border:none;cursor:pointer;padding:2px;border-radius:4px;transition:transform .2s,color .15s}
+.sec-chev{display:flex;color:var(--dim2);background:none;border:none;padding:2px;border-radius:4px;transition:transform .25s cubic-bezier(.22,1,.36,1),color .15s}
 .sec-chev:hover{color:var(--txt)}
 .sec-chev.closed{transform:rotate(-90deg)}
 .sb-scroll{flex:1;overflow-y:auto;min-height:0}
@@ -130,7 +137,8 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .space-row .sec-chev{margin-left:-3px}
 .space-chat-list{border-left:1px solid var(--line);margin-left:16px;padding-left:2px}
 .space-chat-list .chat-row.nested{margin-left:4px}
-.sb-tools{border-top:1px solid var(--line);margin-top:12px;padding-top:8px}
+.sb-tools{border-bottom:1px solid var(--line);margin:2px 0 0;padding:4px 0 8px}
+@media(prefers-reduced-motion:reduce){.sb-section-collapse,.sec-chev{transition:none}}
 .crumb{display:flex;align-items:center;gap:8px;padding:10px 18px;font-size:12.5px;color:var(--dim);border-bottom:1px solid var(--line);flex-shrink:0}
 /* project page */
 .proj-head{display:flex;align-items:center;gap:12px;margin-top:6px}
@@ -700,8 +708,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .cbtn:hover{background:var(--hover);color:var(--txt2)}
 .cpill textarea{width:100%;background:transparent;border:none;outline:none;color:var(--txt2);font:inherit;font-size:14px;resize:none;min-height:24px;max-height:160px;padding:6px 2px;line-height:1.5;display:block}
 .ta-wrap{flex:1;position:relative;min-width:0}
-.ph-anim{position:absolute;left:10px;top:8px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none;animation:phIn .55s ease}
-@keyframes phIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+.ph-anim{position:absolute;left:10px;top:8px;color:var(--dim);font-style:italic;font-size:14px;line-height:1.5;pointer-events:none}
 .mode-chip{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;padding:5px 8px;border-radius:14px;background:none;border:none;font-family:inherit;flex-shrink:0}
 .mode-chip:hover{background:var(--hover);color:var(--txt)}
 .csend{width:34px;height:34px;border-radius:50%;border:none;background:var(--ember);color:var(--onember);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
@@ -831,6 +838,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .turn{display:flex;flex-direction:column;gap:10px}
 .think-line{font-size:15px;font-weight:500;width:fit-content;letter-spacing:.01em}
 .activity-inline{display:flex;align-items:center;margin:0 0 8px}
+<<<<<<< HEAD
 .activity-status{display:inline-flex;align-items:center;gap:10px;width:fit-content;max-width:100%;font-size:14px;line-height:1.4;color:var(--txt2)}
 .activity-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Limelight spotlight — shared by every live agent activity label. */
@@ -841,6 +849,41 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .dotm-square-3-dot{width:var(--dmx-dot-size);height:var(--dmx-dot-size);border-radius:50%;background:currentColor;opacity:.08;animation:dotm-square-3-spiral 1.35s linear infinite;animation-delay:calc(var(--dmx-order) * -.054s);will-change:opacity,transform,box-shadow}
 @keyframes dotm-square-3-spiral{0%,100%{opacity:.08;transform:scale(.82);box-shadow:none}8%{opacity:1;transform:scale(1.15);box-shadow:0 0 6px currentColor}16%{opacity:.72;transform:scale(1.04);box-shadow:0 0 3px currentColor}24%{opacity:.44;transform:scale(.96);box-shadow:none}32%{opacity:.22;transform:scale(.9)}40%{opacity:.08;transform:scale(.82)}}
 @media(prefers-reduced-motion:reduce){.fx-spotlight{animation:none;background-position:50% 0}.dotm-square-3-dot{animation:none;opacity:.45;transform:none}}
+=======
+.activity-status{display:inline-flex;align-items:center;gap:9px;width:fit-content;max-width:100%;font-size:14px;line-height:1.4;color:var(--txt)}
+.activity-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Full labels remain mounted while the spotlight moves across them. There is deliberately no typing animation. */
+.fx-spotlight{--spotlight-ink:var(--txt2);background:radial-gradient(3.5ch 100% at 50% 50%,var(--spotlight-ink) 20%,color-mix(in srgb,var(--spotlight-ink) 14%,transparent) 75%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:fx-spotlight 3.4s ease-in-out infinite alternate}
+@keyframes fx-spotlight{0%{background-position:100% 0}100%{background-position:0 0}}
+.activity-loader{position:relative;display:inline-grid;place-items:center;width:22px;height:22px;flex:0 0 22px;color:var(--ember);filter:drop-shadow(0 0 7px var(--glow-soft))}
+.loader-orbit .loader-orbit-ring{position:absolute;inset:3px;border:1px solid currentColor;border-radius:50%;opacity:.36;animation:activityOrbitRing 2s ease-in-out infinite}
+.loader-orbit .loader-orbit-core{width:4px;height:4px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.loader-orbit .loader-orbit-dot{position:absolute;inset:2px;animation:activityOrbit 1.25s linear infinite}
+.loader-orbit .loader-orbit-dot::after{content:"";position:absolute;left:50%;top:0;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor}
+.loader-triangle svg{width:21px;height:21px;overflow:visible}
+.loader-triangle polygon{fill:none;stroke:currentColor;stroke-width:1.25;stroke-dasharray:28;animation:activityTriangle 1.7s ease-in-out infinite}
+.loader-triangle circle{fill:currentColor;transform-box:fill-box;transform-origin:center;animation:activityNode 1.2s ease-in-out infinite}
+.loader-triangle circle:nth-of-type(2){animation-delay:.18s}.loader-triangle circle:nth-of-type(3){animation-delay:.36s}
+.loader-echo i{position:absolute;border:1px solid currentColor;border-radius:50%;animation:activityEcho 1.8s ease-out infinite}
+.loader-echo i:nth-child(2){animation-delay:.45s}.loader-echo i:nth-child(3){animation-delay:.9s}
+.loader-matrix{grid-template-columns:repeat(3,3px);grid-auto-rows:3px;gap:2px}
+.loader-matrix i{width:3px;height:3px;border-radius:1px;background:currentColor;animation:activityMatrix 1.35s ease-in-out infinite}
+.loader-matrix i:nth-child(2){animation-delay:.08s}.loader-matrix i:nth-child(3){animation-delay:.16s}.loader-matrix i:nth-child(6){animation-delay:.24s}.loader-matrix i:nth-child(9){animation-delay:.32s}.loader-matrix i:nth-child(8){animation-delay:.4s}.loader-matrix i:nth-child(7){animation-delay:.48s}.loader-matrix i:nth-child(4){animation-delay:.56s}.loader-matrix i:nth-child(5){animation-delay:.64s}
+.loader-radar{border:1px solid color-mix(in srgb,currentColor 45%,transparent);border-radius:50%;overflow:hidden}
+.loader-radar::before,.loader-radar::after{content:"";position:absolute;inset:4px;border:1px solid color-mix(in srgb,currentColor 36%,transparent);border-radius:50%}
+.loader-radar::after{inset:1px;background:conic-gradient(from 0deg,currentColor,transparent 34%);border:0;opacity:.55;animation:activityRadar 1.45s linear infinite}
+.loader-radar i{position:relative;z-index:1;width:4px;height:4px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.loader-tool svg{width:17px;height:17px;animation:activityTool 1.55s ease-in-out infinite}
+@keyframes activityOrbit{to{transform:rotate(360deg)}}
+@keyframes activityOrbitRing{0%,100%{transform:scale(.82);opacity:.25}50%{transform:scale(1);opacity:.58}}
+@keyframes activityTriangle{0%{stroke-dashoffset:28;opacity:.35}50%{opacity:1}100%{stroke-dashoffset:-28;opacity:.35}}
+@keyframes activityNode{0%,100%{transform:scale(.65);opacity:.35}50%{transform:scale(1.25);opacity:1}}
+@keyframes activityEcho{0%{inset:9px;opacity:.9}100%{inset:1px;opacity:0}}
+@keyframes activityMatrix{0%,100%{opacity:.22;transform:scale(.72)}45%{opacity:1;transform:scale(1.22)}}
+@keyframes activityRadar{to{transform:rotate(360deg)}}
+@keyframes activityTool{0%,100%{transform:rotate(-8deg) scale(.92)}50%{transform:rotate(12deg) scale(1.06)}}
+@media(prefers-reduced-motion:reduce){.fx-spotlight{animation:none;background-position:50% 0}.activity-loader *,.activity-loader::before,.activity-loader::after{animation:none!important}}
+>>>>>>> c0b55116b732e8e8a5f7cfe2ba3dc75d764a55e5
 .turn-lead{font-size:15px;line-height:1.7;color:var(--txt)}
 .ref-list{display:flex;flex-direction:column;gap:9px}
 .ref-list.inset{margin:2px 0 4px;padding:10px 12px;border-left:2px solid var(--line2);background:var(--panel);border-radius:0 10px 10px 0}
@@ -895,7 +938,8 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .copied{font-size:11px;color:var(--dim);align-self:center;padding:0 6px}
 /* reusable vertical preview rail - shared by chats and sub-agent chats */
 .preview-rail{position:absolute;inset-block:0;right:4px;z-index:24;width:52px;display:flex;align-items:center;justify-content:flex-end;overflow:visible;isolation:isolate;pointer-events:none}
-.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:center;width:48px;pointer-events:auto}
+.preview-rail-nav{position:relative;z-index:2;display:grid;align-content:safe center;width:48px;max-height:calc(100% - 24px);overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none;pointer-events:auto}
+.preview-rail-nav::-webkit-scrollbar{display:none}
 .preview-rail-item{position:relative;display:flex;width:48px;height:20px;align-items:center;justify-content:flex-end;border:0;background:transparent;color:var(--dim2);padding:0 8px 0 0;cursor:pointer;outline:none}
 .preview-rail-item:focus-visible{border-radius:7px;box-shadow:0 0 0 2px color-mix(in srgb,var(--ember) 62%,transparent),0 0 0 4px var(--bg)}
 .preview-rail-tick{display:block;width:38px;height:2px;border-radius:999px;background:currentColor;opacity:.72;transform:scaleX(var(--rail-scale,.25));transform-origin:right center;transition:transform .42s cubic-bezier(.22,1,.36,1),color .18s ease,opacity .18s ease,box-shadow .18s ease}
@@ -1162,20 +1206,43 @@ body{font-size:14px}
 @keyframes icWiggle{0%{transform:rotate(0)}25%{transform:rotate(-12deg) scale(1.1)}55%{transform:rotate(10deg) scale(1.1)}80%{transform:rotate(-5deg)}100%{transform:rotate(0)}}
 @keyframes icBob{0%{transform:translateY(0)}35%{transform:translateY(-4px) scale(1.12)}70%{transform:translateY(1px)}100%{transform:translateY(0)}}
 @keyframes icSpin{0%{transform:rotate(0)}100%{transform:rotate(90deg)}}
+.semantic-icon{overflow:visible}
+.sb-row:hover .semantic-memory,.rail-btn:hover .semantic-memory{animation:semanticMemory .8s cubic-bezier(.22,1,.36,1)}
+.sb-row:hover .semantic-skills,.rail-btn:hover .semantic-skills{animation:semanticSkills .72s cubic-bezier(.22,1,.36,1)}
+.sb-row:hover .semantic-plugins,.rail-btn:hover .semantic-plugins{animation:semanticPlugins .68s cubic-bezier(.22,1,.36,1)}
+.semantic-mcp{transform-origin:center}
+.conn-ic:hover .semantic-mcp,.page-head-ic:hover .semantic-mcp{animation:semanticMcp 1s ease-in-out}
+@keyframes semanticMemory{0%{transform:scale(.92)}45%{transform:scale(1.14)}70%{transform:scale(1.04) translateX(1px)}100%{transform:none}}
+@keyframes semanticSkills{0%{transform:rotate(-6deg) scale(.94)}48%{transform:rotate(8deg) scale(1.16)}100%{transform:none}}
+@keyframes semanticPlugins{0%{transform:scale(.92)}45%{transform:scale(1.14) rotate(3deg)}100%{transform:none}}
+@keyframes semanticMcp{0%,100%{transform:scale(1)}50%{transform:scale(1.13)}}
 .set-modal{position:fixed}
 .set-close{position:absolute;top:12px;right:12px;z-index:3;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:none;background:var(--hover);color:var(--dim);border-radius:9px;cursor:pointer;transition:background .18s,color .18s,transform .18s}
 .set-close:hover{background:var(--active);color:var(--txt2);transform:rotate(90deg)}
 /* \u2500\u2500 dynamic greeting + rotating composer glow (addendum K) \u2500\u2500 */
 .land-greet.typed{min-height:1.5em;display:flex;align-items:center;justify-content:center}
-.typed-new{display:inline-block;animation:charFade .26s ease both}
-@keyframes charFade{from{opacity:0;filter:blur(4px);transform:translateY(2px)}to{opacity:1;filter:none;transform:none}}
-.typed-caret{display:inline-block;width:2px;height:1.05em;margin-left:3px;vertical-align:-3px;border-radius:1px;background:var(--ember);box-shadow:0 0 8px var(--glow);animation:caretBlink 1.05s step-end infinite}
-@keyframes caretBlink{0%,100%{opacity:1}50%{opacity:0}}
+/* Reusable per-character rise animation. */
+.per-character-rise{display:inline-flex;max-width:100%;overflow:hidden;vertical-align:bottom}
+.per-character-rise-char{display:inline-block;white-space:pre;will-change:opacity,transform;animation:pcrRiseIn .7s cubic-bezier(.2,.8,.2,1) both}
+.per-character-rise.exiting .per-character-rise-char{animation-name:pcrRiseOut;animation-timing-function:cubic-bezier(.7,0,.84,0)}
+@keyframes pcrRiseIn{from{opacity:0;transform:translateY(32px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pcrRiseOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-24px)}}
+/* Reusable animated border-gradient button; primary text actions share it globally. */
+.border-gradient-button,.btn.primary{--border-gradient:linear-gradient(45deg,var(--color-1),var(--color-5),var(--color-3),var(--color-4),var(--color-2));position:relative;isolation:isolate;overflow:hidden;border-color:transparent!important;background-image:var(--border-gradient)!important;background-size:200% 200%!important;color:var(--txt2)!important;animation:borderGradientFlow 4.8s linear infinite;transition:transform .18s cubic-bezier(.2,.8,.2,1),filter .2s ease,box-shadow .25s ease}
+.border-gradient-button::before,.btn.primary::before{content:"";position:absolute;z-index:-1;inset:1.5px;border-radius:inherit;background:color-mix(in srgb,var(--modal) 95%,transparent);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);transition:background .3s ease}
+.border-gradient-button>*,.btn.primary>*{position:relative;z-index:1}
+.border-gradient-button:hover,.btn.primary:hover{filter:saturate(1.22) brightness(1.08);box-shadow:0 8px 26px color-mix(in srgb,var(--ember) 22%,transparent)}
+.border-gradient-button:hover::before,.btn.primary:hover::before{background:color-mix(in srgb,var(--modal) 44%,transparent)}
+.border-gradient-button:active,.btn.primary:active{transform:scale(.95)}
+.border-gradient-button:disabled,.btn.primary:disabled{background:var(--line2)!important;animation:none;box-shadow:none;filter:none;color:var(--dim)!important}
+.border-gradient-button:disabled::before,.btn.primary:disabled::before{background:var(--input)}
+.border-gradient-button-label{position:relative;z-index:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;pointer-events:none}
+@keyframes borderGradientFlow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
 .cpill{position:relative}
 .cpill::before{content:"";position:absolute;inset:-1.5px;border-radius:25px;padding:1.5px;pointer-events:none;z-index:2;opacity:0;transition:opacity .4s ease;background:conic-gradient(from var(--a,0deg),color-mix(in srgb,var(--ember) 30%,transparent) 0deg,color-mix(in srgb,var(--ember) 30%,transparent) 30deg,color-mix(in srgb,var(--accent2) 80%,transparent) 44deg,var(--ember) 58deg,#ffffff 70deg,var(--ember) 82deg,color-mix(in srgb,var(--accent2) 80%,transparent) 96deg,color-mix(in srgb,var(--ember) 30%,transparent) 118deg,color-mix(in srgb,var(--ember) 30%,transparent) 360deg);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;filter:drop-shadow(0 0 6px var(--glow))}
 .cpill.glowing::before{opacity:1}
 .cpill.glowing{border-color:transparent;box-shadow:0 0 0 1px color-mix(in srgb,var(--ember) 18%,transparent),0 8px 30px color-mix(in srgb,var(--ember) 14%,transparent)}
-@media (prefers-reduced-motion:reduce){.typed-new{animation:none}.typed-caret{animation:none}}
+@media (prefers-reduced-motion:reduce){.per-character-rise-char,.border-gradient-button,.btn.primary{animation:none!important}.per-character-rise-char{opacity:1!important;transform:none!important}}
 @keyframes orbDrift1{0%{transform:translate(0,0)}33%{transform:translate(40px,30px)}66%{transform:translate(-20px,55px)}100%{transform:translate(0,0)}}
 @keyframes orbDrift2{0%{transform:translate(0,0)}33%{transform:translate(-46px,28px)}66%{transform:translate(24px,-30px)}100%{transform:translate(0,0)}}
 @keyframes orbDrift3{0%{transform:translate(0,0)}50%{transform:translate(36px,-40px)}100%{transform:translate(0,0)}}
@@ -1467,6 +1534,7 @@ body{font-size:14px}
 [data-background="galaxy"][data-theme="light"] .galaxy-container{filter:invert(1);mix-blend-mode:multiply}
 .shader-canvas-container{position:absolute;inset:0;width:100%;height:100%;overflow:hidden;pointer-events:none;background:#080a10}
 .shader-canvas-container canvas{display:block;width:100%;height:100%;pointer-events:none}
+.static-image-background{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:var(--static-position,center);display:block;pointer-events:none}
 .rocket-ascii-container{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden;background:var(--ascii-bg);color:var(--ascii-color);pointer-events:none}
 .rocket-ascii-content{position:absolute;left:50%;top:50%;transform-origin:center center;will-change:transform}
 .rocket-ascii-pre{display:block;margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:8px;font-weight:400;line-height:.8;letter-spacing:0;white-space:pre;color:inherit;text-shadow:0 0 14px color-mix(in srgb,var(--ascii-color) 20%,transparent)}
@@ -1623,8 +1691,8 @@ const FEATURE_FLAGS = {
 };
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
-const I = ({d, size=17, sw=1.5, children}) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d?<path d={d}/>:children}</svg>
+const I = ({d, size=17, sw=1.5, children, className='', ...rest}) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...rest}>{d?<path d={d}/>:children}</svg>
 );
 const IcPencilSq = (p)=> <I {...p} d="M11 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5 M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>;
 const IcSearch = (p)=> <I {...p}><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></I>;
@@ -2587,6 +2655,9 @@ const syncBackgroundTheme = () => {
   } catch {}
 };
 const AmbientBackground = () => null;
+const StaticImageBackground = ({src, position='center', preview=false}) => (
+  <img className="static-image-background" src={src} alt="" loading={preview ? 'lazy' : 'eager'} decoding="async" style={{'--static-position':position}}/>
+);
 
 const BACKGROUND_REGISTRY = [
   {
@@ -2628,6 +2699,30 @@ const BACKGROUND_REGISTRY = [
     tokens:{dark:{cover:'0%',sideCover:'78%',blur:'0px'},light:{cover:'0%',sideCover:'78%',blur:'0px'}},
     theme:{tone:'dark',base:'#090b12',surfaceRgb:'13,15,22',foreground:'#f6eddc',foregroundStrong:'#fff9eb',muted:'#c8bba6',faint:'#8d806f',accent:'#ffb45c',accent2:'#ff6f4b',shadow:'#030407',darkDensity:.82,lightDensity:.73,textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 24px rgba(0,0,0,.90)',asciiColor:'#f6c87b',asciiBackground:'#090b12'}
   },
+  {
+    id:'ember-clouds', label:'Ember Clouds', description:'Painterly clouds glowing in deep blue and ember light.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/ember-clouds.webp',position:'center'},
+    tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
+    theme:{modes:{
+      dark:{tone:'dark',base:'#102536',surfaceRgb:'17,33,47',foreground:'#fff0dc',foregroundStrong:'#fffaf2',muted:'#d7bca7',faint:'#a08476',accent:'#ff9a5a',accent2:'#e95445',shadow:'#06111b',darkDensity:.82,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 17px rgba(0,0,0,.72)'},
+      light:{tone:'light',base:'#d7c2aa',surfaceRgb:'251,242,229',foreground:'#4b3028',foregroundStrong:'#241612',muted:'#76564a',faint:'#9b7b6e',accent:'#b54f32',accent2:'#256c82',shadow:'#5d342a',darkDensity:.80,lightDensity:.77,textShadow:'0 1px 2px rgba(255,255,255,.95),0 0 7px rgba(255,255,255,.68)'}
+    }}
+  },
+  {
+    id:'teal-horizon', label:'Teal Horizon', description:'An abstract teal world swept by molten gold currents.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/teal-horizon.webp',position:'center'},
+    tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
+    theme:{modes:{
+      dark:{tone:'dark',base:'#090707',surfaceRgb:'11,17,17',foreground:'#e8f5ef',foregroundStrong:'#ffffff',muted:'#abc8bd',faint:'#75948a',accent:'#4bd1bd',accent2:'#d8a768',shadow:'#020303',darkDensity:.84,lightDensity:.77,textShadow:'0 2px 4px rgba(0,0,0,.98),0 0 20px rgba(0,0,0,.82)'},
+      light:{tone:'light',base:'#d9e3de',surfaceRgb:'243,249,245',foreground:'#233b37',foregroundStrong:'#0c201c',muted:'#527169',faint:'#78948c',accent:'#137d70',accent2:'#a36728',shadow:'#1d3732',darkDensity:.82,lightDensity:.79,textShadow:'0 1px 2px rgba(255,255,255,.96),0 0 7px rgba(255,255,255,.66)'}
+    }}
+  },
+  {
+    id:'serenox-home', label:'Serenox Home', description:'A quiet hillside home in rose-gold evening light.', kind:'image', component:StaticImageBackground, props:{src:'assets/backgrounds/serenox-home.webp',position:'center'},
+    tokens:{dark:{cover:'0%',sideCover:'0%',blur:'0px'},light:{cover:'0%',sideCover:'0%',blur:'0px'}},
+    theme:{modes:{
+      dark:{tone:'dark',base:'#201719',surfaceRgb:'31,23,26',foreground:'#fff1ea',foregroundStrong:'#ffffff',muted:'#d4b9b3',faint:'#9b7f7d',accent:'#ff956d',accent2:'#d87d91',shadow:'#0b0708',darkDensity:.81,lightDensity:.74,textShadow:'0 2px 4px rgba(0,0,0,.96),0 0 18px rgba(0,0,0,.74)'},
+      light:{tone:'light',base:'#dfb0ae',surfaceRgb:'252,242,239',foreground:'#4e302f',foregroundStrong:'#251515',muted:'#775654',faint:'#9c7a78',accent:'#b45444',accent2:'#8a546c',shadow:'#643934',darkDensity:.79,lightDensity:.76,textShadow:'0 1px 2px rgba(255,255,255,.96),0 0 8px rgba(255,255,255,.72)'}
+    }}
+  },
   {id:'ambient',label:'Ambient',description:'Vellum\'s theme-only ambient surface.',kind:'static',component:AmbientBackground,selectable:false,tokens:{dark:{cover:'100%',sideCover:'100%',blur:'0px'},light:{cover:'100%',sideCover:'100%',blur:'0px'}}}
 ];
 const BACKGROUND_INDEX = Object.fromEntries(BACKGROUND_REGISTRY.map(entry => [entry.id, entry]));
@@ -2636,12 +2731,21 @@ const BackgroundContext = React.createContext(null);
 const useBackground = () => React.useContext(BackgroundContext);
 const BackgroundRenderer = ({entry, preview=false}) => {
   const Component = entry.component;
-  return <Component preview={preview} {...(preview ? (entry.previewProps || {}) : {})}/>;
+  return <Component preview={preview} {...(entry.props || {})} {...(preview ? (entry.previewProps || {}) : {})}/>;
 };
 const AppBackground = () => {
   const {background} = useBackground();
   return <div className="app-background" aria-hidden="true"><div className="app-background-layer"><BackgroundRenderer entry={background}/></div></div>;
 };
+const BackgroundChoiceCard = ({entry, selected, onSelect}) => (
+  <button type="button" role="radio" aria-checked={selected}
+    className={'bg-preview-card' + (selected ? ' on' : '')}
+    onClick={() => onSelect(entry.id)}>
+    <span className="bg-live"><BackgroundRenderer entry={entry} preview/></span>
+    <span className="bg-preview-copy"><span className="bg-preview-name">{entry.label}</span><span className="bg-preview-kind">{entry.kind === 'image' ? 'static' : entry.kind}</span></span>
+    {selected && <span className="bg-preview-check"><IcCheck size={13}/></span>}
+  </button>
+);
 const IcNote = (p)=> <I {...p} d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M9 13h6 M9 17h4"/>;
 const IcUpload = (p)=> <I {...p} d="M12 16V4 M6 10l6-6 6 6 M4 20h16"/>;
 const IcImage = (p)=> <I {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></I>;
@@ -2653,6 +2757,10 @@ const IcSettings = (p)=> <I {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4
 const IcHelp = (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M9.2 9a2.8 2.8 0 0 1 5.5.7c0 1.8-2.7 2.3-2.7 3.8 M12 17h.01"/></I>;
 const IcLogout = (p)=> <I {...p} d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9"/>;
 const IcSparkle = (p)=> <I {...p} d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8L19 17z"/>;
+const IcSkills = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-skills '+className}><path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72"/><path d="m14 7 3 3M5 6v4M19 14v4M10 2v2M7 8H3M21 16h-4M11 3H9"/></I>;
+const IcPlugins = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-plugins '+className}><path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2"/><rect x="14" y="2" width="8" height="8" rx="1"/></I>;
+const IcBot = (p)=> <I {...p} sw={1.7}><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></I>;
+const IcTool = (p)=> <I {...p} sw={1.7} d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.106-3.105c.32-.322.863-.22.983.218a6 6 0 0 1-8.259 7.057l-7.91 7.91a1 1 0 0 1-2.999-3l7.91-7.91a6 6 0 0 1 7.057-8.259c.438.12.54.662.219.984z"/>;
 const IcPenLine = (p)=> <I {...p} d="M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>;
 const IcGlobe = (p)=> <I {...p} d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zM2 12h20 M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20z"/>;
 const IcTrendUp = (p)=> <I {...p} d="M3 17l6-6 4 4 7-7 M14 8h5v5"/>;
@@ -2668,8 +2776,8 @@ const IcChat = (p)=> <I {...p} d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5c-1.5 0-2.9-.4-4
 const IcTerminal = (p)=> <I {...p} d="M4 17l6-6-6-6 M12 19h8"/>;
 const IcLedger = (p)=> <I {...p} d="M4 20V10 M10 20V4 M16 20v-7 M21 20H3"/>;
 const IcStop = (p)=> <I {...p}><rect x="7" y="7" width="10" height="10" rx="2"/></I>;
-const IcBrain = (p)=> <I {...p}><circle cx="12" cy="12" r="2.6"/><circle cx="5" cy="7" r="1.6"/><circle cx="19" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><circle cx="19" cy="17" r="1.6"/><path d="M6.4 8.1l3.5 2.4 M17.6 8.1l-3.5 2.4 M6.4 15.9l3.5-2.4 M17.6 15.9l-3.5-2.4"/></I>;
-const IcMcp = (p)=> <I {...p}><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></I>;
+const IcBrain = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-memory '+className}><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4M6.003 5.125A3 3 0 0 0 6.401 6.5M3.477 10.896a4 4 0 0 1 .585-.396M6 18a4 4 0 0 1-1.967-.516M12 13h4M12 18h6a2 2 0 0 1 2 2v1M12 8h8M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></I>;
+const IcMcp = ({className='',...p})=> <I {...p} sw={1.7} className={'semantic-icon semantic-mcp '+className}><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></I>;
 const IcFlame = (p)=> <I {...p} d="M12 2c1 3.5-1.5 5-1.5 7.5A3.5 3.5 0 0 0 14 13c0-2 2-3 2-3 .5 4 2 5 2 7a6 6 0 1 1-12 0c0-3 2.5-4 2.5-7 0-1.5-.5-2.5-.5-2.5S10 6 12 2z"/>;
 const IcEye = (p)=> <I {...p}><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></I>;
 const IcGraph = (p)=> <I {...p}><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="8" r="2.4"/><circle cx="9" cy="18" r="2.4"/><circle cx="18" cy="18" r="2.4"/><path d="M7.8 7.2l8.4 0.6 M7.4 7.9l1.4 8 M10.9 17.4l5.4 0.5 M17.4 10.2l-7.2 5.9"/></I>;
@@ -2971,6 +3079,30 @@ const chatIsToday = chat => {
   return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
 };
 
+const CollapsibleRegion = ({open, id, labelledBy, children}) => (
+  <div id={id} role={labelledBy ? 'region' : undefined} aria-labelledby={labelledBy} aria-hidden={!open}
+    className={'sb-section-collapse' + (open ? ' open' : '')}>
+    <div className="sb-section-inner">{children}</div>
+  </div>
+);
+
+const SidebarSection = ({id, label, count, open, onToggle, children}) => {
+  const buttonId = `sidebar-section-${id}-button`;
+  const regionId = `sidebar-section-${id}`;
+  return (
+    <section className="sb-section">
+      <button type="button" id={buttonId} className="sb-sec sb-sec-toggle"
+        aria-expanded={open} aria-controls={regionId} onClick={onToggle}
+        title={open ? `Collapse ${label}` : `Expand ${label}`}>
+        <span>{label}</span>
+        {count !== undefined && count !== null && <span className="sb-sec-count">{count}</span>}
+        <span className={'sec-chev' + (open ? '' : ' closed')} aria-hidden="true"><IcChevD size={12}/></span>
+      </button>
+      <CollapsibleRegion open={open} id={regionId} labelledBy={buttonId}>{children}</CollapsibleRegion>
+    </section>
+  );
+};
+
 const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
   const sorted = visibleChats(chats);
   const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
@@ -2999,8 +3131,16 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
-        <div className="sb-sec">Now<span className="sb-sec-count">{sorted.length}</span></div>
-        <div className="now-group">
+        <div className="sb-tools">
+          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
+          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
+          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
+          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcPlugins/></span>Plugins</button>
+          <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
+        </div>
+        <SidebarSection id="now" label="Now" count={sorted.length} open={secOpen.now} onToggle={() => onToggleSec('now')}>
+          <div className="now-group">
           <div className="now-subhead">Continue<span className="space-count">{continueChat ? 1 : 0}</span></div>
           {continueChat ? <ChatRow chat={continueChat} showMeta active={view === 'chat' && continueChat.id === activeChatId}
             renaming={renamingId === continueChat.id}
@@ -3021,32 +3161,38 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             onMenu={e => onChatMenu(chat.id, e)}
             onRename={title => onRename(chat.id, title)}/>)}
           {followUpChats.length === 0 && <div className="now-subempty">Nothing waiting on you.</div>}
-        </div>
-        <div className="sb-sec">Spaces<span className="sb-sec-count">{spaces.length}</span></div>
+          </div>
+        </SidebarSection>
+        <SidebarSection id="spaces" label="Spaces" count={spaces.length} open={secOpen.spaces} onToggle={() => onToggleSec('spaces')}>
         {spaces.length === 0 && <div className="sb-empty">Spaces appear as chats collect.</div>}
         {spaces.slice(0, 8).map(space => {
           const open = expandedSpace === space.id;
+          const regionId = `sidebar-space-${space.id}`;
           return (
             <React.Fragment key={space.id}>
-              <button className={'sb-row space-row' + (open ? ' open' : '')} onClick={() => setExpandedSpace(open ? null : space.id)}>
-                <span className={'sec-chev' + (open ? '' : ' closed')}><IcChevD size={12}/></span>
+              <button className={'sb-row space-row' + (open ? ' open' : '')} aria-expanded={open} aria-controls={regionId}
+                onClick={() => setExpandedSpace(open ? null : space.id)}>
+                <span className={'sec-chev' + (open ? '' : ' closed')} aria-hidden="true"><IcChevD size={12}/></span>
                 <span className="sb-ic"><FolderIcon open={open}/></span>
                 <span className="chat-title">{space.label}</span>
                 <span className="space-count">{space.count}</span>
               </button>
-              {open && <div className="space-chat-list">
-                {chatsForSpace(space.id).map(c => (
-                  <ChatRow key={c.id} chat={c} nested showMeta active={view === 'chat' && c.id === activeChatId}
-                    renaming={renamingId === c.id}
-                    onOpen={() => onOpenChat(c.id)}
-                    onMenu={e => onChatMenu(c.id, e)}
-                    onRename={t => onRename(c.id, t)}/>
-                ))}
-              </div>}
+              <CollapsibleRegion open={open} id={regionId}>
+                <div className="space-chat-list">
+                  {chatsForSpace(space.id).map(c => (
+                    <ChatRow key={c.id} chat={c} nested showMeta active={view === 'chat' && c.id === activeChatId}
+                      renaming={renamingId === c.id}
+                      onOpen={() => onOpenChat(c.id)}
+                      onMenu={e => onChatMenu(c.id, e)}
+                      onRename={t => onRename(c.id, t)}/>
+                  ))}
+                </div>
+              </CollapsibleRegion>
             </React.Fragment>
           );
         })}
-        <div className="sb-sec">Smart views<span className="sb-sec-count">{smartViews.length}</span></div>
+        </SidebarSection>
+        <SidebarSection id="smart-views" label="Smart views" count={smartViews.length} open={secOpen.smartViews} onToggle={() => onToggleSec('smartViews')}>
         {smartViews.map(smart => (
           <button key={smart.id} className="sb-row smart-row" onClick={() => onSmartView(smart)}>
             <span className="sb-ic"><SmartViewIcon id={smart.id}/></span>
@@ -3054,13 +3200,8 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
             <span className="space-count">{smart.count}</span>
           </button>
         ))}
-        <div className="sb-sec" style={{cursor: 'pointer'}} onClick={() => onToggleSec('projects')}>
-          Projects
-          <button className={'sec-chev' + (secOpen.projects ? '' : ' closed')} title={secOpen.projects ? 'Collapse' : 'Expand'}
-            onClick={e => { e.stopPropagation(); onToggleSec('projects'); }}><IcChevD size={12}/></button>
-        </div>
-        {secOpen.projects && (
-          <React.Fragment>
+        </SidebarSection>
+        <SidebarSection id="projects" label="Projects" count={projects.length} open={secOpen.projects} onToggle={() => onToggleSec('projects')}>
             <button className="sb-row" onClick={onNewProject}><span className="sb-ic"><IcFolderPlus/></span>New project</button>
             {projects.map(p => (
               <React.Fragment key={p.id}>
@@ -3078,16 +3219,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
                 ))}
               </React.Fragment>
             ))}
-          </React.Fragment>
-        )}
-        <div className="sb-tools">
-          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
-          <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcGrid/></span>Plugins</button>
-          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
-          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSparkle/></span>Skills</button>
-          <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
-          <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
-        </div>
+        </SidebarSection>
       </div>
       <div className="profile-row" onClick={onProfile}>
         <div className="avatar">{initials(profile.displayName)}</div>
@@ -3161,9 +3293,9 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger ? Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
-      <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcGrid size={17}/></button>
+      <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
-      <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSparkle size={17}/></button>
+      <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSkills size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className={'rail-btn' + (view === 'projects' ? ' active' : '')} title="Projects" onClick={() => onNav('projects')}><IcFolder size={17}/></button>}>
         <div className="fly-head">Projects</div>
@@ -3483,6 +3615,49 @@ const LibPickModal = ({library, onPick, onClose}) => {
   );
 };
 
+const DEFAULT_BORDER_GRADIENT_COLORS = [
+  'var(--color-1)',
+  'var(--color-5)',
+  'var(--color-3)',
+  'var(--color-4)',
+  'var(--color-2)',
+];
+const BorderGradientButton = ({colors=DEFAULT_BORDER_GRADIENT_COLORS,className='',children,type='button',style,...props}) => {
+  const gradient = `linear-gradient(45deg, ${colors.join(',')})`;
+  return (
+    <button
+      {...props}
+      type={type}
+      className={'btn border-gradient-button' + (className ? ' ' + className : '')}
+      style={{...style,'--border-gradient':gradient}}
+    >
+      <span className="border-gradient-button-label">{children ?? 'Gradient Border'}</span>
+    </button>
+  );
+};
+
+const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
+  const value = String(text ?? '');
+  const chars = Array.from(value);
+  const exiting = phase === 'exit';
+  const safeSpeed = Math.max(.25, Number(speed) || 1);
+  return (
+    <span className={'per-character-rise' + (exiting ? ' exiting' : '') + (className ? ' ' + className : '')} aria-label={value}>
+      {chars.map((char,index) => {
+        const order = exiting ? chars.length - index - 1 : index;
+        return (
+          <span
+            key={index}
+            className="per-character-rise-char"
+            aria-hidden="true"
+            style={{animationDuration:((exiting ? 420 : 700) / safeSpeed)+'ms',animationDelay:((order * (exiting ? 14 : 24)) / safeSpeed)+'ms'}}
+          >{char === ' ' ? '\u00a0' : char}</span>
+        );
+      })}
+    </span>
+  );
+};
+
 const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, appSel = [], onToggleSel, onConnectApp, onOpenAgent}) => {
   const [attach, setAttach] = useState([]);
   const [modelOpen, setModelOpen] = useState(false);
@@ -3643,13 +3818,11 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
               }
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
             }}/>
-          {!text && (voiceState !== 'idle'
-            ? <span className="ph-anim" style={{animation: 'none'}}>Type</span>
-            : searchMode
-            ? <span className="ph-anim" key="search">Search the web</span>
-            : ph
-              ? <span className="ph-anim" style={{animation: 'none'}}>{ph}</span>
-              : <span className="ph-anim" key={phIdx}>{PLACEHOLDERS[phIdx]}</span>)}
+          {!text && (() => {
+            const placeholderText = voiceState !== 'idle' ? 'Type' : searchMode ? 'Search the web' : ph || PLACEHOLDERS[phIdx];
+            const placeholderKey = voiceState !== 'idle' ? 'voice' : searchMode ? 'search' : ph ? 'fixed-'+ph : 'rotating-'+phIdx;
+            return <PerCharacterRise key={placeholderKey} className="ph-anim" text={placeholderText} speed={1.18}/>;
+          })()}
         </div>
         <div className="crow crow-rel">
           <input ref={fileRef} type="file" multiple style={{display: 'none'}}
@@ -3868,8 +4041,11 @@ function errorTrace(message) {
 const TraceIcon = ({type, status}) => {
   if (type === 'source') return <IcGlobe size={15}/>;
   if (type === 'error' || status === 'failed') return <IcInfo size={15}/>;
-  if (type === 'subagent_call') return <IcBrain size={15}/>;
-  if (type === 'tool_call') return <IcSearch size={15}/>;
+  if (type === 'subagent_call') return <IcBot size={15}/>;
+  if (type === 'tool_call' || type === 'function_call') return <IcTool size={15}/>;
+  if (String(type || '').includes('memory')) return <IcBrain size={15}/>;
+  if (String(type || '').includes('skill')) return <IcSkills size={15}/>;
+  if (/plugin|mcp/.test(String(type || ''))) return <IcMcp size={15}/>;
   return <IcGlobe size={15}/>;
 };
 
@@ -3990,6 +4166,7 @@ const ActivityDrawer = ({msg, onClose}) => {
 };
 
 const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPreview, className = '', railClassName = '', previewClassName = ''}) => {
+  const navRef = useRef(null);
   const [internalActiveId, setInternalActiveId] = useState(defaultActiveId || (items[0] && items[0].id) || '');
   const [hoveredId, setHoveredId] = useState(null);
   const [focusedId, setFocusedId] = useState(null);
@@ -4003,10 +4180,17 @@ const PreviewRail = ({items, activeId, defaultActiveId, onActiveChange, renderPr
     if (activeId === undefined) setInternalActiveId(id);
     if (onActiveChange) onActiveChange(id);
   };
+  useEffect(() => {
+    const nav = navRef.current;
+    const index = items.findIndex(item => item.id === selectedId);
+    const button = nav && nav.children[index];
+    if (!button || nav.scrollHeight <= nav.clientHeight) return;
+    button.scrollIntoView({block:'nearest', inline:'nearest', behavior:window.matchMedia('(prefers-reduced-motion:reduce)').matches ? 'auto' : 'smooth'});
+  }, [selectedId, items.length]);
   const previewOffset = displayedIndex < 0 ? 0 : (displayedIndex - (items.length - 1) / 2) * 20;
   return (
     <div className={'preview-rail ' + className}>
-      <nav aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
+      <nav ref={navRef} aria-label="Conversation preview navigation" className={'preview-rail-nav ' + railClassName} onPointerLeave={() => setHoveredId(null)}>
         {items.map((item, index) => {
           const distance = displayedIndex < 0 ? Infinity : Math.abs(index - displayedIndex);
           const scale = distance === 0 ? 1 : distance === 1 ? .68 : distance === 2 ? .44 : .25;
@@ -4136,21 +4320,18 @@ const FilesPanel = ({files, onViewImage, onClose}) => (
 const TYPING_LINES = ["Ready when you are.", "What should we get into?", "Pick up where you left off.", "Where would you like to start?", "Tell me what you need."];
 const TypingGreet = () => {
   const [idx, setIdx] = useState(0);
-  const [sub, setSub] = useState(0);
-  const [del, setDel] = useState(false);
+  const [phase, setPhase] = useState('enter');
   useEffect(() => {
-    const full = TYPING_LINES[idx];
-    if (!del && sub === full.length) { const t = setTimeout(() => setDel(true), 2400); return () => clearTimeout(t); }
-    if (del && sub === 0) { setDel(false); setIdx(i => (i + 1) % TYPING_LINES.length); return; }
-    const t = setTimeout(() => setSub(s => s + (del ? -1 : 1)), del ? 28 : 56);
+    const current = TYPING_LINES[idx] || '';
+    const t = setTimeout(() => {
+      if (phase === 'enter') setPhase('exit');
+      else { setIdx(i => (i + 1) % TYPING_LINES.length); setPhase('enter'); }
+    }, phase === 'enter' ? 2850 : 440 + current.length * 14);
     return () => clearTimeout(t);
-  }, [sub, del, idx]);
-  const text = TYPING_LINES[idx].slice(0, sub);
+  }, [idx, phase]);
   return (
     <div className="land-greet typed">
-      <span>{text.slice(0, -1)}</span>
-      <span key={sub} className="typed-new">{text.slice(-1)}</span>
-      <span className="typed-caret"></span>
+      <PerCharacterRise key={idx} text={TYPING_LINES[idx]} phase={phase}/>
     </div>
   );
 };
@@ -4597,13 +4778,6 @@ const activityDomain = item => {
   return (src && (src.provider_label || src.domain || src.dom || src.title)) || item.name || '';
 };
 const activityIsDone = item => item && ['completed','done','failed'].includes(String(item.status||'').toLowerCase());
-const THINKING_ROTATION_LABELS = ['Thinking', 'One sec', 'Checking context', 'Working through it', 'Cooking up your answer'];
-const nextThinkingIndex = current => {
-  if (THINKING_ROTATION_LABELS.length < 2) return 0;
-  let next = Math.floor(Math.random() * THINKING_ROTATION_LABELS.length);
-  if (next === current) next = (next + 1 + Math.floor(Math.random() * (THINKING_ROTATION_LABELS.length - 1))) % THINKING_ROTATION_LABELS.length;
-  return next;
-};
 const isThinkingActivity = item => {
   const type = String(item && item.type || '').toLowerCase();
   const label = String(item && item.label || '').toLowerCase();
@@ -4636,6 +4810,7 @@ const sourcesForMsg = msg => {
     return true;
   });
 };
+<<<<<<< HEAD
 const DOTM_SQUARE_3_SPIRAL = [
   0, 1, 2, 3, 4,
   15, 16, 17, 18, 5,
@@ -4658,37 +4833,37 @@ const DotmSquare3 = ({size=18, dotSize=2.5, className=''}) => {
       ))}
     </span>
   );
+=======
+const activityVisualKind = item => {
+  const haystack = [item && item.type, item && item.label, item && item.name, item && item.detail].filter(Boolean).join(' ').toLowerCase();
+  if (/sub.?agent|delegate|delegation|agent call/.test(haystack)) return 'orbit';
+  if (/skill/.test(haystack)) return 'triangle';
+  if (/plugin|connector|mcp|model context protocol|webhook/.test(haystack)) return 'echo';
+  if (/memory|recall|obsidian|context retriev/.test(haystack)) return 'matrix';
+  if (/source|search|browse|reading|fetch|web/.test(haystack)) return 'radar';
+  if (/tool|function|execute|call/.test(haystack)) return 'tool';
+  return 'matrix';
+};
+const ActivityLoader = ({kind}) => {
+  if (kind === 'orbit') return <span className="activity-loader loader-orbit" aria-hidden="true"><i className="loader-orbit-ring"/><i className="loader-orbit-core"/><i className="loader-orbit-dot"/></span>;
+  if (kind === 'triangle') return <span className="activity-loader loader-triangle" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="12,3 21,19 3,19"/><circle cx="12" cy="3" r="1.7"/><circle cx="21" cy="19" r="1.7"/><circle cx="3" cy="19" r="1.7"/></svg></span>;
+  if (kind === 'echo') return <span className="activity-loader loader-echo" aria-hidden="true"><i/><i/><i/></span>;
+  if (kind === 'radar') return <span className="activity-loader loader-radar" aria-hidden="true"><i/></span>;
+  if (kind === 'tool') return <span className="activity-loader loader-tool" aria-hidden="true"><IcTool/></span>;
+  return <span className="activity-loader loader-matrix" aria-hidden="true">{Array.from({length:9},(_,i)=><i key={i}/>)}</span>;
+>>>>>>> c0b55116b732e8e8a5f7cfe2ba3dc75d764a55e5
 };
 const ActivityStatus = ({item}) => {
-  const [thinkingIndex, setThinkingIndex] = useState(0);
-  const [typingText, setTypingText] = useState(THINKING_ROTATION_LABELS[0]);
-  const thinking = isThinkingActivity(item);
-  useEffect(() => {
-    if (!thinking) {
-      setThinkingIndex(0);
-      setTypingText('');
-      return undefined;
-    }
-    const id = setInterval(() => setThinkingIndex(i => nextThinkingIndex(i)), 2300);
-    return () => clearInterval(id);
-  }, [thinking]);
-  useEffect(() => {
-    if (!thinking) return undefined;
-    const typingLabel = THINKING_ROTATION_LABELS[thinkingIndex] || THINKING_ROTATION_LABELS[0];
-    setTypingText('');
-    let cursor = 0;
-    const id = setInterval(() => {
-      cursor += 1;
-      setTypingText(typingLabel.slice(0, cursor));
-      if (cursor >= typingLabel.length) clearInterval(id);
-    }, 42);
-    return () => clearInterval(id);
-  }, [thinking, thinkingIndex]);
   if (!item) return null;
-  const label = (thinking ? (typingText || THINKING_ROTATION_LABELS[thinkingIndex]) : (item.label || 'Thinking')).replace(/\.+$/, '');
+  const label = String(item.label || item.title || item.name || 'Thinking').replace(/\.+$/, '');
   return (
+<<<<<<< HEAD
     <div className="activity-status" aria-live="polite">
       <DotmSquare3 size={18} dotSize={2.5}/>
+=======
+    <div className="activity-status" aria-live="polite" aria-atomic="true">
+      <ActivityLoader kind={activityVisualKind(item)}/>
+>>>>>>> c0b55116b732e8e8a5f7cfe2ba3dc75d764a55e5
       <span className="activity-text fx-spotlight">{label}</span>
     </div>
   );
@@ -5569,7 +5744,7 @@ const AppsView = ({apps, onConnect, onDisconnect}) => {
   return (
     <div className="page">
       <div className="page-inner" style={{maxWidth: 880}}>
-        <div className="page-head"><span className="page-head-ic"><IcGrid/></span><div><div className="page-title">Connectors</div><div className="page-sub">Browse MCP servers from external registries and install them into Vellum.</div></div></div>
+        <div className="page-head"><span className="page-head-ic"><IcMcp/></span><div><div className="page-title">Connectors</div><div className="page-sub">Browse MCP servers from external registries and install them into Vellum.</div></div></div>
         <div className="conn-tabs">{[['marketplace','Marketplace'],['installed','Installed ? '+installedList.length],['audit','Audit log']].map(([k,l])=>(<button key={k} className={'conn-tab'+(tab===k?' on':'')} onClick={()=>setTab(k)}>{l}</button>))}</div>
         {tab==='marketplace' && <React.Fragment>
           <div className="conn-toolbar"><div className="conn-search"><IcSearch size={15}/><input placeholder="Search connectors and tools" value={query} onChange={e=>setQuery(e.target.value)}/></div><button className="conn-addcustom" onClick={()=>setShowAdd(true)}><IcPlus size={15}/>Add custom MCP server</button></div>
@@ -5673,7 +5848,7 @@ const BackendConnectorsView = ({apps = []}) => {
     <div className="page">
       <div className="page-inner" style={{maxWidth: 880}}>
         <div className="page-head">
-          <span className="page-head-ic"><IcGrid/></span>
+          <span className="page-head-ic"><IcPlugins/></span>
           <div style={{flex: 1}}>
             <div className="page-title">Plugins</div>
             <div className="page-sub">Live connector, MCP, and system plugin status from the Vellum backend.</div>
@@ -5827,7 +6002,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
           Projects keep chats, files, and custom instructions in one place. Use them for ongoing work, or just to keep things tidy.
         </div>
         <div className="m-actions">
-          <button className="btn primary" disabled={!name.trim()} onClick={create}>Create project</button>
+          <BorderGradientButton disabled={!name.trim()} onClick={create}>Create project</BorderGradientButton>
         </div>
       </div>
     </React.Fragment>
@@ -6653,7 +6828,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
     {k: 'Reflections', ic: <IcNote size={14}/>},
     {k: 'Saved', ic: <IcArchive size={14}/>},
     {k: 'Feeds', ic: <IcGlobe size={14}/>},
-    {k: 'Plugins', ic: <IcGrid size={14}/>},
+    {k: 'Plugins', ic: <IcPlugins size={14}/>},
     {k: 'Automations', ic: <IcSparkle size={14}/>},
     {k: 'Computer use', ic: <IcTerminal size={14}/>},
     {k: 'Shortcuts', ic: <I d="M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10" size={14}/>},
@@ -6699,18 +6874,23 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               </div>
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
-                  <div className="appearance-backgrounds-title">Animated background</div>
+                  <div className="appearance-backgrounds-title">Live &amp; animated</div>
                   <div className="appearance-backgrounds-note">Live previews · saved on this device</div>
                 </div>
-                <div className="bg-preview-grid" role="radiogroup" aria-label="Application background">
-                  {selectableBackgrounds.map(entry => (
-                    <button key={entry.id} type="button" role="radio" aria-checked={backgroundId === entry.id}
-                      className={'bg-preview-card' + (backgroundId === entry.id ? ' on' : '')}
-                      onClick={() => setBackgroundId(entry.id)}>
-                      <span className="bg-live"><BackgroundRenderer entry={entry} preview/></span>
-                      <span className="bg-preview-copy"><span className="bg-preview-name">{entry.label}</span><span className="bg-preview-kind">{entry.kind}</span></span>
-                      {backgroundId === entry.id && <span className="bg-preview-check"><IcCheck size={13}/></span>}
-                    </button>
+                <div className="bg-preview-grid" role="radiogroup" aria-label="Live and animated application backgrounds">
+                  {selectableBackgrounds.filter(entry => entry.kind !== 'image').map(entry => (
+                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={backgroundId === entry.id} onSelect={setBackgroundId}/>
+                  ))}
+                </div>
+              </div>
+              <div className="appearance-backgrounds">
+                <div className="appearance-backgrounds-head">
+                  <div className="appearance-backgrounds-title">Static scenes</div>
+                  <div className="appearance-backgrounds-note">High-quality images · adaptive colors</div>
+                </div>
+                <div className="bg-preview-grid" role="radiogroup" aria-label="Static application backgrounds">
+                  {selectableBackgrounds.filter(entry => entry.kind === 'image').map(entry => (
+                    <BackgroundChoiceCard key={entry.id} entry={entry} selected={backgroundId === entry.id} onSelect={setBackgroundId}/>
                   ))}
                 </div>
               </div>
@@ -6986,6 +7166,9 @@ const NotFoundView = ({onBack}) => {
 };
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
+const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
+
 const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
@@ -7098,7 +7281,17 @@ const App = () => {
   };
   const canBack = hist.current.idx > 0;
   const canFwd = hist.current.idx < hist.current.stack.length - 1;
-  const [secOpen, setSecOpen] = useState({projects: true, recents: true, agents: true});
+  const [secOpen, setSecOpen] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SIDEBAR_SECTION_STORAGE_KEY) || '{}');
+      return {...SIDEBAR_SECTION_DEFAULTS, ...saved};
+    } catch {
+      return SIDEBAR_SECTION_DEFAULTS;
+    }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify(secOpen)); } catch {}
+  }, [secOpen]);
   const [viewer, setViewer] = useState(null);
   const [expandedProj, setExpandedProj] = useState({});
   const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));

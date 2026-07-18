@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Vellum — Workspace Preview</title>
+<title>Vellum Workspace</title>
 
 <!-- React + Babel (CDN). Double-click this file to run. -->
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -474,7 +474,7 @@ button{font-family:inherit}
 .md-badge{font-size:9px;color:#4ade80;border:1px solid #1f4d2c;border-radius:3px;padding:0 3px;font-family:'Geist Mono',monospace;flex-shrink:0}
 .files-preview{padding:18px;align-self:flex-start;width:100%}
 .files-preview-name{font-size:13px;color:#ddd;font-family:'Geist Mono',monospace;margin-bottom:8px}
-.files-preview-body{font-size:12px;color:#666;line-height:1.6;font-family:'Geist Mono',monospace}
+.files-preview-body{font-size:12px;color:#777;line-height:1.6;font-family:'Geist Mono',monospace;white-space:pre-wrap;word-break:break-word}.files-preview-body.error{color:#bd6c63}.files-preview-meta{font-size:10.5px;color:#48484e;margin-bottom:12px;font-family:'Geist Mono',monospace}
 .resize-h{width:6px;flex-shrink:0;cursor:col-resize;position:relative;z-index:30;background:transparent}
 .resize-h::after{content:"";position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:1px;background:#191919;transition:background .12s,width .12s}
 .resize-h:hover::after,.resize-h.active::after{background:#e35d2b;width:2px}
@@ -504,6 +504,28 @@ button{font-family:inherit}
 .mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
 .mode-chip:hover{color:#aaa;background:#181818}
 .mode-chip.active{color:#111;background:#d8d8d8}
+.web-shell{height:100%;width:100%;display:flex;flex-direction:column;background:#0b0b0c;overflow:hidden}
+.web-brandbar{height:44px;display:flex;align-items:center;gap:12px;padding:0 14px;border-bottom:1px solid #1b1b1d;background:rgba(10,10,11,.96);flex-shrink:0;position:relative;z-index:200}
+.web-mark{width:20px;height:20px;border-radius:6px;background:radial-gradient(circle at 34% 28%,#f6a25f,#e35d2b 56%,#852f16);box-shadow:0 0 0 1px rgba(255,255,255,.06) inset,0 6px 18px rgba(227,93,43,.18)}
+.web-brand{font-size:12.5px;font-weight:600;color:#e7e7e7;letter-spacing:-.01em}.web-brand span{color:#626268;font-weight:400;margin-left:6px}
+.web-context{display:flex;align-items:center;gap:7px;margin-left:10px;min-width:0;color:#69696f;font:11.5px 'Geist Mono',monospace}
+.web-context-dot{width:5px;height:5px;border-radius:50%;background:#4e9a65;box-shadow:0 0 8px rgba(78,154,101,.5)}
+.web-actions{margin-left:auto;display:flex;align-items:center;gap:7px}
+.web-action{display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border:1px solid #242427;border-radius:7px;background:#141416;color:#8b8b90;font-size:11.5px;cursor:pointer}.web-action:hover{color:#d4d4d6;border-color:#343438;background:#19191b}
+.web-workspace{flex:1;min-height:0;position:relative}
+.coding-main-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;width:calc(100% - 28px);max-width:850px;margin:0 auto 9px;padding:9px 10px;background:#101011;border:1px solid #212124;border-radius:9px;color:#77777d;font-size:11.5px;box-shadow:0 8px 28px rgba(0,0,0,.12)}
+.coding-targets,.coding-permissions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.coding-target-btn,.coding-access-btn{height:28px;border:1px solid #262629;background:#151517;color:#828288;border-radius:7px;padding:0 10px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,border-color .12s,color .12s}
+.coding-target-btn:hover,.coding-access-btn:hover{border-color:#38383c;color:#d1d1d3}.coding-target-btn.active{background:#e5e5e7;border-color:#e5e5e7;color:#111}.coding-target-btn:disabled{opacity:.38;cursor:not-allowed}.coding-target-btn .provider-dot{width:6px;height:6px;border-radius:50%;background:#555}.coding-target-btn.ready .provider-dot{background:#4e9a65;box-shadow:0 0 7px rgba(78,154,101,.45)}.coding-target-btn.warn .provider-dot{background:#c98b3d}
+.coding-access-btn.active{color:#e7a27f;border-color:rgba(227,93,43,.45);background:rgba(227,93,43,.09)}
+.coding-root{display:flex;align-items:center;gap:7px;min-width:260px;flex:1;justify-content:flex-end}.coding-root label{color:#55555b;text-transform:uppercase;font-size:9.5px;letter-spacing:.08em}
+.coding-root-input{height:29px;min-width:230px;max-width:390px;flex:1;background:#09090a;border:1px solid #252528;border-radius:7px;color:#d0d0d2;padding:0 9px;font-family:'Geist Mono',monospace;font-size:11px;outline:none}.coding-root-input:focus{border-color:#48484e;box-shadow:0 0 0 3px rgba(255,255,255,.025)}
+.coding-health{display:flex;align-items:center;gap:7px;max-width:850px;width:calc(100% - 28px);margin:-3px auto 9px;color:#5b5b61;font-size:10.5px;min-height:15px}.coding-health strong{color:#929298;font-weight:500}.coding-health.error{color:#c66f64}.coding-health .trace{font-family:'Geist Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.coding-health-refresh{border:0;background:none;color:#67676c;font-size:10.5px;cursor:pointer;margin-left:auto}.coding-health-refresh:hover{color:#ccc}
+.run-events{margin:10px 0 2px;border:1px solid #1f1f22;border-radius:8px;overflow:hidden;background:#0c0c0d}.run-event{display:grid;grid-template-columns:18px minmax(90px,145px) 1fr auto;align-items:start;gap:8px;padding:7px 9px;border-bottom:1px solid #19191b;color:#6f6f75;font-size:11px}.run-event:last-child{border-bottom:0}.run-event-icon{color:#888}.run-event-label{color:#a0a0a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-event-detail{font-family:'Geist Mono',monospace;color:#55555b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-event-state{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#555}.run-event.error .run-event-state{color:#c66f64}.run-event.complete .run-event-state{color:#629b71}
+.run-event-rewind{border:1px solid #29292d;background:#151517;color:#85858b;border-radius:5px;padding:2px 6px;font:500 9.5px 'Geist',sans-serif;cursor:pointer}.run-event-rewind:hover{border-color:#3b3b40;color:#c8c8cc}
+.run-meta{display:flex;align-items:center;gap:8px;margin-top:9px;color:#55555b;font:10.5px 'Geist Mono',monospace}.run-meta .live{color:#6fa77d}.run-meta .stopped{color:#c98b3d}
+.runtime-empty{max-width:620px;margin:0 auto;text-align:center}.runtime-empty-kicker{font:10px 'Geist Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:#e35d2b;margin-bottom:13px}.runtime-empty-title{font-size:28px;letter-spacing:-.035em;color:#e1e1e3;margin-bottom:9px}.runtime-empty-copy{font-size:13px;line-height:1.6;color:#66666c;max-width:500px;margin:0 auto 18px}.runtime-empty-note{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid #202023;border-radius:7px;background:#101011;color:#6f6f75;font-size:11px}.runtime-empty-note i{width:6px;height:6px;border-radius:50%;background:#4e9a65}
+@media(max-width:820px){.web-context{display:none}.coding-main-strip{align-items:stretch;flex-direction:column}.coding-root{min-width:0;justify-content:stretch}.coding-root-input{min-width:0;max-width:none}.run-event{grid-template-columns:18px 1fr auto}.run-event-detail{grid-column:2/4}.sidebar{width:248px}.main{min-width:0}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes tpulse{0%,100%{opacity:.25}50%{opacity:1}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -517,6 +539,64 @@ button{font-family:inherit}
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, Fragment } = React;
+
+/* Provider-neutral coding API. The UI only consumes Vellum events; provider SDK
+   details stay behind the local backend adapter boundary. */
+function parseCodingSseBlocks(text){
+  return String(text||"").replace(/\r\n/g,"\n").split("\n\n").map(x=>x.trim()).filter(Boolean).map(block=>{
+    let event="message"; const data=[];
+    block.split("\n").forEach(line=>{ if(line.startsWith("event:")) event=line.slice(6).trim(); else if(line.startsWith("data:")) data.push(line.slice(5).trim()); });
+    const raw=data.join("");
+    return {event,data:raw?JSON.parse(raw):null};
+  });
+}
+function createCodingApi(apiBase){
+  const base=String(apiBase||"http://127.0.0.1:8000").replace(/\/+$/,"");
+  async function json(path,init){
+    const response=await fetch(base+path,init);
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(body.detail||body.message||("HTTP "+response.status));
+    return body;
+  }
+  return {
+    health:()=>json("/api/coding/health"),
+    sessions:()=>json("/api/coding/sessions"),
+    session:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)),
+    createSession:(body)=>json("/api/coding/sessions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),
+    events:(id,afterSequence=0)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/events?after_sequence="+encodeURIComponent(afterSequence)),
+    checkpoints:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/checkpoints"),
+    checkpoint:(id,checkpointId)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/checkpoints/"+encodeURIComponent(checkpointId)),
+    rewind:(id,checkpointId,phase="after",confirmDiscard=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/rewind/"+encodeURIComponent(checkpointId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phase,confirm_discard:confirmDiscard})}),
+    projectTree:(root)=>json("/api/coding/projects/tree?root="+encodeURIComponent(root)),
+    projectFile:(root,path)=>json("/api/coding/projects/file?root="+encodeURIComponent(root)+"&path="+encodeURIComponent(path)),
+    stop:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/stop",{method:"POST"}),
+    closeSession:(id,discardChanges=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/close",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({discard_changes:discardChanges})}),
+    async runTurn(id,prompt,onEvent,{signal,maxRuntimeSeconds=1800,maxProviderEvents=10000}={}){
+      const response=await fetch(base+"/api/coding/sessions/"+encodeURIComponent(id)+"/turns/stream",{
+        method:"POST",signal,headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({prompt,max_runtime_seconds:maxRuntimeSeconds,max_provider_events:maxProviderEvents})
+      });
+      if(!response.ok){ const body=await response.json().catch(()=>({})); throw new Error(body.detail||body.message||("HTTP "+response.status)); }
+      if(!response.body){ parseCodingSseBlocks(await response.text()).forEach(onEvent); return; }
+      const reader=response.body.getReader(), decoder=new TextDecoder(); let buffer="";
+      while(true){
+        const chunk=await reader.read(); if(chunk.done) break;
+        buffer+=decoder.decode(chunk.value,{stream:true});
+        const parts=buffer.split("\n\n"); buffer=parts.pop()||"";
+        parts.forEach(part=>parseCodingSseBlocks(part+"\n\n").forEach(onEvent));
+      }
+      buffer+=decoder.decode(); if(buffer.trim()) parseCodingSseBlocks(buffer+"\n\n").forEach(onEvent);
+    }
+  };
+}
+const CODING_ACCESS_MODES=[
+  {id:"read_only",label:"Read",title:"Inspect without changing files"},
+  {id:"workspace_write",label:"Write",title:"Edit files and run workspace commands"},
+  {id:"ask_every_time",label:"Ask",title:"Require approval for sensitive actions"},
+  {id:"full_access",label:"Full",title:"Full local workspace access"},
+];
+function localPref(key,fallback){ try{ const value=localStorage.getItem(key); return value===null?fallback:value; }catch(e){ return fallback; } }
+function saveLocalPref(key,value){ try{ localStorage.setItem(key,String(value)); }catch(e){} }
 
 /* ─── Icons ─── */
 const I = ({ d, size=16, stroke="currentColor", fill="none", sw=1.5, children, vb="0 0 24 24" }) => (
@@ -794,7 +874,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
     const items = fl.map(f=>({ name:f.name, image:f.type.startsWith("image/"), url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }));
     setAtts(prev=> [...prev, ...items]); setOpenMenu(null); e.target.value="";
   }
-  const slashOpen = text.trimStart().startsWith("/");
+  const slashOpen = !a.runtimeLabel && text.trimStart().startsWith("/");
   const list = (slashOpen && a.slashList) ? a.slashList(text) : [];
   useEffect(()=>{
     const h = (e)=>{ if(ref.current && !ref.current.contains(e.target)){ setOpenMenu(null); setPluginsSub(false); } };
@@ -828,7 +908,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
           </div>
         </div>
       )}
-      {openMenu==="plus" && (
+      {openMenu==="plus" && !a.runtimeLabel && (
         <div className="menu-pop pop-in" style={{bottom:62, left:14}}>
           <div className="menu-item" onClick={()=>fileRef.current && fileRef.current.click()}><div className="menu-item-l"><IcImage size={15}/><span>Add photos & files</span></div><span className="kbd">Ctrl U</span></div>
           <div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>
@@ -843,7 +923,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
       )}
       {openMenu==="access" && (
         <div className="menu-pop pop-in" style={{bottom:62, left:52}}>
-          {ACCESS_MODES.map(am=>(<div key={am.id} className="menu-item" onClick={()=>{a.setAccessMode(am.id);setOpenMenu(null);}}><div className="menu-item-l" style={{flexDirection:"column",alignItems:"flex-start",gap:1}}><span style={{color:am.id===a.accessMode?"#e35d2b":"#ccc"}}>{am.label}</span><span style={{fontSize:10.5,color:"#555"}}>{am.sub}</span></div>{am.id===a.accessMode && <span className="drop-check">✓</span>}</div>))}
+          {(a.accessModes||ACCESS_MODES).map(am=>(<div key={am.id} className="menu-item" onClick={()=>{a.setAccessMode(am.id);setOpenMenu(null);}}><div className="menu-item-l" style={{flexDirection:"column",alignItems:"flex-start",gap:1}}><span style={{color:am.id===a.accessMode?"#e35d2b":"#ccc"}}>{am.label}</span><span style={{fontSize:10.5,color:"#555"}}>{am.sub||am.title}</span></div>{am.id===a.accessMode && <span className="drop-check">✓</span>}</div>))}
         </div>
       )}
       {slashOpen && list.length>0 && (
@@ -859,12 +939,12 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
         <textarea className="input-ta" placeholder={placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
         <div className="input-footer">
           <div className="input-lft">
-            <button className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add"><IcPlus size={15}/></button>
+            {!a.runtimeLabel&&<button className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add"><IcPlus size={15}/></button>}
             <div className="pill accent" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}}><IcShield size={12}/><span>{a.accessLabel||"Full access"}</span><IcChevD size={12}/></div>
           </div>
           <div className="input-rgt">
-            <div className="model-pill" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.modelLabel ? a.modelLabel(a.selModel) : model}</span><span>{a.selReasoning||"High"}</span><IcChevD size={12}/></div>
-            <button className="icon-btn"><IcMic size={15}/></button>
+            <div className="model-pill" onClick={(e)=>{if(a.runtimeLabel)return;e.stopPropagation();setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"local runtime":(a.selReasoning||"High")}</span>{!a.runtimeLabel&&<IcChevD size={12}/>}</div>
+            {!a.runtimeLabel&&<button className="icon-btn"><IcMic size={15}/></button>}
             {running ? <button className="stop-btn" onClick={onStop} title="Stop"><IcStop size={13}/></button>
                      : <button className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send"><IcSend size={13}/></button>}
           </div>
@@ -1142,7 +1222,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [sbPinned, setSbPinned]       = useState(false);   // toggle keeps it fixed-open
   const [sbHover, setSbHover]         = useState(false);   // edge-hover reveals it
   const sbOpen = sbPinned || sbHover;
-  const [projects, setProjects]       = useState(PROJECTS);
+  const [projects, setProjects]       = useState([]);
   const [activeChat, setActiveChat]   = useState("new");
   const [showPalette, setShowPalette] = useState(false);
   const [paletteQ, setPaletteQ]       = useState("");
@@ -1177,7 +1257,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [scanning, setScanning]       = useState(false);
   const [apiKeys, setApiKeys]         = useState({openrouter:"", openai:"", anthropic:"", google:""});
   const [activeProvider, setActiveProvider] = useState("openrouter");
-  const [backendUrl, setBackendUrl]   = useState("http://127.0.0.1:8000");
+  const [backendUrl, setBackendUrl]   = useState(()=>localPref("vellum.coding.backend","http://127.0.0.1:8000"));
   const [useBackend, setUseBackend]   = useState(false);
   const [backendStatus, setBackendStatus] = useState("unknown");
   const [memoryEntries, setMemoryEntries] = useState([]);
@@ -1189,18 +1269,32 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [tasksExpanded, setTasksExpanded] = useState(false);
   const [wsWidth, setWsWidth]         = useState(480);
   const [resizing, setResizing]       = useState(false);
-  const [chatMsgs, setChatMsgs]       = useState({}); // chats start empty; coding progress is live (see runCodingTurn)
+  const [chatMsgs, setChatMsgs]       = useState({});
+  const [codingHealth, setCodingHealth] = useState({providers:[]});
+  const [codingSessions, setCodingSessions] = useState([]);
+  const [codingSession, setCodingSession] = useState(null);
+  const [codingProvider, setCodingProvider] = useState(()=>localPref("vellum.coding.provider","codex"));
+  const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",""));
+  const [codingAccessMode, setCodingAccessMode] = useState(()=>localPref("vellum.coding.access","read_only"));
+  const [codingStatus, setCodingStatus] = useState("checking");
+  const [codingError, setCodingError] = useState("");
+  const [codingUsage, setCodingUsage] = useState(null);
+  const [codingEvents, setCodingEvents] = useState([]);
+  const [codingTree, setCodingTree] = useState({root:"",items:[]});
+  const [codingTreePath, setCodingTreePath] = useState("");
   const [running, setRunning]         = useState(false);
   const [progressByChat, setProgressByChat] = useState({}); // chatId -> {status,turnId,reason,tasks:[],outputs:[],sources:[]}
-  const steerRef = useRef({}); // turnId -> pending steer text
   const [selFile, setSelFile]         = useState(null);
+  const [filePreview, setFilePreview] = useState(null);
+  const [fileFilter, setFileFilter]   = useState("");
   const [newChats, setNewChats]       = useState([]);
   const [pinned, setPinned]           = useState([]);
   const [archived, setArchived]       = useState([]);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
 
   const rootRef = useRef(null), trigRef = useRef(null), msgsRef = useRef(null), projInputRef = useRef(null), threadRef = useRef({});
-  const idRef = useRef(2000), replyRef = useRef(0), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
+  const idRef = useRef(2000), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
+  const codingSessionRef = useRef(null), activeCodingSessionRef = useRef(null), codingApiRef = useRef(null), lastSequenceRef = useRef({});
   const nextId = ()=> (++idRef.current);
 
   const accessLabel = (ACCESS_MODES.find(a=>a.id===accessMode)||ACCESS_MODES[0]).label;
@@ -1306,15 +1400,11 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase()==="b"){ e.preventDefault(); setSbPinned(v=>!v); }
       else if (mod && e.key.toLowerCase()==="k"){ e.preventDefault(); setShowPalette(v=>!v); setPaletteQ(""); setPalIdx(0); }
-      else if (mod && e.key==="\\"){ e.preventDefault(); onSwitchShell(); }
-      else if (mod && e.key==="1"){ e.preventDefault(); setActiveMode("general"); }
-      else if (mod && e.key==="2"){ e.preventDefault(); setActiveMode("coding"); }
-      else if (mod && e.key==="3"){ e.preventDefault(); setActiveMode("computer"); }
       else if (e.key==="Escape"){ setShowPalette(false); setCtxMenu(null); setShowPlus(false); setShowSettings(false); setSbHover(false); setSbMenu(null); setProjAddMenu(false); setProjPicker(false); }
     };
     window.addEventListener("keydown", h);
     return ()=> window.removeEventListener("keydown", h);
-  },[onSwitchShell]);
+  },[]);
 
   /* desktop menu-bar actions */
   useEffect(()=>{
@@ -1361,188 +1451,207 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
   useEffect(()=>{ const el = msgsRef.current; if(el) el.scrollTop = el.scrollHeight; }, [chatMsgs, activeChat]);
   useEffect(()=>{ if(activeTabObj && activeTabObj.kind==="memory" && backendStatus==="connected") loadMemory(); }, [activeTab, backendStatus]);
+  useEffect(()=>{
+    codingApiRef.current=createCodingApi(backendUrl);
+    saveLocalPref("vellum.coding.backend",backendUrl);
+    refreshCodingRuntime();
+    const timer=setInterval(refreshCodingHealth,30000);
+    return ()=>clearInterval(timer);
+  },[backendUrl]);
+  useEffect(()=>{
+    saveLocalPref("vellum.coding.provider",codingProvider);
+    saveLocalPref("vellum.coding.root",codingProjectRoot);
+    saveLocalPref("vellum.coding.access",codingAccessMode);
+    const session=codingSessionRef.current;
+    const matches=session&&session.provider===codingProvider&&normalizedPath(sessionProjectRoot(session))===normalizedPath(codingProjectRoot)&&session.access_mode===codingAccessMode;
+    if(!matches){ codingSessionRef.current=null; setCodingSession(null); }
+    setCodingError("");
+  },[codingProvider,codingProjectRoot,codingAccessMode]);
+  useEffect(()=>{ if(codingSession&&codingApiRef.current){ setCodingTreePath(""); codingApiRef.current.projectTree(codingSession.cwd).then(setCodingTree).catch(()=>setCodingTree({root:codingSession.cwd,items:[]})); } },[codingSession&&codingSession.id]);
   useEffect(()=> ()=> clearTimeout(timerRef.current), []);
 
   /* streaming (per-chat) */
   function setMsgsFor(chatId, fn){ setChatMsgs(prev=> ({...prev, [chatId]: fn(prev[chatId]||[])})); }
   function emptyProgress(){ return { status:"idle", turnId:null, reason:"", tasks:[], outputs:[], sources:[] }; }
   function setProgFor(chatId, fn){ setProgressByChat(prev=> ({...prev, [chatId]: fn(prev[chatId]||emptyProgress())})); }
-  /* Pure reducer: fold one VPROTO frame into a progress object. */
-  function applyFrame(prog, f){
-    const p = {...prog, tasks:[...(prog.tasks||[])]};
-    const m = f.method, a = f.params||{};
-    if(m==="turn/started"){ return {...emptyProgress(), status:"planning", turnId:a.turnId}; }
-    if(m==="item/plan"){
-      if(!a.complex) return {...p, status:"done", reason:a.reason};
-      p.status = "running"; p.reason = a.reason;
-      p.tasks = (a.tasks||[]).map(t=>({ id:t.id, title:t.title, role:t.role, status:"pending", routingTag:null, persona:null, output:"" }));
-      return p;
-    }
-    if(m==="item/subagent/started"){
-      const i = p.tasks.findIndex(t=>t.id===a.task.id);
-      if(i>=0) p.tasks[i] = {...p.tasks[i], status:"running", routingTag:a.routingTag, persona:a.persona};
-      return p;
-    }
-    if(m==="item/agentMessage/delta"){
-      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
-      if(i>=0) p.tasks[i] = {...p.tasks[i], output:(p.tasks[i].output||"")+a.text};
-      return p;
-    }
-    if(m==="item/reasoning/delta"){
-      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
-      if(i>=0) p.tasks[i] = {...p.tasks[i], review:(p.tasks[i].review||"")+a.text};
-      return p;
-    }
-    if(m==="item/subagent/completed"){
-      const i = p.tasks.findIndex(t=>t.routingTag===a.routingTag);
-      if(i>=0) p.tasks[i] = {...p.tasks[i], status:a.status, output:a.output!=null?a.output:p.tasks[i].output};
-      return p;
-    }
-    if(m==="turn/completed"){ return {...p, status:"done"}; }
-    return p;
+  function normalizedPath(value){ return String(value||"").trim().replace(/[\\/]+$/,"").toLowerCase(); }
+  function sessionProjectRoot(session){ return (session&&session.source_cwd)||((session&&session.cwd)||""); }
+  function healthFor(provider){ return (codingHealth.providers||[]).find(item=>item.provider===provider); }
+  function supportedAccessModeIds(provider){ const capabilities=(healthFor(provider)||{}).capabilities||{}; return capabilities.access_modes||["read_only"]; }
+  async function refreshCodingHealth(){
+    const api=codingApiRef.current; if(!api) return;
+    try{ const health=await api.health(); setCodingHealth(health); setCodingStatus("ready"); setCodingError(""); }
+    catch(e){ setCodingHealth({providers:[]}); setCodingStatus("offline"); setCodingError((e&&e.message)||"Coding backend unavailable."); }
   }
-  /* Emit a frame: reduce it into this chat's progress. The sole UI data path. */
-  function emitFrame(chatId, frame){ setProgFor(chatId, prog=> applyFrame(prog, frame)); }
-  function toORMessages(msgs){
-    const out = [{role:"system", content:"You are Vellum — a calm, precise, personal AI assistant. Answer plainly and concisely."}];
-    msgs.forEach(m=>{ if(m.type==="user"){ if(m.text) out.push({role:"user", content:m.text}); } else if(m.type==="assistant"){ if(m.text) out.push({role:"assistant", content:m.text}); } });
-    return out;
-  }
-  /* Low-level provider stream. Returns the full text. Calls onDelta(chunk) per token.
-     Does NOT touch chat messages or progress — callers decide what to do with the text. */
-  async function streamModel({messages, model, signal, onDelta}){
-    const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
-    const key = (apiKeys[cfg.keyId]||"").trim();
-    if(!cfg.chatUrl) throw new Error("Provider has no chat endpoint in preview");
-    if(!key) throw new Error("Missing API key");
-    const headers = { "Authorization":"Bearer "+key, "Content-Type":"application/json" };
-    if(cfg.referer){ headers["HTTP-Referer"]="https://vellum.app"; headers["X-Title"]="Vellum"; }
-    const resp = await fetch(cfg.chatUrl, { method:"POST", signal, headers, body: JSON.stringify({ model, stream:true, messages }) });
-    if(!resp.ok || !resp.body){
-      let msg = "Request failed ("+resp.status+")";
-      try{ const j = await resp.json(); if(j && j.error && j.error.message) msg = j.error.message; }catch(e){}
-      throw new Error(msg);
-    }
-    const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf="", acc="";
-    while(true){
-      const r = await reader.read(); if(r.done) break;
-      buf += dec.decode(r.value, {stream:true});
-      let idx;
-      while((idx = buf.indexOf("\n")) >= 0){
-        const line = buf.slice(0, idx).trim(); buf = buf.slice(idx+1);
-        if(!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if(data==="[DONE]") continue;
-        try{ const j = JSON.parse(data); const d = j.choices && j.choices[0] && j.choices[0].delta; const c = d && d.content; if(c){ acc += c; if(onDelta) onDelta(c); } }catch(e){}
-      }
-    }
-    return acc;
-  }
-  async function streamChat(chatId, aid, history, model){
-    const ctrl = new AbortController(); abortRef.current = ctrl;
+  async function refreshCodingRuntime(){
+    const api=codingApiRef.current; if(!api) return;
+    setCodingStatus("checking");
     try{
-      const text = await streamModel({
-        messages: toORMessages(history), model, signal: ctrl.signal,
-        onDelta: (c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid ? {...x, text:(x.text||"")+c, thinking:false} : x)),
-      });
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
-    }catch(e){
-      if(e && e.name==="AbortError") setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
-      else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Network error"), thinking:false, streaming:false}:x));
+      const [health,sessions]=await Promise.all([api.health(),api.sessions()]);
+      setCodingHealth(health); setCodingSessions(sessions.sessions||[]); setCodingStatus("ready"); setCodingError("");
+    }catch(e){ setCodingHealth({providers:[]}); setCodingSessions([]); setCodingStatus("offline"); setCodingError((e&&e.message)||"Coding backend unavailable."); }
+  }
+  function compactValue(value){
+    if(value===null||value===undefined||value==="") return "";
+    if(typeof value==="string") return value.replace(/\s+/g," ").trim().slice(0,260);
+    try{ return JSON.stringify(value).replace(/\s+/g," ").slice(0,260); }catch(e){ return String(value).slice(0,260); }
+  }
+  function runtimeRow(data){
+    const payload=data.payload||{}, type=data.type||"coding";
+    if(type.startsWith("command.")){
+      const item=payload.item||{}; const detail=payload.delta||item.command||item.cmd||item.parsed_cmd||item.text||payload.command||"";
+      return {id:data.id,type:"command",label:type==="command.output"?"Command output":"Command",detail:compactValue(detail),state:type.endsWith("completed")?"complete":"running"};
     }
-    abortRef.current = null; setRunning(false);
+    if(type==="file.changed"){
+      const item=payload.item||{}; const detail=item.path||item.file||payload.path||payload.file||payload.diff||item.changes||payload;
+      return {id:data.id,type:"file",label:"Workspace changed",detail:compactValue(detail),state:"complete"};
+    }
+    if(type.startsWith("tool.")){
+      const item=payload.item||{}; const detail=payload.name||item.name||item.tool_name||payload.input||"Provider tool";
+      return {id:data.id,type:"tool",label:type.endsWith("completed")?"Tool completed":"Tool started",detail:compactValue(detail),state:type.endsWith("completed")?"complete":"running"};
+    }
+    if(payload.checkpoint&&(type==="turn.completed"||type==="turn.error"||type==="turn.limit_reached"||type==="turn.stopped")){
+      const after=payload.checkpoint.after||{}, files=after.changed_files||[], suffix=after.files_truncated?"+":"";
+      return {id:data.id+"-checkpoint",type:"file",label:"Checkpoint captured",detail:files.length+suffix+" changed file"+(files.length===1?"":"s"),state:"complete",checkpointId:payload.checkpoint.id};
+    }
+    if(type==="provider.warning") return {id:data.id,type:"warning",label:"Provider warning",detail:compactValue(payload)||data.message,state:"error"};
+    return null;
   }
-  /* ── Coding-mode orchestration (planner → parallel subagents → reviewer → synthesis) ── */
-  const PLANNER_SYS = "You are Vellum's coding orchestrator. Decide if the user's request needs to be split into multiple independent sub-tasks for parallel sub-agents. "
-    + "Reply with ONLY a JSON object, no prose. Schema: {\"complex\": boolean, \"reason\": string, \"tasks\": [{\"title\": string, \"role\": \"worker\"|\"reviewer\"|\"analyst\"}]}. "
-    + "Set complex=false for simple asks (a question, a one-file edit, a rename). Set complex=true only for genuinely multi-step builds; then list 2-5 concrete tasks. Keep titles under 8 words.";
-  async function planTask(userText, history, signal){
-    const messages = [{role:"system", content:PLANNER_SYS}].concat(toORMessages(history).slice(1)).concat([{role:"user", content:userText}]);
-    let text=""; try{ text = await streamModel({messages, model:selModel, signal, onDelta:null}); }catch(e){ return {complex:false, reason:"", tasks:[]}; }
-    return VPROTO.parsePlan(text);
+  function appendRuntimeRow(chatId,aid,row){
+    if(!row) return;
+    setMsgsFor(chatId,m=>m.map(x=>x.id!==aid?x:{...x,thinking:false,runtimeEvents:[...(x.runtimeEvents||[]).filter(item=>item.id!==row.id),row].slice(-30)}));
   }
-  const REVIEW_ON = true; // reviewer gate toggle (spec §5)
-  function assignPersona(i){ const a = SUBAGENTS[i % SUBAGENTS.length]; return {name:a.name, sprite:a.sprite, color:a.color, role:a.role}; }
-  function workerSys(goal, task){ return "You are sub-agent \""+task.title+"\" working under Vellum's coding orchestrator. Overall goal: "+goal+". Do ONLY your task: \""+task.title+"\". Be concise and produce concrete output (code/text) for just this part. Do not restate the whole plan."; }
-  function reviewerSys(task){ return "You are a reviewer sub-agent. Briefly gate the work for task \""+task.title+"\": note in 1-2 lines whether it meets the task and any fix. Start with PASS or NEEDS-FIX."; }
-  function synthSys(goal){ return "You are Vellum. Combine the sub-agent outputs below into one coherent, final answer to the user's request: "+goal+". Integrate, deduplicate, and present cleanly. Do not mention sub-agents or the orchestration."; }
-  async function runCodingTurn(chatId, aid, userText, history){
-    const ctrl = new AbortController(); abortRef.current = ctrl;
-    const turnId = VPROTO.uuid();
-    emitFrame(chatId, VPROTO.turnStarted(chatId, turnId));
+  async function ensureCodingSession(){
+    const api=codingApiRef.current; if(!api) throw new Error("Coding API unavailable.");
+    const root=codingProjectRoot.trim(); if(!root) throw new Error("Choose a project folder before starting a coding run.");
+    const health=healthFor(codingProvider);
+    if(!health||!health.available) throw new Error((health&&health.message)||("The "+codingProvider+" runtime is not installed."));
+    if(!health.configured) throw new Error((health&&health.message)||("The "+codingProvider+" runtime needs authentication."));
+    const cached=codingSessionRef.current;
+    if(cached&&cached.provider===codingProvider&&normalizedPath(sessionProjectRoot(cached))===normalizedPath(root)&&cached.access_mode===codingAccessMode&&cached.status!=="closed") return cached;
+    const listed=await api.sessions(); const sessions=listed.sessions||[]; setCodingSessions(sessions);
+    let session=sessions.find(item=>item.provider===codingProvider&&normalizedPath(sessionProjectRoot(item))===normalizedPath(root)&&item.access_mode===codingAccessMode&&item.status!=="running"&&item.status!=="closed");
+    if(!session){ session=await api.createSession({provider:codingProvider,cwd:root,access_mode:codingAccessMode,title:chatTitleFor(activeChat)||"Vellum coding session"}); setCodingSessions(prev=>[session,...prev]); }
+    codingSessionRef.current=session; setCodingSession(session); return session;
+  }
+  async function openCodingSession(session){
+    if(running||!session) return;
+    setCodingProvider(session.provider); setCodingProjectRoot(sessionProjectRoot(session)); setCodingAccessMode(session.access_mode);
+    codingSessionRef.current=session; setCodingSession(session); setCodingError("");
+    const chatId="coding-"+session.id; const title=session.title||session.provider+" session";
+    setNewChats(prev=>prev.some(item=>item.id===chatId)?prev:[{id:chatId,title,age:"saved"},...prev]);
+    setActiveChat(chatId); setCodingStatus("loading");
     try{
-      const plan = await planTask(userText, history, ctrl.signal);
-      emitFrame(chatId, VPROTO.plan(turnId, plan.complex, plan.reason, plan.tasks));
-      if(!plan.complex){
-        const text = await streamModel({ messages: toORMessages([...history, {type:"user", text:userText}]), model:selModel, signal:ctrl.signal,
-          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
-        setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:text||x.text, streaming:false, thinking:false}:x));
-        emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
-        abortRef.current=null; setRunning(false); return;
-      }
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, turnId, plan:plan.tasks, thinking:false}:x));
-      const results = await Promise.all(plan.tasks.map(async (task, i)=>{
-        const tag = VPROTO.tag(turnId, VPROTO.uuid());
-        const persona = assignPersona(i);
-        emitFrame(chatId, VPROTO.subagentStarted(turnId, tag, persona, task));
-        let out="";
-        try{
-          out = await streamModel({ messages:[{role:"system", content:workerSys(userText, task)}, {role:"user", content:task.title + (steerRef.current[turnId]?("\n\nUser steer: "+steerRef.current[turnId]):"")}], model:selModel, signal:ctrl.signal,
-            onDelta:(c)=> emitFrame(chatId, VPROTO.agentDelta(tag, c)) });
-          if(REVIEW_ON){
-            const rv = await streamModel({ messages:[{role:"system", content:reviewerSys(task)}, {role:"user", content:out.slice(0,4000)}], model:selModel, signal:ctrl.signal,
-              onDelta:(c)=> emitFrame(chatId, VPROTO.reasoningDelta(tag, c)) });
-            void rv;
-          }
-          emitFrame(chatId, VPROTO.subagentCompleted(tag, "done", out));
-        }catch(e){
-          emitFrame(chatId, VPROTO.subagentCompleted(tag, "error", "⚠ "+((e&&e.message)||"failed")));
+      const result=await codingApiRef.current.events(session.id,0), turns=new Map(), messages=[];
+      (result.events||[]).forEach(data=>{
+        if(data.sequence) lastSequenceRef.current[session.id]=data.sequence;
+        if(!data.turn_id) return;
+        let turn=turns.get(data.turn_id);
+        if(!turn){
+          turn={user:{id:"user-"+data.turn_id,type:"user",text:""},assistant:{id:"assistant-"+data.turn_id,type:"assistant",provider:session.provider,text:"",thinking:false,streaming:false,turnId:data.turn_id,traceId:data.trace_id,runtimeEvents:[],runState:"stopped"}};
+          turns.set(data.turn_id,turn); messages.push(turn.user,turn.assistant);
         }
-        return { task, out };
-      }));
-      const bundle = results.map(r=> "## "+r.task.title+"\n"+r.out).join("\n\n");
-      const steerNote = steerRef.current[turnId] ? ("\n\nUser steer (apply this): "+steerRef.current[turnId]) : "";
-      let fin="";
-      try{
-        fin = await streamModel({ messages:[{role:"system", content:synthSys(userText)}, {role:"user", content:bundle+steerNote}], model:selModel, signal:ctrl.signal,
-          onDelta:(c)=> setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:(x.text||"")+c, thinking:false}:x)) });
-      }catch(e){ fin = bundle; }
-      setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:fin||bundle, streaming:false, thinking:false}:x));
-      emitFrame(chatId, VPROTO.turnCompleted(turnId, aid));
-    }catch(e){
-      if(!(e && e.name==="AbortError")) setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"⚠ "+((e&&e.message)||"Coding run failed"), thinking:false, streaming:false}:x));
-      else setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, streaming:false, thinking:false}:x));
-      setProgFor(chatId, prog=> ({...prog, status:"error"}));
-    }
-    delete steerRef.current[turnId];
-    abortRef.current=null; setRunning(false);
+        const payload=data.payload||{};
+        if(data.type==="turn.started"){turn.user.text=String(payload.prompt||"");turn.assistant.runState="live";}
+        else if(data.type==="assistant.delta") turn.assistant.text+=String(payload.text||"");
+        else if(data.type==="assistant.final"&&payload.text) turn.assistant.text=String(payload.text);
+        else if(data.type==="turn.completed") turn.assistant.runState="complete";
+        else if(data.type==="turn.error"){turn.assistant.runState="error";if(!turn.assistant.text)turn.assistant.text=String(payload.error||data.message||"Coding run failed.");}
+        else if(data.type==="turn.stopped"||data.type==="turn.limit_reached"){turn.assistant.runState="stopped";if(!turn.assistant.text)turn.assistant.text=String(data.message||"Stopped.");}
+        const row=runtimeRow(data); if(row) turn.assistant.runtimeEvents.push(row);
+      });
+      setMsgsFor(chatId,()=>messages.filter(item=>item.type!=="user"||item.text)); setCodingStatus("ready");
+    }catch(e){ setCodingStatus("error"); setCodingError((e&&e.message)||"Could not restore the coding session."); }
   }
-  function sendToChat(chatId, text, atts){
-    const t = (text||"").trim();
-    if(running){
-      // mid-turn steer for an active coding turn (does NOT abort — the turn keeps running)
-      const pr = progressByChat[chatId]; const tid = pr && pr.turnId;
-      if(t && tid && activeMode==="coding" && (pr.status==="running"||pr.status==="planning")){
-        steerRef.current[tid] = t;
-        emitFrame(chatId, VPROTO.steer(chatId, tid, t));
-        setMsgsFor(chatId, m=> [...m, { id:nextId(), type:"system", label:"Steer: "+t, icon:"dot" }]);
-      }
+  async function closeCodingSession(session,event){
+    if(event) event.stopPropagation();
+    if(!session||session.status==="closed") return;
+    if(session.status==="running"){ setCodingError("Stop the active run before closing its workspace."); return; }
+    const confirmed=window.confirm("Close this coding workspace and discard any uncommitted worktree changes? Committed branch history will be preserved.");
+    if(!confirmed) return;
+    try{
+      const closed=await codingApiRef.current.closeSession(session.id,true);
+      setCodingSessions(prev=>prev.map(item=>item.id===closed.id?closed:item));
+      if(codingSessionRef.current&&codingSessionRef.current.id===closed.id){ codingSessionRef.current=null; setCodingSession(null); }
+      setCodingError("");
+    }catch(e){ setCodingError((e&&e.message)||"Could not close the coding workspace."); }
+  }
+  async function rewindCodingCheckpoint(checkpointId){
+    const session=codingSessionRef.current;
+    if(!session||!checkpointId||running) return;
+    const confirmed=window.confirm("Rewind this isolated workspace to the selected checkpoint? Later uncommitted changes will be discarded and the provider will start with a fresh session.");
+    if(!confirmed) return;
+    setCodingStatus("starting");
+    try{
+      const rewound=await codingApiRef.current.rewind(session.id,checkpointId,"after",true);
+      codingSessionRef.current=rewound; setCodingSession(rewound); setCodingSessions(prev=>prev.map(item=>item.id===rewound.id?rewound:item));
+      setCodingStatus("ready"); setCodingError("");
+      codingApiRef.current.projectTree(rewound.cwd).then(setCodingTree).catch(()=>{});
+    }catch(e){ setCodingStatus("error"); setCodingError((e&&e.message)||"Could not rewind the coding workspace."); }
+  }
+  function applyCodingEvent(chatId,aid,frame,answerRef){
+    const data=frame.data||{}; if(data.sequence) lastSequenceRef.current[data.session_id]=data.sequence;
+    setCodingEvents(prev=>[...prev.slice(-199),data]);
+    if(data.trace_id) setProgFor(chatId,p=>({...p,reason:data.trace_id}));
+    if(data.type==="turn.started"){
+      setCodingStatus("running"); setProgFor(chatId,p=>({...p,status:"running",turnId:data.turn_id}));
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,thinking:false,turnId:data.turn_id,traceId:data.trace_id}:x));
       return;
     }
-    if(!t && (!atts || !atts.length)) return;
-    const uid = nextId(), aid = nextId();
-    const prevMsgs = chatMsgs[chatId] || [];
-    const userMsg = { id:uid, type:"user", text:t, atts:atts };
-    setMsgsFor(chatId, m=> [...m, userMsg, { id:aid, type:"assistant", text:"", streaming:true, thinking:true }]);
-    setRunning(true); streamTargetRef.current = chatId;
-    if(useBackend){ streamBackend(chatId, aid, t); return; }
-    const cfg = PROVIDER_CFG[activeProvider] || PROVIDER_CFG.openrouter;
-    const key = (apiKeys[cfg.keyId]||"").trim();
-    const pn = (PROVIDERS.find(p=>p.id===activeProvider)||{}).name || activeProvider;
-    if(!cfg.chatUrl){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:pn+" chats through the Vellum backend in the full app. In this browser preview, pick OpenRouter or OpenAI in Models & Compute.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
-    else if(!key){ timerRef.current = setTimeout(()=>{ setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Add your "+pn+" key in Settings → Models & Compute to chat.", thinking:false, streaming:false}:x)); setRunning(false); }, 300); }
-    else if(activeMode==="coding"){ runCodingTurn(chatId, aid, t, prevMsgs); }
-    else { streamChat(chatId, aid, [...prevMsgs, userMsg], selModel); }
+    if(data.type==="assistant.delta"){
+      const text=String((data.payload&&data.payload.text)||""); if(!text) return;
+      answerRef.current+=text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current,thinking:false}:x)); return;
+    }
+    if(data.type==="assistant.final"){
+      const text=String((data.payload&&data.payload.text)||""); if(text) answerRef.current=text;
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text,thinking:false}:x)); return;
+    }
+    if(data.type==="usage"){ setCodingUsage(data.payload||null); return; }
+    const row=runtimeRow(data); if(row){ appendRuntimeRow(chatId,aid,row); return; }
+    if(data.type==="turn.completed"){
+      setCodingStatus("ready"); setProgFor(chatId,p=>({...p,status:"done"}));
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text||"Completed.",thinking:false,streaming:false,runState:"complete"}:x)); return;
+    }
+    if(data.type==="turn.stopped"||data.type==="turn.limit_reached"){
+      setCodingStatus("stopped"); setProgFor(chatId,p=>({...p,status:"stopped"}));
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text||data.message,thinking:false,streaming:false,runState:"stopped"}:x)); return;
+    }
+    if(data.type==="turn.error"||frame.event==="error"){
+      const message=String((data.payload&&(data.payload.error||data.payload.text))||data.message||"Coding run failed.");
+      setCodingError(message); setCodingStatus("error"); setProgFor(chatId,p=>({...p,status:"error"}));
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||message,thinking:false,streaming:false,runState:"error"}:x));
+    }
+  }
+  async function runCodingTurn(chatId,aid,userText){
+    const ctrl=new AbortController(), answerRef={current:""}; let session=null; abortRef.current=ctrl;
+    try{
+      setCodingError(""); setCodingStatus("starting");
+      session=await ensureCodingSession(); activeCodingSessionRef.current=session;
+      const runningSession={...session,status:"running"}; codingSessionRef.current=runningSession; setCodingSession(runningSession);
+      await codingApiRef.current.runTurn(session.id,userText,frame=>applyCodingEvent(chatId,aid,frame,answerRef),{signal:ctrl.signal,maxRuntimeSeconds:1800,maxProviderEvents:10000});
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text||"Completed.",thinking:false,streaming:false}:x));
+    }catch(e){
+      if(!(e&&e.name==="AbortError")){
+        let replayedTerminal=false;
+        if(session&&codingApiRef.current){
+          try{ const replay=await codingApiRef.current.events(session.id,lastSequenceRef.current[session.id]||0), events=replay.events||[]; replayedTerminal=events.some(data=>["turn.completed","turn.stopped","turn.limit_reached","turn.error"].includes(data.type)); events.forEach(data=>applyCodingEvent(chatId,aid,{event:"replay",data},answerRef)); }catch(replayError){}
+        }
+        if(replayedTerminal) return;
+        const message=(e&&e.message)||"Coding run failed."; setCodingError(message); setCodingStatus("error"); setProgFor(chatId,p=>({...p,status:"error"}));
+        setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||message,thinking:false,streaming:false,runState:"error"}:x));
+      }
+    }finally{
+      abortRef.current=null; activeCodingSessionRef.current=null; setRunning(false);
+      const current=codingSessionRef.current; if(current){ codingApiRef.current.session(current.id).then(session=>{codingSessionRef.current=session;setCodingSession(session);}).catch(()=>{}); }
+    }
+  }
+  function sendToChat(chatId,text,atts){
+    const t=(text||"").trim(); if(running||(!t&&(!atts||!atts.length))) return;
+    const attachmentNote=(atts||[]).length?"\n\nAttached files: "+atts.map(item=>item.name).join(", "):"";
+    const prompt=(t||"Inspect the attached files.")+attachmentNote;
+    const uid=nextId(),aid=nextId(),userMsg={id:uid,type:"user",text:t,atts};
+    setMsgsFor(chatId,m=>[...m,userMsg,{id:aid,type:"assistant",provider:codingProvider,text:"",streaming:true,thinking:true,runtimeEvents:[]}]);
+    setRunning(true);streamTargetRef.current=chatId;runCodingTurn(chatId,aid,prompt);
   }
   function onMainSend(text, atts){
     let chatId = activeChat;
@@ -1552,16 +1661,22 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       const meta = {id:chatId, title:titleFor(seed), age:"now"};
       if(activeProject){ setProjects(prev=> prev.map(p=> p.id===activeProject ? {...p, chats:[meta, ...(p.chats||[])], expanded:true} : p)); }
       else { setNewChats(prev=> [meta, ...prev]); }
-      openProgRef.current = chatId; setActiveChat(chatId);
+      setActiveChat(chatId);
     }
     sendToChat(chatId, text, atts);
   }
-  function stopStream(){
-    clearTimeout(timerRef.current);
-    if(abortRef.current){ try{ abortRef.current.abort(); }catch(e){} abortRef.current=null; }
-    const chatId = streamTargetRef.current || activeChat;
-    setMsgsFor(chatId, m=> m.map(x=> x.streaming ? {...x, streaming:false, thinking:false} : x));
-    setRunning(false);
+  async function stopStream(){
+    if(!running) return;
+    clearTimeout(timerRef.current); setCodingStatus("stopping");
+    const session=activeCodingSessionRef.current||codingSessionRef.current;
+    try{ if(session&&codingApiRef.current) await codingApiRef.current.stop(session.id); }
+    catch(e){ setCodingError((e&&e.message)||"Could not stop the coding run."); }
+    finally{
+      if(abortRef.current){ try{ abortRef.current.abort(); }catch(e){} abortRef.current=null; }
+      const chatId=streamTargetRef.current||activeChat;
+      setMsgsFor(chatId,m=>m.map(x=>x.streaming?{...x,streaming:false,thinking:false,runState:"stopped"}:x));
+      setProgFor(chatId,p=>({...p,status:"stopped"})); setCodingStatus("stopped"); setRunning(false);
+    }
   }
   function setProvider(id){ setActiveProvider(id); const cfg = PROVIDER_CFG[id]; if(cfg){ setModels(cfg.models); setSelModel(cfg.default); } }
   async function syncModels(){
@@ -1753,20 +1868,18 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
   /* palette */
   const COMMANDS = [
-    { id:"new",      title:"New chat",               icon:<IcEdit size={14}/>,    kbd:"",       run:()=> setActiveChat("new") },
+    { id:"new",      title:"New coding session",     icon:<IcEdit size={14}/>,    kbd:"",       run:()=> setActiveChat("new") },
     { id:"sidebar",  title:"Toggle sidebar",         icon:<IcSidebar size={14}/>, kbd:"Ctrl B", run:()=> setSbPinned(v=>!v) },
-    { id:"mission",  title:"Toggle Progress panel",  icon:<IcLayout size={14}/>,  kbd:"",       run:()=> setShowProg(v=>!v) },
-    { id:"work",     title:"Toggle Workspace panel", icon:<IcColumns size={14}/>, kbd:"",       run:()=> setShowSub(v=>!v) },
-    { id:"shell",    title:(shell==="browser"?"Switch to Desktop app shell":"Switch to Browser shell"), icon:<IcWindow size={14}/>, kbd:"Ctrl \\", run:()=> onSwitchShell() },
-    { id:"max",      title:(maximized?"Restore window":"Maximize window"), icon:<IcExpand size={14}/>, kbd:"", run:()=> onToggleMax() },
-    { id:"m-coding", title:"Mode: Coding",           icon:<IcTerminal size={14}/>,kbd:"Ctrl 2", run:()=> setActiveMode("coding") },
-    { id:"t-memory", title:"Open Memory trace",      icon:<IcBook size={14}/>,    kbd:"",       run:()=> addTab("memory") },
+    { id:"files",    title:"Open project files",     icon:<IcFolder size={14}/>,  kbd:"",       run:()=> addTab("files") },
+    { id:"terminal", title:"Open terminal",          icon:<IcTerminal size={14}/>,kbd:"",       run:()=> addTab("terminal") },
+    { id:"refresh",  title:"Refresh coding runtimes",icon:<IcRefresh size={14}/>, kbd:"",       run:refreshCodingRuntime },
   ];
   const q = paletteQ.trim().toLowerCase();
   const cmdMatches  = COMMANDS.filter(c=> !q || c.title.toLowerCase().includes(q));
   const chatMatches = allChats.filter(c=> !q || c.title.toLowerCase().includes(q));
-  const flat = [...cmdMatches.map(c=>({kind:"cmd", item:c})), ...chatMatches.map(c=>({kind:"chat", item:c}))];
-  function runPalette(entry){ if(!entry) return; if(entry.kind==="cmd") entry.item.run(); else setActiveChat(entry.item.id); setShowPalette(false); setPaletteQ(""); }
+  const sessionMatches = codingSessions.filter(session=>!q||(session.title||session.provider).toLowerCase().includes(q)||sessionProjectRoot(session).toLowerCase().includes(q));
+  const flat = [...cmdMatches.map(c=>({kind:"cmd", item:c})), ...chatMatches.map(c=>({kind:"chat", item:c})), ...sessionMatches.map(session=>({kind:"session",item:session}))];
+  function runPalette(entry){ if(!entry) return; if(entry.kind==="cmd") entry.item.run(); else if(entry.kind==="session") openCodingSession(entry.item); else setActiveChat(entry.item.id); setShowPalette(false); setPaletteQ(""); }
   function paletteKey(e){
     if(e.key==="ArrowDown"){ e.preventDefault(); setPalIdx(i=> Math.min(flat.length-1, i+1)); }
     else if(e.key==="ArrowUp"){ e.preventDefault(); setPalIdx(i=> Math.max(0, i-1)); }
@@ -1806,12 +1919,79 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     return [...cmds, ...sk];
   }
   function runSlash(item){ if(item && item.run) item.run(); }
+  const providerAccessModes=CODING_ACCESS_MODES.filter(item=>supportedAccessModeIds(codingProvider).includes(item.id));
+  const codingAccess=(providerAccessModes.find(item=>item.id===codingAccessMode)||providerAccessModes[0]);
   const composerApi = {
-    accessLabel, accessMode, setAccessMode, selModel, setSelModel, selReasoning, setSelReasoning,
+    accessLabel:codingAccess.label, accessMode:codingAccessMode, setAccessMode:setCodingAccessMode, accessModes:providerAccessModes,
+    selModel:codingProvider, setSelModel:setCodingProvider, selReasoning:"SDK", setSelReasoning:()=>{}, runtimeLabel:codingProvider==="claude"?"Claude Code":"Codex",
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
-    models, modelLabel, syncModels, syncing, memoryOn, setMemoryOn,
+    models:[], modelLabel:()=>codingProvider, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
   };
+
+  async function openProjectFile(item){
+    if(!item||item.kind!=="file"||!codingSession||!codingApiRef.current) return;
+    const path=[codingTreePath,item.path].filter(Boolean).join("/");
+    setSelFile(path); setFilePreview({path,content:"Loading…",truncated:false});
+    try{ setFilePreview(await codingApiRef.current.projectFile(codingSession.cwd,path)); }
+    catch(e){ setFilePreview({path,content:(e&&e.message)||"File could not be opened.",error:true}); }
+  }
+  async function openProjectDirectory(item){
+    if(!item||item.kind!=="directory"||!codingSession||!codingApiRef.current) return;
+    const relative=[codingTreePath,item.path].filter(Boolean).join("/"), separator=codingSession.cwd.includes("\\")?"\\":"/";
+    try{ const tree=await codingApiRef.current.projectTree(codingSession.cwd+separator+relative.split("/").join(separator)); setCodingTreePath(relative); setCodingTree(tree); setFileFilter(""); }
+    catch(e){ setCodingError((e&&e.message)||"Directory could not be opened."); }
+  }
+  async function parentProjectDirectory(){
+    if(!codingSession||!codingApiRef.current) return;
+    const parent=codingTreePath.split("/").filter(Boolean).slice(0,-1).join("/"), separator=codingSession.cwd.includes("\\")?"\\":"/";
+    const root=parent?codingSession.cwd+separator+parent.split("/").join(separator):codingSession.cwd;
+    try{ const tree=await codingApiRef.current.projectTree(root); setCodingTreePath(parent); setCodingTree(tree); setFileFilter(""); }
+    catch(e){ setCodingError((e&&e.message)||"Directory could not be opened."); }
+  }
+
+  function providerButtonClass(provider){
+    const health=healthFor(provider); let cls="coding-target-btn"+(codingProvider===provider?" active":"");
+    if(health&&health.available&&health.configured) cls+=" ready"; else if(health&&health.available) cls+=" warn";
+    return cls;
+  }
+  function chooseCodingProvider(provider){ if(running) return; const supported=supportedAccessModeIds(provider); if(!supported.includes(codingAccessMode)) setCodingAccessMode(supported[0]||"read_only"); setCodingProvider(provider); }
+  function codingHealthText(){
+    if(codingStatus==="offline") return codingError||"Local coding backend is offline.";
+    if(codingStatus==="checking") return "Checking installed coding runtimes…";
+    if(codingStatus==="starting") return "Starting "+(codingProvider==="claude"?"Claude Code":"Codex")+"…";
+    if(codingStatus==="running") return (codingProvider==="claude"?"Claude Code":"Codex")+" is working in the selected project.";
+    if(codingStatus==="stopping") return "Stopping the provider runtime…";
+    const health=healthFor(codingProvider); return (health&&health.message)||"Runtime status unavailable.";
+  }
+  function CodingMainStrip(){
+    return (
+      <Fragment>
+        <div className="coding-main-strip">
+          <div className="coding-targets" aria-label="Coding runtime">
+            <button className={providerButtonClass("codex")} onClick={()=>chooseCodingProvider("codex")} disabled={running}><span className="provider-dot"/>Codex</button>
+            <button className={providerButtonClass("claude")} onClick={()=>chooseCodingProvider("claude")} disabled={running}><span className="provider-dot"/>Claude Code</button>
+            <button className="coding-target-btn" disabled title="Grok Build adapter is planned after the local workspace isolation layer"><span className="provider-dot"/>Grok <span style={{fontSize:9,opacity:.6}}>later</span></button>
+          </div>
+          <div className="coding-root"><label htmlFor="coding-root">Project</label><input id="coding-root" className="coding-root-input" value={codingProjectRoot} disabled={running} onChange={e=>setCodingProjectRoot(e.target.value)} placeholder="Paste the local project folder path" spellCheck="false"/></div>
+        </div>
+        <div className="coding-main-strip" style={{paddingTop:6,paddingBottom:6,marginTop:-4}}>
+          <div className="coding-permissions" aria-label="Workspace access">
+            {providerAccessModes.map(mode=><button key={mode.id} className={"coding-access-btn"+(codingAccessMode===mode.id?" active":"")} title={mode.title} disabled={running} onClick={()=>setCodingAccessMode(mode.id)}>{mode.label}</button>)}
+          </div>
+          <div style={{fontSize:10.5,color:"#56565c"}}>{codingSession&&codingSession.workspace_kind==="git_worktree"?"Isolated Git worktree · "+codingSession.workspace_branch:"Read-only source · local session state"}</div>
+        </div>
+        <div className={"coding-health"+(codingError?" error":"")}>
+          <span className="web-context-dot" style={(codingStatus==="offline"||codingStatus==="error")?{background:"#b85b51",boxShadow:"none"}:undefined}/>
+          <strong>{codingProvider==="claude"?"Claude Code":"Codex"}</strong>
+          <span className="trace">{codingHealthText()}</span>
+          <button className="coding-health-refresh" onClick={refreshCodingRuntime}>Refresh</button>
+        </div>
+      </Fragment>
+    );
+  }
+  function runtimeIcon(kind){ if(kind==="command") return <IcTerminal size={12}/>; if(kind==="file") return <IcFile size={12}/>; if(kind==="warning") return <IcShield size={12}/>; return <IcPlugin size={12}/>; }
+  function RunEvents({items}){ return <div className="run-events">{items.map(item=><div key={item.id} className={"run-event "+item.state}><span className="run-event-icon">{runtimeIcon(item.type)}</span><span className="run-event-label">{item.label}</span><span className="run-event-detail" title={item.detail}>{item.detail||"Provider event"}</span>{item.checkpointId&&codingSession&&codingSession.workspace_kind==="git_worktree"?<button className="run-event-rewind" disabled={running} onClick={()=>rewindCodingCheckpoint(item.checkpointId)}>Rewind</button>:<span className="run-event-state">{item.state}</span>}</div>)}</div>; }
 
   function openCtx(e){ e.preventDefault(); e.stopPropagation(); const r = rootRef.current.getBoundingClientRect(); setCtxMenu({ x: Math.min(e.clientX-r.left, r.width-236), y: Math.min(e.clientY-r.top, r.height-300) }); }
   const visibleTasks = tasksExpanded ? TASKS : TASKS.slice(0,6);
@@ -1822,7 +2002,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function renderMsg(msg){
     if(msg.type==="user") return <div key={msg.id} className="user-msg">{msg.atts && msg.atts.length>0 && <div className="att-row" style={{marginBottom:msg.text?6:0}}>{msg.atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span></div>))}</div>}{msg.text}</div>;
     if(msg.type==="assistant"){
-      if(msg.thinking) return <div key={msg.id} className="working-line"><span className="glow-text">Vellum is working</span><span className="tdot"/><span className="tdot"/><span className="tdot"/></div>;
+      if(msg.thinking) return <div key={msg.id} className="working-line"><span className="glow-text">{msg.provider==="claude"?"Claude Code":"Codex"} is connecting</span><span className="tdot"/><span className="tdot"/><span className="tdot"/></div>;
       return <div key={msg.id} className="msg-wrap">
         {msg.plan && msg.plan.length>0 && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const byId={}; (pr.tasks||[]).forEach(t=>byId[t.id]=t); return (
           <div className="plan-block" style={{border:"1px solid #1e1e1e",borderRadius:10,padding:"8px 10px",margin:"4px 0 10px",background:"#121212"}}>
@@ -1837,6 +2017,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           </div>
         ); })()}
         {msg.streaming ? <div><span className="streaming-text">{msg.text}</span><span className="caret"/></div> : <div className="msg-text">{msg.text}</div>}
+        {msg.runtimeEvents && msg.runtimeEvents.length>0 && <RunEvents items={msg.runtimeEvents}/>}
+        {msg.turnId && <div className="run-meta"><span className={msg.runState==="stopped"?"stopped":msg.runState==="complete"?"live":""}>{msg.runState||"live"}</span><span>{msg.provider}</span><span>{msg.turnId.slice(0,18)}</span>{msg.traceId&&<span>{msg.traceId.slice(0,18)}</span>}</div>}
         {msg.activity && msg.activity.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.activity.slice(0,4).map((a,i)=><span key={i} className="att-chip"><Spinner/><span className="att-name">{a.label}</span></span>)}</div>}
         {!msg.streaming && msg.sources && msg.sources.length>0 && <div className="att-row" style={{marginTop:8}}>{msg.sources.slice(0,5).map((s,i)=>(<a key={i} className="att-chip" href={s.url} target="_blank" rel="noreferrer" style={{textDecoration:"none",color:"#9bbcd6"}}><IcGlobe size={12}/><span className="att-name">{s.domain||s.title||"source"}</span></a>))}</div>}
       </div>;
@@ -1933,11 +2115,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       {/* Sidebar */}
       <div className={"sidebar"+(sbOpen?" open":"")}>
         <div className="sb-top">
-          <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New chat</span></button>
+          <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New coding session</span></button>
           <button className="sb-nav-btn" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);setSbHover(false);}}><IcSearch size={15}/><span>Search</span><span className="kbd sb-nav-kbd">Ctrl K</span></button>
-          <button className="sb-nav-btn"><IcPlugin size={15}/><span>Plugins</span></button>
-          <button className="sb-nav-btn"><IcAuto size={15}/><span>Automations</span></button>
-          <button className="sb-nav-btn"><span style={{color:"#4a90d9",display:"flex"}}><IcMonitor size={15}/></span><span>Vellum mobile</span></button>
+          <button className="sb-nav-btn" onClick={()=>{addTab("files");setSbHover(false);}}><IcFolder size={15}/><span>Project files</span></button>
+          <button className="sb-nav-btn" onClick={()=>{addTab("terminal");setSbHover(false);}}><IcTerminal size={15}/><span>Terminal</span></button>
         </div>
         <div style={{flex:1, overflow:"visible"}}>
           {pinned.filter(p=>!archived.includes(p.id)).length>0 && (
@@ -1947,71 +2128,26 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             </div>
           )}
           <div className="sb-section">
-            {sbHeader("Projects","projects", (
-              <Fragment>
-                <button className="sb-hd-btn" title="Collapse / expand all" onClick={(e)=>{e.stopPropagation(); collapseAllProjects();}}><IcExpand size={13}/></button>
-                <div style={{position:"relative",display:"flex"}}>
-                  <button className="sb-hd-btn" title="Add project" onClick={(e)=>{e.stopPropagation(); setProjAddMenu(v=>!v);}}><IcFolderPlus size={14}/></button>
-                  {projAddMenu && (
-                    <div className="sb-opt-menu" style={{left:"auto", right:0}} onClick={(e)=>e.stopPropagation()}>
-                      <div className="sb-opt-item" onClick={startFromScratch}><div className="sb-opt-l"><IcFolderPlus size={14}/><span>Start from scratch</span></div></div>
-                      <div className="sb-opt-item" onClick={useExistingFolder}><div className="sb-opt-l"><IcFolder size={14}/><span>Use an existing folder</span></div></div>
-                    </div>
-                  )}
-                </div>
-              </Fragment>
-            ))}
-            <input type="file" multiple ref={el=>{ if(el){ projInputRef.current=el; el.setAttribute("webkitdirectory",""); el.setAttribute("directory",""); } }} style={{display:"none"}} onChange={onProjInput}/>
-            {projects.length===0 && <div className="sb-add-proj" onClick={startFromScratch}><IcFolderPlus size={13}/><span>Create a project</span></div>}
-            {[...projects].sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0)).map(proj=>{
-              const chats = (proj.chats||[]).filter(c=>!archived.includes(c.id));
-              return (
-              <div key={proj.id}>
-                <div className={"proj-row"+(proj.expanded?" open":"")} style={{position:"relative"}} onClick={()=>toggleProj(proj.id)}>
-                  {proj.expanded?<IcChevD size={14}/>:<IcChevR size={14}/>}<IcFolder size={14}/>
-                  <span className="proj-name">{proj.name}</span>
-                  <div className="proj-row-actions">
-                    <button className="pr-act" title="Project options" onClick={(e)=>{e.stopPropagation(); setProjRowMenu(projRowMenu===proj.id?null:proj.id);}}><IcMoreDots size={14}/></button>
-                    <button className="pr-act" title="New chat in project" onClick={(e)=>{e.stopPropagation(); newChatInProject(proj.id);}}><IcEdit size={13}/></button>
-                  </div>
-                  {projRowMenu===proj.id && (
-                    <div className="sb-opt-menu" style={{top:26, left:14}} onClick={(e)=>e.stopPropagation()}>
-                      <div className="sb-opt-item" onClick={()=>pinProject(proj.id)}><div className="sb-opt-l"><IcPin size={13}/><span>{proj.pinned?"Unpin project":"Pin project"}</span></div></div>
-                      <div className="sb-opt-item" onClick={()=>setProjRowMenu(null)}><div className="sb-opt-l"><IcFolder size={13}/><span>Open in Explorer</span></div></div>
-                      <div className="sb-opt-item" onClick={()=>openNameModal("rename", proj)}><div className="sb-opt-l"><IcEdit size={13}/><span>Rename project</span></div></div>
-                      <div className="sb-opt-item" onClick={()=>archiveProjectChats(proj.id)}><div className="sb-opt-l"><IcArchive size={13}/><span>Archive chats</span></div></div>
-                      <div className="sb-opt-item" onClick={()=>removeProject(proj.id)}><div className="sb-opt-l"><IcX size={13}/><span>Remove</span></div></div>
-                    </div>
-                  )}
-                </div>
-                {proj.expanded && (chats.length>0 ? chats.map(chatRow) : <div className="proj-nochats">No chats</div>)}
-              </div>
-            );})}
-          </div>
-          <div className="sb-section">
             {sbHeader("Chats","chats")}
             {newChats.filter(c=>!archived.includes(c.id)).length===0
               ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No chats</div>
               : newChats.filter(c=>!archived.includes(c.id)).map(chatRow)}
           </div>
           <div className="sb-section">
-            <div className="sb-section-lbl">Vellum Core</div>
-            <div className="core-row" onClick={()=>{addTab("memory");}}><span>❖</span><span>Memory</span><span className="core-count">3 used</span></div>
-            <div className="core-row"><span>⬦</span><span>Knowledge</span><span className="core-count">4 sources</span></div>
-            <div className="core-row" onClick={()=>openSubagent(SUBAGENTS[0])}><span>⚛</span><span>Agents</span><span className="core-count">3 active</span></div>
-            <div className="core-row"><span>✦</span><span>Skills</span><span className="core-count">12 ready</span></div>
+            <div className="sb-section-lbl">Coding sessions</div>
+            {codingSessions.length===0
+              ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No saved runs</div>
+              : codingSessions.slice(0,12).map(session=><div key={session.id} className={"chat-row"+(codingSession&&codingSession.id===session.id?" active":"")} style={{paddingLeft:10}} onClick={()=>openCodingSession(session)}><span className="chat-row-title">{session.title||session.provider}</span>{session.status!=="closed"&&<div className="chat-row-actions"><button className="cr-act" title="Close workspace" onClick={(event)=>closeCodingSession(session,event)}><IcX size={12}/></button></div>}<span className="chat-row-age">{session.provider} · {session.status}</span></div>)}
           </div>
         </div>
         <div className="sb-bottom">
           {showSettings && (
             <div className="settings-pop fade-up">
-              <div className="sp-hdr"><div className="sp-email">prathyaksh24@gmail.com</div><div className="sp-role">Personal account</div></div>
-              <div className="sp-item"><IcUser size={13}/><span>Profile</span></div>
-              <div className="sp-item" onClick={()=>{setShowModels(true); setShowSettings(false);}}><IcGauge size={13}/><span>Models & Compute</span></div>
-              <div className="sp-item-row"><span style={{display:"flex",alignItems:"center",gap:8}}><IcSettings size={13}/><span>Settings</span></span><span className="kbd">Ctrl ,</span></div>
-              <div className="sp-item-row" onClick={()=>setShowUsage(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcRefresh size={13}/><span>Usage remaining</span></span><IcChevD size={12}/></div>
-              {showUsage && (<div className="usage-inner fade-up"><div className="usage-line"><span>5h</span><span className="usage-sub">25% · 12:20 PM</span></div><div className="usage-line"><span>Weekly</span><span className="usage-sub">88% · Jun 8</span></div><div style={{marginTop:6,display:"flex",flexDirection:"column",gap:2}}><div className="upgrade-link">✦ Upgrade to Pro</div><div className="upgrade-link">Learn more →</div></div></div>)}
-              <div className="sp-div"/><div className="sp-item"><IcLogOut size={13}/><span>Log out</span></div>
+              <div className="sp-hdr"><div className="sp-email">Local workspace</div><div className="sp-role">Provider credentials stay outside Vellum</div></div>
+              <div className="sp-item" onClick={()=>{refreshCodingRuntime();setShowSettings(false);}}><IcRefresh size={13}/><span>Refresh runtimes</span></div>
+              <div className="sp-item"><IcShield size={13}/><span>{codingAccess.label} access</span></div>
+              <div className="sp-item-row" onClick={()=>setShowUsage(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcGauge size={13}/><span>Last run usage</span></span><IcChevD size={12}/></div>
+              {showUsage && (<div className="usage-inner fade-up"><div className="usage-line"><span>Last run</span><span className="usage-sub">{codingUsage?compactValue(codingUsage):"No usage event yet"}</span></div></div>)}
             </div>
           )}
           <div className="sb-settings-row" onClick={()=>setShowSettings(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcSettings size={14}/><span>Settings</span></span><span className="kbd">P</span></div>
@@ -2025,32 +2161,18 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           <Fragment>
             <div className="topbar">
               <div/>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><div className="gh-btn"><IcGitHub size={15}/><IcChevD size={12}/></div><button className={"icon-btn"+(showSub?" on":"")} title="Toggle side panel" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}><button className={"icon-btn"+(showSub?" on":"")} title="Toggle workspace tools" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
             </div>
             <div className="landing">
-              <div><div className="landing-title">{apObj ? ("What should we build in "+apObj.name+"?") : "What should we work on?"}</div></div>
-              <div style={{width:"100%",maxWidth:572,position:"relative"}}>
-                <InputBox placeholder="Do anything" model="5.5" api={composerApi} onSend={onMainSend}/>
-                <div style={{padding:"8px 24px 0", position:"relative"}}>
-                  <div className="proj-tag" onClick={(e)=>{e.stopPropagation(); setProjPicker(v=>!v);}}><IcFolder size={12}/><span>{apObj ? apObj.name : "Work in a project"}</span><IcChevD size={11}/></div>
-                  {projPicker && (
-                    <div className="proj-picker" onClick={(e)=>e.stopPropagation()}>
-                      <div className="pp-search"><IcSearch size={13}/><input placeholder="Search projects" value={projSearch} onChange={(e)=>setProjSearch(e.target.value)}/></div>
-                      {projects.filter(p=>!projSearch || p.name.toLowerCase().includes(projSearch.toLowerCase())).map(p=>(
-                        <div key={p.id} className="pp-item" onClick={()=>{ setProjPicker(false); }}><div className="pp-l"><IcFolder size={13}/><span>{p.name}</span></div></div>
-                      ))}
-                      <div className="pp-item" onMouseEnter={()=>setProjPickerSub(true)} onMouseLeave={()=>setProjPickerSub(false)}>
-                        <div className="pp-l"><IcFolderPlus size={13}/><span>Add new project</span></div><IcChevR size={12}/>
-                        {projPickerSub && (
-                          <div className="pp-submenu">
-                            <div className="pp-item" onClick={startFromScratch}><div className="pp-l"><IcPlus size={13}/><span>Start from scratch</span></div></div>
-                            <div className="pp-item" onClick={useExistingFolder}><div className="pp-l"><IcFolder size={13}/><span>Use an existing folder</span></div></div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+              <div className="runtime-empty">
+                <div className="runtime-empty-kicker">Local coding workspace</div>
+                <div className="runtime-empty-title">Build with the right runtime.</div>
+                <div className="runtime-empty-copy">Choose a project and start with one agent. Vellum keeps provider sessions, commands, file changes, usage, and stop control in one web workspace.</div>
+                <div className="runtime-empty-note"><i/>Your provider login stays on this machine</div>
+              </div>
+              <div style={{width:"100%",maxWidth:850,position:"relative"}}>
+                <CodingMainStrip/>
+                <div style={{maxWidth:620,margin:"0 auto"}}><InputBox placeholder="Describe what to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
               </div>
             </div>
           </Fragment>
@@ -2063,7 +2185,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                   <div className="tb-more" onClick={openCtx}><IcMoreDots size={15}/></div>
                 </div>
                 <div className="tb-right">
-                  <div className="mode-switch compact">{MODES.map(m=>(<button key={m.id} className={"mode-chip"+(activeMode===m.id?" active":"")} onClick={()=>setActiveMode(m.id)}>{m.label}</button>))}</div>
+                  <span className={"status-pill "+(running?"running":"complete")}>{running?(codingProvider==="claude"?"Claude working":"Codex working"):(codingProvider==="claude"?"Claude ready":"Codex ready")}</span>
                   <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcTasks size={15}/></button>
                   <button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={15}/></button>
                 </div>
@@ -2073,6 +2195,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {messages.map(renderMsg)}
               </div>
 
+              <CodingMainStrip/>
               <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
 
               {/* Progress floating card */}
@@ -2221,19 +2344,20 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 )}
                 {activeTabObj && activeTabObj.kind==="files" && (
                   <div className="workspace-body">
-                    <div className="files-bar"><span>/</span><button className="icon-btn" style={{marginLeft:"auto"}} title="Workspace root"><IcFolder size={14}/></button></div>
+                    <div className="files-bar">{codingTreePath&&<button className="icon-btn" title="Parent directory" onClick={parentProjectDirectory}><IcChevL size={14}/></button>}<span>{codingTreePath||codingTree.root||codingProjectRoot||"Choose a project first"}</span><button className="icon-btn" style={{marginLeft:"auto"}} title="Refresh project tree" onClick={()=>{if(codingSession){const separator=codingSession.cwd.includes("\\")?"\\":"/",root=codingTreePath?codingSession.cwd+separator+codingTreePath.split("/").join(separator):codingSession.cwd;codingApiRef.current.projectTree(root).then(setCodingTree).catch(()=>{});}}}><IcRefresh size={14}/></button></div>
                     <div className="files-body">
                       <div className="files-left">
-                        {selFile
-                          ? <div className="files-preview"><div className="files-preview-name">{selFile}</div><div className="files-preview-body"># {selFile.replace(/\.md$/,"")}<br/><br/>Preview of the selected file would render here.</div></div>
+                        {filePreview
+                          ? <div className="files-preview"><div className="files-preview-name">{filePreview.path}</div><div className="files-preview-meta">{filePreview.size!==undefined?(filePreview.size+" bytes"):""}{filePreview.truncated?" · preview truncated":""}</div><div className={"files-preview-body"+(filePreview.error?" error":"")}>{filePreview.content}</div></div>
                           : <div className="files-empty"><IcFolder size={30}/><div className="files-empty-t">Open file</div><div className="files-empty-s">Select a file from the workspace tree</div></div>}
                       </div>
                       <div className="files-tree">
-                        <div className="files-filter"><IcSearch size={13}/><input placeholder="Filter files…"/></div>
-                        {FILE_TREE.map((f,i)=> f.dir
-                          ? <div key={i} className="ftree-row"><IcChevR size={13}/><IcFolder size={13}/><span>{f.name}</span></div>
-                          : <div key={i} className="ftree-row" style={{paddingLeft:9}} onClick={()=>setSelFile(f.name)}><span className="md-badge">M↓</span><span>{f.name}</span></div>
+                        <div className="files-filter"><IcSearch size={13}/><input placeholder="Filter files…" value={fileFilter} onChange={e=>setFileFilter(e.target.value)}/></div>
+                        {(codingTree.items||[]).filter(item=>!fileFilter||item.name.toLowerCase().includes(fileFilter.toLowerCase())).map(item=>item.kind==="directory"
+                          ? <div key={item.path} className="ftree-row" onClick={()=>openProjectDirectory(item)}><IcChevR size={13}/><IcFolder size={13}/><span>{item.name}</span></div>
+                          : <div key={item.path} className="ftree-row" style={{paddingLeft:9}} onClick={()=>openProjectFile(item)}><IcFile size={12}/><span>{item.name}</span></div>
                         )}
+                        {codingSession&&(codingTree.items||[]).length===0&&<div className="proj-nochats">No readable files found</div>}
                       </div>
                     </div>
                   </div>
@@ -2383,6 +2507,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
               {cmdMatches.map((c)=>{ const gi = flat.findIndex(f=>f.kind==="cmd" && f.item.id===c.id); return (<div key={c.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"cmd",item:c})}><div className="palette-item-l"><span style={{color:"#888",display:"flex"}}>{c.icon}</span><span className="palette-item-title">{c.title}</span></div>{c.kbd && <span className="kbd">{c.kbd}</span>}</div>); })}
               {chatMatches.length>0 && <div className="palette-sec">Chats</div>}
               {chatMatches.map((c)=>{ const gi = flat.findIndex(f=>f.kind==="chat" && f.item.id===c.id); return (<div key={c.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"chat",item:c})}><div className="palette-item-l">{c.age?<span style={{color:"#444"}}>◷</span>:<Spinner/>}<span className="palette-item-title">{c.title}</span><span className="palette-item-sub">{c.project}</span></div>{c.age && <span className="kbd">{c.age}</span>}</div>); })}
+              {sessionMatches.length>0 && <div className="palette-sec">Saved coding sessions</div>}
+              {sessionMatches.map(session=>{ const gi=flat.findIndex(f=>f.kind==="session"&&f.item.id===session.id); return (<div key={session.id} className={"palette-item"+(palIdx===gi?" hi":"")} onMouseEnter={()=>setPalIdx(gi)} onClick={()=>runPalette({kind:"session",item:session})}><div className="palette-item-l"><IcTerminal size={13}/><span className="palette-item-title">{session.title||session.provider}</span><span className="palette-item-sub">{sessionProjectRoot(session)}</span></div><span className="kbd">{session.provider} · {session.status}</span></div>); })}
             </div>
           </div>
         </div>
@@ -2393,20 +2519,21 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
 /* ═══ App ═══ */
 function App(){
-  const [shell, setShell] = useState("browser");
-  const [maximized, setMaximized] = useState(false);
-  const switchShell = (next)=> setShell(s=> next || (s==="browser" ? "desktop" : "browser"));
-  const toggleMax = ()=> setMaximized(m=>!m);
-  const workspace = <VellumWorkspace shell={shell} onSwitchShell={switchShell} onToggleMax={toggleMax} maximized={maximized}/>;
+  const dispatch=(action)=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:action}));
   return (
-    <div className="stage">
-      <div className="desktop-bg"/>
-      <div className="bg-orb" style={{width:420,height:420,left:"6%",top:"12%",background:"radial-gradient(circle,#e35d2b,transparent 70%)"}}/>
-      <div className="bg-orb" style={{width:380,height:380,right:"8%",bottom:"6%",background:"radial-gradient(circle,#5a4bd6,transparent 70%)",opacity:.25}}/>
-      <div className={"window "+(maximized?"win-max":"win-float")}>
-        {shell==="terminal" ? <ChromeTerminal maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}/> : shell==="browser"
-          ? <ChromeBrowser maximized={maximized} onMax={toggleMax} shell={shell} onShell={setShell}>{workspace}</ChromeBrowser>
-          : <ChromeDesktop maximized={maximized} onMax={toggleMax} title="Find best non-veg meal — Vellum" shell={shell} onShell={setShell}>{workspace}</ChromeDesktop>}
+    <div className="web-shell">
+      <header className="web-brandbar">
+        <div className="web-mark" aria-hidden="true"/>
+        <div className="web-brand">Vellum <span>Workspace</span></div>
+        <div className="web-context"><span className="web-context-dot"/>Local-first · one active writer</div>
+        <div className="web-actions">
+          <button className="web-action" onClick={()=>dispatch("files")}><IcFolder size={13}/>Files</button>
+          <button className="web-action" onClick={()=>dispatch("terminal")}><IcTerminal size={13}/>Terminal</button>
+          <button className="web-action" onClick={()=>dispatch("palette")}><IcSearch size={13}/>Commands</button>
+        </div>
+      </header>
+      <div className="web-workspace">
+        <VellumWorkspace shell="web" onSwitchShell={()=>{}} onToggleMax={()=>{}} maximized={true}/>
       </div>
     </div>
   );

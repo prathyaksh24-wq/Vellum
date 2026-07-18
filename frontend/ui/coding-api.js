@@ -44,11 +44,50 @@ export function createCodingApi({ apiBase = "http://127.0.0.1:8000", fetchImpl =
     projectTree(root) {
       return json(`/api/coding/projects/tree?root=${encodeURIComponent(root)}`);
     },
-    async runTurn(sessionId, prompt, onEvent) {
-      const response = await fetchImpl(`${base}/api/coding/sessions/${encodeURIComponent(sessionId)}/turns/stream`, {
+    projectFile(root, path) {
+      return json(`/api/coding/projects/file?root=${encodeURIComponent(root)}&path=${encodeURIComponent(path)}`);
+    },
+    events(sessionId, afterSequence = 0) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/events?after_sequence=${encodeURIComponent(afterSequence)}`);
+    },
+    checkpoints(sessionId) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/checkpoints`);
+    },
+    checkpoint(sessionId, checkpointId) {
+      return json(
+        `/api/coding/sessions/${encodeURIComponent(sessionId)}/checkpoints/${encodeURIComponent(checkpointId)}`,
+      );
+    },
+    rewind(sessionId, checkpointId, { phase = "after", confirmDiscard = false } = {}) {
+      return json(
+        `/api/coding/sessions/${encodeURIComponent(sessionId)}/rewind/${encodeURIComponent(checkpointId)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phase, confirm_discard: confirmDiscard }),
+        },
+      );
+    },
+    stop(sessionId) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/stop`, { method: "POST" });
+    },
+    close(sessionId, { discardChanges = false } = {}) {
+      return json(`/api/coding/sessions/${encodeURIComponent(sessionId)}/close`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ discard_changes: discardChanges }),
+      });
+    },
+    async runTurn(sessionId, prompt, onEvent, { signal, maxRuntimeSeconds = 1800, maxProviderEvents = 10000 } = {}) {
+      const response = await fetchImpl(`${base}/api/coding/sessions/${encodeURIComponent(sessionId)}/turns/stream`, {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt,
+          max_runtime_seconds: maxRuntimeSeconds,
+          max_provider_events: maxProviderEvents,
+        }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
