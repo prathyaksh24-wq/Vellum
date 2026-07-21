@@ -46,6 +46,38 @@ final result: passed
 
 ---
 
+## Workspace chat navigation and live Codex connection
+
+**Validation Target**
+
+- Browser-rendered implementation: `D:\Vellum-worktrees\local-first-coding-platform\.api-runtime\workspace-latest.png`, `workspace-runtime-menu.png`, `workspace-real-chat.png`, and `workspace-general-chat.png`.
+- Viewport: 1440 x 1000 Chromium.
+- States: landing, runtime dropdown, project chat after a live Codex turn, sidebar hidden, edge-hover reveal, and top-level general chat after a live Codex turn.
+
+**Findings**
+
+- The runtime dropdown contains only Codex, Claude Code, and Grok state labels; the descriptive subheadings are absent.
+- Both project-scoped and top-level general chats reached the real `/api/coding` session and streaming-turn path. The observed final responses were `VELLUM_UI_CONNECTED` and `VELLUM_GENERAL_CHAT_CONNECTED`.
+- Active chats expose an explicit back control. The sidebar can be hidden from its header, restored from the left-edge hover target, or toggled with the existing keyboard shortcut.
+- The Progress toggle is absent from the rendered active-chat interface.
+- Vellum's Codex adapter keeps per-session SQLite state separate from the Codex desktop app and supports an explicit Vellum model override without replacing the user's shared Codex authentication/configuration.
+
+**Implementation Checklist**
+
+- [x] Keep real message sending available inside a project and from a top-level general chat.
+- [x] Default an unselected project root to the API process workspace instead of blocking send.
+- [x] Add explicit sidebar hide, edge-hover reveal, and active-chat back controls.
+- [x] Remove runtime descriptions and the Progress toggle.
+- [x] Verify both chat scopes with real streamed Codex responses in Chromium.
+
+**Environment Note**
+
+- The C: system volume had no free space during validation, and the installed CLI was older than the model selected in the desktop Codex config. The live preview therefore uses `VELLUM_CODEX_SQLITE_HOME` on D: and an explicit compatible `VELLUM_CODEX_MODEL`; these remain deployment configuration rather than hard-coded user credentials.
+
+final result: passed
+
+---
+
 ## Workspace sidebar and SideRays shell
 
 **Comparison Target**

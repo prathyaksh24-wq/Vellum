@@ -570,6 +570,7 @@ button,input,textarea,select{font-family:var(--body-font)}
 .sidebar,.sidebar button{color:var(--workspace-green)}
 .sb-top{padding:12px 8px 8px;gap:3px}
 .sb-runtime-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 7px 10px;position:relative}
+.sb-runtime-actions{display:flex;align-items:center;gap:2px;margin-left:auto}
 .sb-runtime-trigger{display:flex;align-items:center;gap:6px;min-height:34px;padding:4px 8px;border:0;border-radius:11px;background:#102117;color:var(--workspace-green);font-size:18px;font-weight:700;cursor:pointer}
 .sb-runtime-trigger:hover,.sb-runtime-trigger[aria-expanded="true"]{background:#173522}
 .sb-runtime-search{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--workspace-green);cursor:pointer}
@@ -578,7 +579,7 @@ button,input,textarea,select{font-family:var(--body-font)}
 .runtime-option{display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 9px;border:0;border-radius:9px;background:transparent;text-align:left;cursor:pointer}
 .runtime-option:hover{background:#1c3927}
 .runtime-option:disabled{cursor:not-allowed;opacity:.48}
-.runtime-option-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.runtime-option-copy{display:flex;align-items:center;min-width:0}
 .runtime-option-name{font-size:14px;color:#d1f8dc;font-weight:700}
 .runtime-option-desc{font:12px/1.35 'Geist Mono',monospace;color:#8dd8a1}
 .runtime-option-state{font:10px 'Geist Mono',monospace;color:#8dd8a1}
@@ -1469,7 +1470,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [codingSessions, setCodingSessions] = useState([]);
   const [codingSession, setCodingSession] = useState(null);
   const [codingProvider, setCodingProvider] = useState(()=>localPref("vellum.coding.provider","codex"));
-  const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",""));
+  const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",".")||".");
   const [codingAccessMode, setCodingAccessMode] = useState(()=>localPref("vellum.coding.access","read_only"));
   const [codingStatus, setCodingStatus] = useState("checking");
   const [codingError, setCodingError] = useState("");
@@ -1719,7 +1720,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
   async function ensureCodingSession(){
     const api=codingApiRef.current; if(!api) throw new Error("Coding API unavailable.");
-    const root=codingProjectRoot.trim(); if(!root) throw new Error("Choose a project folder before starting a coding run.");
+    const root=codingProjectRoot.trim()||".";
     const health=healthFor(codingProvider);
     if(!health||!health.available) throw new Error((health&&health.message)||("The "+codingProvider+" runtime is not installed."));
     if(!health.configured) throw new Error((health&&health.message)||("The "+codingProvider+" runtime needs authentication."));
@@ -1728,6 +1729,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const listed=await api.sessions(); const sessions=listed.sessions||[]; setCodingSessions(sessions);
     let session=sessions.find(item=>item.provider===codingProvider&&normalizedPath(sessionProjectRoot(item))===normalizedPath(root)&&item.access_mode===codingAccessMode&&item.status!=="running"&&item.status!=="closed");
     if(!session){ session=await api.createSession({provider:codingProvider,cwd:root,access_mode:codingAccessMode,title:chatTitleFor(activeChat)||"Vellum coding session"}); setCodingSessions(prev=>[session,...prev]); }
+    if(root==="."&&sessionProjectRoot(session)) setCodingProjectRoot(sessionProjectRoot(session));
     codingSessionRef.current=session; setCodingSession(session); return session;
   }
   async function openCodingSession(session){
@@ -2297,18 +2299,21 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             <button className="sb-runtime-trigger" aria-haspopup="menu" aria-expanded={runtimeMenu} onClick={()=>setRuntimeMenu(v=>!v)}>
               <span>{codingProvider==="claude"?"Claude Code":"Codex"}</span><IcChevD size={13}/>
             </button>
-            <button className="sb-runtime-search" title="Search chats and commands" aria-label="Search chats and commands" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);}}><IcSearch size={16}/></button>
+            <div className="sb-runtime-actions">
+              <button className="sb-runtime-search" title="Search chats and commands" aria-label="Search chats and commands" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);}}><IcSearch size={16}/></button>
+              <button className="sb-runtime-search" title="Hide sidebar" aria-label="Hide sidebar" onClick={()=>{setSbPinned(false);setSbHover(false);}}><IcSidebar size={16}/></button>
+            </div>
             {runtimeMenu && <div className="runtime-switcher pop-in" role="menu">
               <button className="runtime-option" role="menuitemradio" aria-checked={codingProvider==="codex"} onClick={()=>{chooseCodingProvider("codex");setRuntimeMenu(false);}}>
-                <span className="runtime-option-copy"><span className="runtime-option-name">Codex</span><span className="runtime-option-desc">Plan, build, debug, and ship</span></span>
+                <span className="runtime-option-copy"><span className="runtime-option-name">Codex</span></span>
                 <span className="runtime-option-state">{codingProvider==="codex"?"selected":(healthFor("codex")||{}).available?"ready":"local"}</span>
               </button>
               <button className="runtime-option" role="menuitemradio" aria-checked={codingProvider==="claude"} onClick={()=>{chooseCodingProvider("claude");setRuntimeMenu(false);}}>
-                <span className="runtime-option-copy"><span className="runtime-option-name">Claude Code</span><span className="runtime-option-desc">Review, reason, and implement</span></span>
+                <span className="runtime-option-copy"><span className="runtime-option-name">Claude Code</span></span>
                 <span className="runtime-option-state">{codingProvider==="claude"?"selected":(healthFor("claude")||{}).available?"ready":"local"}</span>
               </button>
               <button className="runtime-option" role="menuitem" disabled title="Grok Build adapter is not connected yet">
-                <span className="runtime-option-copy"><span className="runtime-option-name">Grok</span><span className="runtime-option-desc">Grok Build runtime</span></span><span className="runtime-option-state">not connected</span>
+                <span className="runtime-option-copy"><span className="runtime-option-name">Grok</span></span><span className="runtime-option-state">not connected</span>
               </button>
             </div>}
           </div>
@@ -2396,13 +2401,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           <Fragment>
               <div className="topbar">
                 <div className="tb-left">
-                  <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>setSbPinned(v=>!v)} title="Pin sidebar (Ctrl B)"><IcSidebar size={15}/></button>
+                  <button className="icon-btn" onClick={()=>setActiveChat("new")} title="Back to workspace"><IcChevL size={15}/></button>
+                  <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>{setSbPinned(v=>!v);setSbHover(false);}} title={sbPinned?"Hide sidebar":"Keep sidebar open"}><IcSidebar size={15}/></button>
                   <span className="tb-title">{chatTitle}</span>
                   <div className="tb-more" onClick={openCtx}><IcMoreDots size={15}/></div>
                 </div>
                 <div className="tb-right">
                   <span className={"status-pill "+(running?"running":"complete")}>{running?(codingProvider==="claude"?"Claude working":"Codex working"):(codingProvider==="claude"?"Claude ready":"Codex ready")}</span>
-                  <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcTasks size={15}/></button>
                   <button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={15}/></button>
                 </div>
               </div>
