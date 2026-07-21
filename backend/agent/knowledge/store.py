@@ -14,22 +14,24 @@ import math
 import os
 import sqlite3
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 
 from agent.knowledge.models import (
     ContextPackRequest,
+    IngestionJobInput,
     ObservationActor,
     ObservationInput,
     ProjectionInput,
     SourceItemInput,
+    SyncCursorInput,
     UserSignalInput,
 )
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def _now() -> str:
@@ -120,6 +122,10 @@ class KnowledgeStore:
             if version < 2:
                 self._migrate_v2(connection)
                 connection.execute("PRAGMA user_version = 2")
+                version = 2
+            if version < 3:
+                self._migrate_v3(connection)
+                connection.execute("PRAGMA user_version = 3")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -372,6 +378,20 @@ class KnowledgeStore:
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS preference_states_category_score ON preference_states(category, current_score DESC)"
+        )
+
+    @staticmethod
+    def _migrate_v3(connection: sqlite3.Connection) -> None:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(ingestion_jobs)").fetchall()}
+        if "account_id" not in columns:
+            connection.execute("ALTER TABLE ingestion_jobs ADD COLUMN account_id TEXT NOT NULL DEFAULT ''")
+        if "attempt_count" not in columns:
+            connection.execute("ALTER TABLE ingestion_jobs ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 1")
+        if "lease_expires_at" not in columns:
+            connection.execute("ALTER TABLE ingestion_jobs ADD COLUMN lease_expires_at TEXT NOT NULL DEFAULT ''")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS ingestion_jobs_connector_account_time "
+            "ON ingestion_jobs(connector, account_id, created_at DESC)"
         )
 
     def upsert_source(self, item: SourceItemInput) -> dict[str, Any]:
@@ -771,6 +791,266 @@ class KnowledgeStore:
         item = dict(row)
         item["windows"] = json.loads(str(item.pop("windows_json") or "{}"))
         return item
+
+    def start_ingestion_job(self, item: IngestionJobInput) -> dict[str, Any]:
+        scoped_key = _stable_id("idem", item.connector, item.account_id, item.idempotency_key)
+        job_id = _stable_id("job", scoped_key)
+        now = _now()
+        lease_expires_at = (datetime.now(UTC) + timedelta(seconds=item.lease_seconds)).isoformat()
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT * FROM ingestion_jobs WHERE idempotency_key = ?",
+                (scoped_key,),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO ingestion_jobs (
+                        id, connector, account_id, job_type, status, idempotency_key,
+                        requested_by, stats_json, created_at, started_at,
+                        attempt_count, lease_expires_at
+                    ) VALUES (?, ?, ?, ?, 'running', ?, ?, '{}', ?, ?, 1, ?)
+                    """,
+                    (
+                        job_id,
+                        item.connector,
+                        item.account_id,
+                        item.job_type,
+                        scoped_key,
+                        item.requested_by,
+                        now,
+                        now,
+                        lease_expires_at,
+                    ),
+                )
+                row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+                return {**self._job_row(row), "created": True, "should_run": True}
+            existing_status = str(existing["status"])
+            lease_expired = existing_status == "running" and self._timestamp_expired(
+                str(existing["lease_expires_at"] or ""),
+                datetime.now(UTC),
+            )
+            if existing_status == "failed" or lease_expired:
+                connection.execute(
+                    """
+                    UPDATE ingestion_jobs
+                    SET status = 'running', requested_by = ?, stats_json = '{}',
+                        error_code = '', started_at = ?, completed_at = '',
+                        attempt_count = attempt_count + 1, lease_expires_at = ?
+                    WHERE id = ?
+                    """,
+                    (item.requested_by, now, lease_expires_at, str(existing["id"])),
+                )
+                retried = connection.execute(
+                    "SELECT * FROM ingestion_jobs WHERE id = ?",
+                    (str(existing["id"]),),
+                ).fetchone()
+                return {
+                    **self._job_row(retried),
+                    "created": False,
+                    "should_run": True,
+                    "retried": True,
+                    "reclaimed": lease_expired,
+                }
+            row = self._job_row(existing)
+            return {
+                **row,
+                "created": False,
+                "should_run": False,
+                "deduplicated": True,
+            }
+
+    def complete_ingestion_job(
+        self,
+        job_id: str,
+        *,
+        stats: dict[str, Any] | None = None,
+        cursor: SyncCursorInput | None = None,
+    ) -> dict[str, Any]:
+        now = _now()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown ingestion job: {job_id}")
+            if str(row["status"]) == "completed":
+                return self._job_row(row)
+            if str(row["status"]) != "running":
+                raise ValueError(f"Cannot complete ingestion job in {row['status']} state.")
+            if cursor is not None:
+                self._upsert_sync_cursor(connection, cursor, succeeded_at=now)
+            connection.execute(
+                """
+                UPDATE ingestion_jobs
+                SET status = 'completed', stats_json = ?, error_code = '',
+                    completed_at = ?, lease_expires_at = ''
+                WHERE id = ?
+                """,
+                (_json(stats or {}), now, job_id),
+            )
+            completed = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+        return self._job_row(completed)
+
+    def fail_ingestion_job(self, job_id: str, *, error_code: str) -> dict[str, Any]:
+        safe_code = "".join(character for character in error_code.upper() if character.isalnum() or character == "_")[:80]
+        safe_code = safe_code or "INGESTION_FAILED"
+        now = _now()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown ingestion job: {job_id}")
+            if str(row["status"]) == "completed":
+                raise ValueError("Completed ingestion jobs cannot be failed.")
+            self._record_cursor_failure(
+                connection,
+                connector=str(row["connector"]),
+                account_id=str(row["account_id"]),
+                error_code=safe_code,
+                failed_at=now,
+            )
+            connection.execute(
+                """
+                UPDATE ingestion_jobs
+                SET status = 'failed', error_code = ?, completed_at = ?,
+                    lease_expires_at = ''
+                WHERE id = ?
+                """,
+                (safe_code, now, job_id),
+            )
+            failed = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+        return self._job_row(failed)
+
+    def get_sync_cursor(self, connector: str, account_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM sync_cursors WHERE connector = ? AND account_id = ?",
+                (connector, account_id),
+            ).fetchone()
+        return self._cursor_row(row) if row is not None else None
+
+    def list_sync_cursors(self, *, connector: str = "", limit: int = 100) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if connector:
+            where = "WHERE connector = ?"
+            params.append(connector)
+        params.append(max(1, min(int(limit), 500)))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM sync_cursors {where} ORDER BY updated_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._cursor_row(row) for row in rows]
+
+    def list_ingestion_jobs(self, *, connector: str = "", limit: int = 100) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if connector:
+            where = "WHERE connector = ?"
+            params.append(connector)
+        params.append(max(1, min(int(limit), 500)))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM ingestion_jobs {where} ORDER BY created_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._job_row(row) for row in rows]
+
+    def heartbeat_ingestion_job(self, job_id: str, *, lease_seconds: int = 900) -> dict[str, Any]:
+        bounded_lease = max(30, min(int(lease_seconds), 86400))
+        lease_expires_at = (datetime.now(UTC) + timedelta(seconds=bounded_lease)).isoformat()
+        with self._connect() as connection:
+            row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise KeyError(f"Unknown ingestion job: {job_id}")
+            if str(row["status"]) != "running":
+                raise ValueError("Only running ingestion jobs can renew a lease.")
+            connection.execute(
+                "UPDATE ingestion_jobs SET lease_expires_at = ? WHERE id = ?",
+                (lease_expires_at, job_id),
+            )
+            renewed = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+        return self._job_row(renewed)
+
+    @staticmethod
+    def _upsert_sync_cursor(
+        connection: sqlite3.Connection,
+        item: SyncCursorInput,
+        *,
+        succeeded_at: str,
+    ) -> None:
+        cursor_id = _stable_id("cur", item.connector, item.account_id)
+        connection.execute(
+            """
+            INSERT INTO sync_cursors (
+                id, connector, account_id, cursor, state_json,
+                last_success_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(connector, account_id) DO UPDATE SET
+                cursor = excluded.cursor,
+                state_json = excluded.state_json,
+                last_success_at = excluded.last_success_at,
+                last_error_at = '',
+                last_error_code = '',
+                updated_at = excluded.updated_at
+            """,
+            (
+                cursor_id,
+                item.connector,
+                item.account_id,
+                item.cursor,
+                _json(item.state),
+                succeeded_at,
+                succeeded_at,
+            ),
+        )
+
+    @staticmethod
+    def _record_cursor_failure(
+        connection: sqlite3.Connection,
+        *,
+        connector: str,
+        account_id: str,
+        error_code: str,
+        failed_at: str,
+    ) -> None:
+        cursor_id = _stable_id("cur", connector, account_id)
+        connection.execute(
+            """
+            INSERT INTO sync_cursors (
+                id, connector, account_id, cursor, state_json,
+                last_error_at, last_error_code, updated_at
+            ) VALUES (?, ?, ?, '', '{}', ?, ?, ?)
+            ON CONFLICT(connector, account_id) DO UPDATE SET
+                last_error_at = excluded.last_error_at,
+                last_error_code = excluded.last_error_code,
+                updated_at = excluded.updated_at
+            """,
+            (cursor_id, connector, account_id, failed_at, error_code, failed_at),
+        )
+
+    @staticmethod
+    def _job_row(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["stats"] = json.loads(str(item.pop("stats_json") or "{}"))
+        return item
+
+    @staticmethod
+    def _cursor_row(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["state"] = json.loads(str(item.pop("state_json") or "{}"))
+        return item
+
+    @staticmethod
+    def _timestamp_expired(value: str, reference: datetime) -> bool:
+        if not value:
+            return True
+        try:
+            timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return True
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=UTC)
+        return timestamp.astimezone(UTC) <= reference.astimezone(UTC)
 
     def list_sources(self, *, kind: str = "", limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         params: list[Any] = []

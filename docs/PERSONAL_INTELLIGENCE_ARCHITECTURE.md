@@ -59,6 +59,20 @@ The initial schema includes:
 - connector cursors and ingestion jobs
 - bounded context packages
 
+## Ingestion Control Plane
+
+Every connector run uses an account-scoped idempotency key and an ingestion job
+record. Successful completion and cursor advancement occur in one transaction;
+a failed run records a bounded error code and leaves the previous cursor intact.
+Repeating a completed or in-flight idempotency key does not execute the provider
+operation again. This contract is shared by scheduled and user-triggered runs.
+Failed jobs can retry the same key, and expired running leases can be reclaimed;
+attempt counts remain visible for diagnosis.
+
+The frontend receives read-only job and cursor health. Connector execution stays
+inside trusted backend adapters; the browser cannot claim provider identity or
+advance a sync cursor.
+
 A future hosted deployment may use PostgreSQL and object storage behind the
 same service contract. Desktop operation must not require users to administer
 those services.
@@ -162,6 +176,8 @@ Initial additive endpoints:
 - `GET /api/knowledge/core/observations`
 - `POST /api/knowledge/core/signals`
 - `GET /api/knowledge/core/preferences`
+- `GET /api/knowledge/core/ingestion-jobs`
+- `GET /api/knowledge/core/sync-cursors`
 - `POST /api/knowledge/core/context-packs`
 - `POST /api/knowledge/core/bootstrap`
 

@@ -43,6 +43,12 @@ class EvidenceClass(str, Enum):
     IMPORTED = "imported"
 
 
+class IngestionJobStatus(str, Enum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class SourceItemInput(BaseModel):
     kind: str = Field(min_length=1, max_length=80)
     external_id: str = Field(min_length=1, max_length=500)
@@ -118,6 +124,22 @@ class UserSignalInput(BaseModel):
         if not clean:
             raise ValueError("signal identity fields cannot be blank")
         return clean
+
+
+class IngestionJobInput(BaseModel):
+    connector: str = Field(min_length=1, max_length=120)
+    account_id: str = Field(min_length=1, max_length=500)
+    job_type: str = Field(min_length=1, max_length=120)
+    idempotency_key: str = Field(min_length=1, max_length=500)
+    requested_by: str = Field(min_length=1, max_length=120)
+    lease_seconds: int = Field(default=900, ge=30, le=86400)
+
+
+class SyncCursorInput(BaseModel):
+    connector: str = Field(min_length=1, max_length=120)
+    account_id: str = Field(min_length=1, max_length=500)
+    cursor: str = Field(default="", max_length=4000)
+    state: dict[str, Any] = Field(default_factory=dict)
 
 
 class ContextPackRequest(BaseModel):

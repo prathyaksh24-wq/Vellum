@@ -61,6 +61,18 @@
     coreSources: coreSources,
     coreObservations: coreObservations,
     corePreferences: corePreferences,
+    ingestionJobs: function (connector, limit) {
+      var params = new URLSearchParams();
+      if (connector) params.set("connector", String(connector));
+      if (limit !== undefined) params.set("limit", String(limit));
+      return client.request("/api/knowledge/core/ingestion-jobs?" + params.toString());
+    },
+    syncCursors: function (connector, limit) {
+      var params = new URLSearchParams();
+      if (connector) params.set("connector", String(connector));
+      if (limit !== undefined) params.set("limit", String(limit));
+      return client.request("/api/knowledge/core/sync-cursors?" + params.toString());
+    },
     recordSignal: function (payload) {
       return client.request("/api/knowledge/core/signals", client.jsonOptions("POST", payload));
     },

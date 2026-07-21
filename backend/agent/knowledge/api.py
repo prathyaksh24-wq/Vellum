@@ -81,6 +81,32 @@ async def core_preferences(
     return {"preferences": items, "count": len(items)}
 
 
+@router.get("/ingestion-jobs")
+async def core_ingestion_jobs(
+    connector: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(
+        get_knowledge_core().store.list_ingestion_jobs,
+        connector=connector,
+        limit=limit,
+    )
+    return {"jobs": items, "count": len(items)}
+
+
+@router.get("/sync-cursors")
+async def core_sync_cursors(
+    connector: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(
+        get_knowledge_core().store.list_sync_cursors,
+        connector=connector,
+        limit=limit,
+    )
+    return {"cursors": items, "count": len(items)}
+
+
 @router.post("/projections")
 async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().store.register_projection, request)

@@ -5,15 +5,18 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from agent.knowledge.api import router as knowledge_core_router
+from agent.knowledge.ingestion import IngestionCoordinator, IngestionResult
 from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
     EvidenceClass,
     ExternalPolicy,
+    IngestionJobInput,
     ObservationActor,
     ObservationInput,
     ProjectionInput,
@@ -219,6 +222,8 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
             },
         )
         preferences = client.get("/api/knowledge/core/preferences?category=youtube_channel")
+        ingestion_jobs = client.get("/api/knowledge/core/ingestion-jobs")
+        sync_cursors = client.get("/api/knowledge/core/sync-cursors")
         context = client.post(
             "/api/knowledge/core/context-packs",
             json={"query": "anything", "destination": "external"},
@@ -236,6 +241,8 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
     assert spoofed_connector.status_code == 422
     assert preferences.status_code == 200
     assert preferences.json()["count"] == 1
+    assert ingestion_jobs.status_code == 200
+    assert sync_cursors.status_code == 200
     assert context.status_code == 200
     assert context.json()["policy"]["raw_private_content"] == "withheld"
 
@@ -377,8 +384,85 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
 
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
-    assert migrated.status()["schema_version"] == 2
+    assert migrated.status()["schema_version"] == 3
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}
     assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
+
+
+def test_ingestion_coordinator_is_resumable_and_idempotent_per_account(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    coordinator = IngestionCoordinator(core.store)
+    calls = []
+    request = IngestionJobInput(
+        connector="youtube",
+        account_id="primary",
+        job_type="activity_sync",
+        idempotency_key="window:2026-07-21T12",
+        requested_by="scheduler",
+    )
+
+    def operation(cursor):
+        calls.append(cursor)
+        return IngestionResult(stats={"items": 3}, cursor="next-page", cursor_state={"etag": "abc"})
+
+    first = coordinator.run(request, operation=operation)
+    duplicate = coordinator.run(request, operation=operation)
+    second_account = coordinator.run(
+        request.model_copy(update={"account_id": "secondary"}),
+        operation=operation,
+    )
+
+    assert first["status"] == "completed"
+    assert first["stats"] == {"items": 3}
+    assert duplicate["deduplicated"] is True
+    assert duplicate["should_run"] is False
+    assert second_account["status"] == "completed"
+    assert len(calls) == 2
+    cursor = core.store.get_sync_cursor("youtube", "primary")
+    assert cursor is not None
+    assert cursor["cursor"] == "next-page"
+    assert cursor["state"] == {"etag": "abc"}
+
+
+def test_failed_ingestion_records_health_without_advancing_cursor(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    coordinator = IngestionCoordinator(core.store)
+    initial = IngestionJobInput(
+        connector="x",
+        account_id="primary",
+        job_type="archive_sync",
+        idempotency_key="initial",
+        requested_by="user",
+    )
+    coordinator.run(initial, operation=lambda _cursor: IngestionResult(cursor="cursor-1"))
+
+    failing = initial.model_copy(update={"idempotency_key": "next"})
+    with pytest.raises(RuntimeError, match="provider unavailable"):
+        coordinator.run(
+            failing,
+            operation=lambda _cursor: (_ for _ in ()).throw(RuntimeError("provider unavailable")),
+        )
+
+    cursor = core.store.get_sync_cursor("x", "primary")
+    jobs = core.store.list_ingestion_jobs(connector="x")
+    assert cursor is not None
+    assert cursor["cursor"] == "cursor-1"
+    assert cursor["last_error_code"] == "RUNTIMEERROR"
+    assert jobs[0]["status"] == "failed"
+    assert jobs[0]["error_code"] == "RUNTIMEERROR"
+
+    retried = coordinator.run(
+        failing,
+        operation=lambda previous: IngestionResult(
+            stats={"resumed_from": previous["cursor"]},
+            cursor="cursor-2",
+        ),
+    )
+    recovered_cursor = core.store.get_sync_cursor("x", "primary")
+    assert retried["status"] == "completed"
+    assert retried["attempt_count"] == 2
+    assert recovered_cursor is not None
+    assert recovered_cursor["cursor"] == "cursor-2"
+    assert recovered_cursor["last_error_code"] == ""
