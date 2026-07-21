@@ -11,16 +11,26 @@
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500&family=Geist:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;700&family=Geist+Mono:wght@300;400;500&family=Karla:wght@400;700&display=swap');
+
+:root{
+  --heading-font:'Fraunces',serif;
+  --body-font:'Karla',sans-serif;
+  --workspace-green:#a7f3bd;
+  --workspace-green-muted:#68a97b;
+  --workspace-panel:#020704;
+}
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body,#root{height:100%;width:100%;overflow:hidden}
-body{font-family:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;background:#050507;color:#d8d8d8;font-size:13px;-webkit-font-smoothing:antialiased}
+body{font-family:var(--body-font);background:#050507;color:#d8d8d8;font-size:13px;-webkit-font-smoothing:antialiased}
+.heading,h1,h2,h3,.landing-title,.runtime-empty-title{font-family:var(--heading-font)}
+.body-text{font-family:var(--body-font)}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
 ::-webkit-scrollbar-thumb:hover{background:#3a3a3a}
-button{font-family:inherit}
+button,input,textarea,select{font-family:var(--body-font)}
 
 /* Stage / backdrop */
 .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
@@ -121,7 +131,7 @@ button{font-family:inherit}
 .modal-title{font-size:16px;color:#eee;font-weight:500}
 .modal-x{cursor:pointer;color:#666;display:flex}.modal-x:hover{color:#ddd}
 .modal-sub{font-size:12.5px;color:#666;margin-top:3px}
-.modal-input{width:100%;margin-top:14px;background:#0f0f10;border:1px solid #2a2a2e;border-radius:9px;padding:10px 12px;color:#eee;font-size:13.5px;font-family:'Geist',sans-serif;outline:none}
+.modal-input{width:100%;margin-top:14px;background:#0f0f10;border:1px solid #2a2a2e;border-radius:9px;padding:10px 12px;color:#eee;font-size:13.5px;font-family:var(--body-font);outline:none}
 .modal-input:focus{border-color:#3a3a40}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .modal-btn{border:1px solid #2a2a2e;background:#1c1c1f;color:#ccc;border-radius:8px;padding:7px 16px;font-size:12.5px;cursor:pointer}
@@ -162,11 +172,11 @@ button{font-family:inherit}
 .cm-key-dot{width:7px;height:7px;border-radius:50%;background:#333;flex-shrink:0}
 .cm-key-dot.on{background:#4ade80}
 .att-row{display:flex;flex-wrap:wrap;gap:6px}
-.att-row.att-compose{padding:9px 12px 2px}
-.att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #262629;border-radius:8px;padding:4px 8px;font-size:11.5px;color:#bbb;max-width:180px}
+.att-row.att-compose{padding:10px 14px 0}
+.att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #29292d;border-radius:9px;padding:4px 7px;font-size:11.5px;color:#bbb;max-width:200px;min-height:32px}
 .att-chip img{width:24px;height:24px;border-radius:4px;object-fit:cover;flex-shrink:0}
 .att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.att-x{cursor:pointer;color:#666;display:flex;flex-shrink:0}
+.att-x{cursor:pointer;color:#666;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;background:none;padding:2px;border-radius:4px}
 .att-x:hover{color:#ddd}
 .spinner{width:13px;height:13px;border:1.5px solid #2a2a2a;border-top-color:#e35d2b;border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
 .sb-bottom{border-top:1px solid #191919;padding:6px 10px 8px;position:relative}
@@ -197,7 +207,7 @@ button{font-family:inherit}
 .main.desk-inset .chat-pane{border-top-left-radius:22px}
 .proj-picker{position:absolute;top:34px;left:24px;min-width:248px;background:#1b1b1d;border:1px solid #2a2a2e;border-radius:11px;padding:4px;box-shadow:0 16px 50px rgba(0,0,0,.75);z-index:300}
 .pp-search{display:flex;align-items:center;gap:8px;padding:7px 10px 9px;color:#666;border-bottom:1px solid #232326;margin-bottom:4px}
-.pp-search input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12.5px;font-family:'Geist',sans-serif}
+.pp-search input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12.5px;font-family:var(--body-font)}
 .pp-search input::placeholder{color:#555}
 .pp-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 10px;border-radius:7px;cursor:pointer;color:#cfcfcf;font-size:12.5px;position:relative}
 .pp-item:hover{background:#2a2a2e;color:#fff}
@@ -247,29 +257,50 @@ button{font-family:inherit}
 .learning-inline-title{font-size:13px;color:#bbb;margin-bottom:3px}
 .learning-inline-body{font-size:12px;color:#666;line-height:1.5}
 
-/* Input */
-.input-wrap{padding:10px 14px 12px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
-.input-box{background:#121212;border:1px solid #1e1e1e;border-radius:13px;overflow:hidden;transition:border-color .15s}
-.input-box:focus-within{border-color:#2a2a2a}
-.input-ta{width:100%;background:transparent;border:none;outline:none;color:#d8d8d8;font-size:13.5px;font-family:'Geist',sans-serif;padding:12px 14px 6px;resize:none;line-height:1.55}
-.input-ta::placeholder{color:#383838}
-.input-footer{display:flex;align-items:center;justify-content:space-between;padding:5px 10px 9px}
-.input-lft{display:flex;align-items:center;gap:5px}
-.input-rgt{display:flex;align-items:center;gap:5px}
-.pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#666;font-size:11.5px;transition:border-color .12s,color .12s;white-space:nowrap}
-.pill.accent{color:#e35d2b;border-color:rgba(227,93,43,.25)}
-.model-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#777;font-size:11.5px;transition:border-color .12s,color .12s}
-.model-pill:hover{border-color:#333;color:#aaa}
-.model-num{font-weight:600;color:#bbb;font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.model-search{width:100%;background:#0f0f10;border:1px solid #242427;border-radius:7px;padding:5px 9px;color:#ccc;font-size:12px;font-family:'Geist',sans-serif;outline:none;margin:2px 0 4px}
+/* Studio composer */
+.input-wrap{padding:12px 14px 14px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
+.input-box{position:relative;z-index:1;background:#121213;border:1px solid #242427;border-radius:21px;overflow:hidden;transition:border-color .18s,box-shadow .18s;box-shadow:0 16px 42px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.025)}
+.input-box:focus-within{border-color:#35353a;box-shadow:0 18px 48px rgba(0,0,0,.28),0 0 0 3px rgba(255,255,255,.018),inset 0 1px 0 rgba(255,255,255,.04)}
+.input-ta{width:100%;min-height:74px;max-height:220px;background:transparent;border:none;outline:none;color:#e1e1e3;font-size:15.5px;font-family:var(--body-font);padding:17px 18px 7px;resize:none;line-height:1.5;letter-spacing:-.012em}
+.input-ta::placeholder{color:#505055}
+.input-footer{display:flex;align-items:center;justify-content:space-between;padding:7px 12px 11px;gap:12px}
+.input-lft{display:flex;align-items:center;gap:5px;min-width:0}
+.input-rgt{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.input-box .icon-btn{width:30px;height:30px;align-items:center;justify-content:center;border-radius:50%;color:#66666c}
+.input-box .icon-btn:hover,.input-box .icon-btn.on{color:#d4d4d7;background:#1d1d20}
+.pill{display:flex;align-items:center;gap:5px;min-height:30px;padding:4px 10px;border-radius:999px;background:#18181a;border:1px solid #232326;cursor:pointer;color:#8a8a90;font-size:11.5px;transition:border-color .12s,color .12s,background .12s;white-space:nowrap}
+.pill:hover{border-color:#343439;color:#d0d0d3;background:#1b1b1e}
+.pill:disabled{cursor:not-allowed;opacity:.58}
+.pill.accent{color:#d9d9dc;border-color:#27272b;background:#18181a}
+.agent-pill-label{font-weight:550;color:#e2e2e4}
+.agent-access{color:#696970;font-size:10.5px;margin-left:1px}
+.model-pill{display:flex;align-items:center;gap:5px;min-height:30px;padding:4px 9px;border-radius:999px;background:transparent;border:1px solid transparent;cursor:pointer;color:#77777e;font-size:11.5px;transition:border-color .12s,color .12s,background .12s}
+.model-pill:hover{border-color:#29292d;background:#18181a;color:#b7b7bc}
+.model-pill[aria-disabled="true"]{cursor:default}
+.model-num{font-weight:600;color:#d1d1d4;font-size:11.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-search{width:100%;background:#0f0f10;border:1px solid #242427;border-radius:7px;padding:5px 9px;color:#ccc;font-size:12px;font-family:var(--body-font);outline:none;margin:2px 0 4px}
 .model-search::placeholder{color:#444}
 .model-list{max-height:260px;overflow-y:auto}
 .model-sync{font-size:11px;color:#e35d2b;cursor:pointer}
 .model-sync:hover{color:#f6824f}
-.send-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#d8d8d8;cursor:pointer;border:none;color:#0d0d0d;transition:background .12s,transform .12s;flex-shrink:0}
+.send-btn{display:flex;align-items:center;justify-content:center;width:31px;height:31px;border-radius:50%;background:#d8d8d8;cursor:pointer;border:none;color:#0d0d0d;transition:background .12s,transform .12s;flex-shrink:0}
 .send-btn:hover{background:#fff;transform:translateY(-1px)}
 .send-btn:disabled{background:#2a2a2a;color:#555;cursor:default;transform:none}
-.stop-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#1a1a1a;border:1px solid #2a2a2a;cursor:pointer;color:#e35d2b;transition:background .12s;flex-shrink:0;box-shadow:0 0 0 3px rgba(227,93,43,.07)}
+.stop-btn{display:flex;align-items:center;justify-content:center;width:31px;height:31px;border-radius:50%;background:#d8d8d8;border:none;cursor:pointer;color:#111;transition:background .12s,transform .12s;flex-shrink:0}
+.stop-btn:hover{background:#fff;transform:scale(.97)}
+.composer-queue{position:relative;z-index:0;margin:0 17px -5px;padding:8px 11px 10px;min-height:42px;border:1px solid #242427;border-bottom-color:#1b1b1d;border-radius:16px 16px 7px 7px;background:#101011;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.queue-item{display:flex;align-items:center;gap:8px;min-width:0;color:#77777d;font-size:11.5px}
+.queue-kicker{display:flex;align-items:center;gap:5px;color:#55555b;font:10px 'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.queue-kicker i{width:5px;height:5px;border-radius:50%;background:#e35d2b;box-shadow:0 0 8px rgba(227,93,43,.42)}
+.queue-text{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9a9aa0}
+.queue-action{border:none;background:none;color:#5f5f65;font:11px var(--body-font);cursor:pointer;padding:4px 5px;border-radius:6px}
+.queue-action:hover{color:#d0d0d3;background:#1b1b1e}
+.queue-icon{display:flex;align-items:center;justify-content:center;border:none;background:none;color:#4f4f55;cursor:pointer;padding:4px;border-radius:6px}
+.queue-icon:hover{color:#c7c7cb;background:#1b1b1e}
+.voice-live{color:#e35d2b!important;background:rgba(227,93,43,.1)!important;box-shadow:0 0 0 1px rgba(227,93,43,.2) inset}
+.composer-hint{position:absolute;right:17px;bottom:1px;color:#3f3f44;font-size:10px;white-space:nowrap}
+.menu-item .provider-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;box-shadow:0 0 7px rgba(78,154,101,.28)}
+@media(max-width:720px){.input-ta{font-size:14.5px;padding:15px 15px 6px}.input-footer{padding:6px 9px 9px}.agent-access,.model-pill>span:not(.model-num){display:none}.input-wrap{padding-left:9px;padding-right:9px}.composer-queue{margin-left:12px;margin-right:12px}.pill{padding-left:8px;padding-right:8px}}
 .proj-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;background:#181818;border:1px solid #1e1e1e;color:#555;font-size:11.5px;cursor:pointer}
 
 /* Menus */
@@ -315,7 +346,7 @@ button{font-family:inherit}
 .drop-check{color:#e35d2b;font-size:12px}
 
 /* Slash menu */
-.slash-pop{position:absolute;bottom:62px;left:14px;width:calc(100% - 28px);max-height:360px;overflow-y:auto;background:#1c1c1e;border:1px solid #2a2a2d;border-radius:12px;z-index:220;box-shadow:0 18px 55px rgba(0,0,0,.8);padding:6px}
+.slash-pop{position:absolute;bottom:70px;left:14px;width:calc(100% - 28px);max-height:360px;overflow-y:auto;background:#1c1c1e;border:1px solid #2a2a2d;border-radius:12px;z-index:220;box-shadow:0 18px 55px rgba(0,0,0,.8);padding:6px}
 .slash-item{display:flex;align-items:center;gap:11px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s}
 .slash-item.hi,.slash-item:hover{background:#2c2c2f}
 .slash-ic{color:#9a9a9a;display:flex;flex-shrink:0}
@@ -420,7 +451,7 @@ button{font-family:inherit}
 .compact-msgs{overflow:visible;display:block;padding-top:6px;flex:none}
 .terminal-panel{height:100%;min-height:0;display:grid;grid-template-rows:auto 1fr auto;background:#070707}
 .terminal-toolbar{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid #191919;background:#0f0f0f;flex-shrink:0}
-.terminal-shell{height:28px;background:#161618;border:1px solid #242427;border-radius:7px;color:#ccc;font-family:'Geist',sans-serif;font-size:12px;padding:0 8px;outline:none}
+.terminal-shell{height:28px;background:#161618;border:1px solid #242427;border-radius:7px;color:#ccc;font-family:var(--body-font);font-size:12px;padding:0 8px;outline:none}
 .terminal-connect,.terminal-run{height:28px;border:1px solid #242427;background:#18181a;color:#cfcfcf;border-radius:7px;padding:0 10px;font-size:12px;cursor:pointer}
 .terminal-connect:hover,.terminal-run:hover{background:#222225;color:#fff}
 .terminal-output{min-height:0;overflow:auto;padding:12px 13px;font-family:'Geist Mono',monospace;font-size:12px;color:#bdbdbd;line-height:1.65;white-space:pre-wrap;background:#070707}
@@ -467,7 +498,7 @@ button{font-family:inherit}
 .files-empty-s{font-size:12px;color:#555}
 .files-tree{width:250px;flex-shrink:0;overflow-y:auto;padding:8px}
 .files-filter{display:flex;align-items:center;gap:7px;background:#161618;border:1px solid #232326;border-radius:8px;padding:6px 10px;margin-bottom:8px;color:#666}
-.files-filter input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12px;font-family:'Geist',sans-serif}
+.files-filter input{flex:1;background:transparent;border:none;outline:none;color:#ccc;font-size:12px;font-family:var(--body-font)}
 .files-filter input::placeholder{color:#444}
 .ftree-row{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;cursor:pointer;color:#aaa;font-size:12.5px;transition:background .12s}
 .ftree-row:hover{background:#161618;color:#ddd}
@@ -487,7 +518,7 @@ button{font-family:inherit}
 .palette-overlay{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:500;display:flex;align-items:flex-start;justify-content:center;padding-top:11vh;backdrop-filter:blur(3px)}
 .palette-box{width:min(560px,90%);background:#161618;border:1px solid #2a2a2e;border-radius:13px;overflow:hidden;box-shadow:0 24px 70px rgba(0,0,0,.8);max-height:62vh;display:flex;flex-direction:column}
 .palette-input-row{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid #232326}
-.palette-in{flex:1;background:transparent;border:none;outline:none;color:#ddd;font-size:14.5px;font-family:'Geist',sans-serif}
+.palette-in{flex:1;background:transparent;border:none;outline:none;color:#ddd;font-size:14.5px;font-family:var(--body-font)}
 .palette-in::placeholder{color:#3c3c3c}
 .palette-list{overflow-y:auto;padding:5px}
 .palette-sec{font-size:10px;color:#4a4a4a;padding:8px 12px 4px;letter-spacing:.07em;text-transform:uppercase}
@@ -501,7 +532,7 @@ button{font-family:inherit}
 .gh-btn:hover{border-color:#333;color:#ccc}
 .mode-switch{display:flex;align-items:center;gap:4px;background:#111;border:1px solid #1d1d1d;border-radius:999px;padding:3px}
 .mode-switch.compact{margin-right:4px}
-.mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
+.mode-chip{border:none;background:transparent;color:#555;border-radius:999px;padding:4px 9px;font-family:var(--body-font);font-size:11.5px;cursor:pointer;transition:background .12s,color .12s}
 .mode-chip:hover{color:#aaa;background:#181818}
 .mode-chip.active{color:#111;background:#d8d8d8}
 .web-shell{height:100%;width:100%;display:flex;flex-direction:column;background:#0b0b0c;overflow:hidden}
@@ -515,14 +546,14 @@ button{font-family:inherit}
 .web-workspace{flex:1;min-height:0;position:relative}
 .coding-main-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;width:calc(100% - 28px);max-width:850px;margin:0 auto 9px;padding:9px 10px;background:#101011;border:1px solid #212124;border-radius:9px;color:#77777d;font-size:11.5px;box-shadow:0 8px 28px rgba(0,0,0,.12)}
 .coding-targets,.coding-permissions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
-.coding-target-btn,.coding-access-btn{height:28px;border:1px solid #262629;background:#151517;color:#828288;border-radius:7px;padding:0 10px;font-family:'Geist',sans-serif;font-size:11.5px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,border-color .12s,color .12s}
+.coding-target-btn,.coding-access-btn{height:28px;border:1px solid #262629;background:#151517;color:#828288;border-radius:7px;padding:0 10px;font-family:var(--body-font);font-size:11.5px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,border-color .12s,color .12s}
 .coding-target-btn:hover,.coding-access-btn:hover{border-color:#38383c;color:#d1d1d3}.coding-target-btn.active{background:#e5e5e7;border-color:#e5e5e7;color:#111}.coding-target-btn:disabled{opacity:.38;cursor:not-allowed}.coding-target-btn .provider-dot{width:6px;height:6px;border-radius:50%;background:#555}.coding-target-btn.ready .provider-dot{background:#4e9a65;box-shadow:0 0 7px rgba(78,154,101,.45)}.coding-target-btn.warn .provider-dot{background:#c98b3d}
 .coding-access-btn.active{color:#e7a27f;border-color:rgba(227,93,43,.45);background:rgba(227,93,43,.09)}
 .coding-root{display:flex;align-items:center;gap:7px;min-width:260px;flex:1;justify-content:flex-end}.coding-root label{color:#55555b;text-transform:uppercase;font-size:9.5px;letter-spacing:.08em}
 .coding-root-input{height:29px;min-width:230px;max-width:390px;flex:1;background:#09090a;border:1px solid #252528;border-radius:7px;color:#d0d0d2;padding:0 9px;font-family:'Geist Mono',monospace;font-size:11px;outline:none}.coding-root-input:focus{border-color:#48484e;box-shadow:0 0 0 3px rgba(255,255,255,.025)}
 .coding-health{display:flex;align-items:center;gap:7px;max-width:850px;width:calc(100% - 28px);margin:-3px auto 9px;color:#5b5b61;font-size:10.5px;min-height:15px}.coding-health strong{color:#929298;font-weight:500}.coding-health.error{color:#c66f64}.coding-health .trace{font-family:'Geist Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.coding-health-refresh{border:0;background:none;color:#67676c;font-size:10.5px;cursor:pointer;margin-left:auto}.coding-health-refresh:hover{color:#ccc}
 .run-events{margin:10px 0 2px;border:1px solid #1f1f22;border-radius:8px;overflow:hidden;background:#0c0c0d}.run-event{display:grid;grid-template-columns:18px minmax(90px,145px) 1fr auto;align-items:start;gap:8px;padding:7px 9px;border-bottom:1px solid #19191b;color:#6f6f75;font-size:11px}.run-event:last-child{border-bottom:0}.run-event-icon{color:#888}.run-event-label{color:#a0a0a5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-event-detail{font-family:'Geist Mono',monospace;color:#55555b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.run-event-state{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#555}.run-event.error .run-event-state{color:#c66f64}.run-event.complete .run-event-state{color:#629b71}
-.run-event-rewind{border:1px solid #29292d;background:#151517;color:#85858b;border-radius:5px;padding:2px 6px;font:500 9.5px 'Geist',sans-serif;cursor:pointer}.run-event-rewind:hover{border-color:#3b3b40;color:#c8c8cc}
+.run-event-rewind{border:1px solid #29292d;background:#151517;color:#85858b;border-radius:5px;padding:2px 6px;font:700 9.5px var(--body-font);cursor:pointer}.run-event-rewind:hover{border-color:#3b3b40;color:#c8c8cc}
 .run-meta{display:flex;align-items:center;gap:8px;margin-top:9px;color:#55555b;font:10.5px 'Geist Mono',monospace}.run-meta .live{color:#6fa77d}.run-meta .stopped{color:#c98b3d}
 .runtime-empty{max-width:620px;margin:0 auto;text-align:center}.runtime-empty-kicker{font:10px 'Geist Mono',monospace;letter-spacing:.13em;text-transform:uppercase;color:#e35d2b;margin-bottom:13px}.runtime-empty-title{font-size:28px;letter-spacing:-.035em;color:#e1e1e3;margin-bottom:9px}.runtime-empty-copy{font-size:13px;line-height:1.6;color:#66666c;max-width:500px;margin:0 auto 18px}.runtime-empty-note{display:inline-flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid #202023;border-radius:7px;background:#101011;color:#6f6f75;font-size:11px}.runtime-empty-note i{width:6px;height:6px;border-radius:50%;background:#4e9a65}
 @media(max-width:820px){.web-context{display:none}.coding-main-strip{align-items:stretch;flex-direction:column}.coding-root{min-width:0;justify-content:stretch}.coding-root-input{min-width:0;max-width:none}.run-event{grid-template-columns:18px 1fr auto}.run-event-detail{grid-column:2/4}.sidebar{width:248px}.main{min-width:0}}
@@ -532,10 +563,90 @@ button{font-family:inherit}
 .fade-up{animation:fadeUp .16s ease}
 @keyframes popIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
 .pop-in{animation:popIn .14s ease}
+/* Web workspace redesign: reference-matched sidebar + procedural SideRays stage */
+.web-shell,.web-workspace,.workspace{background:#030705}
+.workspace{--sidebar-width:266px}
+.sidebar{width:var(--sidebar-width);background:var(--workspace-panel);border-right:1px solid #17301f;box-shadow:none;color:var(--workspace-green);font-size:14px}
+.sidebar,.sidebar button{color:var(--workspace-green)}
+.sb-top{padding:12px 8px 8px;gap:3px}
+.sb-runtime-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 7px 10px;position:relative}
+.sb-runtime-actions{display:flex;align-items:center;gap:2px;margin-left:auto}
+.sb-runtime-trigger{display:flex;align-items:center;gap:6px;min-height:34px;padding:4px 8px;border:0;border-radius:11px;background:#102117;color:var(--workspace-green);font-size:18px;font-weight:700;cursor:pointer}
+.sb-runtime-trigger:hover,.sb-runtime-trigger[aria-expanded="true"]{background:#173522}
+.sb-runtime-search{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border:0;border-radius:8px;background:transparent;color:var(--workspace-green);cursor:pointer}
+.sb-runtime-search:hover{background:#102117}
+.runtime-switcher{position:absolute;left:7px;right:7px;top:42px;z-index:440;padding:5px;background:#14281c;border:1px solid #2b4d37;border-radius:13px;box-shadow:0 18px 50px rgba(0,0,0,.62)}
+.runtime-option{display:flex;align-items:center;justify-content:space-between;width:100%;padding:9px 9px;border:0;border-radius:9px;background:transparent;text-align:left;cursor:pointer}
+.runtime-option:hover{background:#1c3927}
+.runtime-option:disabled{cursor:not-allowed;opacity:.48}
+.runtime-option-copy{display:flex;align-items:center;min-width:0}
+.runtime-option-name{font-size:14px;color:#d1f8dc;font-weight:700}
+.runtime-option-desc{font:12px/1.35 'Geist Mono',monospace;color:#8dd8a1}
+.runtime-option-state{font:10px 'Geist Mono',monospace;color:#8dd8a1}
+.sb-nav-btn{gap:10px;padding:7px 9px;border-radius:8px;color:var(--workspace-green);font-size:14px}
+.sb-nav-btn:hover{background:#0e2015;color:#d4ffdf}
+.sb-nav-btn[aria-disabled="true"]{opacity:.54;cursor:default}
+.sb-nav-kbd{display:none}
+.sb-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:visible;padding-bottom:12px}
+.sb-section{padding:10px 7px 2px}
+.sb-section-lbl{padding:2px 8px 7px;color:var(--workspace-green-muted);font-size:13px;font-weight:400;letter-spacing:.02em;text-transform:none}
+.sb-section-hd{padding:2px 8px 6px}
+.sb-hd-actions{opacity:1}
+.sb-hd-btn{color:#568966}
+.sb-hd-btn:hover{color:#c8fbd5;background:#102117}
+.proj-row{padding:6px 8px;color:var(--workspace-green);font-size:14px;border-radius:8px}
+.project-item{position:relative}
+.project-row-menu{position:absolute;right:6px;top:32px;z-index:420;width:184px;padding:5px;background:#173022;border:1px solid #2e5139;border-radius:11px;box-shadow:0 16px 44px rgba(0,0,0,.58)}
+.project-row-menu button{display:flex;align-items:center;gap:8px;width:100%;padding:7px 8px;border:0;border-radius:7px;background:transparent;color:#bdf4cb;text-align:left;cursor:pointer}
+.project-row-menu button:hover{background:#22432f}
+.project-row-menu button.danger{color:#ef9d9d}
+.proj-row:hover,.proj-row.open{background:#0d1c13;color:#d4ffdf}
+.project-chat-list{padding-left:0}
+.chat-row{padding:6px 8px 6px 31px;color:#9ce7af;font-size:13px;border-radius:8px}
+.chat-row:hover{background:#11251a;color:#d5ffdf}
+.chat-row.active{background:#1b3525;color:#d8ffe2}
+.chat-row-age{color:#5f9e71}
+.cr-act,.pr-act{color:#69a87b}
+.cr-act:hover,.pr-act:hover{color:#d7ffe2;background:#24422f}
+.proj-nochats{padding-left:31px;color:#477455}
+.sb-project-menu{position:absolute;top:26px;right:0;z-index:430;width:222px;padding:7px;background:#173022;border:1px solid #2e5139;border-radius:13px;box-shadow:0 18px 50px rgba(0,0,0,.58)}
+.sb-project-menu button{display:flex;align-items:center;gap:9px;width:100%;padding:8px;border:0;border-radius:8px;background:transparent;color:#bdf4cb;text-align:left;cursor:pointer}
+.sb-project-menu button:hover{background:#22432f}
+.sb-project-wrap{position:relative}
+.sb-empty{padding:3px 8px;color:#477455;font-size:12px}
+.sb-bottom{border-top:1px solid #17301f;padding:9px 8px}
+.sb-profile{display:flex;align-items:center;gap:9px;width:100%;padding:7px;border:0;border-radius:8px;background:transparent;color:#c7f8d3;cursor:pointer;text-align:left}
+.sb-profile:hover{background:#102117}
+.sb-avatar{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#24475f;color:#d9f7ff;font:9px 'Geist Mono',monospace;flex-shrink:0}
+.sb-profile-name{flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings-pop{bottom:54px;left:8px;background:#14281c;border-color:#2b4d37}
+.sp-hdr,.sp-div{border-color:#294733}
+.sp-item,.sp-item-row,.sp-email{color:#b8eec6}
+.web-workspace>.workspace{height:100%}
+.main{position:relative;background:#050807}
+.main.desk-inset{border-radius:0;border-top:0;border-left-color:#17301f}
+.main.desk-inset .chat-pane{border-radius:0}
+.chat-pane{background:rgba(5,8,7,.82);isolation:isolate}
+.side-rays-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;opacity:1}
+.side-rays-shade{position:absolute;inset:0;z-index:-1;background:rgba(3,7,5,.25);pointer-events:none}
+.landing{position:relative;z-index:2}
+.runtime-empty{max-width:640px}
+.runtime-empty-kicker{font-family:'Geist Mono',monospace;color:#d7b83b}
+.runtime-empty-title{font-size:36px;line-height:1.1;color:#f1f4ed;letter-spacing:-.025em}
+.runtime-empty-copy{font-size:15px;color:#a8b6ad}
+.runtime-empty-note{color:#b8c8bd;background:rgba(7,14,10,.72);border-color:#26392c}
+.input-ta,.modal-input,.pp-search input,.palette-in,.model-search{font-family:var(--body-font)}
+.input-box{background:rgba(10,16,12,.9);border-color:#2a3e30;box-shadow:0 18px 56px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.03)}
+.input-box:focus-within{border-color:#5d8067}
+.msgs,.topbar,.input-wrap,.prog-float{position:relative;z-index:2}
+.msgs{padding-top:16px}
+.topbar{background:rgba(3,7,5,.66);border-bottom:1px solid rgba(39,66,47,.45)}
+.msg-text,.user-msg{font-family:var(--body-font)}
+@media(max-width:720px){.workspace{--sidebar-width:min(88vw,300px)}.sidebar{width:var(--sidebar-width)}.main[style]{margin-left:0!important}.runtime-empty-title{font-size:29px}}
 </style>
 </head>
 <body>
-<div id="root" style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-family:Geist,sans-serif">Loading Vellum…</div>
+<div id="root" style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-family:Karla,sans-serif">Loading Vellum…</div>
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, Fragment } = React;
@@ -646,6 +757,50 @@ const IcCheckCircle = ({size=16}) => <I size={size} stroke="#4ade80" d="M22 11.0
 const IcCircle      = ({size=16}) => <I size={size}><circle cx="12" cy="12" r="9" stroke="#3a3a3a" strokeWidth="1.5" fill="none"/></I>;
 const IcCircleRun   = ({size=16}) => <I size={size}><circle cx="12" cy="12" r="9" stroke="#e35d2b" strokeWidth="1.5" fill="none" strokeDasharray="4 3"/></I>;
 const IcGitHub   = ({size=15}) => <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.385-1.335-1.755-1.335-1.755-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 21.795 24 17.295 24 12c0-6.63-5.37-12-12-12"/></svg>;
+
+function SideRays({speed=2.7,rayColor1="#EAB308",rayColor2="#96c8ff",intensity=1.9,spread=2.1,origin="top-right",tilt=6,saturation=1.5,blend=.75,falloff=1.6,opacity=1}){
+  const canvasRef=useRef(null);
+  useEffect(()=>{
+    const canvas=canvasRef.current;
+    if(!canvas) return;
+    const ctx=canvas.getContext("2d",{alpha:true});
+    let frame=0,raf=0,width=0,height=0,dpr=1;
+    const reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const hexToRgb=(hex)=>{ const value=hex.replace("#",""); const full=value.length===3?value.split("").map(c=>c+c).join(""):value; const number=parseInt(full,16); return [(number>>16)&255,(number>>8)&255,number&255]; };
+    const boost=(rgb)=>rgb.map(v=>Math.min(255,Math.round(128+(v-128)*saturation)));
+    const c1=boost(hexToRgb(rayColor1)),c2=boost(hexToRgb(rayColor2));
+    function resize(){
+      const rect=canvas.getBoundingClientRect();
+      dpr=Math.min(window.devicePixelRatio||1,2); width=Math.max(1,rect.width); height=Math.max(1,rect.height);
+      canvas.width=Math.round(width*dpr); canvas.height=Math.round(height*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+    }
+    function paint(now=0){
+      ctx.clearRect(0,0,width,height);
+      const ox=origin.includes("right")?width:0, oy=origin.includes("bottom")?height:0;
+      const diagonal=Math.hypot(width,height)*1.18;
+      ctx.save(); ctx.translate(ox,oy); ctx.rotate((tilt*Math.PI)/180); ctx.globalCompositeOperation="screen";
+      const count=13;
+      for(let i=0;i<count;i++){
+        const phase=(reduced?0:now*.00019*speed)+i*.83;
+        const angle=(.62+(i/(count-1))*.92*spread)+Math.sin(phase)*.045;
+        const beam=Math.max(22,(width*.018+i%3*7)*spread);
+        const rgb=i%2?c1:c2;
+        const alpha=Math.min(.34,(.035+(i%4)*.018)*intensity*blend*opacity);
+        ctx.save(); ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0,-beam*.1); ctx.lineTo(diagonal,beam*1.35); ctx.lineTo(diagonal,-beam*1.35); ctx.closePath();
+        const grad=ctx.createLinearGradient(0,0,diagonal,0);
+        grad.addColorStop(0,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`);
+        grad.addColorStop(Math.min(.82,.26/falloff+.18),`rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha*.62})`);
+        grad.addColorStop(1,`rgba(${rgb[0]},${rgb[1]},${rgb[2]},0)`);
+        ctx.fillStyle=grad; ctx.filter=`blur(${9+(i%3)*5}px)`; ctx.fill(); ctx.restore();
+      }
+      ctx.restore();
+      if(!reduced){frame++;raf=requestAnimationFrame(paint);}
+    }
+    const observer=new ResizeObserver(()=>{resize();paint(performance.now());}); observer.observe(canvas); resize(); paint(performance.now());
+    return ()=>{observer.disconnect();cancelAnimationFrame(raf);};
+  },[speed,rayColor1,rayColor2,intensity,spread,origin,tilt,saturation,blend,falloff,opacity]);
+  return <canvas ref={canvasRef} className="side-rays-canvas" aria-hidden="true"/>;
+}
 
 /* ─── Pixel-art subagent sprites ─── */
 const SPRITES = {
@@ -861,28 +1016,58 @@ const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
 
 function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-up changes", model="5.5", api, wrapStyle, panelOpen=false }){
   const [text, setText] = useState("");
-  const [openMenu, setOpenMenu] = useState(null);   // plus | model | access | null
+  const [openMenu, setOpenMenu] = useState(null);   // plus | model | runtime | access | null
   const [pluginsSub, setPluginsSub] = useState(false);
   const [slashIdx, setSlashIdx] = useState(0);
   const [atts, setAtts] = useState([]);
+  const [queued, setQueued] = useState([]);
+  const [voiceActive, setVoiceActive] = useState(false);
   const [modelQ, setModelQ] = useState("");
   const ref = useRef(null);
   const fileRef = useRef(null);
+  const speechRef = useRef(null);
+  const voiceBaseRef = useRef("");
   const a = api || {};
-  function onFiles(e){
+  const SpeechRecognition = typeof window!=="undefined" && (window.SpeechRecognition||window.webkitSpeechRecognition);
+  async function onFiles(e){
     const fl = Array.from(e.target.files||[]);
-    const items = fl.map(f=>({ name:f.name, image:f.type.startsWith("image/"), url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }));
+    const items = await Promise.all(fl.map(async f=>{
+      const image=f.type.startsWith("image/"), textLike=f.type.startsWith("text/")||/\.(c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rb|rs|sh|sql|toml|ts|tsx|txt|xml|yaml|yml)$/i.test(f.name);
+      let content=null;
+      if(textLike&&f.size<=131072){ try{ content=await f.text(); }catch(error){} }
+      return {name:f.name,image,type:f.type||"application/octet-stream",size:f.size,content,url:image?URL.createObjectURL(f):null};
+    }));
     setAtts(prev=> [...prev, ...items]); setOpenMenu(null); e.target.value="";
   }
+  function releaseAttachments(items){ (items||[]).forEach(item=>{ if(item.url){ try{URL.revokeObjectURL(item.url);}catch(error){} } }); }
+  function removeAttachment(index){ setAtts(prev=>{ const item=prev[index]; releaseAttachments(item?[item]:[]); return prev.filter((_,i)=>i!==index); }); }
   const slashOpen = !a.runtimeLabel && text.trimStart().startsWith("/");
   const list = (slashOpen && a.slashList) ? a.slashList(text) : [];
   useEffect(()=>{
     const h = (e)=>{ if(ref.current && !ref.current.contains(e.target)){ setOpenMenu(null); setPluginsSub(false); } };
     window.addEventListener("mousedown", h); return ()=> window.removeEventListener("mousedown", h);
   },[]);
+  useEffect(()=>()=>{ if(speechRef.current){ try{speechRef.current.stop();}catch(error){} } },[]);
+  function clearDraft(){ setText(""); setAtts([]); }
   function doSend(){
     if(slashOpen){ if(list.length) a.runSlash(list[Math.min(slashIdx,list.length-1)]); setText(""); setSlashIdx(0); return; }
-    const t = text.trim(); if(!t && atts.length===0) return; onSend && onSend(t, atts); setText(""); setAtts([]);
+    const t = text.trim(); if(!t && atts.length===0) return;
+    if(running){ setQueued(prev=>[...prev,{id:"queued-"+Date.now()+"-"+prev.length,text:t,atts}]); clearDraft(); return; }
+    onSend && onSend(t, atts); clearDraft();
+  }
+  function useQueued(item, sendNow){
+    setQueued(prev=>prev.filter(entry=>entry.id!==item.id));
+    if(sendNow){ onSend&&onSend(item.text,item.atts); return; }
+    setText(current=>[current,item.text].filter(Boolean).join("\n")); setAtts(current=>[...current,...(item.atts||[])]);
+  }
+  function deleteQueued(item){ releaseAttachments(item.atts); setQueued(prev=>prev.filter(entry=>entry.id!==item.id)); }
+  function toggleDictation(){
+    if(!SpeechRecognition) return;
+    if(voiceActive){ try{speechRef.current&&speechRef.current.stop();}catch(error){} setVoiceActive(false); return; }
+    const recognition=new SpeechRecognition(); speechRef.current=recognition; voiceBaseRef.current=text.trimEnd(); recognition.continuous=false; recognition.interimResults=true;
+    recognition.onstart=()=>setVoiceActive(true);
+    recognition.onresult=(event)=>{ let transcript=""; for(let i=event.resultIndex;i<event.results.length;i++) transcript+=event.results[i][0].transcript; setText([voiceBaseRef.current,transcript].filter(Boolean).join(voiceBaseRef.current?" ":"")); };
+    recognition.onerror=()=>setVoiceActive(false); recognition.onend=()=>setVoiceActive(false); recognition.start();
   }
   function keyDown(e){
     if(slashOpen && list.length){
@@ -891,8 +1076,9 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
     }
     if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); doSend(); }
   }
+  const firstQueued=queued[0];
   return (
-    <div className="input-wrap" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
+    <div className="input-wrap studio-composer" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
       {openMenu==="model" && (
         <div className="model-drop fade-up" style={{right: panelOpen?344:14}}>
           <div className="drop-panel"><div className="drop-lbl">Reasoning</div>{REASONING.map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}</div>
@@ -908,21 +1094,28 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
           </div>
         </div>
       )}
-      {openMenu==="plus" && !a.runtimeLabel && (
-        <div className="menu-pop pop-in" style={{bottom:62, left:14}}>
+      {openMenu==="runtime" && a.runtimeLabel && (
+        <div className="menu-pop pop-in" style={{bottom:70,right:panelOpen?344:14,minWidth:224}}>
+          <div className="menu-sec">Agent runtime</div>
+          {(a.providerOptions||[]).map(provider=><div key={provider.id} className="menu-item" aria-disabled={running||!provider.available} style={{opacity:provider.available?1:.42,cursor:running||!provider.available?"not-allowed":"pointer"}} onClick={()=>{if(running||!provider.available)return;a.chooseProvider&&a.chooseProvider(provider.id);setOpenMenu(null);}}><div className="menu-item-l"><span className="provider-dot" style={{background:provider.available?"#4e9a65":"#555"}}/><span>{provider.label}</span></div>{provider.id===a.providerId&&<span className="drop-check">selected</span>}</div>)}
+          <div className="menu-sec">Sessions and credentials stay local</div>
+        </div>
+      )}
+      {openMenu==="plus" && (
+        <div className={"menu-pop pop-in"+(a.runtimeLabel?" runtime-compose-menu":"")} style={{bottom:70, left:14}}>
           <div className="menu-item" onClick={()=>fileRef.current && fileRef.current.click()}><div className="menu-item-l"><IcImage size={15}/><span>Add photos & files</span></div><span className="kbd">Ctrl U</span></div>
-          <div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>
+          {!a.runtimeLabel&&<div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>}
           <div className="menu-item" onClick={()=>a.setIncludeIde(v=>!v)}><div className="menu-item-l"><IcColumns size={15}/><span>Include IDE context</span></div><Toggle on={a.includeIde}/></div>
           <div className="menu-item" onClick={()=>a.setPlanMode(v=>!v)}><div className="menu-item-l"><IcLayout size={15}/><span>Plan mode</span></div><Toggle on={a.planMode}/></div>
-          <div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>
-          <div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
+          {!a.runtimeLabel&&<div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>}
+          {!a.runtimeLabel&&<div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
             <div className="menu-item-l"><IcPlugin size={15}/><span>Plugins</span></div><IcChevR size={13}/>
             {pluginsSub && (<div className="submenu pop-in"><div className="menu-sec">6 installed plugins</div>{PLUGINS.map(p=>(<div key={p.id} className="menu-item" onClick={(e)=>{e.stopPropagation(); a.setPluginsOn(o=>({...o,[p.id]:!o[p.id]}));}}><div className="menu-item-l"><span className="plug-ic" style={{background:p.bg,color:p.fg}}>{p.ic}</span><span>{p.name}</span></div><Toggle on={a.pluginsOn && a.pluginsOn[p.id]}/></div>))}</div>)}
-          </div>
+          </div>}
         </div>
       )}
       {openMenu==="access" && (
-        <div className="menu-pop pop-in" style={{bottom:62, left:52}}>
+        <div className="menu-pop pop-in" style={{bottom:70, left:52,minWidth:238}}>
           {(a.accessModes||ACCESS_MODES).map(am=>(<div key={am.id} className="menu-item" onClick={()=>{a.setAccessMode(am.id);setOpenMenu(null);}}><div className="menu-item-l" style={{flexDirection:"column",alignItems:"flex-start",gap:1}}><span style={{color:am.id===a.accessMode?"#e35d2b":"#ccc"}}>{am.label}</span><span style={{fontSize:10.5,color:"#555"}}>{am.sub||am.title}</span></div>{am.id===a.accessMode && <span className="drop-check">✓</span>}</div>))}
         </div>
       )}
@@ -934,22 +1127,24 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
         </div>
       )}
       <input type="file" multiple ref={fileRef} style={{display:"none"}} onChange={onFiles}/>
+      {firstQueued&&<div className="composer-queue" aria-live="polite"><div className="queue-item"><span className="queue-kicker"><i/>{queued.length>1?queued.length+" queued":"Queued"}</span><span className="queue-text" title={firstQueued.text}>{firstQueued.text||((firstQueued.atts||[]).map(item=>item.name).join(", "))}</span><button type="button" className="queue-action" onClick={()=>useQueued(firstQueued,!running)}>{running?"Steer":"Run"}</button><button type="button" className="queue-icon" title="Edit queued message" aria-label="Edit queued message" onClick={()=>useQueued(firstQueued,false)}><IcEdit size={12}/></button><button type="button" className="queue-icon" title="Remove queued message" aria-label="Remove queued message" onClick={()=>deleteQueued(firstQueued)}><IcX size={12}/></button></div></div>}
       <div className="input-box">
-        {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><span className="att-x" onClick={()=>setAtts(prev=>prev.filter((_,j)=>j!==i))}><IcX size={11}/></span></div>))}</div>}
-        <textarea className="input-ta" placeholder={placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
+        {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><button type="button" className="att-x" title={"Remove "+at.name} aria-label={"Remove "+at.name} onClick={()=>removeAttachment(i)}><IcX size={11}/></button></div>))}</div>}
+        <textarea className="input-ta" aria-label="Agent prompt" placeholder={running?"Queue a follow-up while the agent works":placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
         <div className="input-footer">
           <div className="input-lft">
-            {!a.runtimeLabel&&<button className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add"><IcPlus size={15}/></button>}
-            <div className="pill accent" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}}><IcShield size={12}/><span>{a.accessLabel||"Full access"}</span><IcChevD size={12}/></div>
+            <button type="button" className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add context or attachments" aria-label="Add context or attachments" aria-expanded={openMenu==="plus"}><IcPlus size={15}/></button>
+            <button type="button" className="pill accent" disabled={running} onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}} aria-expanded={openMenu==="access"}><IcAuto size={12}/><span className="agent-pill-label">Coding agent</span><span className="agent-access">{a.accessLabel||"Full access"}</span><IcChevD size={12}/></button>
           </div>
           <div className="input-rgt">
-            <div className="model-pill" onClick={(e)=>{if(a.runtimeLabel)return;e.stopPropagation();setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"local runtime":(a.selReasoning||"High")}</span>{!a.runtimeLabel&&<IcChevD size={12}/>}</div>
-            {!a.runtimeLabel&&<button className="icon-btn"><IcMic size={15}/></button>}
-            {running ? <button className="stop-btn" onClick={onStop} title="Stop"><IcStop size={13}/></button>
-                     : <button className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send"><IcSend size={13}/></button>}
+            <button type="button" className="model-pill" aria-disabled={!a.runtimeLabel&&!a.models?.length} aria-expanded={openMenu==="runtime"||openMenu==="model"} onClick={(e)=>{e.stopPropagation();if(a.runtimeLabel){setOpenMenu(m=>m==="runtime"?null:"runtime");return;}if(a.models&&a.models.length)setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"SDK":(a.selReasoning||"High")}</span>{(a.runtimeLabel||(a.models&&a.models.length>0))&&<IcChevD size={12}/>}</button>
+            {SpeechRecognition&&<button type="button" className={"icon-btn"+(voiceActive?" voice-live":"")} onClick={toggleDictation} title={voiceActive?"Stop dictation":"Dictate prompt"} aria-label={voiceActive?"Stop dictation":"Dictate prompt"}><IcMic size={15}/></button>}
+            {running ? <button type="button" className="stop-btn" onClick={onStop} title="Stop current run" aria-label="Stop current run"><IcStop size={12}/></button>
+                     : <button type="button" className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send prompt" aria-label="Send prompt"><IcSend size={13}/></button>}
           </div>
         </div>
       </div>
+      {running&&text.trim()&&<span className="composer-hint">Enter queues this follow-up</span>}
     </div>
   );
 }
@@ -1219,10 +1414,10 @@ function TerminalPane({ backendBase }){
 }
 
 function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
-  const [sbPinned, setSbPinned]       = useState(false);   // toggle keeps it fixed-open
+  const [sbPinned, setSbPinned]       = useState(shell==="web");   // web starts as a persistent workspace sidebar
   const [sbHover, setSbHover]         = useState(false);   // edge-hover reveals it
   const sbOpen = sbPinned || sbHover;
-  const [projects, setProjects]       = useState([]);
+  const [projects, setProjects]       = useState([{id:"proj-vellum",name:"Vellum",files:[],chats:[],expanded:true}]);
   const [activeChat, setActiveChat]   = useState("new");
   const [showPalette, setShowPalette] = useState(false);
   const [paletteQ, setPaletteQ]       = useState("");
@@ -1246,12 +1441,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [sbMenu, setSbMenu]           = useState(null);   // projects | chats | null
   const [sbSub, setSbSub]             = useState(null);   // organize | sort | null
   const [projAddMenu, setProjAddMenu] = useState(false);
+  const [runtimeMenu, setRuntimeMenu] = useState(false);
   const [projPicker, setProjPicker]   = useState(false);
   const [projPickerSub, setProjPickerSub] = useState(false);
   const [projSearch, setProjSearch]   = useState("");
   const [nameModal, setNameModal]     = useState(null);   // {name, mode, id}
   const [projRowMenu, setProjRowMenu] = useState(null);   // project id
-  const [activeProject, setActiveProject] = useState(null);
+  const [activeProject, setActiveProject] = useState("proj-vellum");
   const [showModels, setShowModels]   = useState(false);
   const [hw, setHw]                   = useState(null);
   const [scanning, setScanning]       = useState(false);
@@ -1274,7 +1470,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [codingSessions, setCodingSessions] = useState([]);
   const [codingSession, setCodingSession] = useState(null);
   const [codingProvider, setCodingProvider] = useState(()=>localPref("vellum.coding.provider","codex"));
-  const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",""));
+  const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",".")||".");
   const [codingAccessMode, setCodingAccessMode] = useState(()=>localPref("vellum.coding.access","read_only"));
   const [codingStatus, setCodingStatus] = useState("checking");
   const [codingError, setCodingError] = useState("");
@@ -1400,7 +1596,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase()==="b"){ e.preventDefault(); setSbPinned(v=>!v); }
       else if (mod && e.key.toLowerCase()==="k"){ e.preventDefault(); setShowPalette(v=>!v); setPaletteQ(""); setPalIdx(0); }
-      else if (e.key==="Escape"){ setShowPalette(false); setCtxMenu(null); setShowPlus(false); setShowSettings(false); setSbHover(false); setSbMenu(null); setProjAddMenu(false); setProjPicker(false); }
+      else if (e.key==="Escape"){ setShowPalette(false); setCtxMenu(null); setShowPlus(false); setShowSettings(false); setSbHover(false); setSbMenu(null); setProjAddMenu(false); setProjPicker(false); setRuntimeMenu(false); }
     };
     window.addEventListener("keydown", h);
     return ()=> window.removeEventListener("keydown", h);
@@ -1441,6 +1637,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       if(!e.target.closest(".ctx-menu")) setCtxMenu(null);
       if(!e.target.closest(".plus-drop") && !e.target.closest(".tab-add-btn")) setShowPlus(false);
       if(!e.target.closest(".sb-opt-menu") && !e.target.closest(".sb-hd-btn")){ setSbMenu(null); setSbSub(null); setProjAddMenu(false); }
+      if(!e.target.closest(".sb-runtime-row")) setRuntimeMenu(false);
       if(!e.target.closest(".proj-picker") && !e.target.closest(".proj-tag")){ setProjPicker(false); setProjPickerSub(false); }
       if(!e.target.closest(".sb-opt-menu") && !e.target.closest(".pr-act")) setProjRowMenu(null);
       if(!e.target.closest(".settings-pop") && !e.target.closest(".sb-settings-row")) setShowSettings(false);
@@ -1523,7 +1720,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
   async function ensureCodingSession(){
     const api=codingApiRef.current; if(!api) throw new Error("Coding API unavailable.");
-    const root=codingProjectRoot.trim(); if(!root) throw new Error("Choose a project folder before starting a coding run.");
+    const root=codingProjectRoot.trim()||".";
     const health=healthFor(codingProvider);
     if(!health||!health.available) throw new Error((health&&health.message)||("The "+codingProvider+" runtime is not installed."));
     if(!health.configured) throw new Error((health&&health.message)||("The "+codingProvider+" runtime needs authentication."));
@@ -1532,6 +1729,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const listed=await api.sessions(); const sessions=listed.sessions||[]; setCodingSessions(sessions);
     let session=sessions.find(item=>item.provider===codingProvider&&normalizedPath(sessionProjectRoot(item))===normalizedPath(root)&&item.access_mode===codingAccessMode&&item.status!=="running"&&item.status!=="closed");
     if(!session){ session=await api.createSession({provider:codingProvider,cwd:root,access_mode:codingAccessMode,title:chatTitleFor(activeChat)||"Vellum coding session"}); setCodingSessions(prev=>[session,...prev]); }
+    if(root==="."&&sessionProjectRoot(session)) setCodingProjectRoot(sessionProjectRoot(session));
     codingSessionRef.current=session; setCodingSession(session); return session;
   }
   async function openCodingSession(session){
@@ -1647,8 +1845,15 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
   function sendToChat(chatId,text,atts){
     const t=(text||"").trim(); if(running||(!t&&(!atts||!atts.length))) return;
-    const attachmentNote=(atts||[]).length?"\n\nAttached files: "+atts.map(item=>item.name).join(", "):"";
-    const prompt=(t||"Inspect the attached files.")+attachmentNote;
+    let attachmentBudget=131072;
+    const attachmentParts=(atts||[]).map(item=>{
+      if(!item.content) return "Attached file: "+item.name+" ("+(item.type||"binary")+")";
+      if(attachmentBudget<=0) return "Attached text file: "+item.name+" (content omitted because the attachment context limit was reached)";
+      const content=item.content.slice(0,attachmentBudget); attachmentBudget=Math.max(0,attachmentBudget-content.length);
+      return "Attached text file: "+item.name+"\n```\n"+content+"\n```";
+    });
+    const guidance=[planMode?"Planning mode: inspect the workspace and produce a concrete plan, but do not edit files or run destructive commands.":"",includeIde?"Use the active Vellum workspace and its current project state as the source of truth.":""].filter(Boolean).join("\n");
+    const prompt=[guidance,t||"Inspect the attached files.",...attachmentParts].filter(Boolean).join("\n\n");
     const uid=nextId(),aid=nextId(),userMsg={id:uid,type:"user",text:t,atts};
     setMsgsFor(chatId,m=>[...m,userMsg,{id:aid,type:"assistant",provider:codingProvider,text:"",streaming:true,thinking:true,runtimeEvents:[]}]);
     setRunning(true);streamTargetRef.current=chatId;runCodingTurn(chatId,aid,prompt);
@@ -1924,6 +2129,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const composerApi = {
     accessLabel:codingAccess.label, accessMode:codingAccessMode, setAccessMode:setCodingAccessMode, accessModes:providerAccessModes,
     selModel:codingProvider, setSelModel:setCodingProvider, selReasoning:"SDK", setSelReasoning:()=>{}, runtimeLabel:codingProvider==="claude"?"Claude Code":"Codex",
+    providerId:codingProvider, providerOptions:["codex","claude"].map(id=>({id,label:id==="claude"?"Claude Code":"Codex",available:!!(healthFor(id)||{}).available})), chooseProvider:chooseCodingProvider,
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
     models:[], modelLabel:()=>codingProvider, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
@@ -1963,32 +2169,6 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(codingStatus==="running") return (codingProvider==="claude"?"Claude Code":"Codex")+" is working in the selected project.";
     if(codingStatus==="stopping") return "Stopping the provider runtime…";
     const health=healthFor(codingProvider); return (health&&health.message)||"Runtime status unavailable.";
-  }
-  function CodingMainStrip(){
-    return (
-      <Fragment>
-        <div className="coding-main-strip">
-          <div className="coding-targets" aria-label="Coding runtime">
-            <button className={providerButtonClass("codex")} onClick={()=>chooseCodingProvider("codex")} disabled={running}><span className="provider-dot"/>Codex</button>
-            <button className={providerButtonClass("claude")} onClick={()=>chooseCodingProvider("claude")} disabled={running}><span className="provider-dot"/>Claude Code</button>
-            <button className="coding-target-btn" disabled title="Grok Build adapter is planned after the local workspace isolation layer"><span className="provider-dot"/>Grok <span style={{fontSize:9,opacity:.6}}>later</span></button>
-          </div>
-          <div className="coding-root"><label htmlFor="coding-root">Project</label><input id="coding-root" className="coding-root-input" value={codingProjectRoot} disabled={running} onChange={e=>setCodingProjectRoot(e.target.value)} placeholder="Paste the local project folder path" spellCheck="false"/></div>
-        </div>
-        <div className="coding-main-strip" style={{paddingTop:6,paddingBottom:6,marginTop:-4}}>
-          <div className="coding-permissions" aria-label="Workspace access">
-            {providerAccessModes.map(mode=><button key={mode.id} className={"coding-access-btn"+(codingAccessMode===mode.id?" active":"")} title={mode.title} disabled={running} onClick={()=>setCodingAccessMode(mode.id)}>{mode.label}</button>)}
-          </div>
-          <div style={{fontSize:10.5,color:"#56565c"}}>{codingSession&&codingSession.workspace_kind==="git_worktree"?"Isolated Git worktree · "+codingSession.workspace_branch:"Read-only source · local session state"}</div>
-        </div>
-        <div className={"coding-health"+(codingError?" error":"")}>
-          <span className="web-context-dot" style={(codingStatus==="offline"||codingStatus==="error")?{background:"#b85b51",boxShadow:"none"}:undefined}/>
-          <strong>{codingProvider==="claude"?"Claude Code":"Codex"}</strong>
-          <span className="trace">{codingHealthText()}</span>
-          <button className="coding-health-refresh" onClick={refreshCodingRuntime}>Refresh</button>
-        </div>
-      </Fragment>
-    );
   }
   function runtimeIcon(kind){ if(kind==="command") return <IcTerminal size={12}/>; if(kind==="file") return <IcFile size={12}/>; if(kind==="warning") return <IcShield size={12}/>; return <IcPlugin size={12}/>; }
   function RunEvents({items}){ return <div className="run-events">{items.map(item=><div key={item.id} className={"run-event "+item.state}><span className="run-event-icon">{runtimeIcon(item.type)}</span><span className="run-event-label">{item.label}</span><span className="run-event-detail" title={item.detail}>{item.detail||"Provider event"}</span>{item.checkpointId&&codingSession&&codingSession.workspace_kind==="git_worktree"?<button className="run-event-rewind" disabled={running} onClick={()=>rewindCodingCheckpoint(item.checkpointId)}>Rewind</button>:<span className="run-event-state">{item.state}</span>}</div>)}</div>; }
@@ -2115,29 +2295,73 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       {/* Sidebar */}
       <div className={"sidebar"+(sbOpen?" open":"")}>
         <div className="sb-top">
-          <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New coding session</span></button>
-          <button className="sb-nav-btn" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);setSbHover(false);}}><IcSearch size={15}/><span>Search</span><span className="kbd sb-nav-kbd">Ctrl K</span></button>
-          <button className="sb-nav-btn" onClick={()=>{addTab("files");setSbHover(false);}}><IcFolder size={15}/><span>Project files</span></button>
-          <button className="sb-nav-btn" onClick={()=>{addTab("terminal");setSbHover(false);}}><IcTerminal size={15}/><span>Terminal</span></button>
-        </div>
-        <div style={{flex:1, overflow:"visible"}}>
-          {pinned.filter(p=>!archived.includes(p.id)).length>0 && (
-            <div className="sb-section">
-              <div className="sb-section-lbl">Pinned</div>
-              {pinned.filter(p=>!archived.includes(p.id)).map(chatRow)}
+          <div className="sb-runtime-row">
+            <button className="sb-runtime-trigger" aria-haspopup="menu" aria-expanded={runtimeMenu} onClick={()=>setRuntimeMenu(v=>!v)}>
+              <span>{codingProvider==="claude"?"Claude Code":"Codex"}</span><IcChevD size={13}/>
+            </button>
+            <div className="sb-runtime-actions">
+              <button className="sb-runtime-search" title="Search chats and commands" aria-label="Search chats and commands" onClick={()=>{setShowPalette(true);setPaletteQ("");setPalIdx(0);}}><IcSearch size={16}/></button>
+              <button className="sb-runtime-search" title="Hide sidebar" aria-label="Hide sidebar" onClick={()=>{setSbPinned(false);setSbHover(false);}}><IcSidebar size={16}/></button>
             </div>
-          )}
+            {runtimeMenu && <div className="runtime-switcher pop-in" role="menu">
+              <button className="runtime-option" role="menuitemradio" aria-checked={codingProvider==="codex"} onClick={()=>{chooseCodingProvider("codex");setRuntimeMenu(false);}}>
+                <span className="runtime-option-copy"><span className="runtime-option-name">Codex</span></span>
+                <span className="runtime-option-state">{codingProvider==="codex"?"selected":(healthFor("codex")||{}).available?"ready":"local"}</span>
+              </button>
+              <button className="runtime-option" role="menuitemradio" aria-checked={codingProvider==="claude"} onClick={()=>{chooseCodingProvider("claude");setRuntimeMenu(false);}}>
+                <span className="runtime-option-copy"><span className="runtime-option-name">Claude Code</span></span>
+                <span className="runtime-option-state">{codingProvider==="claude"?"selected":(healthFor("claude")||{}).available?"ready":"local"}</span>
+              </button>
+              <button className="runtime-option" role="menuitem" disabled title="Grok Build adapter is not connected yet">
+                <span className="runtime-option-copy"><span className="runtime-option-name">Grok</span></span><span className="runtime-option-state">not connected</span>
+              </button>
+            </div>}
+          </div>
+          <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New chat</span></button>
+          <button className="sb-nav-btn" aria-disabled="true" title="GitHub pull requests are not connected in this frontend-only pass"><IcGitHub size={15}/><span>Pull requests</span></button>
+          <button className="sb-nav-btn" aria-disabled="true" title="Scheduled coding runs are not connected yet"><IcGauge size={15}/><span>Scheduled</span></button>
+          <button className="sb-nav-btn" aria-disabled="true" title="Plugin management remains available from the composer"><IcPlugin size={15}/><span>Plugins</span></button>
+        </div>
+        <div className="sb-scroll">
           <div className="sb-section">
-            {sbHeader("Chats","chats")}
-            {newChats.filter(c=>!archived.includes(c.id)).length===0
-              ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No chats</div>
-              : newChats.filter(c=>!archived.includes(c.id)).map(chatRow)}
+            <div className="sb-section-lbl">Pinned</div>
+            {pinned.filter(p=>!archived.includes(p.id)).length>0
+              ? pinned.filter(p=>!archived.includes(p.id)).map(chatRow)
+              : <div className="sb-empty">Pin important chats for quick access</div>}
           </div>
           <div className="sb-section">
-            <div className="sb-section-lbl">Coding sessions</div>
-            {codingSessions.length===0
-              ? <div style={{fontSize:12,color:"#383838",padding:"2px 10px"}}>No saved runs</div>
-              : codingSessions.slice(0,12).map(session=><div key={session.id} className={"chat-row"+(codingSession&&codingSession.id===session.id?" active":"")} style={{paddingLeft:10}} onClick={()=>openCodingSession(session)}><span className="chat-row-title">{session.title||session.provider}</span>{session.status!=="closed"&&<div className="chat-row-actions"><button className="cr-act" title="Close workspace" onClick={(event)=>closeCodingSession(session,event)}><IcX size={12}/></button></div>}<span className="chat-row-age">{session.provider} · {session.status}</span></div>)}
+            <div className="sb-project-wrap">
+              {sbHeader("Projects","projects",<button className="sb-hd-btn" title="Add project" onClick={(e)=>{e.stopPropagation();setProjAddMenu(v=>!v);}}><IcPlus size={14}/></button>)}
+              {projAddMenu && <div className="sb-project-menu pop-in" onClick={e=>e.stopPropagation()}>
+                <button onClick={startFromScratch}><IcPlus size={14}/>Start from scratch</button>
+                <button onClick={useExistingFolder}><IcFolder size={14}/>Use an existing folder</button>
+              </div>}
+            </div>
+            {projects.map(project=><div key={project.id} className="project-item">
+              <div className={"proj-row"+(project.expanded?" open":"")} onClick={()=>toggleProj(project.id)}>
+                <IcFolder size={15}/><span className="proj-name">{project.name}</span>
+                <div className="proj-row-actions">
+                  <button className="pr-act" title="New chat in project" onClick={(e)=>{e.stopPropagation();newChatInProject(project.id);}}><IcPlus size={13}/></button>
+                  <button className="pr-act" title="Project options" onClick={(e)=>{e.stopPropagation();setProjRowMenu(projRowMenu===project.id?null:project.id);}}><IcMoreDots size={13}/></button>
+                </div>
+              </div>
+              {projRowMenu===project.id&&<div className="project-row-menu pop-in" onClick={e=>e.stopPropagation()}>
+                <button onClick={()=>newChatInProject(project.id)}><IcEdit size={13}/>New chat</button>
+                <button onClick={()=>openNameModal("rename",project)}><IcEdit size={13}/>Rename project</button>
+                <button onClick={()=>pinProject(project.id)}><IcPin size={13}/>{project.pinned?"Unpin project":"Pin project"}</button>
+                <button onClick={()=>archiveProjectChats(project.id)}><IcArchive size={13}/>Archive chats</button>
+                {project.id!=="proj-vellum"&&<button className="danger" onClick={()=>removeProject(project.id)}><IcX size={13}/>Remove project</button>}
+              </div>}
+              {project.expanded && <div className="project-chat-list">
+                {(project.chats||[]).length>0 ? project.chats.filter(c=>!archived.includes(c.id)).slice(0,8).map(chatRow) : <div className="proj-nochats">No chats yet</div>}
+              </div>}
+            </div>)}
+          </div>
+          <div className="sb-section">
+            {sbHeader("Chats","chats")}
+            {newChats.filter(c=>!archived.includes(c.id)).map(chatRow)}
+            {codingSessions.slice(0,8).map(session=><div key={session.id} className={"chat-row"+(codingSession&&codingSession.id===session.id?" active":"")} onClick={()=>openCodingSession(session)}><span className="chat-row-title">{session.title||session.provider}</span>{session.status!=="closed"&&<div className="chat-row-actions"><button className="cr-act" title="Close workspace" onClick={(event)=>closeCodingSession(session,event)}><IcX size={12}/></button></div>}<span className="chat-row-age">{session.provider} · {session.status}</span></div>)}
+            {newChats.filter(c=>!archived.includes(c.id)).length===0&&codingSessions.length===0&&<div className="sb-empty">New conversations appear here</div>}
           </div>
         </div>
         <div className="sb-bottom">
@@ -2150,19 +2374,17 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
               {showUsage && (<div className="usage-inner fade-up"><div className="usage-line"><span>Last run</span><span className="usage-sub">{codingUsage?compactValue(codingUsage):"No usage event yet"}</span></div></div>)}
             </div>
           )}
-          <div className="sb-settings-row" onClick={()=>setShowSettings(v=>!v)}><span style={{display:"flex",alignItems:"center",gap:8}}><IcSettings size={14}/><span>Settings</span></span><span className="kbd">P</span></div>
+          <button className="sb-profile sb-settings-row" onClick={()=>setShowSettings(v=>!v)}><span className="sb-avatar">PR</span><span className="sb-profile-name">Pratyakksh</span><IcSettings size={14}/></button>
         </div>
       </div>
 
       {/* Main */}
-      <div className={"main"+(shell==="desktop"&&sbPinned?" desk-inset":"")} style={sbPinned?{marginLeft:272}:undefined}>
+      <div className={"main"+(shell==="desktop"&&sbPinned?" desk-inset":"")} style={sbPinned?{marginLeft:266}:undefined}>
         <div className="chat-pane">
+        <SideRays speed={2.7} rayColor1="#EAB308" rayColor2="#96c8ff" intensity={1.9} spread={2.1} origin="top-right" tilt={6} saturation={1.5} blend={.75} falloff={1.6} opacity={1}/>
+        <div className="side-rays-shade" aria-hidden="true"/>
         {isLanding ? (
           <Fragment>
-            <div className="topbar">
-              <div/>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><button className={"icon-btn"+(showSub?" on":"")} title="Toggle workspace tools" onClick={()=>setShowSub(v=>!v)}><IcColumns size={16}/></button></div>
-            </div>
             <div className="landing">
               <div className="runtime-empty">
                 <div className="runtime-empty-kicker">Local coding workspace</div>
@@ -2171,8 +2393,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 <div className="runtime-empty-note"><i/>Your provider login stays on this machine</div>
               </div>
               <div style={{width:"100%",maxWidth:850,position:"relative"}}>
-                <CodingMainStrip/>
-                <div style={{maxWidth:620,margin:"0 auto"}}><InputBox placeholder="Describe what to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
+                <div style={{maxWidth:760,margin:"0 auto"}}><InputBox placeholder="Describe what to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
               </div>
             </div>
           </Fragment>
@@ -2180,13 +2401,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           <Fragment>
               <div className="topbar">
                 <div className="tb-left">
-                  <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>setSbPinned(v=>!v)} title="Pin sidebar (Ctrl B)"><IcSidebar size={15}/></button>
+                  <button className="icon-btn" onClick={()=>setActiveChat("new")} title="Back to workspace"><IcChevL size={15}/></button>
+                  <button className={"icon-btn"+(sbPinned?" on":"")} onClick={()=>{setSbPinned(v=>!v);setSbHover(false);}} title={sbPinned?"Hide sidebar":"Keep sidebar open"}><IcSidebar size={15}/></button>
                   <span className="tb-title">{chatTitle}</span>
                   <div className="tb-more" onClick={openCtx}><IcMoreDots size={15}/></div>
                 </div>
                 <div className="tb-right">
                   <span className={"status-pill "+(running?"running":"complete")}>{running?(codingProvider==="claude"?"Claude working":"Codex working"):(codingProvider==="claude"?"Claude ready":"Codex ready")}</span>
-                  <button className={"icon-btn"+(showProg?" on":"")} title="Toggle Progress" onClick={()=>setShowProg(v=>!v)}><IcTasks size={15}/></button>
                   <button className={"icon-btn"+(showSub?" on":"")} title="Toggle Workspace" onClick={()=>setShowSub(v=>!v)}><IcColumns size={15}/></button>
                 </div>
               </div>
@@ -2195,7 +2416,6 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                 {messages.map(renderMsg)}
               </div>
 
-              <CodingMainStrip/>
               <InputBox running={running} model="5.5" api={composerApi} onSend={onMainSend} onStop={stopStream} wrapStyle={showProg?{paddingRight:338}:null} panelOpen={showProg}/>
 
               {/* Progress floating card */}
@@ -2519,19 +2739,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
 
 /* ═══ App ═══ */
 function App(){
-  const dispatch=(action)=>window.dispatchEvent(new CustomEvent("vellum-menu",{detail:action}));
   return (
     <div className="web-shell">
-      <header className="web-brandbar">
-        <div className="web-mark" aria-hidden="true"/>
-        <div className="web-brand">Vellum <span>Workspace</span></div>
-        <div className="web-context"><span className="web-context-dot"/>Local-first · one active writer</div>
-        <div className="web-actions">
-          <button className="web-action" onClick={()=>dispatch("files")}><IcFolder size={13}/>Files</button>
-          <button className="web-action" onClick={()=>dispatch("terminal")}><IcTerminal size={13}/>Terminal</button>
-          <button className="web-action" onClick={()=>dispatch("palette")}><IcSearch size={13}/>Commands</button>
-        </div>
-      </header>
       <div className="web-workspace">
         <VellumWorkspace shell="web" onSwitchShell={()=>{}} onToggleMax={()=>{}} maximized={true}/>
       </div>

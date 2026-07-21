@@ -17,8 +17,10 @@ from agent.coding.adapters.codex import (
     CodexAdapter,
     _codex_error_message,
     codex_auth_configured,
+    codex_config_overrides,
     codex_runtime_path,
     codex_sandbox_name,
+    codex_sqlite_home,
 )
 from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName, utc_now
 
@@ -146,6 +148,29 @@ def test_codex_runtime_prefers_native_binary_behind_npm_wrapper(monkeypatch, tmp
     assert codex_runtime_path() == str(native.resolve())
 
 
+def test_codex_sqlite_home_is_isolated_per_vellum_session(monkeypatch, tmp_path):
+    monkeypatch.setenv("VELLUM_CODEX_SQLITE_HOME", str(tmp_path / "codex-state"))
+
+    first = codex_sqlite_home("code/session-1")
+    second = codex_sqlite_home("code-session-2")
+
+    assert first == str((tmp_path / "codex-state" / "code_session-1").resolve())
+    assert second == str((tmp_path / "codex-state" / "code-session-2").resolve())
+    assert first != second
+    assert os.path.isdir(first)
+    assert os.path.isdir(second)
+
+
+def test_codex_config_overrides_only_sets_an_explicit_vellum_model(monkeypatch):
+    monkeypatch.setenv("VELLUM_CODEX_MODEL", "gpt-test")
+
+    assert codex_config_overrides() == ('model="gpt-test"',)
+
+    monkeypatch.delenv("VELLUM_CODEX_MODEL")
+    monkeypatch.setattr(codex_adapter_module, "_repo_env_value", lambda _name: "")
+    assert codex_config_overrides() == ()
+
+
 def test_codex_error_message_extracts_nested_provider_detail():
     error = SimpleNamespace(
         message='{"type":"error","error":{"message":"Upgrade Codex to use this model."}}'
@@ -208,6 +233,7 @@ def test_codex_start_session_validates_dependency_without_prestarting_thread(mon
 
 def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatch, tmp_path):
     calls = []
+    configs = []
 
     class FakeSandbox:
         read_only = "read_only"
@@ -241,7 +267,15 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
             calls.append(("turn", prompt, cwd, sandbox))
             return FakeTurn()
 
+    class FakeConfig:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+            configs.append(kwargs)
+
     class FakeCodex:
+        def __init__(self, config=None):
+            self.config = config
+
         async def __aenter__(self):
             calls.append(("connect",))
             return self
@@ -257,9 +291,14 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
             calls.append(("resume", provider_session_id, kwargs))
             return FakeThread()
 
-    fake_module = SimpleNamespace(AsyncCodex=FakeCodex, Sandbox=FakeSandbox)
+    fake_module = SimpleNamespace(
+        AsyncCodex=FakeCodex, Sandbox=FakeSandbox, CodexConfig=FakeConfig
+    )
     monkeypatch.setattr(importlib.util, "find_spec", lambda name: object())
     monkeypatch.setattr("importlib.import_module", lambda name: fake_module)
+    monkeypatch.setattr(codex_adapter_module, "codex_runtime_path", lambda: None)
+    monkeypatch.setenv("VELLUM_CODEX_SQLITE_HOME", str(tmp_path / "codex-state"))
+    monkeypatch.setenv("VELLUM_CODEX_MODEL", "gpt-test")
 
     session = CodingSession(
         id="code_1",
@@ -287,6 +326,16 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
         ("turn", "fix tests", str(tmp_path), "workspace_write"),
         ("close",),
     ]
+    assert configs == [
+        {
+            "env": {
+                "CODEX_SQLITE_HOME": str(
+                    (tmp_path / "codex-state" / "code_1").resolve()
+                )
+            },
+            "config_overrides": ('model="gpt-test"',),
+        }
+    ]
 
     resumed_session = CodingSession(
         id="code_1",
@@ -307,6 +356,7 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
         ("turn", "review", str(tmp_path), "read_only"),
         ("close",),
     ]
+    assert configs[-1] == configs[0]
 
 
 def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_path):

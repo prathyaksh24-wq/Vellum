@@ -43,3 +43,130 @@
 - P3: Rocket Blast is fetched from its published registry at runtime to keep the standalone HTML small; an offline build can vendor/compress the same frame set later if Vellum needs to run without network access.
 
 final result: passed
+
+---
+
+## Workspace chat navigation and live Codex connection
+
+**Validation Target**
+
+- Browser-rendered implementation: `D:\Vellum-worktrees\local-first-coding-platform\.api-runtime\workspace-latest.png`, `workspace-runtime-menu.png`, `workspace-real-chat.png`, and `workspace-general-chat.png`.
+- Viewport: 1440 x 1000 Chromium.
+- States: landing, runtime dropdown, project chat after a live Codex turn, sidebar hidden, edge-hover reveal, and top-level general chat after a live Codex turn.
+
+**Findings**
+
+- The runtime dropdown contains only Codex, Claude Code, and Grok state labels; the descriptive subheadings are absent.
+- Both project-scoped and top-level general chats reached the real `/api/coding` session and streaming-turn path. The observed final responses were `VELLUM_UI_CONNECTED` and `VELLUM_GENERAL_CHAT_CONNECTED`.
+- Active chats expose an explicit back control. The sidebar can be hidden from its header, restored from the left-edge hover target, or toggled with the existing keyboard shortcut.
+- The Progress toggle is absent from the rendered active-chat interface.
+- Vellum's Codex adapter keeps per-session SQLite state separate from the Codex desktop app and supports an explicit Vellum model override without replacing the user's shared Codex authentication/configuration.
+
+**Implementation Checklist**
+
+- [x] Keep real message sending available inside a project and from a top-level general chat.
+- [x] Default an unselected project root to the API process workspace instead of blocking send.
+- [x] Add explicit sidebar hide, edge-hover reveal, and active-chat back controls.
+- [x] Remove runtime descriptions and the Progress toggle.
+- [x] Verify both chat scopes with real streamed Codex responses in Chromium.
+
+**Environment Note**
+
+- The C: system volume had no free space during validation, and the installed CLI was older than the model selected in the desktop Codex config. The live preview therefore uses `VELLUM_CODEX_SQLITE_HOME` on D: and an explicit compatible `VELLUM_CODEX_MODEL`; these remain deployment configuration rather than hard-coded user credentials.
+
+final result: passed
+
+---
+
+## Workspace sidebar and SideRays shell
+
+**Comparison Target**
+
+- Source visual truth: `C:\Users\User\OneDrive\Pictures\codex dropdown.png`, `C:\Users\User\OneDrive\Pictures\codex sidebar.png`, and `C:\Users\User\OneDrive\Pictures\sidebar projects.png`.
+- Browser-rendered implementation: `D:\Vellum-worktrees\vellum-workspace-sidebar-rays.png`, `D:\Vellum-worktrees\vellum-workspace-runtime-2.png`, `D:\Vellum-worktrees\vellum-workspace-project-2.png`, and `D:\Vellum-worktrees\vellum-workspace-send-2.png`.
+- Side-by-side evidence: `D:\Vellum-worktrees\compare-runtime-dropdown.png` and `D:\Vellum-worktrees\compare-project-sidebar.png`.
+- Viewport: 1440 x 900 desktop; focused sidebar comparisons use a 503 x 736 crop matching the supplied project-sidebar reference.
+- States: landing idle, runtime menu open, project-add menu open, and active project chat after send.
+
+**Findings**
+
+- No remaining P0, P1, or P2 visual findings in the requested frontend scope.
+- Fonts and typography: Karla is now the workspace body/UI family, Fraunces is the heading family, and monospace remains limited to code/runtime metadata where semantic scanning benefits from it.
+- Spacing and layout rhythm: the 266 px persistent sidebar, grouped navigation, section labels, nested project chat rows, runtime menu, bottom profile row, and project-add popover follow the density and hierarchy of the supplied Codex references.
+- Colors and visual tokens: the sidebar adopts the reference's near-black and green palette. The chat surface remains darker and quieter so the requested gold/blue procedural rays are visible without reducing text or composer contrast.
+- Image and animation fidelity: SideRays is implemented as a responsive canvas background using the supplied speed, colors, intensity, spread, origin, tilt, saturation, blend, falloff, and opacity. It renders behind both landing and active-chat states and honors reduced-motion preferences.
+- Copy and content: Sites is intentionally omitted. Codex and Claude Code are selectable runtimes; Grok appears in the dropdown with an explicit not-connected state instead of implying a backend integration that is not present.
+
+**Focused Region Comparison**
+
+- Runtime selector: the combined comparison verifies the rounded selector, search action, stacked runtime names/descriptions, selected state, and disabled Grok state at readable scale.
+- Project sidebar: the combined comparison verifies the persistent left rail, project hierarchy, nested active chat, section actions, profile row, and omission of Sites.
+- Active chat: the post-send capture verifies that the removed provider/project strip does not return after a message and that SideRays remains mounted behind the conversation and composer.
+
+**Comparison History**
+
+- Initial P1: the workspace exposed a separate global utility bar and a provider/project strip above both composer states, conflicting with the supplied single-sidebar information architecture. Fix: removed both surfaces and moved runtime selection into the sidebar dropdown while keeping access selection in the working composer.
+- Initial P1: projects were absent from the rendered sidebar even though project state and handlers existed. Fix: restored a visible Vellum project tree with nested chats, add-folder/start-new actions, and project menus using the existing frontend state.
+- Initial P2: the prior neutral sidebar lacked the green-on-black hierarchy and persistent desktop width shown in the reference. Fix: introduced scoped workspace sidebar tokens and made the web shell open it by default.
+- Post-fix evidence: the runtime, project-menu, and post-send browser captures above show the corrected states with no remaining actionable mismatch.
+
+**Implementation Checklist**
+
+- [x] Apply Fraunces/Karla across the standalone coding workspace.
+- [x] Remove the global Vellum Workspace utility bar.
+- [x] Remove the provider/project strip from landing and active chat.
+- [x] Add the procedural SideRays background to both chat states.
+- [x] Add the Codex/Claude Code/Grok runtime dropdown and honest capability state.
+- [x] Restore project, nested-chat, pinned, general-chat, add-project, and profile sidebar regions without adding Sites.
+- [x] Verify landing, open-menu, project-add, and post-send states in Chromium and compare focused regions against the supplied references.
+
+**Follow-up Polish**
+
+- P3: Pull requests, Scheduled, and the top-level Plugins entry are intentionally non-operational in this frontend-only pass and are visually muted with explanatory titles until their product flows are connected.
+
+final result: passed
+
+---
+
+## Studio coding composer
+
+**Comparison Target**
+
+- Source visual truth: `C:\Users\User\AppData\Local\Temp\beui-agent-chat-input-preview-11ty.png` captured from `https://pro.beui.dev/preview/agent-chat-input`.
+- Browser-rendered implementation: `D:\Vellum-worktrees\vellum-workspace-studio-final.png`.
+- Side-by-side evidence: `D:\Vellum-worktrees\studio-composer-comparison-final.png`.
+- Viewport: 1440 x 900 desktop; the intended Vellum coding-workspace surface.
+- State: dark theme, landing composer idle, Codex selected, read-only access, provider backend unavailable in this static-browser capture.
+
+**Findings**
+
+- No remaining P0, P1, or P2 differences in the requested composer scope.
+- Fonts and typography: the composer now inherits the requested Karla body family while retaining Geist Mono only for runtime metadata; the prompt remains 15.5 px with the reference's quieter placeholder and compact toolbar labels.
+- Spacing and layout rhythm: the composer now uses the reference's wide, low profile, 21 px radius, inset toolbar, grouped left/right controls, and layered queue rail when follow-ups exist.
+- Colors and visual tokens: Vellum's neutral near-black surfaces and orange status accent are preserved instead of importing BeUI's product palette.
+- Image and asset fidelity: the composer has no raster artwork or custom visual asset requirement; it reuses Vellum's established icon set and does not introduce placeholders.
+- Copy and content: source labels are adapted to real Vellum capabilities: Coding agent, selected provider SDK, access mode, attachments, dictation, send/stop, and queued follow-ups.
+
+**Focused Region Comparison**
+
+- The source and implementation composer regions were cropped to comparable scale in the side-by-side evidence above. The controls, input hierarchy, corner geometry, and footer grouping remain clearly readable at that scale.
+- A separate browser interaction harness verified the Add menu, access menu, runtime menu, controlled text input, enabled send state, and dictation capability. Evidence: `D:\Vellum-worktrees\studio-composer-interaction-qa-3.png`.
+
+**Comparison History**
+
+- Initial P2: Vellum's landing composer was 620 px wide, making its control groups visibly more cramped than the source. Fix: widened the landing slot to 760 px while retaining the existing responsive collapse rules.
+- Post-fix evidence: `D:\Vellum-worktrees\studio-composer-comparison-final.png` shows the corrected proportions with no remaining actionable composer mismatch.
+
+**Implementation Checklist**
+
+- [x] Preserve the existing coding-session, provider, access, stop, and event-stream wiring.
+- [x] Add a functional provider switcher and permission selector inside the composer.
+- [x] Add text-file ingestion, image/file chips, browser dictation, and send/stop states.
+- [x] Queue follow-up prompts while a provider is running, with steer, edit, remove, and explicit run actions.
+- [x] Parse the inline JSX, run the workspace regression tests, render in Chromium, and exercise the primary composer controls.
+
+**Follow-up Polish**
+
+- P3: the surrounding Vellum workspace remains intentionally desktop-first below tablet width; the composer itself collapses cleanly, but a future mobile workspace project would need broader shell changes.
+
+final result: passed

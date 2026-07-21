@@ -77,6 +77,41 @@ def codex_runtime_path() -> str | None:
     return None
 
 
+def codex_sqlite_home(session_id: str) -> str:
+    """Keep Vellum Codex state isolated from the desktop app and other sessions."""
+    override = os.environ.get("VELLUM_CODEX_SQLITE_HOME") or _repo_env_value(
+        "VELLUM_CODEX_SQLITE_HOME"
+    )
+    if override:
+        root = Path(override).expanduser()
+    elif os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        root = Path(os.environ["LOCALAPPDATA"]) / "Vellum" / "codex-state"
+    else:
+        state_root = os.environ.get("XDG_STATE_HOME")
+        root = (
+            Path(state_root).expanduser() / "vellum" / "codex-state"
+            if state_root
+            else Path.home() / ".local" / "state" / "vellum" / "codex-state"
+        )
+    safe_session_id = "".join(
+        character if character.isalnum() or character in {"-", "_"} else "_"
+        for character in session_id
+    )
+    session_root = root / (safe_session_id or "default")
+    session_root.mkdir(parents=True, exist_ok=True)
+    return str(session_root.resolve())
+
+
+def codex_config_overrides() -> tuple[str, ...]:
+    """Apply Vellum-specific choices while preserving the user's Codex config."""
+    model = os.environ.get("VELLUM_CODEX_MODEL") or _repo_env_value(
+        "VELLUM_CODEX_MODEL"
+    )
+    if not model:
+        return ()
+    return (f"model={json.dumps(model)}",)
+
+
 def extract_codex_thread_id(thread: object) -> str | None:
     for attr in ("id", "thread_id", "session_id"):
         value = getattr(thread, attr, None)
@@ -193,7 +228,16 @@ class CodexAdapter:
         sandbox = getattr(Sandbox, codex_sandbox_name(session.access_mode))
         CodexConfig = getattr(module, "CodexConfig", None)
         runtime_path = codex_runtime_path()
-        codex = AsyncCodex(CodexConfig(codex_bin=runtime_path)) if runtime_path and CodexConfig else AsyncCodex()
+        if CodexConfig:
+            config_kwargs: dict[str, Any] = {
+                "env": {"CODEX_SQLITE_HOME": codex_sqlite_home(session.id)},
+                "config_overrides": codex_config_overrides(),
+            }
+            if runtime_path:
+                config_kwargs["codex_bin"] = runtime_path
+            codex = AsyncCodex(CodexConfig(**config_kwargs))
+        else:
+            codex = AsyncCodex()
         active = _ActiveCodexTurn(codex=codex, task=asyncio.current_task())
         self._active_turns[turn_id] = active
 
