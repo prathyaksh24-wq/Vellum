@@ -151,6 +151,20 @@ meaningful engagement. A channel can therefore move from `active` to `waning`,
 `occasional`, or `dormant` without losing the fact that it was historically
 important. Explicit negative feedback can move a subject to `rejected`.
 
+## Sensitive Context and Interpretation
+
+Retention is separate from endorsement. Political posts, protected-class humor,
+sexual content, harassment, violence, health, financial material, and ambiguous
+engagement can remain searchable evidence while being excluded from preference
+and style learning. Each annotation records labels, context, stance, intent,
+confidence, taxonomy version, eligibility, and review state.
+
+Likes, bookmarks, timelines, reposts, quotations, and agent-selected searches do
+not prove agreement. They default to `stance=unknown`; passive signal weight is
+capped, and sensitive evidence requires trusted user review before it can affect
+preference or humor/style behavior. No content is deleted merely because it is
+sensitive.
+
 ## Context Packs
 
 Chat, coding, and specialists consume bounded context packages instead of
@@ -178,6 +192,7 @@ Initial additive endpoints:
 - `GET /api/knowledge/core/preferences`
 - `GET /api/knowledge/core/ingestion-jobs`
 - `GET /api/knowledge/core/sync-cursors`
+- `GET /api/knowledge/core/annotations`
 - `POST /api/knowledge/core/context-packs`
 - `POST /api/knowledge/core/bootstrap`
 

@@ -7,7 +7,13 @@ import json
 import re
 from typing import Any
 
-from agent.knowledge.models import ExternalPolicy, ObservationActor, Sensitivity, SourceItemInput
+from agent.knowledge.models import (
+    ContentAnnotationInput,
+    ExternalPolicy,
+    ObservationActor,
+    Sensitivity,
+    SourceItemInput,
+)
 from agent.knowledge.service import KnowledgeCore
 from agent.tools.registry import CapabilityAccess, ToolInvocation
 
@@ -74,7 +80,30 @@ class KnowledgeToolObserver:
                 )
             )
             source_ids.append(str(result["source_id"]))
+            self._annotate_x_observation(str(result["source_id"]), invocation)
         return source_ids
+
+    def _annotate_x_observation(self, source_id: str, invocation: ToolInvocation) -> None:
+        if invocation.name in {"x.likes", "x.bookmarks", "x.timeline"}:
+            labels = ["ambiguous_engagement"]
+            context = invocation.name.removeprefix("x.")
+        else:
+            labels = ["agent_selected"]
+            context = "agent_search"
+        self.core.store.upsert_content_annotation(
+            ContentAnnotationInput(
+                target_type="source",
+                target_id=source_id,
+                labels=labels,
+                context=context,
+                stance="unknown",
+                intent="unknown",
+                confidence=1.0,
+                eligible_for_preference=False,
+                eligible_for_style=False,
+                metadata={"observed_via": invocation.name},
+            )
+        )
 
     def _record_youtube(self, invocation: ToolInvocation) -> list[str]:
         if invocation.name == "youtube.fetch_transcript":

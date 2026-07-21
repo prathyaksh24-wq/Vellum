@@ -107,6 +107,21 @@ async def core_sync_cursors(
     return {"cursors": items, "count": len(items)}
 
 
+@router.get("/annotations")
+async def core_annotations(
+    target_id: str = "",
+    requires_review: bool | None = None,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(
+        get_knowledge_core().store.list_content_annotations,
+        target_id=target_id,
+        requires_review=requires_review,
+        limit=limit,
+    )
+    return {"annotations": items, "count": len(items)}
+
+
 @router.post("/projections")
 async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().store.register_projection, request)

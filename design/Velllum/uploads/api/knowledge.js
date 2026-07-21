@@ -73,6 +73,13 @@
       if (limit !== undefined) params.set("limit", String(limit));
       return client.request("/api/knowledge/core/sync-cursors?" + params.toString());
     },
+    coreAnnotations: function (targetId, requiresReview, limit) {
+      var params = new URLSearchParams();
+      if (targetId) params.set("target_id", String(targetId));
+      if (requiresReview !== undefined && requiresReview !== null) params.set("requires_review", String(Boolean(requiresReview)));
+      if (limit !== undefined) params.set("limit", String(limit));
+      return client.request("/api/knowledge/core/annotations?" + params.toString());
+    },
     recordSignal: function (payload) {
       return client.request("/api/knowledge/core/signals", client.jsonOptions("POST", payload));
     },

@@ -49,6 +49,15 @@ class IngestionJobStatus(str, Enum):
     FAILED = "failed"
 
 
+class ContentStance(str, Enum):
+    UNKNOWN = "unknown"
+    SUPPORT = "support"
+    CRITICISM = "criticism"
+    SATIRE = "satire"
+    QUOTATION = "quotation"
+    MIXED = "mixed"
+
+
 class SourceItemInput(BaseModel):
     kind: str = Field(min_length=1, max_length=80)
     external_id: str = Field(min_length=1, max_length=500)
@@ -140,6 +149,25 @@ class SyncCursorInput(BaseModel):
     account_id: str = Field(min_length=1, max_length=500)
     cursor: str = Field(default="", max_length=4000)
     state: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContentAnnotationInput(BaseModel):
+    target_type: Literal["source", "observation", "claim", "insight"]
+    target_id: str = Field(min_length=1, max_length=160)
+    labels: list[str] = Field(default_factory=list, max_length=50)
+    context: str = Field(default="", max_length=160)
+    stance: ContentStance = ContentStance.UNKNOWN
+    intent: str = Field(default="unknown", max_length=120)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    eligible_for_preference: bool = False
+    eligible_for_style: bool = False
+    taxonomy_version: str = Field(default="vellum-safety-v1", max_length=80)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("labels")
+    @classmethod
+    def normalize_labels(cls, labels: list[str]) -> list[str]:
+        return sorted({label.strip().casefold().replace(" ", "_") for label in labels if label.strip()})
 
 
 class ContextPackRequest(BaseModel):

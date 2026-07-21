@@ -13,6 +13,8 @@ from agent.knowledge.api import router as knowledge_core_router
 from agent.knowledge.ingestion import IngestionCoordinator, IngestionResult
 from agent.knowledge.models import (
     BootstrapRequest,
+    ContentAnnotationInput,
+    ContentStance,
     ContextPackRequest,
     EvidenceClass,
     ExternalPolicy,
@@ -224,6 +226,7 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
         preferences = client.get("/api/knowledge/core/preferences?category=youtube_channel")
         ingestion_jobs = client.get("/api/knowledge/core/ingestion-jobs")
         sync_cursors = client.get("/api/knowledge/core/sync-cursors")
+        annotations = client.get("/api/knowledge/core/annotations?requires_review=true")
         context = client.post(
             "/api/knowledge/core/context-packs",
             json={"query": "anything", "destination": "external"},
@@ -243,6 +246,7 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
     assert preferences.json()["count"] == 1
     assert ingestion_jobs.status_code == 200
     assert sync_cursors.status_code == 200
+    assert annotations.status_code == 200
     assert context.status_code == 200
     assert context.json()["policy"]["raw_private_content"] == "withheld"
 
@@ -280,6 +284,12 @@ def test_tool_observer_records_evidence_but_not_preferences(tmp_path: Path) -> N
     assert len(observations) == 1
     assert observations[0]["actor"] == "agent"
     assert core.store.status()["counts"]["user_signals"] == 0
+    annotations = core.store.list_content_annotations(target_id=sources[0]["id"])
+    assert annotations[0]["labels"] == ["ambiguous_engagement"]
+    assert annotations[0]["stance"] == "unknown"
+    assert annotations[0]["eligible_for_preference"] is False
+    assert annotations[0]["eligible_for_style"] is False
+    assert annotations[0]["requires_review"] is True
 
 
 def test_tool_observer_withholds_transcript_raw_content_from_external_context(tmp_path: Path) -> None:
@@ -384,11 +394,60 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
 
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
-    assert migrated.status()["schema_version"] == 3
+    assert migrated.status()["schema_version"] == 4
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}
     assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
+
+
+def test_sensitive_annotation_requires_trusted_review_for_learning(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    annotation = ContentAnnotationInput(
+        target_type="source",
+        target_id="src-sensitive",
+        labels=["Politics", "ambiguous engagement"],
+        context="liked_post",
+        stance=ContentStance.SATIRE,
+        confidence=0.8,
+        eligible_for_preference=True,
+        eligible_for_style=True,
+    )
+
+    automatic = core.store.upsert_content_annotation(annotation)
+    reviewed = core.store.upsert_content_annotation(annotation, trusted_user_review=True)
+
+    assert automatic["labels"] == ["ambiguous_engagement", "politics"]
+    assert automatic["eligible_for_preference"] is False
+    assert automatic["eligible_for_style"] is False
+    assert automatic["requires_review"] is True
+    assert reviewed["eligible_for_preference"] is True
+    assert reviewed["eligible_for_style"] is True
+    assert reviewed["requires_review"] is False
+
+
+def test_passive_signal_weight_is_capped(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    result = core.store.record_user_signal(
+        UserSignalInput(
+            subject_key="x:topic:politics",
+            category="topic",
+            signal_type="liked_post",
+            event_key="x:like:123",
+            value=1.0,
+            weight=10.0,
+            actor=ObservationActor.CONNECTOR,
+            evidence_class=EvidenceClass.PASSIVE,
+        )
+    )
+
+    assert result["effective_weight"] == 0.25
+    with sqlite3.connect(core.store.db_path) as connection:
+        stored_weight = connection.execute(
+            "SELECT weight FROM user_signals WHERE id = ?",
+            (result["signal_id"],),
+        ).fetchone()[0]
+    assert stored_weight == 0.25
 
 
 def test_ingestion_coordinator_is_resumable_and_idempotent_per_account(tmp_path: Path) -> None:

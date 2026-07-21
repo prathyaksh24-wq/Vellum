@@ -130,6 +130,7 @@ def build_capability_contract() -> CapabilityContract:
                     "preferences": "/api/knowledge/core/preferences",
                     "ingestion_jobs": "/api/knowledge/core/ingestion-jobs",
                     "sync_cursors": "/api/knowledge/core/sync-cursors",
+                    "annotations": "/api/knowledge/core/annotations",
                     "context_packs": "/api/knowledge/core/context-packs",
                     "bootstrap": "/api/knowledge/core/bootstrap",
                 },

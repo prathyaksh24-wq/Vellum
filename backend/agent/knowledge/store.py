@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from agent.knowledge.models import (
+    ContentAnnotationInput,
     ContextPackRequest,
     IngestionJobInput,
     ObservationActor,
@@ -31,7 +32,27 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+
+_SENSITIVE_LABELS = {
+    "harassment",
+    "hate_or_protected_class",
+    "politics",
+    "sexual_content",
+    "self_harm",
+    "violence",
+    "health",
+    "financial",
+    "ambiguous_engagement",
+}
+
+_EVIDENCE_WEIGHT_CAPS = {
+    "explicit": 10.0,
+    "engagement": 2.0,
+    "imported": 1.0,
+    "passive": 0.25,
+}
 
 
 def _now() -> str:
@@ -126,6 +147,10 @@ class KnowledgeStore:
             if version < 3:
                 self._migrate_v3(connection)
                 connection.execute("PRAGMA user_version = 3")
+                version = 3
+            if version < 4:
+                self._migrate_v4(connection)
+                connection.execute("PRAGMA user_version = 4")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -394,6 +419,35 @@ class KnowledgeStore:
             "ON ingestion_jobs(connector, account_id, created_at DESC)"
         )
 
+    @staticmethod
+    def _migrate_v4(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS content_annotations (
+                id TEXT PRIMARY KEY,
+                target_type TEXT NOT NULL,
+                target_id TEXT NOT NULL,
+                taxonomy_version TEXT NOT NULL,
+                labels_json TEXT NOT NULL DEFAULT '[]',
+                context TEXT NOT NULL DEFAULT '',
+                stance TEXT NOT NULL DEFAULT 'unknown',
+                intent TEXT NOT NULL DEFAULT 'unknown',
+                confidence REAL NOT NULL DEFAULT 0,
+                eligible_for_preference INTEGER NOT NULL DEFAULT 0,
+                eligible_for_style INTEGER NOT NULL DEFAULT 0,
+                requires_review INTEGER NOT NULL DEFAULT 1,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(target_type, target_id, taxonomy_version)
+            );
+            CREATE INDEX IF NOT EXISTS content_annotations_target
+            ON content_annotations(target_type, target_id);
+            CREATE INDEX IF NOT EXISTS content_annotations_review
+            ON content_annotations(requires_review, updated_at DESC);
+            """
+        )
+
     def upsert_source(self, item: SourceItemInput) -> dict[str, Any]:
         source_id = _stable_id("src", item.kind.casefold(), item.external_id)
         observed_at = _iso(item.observed_at) or _now()
@@ -584,6 +638,7 @@ class KnowledgeStore:
         observed_at = _iso(item.observed_at) or _now()
         eligible_actor = item.actor not in {ObservationActor.AGENT, ObservationActor.SCHEDULED}
         eligible = bool(item.preference_evidence and eligible_actor)
+        effective_weight = min(float(item.weight), _EVIDENCE_WEIGHT_CAPS[item.evidence_class.value])
         now = _now()
         with self._connect() as connection:
             existing = connection.execute(
@@ -604,7 +659,7 @@ class KnowledgeStore:
                         signal_id,
                         item.signal_type,
                         float(item.value),
-                        float(item.weight),
+                        effective_weight,
                         item.actor.value,
                         item.source_id,
                         item.observation_id,
@@ -627,8 +682,107 @@ class KnowledgeStore:
             "signal_id": signal_id,
             "created": existing is None,
             "eligible": eligible,
+            "effective_weight": effective_weight,
             "preference": state,
         }
+
+    def upsert_content_annotation(
+        self,
+        item: ContentAnnotationInput,
+        *,
+        trusted_user_review: bool = False,
+    ) -> dict[str, Any]:
+        labels = set(item.labels)
+        sensitive = bool(labels & _SENSITIVE_LABELS)
+        reviewed = bool(trusted_user_review)
+        eligible_for_preference = bool(item.eligible_for_preference and (reviewed or not sensitive))
+        eligible_for_style = bool(
+            item.eligible_for_style
+            and (reviewed or not sensitive)
+            and item.stance.value != "unknown"
+        )
+        requires_review = bool(sensitive and not reviewed)
+        annotation_id = _stable_id("ann", item.target_type, item.target_id, item.taxonomy_version)
+        now = _now()
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id FROM content_annotations WHERE id = ?",
+                (annotation_id,),
+            ).fetchone()
+            connection.execute(
+                """
+                INSERT INTO content_annotations (
+                    id, target_type, target_id, taxonomy_version, labels_json,
+                    context, stance, intent, confidence, eligible_for_preference,
+                    eligible_for_style, requires_review, metadata_json, created_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    labels_json = excluded.labels_json,
+                    context = excluded.context,
+                    stance = excluded.stance,
+                    intent = excluded.intent,
+                    confidence = excluded.confidence,
+                    eligible_for_preference = excluded.eligible_for_preference,
+                    eligible_for_style = excluded.eligible_for_style,
+                    requires_review = excluded.requires_review,
+                    metadata_json = excluded.metadata_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    annotation_id,
+                    item.target_type,
+                    item.target_id,
+                    item.taxonomy_version,
+                    _json(sorted(labels)),
+                    item.context,
+                    item.stance.value,
+                    item.intent,
+                    float(item.confidence),
+                    int(eligible_for_preference),
+                    int(eligible_for_style),
+                    int(requires_review),
+                    _json(item.metadata),
+                    now,
+                    now,
+                ),
+            )
+            row = connection.execute("SELECT * FROM content_annotations WHERE id = ?", (annotation_id,)).fetchone()
+        return {**self._annotation_row(row), "created": existing is None}
+
+    def list_content_annotations(
+        self,
+        *,
+        target_id: str = "",
+        requires_review: bool | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if target_id:
+            clauses.append("target_id = ?")
+            params.append(target_id)
+        if requires_review is not None:
+            clauses.append("requires_review = ?")
+            params.append(int(requires_review))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(int(limit), 500)))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM content_annotations {where} ORDER BY updated_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._annotation_row(row) for row in rows]
+
+    @staticmethod
+    def _annotation_row(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["labels"] = json.loads(str(item.pop("labels_json") or "[]"))
+        item["metadata"] = json.loads(str(item.pop("metadata_json") or "{}"))
+        item["eligible_for_preference"] = bool(item["eligible_for_preference"])
+        item["eligible_for_style"] = bool(item["eligible_for_style"])
+        item["requires_review"] = bool(item["requires_review"])
+        return item
 
     def recompute_preference(self, subject_key: str, *, now: datetime | None = None) -> dict[str, Any] | None:
         reference = now or datetime.now(UTC)
@@ -1192,6 +1346,7 @@ class KnowledgeStore:
             "sync_cursors",
             "ingestion_jobs",
             "context_packs",
+            "content_annotations",
         )
         with self._connect() as connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
