@@ -46,6 +46,56 @@ final result: passed
 
 ---
 
+## Workspace sidebar and SideRays shell
+
+**Comparison Target**
+
+- Source visual truth: `C:\Users\User\OneDrive\Pictures\codex dropdown.png`, `C:\Users\User\OneDrive\Pictures\codex sidebar.png`, and `C:\Users\User\OneDrive\Pictures\sidebar projects.png`.
+- Browser-rendered implementation: `D:\Vellum-worktrees\vellum-workspace-sidebar-rays.png`, `D:\Vellum-worktrees\vellum-workspace-runtime-2.png`, `D:\Vellum-worktrees\vellum-workspace-project-2.png`, and `D:\Vellum-worktrees\vellum-workspace-send-2.png`.
+- Side-by-side evidence: `D:\Vellum-worktrees\compare-runtime-dropdown.png` and `D:\Vellum-worktrees\compare-project-sidebar.png`.
+- Viewport: 1440 x 900 desktop; focused sidebar comparisons use a 503 x 736 crop matching the supplied project-sidebar reference.
+- States: landing idle, runtime menu open, project-add menu open, and active project chat after send.
+
+**Findings**
+
+- No remaining P0, P1, or P2 visual findings in the requested frontend scope.
+- Fonts and typography: Karla is now the workspace body/UI family, Fraunces is the heading family, and monospace remains limited to code/runtime metadata where semantic scanning benefits from it.
+- Spacing and layout rhythm: the 266 px persistent sidebar, grouped navigation, section labels, nested project chat rows, runtime menu, bottom profile row, and project-add popover follow the density and hierarchy of the supplied Codex references.
+- Colors and visual tokens: the sidebar adopts the reference's near-black and green palette. The chat surface remains darker and quieter so the requested gold/blue procedural rays are visible without reducing text or composer contrast.
+- Image and animation fidelity: SideRays is implemented as a responsive canvas background using the supplied speed, colors, intensity, spread, origin, tilt, saturation, blend, falloff, and opacity. It renders behind both landing and active-chat states and honors reduced-motion preferences.
+- Copy and content: Sites is intentionally omitted. Codex and Claude Code are selectable runtimes; Grok appears in the dropdown with an explicit not-connected state instead of implying a backend integration that is not present.
+
+**Focused Region Comparison**
+
+- Runtime selector: the combined comparison verifies the rounded selector, search action, stacked runtime names/descriptions, selected state, and disabled Grok state at readable scale.
+- Project sidebar: the combined comparison verifies the persistent left rail, project hierarchy, nested active chat, section actions, profile row, and omission of Sites.
+- Active chat: the post-send capture verifies that the removed provider/project strip does not return after a message and that SideRays remains mounted behind the conversation and composer.
+
+**Comparison History**
+
+- Initial P1: the workspace exposed a separate global utility bar and a provider/project strip above both composer states, conflicting with the supplied single-sidebar information architecture. Fix: removed both surfaces and moved runtime selection into the sidebar dropdown while keeping access selection in the working composer.
+- Initial P1: projects were absent from the rendered sidebar even though project state and handlers existed. Fix: restored a visible Vellum project tree with nested chats, add-folder/start-new actions, and project menus using the existing frontend state.
+- Initial P2: the prior neutral sidebar lacked the green-on-black hierarchy and persistent desktop width shown in the reference. Fix: introduced scoped workspace sidebar tokens and made the web shell open it by default.
+- Post-fix evidence: the runtime, project-menu, and post-send browser captures above show the corrected states with no remaining actionable mismatch.
+
+**Implementation Checklist**
+
+- [x] Apply Fraunces/Karla across the standalone coding workspace.
+- [x] Remove the global Vellum Workspace utility bar.
+- [x] Remove the provider/project strip from landing and active chat.
+- [x] Add the procedural SideRays background to both chat states.
+- [x] Add the Codex/Claude Code/Grok runtime dropdown and honest capability state.
+- [x] Restore project, nested-chat, pinned, general-chat, add-project, and profile sidebar regions without adding Sites.
+- [x] Verify landing, open-menu, project-add, and post-send states in Chromium and compare focused regions against the supplied references.
+
+**Follow-up Polish**
+
+- P3: Pull requests, Scheduled, and the top-level Plugins entry are intentionally non-operational in this frontend-only pass and are visually muted with explanatory titles until their product flows are connected.
+
+final result: passed
+
+---
+
 ## Studio coding composer
 
 **Comparison Target**
@@ -59,7 +109,7 @@ final result: passed
 **Findings**
 
 - No remaining P0, P1, or P2 differences in the requested composer scope.
-- Fonts and typography: the existing Geist hierarchy remains intact; the prompt is raised to 15.5 px with the reference's quieter placeholder and compact toolbar labels.
+- Fonts and typography: the composer now inherits the requested Karla body family while retaining Geist Mono only for runtime metadata; the prompt remains 15.5 px with the reference's quieter placeholder and compact toolbar labels.
 - Spacing and layout rhythm: the composer now uses the reference's wide, low profile, 21 px radius, inset toolbar, grouped left/right controls, and layered queue rail when follow-ups exist.
 - Colors and visual tokens: Vellum's neutral near-black surfaces and orange status accent are preserved instead of importing BeUI's product palette.
 - Image and asset fidelity: the composer has no raster artwork or custom visual asset requirement; it reuses Vellum's established icon set and does not introduce placeholders.
