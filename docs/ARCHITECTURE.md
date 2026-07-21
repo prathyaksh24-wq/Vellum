@@ -87,11 +87,18 @@ See `docs/memory-knowledge-architecture.md` for the ownership contract.
 
 ## Knowledge System
 
-The Knowledge Wiki is a maintained Obsidian synthesis layer under `Vault/Knowledge`. It is separate from raw `Vault/Library` material.
+The Personal Intelligence Knowledge Core is the target canonical evidence layer.
+It stores source identity, immutable versions, observations, provenance,
+relationships, temporal preferences, projections, and context-package lineage.
+It currently runs additively in shadow mode.
+
+The Knowledge Wiki remains a maintained Obsidian synthesis layer under
+`Vault/Knowledge` during migration. It is separate from raw `Vault/Library`
+material and will become the optional Karpathy-style projection after cutover.
 
 Normal wiki operations read and write maintained Knowledge pages. Raw Library content is read only when explicitly approved for a specific ingestion request. Pages carry trust and provenance metadata, and revisions are versioned under the wiki history directory.
 
-See `docs/knowledge-wiki.md`.
+See `docs/knowledge-wiki.md` and `docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md`.
 
 ## Tools And MCP Integrations
 
@@ -148,6 +155,7 @@ Coding mode is separate from default chat. It has its own session service, event
 Important local storage locations:
 
 - `data/ui/conversations.json` for canonical conversations.
+- `data/knowledge/core.db` and `data/knowledge/blobs/` for the shadow Personal Intelligence store.
 - `data/memory/` for memory databases, logs, and derived stores.
 - `data/llm-routing/routing.db` for routing state.
 - `data/skills/catalog.db` for the skills catalog projection.

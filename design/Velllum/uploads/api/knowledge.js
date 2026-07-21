@@ -26,6 +26,21 @@
     return client.request("/api/knowledge/rebuild-index", { method: "POST" });
   }
 
+  function coreSources(kind, limit, offset) {
+    var params = new URLSearchParams();
+    if (kind) params.set("kind", String(kind));
+    if (limit !== undefined) params.set("limit", String(limit));
+    if (offset !== undefined) params.set("offset", String(offset));
+    return client.request("/api/knowledge/core/sources?" + params.toString());
+  }
+
+  function coreObservations(origin, limit) {
+    var params = new URLSearchParams();
+    if (origin) params.set("origin", String(origin));
+    if (limit !== undefined) params.set("limit", String(limit));
+    return client.request("/api/knowledge/core/observations?" + params.toString());
+  }
+
   window.VellumApi.knowledge = {
     status: function () { return client.request("/api/knowledge/status"); },
     query: query,
@@ -34,5 +49,15 @@
     page: function (ref) { return client.request("/api/knowledge/pages/" + encodeURIComponent(ref)); },
     lint: lint,
     indexRebuild: rebuildIndex,
+    coreStatus: function () { return client.request("/api/knowledge/core/status"); },
+    coreOwnership: function () { return client.request("/api/knowledge/core/ownership"); },
+    coreSources: coreSources,
+    coreObservations: coreObservations,
+    contextPack: function (payload) {
+      return client.request("/api/knowledge/core/context-packs", client.jsonOptions("POST", payload));
+    },
+    bootstrapPreview: function (payload) {
+      return client.request("/api/knowledge/core/bootstrap", client.jsonOptions("POST", Object.assign({}, payload || {}, {apply:false})));
+    },
   };
 })();

@@ -1,0 +1,70 @@
+"""Stable API additions under Vellum's existing /api/knowledge contract."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query
+
+from agent.knowledge.models import BootstrapRequest, ContextPackRequest, ObservationInput, ProjectionInput, SourceItemInput
+from agent.knowledge.runtime import get_knowledge_core
+
+
+router = APIRouter(prefix="/core", tags=["personal-intelligence"])
+
+
+@router.get("/status")
+async def core_status() -> dict[str, Any]:
+    return await asyncio.to_thread(get_knowledge_core().status)
+
+
+@router.get("/ownership")
+async def core_ownership() -> dict[str, Any]:
+    return {"ownership": get_knowledge_core().ownership()}
+
+
+@router.get("/sources")
+async def core_sources(
+    kind: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(get_knowledge_core().store.list_sources, kind=kind, limit=limit, offset=offset)
+    return {"sources": items, "count": len(items), "limit": limit, "offset": offset}
+
+
+@router.post("/sources")
+async def core_upsert_source(request: SourceItemInput) -> dict[str, Any]:
+    return await asyncio.to_thread(get_knowledge_core().store.upsert_source, request)
+
+
+@router.get("/observations")
+async def core_observations(
+    origin: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(get_knowledge_core().store.list_observations, origin=origin, limit=limit)
+    return {"observations": items, "count": len(items)}
+
+
+@router.post("/observations")
+async def core_record_observation(request: ObservationInput) -> dict[str, Any]:
+    return await asyncio.to_thread(get_knowledge_core().store.record_observation, request)
+
+
+@router.post("/projections")
+async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
+    return await asyncio.to_thread(get_knowledge_core().store.register_projection, request)
+
+
+@router.post("/context-packs")
+async def core_context_pack(request: ContextPackRequest) -> dict[str, Any]:
+    return await asyncio.to_thread(get_knowledge_core().create_context_pack, request)
+
+
+@router.post("/bootstrap")
+async def core_bootstrap(request: BootstrapRequest) -> dict[str, Any]:
+    if request.apply and not request.confirm:
+        raise HTTPException(status_code=409, detail="Bootstrap apply requires explicit confirmation.")
+    return await asyncio.to_thread(get_knowledge_core().bootstrap, request)

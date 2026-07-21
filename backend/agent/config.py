@@ -67,6 +67,23 @@ class Settings(BaseSettings):
     obsidian_vault_path: Path = Field(alias="OBSIDIAN_VAULT_PATH")
     agent_notes_folder: str = Field(default="Agent", alias="AGENT_NOTES_FOLDER")
 
+    # Personal Intelligence / canonical Knowledge Core
+    knowledge_core_enabled: bool = Field(default=True, alias="KNOWLEDGE_CORE_ENABLED")
+    knowledge_shadow_write: bool = Field(default=True, alias="KNOWLEDGE_SHADOW_WRITE")
+    knowledge_read_enabled: bool = Field(default=False, alias="KNOWLEDGE_READ_ENABLED")
+    knowledge_tool_observation_learning: bool = Field(
+        default=False,
+        alias="KNOWLEDGE_TOOL_OBSERVATION_LEARNING",
+    )
+    knowledge_core_db_path: Path = Field(
+        default=Path("data/knowledge/core.db"),
+        alias="KNOWLEDGE_CORE_DB_PATH",
+    )
+    knowledge_blob_path: Path = Field(
+        default=Path("data/knowledge/blobs"),
+        alias="KNOWLEDGE_BLOB_PATH",
+    )
+
     # Vector store (embedded ChromaDB)
     chroma_path: Path | None = Field(default=Path("data/embeddings/chroma"), alias="CHROMA_PATH")
 
@@ -161,6 +178,8 @@ class Settings(BaseSettings):
         "obsidian_vault_path",
         "filesystem_mcp_path",
         "chroma_path",
+        "knowledge_core_db_path",
+        "knowledge_blob_path",
         "voice_model_dir",
         "computer_use_screenshot_dir",
         "llm_routing_db_path",
@@ -182,6 +201,8 @@ class Settings(BaseSettings):
         self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.chroma_path is not None:
             self.chroma_path = _resolve_against_repo(self.chroma_path)
+        self.knowledge_core_db_path = _resolve_against_repo(self.knowledge_core_db_path)
+        self.knowledge_blob_path = _resolve_against_repo(self.knowledge_blob_path)
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
         self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)

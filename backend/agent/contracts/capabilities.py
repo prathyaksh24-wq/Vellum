@@ -118,6 +118,19 @@ def build_capability_contract() -> CapabilityContract:
                 },
                 notes="Private maintained knowledge; raw Library notes are never ingested automatically.",
             ),
+            "personal_intelligence": FeatureContract(
+                enabled=True,
+                source="backend.agent.knowledge",
+                endpoints={
+                    "status": "/api/knowledge/core/status",
+                    "ownership": "/api/knowledge/core/ownership",
+                    "sources": "/api/knowledge/core/sources",
+                    "observations": "/api/knowledge/core/observations",
+                    "context_packs": "/api/knowledge/core/context-packs",
+                    "bootstrap": "/api/knowledge/core/bootstrap",
+                },
+                notes="Cerebras-style canonical evidence layer operating in additive shadow mode.",
+            ),
             "hermes_skills": FeatureContract(
                 enabled=True,
                 source="plugin_runtime.hermes",

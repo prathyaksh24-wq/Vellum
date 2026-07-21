@@ -23,7 +23,11 @@ These are not aspirational values. They are operational commitments that shape e
 
 ### Truth, plainly
 
-Vellum treats the user's curated selections in Obsidian as the highest-priority source of truth. What is in the vault is what has been chosen — selected, saved, organized — which means it carries the user's own judgment about what matters.
+Vellum treats the user's curated selections as the highest-priority source of
+truth. Obsidian is one optional surface for those selections; the local Vellum
+Knowledge Core preserves their evidence, provenance, and history independently
+of any note-taking application. What the user selects, saves, reads, corrects,
+or deliberately connects carries their judgment about what matters.
 
 When Vellum answers, it distinguishes clearly between three kinds of knowledge:
 
@@ -161,7 +165,10 @@ Vellum is not a tool that asks for your attention. It does not notify, ping, or 
 
 Vellum is not a tool that modifies itself without permission. Every autonomous behavior has a boundary the user set. Every skill was approved by the user.
 
-Vellum is not a tool that leaks. Data that enters the privacy layer stays private. The vault is the only source of truth. The model's weights don't change. The cloud never sees raw personal data.
+Vellum is not a tool that leaks. Data that enters the privacy layer stays
+private. The local Knowledge Core is the canonical evidence store and Obsidian
+is an optional readable projection. The model's weights don't change. The cloud
+never sees raw personal data.
 
 Vellum is not a tool for everyone. It is for one person, built to be more faithful to that person the longer it runs.
 

@@ -15,6 +15,7 @@ from agent.memory.fts5 import FTS5Memory
 from agent.memory.honcho_client import HonchoMemory
 from agent.memory.orchestrator import MemoryOrchestrator, SQLiteMemoryStore
 from agent.memory.resolved import ResolvedQuestionsCache
+from agent.knowledge.runtime import get_knowledge_core
 from agent.obsidian.wiki_runtime import get_knowledge_wiki
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 
@@ -42,6 +43,7 @@ def build_memory_orchestrator() -> MemoryOrchestrator:
         ),
         memory_dir=memory_root,
         knowledge_wiki=get_knowledge_wiki(),
+        knowledge_core=get_knowledge_core() if settings.knowledge_core_enabled else None,
     )
 
 

@@ -399,6 +399,7 @@ class MemoryOrchestrator:
     provider_extensions: MemoryProviderExtensionManager | None = None
     specialist_cache: SpecialistResponseCache | None = None
     knowledge_wiki: Any | None = None
+    knowledge_core: Any | None = None
 
     def __post_init__(self) -> None:
         if self.store is None:
@@ -502,12 +503,28 @@ class MemoryOrchestrator:
                 },
             )
 
+        knowledge_core_result: dict[str, Any] = {"stored": False, "reason": "knowledge_core_unavailable"}
+        if self.knowledge_core is not None:
+            try:
+                knowledge_core_result = self.knowledge_core.record_turn(
+                    thread_id=thread_id,
+                    query=clean_query,
+                    answer=clean_answer,
+                    tools=compact_tools,
+                    sources=source_list,
+                    agent_name=agent_name,
+                )
+            except Exception as exc:
+                # Shadow ingestion cannot make the existing memory write fail.
+                knowledge_core_result = {"stored": False, "reason": "shadow_write_failed", "error": str(exc)[:300]}
+
         return {
             "stored": True,
             "fts5_id": rowid,
             "resolved_cached": resolved_cached,
             "memory_card_path": memory_card_path,
             "external_sync": external_sync,
+            "knowledge_core": knowledge_core_result,
         }
 
     def build_memory_packet(

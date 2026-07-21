@@ -1,0 +1,39 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+
+async function loadKnowledgeApi(requestImpl) {
+  vi.resetModules();
+  window.VellumApi = {
+    client: {
+      request: requestImpl,
+      jsonOptions: (method, body) => ({ method, body: JSON.stringify(body) }),
+    },
+  };
+  await import("../../../design/Velllum/uploads/api/knowledge.js");
+  return window.VellumApi.knowledge;
+}
+
+describe("Vellum personal intelligence API adapter", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  test("keeps Personal Intelligence behind the existing knowledge namespace", async () => {
+    const request = vi.fn(async () => ({ ready: true }));
+    const api = await loadKnowledgeApi(request);
+
+    await api.coreStatus();
+    await api.coreSources("x_post", 20, 0);
+
+    expect(request).toHaveBeenNthCalledWith(1, "/api/knowledge/core/status");
+    expect(request).toHaveBeenNthCalledWith(2, "/api/knowledge/core/sources?kind=x_post&limit=20&offset=0");
+  });
+
+  test("bootstrap preview cannot accidentally request an applying migration", async () => {
+    const request = vi.fn(async () => ({ mode: "preview" }));
+    const api = await loadKnowledgeApi(request);
+
+    await api.bootstrapPreview({ conversations: true, apply: true });
+
+    const [, options] = request.mock.calls[0];
+    expect(request.mock.calls[0][0]).toBe("/api/knowledge/core/bootstrap");
+    expect(JSON.parse(options.body)).toMatchObject({ conversations: true, apply: false });
+  });
+});

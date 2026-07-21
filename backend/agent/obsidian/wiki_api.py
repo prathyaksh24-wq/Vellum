@@ -14,9 +14,11 @@ from agent.obsidian.wiki_runtime import get_knowledge_wiki
 from agent.obsidian.vault import ObsidianVault
 from agent.obsidian.conversation_context import is_sensitive_context
 from agent.config import get_settings
+from agent.knowledge.api import router as knowledge_core_router
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
+router.include_router(knowledge_core_router)
 
 
 class KnowledgePageRequest(BaseModel):
@@ -73,7 +75,14 @@ class KnowledgeOverviewRequest(BaseModel):
 @router.get("/status")
 async def knowledge_status() -> dict[str, Any]:
     try:
-        return await asyncio.to_thread(get_knowledge_wiki().status)
+        status = await asyncio.to_thread(get_knowledge_wiki().status)
+        try:
+            from agent.knowledge.runtime import get_knowledge_core
+
+            status["personal_intelligence"] = await asyncio.to_thread(get_knowledge_core().status)
+        except Exception as exc:
+            status["personal_intelligence"] = {"ready": False, "error": str(exc)[:300]}
+        return status
     except KnowledgeWikiError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

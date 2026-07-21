@@ -1,6 +1,10 @@
 # Vellum Knowledge Wiki
 
-The Knowledge Wiki is Vellum's private, maintained Obsidian knowledge layer. It complements the Memory Orchestrator; it does not replace it.
+The Knowledge Wiki is Vellum's private, maintained Obsidian knowledge layer. It
+complements the Memory Orchestrator; it does not replace it. During the Personal
+Intelligence migration it remains the active maintained wiki. After verified
+cutover it becomes an optional Karpathy-style projection of canonical Knowledge
+Core insights. See `PERSONAL_INTELLIGENCE_ARCHITECTURE.md`.
 
 ## Trust boundary
 

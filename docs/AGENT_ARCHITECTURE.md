@@ -90,8 +90,10 @@
 
 ### Default Vellum Streaming Contract
 
-The active frontend surface is `design/Velllum/uploads/vellum-workspace.html`.
-The retired `frontend/ui/vellum-chat.html` is not a target for new stream work.
+The active frontend surface is
+`design/Velllum/uploads/Vellum Default Re-designed.html`.
+`design/Velllum/uploads/vellum-workspace.html` is the separate coding workspace,
+not the default Vellum frontend. Retired chat HTML files are not targets for new work.
 
 Default Vellum reasoning mode consumes `POST /chat/stream` as
 `text/event-stream`. The stream emits OpenAI Responses-style semantic events:
@@ -335,10 +337,14 @@ instructions, citation_style, output_format, created, approved, use_count`.
 ## 5. Knowledge Layer
 
 ### Obsidian Vault
-The single source of truth. All agent knowledge is derived from Markdown files here.
+During the Personal Intelligence migration, Obsidian remains the active source
+for existing raw imports and the maintained Knowledge Wiki. The target source of
+truth is the local Knowledge Core; Obsidian becomes an optional readable
+projection and explicit user-authored source surface after verified cutover.
 Location: `OBSIDIAN_VAULT_PATH` (from `.env`).
 The vault is plain Markdown. It requires no Docker, no database, no special tooling.
-If every Docker service stopped tomorrow, your vault is intact and human-readable.
+If every Docker service stopped tomorrow, the vault remains intact and
+human-readable. The embedded Knowledge Core also runs without Docker.
 
 Every file the agent uses was originally a human choice — a book you imported,
 a note you wrote, a post you saved. The vault is yours. The agent reads from it.

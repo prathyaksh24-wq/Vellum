@@ -143,6 +143,7 @@ Vellum treats privacy as part of the runtime boundary:
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [Personal Intelligence Architecture](docs/PERSONAL_INTELLIGENCE_ARCHITECTURE.md)
 - [Memory and Knowledge Ownership](docs/memory-knowledge-architecture.md)
 - [Knowledge Wiki](docs/knowledge-wiki.md)
 - [Skills System](docs/SKILLS_SYSTEM.md)
