@@ -214,3 +214,25 @@ Canonical ownership moves only after all gates pass:
 
 Old writers are retired separately after a stable read cutover. Existing files
 are not deleted as part of the ownership change.
+
+## Migration Operations
+
+The operational CLI is preview-first and prints structured JSON:
+
+```powershell
+.venv\Scripts\python.exe scripts\knowledge_core.py status
+.venv\Scripts\python.exe scripts\knowledge_core.py bootstrap
+.venv\Scripts\python.exe scripts\knowledge_core.py backup --output data\knowledge\backups\before-bootstrap.zip
+.venv\Scripts\python.exe scripts\knowledge_core.py verify data\knowledge\backups\before-bootstrap.zip
+```
+
+Applying the existing-data bootstrap requires the literal confirmation token:
+
+```powershell
+.venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --apply --confirm APPLY_KNOWLEDGE_BOOTSTRAP
+```
+
+Backups use SQLite's online backup API, include content-addressed blobs and a
+checksummed manifest, and are verified before the command succeeds. Restore is
+not automated yet; it remains a cutover gate until atomic restore and rollback
+tests are implemented.

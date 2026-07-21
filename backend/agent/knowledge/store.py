@@ -14,6 +14,7 @@ import math
 import os
 import sqlite3
 import tempfile
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable
@@ -1357,4 +1358,20 @@ class KnowledgeStore:
             "storage": "embedded_sqlite",
             "blobs": "local_content_addressed_gzip",
             "counts": counts,
+        }
+
+    def backup_database(self, destination: str | Path) -> None:
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with closing(self._connect()) as source, closing(sqlite3.connect(target)) as backup:
+            source.backup(backup)
+
+    def integrity_check(self) -> dict[str, Any]:
+        with closing(self._connect()) as connection:
+            result = str(connection.execute("PRAGMA integrity_check").fetchone()[0])
+            foreign_key_errors = [tuple(row) for row in connection.execute("PRAGMA foreign_key_check").fetchall()]
+        return {
+            "ok": result.casefold() == "ok" and not foreign_key_errors,
+            "sqlite": result,
+            "foreign_key_errors": len(foreign_key_errors),
         }
