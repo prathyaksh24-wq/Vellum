@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -22,6 +23,9 @@ class ToolPermissionError(PermissionError):
 CapabilityAdapter = Callable[[dict[str, Any]], dict[str, Any]]
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class CapabilityRecord:
     name: str
@@ -34,9 +38,23 @@ class CapabilityRecord:
     required_env_flags: frozenset[str] = frozenset()
 
 
+@dataclass(frozen=True)
+class ToolInvocation:
+    name: str
+    namespace: str
+    access: CapabilityAccess
+    agent_name: str
+    payload: dict[str, Any]
+    result: dict[str, Any]
+
+
+ToolInvocationObserver = Callable[[ToolInvocation], None]
+
+
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, observer: ToolInvocationObserver | None = None) -> None:
         self._records: dict[str, CapabilityRecord] = {}
+        self._observer = observer
 
     def register(self, record: CapabilityRecord) -> None:
         if record.name in self._records:
@@ -52,7 +70,22 @@ class ToolRegistry:
     def invoke(self, name: str, payload: dict[str, Any], *, agent_name: str) -> dict[str, Any]:
         record = self.get(name)
         self._check_permission(record, payload, agent_name=agent_name)
-        return record.adapter(payload)
+        result = record.adapter(payload)
+        if self._observer is not None:
+            try:
+                self._observer(
+                    ToolInvocation(
+                        name=record.name,
+                        namespace=record.namespace,
+                        access=record.access,
+                        agent_name=agent_name,
+                        payload=dict(payload),
+                        result=result,
+                    )
+                )
+            except Exception:
+                logger.exception("Tool observation failed for %s.", record.name)
+        return result
 
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
         if agent_name not in record.allowed_agents:

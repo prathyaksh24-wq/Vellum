@@ -105,6 +105,12 @@ user preference merely because Vellum chose to run them. Preferences must be
 supported by user behavior, explicit confirmation, or a separately approved
 policy.
 
+When `KNOWLEDGE_TOOL_OBSERVATION_LEARNING=true`, the shared `ToolRegistry`
+captures successful read results after capability and profile permission checks.
+X posts and YouTube metadata/transcripts become versioned source evidence;
+unknown tools produce metadata-only observations. Observer failure never changes
+the tool result, and this path never writes `user_signals` directly.
+
 ## Books
 
 Raw book pages are `private_local_only` and `deny_raw`. They may be parsed,

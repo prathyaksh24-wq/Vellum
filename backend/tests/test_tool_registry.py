@@ -109,3 +109,43 @@ def test_tool_registry_rejects_duplicate_capability_names():
                 adapter=lambda payload: {},
             )
         )
+
+
+def test_tool_registry_observer_is_best_effort_and_runs_after_success():
+    observed = []
+    registry = ToolRegistry(observer=observed.append)
+    registry.register(
+        CapabilityRecord(
+            name="youtube.search_videos",
+            namespace="youtube",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"YoutubeAgent"}),
+            stream_label="Searched YouTube",
+            adapter=lambda payload: {"items": [{"video_id": payload["query"]}]},
+        )
+    )
+
+    result = registry.invoke("youtube.search_videos", {"query": "video-1"}, agent_name="YoutubeAgent")
+
+    assert result["items"][0]["video_id"] == "video-1"
+    assert observed[0].name == "youtube.search_videos"
+    assert observed[0].agent_name == "YoutubeAgent"
+
+
+def test_tool_registry_observer_failure_does_not_break_a_successful_tool():
+    def fail(_invocation):
+        raise RuntimeError("observer unavailable")
+
+    registry = ToolRegistry(observer=fail)
+    registry.register(
+        CapabilityRecord(
+            name="x.search_posts",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"XAgent"}),
+            stream_label="Searched X",
+            adapter=lambda payload: {"items": [{"text": payload["query"]}]},
+        )
+    )
+
+    assert registry.invoke("x.search_posts", {"query": "topic"}, agent_name="XAgent")["items"]

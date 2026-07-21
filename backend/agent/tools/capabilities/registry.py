@@ -6,7 +6,7 @@ from agent.tools.capabilities.mcp_service import McpCapabilityService
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
-from agent.tools.registry import ToolRegistry
+from agent.tools.registry import ToolInvocationObserver, ToolRegistry
 
 
 def build_shared_tool_registry(
@@ -17,6 +17,7 @@ def build_shared_tool_registry(
     youtube_service: YoutubeCapabilityService | None = None,
     memory_service: MemoryCapabilityService | None = None,
     mcp_service: McpCapabilityService | None = None,
+    tool_observer: ToolInvocationObserver | None = None,
 ) -> ToolRegistry:
     root = Path(vault_root)
     memory_sessions_db = sessions_db or root / "Agent" / "Memory" / "shared-tool-registry-sessions.db"
@@ -26,7 +27,9 @@ def build_shared_tool_registry(
         memory_service or MemoryCapabilityService(vault_root=root, sessions_db=memory_sessions_db),
         mcp_service or McpCapabilityService(),
     )
-    registry = ToolRegistry()
+    if tool_observer is None:
+        tool_observer = _default_tool_observer()
+    registry = ToolRegistry(observer=tool_observer)
     for service in services:
         _copy_records(registry, service.build_registry())
     return registry
@@ -35,3 +38,14 @@ def build_shared_tool_registry(
 def _copy_records(target: ToolRegistry, source: ToolRegistry) -> None:
     for name in source.names():
         target.register(source.get(name))
+
+
+def _default_tool_observer() -> ToolInvocationObserver | None:
+    from agent.config import get_settings
+
+    if not get_settings().knowledge_tool_observation_learning:
+        return None
+    from agent.knowledge.runtime import get_knowledge_core
+    from agent.knowledge.tool_observer import KnowledgeToolObserver
+
+    return KnowledgeToolObserver(get_knowledge_core())

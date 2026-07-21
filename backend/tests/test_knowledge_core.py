@@ -20,6 +20,8 @@ from agent.knowledge.models import (
 from agent.knowledge.service import KnowledgeCore
 from agent.knowledge.store import KnowledgeStore
 from agent.knowledge.runtime import set_knowledge_core
+from agent.knowledge.tool_observer import KnowledgeToolObserver
+from agent.tools.registry import CapabilityAccess, ToolInvocation
 
 
 def build_core(tmp_path: Path) -> KnowledgeCore:
@@ -204,3 +206,60 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
     assert unconfirmed_apply.status_code == 409
     assert context.status_code == 200
     assert context.json()["policy"]["raw_private_content"] == "withheld"
+
+
+def test_tool_observer_records_evidence_but_not_preferences(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    core.tool_learning_enabled = True
+    observer = KnowledgeToolObserver(core)
+
+    observer(
+        ToolInvocation(
+            name="x.likes",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            agent_name="XAgent",
+            payload={"handle": "me", "max_results": 5},
+            result={
+                "items": [
+                    {
+                        "text": "An interesting post",
+                        "url": "https://x.com/example/status/123",
+                        "handle": "example",
+                    }
+                ],
+                "provider": "agent-reach",
+            },
+        )
+    )
+
+    sources = core.store.list_sources(kind="x_post")
+    observations = core.store.list_observations(origin="x.likes")
+    assert len(sources) == 1
+    assert sources[0]["external_id"] == "123"
+    assert sources[0]["sensitivity"] == "private"
+    assert len(observations) == 1
+    assert observations[0]["actor"] == "agent"
+    assert core.store.status()["counts"]["user_signals"] == 0
+
+
+def test_tool_observer_withholds_transcript_raw_content_from_external_context(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    core.tool_learning_enabled = True
+    KnowledgeToolObserver(core)(
+        ToolInvocation(
+            name="youtube.fetch_transcript",
+            namespace="youtube",
+            access=CapabilityAccess.READ,
+            agent_name="YoutubeAgent",
+            payload={"video_id": "abc123"},
+            result={"video_id": "abc123", "transcript": "Full transcript text."},
+        )
+    )
+
+    context = core.create_context_pack(
+        ContextPackRequest(query="YouTube transcript abc123", destination="external", include_raw_content=True)
+    )
+    assert context["evidence"][0]["external_policy"] == "deny_raw"
+    assert context["evidence"][0]["content_withheld"] is True
+    assert "content" not in context["evidence"][0]
