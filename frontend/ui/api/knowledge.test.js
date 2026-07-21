@@ -21,9 +21,11 @@ describe("Vellum personal intelligence API adapter", () => {
 
     await api.coreStatus();
     await api.coreSources("x_post", 20, 0);
+    await api.corePreferences("youtube_channel", 10);
 
     expect(request).toHaveBeenNthCalledWith(1, "/api/knowledge/core/status");
     expect(request).toHaveBeenNthCalledWith(2, "/api/knowledge/core/sources?kind=x_post&limit=20&offset=0");
+    expect(request).toHaveBeenNthCalledWith(3, "/api/knowledge/core/preferences?category=youtube_channel&limit=10");
   });
 
   test("bootstrap preview cannot accidentally request an applying migration", async () => {

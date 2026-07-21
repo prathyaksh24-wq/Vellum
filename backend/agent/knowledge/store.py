@@ -10,6 +10,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import math
 import os
 import sqlite3
 import tempfile
@@ -17,11 +18,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-from agent.knowledge.models import ContextPackRequest, ObservationInput, ProjectionInput, SourceItemInput
+from agent.knowledge.models import (
+    ContextPackRequest,
+    ObservationActor,
+    ObservationInput,
+    ProjectionInput,
+    SourceItemInput,
+    UserSignalInput,
+)
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def _now() -> str:
@@ -107,7 +115,11 @@ class KnowledgeStore:
                 )
             if version == 0:
                 self._create_schema(connection)
-                connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+                connection.execute("PRAGMA user_version = 1")
+                version = 1
+            if version < 2:
+                self._migrate_v2(connection)
+                connection.execute("PRAGMA user_version = 2")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -338,6 +350,30 @@ class KnowledgeStore:
             """
         )
 
+    @staticmethod
+    def _migrate_v2(connection: sqlite3.Connection) -> None:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(user_signals)").fetchall()}
+        additions = {
+            "subject_key": "TEXT NOT NULL DEFAULT ''",
+            "category": "TEXT NOT NULL DEFAULT 'general'",
+            "evidence_class": "TEXT NOT NULL DEFAULT 'engagement'",
+            "eligible": "INTEGER NOT NULL DEFAULT 0",
+            "event_key": "TEXT NOT NULL DEFAULT ''",
+            "sensitivity": "TEXT NOT NULL DEFAULT 'private'",
+        }
+        for name, definition in additions.items():
+            if name not in columns:
+                connection.execute(f"ALTER TABLE user_signals ADD COLUMN {name} {definition}")
+        connection.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS user_signals_event_key ON user_signals(event_key) WHERE event_key <> ''"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS user_signals_subject_time ON user_signals(subject_key, observed_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS preference_states_category_score ON preference_states(category, current_score DESC)"
+        )
+
     def upsert_source(self, item: SourceItemInput) -> dict[str, Any]:
         source_id = _stable_id("src", item.kind.casefold(), item.external_id)
         observed_at = _iso(item.observed_at) or _now()
@@ -522,6 +558,219 @@ class KnowledgeStore:
                 ),
             )
         return {"projection_id": projection_id, "created": existing is None}
+
+    def record_user_signal(self, item: UserSignalInput) -> dict[str, Any]:
+        signal_id = _stable_id("sig", item.event_key)
+        observed_at = _iso(item.observed_at) or _now()
+        eligible_actor = item.actor not in {ObservationActor.AGENT, ObservationActor.SCHEDULED}
+        eligible = bool(item.preference_evidence and eligible_actor)
+        now = _now()
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT id, eligible FROM user_signals WHERE event_key = ?",
+                (item.event_key,),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO user_signals (
+                        id, entity_id, signal_type, value, weight, actor, source_id,
+                        observation_id, observed_at, metadata_json, created_at,
+                        subject_key, category, evidence_class, eligible, event_key,
+                        sensitivity
+                    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        signal_id,
+                        item.signal_type,
+                        float(item.value),
+                        float(item.weight),
+                        item.actor.value,
+                        item.source_id,
+                        item.observation_id,
+                        observed_at,
+                        _json(item.metadata),
+                        now,
+                        item.subject_key,
+                        item.category,
+                        item.evidence_class.value,
+                        int(eligible),
+                        item.event_key,
+                        item.sensitivity.value,
+                    ),
+                )
+            else:
+                signal_id = str(existing["id"])
+                eligible = bool(existing["eligible"])
+        state = self.recompute_preference(item.subject_key)
+        return {
+            "signal_id": signal_id,
+            "created": existing is None,
+            "eligible": eligible,
+            "preference": state,
+        }
+
+    def recompute_preference(self, subject_key: str, *, now: datetime | None = None) -> dict[str, Any] | None:
+        reference = now or datetime.now(UTC)
+        if reference.tzinfo is None:
+            reference = reference.replace(tzinfo=UTC)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT value, weight, observed_at, category, signal_type, evidence_class
+                FROM user_signals
+                WHERE subject_key = ? AND eligible = 1
+                ORDER BY observed_at ASC
+                """,
+                (subject_key,),
+            ).fetchall()
+        if not rows:
+            return None
+
+        signals: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                observed = datetime.fromisoformat(str(row["observed_at"]).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=UTC)
+            age_days = max(0.0, (reference - observed.astimezone(UTC)).total_seconds() / 86400.0)
+            signals.append({**dict(row), "observed": observed.astimezone(UTC), "age_days": age_days})
+        if not signals:
+            return None
+
+        def window(days_min: float, days_max: float) -> list[dict[str, Any]]:
+            return [signal for signal in signals if days_min <= signal["age_days"] < days_max]
+
+        def weighted_average(items: list[dict[str, Any]]) -> float | None:
+            denominator = sum(float(item["weight"]) for item in items)
+            if denominator <= 0:
+                return None
+            return sum(float(item["value"]) * float(item["weight"]) for item in items) / denominator
+
+        decayed_weights = [float(signal["weight"]) * math.exp(-signal["age_days"] / 60.0) for signal in signals]
+        denominator = sum(decayed_weights)
+        raw_current = (
+            sum(float(signal["value"]) * weight for signal, weight in zip(signals, decayed_weights)) / denominator
+            if denominator > 0
+            else 0.0
+        )
+        days_since_latest = min(signal["age_days"] for signal in signals)
+        freshness = math.exp(-days_since_latest / 90.0)
+        current_score = max(-1.0, min(1.0, raw_current * freshness))
+        recent_items = window(0, 30)
+        prior_items = window(30, 180)
+        long_items = window(0, 3650)
+        recent = weighted_average(recent_items)
+        prior = weighted_average(prior_items)
+        long_term = weighted_average(long_items)
+        historical_peak = max(float(signal["value"]) for signal in signals)
+        meaningful = [signal for signal in signals if float(signal["value"]) >= 0.35]
+        last_meaningful = max((signal["observed"] for signal in meaningful), default=None)
+        days_since_meaningful = (
+            max(0.0, (reference - last_meaningful).total_seconds() / 86400.0)
+            if last_meaningful is not None
+            else float("inf")
+        )
+
+        comparison_recent = recent if recent is not None else 0.0
+        comparison_prior = prior if prior is not None else historical_peak
+        delta = comparison_recent - comparison_prior
+        if delta >= 0.15:
+            trend = "rising"
+        elif delta <= -0.15 or (days_since_meaningful > 30 and historical_peak >= 0.5):
+            trend = "falling"
+        else:
+            trend = "stable"
+
+        if current_score <= -0.3:
+            lifecycle = "rejected"
+        elif historical_peak >= 0.5 and days_since_latest > 90:
+            lifecycle = "dormant"
+        elif historical_peak >= 0.55 and (
+            current_score <= historical_peak - 0.2 or trend == "falling"
+        ):
+            lifecycle = "waning"
+        elif current_score >= 0.55 and days_since_latest <= 30:
+            lifecycle = "active"
+        else:
+            lifecycle = "occasional"
+
+        confidence = max(0.0, min(1.0, (1.0 - math.exp(-len(signals) / 5.0)) * freshness))
+        category = str(signals[-1]["category"])
+        windows = {
+            "recent_30d": {"average": recent, "count": len(recent_items)},
+            "prior_30_to_180d": {"average": prior, "count": len(prior_items)},
+            "long_term": {"average": long_term, "count": len(long_items)},
+            "days_since_latest": round(days_since_latest, 3),
+            "days_since_meaningful": None if math.isinf(days_since_meaningful) else round(days_since_meaningful, 3),
+        }
+        state_id = _stable_id("pref", subject_key)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO preference_states (
+                    id, subject_key, entity_id, category, current_score, trend,
+                    lifecycle, confidence, historical_peak, windows_json,
+                    evidence_count, last_meaningful_engagement, updated_at
+                ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(subject_key) DO UPDATE SET
+                    category = excluded.category,
+                    current_score = excluded.current_score,
+                    trend = excluded.trend,
+                    lifecycle = excluded.lifecycle,
+                    confidence = excluded.confidence,
+                    historical_peak = excluded.historical_peak,
+                    windows_json = excluded.windows_json,
+                    evidence_count = excluded.evidence_count,
+                    last_meaningful_engagement = excluded.last_meaningful_engagement,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    state_id,
+                    subject_key,
+                    category,
+                    current_score,
+                    trend,
+                    lifecycle,
+                    confidence,
+                    historical_peak,
+                    _json(windows),
+                    len(signals),
+                    last_meaningful.isoformat() if last_meaningful is not None else "",
+                    _now(),
+                ),
+            )
+        return self.get_preference(subject_key)
+
+    def get_preference(self, subject_key: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM preference_states WHERE subject_key = ?",
+                (subject_key,),
+            ).fetchone()
+        return self._preference_row(row) if row is not None else None
+
+    def list_preferences(self, *, category: str = "", limit: int = 100) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        where = ""
+        if category:
+            where = "WHERE category = ?"
+            params.append(category)
+        params.append(max(1, min(int(limit), 500)))
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM preference_states {where} ORDER BY updated_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+        return [self._preference_row(row) for row in rows]
+
+    @staticmethod
+    def _preference_row(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["windows"] = json.loads(str(item.pop("windows_json") or "{}"))
+        return item
 
     def list_sources(self, *, kind: str = "", limit: int = 100, offset: int = 0) -> list[dict[str, Any]]:
         params: list[Any] = []

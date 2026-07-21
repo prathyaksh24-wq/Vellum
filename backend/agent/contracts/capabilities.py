@@ -126,6 +126,8 @@ def build_capability_contract() -> CapabilityContract:
                     "ownership": "/api/knowledge/core/ownership",
                     "sources": "/api/knowledge/core/sources",
                     "observations": "/api/knowledge/core/observations",
+                    "signals": "/api/knowledge/core/signals",
+                    "preferences": "/api/knowledge/core/preferences",
                     "context_packs": "/api/knowledge/core/context-packs",
                     "bootstrap": "/api/knowledge/core/bootstrap",
                 },

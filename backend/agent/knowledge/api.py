@@ -7,7 +7,15 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from agent.knowledge.models import BootstrapRequest, ContextPackRequest, ObservationInput, ProjectionInput, SourceItemInput
+from agent.knowledge.models import (
+    BootstrapRequest,
+    ContextPackRequest,
+    ObservationActor,
+    ObservationInput,
+    ProjectionInput,
+    SourceItemInput,
+    UserSignalInput,
+)
 from agent.knowledge.runtime import get_knowledge_core
 
 
@@ -51,6 +59,26 @@ async def core_observations(
 @router.post("/observations")
 async def core_record_observation(request: ObservationInput) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().store.record_observation, request)
+
+
+@router.post("/signals")
+async def core_record_signal(request: UserSignalInput) -> dict[str, Any]:
+    if request.actor != ObservationActor.USER:
+        raise HTTPException(status_code=422, detail="Public signal writes require actor=user.")
+    return await asyncio.to_thread(get_knowledge_core().store.record_user_signal, request)
+
+
+@router.get("/preferences")
+async def core_preferences(
+    category: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(
+        get_knowledge_core().store.list_preferences,
+        category=category,
+        limit=limit,
+    )
+    return {"preferences": items, "count": len(items)}
 
 
 @router.post("/projections")

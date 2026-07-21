@@ -41,6 +41,13 @@
     return client.request("/api/knowledge/core/observations?" + params.toString());
   }
 
+  function corePreferences(category, limit) {
+    var params = new URLSearchParams();
+    if (category) params.set("category", String(category));
+    if (limit !== undefined) params.set("limit", String(limit));
+    return client.request("/api/knowledge/core/preferences?" + params.toString());
+  }
+
   window.VellumApi.knowledge = {
     status: function () { return client.request("/api/knowledge/status"); },
     query: query,
@@ -53,6 +60,10 @@
     coreOwnership: function () { return client.request("/api/knowledge/core/ownership"); },
     coreSources: coreSources,
     coreObservations: coreObservations,
+    corePreferences: corePreferences,
+    recordSignal: function (payload) {
+      return client.request("/api/knowledge/core/signals", client.jsonOptions("POST", payload));
+    },
     contextPack: function (payload) {
       return client.request("/api/knowledge/core/context-packs", client.jsonOptions("POST", payload));
     },

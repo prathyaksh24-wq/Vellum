@@ -36,6 +36,13 @@ class PromotionStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class EvidenceClass(str, Enum):
+    EXPLICIT = "explicit"
+    ENGAGEMENT = "engagement"
+    PASSIVE = "passive"
+    IMPORTED = "imported"
+
+
 class SourceItemInput(BaseModel):
     kind: str = Field(min_length=1, max_length=80)
     external_id: str = Field(min_length=1, max_length=500)
@@ -86,6 +93,31 @@ class ProjectionInput(BaseModel):
     generated_by: str = Field(default="vellum", max_length=80)
     do_not_reingest: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class UserSignalInput(BaseModel):
+    subject_key: str = Field(min_length=1, max_length=500)
+    category: str = Field(min_length=1, max_length=120)
+    signal_type: str = Field(min_length=1, max_length=120)
+    event_key: str = Field(min_length=1, max_length=500)
+    value: float = Field(ge=-1.0, le=1.0)
+    weight: float = Field(default=1.0, gt=0.0, le=10.0)
+    actor: ObservationActor
+    evidence_class: EvidenceClass = EvidenceClass.ENGAGEMENT
+    preference_evidence: bool = True
+    source_id: str | None = None
+    observation_id: str | None = None
+    observed_at: datetime | None = None
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("subject_key", "category", "signal_type", "event_key")
+    @classmethod
+    def clean_signal_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("signal identity fields cannot be blank")
+        return clean
 
 
 class ContextPackRequest(BaseModel):

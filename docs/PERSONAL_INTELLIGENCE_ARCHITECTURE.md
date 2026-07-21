@@ -119,6 +119,24 @@ approved, privacy-safe derivatives and citations; raw pages are withheld.
 Page, chapter, edition, OCR confidence, and interpretation classification must
 remain attached to every derived claim.
 
+## Temporal Preferences
+
+Preferences are evidence-backed state, not timeless labels. Each signal has a
+stable event key, actor, source, evidence class, sensitivity, value, weight, and
+timestamp. Only approved user, connector, and imported activity is eligible;
+agent and scheduled actions are retained for provenance but excluded from the
+preference calculation.
+
+The public frontend endpoint accepts only `actor=user`. Connector and imported
+signals enter through trusted backend adapters so a browser client cannot forge
+provider history.
+
+Each subject retains its historical peak alongside a freshness-adjusted current
+score, 30-day and prior-window summaries, trend, lifecycle, confidence, and last
+meaningful engagement. A channel can therefore move from `active` to `waning`,
+`occasional`, or `dormant` without losing the fact that it was historically
+important. Explicit negative feedback can move a subject to `rejected`.
+
 ## Context Packs
 
 Chat, coding, and specialists consume bounded context packages instead of
@@ -142,6 +160,8 @@ Initial additive endpoints:
 - `GET /api/knowledge/core/ownership`
 - `GET /api/knowledge/core/sources`
 - `GET /api/knowledge/core/observations`
+- `POST /api/knowledge/core/signals`
+- `GET /api/knowledge/core/preferences`
 - `POST /api/knowledge/core/context-packs`
 - `POST /api/knowledge/core/bootstrap`
 

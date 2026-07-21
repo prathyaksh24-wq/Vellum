@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -10,12 +12,14 @@ from agent.knowledge.api import router as knowledge_core_router
 from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
+    EvidenceClass,
     ExternalPolicy,
     ObservationActor,
     ObservationInput,
     ProjectionInput,
     Sensitivity,
     SourceItemInput,
+    UserSignalInput,
 )
 from agent.knowledge.service import KnowledgeCore
 from agent.knowledge.store import KnowledgeStore
@@ -192,6 +196,29 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
         status = client.get("/api/knowledge/core/status")
         preview = client.post("/api/knowledge/core/bootstrap", json={"apply": False})
         unconfirmed_apply = client.post("/api/knowledge/core/bootstrap", json={"apply": True})
+        signal = client.post(
+            "/api/knowledge/core/signals",
+            json={
+                "subject_key": "youtube:channel:test",
+                "category": "youtube_channel",
+                "signal_type": "completed_video",
+                "event_key": "youtube:test:completion:1",
+                "value": 0.9,
+                "actor": "user",
+            },
+        )
+        spoofed_connector = client.post(
+            "/api/knowledge/core/signals",
+            json={
+                "subject_key": "youtube:channel:test",
+                "category": "youtube_channel",
+                "signal_type": "completed_video",
+                "event_key": "youtube:test:completion:2",
+                "value": 0.9,
+                "actor": "connector",
+            },
+        )
+        preferences = client.get("/api/knowledge/core/preferences?category=youtube_channel")
         context = client.post(
             "/api/knowledge/core/context-packs",
             json={"query": "anything", "destination": "external"},
@@ -204,6 +231,11 @@ def test_core_api_stays_under_existing_knowledge_namespace(tmp_path: Path) -> No
     assert preview.status_code == 200
     assert preview.json()["mode"] == "preview"
     assert unconfirmed_apply.status_code == 409
+    assert signal.status_code == 200
+    assert signal.json()["eligible"] is True
+    assert spoofed_connector.status_code == 422
+    assert preferences.status_code == 200
+    assert preferences.json()["count"] == 1
     assert context.status_code == 200
     assert context.json()["policy"]["raw_private_content"] == "withheld"
 
@@ -263,3 +295,90 @@ def test_tool_observer_withholds_transcript_raw_content_from_external_context(tm
     assert context["evidence"][0]["external_policy"] == "deny_raw"
     assert context["evidence"][0]["content_withheld"] is True
     assert "content" not in context["evidence"][0]
+
+
+def test_preference_state_preserves_historical_peak_and_detects_waning_interest(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    now = datetime.now(UTC)
+    for index, days_ago in enumerate((240, 220, 200, 180)):
+        core.store.record_user_signal(
+            UserSignalInput(
+                subject_key="youtube:channel:sidemen",
+                category="youtube_channel",
+                signal_type="completed_video",
+                event_key=f"youtube:history:old:{index}",
+                value=1.0,
+                weight=1.0,
+                actor=ObservationActor.IMPORTED,
+                evidence_class=EvidenceClass.IMPORTED,
+                observed_at=now - timedelta(days=days_ago),
+            )
+        )
+    core.store.record_user_signal(
+        UserSignalInput(
+            subject_key="youtube:channel:sidemen",
+            category="youtube_channel",
+            signal_type="partial_view",
+            event_key="youtube:history:recent:1",
+            value=0.2,
+            weight=1.0,
+            actor=ObservationActor.CONNECTOR,
+            observed_at=now - timedelta(days=8),
+        )
+    )
+
+    state = core.store.recompute_preference("youtube:channel:sidemen", now=now)
+
+    assert state is not None
+    assert state["historical_peak"] == 1.0
+    assert state["current_score"] < state["historical_peak"]
+    assert state["trend"] == "falling"
+    assert state["lifecycle"] == "waning"
+    assert state["windows"]["recent_30d"]["count"] == 1
+    assert state["windows"]["prior_30_to_180d"]["count"] == 0
+
+
+def test_agent_selected_tool_signal_cannot_change_preferences(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    result = core.store.record_user_signal(
+        UserSignalInput(
+            subject_key="x:topic:philosophy",
+            category="topic",
+            signal_type="agent_search",
+            event_key="tool:x.search:1",
+            value=1.0,
+            actor=ObservationActor.AGENT,
+            preference_evidence=True,
+        )
+    )
+
+    assert result["eligible"] is False
+    assert result["preference"] is None
+    assert core.store.list_preferences() == []
+
+
+def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
+    db_path = tmp_path / "data" / "knowledge" / "core.db"
+    db_path.parent.mkdir(parents=True)
+    with sqlite3.connect(db_path) as connection:
+        KnowledgeStore._create_schema(connection)
+        connection.execute(
+            """
+            INSERT INTO sources (
+                id, kind, external_id, account_id, title, uri, source_path,
+                sensitivity, external_policy, trust, status, metadata_json,
+                first_seen_at, last_seen_at, created_at, updated_at
+            ) VALUES (?, ?, ?, '', '', '', '', 'private', 'allow_scrubbed',
+                      'test', 'active', '{}', ?, ?, ?, ?)
+            """,
+            ("src_v1", "test", "source-1", "2026-01-01", "2026-01-01", "2026-01-01", "2026-01-01"),
+        )
+        connection.execute("PRAGMA user_version = 1")
+
+    migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
+
+    assert migrated.status()["schema_version"] == 2
+    assert migrated.list_sources()[0]["id"] == "src_v1"
+    with sqlite3.connect(db_path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}
+    assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
