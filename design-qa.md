@@ -43,3 +43,48 @@
 - P3: Rocket Blast is fetched from its published registry at runtime to keep the standalone HTML small; an offline build can vendor/compress the same frame set later if Vellum needs to run without network access.
 
 final result: passed
+
+---
+
+## Studio coding composer
+
+**Comparison Target**
+
+- Source visual truth: `C:\Users\User\AppData\Local\Temp\beui-agent-chat-input-preview-11ty.png` captured from `https://pro.beui.dev/preview/agent-chat-input`.
+- Browser-rendered implementation: `D:\Vellum-worktrees\vellum-workspace-studio-final.png`.
+- Side-by-side evidence: `D:\Vellum-worktrees\studio-composer-comparison-final.png`.
+- Viewport: 1440 x 900 desktop; the intended Vellum coding-workspace surface.
+- State: dark theme, landing composer idle, Codex selected, read-only access, provider backend unavailable in this static-browser capture.
+
+**Findings**
+
+- No remaining P0, P1, or P2 differences in the requested composer scope.
+- Fonts and typography: the existing Geist hierarchy remains intact; the prompt is raised to 15.5 px with the reference's quieter placeholder and compact toolbar labels.
+- Spacing and layout rhythm: the composer now uses the reference's wide, low profile, 21 px radius, inset toolbar, grouped left/right controls, and layered queue rail when follow-ups exist.
+- Colors and visual tokens: Vellum's neutral near-black surfaces and orange status accent are preserved instead of importing BeUI's product palette.
+- Image and asset fidelity: the composer has no raster artwork or custom visual asset requirement; it reuses Vellum's established icon set and does not introduce placeholders.
+- Copy and content: source labels are adapted to real Vellum capabilities: Coding agent, selected provider SDK, access mode, attachments, dictation, send/stop, and queued follow-ups.
+
+**Focused Region Comparison**
+
+- The source and implementation composer regions were cropped to comparable scale in the side-by-side evidence above. The controls, input hierarchy, corner geometry, and footer grouping remain clearly readable at that scale.
+- A separate browser interaction harness verified the Add menu, access menu, runtime menu, controlled text input, enabled send state, and dictation capability. Evidence: `D:\Vellum-worktrees\studio-composer-interaction-qa-3.png`.
+
+**Comparison History**
+
+- Initial P2: Vellum's landing composer was 620 px wide, making its control groups visibly more cramped than the source. Fix: widened the landing slot to 760 px while retaining the existing responsive collapse rules.
+- Post-fix evidence: `D:\Vellum-worktrees\studio-composer-comparison-final.png` shows the corrected proportions with no remaining actionable composer mismatch.
+
+**Implementation Checklist**
+
+- [x] Preserve the existing coding-session, provider, access, stop, and event-stream wiring.
+- [x] Add a functional provider switcher and permission selector inside the composer.
+- [x] Add text-file ingestion, image/file chips, browser dictation, and send/stop states.
+- [x] Queue follow-up prompts while a provider is running, with steer, edit, remove, and explicit run actions.
+- [x] Parse the inline JSX, run the workspace regression tests, render in Chromium, and exercise the primary composer controls.
+
+**Follow-up Polish**
+
+- P3: the surrounding Vellum workspace remains intentionally desktop-first below tablet width; the composer itself collapses cleanly, but a future mobile workspace project would need broader shell changes.
+
+final result: passed

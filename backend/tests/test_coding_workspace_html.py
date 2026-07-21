@@ -38,3 +38,16 @@ def test_workspace_html_exposes_real_project_files_without_secret_preview() -> N
     assert "projectFile(codingSession.cwd,path)" in html
     assert "Preview of the selected file would render here" not in html
     assert "prathyaksh24@gmail.com" not in html
+
+
+def test_workspace_html_exposes_functional_studio_composer() -> None:
+    html = WORKSPACE_HTML.read_text(encoding="utf-8")
+
+    assert 'className="input-wrap studio-composer"' in html
+    assert "Agent runtime" in html
+    assert "Queue a follow-up while the agent works" in html
+    assert "window.SpeechRecognition||window.webkitSpeechRecognition" in html
+    assert 'aria-label="Send prompt"' in html
+    assert "setQueued(prev=>[...prev" in html
+    assert "attachmentBudget=131072" in html
+    assert "content=await f.text()" in html

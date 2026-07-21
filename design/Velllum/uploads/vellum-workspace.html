@@ -162,11 +162,11 @@ button{font-family:inherit}
 .cm-key-dot{width:7px;height:7px;border-radius:50%;background:#333;flex-shrink:0}
 .cm-key-dot.on{background:#4ade80}
 .att-row{display:flex;flex-wrap:wrap;gap:6px}
-.att-row.att-compose{padding:9px 12px 2px}
-.att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #262629;border-radius:8px;padding:4px 8px;font-size:11.5px;color:#bbb;max-width:180px}
+.att-row.att-compose{padding:10px 14px 0}
+.att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #29292d;border-radius:9px;padding:4px 7px;font-size:11.5px;color:#bbb;max-width:200px;min-height:32px}
 .att-chip img{width:24px;height:24px;border-radius:4px;object-fit:cover;flex-shrink:0}
 .att-chip .att-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.att-x{cursor:pointer;color:#666;display:flex;flex-shrink:0}
+.att-x{cursor:pointer;color:#666;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;background:none;padding:2px;border-radius:4px}
 .att-x:hover{color:#ddd}
 .spinner{width:13px;height:13px;border:1.5px solid #2a2a2a;border-top-color:#e35d2b;border-radius:50%;animation:spin .75s linear infinite;flex-shrink:0}
 .sb-bottom{border-top:1px solid #191919;padding:6px 10px 8px;position:relative}
@@ -247,29 +247,50 @@ button{font-family:inherit}
 .learning-inline-title{font-size:13px;color:#bbb;margin-bottom:3px}
 .learning-inline-body{font-size:12px;color:#666;line-height:1.5}
 
-/* Input */
-.input-wrap{padding:10px 14px 12px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
-.input-box{background:#121212;border:1px solid #1e1e1e;border-radius:13px;overflow:hidden;transition:border-color .15s}
-.input-box:focus-within{border-color:#2a2a2a}
-.input-ta{width:100%;background:transparent;border:none;outline:none;color:#d8d8d8;font-size:13.5px;font-family:'Geist',sans-serif;padding:12px 14px 6px;resize:none;line-height:1.55}
-.input-ta::placeholder{color:#383838}
-.input-footer{display:flex;align-items:center;justify-content:space-between;padding:5px 10px 9px}
-.input-lft{display:flex;align-items:center;gap:5px}
-.input-rgt{display:flex;align-items:center;gap:5px}
-.pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#666;font-size:11.5px;transition:border-color .12s,color .12s;white-space:nowrap}
-.pill.accent{color:#e35d2b;border-color:rgba(227,93,43,.25)}
-.model-pill{display:flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;background:#181818;border:1px solid #222;cursor:pointer;color:#777;font-size:11.5px;transition:border-color .12s,color .12s}
-.model-pill:hover{border-color:#333;color:#aaa}
-.model-num{font-weight:600;color:#bbb;font-size:12px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Studio composer */
+.input-wrap{padding:12px 14px 14px;flex-shrink:0;position:relative;z-index:30;transition:padding-right .18s ease}
+.input-box{position:relative;z-index:1;background:#121213;border:1px solid #242427;border-radius:21px;overflow:hidden;transition:border-color .18s,box-shadow .18s;box-shadow:0 16px 42px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.025)}
+.input-box:focus-within{border-color:#35353a;box-shadow:0 18px 48px rgba(0,0,0,.28),0 0 0 3px rgba(255,255,255,.018),inset 0 1px 0 rgba(255,255,255,.04)}
+.input-ta{width:100%;min-height:74px;max-height:220px;background:transparent;border:none;outline:none;color:#e1e1e3;font-size:15.5px;font-family:'Geist',sans-serif;padding:17px 18px 7px;resize:none;line-height:1.5;letter-spacing:-.012em}
+.input-ta::placeholder{color:#505055}
+.input-footer{display:flex;align-items:center;justify-content:space-between;padding:7px 12px 11px;gap:12px}
+.input-lft{display:flex;align-items:center;gap:5px;min-width:0}
+.input-rgt{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.input-box .icon-btn{width:30px;height:30px;align-items:center;justify-content:center;border-radius:50%;color:#66666c}
+.input-box .icon-btn:hover,.input-box .icon-btn.on{color:#d4d4d7;background:#1d1d20}
+.pill{display:flex;align-items:center;gap:5px;min-height:30px;padding:4px 10px;border-radius:999px;background:#18181a;border:1px solid #232326;cursor:pointer;color:#8a8a90;font-size:11.5px;transition:border-color .12s,color .12s,background .12s;white-space:nowrap}
+.pill:hover{border-color:#343439;color:#d0d0d3;background:#1b1b1e}
+.pill:disabled{cursor:not-allowed;opacity:.58}
+.pill.accent{color:#d9d9dc;border-color:#27272b;background:#18181a}
+.agent-pill-label{font-weight:550;color:#e2e2e4}
+.agent-access{color:#696970;font-size:10.5px;margin-left:1px}
+.model-pill{display:flex;align-items:center;gap:5px;min-height:30px;padding:4px 9px;border-radius:999px;background:transparent;border:1px solid transparent;cursor:pointer;color:#77777e;font-size:11.5px;transition:border-color .12s,color .12s,background .12s}
+.model-pill:hover{border-color:#29292d;background:#18181a;color:#b7b7bc}
+.model-pill[aria-disabled="true"]{cursor:default}
+.model-num{font-weight:600;color:#d1d1d4;font-size:11.5px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-search{width:100%;background:#0f0f10;border:1px solid #242427;border-radius:7px;padding:5px 9px;color:#ccc;font-size:12px;font-family:'Geist',sans-serif;outline:none;margin:2px 0 4px}
 .model-search::placeholder{color:#444}
 .model-list{max-height:260px;overflow-y:auto}
 .model-sync{font-size:11px;color:#e35d2b;cursor:pointer}
 .model-sync:hover{color:#f6824f}
-.send-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#d8d8d8;cursor:pointer;border:none;color:#0d0d0d;transition:background .12s,transform .12s;flex-shrink:0}
+.send-btn{display:flex;align-items:center;justify-content:center;width:31px;height:31px;border-radius:50%;background:#d8d8d8;cursor:pointer;border:none;color:#0d0d0d;transition:background .12s,transform .12s;flex-shrink:0}
 .send-btn:hover{background:#fff;transform:translateY(-1px)}
 .send-btn:disabled{background:#2a2a2a;color:#555;cursor:default;transform:none}
-.stop-btn{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:#1a1a1a;border:1px solid #2a2a2a;cursor:pointer;color:#e35d2b;transition:background .12s;flex-shrink:0;box-shadow:0 0 0 3px rgba(227,93,43,.07)}
+.stop-btn{display:flex;align-items:center;justify-content:center;width:31px;height:31px;border-radius:50%;background:#d8d8d8;border:none;cursor:pointer;color:#111;transition:background .12s,transform .12s;flex-shrink:0}
+.stop-btn:hover{background:#fff;transform:scale(.97)}
+.composer-queue{position:relative;z-index:0;margin:0 17px -5px;padding:8px 11px 10px;min-height:42px;border:1px solid #242427;border-bottom-color:#1b1b1d;border-radius:16px 16px 7px 7px;background:#101011;box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.queue-item{display:flex;align-items:center;gap:8px;min-width:0;color:#77777d;font-size:11.5px}
+.queue-kicker{display:flex;align-items:center;gap:5px;color:#55555b;font:10px 'Geist Mono',monospace;text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.queue-kicker i{width:5px;height:5px;border-radius:50%;background:#e35d2b;box-shadow:0 0 8px rgba(227,93,43,.42)}
+.queue-text{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#9a9aa0}
+.queue-action{border:none;background:none;color:#5f5f65;font:11px 'Geist',sans-serif;cursor:pointer;padding:4px 5px;border-radius:6px}
+.queue-action:hover{color:#d0d0d3;background:#1b1b1e}
+.queue-icon{display:flex;align-items:center;justify-content:center;border:none;background:none;color:#4f4f55;cursor:pointer;padding:4px;border-radius:6px}
+.queue-icon:hover{color:#c7c7cb;background:#1b1b1e}
+.voice-live{color:#e35d2b!important;background:rgba(227,93,43,.1)!important;box-shadow:0 0 0 1px rgba(227,93,43,.2) inset}
+.composer-hint{position:absolute;right:17px;bottom:1px;color:#3f3f44;font-size:10px;white-space:nowrap}
+.menu-item .provider-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;box-shadow:0 0 7px rgba(78,154,101,.28)}
+@media(max-width:720px){.input-ta{font-size:14.5px;padding:15px 15px 6px}.input-footer{padding:6px 9px 9px}.agent-access,.model-pill>span:not(.model-num){display:none}.input-wrap{padding-left:9px;padding-right:9px}.composer-queue{margin-left:12px;margin-right:12px}.pill{padding-left:8px;padding-right:8px}}
 .proj-tag{display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:5px;background:#181818;border:1px solid #1e1e1e;color:#555;font-size:11.5px;cursor:pointer}
 
 /* Menus */
@@ -315,7 +336,7 @@ button{font-family:inherit}
 .drop-check{color:#e35d2b;font-size:12px}
 
 /* Slash menu */
-.slash-pop{position:absolute;bottom:62px;left:14px;width:calc(100% - 28px);max-height:360px;overflow-y:auto;background:#1c1c1e;border:1px solid #2a2a2d;border-radius:12px;z-index:220;box-shadow:0 18px 55px rgba(0,0,0,.8);padding:6px}
+.slash-pop{position:absolute;bottom:70px;left:14px;width:calc(100% - 28px);max-height:360px;overflow-y:auto;background:#1c1c1e;border:1px solid #2a2a2d;border-radius:12px;z-index:220;box-shadow:0 18px 55px rgba(0,0,0,.8);padding:6px}
 .slash-item{display:flex;align-items:center;gap:11px;padding:8px 12px;border-radius:8px;cursor:pointer;transition:background .1s}
 .slash-item.hi,.slash-item:hover{background:#2c2c2f}
 .slash-ic{color:#9a9a9a;display:flex;flex-shrink:0}
@@ -861,28 +882,58 @@ const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
 
 function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-up changes", model="5.5", api, wrapStyle, panelOpen=false }){
   const [text, setText] = useState("");
-  const [openMenu, setOpenMenu] = useState(null);   // plus | model | access | null
+  const [openMenu, setOpenMenu] = useState(null);   // plus | model | runtime | access | null
   const [pluginsSub, setPluginsSub] = useState(false);
   const [slashIdx, setSlashIdx] = useState(0);
   const [atts, setAtts] = useState([]);
+  const [queued, setQueued] = useState([]);
+  const [voiceActive, setVoiceActive] = useState(false);
   const [modelQ, setModelQ] = useState("");
   const ref = useRef(null);
   const fileRef = useRef(null);
+  const speechRef = useRef(null);
+  const voiceBaseRef = useRef("");
   const a = api || {};
-  function onFiles(e){
+  const SpeechRecognition = typeof window!=="undefined" && (window.SpeechRecognition||window.webkitSpeechRecognition);
+  async function onFiles(e){
     const fl = Array.from(e.target.files||[]);
-    const items = fl.map(f=>({ name:f.name, image:f.type.startsWith("image/"), url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }));
+    const items = await Promise.all(fl.map(async f=>{
+      const image=f.type.startsWith("image/"), textLike=f.type.startsWith("text/")||/\.(c|cc|cpp|css|csv|go|h|html|java|js|json|jsx|md|py|rb|rs|sh|sql|toml|ts|tsx|txt|xml|yaml|yml)$/i.test(f.name);
+      let content=null;
+      if(textLike&&f.size<=131072){ try{ content=await f.text(); }catch(error){} }
+      return {name:f.name,image,type:f.type||"application/octet-stream",size:f.size,content,url:image?URL.createObjectURL(f):null};
+    }));
     setAtts(prev=> [...prev, ...items]); setOpenMenu(null); e.target.value="";
   }
+  function releaseAttachments(items){ (items||[]).forEach(item=>{ if(item.url){ try{URL.revokeObjectURL(item.url);}catch(error){} } }); }
+  function removeAttachment(index){ setAtts(prev=>{ const item=prev[index]; releaseAttachments(item?[item]:[]); return prev.filter((_,i)=>i!==index); }); }
   const slashOpen = !a.runtimeLabel && text.trimStart().startsWith("/");
   const list = (slashOpen && a.slashList) ? a.slashList(text) : [];
   useEffect(()=>{
     const h = (e)=>{ if(ref.current && !ref.current.contains(e.target)){ setOpenMenu(null); setPluginsSub(false); } };
     window.addEventListener("mousedown", h); return ()=> window.removeEventListener("mousedown", h);
   },[]);
+  useEffect(()=>()=>{ if(speechRef.current){ try{speechRef.current.stop();}catch(error){} } },[]);
+  function clearDraft(){ setText(""); setAtts([]); }
   function doSend(){
     if(slashOpen){ if(list.length) a.runSlash(list[Math.min(slashIdx,list.length-1)]); setText(""); setSlashIdx(0); return; }
-    const t = text.trim(); if(!t && atts.length===0) return; onSend && onSend(t, atts); setText(""); setAtts([]);
+    const t = text.trim(); if(!t && atts.length===0) return;
+    if(running){ setQueued(prev=>[...prev,{id:"queued-"+Date.now()+"-"+prev.length,text:t,atts}]); clearDraft(); return; }
+    onSend && onSend(t, atts); clearDraft();
+  }
+  function useQueued(item, sendNow){
+    setQueued(prev=>prev.filter(entry=>entry.id!==item.id));
+    if(sendNow){ onSend&&onSend(item.text,item.atts); return; }
+    setText(current=>[current,item.text].filter(Boolean).join("\n")); setAtts(current=>[...current,...(item.atts||[])]);
+  }
+  function deleteQueued(item){ releaseAttachments(item.atts); setQueued(prev=>prev.filter(entry=>entry.id!==item.id)); }
+  function toggleDictation(){
+    if(!SpeechRecognition) return;
+    if(voiceActive){ try{speechRef.current&&speechRef.current.stop();}catch(error){} setVoiceActive(false); return; }
+    const recognition=new SpeechRecognition(); speechRef.current=recognition; voiceBaseRef.current=text.trimEnd(); recognition.continuous=false; recognition.interimResults=true;
+    recognition.onstart=()=>setVoiceActive(true);
+    recognition.onresult=(event)=>{ let transcript=""; for(let i=event.resultIndex;i<event.results.length;i++) transcript+=event.results[i][0].transcript; setText([voiceBaseRef.current,transcript].filter(Boolean).join(voiceBaseRef.current?" ":"")); };
+    recognition.onerror=()=>setVoiceActive(false); recognition.onend=()=>setVoiceActive(false); recognition.start();
   }
   function keyDown(e){
     if(slashOpen && list.length){
@@ -891,8 +942,9 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
     }
     if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); doSend(); }
   }
+  const firstQueued=queued[0];
   return (
-    <div className="input-wrap" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
+    <div className="input-wrap studio-composer" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
       {openMenu==="model" && (
         <div className="model-drop fade-up" style={{right: panelOpen?344:14}}>
           <div className="drop-panel"><div className="drop-lbl">Reasoning</div>{REASONING.map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}</div>
@@ -908,21 +960,28 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
           </div>
         </div>
       )}
-      {openMenu==="plus" && !a.runtimeLabel && (
-        <div className="menu-pop pop-in" style={{bottom:62, left:14}}>
+      {openMenu==="runtime" && a.runtimeLabel && (
+        <div className="menu-pop pop-in" style={{bottom:70,right:panelOpen?344:14,minWidth:224}}>
+          <div className="menu-sec">Agent runtime</div>
+          {(a.providerOptions||[]).map(provider=><div key={provider.id} className="menu-item" aria-disabled={running||!provider.available} style={{opacity:provider.available?1:.42,cursor:running||!provider.available?"not-allowed":"pointer"}} onClick={()=>{if(running||!provider.available)return;a.chooseProvider&&a.chooseProvider(provider.id);setOpenMenu(null);}}><div className="menu-item-l"><span className="provider-dot" style={{background:provider.available?"#4e9a65":"#555"}}/><span>{provider.label}</span></div>{provider.id===a.providerId&&<span className="drop-check">selected</span>}</div>)}
+          <div className="menu-sec">Sessions and credentials stay local</div>
+        </div>
+      )}
+      {openMenu==="plus" && (
+        <div className={"menu-pop pop-in"+(a.runtimeLabel?" runtime-compose-menu":"")} style={{bottom:70, left:14}}>
           <div className="menu-item" onClick={()=>fileRef.current && fileRef.current.click()}><div className="menu-item-l"><IcImage size={15}/><span>Add photos & files</span></div><span className="kbd">Ctrl U</span></div>
-          <div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>
+          {!a.runtimeLabel&&<div className="menu-item" onClick={()=>a.setMemoryOn(v=>!v)}><div className="menu-item-l"><span style={{fontSize:13}}>❖</span><span>Store to memory</span></div><Toggle on={a.memoryOn}/></div>}
           <div className="menu-item" onClick={()=>a.setIncludeIde(v=>!v)}><div className="menu-item-l"><IcColumns size={15}/><span>Include IDE context</span></div><Toggle on={a.includeIde}/></div>
           <div className="menu-item" onClick={()=>a.setPlanMode(v=>!v)}><div className="menu-item-l"><IcLayout size={15}/><span>Plan mode</span></div><Toggle on={a.planMode}/></div>
-          <div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>
-          <div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
+          {!a.runtimeLabel&&<div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>}
+          {!a.runtimeLabel&&<div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
             <div className="menu-item-l"><IcPlugin size={15}/><span>Plugins</span></div><IcChevR size={13}/>
             {pluginsSub && (<div className="submenu pop-in"><div className="menu-sec">6 installed plugins</div>{PLUGINS.map(p=>(<div key={p.id} className="menu-item" onClick={(e)=>{e.stopPropagation(); a.setPluginsOn(o=>({...o,[p.id]:!o[p.id]}));}}><div className="menu-item-l"><span className="plug-ic" style={{background:p.bg,color:p.fg}}>{p.ic}</span><span>{p.name}</span></div><Toggle on={a.pluginsOn && a.pluginsOn[p.id]}/></div>))}</div>)}
-          </div>
+          </div>}
         </div>
       )}
       {openMenu==="access" && (
-        <div className="menu-pop pop-in" style={{bottom:62, left:52}}>
+        <div className="menu-pop pop-in" style={{bottom:70, left:52,minWidth:238}}>
           {(a.accessModes||ACCESS_MODES).map(am=>(<div key={am.id} className="menu-item" onClick={()=>{a.setAccessMode(am.id);setOpenMenu(null);}}><div className="menu-item-l" style={{flexDirection:"column",alignItems:"flex-start",gap:1}}><span style={{color:am.id===a.accessMode?"#e35d2b":"#ccc"}}>{am.label}</span><span style={{fontSize:10.5,color:"#555"}}>{am.sub||am.title}</span></div>{am.id===a.accessMode && <span className="drop-check">✓</span>}</div>))}
         </div>
       )}
@@ -934,22 +993,24 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
         </div>
       )}
       <input type="file" multiple ref={fileRef} style={{display:"none"}} onChange={onFiles}/>
+      {firstQueued&&<div className="composer-queue" aria-live="polite"><div className="queue-item"><span className="queue-kicker"><i/>{queued.length>1?queued.length+" queued":"Queued"}</span><span className="queue-text" title={firstQueued.text}>{firstQueued.text||((firstQueued.atts||[]).map(item=>item.name).join(", "))}</span><button type="button" className="queue-action" onClick={()=>useQueued(firstQueued,!running)}>{running?"Steer":"Run"}</button><button type="button" className="queue-icon" title="Edit queued message" aria-label="Edit queued message" onClick={()=>useQueued(firstQueued,false)}><IcEdit size={12}/></button><button type="button" className="queue-icon" title="Remove queued message" aria-label="Remove queued message" onClick={()=>deleteQueued(firstQueued)}><IcX size={12}/></button></div></div>}
       <div className="input-box">
-        {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><span className="att-x" onClick={()=>setAtts(prev=>prev.filter((_,j)=>j!==i))}><IcX size={11}/></span></div>))}</div>}
-        <textarea className="input-ta" placeholder={placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
+        {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><button type="button" className="att-x" title={"Remove "+at.name} aria-label={"Remove "+at.name} onClick={()=>removeAttachment(i)}><IcX size={11}/></button></div>))}</div>}
+        <textarea className="input-ta" aria-label="Agent prompt" placeholder={running?"Queue a follow-up while the agent works":placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
         <div className="input-footer">
           <div className="input-lft">
-            {!a.runtimeLabel&&<button className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add"><IcPlus size={15}/></button>}
-            <div className="pill accent" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}}><IcShield size={12}/><span>{a.accessLabel||"Full access"}</span><IcChevD size={12}/></div>
+            <button type="button" className="icon-btn" onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="plus"?null:"plus");}} title="Add context or attachments" aria-label="Add context or attachments" aria-expanded={openMenu==="plus"}><IcPlus size={15}/></button>
+            <button type="button" className="pill accent" disabled={running} onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}} aria-expanded={openMenu==="access"}><IcAuto size={12}/><span className="agent-pill-label">Coding agent</span><span className="agent-access">{a.accessLabel||"Full access"}</span><IcChevD size={12}/></button>
           </div>
           <div className="input-rgt">
-            <div className="model-pill" onClick={(e)=>{if(a.runtimeLabel)return;e.stopPropagation();setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"local runtime":(a.selReasoning||"High")}</span>{!a.runtimeLabel&&<IcChevD size={12}/>}</div>
-            {!a.runtimeLabel&&<button className="icon-btn"><IcMic size={15}/></button>}
-            {running ? <button className="stop-btn" onClick={onStop} title="Stop"><IcStop size={13}/></button>
-                     : <button className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send"><IcSend size={13}/></button>}
+            <button type="button" className="model-pill" aria-disabled={!a.runtimeLabel&&!a.models?.length} aria-expanded={openMenu==="runtime"||openMenu==="model"} onClick={(e)=>{e.stopPropagation();if(a.runtimeLabel){setOpenMenu(m=>m==="runtime"?null:"runtime");return;}if(a.models&&a.models.length)setOpenMenu(m=>m==="model"?null:"model");}}><span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"SDK":(a.selReasoning||"High")}</span>{(a.runtimeLabel||(a.models&&a.models.length>0))&&<IcChevD size={12}/>}</button>
+            {SpeechRecognition&&<button type="button" className={"icon-btn"+(voiceActive?" voice-live":"")} onClick={toggleDictation} title={voiceActive?"Stop dictation":"Dictate prompt"} aria-label={voiceActive?"Stop dictation":"Dictate prompt"}><IcMic size={15}/></button>}
+            {running ? <button type="button" className="stop-btn" onClick={onStop} title="Stop current run" aria-label="Stop current run"><IcStop size={12}/></button>
+                     : <button type="button" className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send prompt" aria-label="Send prompt"><IcSend size={13}/></button>}
           </div>
         </div>
       </div>
+      {running&&text.trim()&&<span className="composer-hint">Enter queues this follow-up</span>}
     </div>
   );
 }
@@ -1647,8 +1708,15 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   }
   function sendToChat(chatId,text,atts){
     const t=(text||"").trim(); if(running||(!t&&(!atts||!atts.length))) return;
-    const attachmentNote=(atts||[]).length?"\n\nAttached files: "+atts.map(item=>item.name).join(", "):"";
-    const prompt=(t||"Inspect the attached files.")+attachmentNote;
+    let attachmentBudget=131072;
+    const attachmentParts=(atts||[]).map(item=>{
+      if(!item.content) return "Attached file: "+item.name+" ("+(item.type||"binary")+")";
+      if(attachmentBudget<=0) return "Attached text file: "+item.name+" (content omitted because the attachment context limit was reached)";
+      const content=item.content.slice(0,attachmentBudget); attachmentBudget=Math.max(0,attachmentBudget-content.length);
+      return "Attached text file: "+item.name+"\n```\n"+content+"\n```";
+    });
+    const guidance=[planMode?"Planning mode: inspect the workspace and produce a concrete plan, but do not edit files or run destructive commands.":"",includeIde?"Use the active Vellum workspace and its current project state as the source of truth.":""].filter(Boolean).join("\n");
+    const prompt=[guidance,t||"Inspect the attached files.",...attachmentParts].filter(Boolean).join("\n\n");
     const uid=nextId(),aid=nextId(),userMsg={id:uid,type:"user",text:t,atts};
     setMsgsFor(chatId,m=>[...m,userMsg,{id:aid,type:"assistant",provider:codingProvider,text:"",streaming:true,thinking:true,runtimeEvents:[]}]);
     setRunning(true);streamTargetRef.current=chatId;runCodingTurn(chatId,aid,prompt);
@@ -1924,6 +1992,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const composerApi = {
     accessLabel:codingAccess.label, accessMode:codingAccessMode, setAccessMode:setCodingAccessMode, accessModes:providerAccessModes,
     selModel:codingProvider, setSelModel:setCodingProvider, selReasoning:"SDK", setSelReasoning:()=>{}, runtimeLabel:codingProvider==="claude"?"Claude Code":"Codex",
+    providerId:codingProvider, providerOptions:["codex","claude"].map(id=>({id,label:id==="claude"?"Claude Code":"Codex",available:!!(healthFor(id)||{}).available})), chooseProvider:chooseCodingProvider,
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
     models:[], modelLabel:()=>codingProvider, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
@@ -2172,7 +2241,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
               </div>
               <div style={{width:"100%",maxWidth:850,position:"relative"}}>
                 <CodingMainStrip/>
-                <div style={{maxWidth:620,margin:"0 auto"}}><InputBox placeholder="Describe what to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
+                <div style={{maxWidth:760,margin:"0 auto"}}><InputBox placeholder="Describe what to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
               </div>
             </div>
           </Fragment>
