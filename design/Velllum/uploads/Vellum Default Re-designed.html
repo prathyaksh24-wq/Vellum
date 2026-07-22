@@ -1110,7 +1110,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .btn:disabled{color:var(--dim);cursor:not-allowed;background:none}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:var(--onember)}
 .btn.primary:hover{filter:brightness(1.08)}
-/* Ã¢â€â‚¬Ã¢â€â‚¬ modern visual system (addendum E) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Modern visual system (addendum E) */
 .wordmark{font-family:var(--font-d);font-weight:600;font-size:17px}
 .wordmark em{font-style:normal}
 .land-mark{font-family:var(--font-d);font-weight:600;font-size:42px;letter-spacing:-.03em;background:linear-gradient(105deg,var(--txt2) 16%,var(--ember) 50%,var(--accent2) 84%);-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -1164,7 +1164,7 @@ body{font-size:14px}
 .mem-row{font-size:13.5px}
 .arc-row{font-size:13.5px}
 ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:5px}::-webkit-scrollbar-track{background:transparent}
-/* Ã¢â€â‚¬Ã¢â€â‚¬ motion (addendum H) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Motion (addendum H) */
 @media (prefers-reduced-motion:no-preference){
   .landing > *{animation:landRise .6s cubic-bezier(.2,.7,.2,1) both}
   .landing > *:nth-child(1){animation-delay:.04s}
@@ -1330,7 +1330,7 @@ body{font-size:14px}
 .agent-seg button.on{background:var(--grad);color:#fff}
 .agent-ta{width:100%;background:var(--input);border:1px solid var(--line2);border-radius:10px;color:var(--txt2);font:inherit;font-size:13px;padding:10px 12px;resize:vertical;outline:none;min-height:64px}
 .agent-ta:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-/* Ã¢â€â‚¬Ã¢â€â‚¬ agent conversation history handle (addendum L) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Agent conversation history handle (addendum L) */
 .agent-bar-acts{display:flex;gap:4px;align-items:center}
 .agent-hist{position:absolute;right:0;top:50%;transform:translateY(-50%);z-index:42;display:flex;align-items:center}
 .agent-hist-handle{display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding:15px 10px;cursor:pointer;background:var(--glass);border:1px solid var(--line2);border-right:none;border-radius:13px 0 0 13px;backdrop-filter:blur(14px) saturate(150%);-webkit-backdrop-filter:blur(14px) saturate(150%);box-shadow:-6px 0 22px rgba(0,0,0,.20);transition:background .2s,box-shadow .2s,padding-right .2s}
@@ -1357,7 +1357,7 @@ body{font-size:14px}
 .ahp-title{flex:1;min-width:0;font-size:12.5px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ahp-when{font-size:10.5px;color:var(--dim2);flex-shrink:0}
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ agent: hover avatar -> back (addendum M) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Agent: hover avatar to back (addendum M) */
 .agent-back{position:relative;width:28px;height:28px;border:none;background:none;padding:0;cursor:pointer;flex-shrink:0}
 .agent-back .agent-back-ava{transition:opacity .18s,transform .18s}
 .agent-back-ic{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--hover);color:var(--txt2);opacity:0;transform:scale(.82);transition:opacity .18s cubic-bezier(.2,.7,.2,1),transform .18s cubic-bezier(.34,1.56,.64,1)}
@@ -1368,7 +1368,7 @@ body{font-size:14px}
 .agent-head-set{margin-left:auto}
 .agent-bar .agent-id-meta{min-width:0}
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬ keyboard shortcuts + toast + dev mode (addendum N) Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Keyboard shortcuts, toast, and dev mode (addendum N) */
 .menu-help{cursor:pointer;border-radius:5px;padding:1px 5px;transition:background .15s,color .15s}
 .menu-help:hover{background:var(--hover);color:var(--txt2)}
 .dev-badge{font-family:var(--font-m);font-size:9.5px;letter-spacing:.12em;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 45%,var(--line2));border-radius:5px;padding:1px 6px;align-self:center;margin-right:4px}
@@ -1712,7 +1712,7 @@ const FEATURE_FLAGS = {
   mockPlugins: true,
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ icons Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Icons */
 const I = ({d, size=17, sw=1.5, children, className='', ...rest}) => (
   <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" {...rest}>{d?<path d={d}/>:children}</svg>
 );
@@ -2936,7 +2936,7 @@ const visibleChats = cs => {
   return [...v.filter(c => c.pinned), ...v.filter(c => !c.pinned)];
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ data Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Data */
 const uid = () => Math.random().toString(36).slice(2, 10);
 const initials = (name) => name.trim().split(/\s+/).map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
@@ -3019,7 +3019,7 @@ const SEED_FEEDS = [
   { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots ? last filed 07/06', on: false },
 ];
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ sidebar Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Sidebar */
 const SourceMarks = ({sources = [], limit = 2}) => (
   <span className="source-marks">
     {sources.slice(0, limit).map(source => <span key={source} className="source-mark" title={source}>{source.slice(0, 2)}</span>)}
@@ -3340,7 +3340,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ project menu Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Project menu */
 const ProjectMenu = ({pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={{left: Math.min(pos.x, window.innerWidth - 210), top: Math.min(pos.y, window.innerHeight - 160)}} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share project</div>
@@ -3350,7 +3350,7 @@ const ProjectMenu = ({pos, onAction, onClose}) => (
   </Popover>
 );
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ chat Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Chat */
 const KIND_BY_EXT = { png:'image', jpg:'image', jpeg:'image', gif:'image', webp:'image', svg:'image',
   pdf:'pdf', diff:'diff', patch:'diff', html:'code', js:'code', jsx:'code', ts:'code', py:'code', css:'code', json:'code', mjs:'code' };
 const kindOf = (name) => KIND_BY_EXT[(name.split('.').pop() || '').toLowerCase()] || 'note';
@@ -5051,7 +5051,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ search overlay Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Search overlay */
 const searchFallback = (chats, query, preset) => {
   const needle = query.trim().toLowerCase();
   return chats.filter(chat => {
@@ -5143,7 +5143,7 @@ const SearchOverlay = ({chats, initialPreset, onNewChat, onOpenChat, onClose}) =
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ library Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Library */
 const KIND_ICONS = {
   image: IcImage, pdf: IcPdf, code: IcCode, diff: IcDiffFile, note: IcNote,
 };
@@ -5266,7 +5266,7 @@ const LibraryView = ({library, setLibrary}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ projects Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Projects */
 const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   <div className="page">
     <div className="page-inner">
@@ -5290,7 +5290,7 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
   </div>
 );
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ project page Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Project page */
 const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
@@ -5377,7 +5377,7 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ ledger Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Ledger */
 const CB_PERIODS = [['today','Today'],['7d','7 Days'],['30d','30 Days'],['month','Month'],['all','All Time']];
 const CB_DATA = {
   today: { cost:0.62, calls:84, sessions:3, cache:0.86, days:[['',0.62]],
@@ -5853,7 +5853,7 @@ const MemoryView = ({memory, onForget}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ archive Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Archive */
 const APP_BLURB = { airtable:'Bases, tables and records.', github:'Repos, issues and pull requests.', linear:'Issues, projects and cycles.', box:'Cloud files and folders.', dropbox:'Cloud files and folders.', gmail:'Email, drafts and threads.' };
 
 // 1) Local connector registry ? normalized MCP server descriptors.
@@ -6046,7 +6046,7 @@ const InstallWizard = ({wizard, onApprove, onAuth, onFinish, onCancel}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ archive Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Archive */
 const CONNECTOR_STATUS_LABELS = {
   ready: 'Ready',
   missing_agent_reach: 'Install Agent-Reach',
@@ -6145,7 +6145,7 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ context menu (chat row) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Context menu (chat row) */
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={clampMenuPosition(pos, 230, 260)} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
@@ -6200,7 +6200,7 @@ const SpacePickerModal = ({chat, spaces, onSave, onAutomatic, onClose}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ create project modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Create project modal */
 const CreateProjectModal = ({onCreate, onClose}) => {
   const [name, setName] = useState('');
   const [mem, setMem] = useState('default');
@@ -6247,7 +6247,7 @@ const CreateProjectModal = ({onCreate, onClose}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ profile Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Profile */
 const ProfilePopover = ({profile, pos, onEditProfile, onSettings, onPersonalization, onAddAccount, onClose}) => {
   const [acctOpen, setAcctOpen] = useState(false);
   const Row = ({icon, label, hint}) => (
@@ -6827,7 +6827,7 @@ const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ settings modal Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* Settings modal */
 const ACCENTS = [
   { id:'default', name:'Vellum', accent:'#988686', accent2:'#5c4e4e', swatch:['#988686','#b4a39f','#5c4e4e','#3a3433'] },
   { id:'blue-eclipse', name:'Blue eclipse', accent:'#505081', accent2:'#272757', swatch:['#272757','#8686AC','#505081','#0F0E47'] },
@@ -7412,7 +7412,7 @@ const NotFoundView = ({onBack}) => {
   );
 };
 
-/* Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ app Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ */
+/* App */
 const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
 const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
 
