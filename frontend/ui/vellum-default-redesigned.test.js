@@ -44,6 +44,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("Manage videos and drafts on your behalf");
   });
 
+  test("does not contain unresolved Git conflict markers", () => {
+    expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
+  });
+
   test("includes routing, OpenRouter, memory, and Hermes-compatible plugin surfaces", () => {
     expect(html).toContain("OpenRouter");
     expect(html).toContain("Provider routing, fallback models, and credential pools");
