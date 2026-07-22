@@ -171,6 +171,32 @@ button,input,textarea,select{font-family:var(--body-font)}
 .cm-key input::placeholder{color:#444}
 .cm-key-dot{width:7px;height:7px;border-radius:50%;background:#333;flex-shrink:0}
 .cm-key-dot.on{background:#4ade80}
+
+/* Full workspace settings surface */
+.settings-workspace{position:absolute;inset:0;z-index:680;background:#101015;display:grid;grid-template-columns:220px minmax(0,1fr);color:var(--ocx-text);animation:fadeIn .14s ease}
+.settings-rail{border-right:1px solid var(--ocx-border-soft);background:#0d0d12;padding:24px 14px;display:flex;flex-direction:column;min-width:0}
+.settings-rail-head{display:flex;align-items:center;gap:9px;padding:0 8px 22px;color:#f1eff8;font-size:16px;font-weight:700}
+.settings-nav{display:flex;flex-direction:column;gap:3px}
+.settings-nav-btn{border:0;background:transparent;color:var(--ocx-muted);border-radius:8px;padding:9px 10px;text-align:left;font:600 12.5px var(--body-font);cursor:pointer;display:flex;align-items:center;gap:9px}
+.settings-nav-btn:hover{background:#17171f;color:#dedbe7}.settings-nav-btn.active{background:var(--ocx-accent-soft);color:#e8e2ff}
+.settings-rail-note{margin-top:auto;padding:14px 9px 0;border-top:1px solid var(--ocx-border-soft);font-size:10.5px;line-height:1.5;color:var(--ocx-faint)}
+.settings-content{min-width:0;overflow:auto;background:radial-gradient(circle at 76% 0%,rgba(122,92,255,.075),transparent 36%),#101015}
+.settings-content-inner{width:min(920px,calc(100% - 56px));margin:0 auto;padding:34px 0 64px}
+.settings-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:28px}
+.settings-page-title{font-family:var(--heading-font);font-size:29px;line-height:1.1;color:#f2eff8;letter-spacing:-.025em}
+.settings-page-sub{font-size:12.5px;color:var(--ocx-muted);margin-top:7px;line-height:1.55;max-width:640px}
+.settings-close{width:32px;height:32px;border:1px solid var(--ocx-border);border-radius:8px;background:#17171d;color:var(--ocx-muted);display:flex;align-items:center;justify-content:center;cursor:pointer}.settings-close:hover{color:#fff;background:#202029}
+.settings-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px}.settings-search{flex:1;min-width:0;border:1px solid var(--ocx-border);background:#15151c;color:#ece9f4;border-radius:9px;padding:9px 12px;font:12.5px var(--body-font);outline:none}.settings-search:focus{border-color:#504873}.settings-search::placeholder{color:#5c5967}
+.settings-action{border:1px solid var(--ocx-border);background:#191921;color:#d7d2e1;border-radius:8px;padding:8px 11px;font:600 11.5px var(--body-font);cursor:pointer;display:inline-flex;align-items:center;gap:7px}.settings-action:hover{background:#22222c}.settings-action.primary{background:var(--ocx-accent);border-color:var(--ocx-accent);color:white}.settings-action:disabled{opacity:.45;cursor:not-allowed}
+.settings-section{margin-top:26px}.settings-section:first-of-type{margin-top:0}.settings-section-hd{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:11px}.settings-section-title{font-size:13px;color:#eeeaf5;font-weight:700}.settings-section-meta{font:10.5px 'Geist Mono',monospace;color:var(--ocx-faint)}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.provider-card{border:1px solid var(--ocx-border-soft);background:#15151b;border-radius:11px;padding:13px;display:flex;align-items:center;gap:11px;min-width:0;transition:border-color .12s,background .12s}.provider-card:hover{border-color:#363244;background:#181820}.provider-card.selected{border-color:#6557a1;background:rgba(122,92,255,.09)}
+.provider-card-icon{width:34px;height:34px;border:1px solid var(--ocx-border);background:#101015;border-radius:9px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}.provider-card-main{min-width:0;flex:1}.provider-card-name{font-size:12.5px;color:#e7e3ed;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.provider-card-sub{font-size:10.5px;color:var(--ocx-faint);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.provider-status{font:9.5px 'Geist Mono',monospace;border:1px solid var(--ocx-border);border-radius:999px;padding:3px 6px;color:var(--ocx-faint);white-space:nowrap}.provider-status.ready{color:#72d6ad;border-color:rgba(78,203,157,.3);background:rgba(78,203,157,.07)}.provider-status.needs{color:#f0b36a;border-color:rgba(240,179,106,.26)}
+.settings-callout{border:1px solid rgba(122,92,255,.25);background:rgba(122,92,255,.075);border-radius:10px;padding:11px 13px;color:#aaa5ba;font-size:11.5px;line-height:1.55;margin-bottom:16px}.settings-callout b{color:#ded7f4}
+.model-settings-layout{display:grid;grid-template-columns:210px minmax(0,1fr);gap:14px}.model-provider-tabs{display:flex;flex-direction:column;gap:5px}.model-provider-tab{border:1px solid transparent;background:transparent;color:var(--ocx-muted);border-radius:9px;padding:10px;display:flex;align-items:center;gap:9px;font:600 12px var(--body-font);cursor:pointer;text-align:left}.model-provider-tab:hover{background:#17171e;color:#ddd}.model-provider-tab.active{border-color:var(--ocx-border);background:#1a1922;color:#eee}.model-provider-tab small{margin-left:auto;font:9.5px 'Geist Mono',monospace;color:var(--ocx-faint)}
+.model-settings-list{border:1px solid var(--ocx-border-soft);background:#141419;border-radius:12px;overflow:hidden}.model-settings-row{display:flex;align-items:center;gap:11px;padding:12px 13px;border-bottom:1px solid var(--ocx-border-soft);cursor:pointer}.model-settings-row:last-child{border-bottom:0}.model-settings-row:hover{background:#1b1a23}.model-settings-row.selected{background:rgba(122,92,255,.08)}.model-radio{width:15px;height:15px;border-radius:50%;border:1px solid #575260;display:flex;align-items:center;justify-content:center;flex:0 0 auto}.model-settings-row.selected .model-radio{border-color:var(--ocx-accent)}.model-settings-row.selected .model-radio::after{content:"";width:7px;height:7px;border-radius:50%;background:var(--ocx-accent)}.model-row-main{flex:1;min-width:0}.model-row-name{font-size:12.5px;color:#e8e4ee;font-weight:700}.model-row-id{font:10.5px 'Geist Mono',monospace;color:var(--ocx-faint);margin-top:3px}.model-row-sub{font-size:10.5px;color:var(--ocx-muted);text-align:right;max-width:190px}
+.reasoning-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}.reasoning-chip{border:1px solid var(--ocx-border);background:#15151b;color:var(--ocx-muted);border-radius:999px;padding:6px 10px;font:600 10.5px var(--body-font);cursor:pointer}.reasoning-chip.active{border-color:#64589a;background:var(--ocx-accent-soft);color:#e8e1ff}
+.runtime-panel{border:1px solid var(--ocx-border-soft);background:#15151b;border-radius:12px;padding:16px;margin-bottom:11px}.runtime-panel-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}.runtime-panel-title{font-size:12.5px;font-weight:700;color:#e9e5ef}.runtime-panel-copy{font-size:11.5px;color:var(--ocx-muted);line-height:1.55;margin-top:6px}.settings-field{display:flex;align-items:center;gap:10px;margin-top:13px}.settings-field input{flex:1;min-width:0;border:1px solid var(--ocx-border);background:#0f0f14;color:#e8e4ee;border-radius:8px;padding:9px 10px;font:11.5px 'Geist Mono',monospace;outline:none}
+@media(max-width:760px){.settings-workspace{grid-template-columns:1fr}.settings-rail{border-right:0;border-bottom:1px solid var(--ocx-border-soft);padding:12px}.settings-rail-head{padding:0 6px 10px}.settings-nav{flex-direction:row;overflow-x:auto}.settings-nav-btn{white-space:nowrap}.settings-rail-note{display:none}.settings-content-inner{width:calc(100% - 28px);padding-top:22px}.settings-grid{grid-template-columns:1fr}.model-settings-layout{grid-template-columns:1fr}.model-provider-tabs{flex-direction:row;overflow-x:auto}.model-provider-tab{white-space:nowrap}.model-row-sub{display:none}}
 .att-row{display:flex;flex-wrap:wrap;gap:6px}
 .att-row.att-compose{padding:10px 14px 0}
 .att-chip{display:flex;align-items:center;gap:6px;background:#1a1a1c;border:1px solid #29292d;border-radius:9px;padding:4px 7px;font-size:11.5px;color:#bbb;max-width:200px;min-height:32px}
@@ -795,6 +821,74 @@ const CODING_ACCESS_MODES=[
 ];
 function localPref(key,fallback){ try{ const value=localStorage.getItem(key); return value===null?fallback:value; }catch(e){ return fallback; } }
 function saveLocalPref(key,value){ try{ localStorage.setItem(key,String(value)); }catch(e){} }
+function localJsonPref(key,fallback){ try{ const value=localStorage.getItem(key); return value===null?fallback:JSON.parse(value); }catch(e){ return fallback; } }
+function saveLocalJsonPref(key,value){ try{ localStorage.setItem(key,JSON.stringify(value)); }catch(e){} }
+
+/* Curated from provider-owned model catalogs on 2026-07-22. Runtime adapters remain
+   authoritative: this frontend preference is only sent once the backend contract supports it. */
+const CODING_MODEL_CATALOG = {
+  codex:[
+    {id:"gpt-5.6-sol",label:"GPT-5.6 Sol",sub:"Frontier capability · Codex default"},
+    {id:"gpt-5.6-terra",label:"GPT-5.6 Terra",sub:"Balanced performance and cost"},
+    {id:"gpt-5.6-luna",label:"GPT-5.6 Luna",sub:"Fast, efficient coding work"},
+  ],
+  claude:[
+    {id:"claude-fable-5",label:"Claude Fable 5",sub:"Highest available capability"},
+    {id:"claude-opus-4-8",label:"Claude Opus 4.8",sub:"Complex agentic coding"},
+    {id:"claude-sonnet-5",label:"Claude Sonnet 5",sub:"Speed and intelligence"},
+    {id:"claude-haiku-4-5-20251001",label:"Claude Haiku 4.5",sub:"Fastest Claude option"},
+  ],
+  grok:[
+    {id:"grok-4.5",label:"Grok 4.5",sub:"Grok Build default · coding and agents"},
+    {id:"grok-build-0.1",label:"Grok Build 0.1",sub:"Dedicated agentic coding model"},
+    {id:"grok-4.3",label:"Grok 4.3",sub:"General agentic workloads"},
+  ],
+  kimi:[
+    {id:"kimi-k2.5",label:"Kimi K2.5",sub:"Current multimodal Kimi model"},
+  ],
+};
+const CODING_REASONING = {
+  codex:["Low","Medium","High","Extra High","Max"],
+  claude:["Low","Medium","High"],
+  grok:["Low","Medium","High"],
+  kimi:["Default"],
+};
+const CODING_MODEL_DEFAULTS = {codex:"gpt-5.6-sol",claude:"claude-opus-4-8",grok:"grok-4.5",kimi:"kimi-k2.5"};
+const CODING_REASONING_DEFAULTS = {codex:"High",claude:"High",grok:"High",kimi:"Default"};
+const PROVIDER_DIRECTORY = [
+  {id:"codex",name:"Codex",kind:"Agent runtime",state:"runtime"},
+  {id:"claude",name:"Claude Code",kind:"Agent runtime",state:"runtime"},
+  {id:"grok",name:"Grok Build",kind:"Agent runtime",state:"runtime"},
+  {id:"kimi",name:"Kimi Code",kind:"Agent runtime",state:"runtime"},
+  {id:"cursor",name:"Cursor",kind:"Coding agent",state:"planned"},
+  {id:"opencode",name:"OpenCode",kind:"Coding agent",state:"planned"},
+  {id:"github-copilot",name:"GitHub Copilot",kind:"Coding agent",state:"planned"},
+  {id:"copilot",name:"Copilot",kind:"Coding agent",state:"planned"},
+  {id:"gitlab-duo",name:"GitLab Duo",kind:"Coding agent",state:"planned"},
+  {id:"kiro",name:"Kiro",kind:"Coding agent",state:"planned"},
+  {id:"antigravity",name:"Antigravity",kind:"Coding agent",state:"planned"},
+  {id:"openrouter",name:"OpenRouter",kind:"Model gateway",state:"key"},
+  {id:"openai",name:"OpenAI",kind:"Model provider",state:"key"},
+  {id:"anthropic",name:"Anthropic",kind:"Model provider",state:"key"},
+  {id:"google",name:"Google Gemini",kind:"Model provider",state:"key"},
+  {id:"deepseek",name:"DeepSeek",kind:"Model provider",state:"planned"},
+  {id:"mistral",name:"Mistral",kind:"Model provider",state:"planned"},
+  {id:"groq",name:"Groq",kind:"Inference provider",state:"planned"},
+  {id:"ollama",name:"Ollama",kind:"Local runtime",state:"planned"},
+  {id:"lm-studio",name:"LM Studio",kind:"Local runtime",state:"planned"},
+  {id:"vllm",name:"vLLM",kind:"Local runtime",state:"planned"},
+  {id:"qwen-portal",name:"Qwen",kind:"Model provider",state:"planned"},
+  {id:"alibaba",name:"Alibaba Cloud",kind:"Model provider",state:"planned"},
+  {id:"qianfan",name:"Baidu Qianfan",kind:"Model provider",state:"planned"},
+  {id:"moonshot",name:"Moonshot AI",kind:"Model provider",state:"planned"},
+  {id:"nvidia",name:"NVIDIA NIM",kind:"Inference provider",state:"planned"},
+  {id:"xiaomi",name:"Xiaomi MiMo",kind:"Model provider",state:"planned"},
+  {id:"fireworks",name:"Fireworks AI",kind:"Inference provider",state:"planned"},
+  {id:"firepass",name:"Firepass",kind:"Model gateway",state:"planned"},
+  {id:"cloudflare-ai-gateway",name:"Cloudflare AI Gateway",kind:"Model gateway",state:"planned"},
+  {id:"vercel-ai-gateway",name:"Vercel AI Gateway",kind:"Model gateway",state:"planned"},
+  {id:"huggingface",name:"Hugging Face",kind:"Model provider",state:"planned"},
+];
 
 /* ─── Icons ─── */
 const I = ({ d, size=16, stroke="currentColor", fill="none", sw=1.5, children, vb="0 0 24 24" }) => (
@@ -997,7 +1091,7 @@ const DESKTOP_MENUS = {
   Window: [ {l:"Minimize",k:"Ctrl+M"},{l:"Zoom",act:"max"},{l:"Close",k:"Ctrl+W"} ],
   Help: [ {l:"Documentation"},{l:"Keyboard Shortcuts"},{l:"Release Notes"},"-",{l:"About Vellum"} ],
 };
-const MODELS = ["GPT-5.5","GPT-5.4","GPT-5.4-Mini","GPT-5.3-Codex","GPT-5.2"];
+const MODELS = ["GPT-5.6 Sol","GPT-5.6 Terra","GPT-5.6 Luna"];
 const REASONING = ["Low","Medium","High","Extra High"];
 const ACCESS_MODES = [
   { id:"full", label:"Full access", sub:"Read, write, run, browse" },
@@ -1007,8 +1101,8 @@ const ACCESS_MODES = [
 ];
 const PROVIDERS = [
   { id:"openrouter", name:"OpenRouter", sub:"400+ models behind one key — best when you can't run local", ph:"sk-or-v1-…" },
-  { id:"openai",     name:"OpenAI",     sub:"GPT-5, GPT-5-mini",     ph:"sk-…" },
-  { id:"anthropic",  name:"Anthropic",  sub:"Claude Opus / Sonnet",  ph:"sk-ant-…" },
+  { id:"openai",     name:"OpenAI",     sub:"GPT-5.6 Sol / Terra / Luna", ph:"sk-…" },
+  { id:"anthropic",  name:"Anthropic",  sub:"Claude Fable / Opus / Sonnet", ph:"sk-ant-…" },
   { id:"google",     name:"Google AI",  sub:"Gemini 2.x",            ph:"AIza…" },
 ];
 function recommendModel(hw){
@@ -1027,17 +1121,15 @@ const OR_MODELS_DEFAULT = [
 ];
 const DEFAULT_MODEL = "deepseek/deepseek-chat";
 const OPENAI_MODELS = [
-  { id:"gpt-4o",       label:"GPT-4o" },
-  { id:"gpt-4o-mini",  label:"GPT-4o mini" },
-  { id:"gpt-4.1",      label:"GPT-4.1" },
-  { id:"gpt-4.1-mini", label:"GPT-4.1 mini" },
-  { id:"o1",           label:"o1" },
-  { id:"o1-mini",      label:"o1-mini" },
+  { id:"gpt-5.6-sol",   label:"GPT-5.6 Sol" },
+  { id:"gpt-5.6-terra", label:"GPT-5.6 Terra" },
+  { id:"gpt-5.6-luna",  label:"GPT-5.6 Luna" },
 ];
 const ANTHROPIC_MODELS = [
-  { id:"claude-3-7-sonnet-latest", label:"Claude 3.7 Sonnet" },
-  { id:"claude-3-5-haiku-latest",  label:"Claude 3.5 Haiku" },
-  { id:"claude-3-opus-latest",     label:"Claude 3 Opus" },
+  { id:"claude-fable-5",              label:"Claude Fable 5" },
+  { id:"claude-opus-4-8",             label:"Claude Opus 4.8" },
+  { id:"claude-sonnet-5",              label:"Claude Sonnet 5" },
+  { id:"claude-haiku-4-5-20251001",    label:"Claude Haiku 4.5" },
 ];
 const GOOGLE_MODELS = [
   { id:"gemini-2.0-flash", label:"Gemini 2.0 Flash" },
@@ -1078,8 +1170,8 @@ const VPROTO = {
 };
 const PROVIDER_CFG = {
   openrouter:{ chatUrl:"https://openrouter.ai/api/v1/chat/completions", listUrl:"https://openrouter.ai/api/v1/models", keyId:"openrouter", models:OR_MODELS_DEFAULT, default:"deepseek/deepseek-chat", referer:true },
-  openai:    { chatUrl:"https://api.openai.com/v1/chat/completions",    listUrl:"https://api.openai.com/v1/models",    keyId:"openai",     models:OPENAI_MODELS,    default:"gpt-4o" },
-  anthropic: { chatUrl:null, listUrl:null, keyId:"anthropic", models:ANTHROPIC_MODELS, default:"claude-3-7-sonnet-latest" },
+  openai:    { chatUrl:"https://api.openai.com/v1/chat/completions",    listUrl:"https://api.openai.com/v1/models",    keyId:"openai",     models:OPENAI_MODELS,    default:"gpt-5.6-sol" },
+  anthropic: { chatUrl:null, listUrl:null, keyId:"anthropic", models:ANTHROPIC_MODELS, default:"claude-opus-4-8" },
   google:    { chatUrl:null, listUrl:null, keyId:"google",    models:GOOGLE_MODELS,    default:"gemini-2.0-flash" },
 };
 const MAIN_MSGS = [
@@ -1195,24 +1287,21 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
     <div className="input-wrap studio-composer" ref={ref} style={Object.assign({position:"relative"}, wrapStyle||{})}>
       {openMenu==="model" && (
         <div className="model-drop fade-up" style={{right: panelOpen?344:14}}>
-          <div className="drop-panel"><div className="drop-lbl">Reasoning</div>{REASONING.map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}</div>
+          <div className="drop-panel">
+            <div className="drop-lbl">Reasoning</div>
+            {(a.reasoningOptions||REASONING).map(r=>(<div key={r} className={"drop-item"+(a.selReasoning===r?" sel":"")} onClick={()=>a.setSelReasoning(r)}><span>{r}</span>{a.selReasoning===r && <span className="drop-check">✓</span>}</div>))}
+            {a.runtimeLabel&&<Fragment><div className="drop-lbl" style={{borderTop:"1px solid #292733",marginTop:5,paddingTop:8}}>Runtime</div>{(a.providerOptions||[]).map(provider=><div key={provider.id} className={"drop-item"+(provider.id===a.providerId?" sel":"")} aria-disabled={running||!provider.available} style={{opacity:provider.available?1:.42,cursor:running||!provider.available?"not-allowed":"pointer"}} onClick={()=>{if(running||!provider.available)return;a.chooseProvider&&a.chooseProvider(provider.id);setModelQ("");}}><span style={{display:"flex",alignItems:"center",gap:8}}><ProviderIcon provider={provider.icon||provider.id} size={13}/>{provider.label}</span>{provider.id===a.providerId?<span className="drop-check">✓</span>:<span className="runtime-option-state">{provider.available?"ready":"offline"}</span>}</div>)}</Fragment>}
+          </div>
           <div className="drop-panel" style={{minWidth:236}}>
-            <div className="drop-lbl" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>Model</span><span className="model-sync" onClick={()=>a.syncModels && a.syncModels()}>{a.syncing?"syncing…":"↻ Sync"}</span></div>
+            <div className="drop-lbl" style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{a.runtimeLabel?a.runtimeLabel:"Model"}</span>{!a.runtimeLabel&&<span className="model-sync" onClick={()=>a.syncModels && a.syncModels()}>{a.syncing?"syncing…":"↻ Sync"}</span>}</div>
             <div style={{padding:"0 9px"}}><input className="model-search" placeholder="Search models" value={modelQ} onChange={(e)=>setModelQ(e.target.value)}/></div>
             <div className="model-list">
               {(a.models||[]).filter(m=> !modelQ || m.label.toLowerCase().includes(modelQ.toLowerCase()) || m.id.toLowerCase().includes(modelQ.toLowerCase())).slice(0,60).map(m=>(
-                <div key={m.id} className={"drop-item"+(a.selModel===m.id?" sel":"")} onClick={()=>{a.setSelModel(m.id);setOpenMenu(null);setModelQ("");}}><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:178}}>{m.label}</span>{a.selModel===m.id && <span className="drop-check">✓</span>}</div>
+                <div key={m.id} className={"drop-item"+(a.selModel===m.id?" sel":"")} onClick={()=>{a.setSelModel(m.id);setOpenMenu(null);setModelQ("");}}><span style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>{a.runtimeLabel&&<ProviderIcon provider={a.providerId} size={13}/>}<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:178}}>{m.label}</span></span>{a.selModel===m.id && <span className="drop-check">✓</span>}</div>
               ))}
             </div>
-            <div className="drop-item" style={{borderTop:"1px solid #232323",color:"#e35d2b"}} onClick={()=>{a.openModels && a.openModels(); setOpenMenu(null);}}><span>Manage models & keys…</span></div>
+            <div className="drop-item" style={{borderTop:"1px solid #292733",color:"#a99afb"}} onClick={()=>{a.openModels && a.openModels(); setOpenMenu(null);}}><span>Manage providers & models…</span></div>
           </div>
-        </div>
-      )}
-      {openMenu==="runtime" && a.runtimeLabel && (
-        <div className="menu-pop pop-in" style={{bottom:70,right:panelOpen?344:14,minWidth:224}}>
-          <div className="menu-sec">Agent runtime</div>
-          {(a.providerOptions||[]).map(provider=><div key={provider.id} className="menu-item" aria-disabled={running||!provider.available} style={{opacity:provider.available?1:.42,cursor:running||!provider.available?"not-allowed":"pointer"}} onClick={()=>{if(running||!provider.available)return;a.chooseProvider&&a.chooseProvider(provider.id);setOpenMenu(null);}}><div className="menu-item-l"><span className="provider-icon-shell"><ProviderIcon provider={provider.icon||provider.id} size={15}/></span><span>{provider.label}</span></div>{provider.id===a.providerId?<span className="drop-check">selected</span>:<span className="runtime-option-state">{provider.available?"ready":"not connected"}</span>}</div>)}
-          <div className="menu-sec">Sessions and credentials stay local</div>
         </div>
       )}
       {openMenu==="plus" && (
@@ -1251,7 +1340,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
             <button type="button" className="pill accent" disabled={running} onClick={(e)=>{e.stopPropagation(); setOpenMenu(m=>m==="access"?null:"access");}} aria-expanded={openMenu==="access"}><IcAuto size={12}/><span className="agent-pill-label">Coding agent</span><span className="agent-access">{a.accessLabel||"Full access"}</span><IcChevD size={12}/></button>
           </div>
           <div className="input-rgt">
-            <button type="button" className="model-pill" aria-disabled={!a.runtimeLabel&&!a.models?.length} aria-expanded={openMenu==="runtime"||openMenu==="model"} onClick={(e)=>{e.stopPropagation();if(a.runtimeLabel){setOpenMenu(m=>m==="runtime"?null:"runtime");return;}if(a.models&&a.models.length)setOpenMenu(m=>m==="model"?null:"model");}}>{a.runtimeLabel&&<ProviderIcon provider={a.providerId} size={14}/>}<span className="model-num">{a.runtimeLabel||(a.modelLabel ? a.modelLabel(a.selModel) : model)}</span><span>{a.runtimeLabel?"SDK":(a.selReasoning||"High")}</span>{(a.runtimeLabel||(a.models&&a.models.length>0))&&<IcChevD size={12}/>}</button>
+            <button type="button" className="model-pill" aria-disabled={!a.models?.length} aria-expanded={openMenu==="model"} onClick={(e)=>{e.stopPropagation();if(a.models&&a.models.length)setOpenMenu(m=>m==="model"?null:"model");}}>{a.runtimeLabel&&<ProviderIcon provider={a.providerId} size={14}/>}<span className="model-num">{a.modelLabel ? a.modelLabel(a.selModel) : model}</span><span>{a.selReasoning||"High"}</span>{a.models&&a.models.length>0&&<IcChevD size={12}/>}</button>
             {SpeechRecognition&&<button type="button" className={"icon-btn"+(voiceActive?" voice-live":"")} onClick={toggleDictation} title={voiceActive?"Stop dictation":"Dictate prompt"} aria-label={voiceActive?"Stop dictation":"Dictate prompt"}><IcMic size={15}/></button>}
             {running ? <button type="button" className="stop-btn" onClick={onStop} title="Stop current run" aria-label="Stop current run"><IcStop size={12}/></button>
                      : <button type="button" className="send-btn" onClick={doSend} disabled={!text.trim() && atts.length===0} title="Send prompt" aria-label="Send prompt"><IcSend size={13}/></button>}
@@ -1563,6 +1652,9 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [projRowMenu, setProjRowMenu] = useState(null);   // project id
   const [activeProject, setActiveProject] = useState("proj-vellum");
   const [showModels, setShowModels]   = useState(false);
+  const [settingsSection, setSettingsSection] = useState("providers");
+  const [providerQuery, setProviderQuery] = useState("");
+  const [settingsModelProvider, setSettingsModelProvider] = useState(()=>localPref("vellum.coding.settingsProvider","codex"));
   const [hw, setHw]                   = useState(null);
   const [scanning, setScanning]       = useState(false);
   const [apiKeys, setApiKeys]         = useState({openrouter:"", openai:"", anthropic:"", google:""});
@@ -1584,6 +1676,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [codingSessions, setCodingSessions] = useState([]);
   const [codingSession, setCodingSession] = useState(null);
   const [codingProvider, setCodingProvider] = useState(()=>localPref("vellum.coding.provider","codex"));
+  const [codingModelByProvider, setCodingModelByProvider] = useState(()=>localJsonPref("vellum.coding.models",CODING_MODEL_DEFAULTS));
+  const [codingReasoningByProvider, setCodingReasoningByProvider] = useState(()=>localJsonPref("vellum.coding.reasoning",CODING_REASONING_DEFAULTS));
   const [codingProjectRoot, setCodingProjectRoot] = useState(()=>localPref("vellum.coding.root",".")||".");
   const [codingAccessMode, setCodingAccessMode] = useState(()=>localPref("vellum.coding.access","read_only"));
   const [codingStatus, setCodingStatus] = useState("checking");
@@ -1778,6 +1872,9 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(!matches){ codingSessionRef.current=null; setCodingSession(null); }
     setCodingError("");
   },[codingProvider,codingProjectRoot,codingAccessMode]);
+  useEffect(()=>{ saveLocalJsonPref("vellum.coding.models",codingModelByProvider); },[codingModelByProvider]);
+  useEffect(()=>{ saveLocalJsonPref("vellum.coding.reasoning",codingReasoningByProvider); },[codingReasoningByProvider]);
+  useEffect(()=>{ saveLocalPref("vellum.coding.settingsProvider",settingsModelProvider); },[settingsModelProvider]);
   useEffect(()=>{ if(codingSession&&codingApiRef.current){ setCodingTreePath(""); codingApiRef.current.projectTree(codingSession.cwd).then(setCodingTree).catch(()=>setCodingTree({root:codingSession.cwd,items:[]})); } },[codingSession&&codingSession.id]);
   useEffect(()=> ()=> clearTimeout(timerRef.current), []);
 
@@ -2240,13 +2337,19 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function runSlash(item){ if(item && item.run) item.run(); }
   const providerAccessModes=CODING_ACCESS_MODES.filter(item=>supportedAccessModeIds(codingProvider).includes(item.id));
   const codingAccess=(providerAccessModes.find(item=>item.id===codingAccessMode)||providerAccessModes[0]);
+  const codingModels=CODING_MODEL_CATALOG[codingProvider]||[];
+  const codingModel=codingModelByProvider[codingProvider]||CODING_MODEL_DEFAULTS[codingProvider]||(codingModels[0]&&codingModels[0].id);
+  const codingReasoning=codingReasoningByProvider[codingProvider]||CODING_REASONING_DEFAULTS[codingProvider]||"Default";
+  function setCodingModel(modelId){ setCodingModelByProvider(current=>({...current,[codingProvider]:modelId})); }
+  function setCodingReasoning(reasoning){ setCodingReasoningByProvider(current=>({...current,[codingProvider]:reasoning})); }
+  function codingModelLabel(modelId){ const item=codingModels.find(model=>model.id===modelId); return item?item.label:modelId; }
   const composerApi = {
     accessLabel:codingAccess.label, accessMode:codingAccessMode, setAccessMode:setCodingAccessMode, accessModes:providerAccessModes,
-    selModel:codingProvider, setSelModel:setCodingProvider, selReasoning:"SDK", setSelReasoning:()=>{}, runtimeLabel:runtimeName(codingProvider),
+    selModel:codingModel, setSelModel:setCodingModel, selReasoning:codingReasoning, setSelReasoning:setCodingReasoning, reasoningOptions:CODING_REASONING[codingProvider]||["Default"], runtimeLabel:runtimeName(codingProvider),
     providerId:codingProvider, providerOptions:["codex","claude","grok","kimi"].map(id=>({id,label:runtimeName(id),icon:id,available:!!(healthFor(id)||{}).available})), chooseProvider:chooseCodingProvider,
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
-    slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
-    models:[], modelLabel:()=>codingProvider, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
+    slashList: slashFiltered, runSlash, openModels: ()=>{setSettingsSection("models");setSettingsModelProvider(codingProvider);setShowModels(true);},
+    models:codingModels, modelLabel:codingModelLabel, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
   };
 
   async function openProjectFile(item){
@@ -2438,7 +2541,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New chat</span></button>
           <button className="sb-nav-btn" aria-disabled="true" title="GitHub pull requests are not connected in this frontend-only pass"><IcGitHub size={15}/><span>Pull requests</span></button>
           <button className="sb-nav-btn" aria-disabled="true" title="Scheduled coding runs are not connected yet"><IcGauge size={15}/><span>Scheduled</span></button>
-          <button className="sb-nav-btn" onClick={()=>setShowModels(true)} title="Open model and provider settings"><IcPlugin size={15}/><span>Models & providers</span></button>
+          <button className="sb-nav-btn" onClick={()=>{setSettingsSection("providers");setShowModels(true);}} title="Open model and provider settings"><IcPlugin size={15}/><span>Models & providers</span></button>
         </div>
         <div className="sb-scroll">
           <div className="sb-section">
@@ -2718,7 +2821,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
                       <Fragment>
                         <div className="drawer-section-title">Used in this task</div>{MEMORY_USED.map((m,i)=>(<div key={i} className="memory-card"><div className="memory-title">{m.title}</div><div className="memory-meta">{m.meta}</div><div className="memory-reason">Why: {m.reason}</div></div>))}
                         <div className="drawer-section-title">Learning events</div>{LEARNING_EVENTS.map((e,i)=>(<div key={i} className="learn-card"><div className="learn-title">{e.title}</div><div className="learn-body">{e.body}</div><div className="learn-conf">Confidence · {e.confidence}</div></div>))}
-                        {backendStatus!=="connected" && <div className="cm-note" style={{margin:"12px 14px"}}>Turn on the backend in Settings → Models & Compute to see your real stored memories here.</div>}
+                        {backendStatus!=="connected" && <div className="cm-note" style={{margin:"12px 14px"}}>Open Settings → Runtime to connect the Vellum backend and load your stored memories.</div>}
                       </Fragment>
                     )}
                   </div>
@@ -2751,76 +2854,48 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
         </div>
       )}
 
-      {/* Models & Compute modal */}
-      {showModels && (()=>{ const rec = hw ? recommendModel(hw) : null; return (
-        <div className="modal-overlay" onClick={()=>setShowModels(false)}>
-          <div className="modal-box compute-modal pop-in" onClick={(e)=>e.stopPropagation()}>
-            <div className="modal-hd"><div className="modal-title">Models & Compute</div><span className="modal-x" onClick={()=>setShowModels(false)}><IcX size={15}/></span></div>
-            <div className="modal-sub">Vellum decides where your models run. Scan your machine, then download a local model if it fits — or bring your own key for a cloud provider.</div>
+      {/* Provider and model settings workspace */}
+      {showModels && (()=>{
+        const settingsModels=CODING_MODEL_CATALOG[settingsModelProvider]||[];
+        const settingsSelectedModel=codingModelByProvider[settingsModelProvider]||CODING_MODEL_DEFAULTS[settingsModelProvider];
+        const settingsReasoning=codingReasoningByProvider[settingsModelProvider]||CODING_REASONING_DEFAULTS[settingsModelProvider]||"Default";
+        const providerRows=PROVIDER_DIRECTORY.filter(item=>!providerQuery||item.name.toLowerCase().includes(providerQuery.toLowerCase())||item.kind.toLowerCase().includes(providerQuery.toLowerCase()));
+        const pageCopy={providers:["Providers","Manage local agent runtimes and prepare additional providers without pretending an adapter is connected."],models:["Models","Choose a provider-specific model and reasoning preference for the coding composer."],runtime:["Runtime","Inspect the local Vellum backend, agent availability, and machine capability."],workspace:["Workspace","Control the project root and access boundary used when a coding session starts."]}[settingsSection];
+        const nav=[{id:"providers",label:"Providers",icon:<IcPlugin size={14}/>},{id:"models",label:"Models",icon:<IcGauge size={14}/>},{id:"runtime",label:"Runtime",icon:<IcTerminal size={14}/>},{id:"workspace",label:"Workspace",icon:<IcFolder size={14}/>}];
+        return <div className="settings-workspace">
+          <aside className="settings-rail">
+            <div className="settings-rail-head"><IcSettings size={17}/><span>Settings</span></div>
+            <div className="settings-nav">{nav.map(item=><button key={item.id} className={"settings-nav-btn"+(settingsSection===item.id?" active":"")} onClick={()=>setSettingsSection(item.id)}>{item.icon}<span>{item.label}</span></button>)}</div>
+            <div className="settings-rail-note">Local-first workspace<br/>Preferences stay in this browser. Credentials shown here are session-only until the secure credential broker is connected.</div>
+          </aside>
+          <section className="settings-content">
+            <div className="settings-content-inner">
+              <header className="settings-page-head"><div><div className="settings-page-title">{pageCopy[0]}</div><div className="settings-page-sub">{pageCopy[1]}</div></div><button className="settings-close" onClick={()=>setShowModels(false)} title="Close settings" aria-label="Close settings"><IcX size={15}/></button></header>
 
-            <div className="cm-sec">
-              <div className="cm-sec-hd"><span>Your hardware</span><button className="cm-scan" onClick={scanHardware}>{scanning?"Scanning…":(hw?"Re-scan":"Scan this computer")}</button></div>
-              {hw ? (
-                <Fragment>
-                  <div className="cm-specs">
-                    <div className="cm-chip"><b>CPU</b><span>{hw.cores?hw.cores+" cores":"—"}</span></div>
-                    <div className="cm-chip"><b>Memory</b><span>{hw.ram?("≥ "+hw.ram+" GB"):"—"}</span></div>
-                    <div className="cm-chip"><b>GPU</b><span>{hw.gpu||"none detected"}</span></div>
-                    <div className="cm-chip"><b>Free disk</b><span>{hw.storage?("~"+hw.storage+" GB"):"—"}</span></div>
-                    <div className="cm-chip"><b>OS</b><span>{hw.platform}</span></div>
-                  </div>
-                  <div className="cm-note">Browser scan is approximate — memory caps at 8 GB and VRAM isn't exposed. The desktop app reports exact specs.</div>
-                </Fragment>
-              ) : <div className="cm-hint">Detects cores, memory, GPU and free disk to tell you whether a local model is realistic — or whether you're better off on a cloud key.</div>}
+              {settingsSection==="providers"&&<Fragment>
+                <div className="settings-toolbar"><input className="settings-search" placeholder="Search providers and runtimes" value={providerQuery} onChange={e=>setProviderQuery(e.target.value)}/><button className="settings-action" onClick={refreshCodingRuntime}><IcRefresh size={12}/>Refresh runtimes</button></div>
+                <div className="settings-section"><div className="settings-section-hd"><div className="settings-section-title">Agent runtimes</div><div className="settings-section-meta">{(codingHealth.providers||[]).filter(p=>p.available).length} detected</div></div><div className="settings-grid">{providerRows.filter(item=>item.state==="runtime").map(item=>{const health=healthFor(item.id)||{};const ready=health.available&&health.configured;return <div key={item.id} className={"provider-card"+(codingProvider===item.id?" selected":"")}><div className="provider-card-icon"><ProviderIcon provider={item.id} size={18}/></div><div className="provider-card-main"><div className="provider-card-name">{item.name}</div><div className="provider-card-sub">{health.message||item.kind}</div></div><span className={"provider-status "+(ready?"ready":health.available?"needs":"")}>{ready?"ready":health.available?"sign in":"not installed"}</span>{ready&&<button className="settings-action" disabled={running} onClick={()=>{chooseCodingProvider(item.id);setSettingsModelProvider(item.id);}}>{codingProvider===item.id?"Selected":"Use"}</button>}</div>})}</div></div>
+                <div className="settings-section"><div className="settings-section-hd"><div className="settings-section-title">Provider catalog</div><div className="settings-section-meta">OpenCodex icon set</div></div><div className="settings-grid">{providerRows.filter(item=>item.state!=="runtime").map(item=>{const keyConfig=PROVIDERS.find(p=>p.id===item.id);return <div key={item.id} className={"provider-card"+(activeProvider===item.id?" selected":"")}><div className="provider-card-icon"><ProviderIcon provider={item.id} size={18}/></div><div className="provider-card-main"><div className="provider-card-name">{item.name}</div><div className="provider-card-sub">{item.kind}</div></div>{item.state==="key"&&keyConfig?<div className="cm-key" style={{width:146}}><span className={"cm-key-dot"+(apiKeys[item.id]?" on":"")}/><input type="password" aria-label={item.name+" API key"} placeholder={keyConfig.ph} value={apiKeys[item.id]||""} onChange={e=>setApiKeys(current=>({...current,[item.id]:e.target.value}))}/></div>:<span className="provider-status">adapter planned</span>}</div>})}</div><div className="cm-note">API keys entered here live only in page memory and are not sent anywhere by this frontend. Production persistence will use the local secure credential broker.</div></div>
+              </Fragment>}
+
+              {settingsSection==="models"&&<Fragment>
+                <div className="settings-callout"><b>Catalog refreshed from provider-owned documentation on July 22, 2026.</b> This is a frontend preference today: the coding backend still starts Codex and Claude sessions with its configured runtime model. Vellum will apply the selection after the backend model-override contract is added.</div>
+                <div className="model-settings-layout"><div className="model-provider-tabs">{["codex","claude","grok","kimi"].map(id=><button key={id} className={"model-provider-tab"+(settingsModelProvider===id?" active":"")} onClick={()=>setSettingsModelProvider(id)}><ProviderIcon provider={id} size={15}/><span>{runtimeName(id)}</span><small>{(CODING_MODEL_CATALOG[id]||[]).length}</small></button>)}</div><div><div className="model-settings-list">{settingsModels.map(model=><div key={model.id} className={"model-settings-row"+(settingsSelectedModel===model.id?" selected":"")} onClick={()=>setCodingModelByProvider(current=>({...current,[settingsModelProvider]:model.id}))}><span className="model-radio"/><div className="model-row-main"><div className="model-row-name">{model.label}</div><div className="model-row-id">{model.id}</div></div><div className="model-row-sub">{model.sub}</div></div>)}</div><div className="settings-section"><div className="settings-section-hd"><div className="settings-section-title">Reasoning effort</div><div className="settings-section-meta">saved per provider</div></div><div className="reasoning-row">{(CODING_REASONING[settingsModelProvider]||["Default"]).map(level=><button key={level} className={"reasoning-chip"+(settingsReasoning===level?" active":"")} onClick={()=>setCodingReasoningByProvider(current=>({...current,[settingsModelProvider]:level}))}>{level}</button>)}</div></div></div></div>
+              </Fragment>}
+
+              {settingsSection==="runtime"&&<Fragment>
+                <div className="runtime-panel"><div className="runtime-panel-hd"><div className="runtime-panel-title">Vellum coding backend</div><span className={"provider-status "+(codingStatus==="ready"?"ready":codingStatus==="checking"?"needs":"")}>{codingStatus}</span></div><div className="runtime-panel-copy">The frontend uses the provider-neutral <span className="mono">/api/coding</span> contract and its normalized SSE stream.</div><div className="settings-field"><input value={backendUrl} onChange={e=>setBackendUrl(e.target.value)} aria-label="Coding backend URL"/><button className="settings-action primary" onClick={refreshCodingRuntime}>Test connection</button></div>{codingError&&<div className="cm-note" style={{color:"#f08a84"}}>{codingError}</div>}</div>
+                <div className="runtime-panel"><div className="runtime-panel-hd"><div className="runtime-panel-title">Machine capability</div><button className="settings-action" onClick={scanHardware}>{scanning?"Scanning…":hw?"Re-scan":"Scan this browser"}</button></div><div className="runtime-panel-copy">Browser hardware detection is approximate. The later desktop host can expose exact memory, GPU, PTY, and sandbox details.</div>{hw&&<div className="cm-specs" style={{marginTop:13}}><div className="cm-chip"><b>CPU</b><span>{hw.cores?hw.cores+" cores":"—"}</span></div><div className="cm-chip"><b>Memory</b><span>{hw.ram?"≥ "+hw.ram+" GB":"—"}</span></div><div className="cm-chip"><b>GPU</b><span>{hw.gpu||"not exposed"}</span></div><div className="cm-chip"><b>OS</b><span>{hw.platform}</span></div></div>}</div>
+              </Fragment>}
+
+              {settingsSection==="workspace"&&<Fragment>
+                <div className="runtime-panel"><div className="runtime-panel-title">Project root</div><div className="runtime-panel-copy">Messages can start outside a saved project; the runtime receives this root as its working directory.</div><div className="settings-field"><input value={codingProjectRoot} onChange={e=>setCodingProjectRoot(e.target.value||".")} aria-label="Coding project root"/></div></div>
+                <div className="runtime-panel"><div className="runtime-panel-title">Workspace access</div><div className="runtime-panel-copy">The selected runtime remains authoritative for the permissions it actually supports.</div><div className="reasoning-row">{providerAccessModes.map(mode=><button key={mode.id} className={"reasoning-chip"+(codingAccessMode===mode.id?" active":"")} onClick={()=>setCodingAccessMode(mode.id)} title={mode.title}>{mode.label}</button>)}</div></div>
+              </Fragment>}
             </div>
-
-            {rec && (
-              <div className="cm-sec">
-                <div className="cm-sec-hd"><span>Recommendation</span></div>
-                <div className={"cm-reco "+rec.tier}>
-                  <div className="cm-reco-t">{rec.title}</div>
-                  <div className="cm-reco-b">{rec.note}</div>
-                  {rec.model && <button className="cm-dl">Download {rec.model} · {rec.size}</button>}
-                </div>
-              </div>
-            )}
-
-            <div className="cm-sec">
-              <div className="cm-sec-hd"><span>Connect a provider — bring your own key</span></div>
-              {PROVIDERS.map(p=>(
-                <div key={p.id} className="cm-prov">
-                  <div className="provider-icon-shell"><ProviderIcon provider={p.id} size={16}/></div>
-                  <div className="cm-prov-main" onClick={()=>setProvider(p.id)}>
-                    <div className="cm-prov-name">{p.name}</div>
-                    <div className="cm-prov-sub">{p.sub}</div>
-                  </div>
-                  <div className={"cm-prov-radio"+(activeProvider===p.id?" on":"")} onClick={()=>setProvider(p.id)}/>
-                  <div className="cm-key">
-                    <span className={"cm-key-dot"+(apiKeys[p.id]?" on":"")}/>
-                    <input type="password" placeholder={p.ph} value={apiKeys[p.id]} onChange={(e)=>setApiKeys(k=>({...k,[p.id]:e.target.value}))}/>
-                  </div>
-                </div>
-              ))}
-              <div className="cm-note">Keys are stored locally and only the active provider is used. Each Vellum user sets up their own — nothing is shared.</div>
-            </div>
-
-            <div className="cm-sec">
-              <div className="cm-sec-hd"><span>Vellum backend — memory, privacy, vault</span><span className={"status-pill "+(backendStatus==="connected"?"complete":backendStatus==="checking"?"running":"")}>{backendStatus}</span></div>
-              <div className="cm-prov">
-                <div className={"cm-prov-radio"+(useBackend?" on":"")} onClick={()=>{ const n=!useBackend; setUseBackend(n); if(n) pingBackend(); }}/>
-                <div className="cm-prov-main" onClick={()=>{ const n=!useBackend; setUseBackend(n); if(n) pingBackend(); }}>
-                  <div className="cm-prov-name">Route chats through the backend</div>
-                  <div className="cm-prov-sub">Engages Honcho user-model + FTS5 search + Obsidian write-back + privacy gate.</div>
-                </div>
-                <div className="cm-key" style={{width:172}}><input placeholder="http://127.0.0.1:8000" value={backendUrl} onChange={(e)=>setBackendUrl(e.target.value)}/></div>
-              </div>
-              <div className="cm-note">Retrieval runs on <b style={{color:"#888"}}>FTS5 + Honcho</b> — Qdrant (vector search) stays off. Needs the backend running and this UI served from an allowed origin (:5173). <span style={{color:"#e35d2b",cursor:"pointer"}} onClick={pingBackend}>Test connection</span></div>
-            </div>
-
-            <div className="modal-actions"><button className="modal-btn" onClick={()=>setShowModels(false)}>Close</button><button className="modal-btn primary" onClick={()=>setShowModels(false)}>Save</button></div>
-          </div>
-        </div>
-      ); })()}
+          </section>
+        </div>;
+      })()}
 
       {/* Context menu */}
       {ctxMenu && (
