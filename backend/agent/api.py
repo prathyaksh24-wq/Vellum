@@ -90,6 +90,8 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
+from agent.plugins.youtube_runtime import portable_youtube_status
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
@@ -4605,6 +4607,7 @@ async def list_plugins() -> dict[str, Any]:
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
         portable_spotify_status(),
+        portable_youtube_status(),
         *[
         {
             "id": str(server.get("name") or ""),
@@ -5047,7 +5050,19 @@ async def terminal_ws(websocket: WebSocket) -> None:
 
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
+router.include_router(youtube_router)
 app.include_router(router)
+
+
+@app.get("/", include_in_schema=False)
+async def desktop_oauth_callback(
+    code: str = "",
+    state: str = "",
+    error: str = "",
+) -> Any:
+    if code or state or error:
+        return await youtube_oauth_callback(code=code, state=state, error=error)
+    return {"service": "Vellum API", "health": "/api/health"}
 
 
 @app.get("/health")

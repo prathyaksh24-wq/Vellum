@@ -86,6 +86,18 @@ def build_capability_contract() -> CapabilityContract:
                     "player_action": "/api/plugins/spotify/player/action",
                 },
             ),
+            "youtube": FeatureContract(
+                enabled=True,
+                source="plugins/connectors/youtube",
+                plugin_owned=True,
+                endpoints={
+                    "status": "/api/plugins/youtube/status",
+                    "oauth_start": "/api/plugins/youtube/oauth/start",
+                    "oauth_callback": "/api/plugins/youtube/oauth/callback",
+                    "sync": "/api/plugins/youtube/sync",
+                    "disconnect": "/api/plugins/youtube/connection",
+                },
+            ),
             "memory_orchestrator": FeatureContract(
                 enabled=True,
                 source="plugins/memory/vellum-memory-orchestrator",

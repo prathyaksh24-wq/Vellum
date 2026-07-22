@@ -81,6 +81,23 @@ def test_health_endpoint_is_lightweight_by_default(monkeypatch):
     assert "embeddings" not in body
 
 
+def test_api_root_supports_google_desktop_loopback_without_replacing_health(monkeypatch):
+    observed = {}
+
+    async def fake_callback(**kwargs):
+        observed.update(kwargs)
+        return {"oauth": "complete"}
+
+    monkeypatch.setattr(api, "youtube_oauth_callback", fake_callback)
+    with TestClient(api.app) as client:
+        root = client.get("/")
+        callback = client.get("/", params={"code": "code", "state": "state"})
+
+    assert root.json() == {"service": "Vellum API", "health": "/api/health"}
+    assert callback.json() == {"oauth": "complete"}
+    assert observed == {"code": "code", "state": "state", "error": ""}
+
+
 def test_capabilities_endpoint_publishes_stable_frontend_contract():
     with TestClient(api.app) as client:
         response = client.get("/api/capabilities")
@@ -92,13 +109,14 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
 
     features = body["features"]
-    for key in ["chat", "plugins", "spotify", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
+    for key in ["chat", "plugins", "spotify", "youtube", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
         assert key in features
         assert isinstance(features[key]["enabled"], bool)
         assert features[key]["contract"] == "v1"
         assert features[key]["endpoints"]
 
     assert features["spotify"]["plugin_owned"] is True
+    assert features["youtube"]["plugin_owned"] is True
     assert features["memory_orchestrator"]["plugin_owned"] is True
     assert features["hermes_skills"]["plugin_owned"] is True
     assert features["openrouter"]["endpoints"]["models"] == "/api/models"

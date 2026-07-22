@@ -18,5 +18,9 @@
     hubMutation: function (action, body) { return client.request("/api/skills/v2/hub/" + action, client.jsonOptions("POST", body)); },
     learn: function (source, threadId, category) { return client.request("/api/skills/learn", client.jsonOptions("POST", {source:source, thread_id:threadId || "skills-hub", category:category || "community"})); },
     capabilities: function () { return client.request("/api/capabilities"); },
+    youtubeStatus: function () { return client.request("/api/plugins/youtube/status"); },
+    youtubeOAuthStart: function () { return client.request("/api/plugins/youtube/oauth/start", client.jsonOptions("POST")); },
+    youtubeSync: function (idempotencyKey) { return client.request("/api/plugins/youtube/sync", client.jsonOptions("POST", {idempotency_key:idempotencyKey || ""})); },
+    youtubeDisconnect: function () { return client.request("/api/plugins/youtube/connection", {method:"DELETE"}); },
   };
 })();

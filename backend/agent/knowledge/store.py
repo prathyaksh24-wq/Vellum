@@ -1227,6 +1227,18 @@ class KnowledgeStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def set_source_status(self, source_id: str, status: str) -> bool:
+        clean_source_id = source_id.strip()
+        clean_status = status.strip()
+        if not clean_source_id or not clean_status:
+            raise ValueError("Source ID and status are required.")
+        with closing(self._connect()) as connection, connection:
+            cursor = connection.execute(
+                "UPDATE sources SET status = ?, updated_at = ? WHERE id = ?",
+                (clean_status, _now(), clean_source_id),
+            )
+        return int(cursor.rowcount) > 0
+
     def list_observations(self, *, origin: str = "", limit: int = 100) -> list[dict[str, Any]]:
         params: list[Any] = []
         where = ""

@@ -104,6 +104,12 @@ The bootstrap API previews by default. Applying it is explicit and repeatable.
 
 No adapter deletes, renames, or rewrites existing files.
 
+The YouTube connector keeps provider boundaries additive: official OAuth owns
+channel identity and subscription snapshots, Google Takeout owns historical
+activity events, and transcript/live-search tools own content evidence. All
+feeds converge on stable YouTube video and channel IDs in Knowledge Core. See
+`docs/YOUTUBE_INTEGRATION.md`.
+
 ## Observation Semantics
 
 Every observation records its initiator:

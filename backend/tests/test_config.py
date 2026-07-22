@@ -41,6 +41,10 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.llm_routing_keyring_service == "vellum.llm"
     assert settings.llm_routing_max_targets == 4
     assert settings.llm_routing_max_transient_retries == 2
+    assert isinstance(settings.youtube_oauth_client_id, str)
+    assert isinstance(settings.youtube_oauth_client_secret, str)
+    assert settings.youtube_oauth_keyring_service == "vellum.youtube"
+    assert settings.youtube_oauth_account_label == "primary"
 
 
 def test_auto_gui_removed_from_dependency_files():

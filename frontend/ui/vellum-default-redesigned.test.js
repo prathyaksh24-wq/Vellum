@@ -34,6 +34,16 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("SpotifyPlayer");
   });
 
+  test("uses backend-owned YouTube OAuth without collecting credentials in the UI", () => {
+    expect(html).toContain("const YouTubeAPI");
+    expect(html).toContain("API.plugins.youtubeOAuthStart()");
+    expect(html).toContain("API.plugins.youtubeSync");
+    expect(html).toContain("API.plugins.youtubeDisconnect()");
+    expect(html).not.toContain("clientSecret");
+    expect(html).not.toContain("Email or phone");
+    expect(html).not.toContain("Manage videos and drafts on your behalf");
+  });
+
   test("includes routing, OpenRouter, memory, and Hermes-compatible plugin surfaces", () => {
     expect(html).toContain("OpenRouter");
     expect(html).toContain("Provider routing, fallback models, and credential pools");

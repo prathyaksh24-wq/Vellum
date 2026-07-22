@@ -16,6 +16,7 @@ data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
 data/plugins/spotify/oauth-flow.json
+data/plugins/youtube/
 data/logs/
 data/cache/
 data/embeddings/

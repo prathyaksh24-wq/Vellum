@@ -124,6 +124,13 @@ class Settings(BaseSettings):
     x_tool_allow_posts: bool = Field(default=False, alias="X_TOOL_ALLOW_POSTS")
     x_api_client_id: str = Field(default="", alias="X_API_CLIENT_ID")
     x_api_client_secret: str = Field(default="", alias="X_API_CLIENT_SECRET")
+    youtube_oauth_client_id: str = Field(default="", alias="YOUTUBE_OAUTH_CLIENT_ID")
+    youtube_oauth_client_secret: str = Field(default="", alias="YOUTUBE_OAUTH_CLIENT_SECRET")
+    youtube_oauth_keyring_service: str = Field(
+        default="vellum.youtube",
+        alias="YOUTUBE_OAUTH_KEYRING_SERVICE",
+    )
+    youtube_oauth_account_label: str = Field(default="primary", alias="YOUTUBE_OAUTH_ACCOUNT_LABEL")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")

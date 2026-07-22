@@ -1700,6 +1700,12 @@ const SpotifyAPI = {
   player: (details=false) => API.client.request('/api/plugins/spotify/player' + (details ? '?details=true' : '')),
   action: body => API.client.request('/api/plugins/spotify/player/action', API.client.jsonOptions('POST', body)),
 };
+const YouTubeAPI = {
+  status: () => API.plugins.youtubeStatus(),
+  start: () => API.plugins.youtubeOAuthStart(),
+  sync: key => API.plugins.youtubeSync(key || ''),
+  disconnect: () => API.plugins.youtubeDisconnect(),
+};
 const FEATURE_FLAGS = {
   realChat: true,
   realConversations: true,
@@ -4620,80 +4626,88 @@ const GLogo = ({size=22}) => (
 const YTLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
 );
-const YT_DOCS = {
-  register: 'https://developers.google.com/youtube/registering_an_application',
-  installed: 'https://developers.google.com/youtube/v3/guides/auth/installed-apps',
-  native: 'https://developers.google.com/identity/protocols/oauth2/native-app',
-  console: 'https://console.cloud.google.com/apis/credentials',
-};
 const YouTubeConnectModal = ({onClose, onConnected}) => {
-  const [step, setStep] = useState('setup'); // setup | signin | consent | connecting
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [email, setEmail] = useState('');
-  const cleanEmail = (email || 'pratyakksh@gmail.com').trim() || 'pratyakksh@gmail.com';
-  const authorize = () => { setStep('connecting'); setTimeout(() => onConnected(cleanEmail), 1400); };
-  const urls = { setup: 'console.cloud.google.com', signin: 'accounts.google.com', consent: 'accounts.google.com', connecting: 'accounts.google.com' };
-  const paths = { setup: '/apis/credentials', signin: '/signin/oauth', consent: '/o/oauth2/auth', connecting: '/o/oauth2/auth' };
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  const loadStatus = async () => {
+    try {
+      const next = await YouTubeAPI.status();
+      setStatus(next); setError('');
+      return next;
+    } catch (err) {
+      setError(err && err.message ? err.message : 'YouTube status is unavailable.');
+      return null;
+    }
+  };
+  useEffect(() => {
+    loadStatus();
+    const onComplete = event => {
+      if (!event.data || event.data.type !== 'vellum:youtube-oauth-complete') return;
+      loadStatus();
+    };
+    const onStorage = event => { if (event.key === 'vellum:youtube-oauth-complete') loadStatus(); };
+    window.addEventListener('message', onComplete);
+    window.addEventListener('storage', onStorage);
+    return () => { window.removeEventListener('message', onComplete); window.removeEventListener('storage', onStorage); };
+  }, []);
+  const begin = async () => {
+    if (busy) return;
+    setBusy('connect'); setError('');
+    const popup = window.open('about:blank', 'vellum-youtube-oauth', 'popup,width=620,height=760');
+    try {
+      const result = await YouTubeAPI.start();
+      if (popup) popup.location.href = result.authorization_url;
+      else window.open(result.authorization_url, '_blank', 'noopener,noreferrer');
+      const startedAt = Date.now();
+      const poll = async () => {
+        const next = await loadStatus();
+        if (next && next.connected) return;
+        if (Date.now() - startedAt < 180000) setTimeout(poll, 1800);
+      };
+      setTimeout(poll, 1200);
+    } catch (err) {
+      if (popup) popup.close();
+      setError(err && err.message ? err.message : 'Could not start YouTube authorization.');
+    } finally { setBusy(''); }
+  };
+  const sync = async () => {
+    setBusy('sync'); setError('');
+    try { await YouTubeAPI.sync('manual:' + Date.now()); await loadStatus(); }
+    catch (err) { setError(err && err.message ? err.message : 'YouTube synchronization failed.'); }
+    finally { setBusy(''); }
+  };
+  const connected = !!(status && status.connected);
   return (
     <React.Fragment>
       <div className="backdrop dim xc-backdrop" onClick={onClose}/>
       <div className="xc-win gc-win" role="dialog" aria-label="Connect YouTube">
         <div className="xc-bar">
           <div className="xc-dots"><span className="xc-dot r" onClick={onClose} title="Close"/><span className="xc-dot y"/><span className="xc-dot g"/></div>
-          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>{urls[step]}<span className="xc-url-path">{paths[step]}</span></div>
+          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>accounts.google.com<span className="xc-url-path">/o/oauth2/v2/auth</span></div>
           <button className="xc-close" onClick={onClose} aria-label="Close"><IcX size={15}/></button>
         </div>
         <div className="xc-body gc-body">
-          {step === 'setup' && (
-            <div className="gc-page">
-              <div className="gc-logo"><GLogo size={28}/></div>
-              <div className="gc-h">Set up YouTube access</div>
-              <div className="gc-sub">Vellum connects to YouTube using <b>Google OAuth 2.0 for installed apps</b>. First create OAuth credentials in the Google Cloud Console ? it only takes a few minutes.</div>
-              <ol className="gc-steps">
-                <li><a href={YT_DOCS.register} target="_blank" rel="noopener">Register an application</a> and create a Google Cloud project.</li>
-                <li>Enable the <b>YouTube Data API v3</b> and configure an <a href={YT_DOCS.installed} target="_blank" rel="noopener">OAuth client for installed apps</a>.</li>
-                <li>Copy your <b>Client ID</b> and <b>secret</b> from the <a href={YT_DOCS.console} target="_blank" rel="noopener">Credentials page</a>.</li>
-              </ol>
-              <label className="gc-field"><span>OAuth Client ID</span><input autoFocus value={clientId} onChange={e => setClientId(e.target.value)} placeholder="xxxxxxxx.apps.googleusercontent.com"/></label>
-              <label className="gc-field"><span>Client secret</span><input type="password" value={clientSecret} onChange={e => setClientSecret(e.target.value)} placeholder="GOCSPX-?"/></label>
-              <button className="gc-btn gc-btn-full" onClick={() => setStep('signin')}>Continue with Google</button>
-              <div className="gc-note">New to this? Follow Google's <a href={YT_DOCS.native} target="_blank" rel="noopener">OAuth for native apps guide</a>.</div>
+          <div className="gc-page">
+            <div className="gc-logo"><GLogo size={28}/></div>
+            <div className="gc-h">{connected ? 'YouTube connected' : 'Connect YouTube'}</div>
+            <div className="gc-sub">{connected ? (status.channel_title || 'Your primary YouTube channel') : 'Google handles sign-in and consent in a secure browser window.'}</div>
+            <div className="gc-perm-title">Read-only access</div>
+            <div className="gc-perms">
+              <div className="gc-perm"><YTLogo size={16}/>View your YouTube channel identity</div>
+              <div className="gc-perm"><YTLogo size={16}/>Read your channel subscriptions</div>
             </div>
-          )}
-          {step === 'signin' && (
-            <div className="gc-page">
-              <div className="gc-logo"><GLogo size={28}/></div>
-              <div className="gc-h">Sign in</div>
-              <div className="gc-sub">to continue to <b>Vellum</b></div>
-              <label className="gc-field"><span>Email or phone</span><input autoFocus value={email} onChange={e => setEmail(e.target.value)} placeholder="you@gmail.com"/></label>
-              <a className="gc-link-left" href={YT_DOCS.console} target="_blank" rel="noopener">Forgot email?</a>
-              <div className="gc-guest">Not your computer? Use Guest mode to sign in privately.</div>
-              <div className="gc-actions"><a className="gc-link" href={YT_DOCS.register} target="_blank" rel="noopener">Create account</a><button className="gc-btn" onClick={() => setStep('consent')}>Next</button></div>
+            <div className="gc-trust">Vellum does not request your email, password, uploads, comments, or write access. OAuth tokens stay in your operating-system keyring.</div>
+            {!status && !error && <div className="gc-note">Checking connection status...</div>}
+            {status && !status.configured && <div className="gc-note">Set <b>YOUTUBE_OAUTH_CLIENT_ID</b> and <b>YOUTUBE_OAUTH_CLIENT_SECRET</b> in the local .env file, then restart Vellum.</div>}
+            {error && <div className="gc-note" style={{color:'#ff7b72'}}>{error}</div>}
+            <div className="gc-actions">
+              <button className="gc-cancel" onClick={onClose}>Cancel</button>
+              {!connected && <button className="gc-btn" disabled={busy === 'connect' || !!(status && !status.configured)} onClick={begin}>{busy === 'connect' ? 'Opening Google...' : 'Continue with Google'}</button>}
+              {connected && <button className="gc-cancel" disabled={busy === 'sync'} onClick={sync}>{busy === 'sync' ? 'Syncing...' : 'Sync subscriptions'}</button>}
+              {connected && <button className="gc-btn" onClick={() => onConnected(status)}>Done</button>}
             </div>
-          )}
-          {step === 'consent' && (
-            <div className="gc-page">
-              <div className="gc-logo"><GLogo size={28}/></div>
-              <div className="gc-h">Vellum wants to access your Google Account</div>
-              <div className="gc-acct"><span className="gc-acct-ava">{cleanEmail.slice(0,1).toUpperCase()}</span><span className="gc-acct-email">{cleanEmail}</span></div>
-              <div className="gc-perm-title">This will allow Vellum to:</div>
-              <div className="gc-perms">
-                <div className="gc-perm"><YTLogo size={16}/>View your YouTube account and channel</div>
-                <div className="gc-perm"><YTLogo size={16}/>Read subscriptions, playlists, and video transcripts</div>
-                <div className="gc-perm"><YTLogo size={16}/>Manage videos and drafts on your behalf</div>
-              </div>
-              <div className="gc-trust">Make sure you trust Vellum. You can remove access anytime in your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Account</a>.</div>
-              <div className="gc-actions"><button className="gc-cancel" onClick={onClose}>Cancel</button><button className="gc-btn" onClick={authorize}>Allow</button></div>
-            </div>
-          )}
-          {step === 'connecting' && (
-            <div className="gc-page gc-connecting">
-              <div className="gc-spin"/>
-              <div className="gc-h">Completing sign-in?</div>
-              <div className="gc-sub">Redirecting back to Vellum</div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     </React.Fragment>
@@ -7499,8 +7513,7 @@ const App = () => {
   const [xConn, setXConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-xconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
   useEffect(() => { try { localStorage.setItem('vellum-xconn', JSON.stringify(xConn)); } catch {} }, [xConn]);
   const [xConnectOpen, setXConnectOpen] = useState(false);
-  const [ytConn, setYtConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-ytconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
-  useEffect(() => { try { localStorage.setItem('vellum-ytconn', JSON.stringify(ytConn)); } catch {} }, [ytConn]);
+  const [ytConn, setYtConn] = useState({connected:false,status:'loading',channel_id:'',channel_title:''});
   const [ytConnectOpen, setYtConnectOpen] = useState(false);
   const threadRef = useRef({});
   const pendingMoveRef = useRef(null);
@@ -7592,6 +7605,33 @@ const App = () => {
   const disconnectSpotify = async () => {
     try { await SpotifyAPI.logout(); setSpotify({connected:false,status:'not_configured',account_name:'',product:''}); pushToast('Spotify disconnected'); }
     catch (err) { pushToast('Spotify disconnect failed'); }
+  };
+  const refreshYouTube = async () => {
+    try {
+      const status = await YouTubeAPI.status();
+      setYtConn(status);
+      setApps(as => as.map(app => app.id === 'youtube' ? {...app,state:status.connected ? 'ready' : 'off',configured:!!status.configured} : app));
+      return status;
+    } catch (_) {
+      const status = {connected:false,status:'unreachable',channel_id:'',channel_title:''};
+      setYtConn(status);
+      return status;
+    }
+  };
+  useEffect(() => {
+    refreshYouTube();
+    const onMessage = event => {
+      if (!event.data || event.data.type !== 'vellum:youtube-oauth-complete') return;
+      refreshYouTube();
+    };
+    const onStorage = event => { if (event.key === 'vellum:youtube-oauth-complete') refreshYouTube(); };
+    window.addEventListener('message', onMessage);
+    window.addEventListener('storage', onStorage);
+    return () => { window.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); };
+  }, []);
+  const disconnectYouTube = async () => {
+    try { await YouTubeAPI.disconnect(); setYtConn({connected:false,status:'not_connected',channel_id:'',channel_title:''}); pushToast('YouTube disconnected'); }
+    catch (_) { pushToast('YouTube disconnect failed'); }
   };
 
   async function refreshMemoryData() {
@@ -8621,7 +8661,7 @@ const App = () => {
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.handle} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={() => { setYtConn({connected:false, handle:''}); pushToast('YouTube account disconnected'); }} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen}
@@ -8670,7 +8710,7 @@ const App = () => {
         {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)}/>}
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
-        {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={(h) => { setYtConn({connected:true, handle:h}); setYtConnectOpen(false); pushToast('YouTube account connected'); }}/>}
+        {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={status => { setYtConn(status); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>}
         {toast && <div className="toast">{toast}</div>}
       </div>
     </div>
