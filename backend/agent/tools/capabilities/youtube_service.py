@@ -21,6 +21,8 @@ WebSearchBackend = Callable[[str, int], list[dict[str, Any]]]
 TranscriptBackend = Callable[[dict[str, Any]], dict[str, Any] | None]
 AccountBackend = Callable[[], dict[str, Any]]
 SubscriptionsBackend = Callable[[], list[dict[str, Any]]]
+LikedVideosBackend = Callable[[int], list[dict[str, Any]]]
+TakeoutHistoryBackend = Callable[[str, int], dict[str, Any]]
 
 
 class YoutubeCapabilityService:
@@ -34,6 +36,8 @@ class YoutubeCapabilityService:
         transcript_backend: TranscriptBackend | None = None,
         account_backend: AccountBackend | None = None,
         subscriptions_backend: SubscriptionsBackend | None = None,
+        liked_videos_backend: LikedVideosBackend | None = None,
+        takeout_history_backend: TakeoutHistoryBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
@@ -43,6 +47,8 @@ class YoutubeCapabilityService:
         self.transcript_backend = transcript_backend or self._default_fetch_transcript
         self.account_backend = account_backend or self._default_account
         self.subscriptions_backend = subscriptions_backend or self._default_subscriptions
+        self.liked_videos_backend = liked_videos_backend or self._default_liked_videos
+        self.takeout_history_backend = takeout_history_backend or self._default_takeout_history
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -87,6 +93,36 @@ class YoutubeCapabilityService:
                 adapter=self.subscriptions,
             )
         )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.liked_videos",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Read liked YouTube videos",
+                adapter=self.liked_videos,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.takeout_history",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Read local YouTube history",
+                adapter=self.takeout_history,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.subscription_feed",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Check YouTube subscription feed",
+                adapter=self.subscription_feed,
+            )
+        )
         return registry
 
     def account(self, _payload: dict[str, Any]) -> dict[str, Any]:
@@ -107,6 +143,32 @@ class YoutubeCapabilityService:
             "connected": True,
             "account": account,
             "items": [item for item in items if item["channel_id"]],
+        }
+
+    def liked_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
+        account = dict(self.account_backend())
+        if not account.get("connected"):
+            return {"action": "youtube.liked_videos", "connected": False, "account": account, "items": []}
+        max_results = min(_positive_int(payload.get("max_results"), default=20), 50)
+        items = [self._normalize_video(item) for item in self.liked_videos_backend(max_results)]
+        return {
+            "action": "youtube.liked_videos",
+            "connected": True,
+            "account": account,
+            "items": [item for item in items if item["video_id"]],
+        }
+
+    def takeout_history(self, payload: dict[str, Any]) -> dict[str, Any]:
+        kind = "search" if str(payload.get("kind") or "").casefold() == "search" else "watch"
+        limit = min(_positive_int(payload.get("limit"), default=20), 100)
+        result = dict(self.takeout_history_backend(kind, limit))
+        return {"action": "youtube.takeout_history", **result}
+
+    def subscription_feed(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "action": "youtube.subscription_feed",
+            "available": False,
+            "reason": "official_feed_unavailable",
         }
 
     def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -160,6 +222,8 @@ class YoutubeCapabilityService:
             "transcript": _string(item.get("transcript") or item.get("transcriptText")),
         }
         provider = _string(item.get("provider"))
+        if not record["channel"]:
+            record["channel"] = _string(item.get("channel_title") or item.get("videoOwnerChannelTitle"))
         if provider:
             record["provider"] = provider
         return record
@@ -182,6 +246,23 @@ class YoutubeCapabilityService:
         from agent.plugins.youtube_runtime import youtube_client
 
         return youtube_client().list_subscriptions()
+
+    def _default_liked_videos(self, max_results: int) -> list[dict[str, Any]]:
+        from agent.plugins.youtube_runtime import youtube_client
+
+        return youtube_client().list_liked_videos(max_results=max_results)
+
+    def _default_takeout_history(self, kind: str, limit: int) -> dict[str, Any]:
+        from agent.knowledge.runtime import get_knowledge_core
+        from agent.plugins.youtube_runtime import youtube_status
+        from agent.plugins.youtube_takeout import YouTubeTakeoutImporter
+
+        status = youtube_status()
+        account_id = str(status.get("channel_id") or status.get("account_label") or "primary")
+        return YouTubeTakeoutImporter(store=get_knowledge_core().store, account_id=account_id).history(
+            kind=kind,
+            limit=limit,
+        )
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:

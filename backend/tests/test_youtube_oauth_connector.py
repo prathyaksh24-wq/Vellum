@@ -45,8 +45,12 @@ def test_youtube_manifest_registers_read_only_connector() -> None:
 
     plugin.register(context)
 
-    assert plugin.manifest.capabilities == ["youtube.account", "youtube.subscriptions"]
-    assert context.connectors["youtube"]["capabilities"] == ["youtube.account", "youtube.subscriptions"]
+    assert plugin.manifest.capabilities == ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"]
+    assert context.connectors["youtube"]["capabilities"] == [
+        "youtube.account",
+        "youtube.subscriptions",
+        "youtube.liked_videos",
+    ]
 
 
 def test_youtube_auth_url_uses_readonly_scope_and_pkce() -> None:
@@ -161,6 +165,70 @@ def test_youtube_client_refreshes_and_paginates_subscriptions(tmp_path: Path) ->
     assert calls[0]["data"]["refresh_token"] == "refresh-token"
     assert calls[1]["headers"]["Authorization"] == "Bearer fresh-access"
     assert calls[2]["params"]["pageToken"] == "next"
+
+
+def test_youtube_client_lists_liked_videos_from_related_playlist(tmp_path: Path) -> None:
+    module = youtube_module()
+    store = module.auth.YouTubeAuthStore(tmp_path, keyring_backend=FakeKeyring())
+    store.save_tokens({"access_token": "access", "expires_at": 10_000})
+
+    def request(_method: str, url: str, **kwargs):
+        if url.endswith("/channels"):
+            return FakeResponse(
+                {
+                    "items": [
+                        {
+                            "id": "UC-primary",
+                            "snippet": {"title": "Primary channel"},
+                            "contentDetails": {"relatedPlaylists": {"likes": "LL-primary"}},
+                        }
+                    ]
+                }
+            )
+        assert url.endswith("/playlistItems")
+        assert kwargs["params"]["playlistId"] == "LL-primary"
+        return FakeResponse(
+            {
+                "items": [
+                    {
+                        "id": "playlist-item-1",
+                        "snippet": {
+                            "title": "A liked video",
+                            "description": "Description",
+                            "publishedAt": "2026-07-20T12:00:00Z",
+                            "videoOwnerChannelId": "UC-owner",
+                            "videoOwnerChannelTitle": "Owner channel",
+                            "resourceId": {"videoId": "liked123456"},
+                        },
+                        "contentDetails": {"videoId": "liked123456", "videoPublishedAt": "2026-07-19T12:00:00Z"},
+                    }
+                ]
+            }
+        )
+
+    client = module.client.YouTubeClient(
+        client_id="client",
+        client_secret="secret",
+        store=store,
+        request_backend=request,
+        clock=lambda: 100.0,
+    )
+
+    videos = client.list_liked_videos(max_results=10)
+
+    assert videos == [
+        {
+            "playlist_item_id": "playlist-item-1",
+            "video_id": "liked123456",
+            "title": "A liked video",
+            "description": "Description",
+            "channel_id": "UC-owner",
+            "channel_title": "Owner channel",
+            "published_at": "2026-07-19T12:00:00Z",
+            "added_at": "2026-07-20T12:00:00Z",
+            "url": "https://www.youtube.com/watch?v=liked123456",
+        }
+    ]
 
 
 def test_youtube_code_exchange_requires_readonly_scope(tmp_path: Path) -> None:

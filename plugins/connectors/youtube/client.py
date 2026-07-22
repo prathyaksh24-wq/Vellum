@@ -133,6 +133,52 @@ class YouTubeClient:
             raise YouTubeAPIError("YouTube subscription pagination exceeded its safety limit")
         return subscriptions
 
+    def list_liked_videos(self, *, max_results: int = 20) -> list[dict[str, Any]]:
+        profile = self.get_my_channel()
+        playlist_id = str(profile.get("likes_playlist_id") or "")
+        if not playlist_id:
+            return []
+        return self.list_playlist_videos(playlist_id, max_results=max_results)
+
+    def list_playlist_videos(self, playlist_id: str, *, max_results: int = 20) -> list[dict[str, Any]]:
+        clean_playlist_id = playlist_id.strip()
+        if not clean_playlist_id:
+            return []
+        limit = max(1, min(int(max_results), 50))
+        payload = self._api_get(
+            "/playlistItems",
+            params={
+                "part": "snippet,contentDetails",
+                "playlistId": clean_playlist_id,
+                "maxResults": limit,
+            },
+        )
+        items = payload.get("items") if isinstance(payload.get("items"), list) else []
+        videos: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            snippet = item.get("snippet") if isinstance(item.get("snippet"), dict) else {}
+            content = item.get("contentDetails") if isinstance(item.get("contentDetails"), dict) else {}
+            resource = snippet.get("resourceId") if isinstance(snippet.get("resourceId"), dict) else {}
+            video_id = str(content.get("videoId") or resource.get("videoId") or "")
+            if not video_id:
+                continue
+            videos.append(
+                {
+                    "playlist_item_id": str(item.get("id") or ""),
+                    "video_id": video_id,
+                    "title": str(snippet.get("title") or ""),
+                    "description": str(snippet.get("description") or ""),
+                    "channel_id": str(snippet.get("videoOwnerChannelId") or ""),
+                    "channel_title": str(snippet.get("videoOwnerChannelTitle") or ""),
+                    "published_at": str(content.get("videoPublishedAt") or ""),
+                    "added_at": str(snippet.get("publishedAt") or ""),
+                    "url": f"https://www.youtube.com/watch?v={video_id}",
+                }
+            )
+        return videos
+
     def disconnect(self) -> None:
         tokens = self.store.load_tokens(required=False)
         token = str(tokens.get("refresh_token") or tokens.get("access_token") or "")

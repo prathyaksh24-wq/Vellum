@@ -67,6 +67,7 @@ def _profile(
     *,
     tools: list[str],
     cache: CachePolicy | None = None,
+    cache_first: bool = True,
 ) -> AgentProfile:
     return AgentProfile(
         id=profile_id,
@@ -75,6 +76,7 @@ def _profile(
         memory=MemoryPolicy(
             read_scopes=["user_profile", "shared", f"agent:{profile_id}"],
             write_scope=f"agent:{profile_id}",
+            cache_first=cache_first,
         ),
         cache=cache or CachePolicy(),
     )
@@ -119,9 +121,13 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             tools=[
                 "youtube.account",
                 "youtube.subscriptions",
+                "youtube.liked_videos",
+                "youtube.takeout_history",
+                "youtube.subscription_feed",
                 "youtube.search_videos",
                 "youtube.fetch_transcript",
             ],
+            cache_first=False,
         ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",

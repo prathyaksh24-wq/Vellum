@@ -94,7 +94,7 @@ def portable_youtube_status() -> dict[str, Any]:
             if connected
             else "Connect a YouTube account for read-only subscription synchronization."
         ),
-        "capabilities": ["youtube.account", "youtube.subscriptions"],
+        "capabilities": ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"],
     }
 
 

@@ -1228,6 +1228,49 @@ def test_youtube_agent_uses_official_account_capabilities_without_public_search(
     assert search_calls == []
 
 
+def test_youtube_agent_routes_private_library_and_takeout_queries_without_public_search(tmp_path):
+    search_calls = []
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: search_calls.append(query) or [],
+        account_backend=lambda: {"configured": True, "connected": True},
+        liked_videos_backend=lambda max_results: [
+            {
+                "video_id": "liked123456",
+                "title": "A liked video",
+                "channel_title": "Creator",
+                "url": "https://youtube.com/watch?v=liked123456",
+            }
+        ],
+        takeout_history_backend=lambda kind, limit: {
+            "available": True,
+            "kind": kind,
+            "total": 40_200,
+            "items": [
+                {
+                    "title": "A watched video",
+                    "channel_title": "Creator",
+                    "occurred_at": "2026-07-22T10:04:24+05:30",
+                    "url": "https://youtube.com/watch?v=watched1234",
+                }
+            ],
+        },
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+
+    liked = agent.answer("What are my latest liked videos on YouTube?")
+    history = agent.answer("What did I recently watch according to my YouTube Takeout?")
+    feed = agent.answer("Show the latest videos from channels I subscribe to on YouTube")
+
+    assert "A liked video" in liked.summary
+    assert "youtube.liked_videos" in liked.analysis
+    assert "A watched video" in history.summary
+    assert "youtube.takeout_history" in history.analysis
+    assert "does not expose the personalized subscriptions feed" in feed.summary
+    assert "youtube.subscription_feed" in feed.analysis
+    assert search_calls == []
+
+
 def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",

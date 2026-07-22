@@ -3,7 +3,8 @@ name: YouTube
 type: connector
 category: Connectors
 version: 1.0.0
-description: Read-only YouTube account and subscription synchronization for Vellum Personal Intelligence.
+description: Read-only YouTube account, subscriptions, and liked-video access for Vellum Personal Intelligence.
 capabilities:
   - youtube.account
   - youtube.subscriptions
+  - youtube.liked_videos

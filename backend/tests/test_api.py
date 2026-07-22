@@ -47,6 +47,17 @@ def _parse_sse(text):
     return events
 
 
+def test_youtube_specialist_results_are_passed_through_without_external_rewrite():
+    result = LiveAgentResult(
+        handled=True,
+        agent_name="YoutubeAgent",
+        answer="Private YouTube account data",
+        status="answered",
+    )
+
+    assert api._should_passthrough_live_result(result) is True
+
+
 def test_health_endpoint_reports_service_and_vector_store(monkeypatch):
     monkeypatch.setattr(api, "_vector_health", lambda: {"ok": True, "collections": ["obsidian_vault"]})
     monkeypatch.setattr(api, "_embedding_health", lambda: {"ok": True, "provider": "sentence-transformers"})

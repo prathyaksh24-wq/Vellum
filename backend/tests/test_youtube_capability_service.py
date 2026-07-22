@@ -201,6 +201,15 @@ def test_youtube_service_registry_is_read_only(tmp_path):
         subscriptions_backend=lambda: [
             {"channel_id": "UC-one", "title": "Channel One", "channel_url": "https://youtube.com/channel/UC-one"}
         ],
+        liked_videos_backend=lambda max_results: [
+            {"video_id": "liked123456", "title": "Liked video", "url": "https://youtube.com/watch?v=liked123456"}
+        ],
+        takeout_history_backend=lambda kind, limit: {
+            "available": True,
+            "kind": kind,
+            "total": 2,
+            "items": [{"title": "History item", "occurred_at": "2026-07-21T12:00:00+00:00"}],
+        },
     )
 
     registry = service.build_registry()
@@ -208,10 +217,19 @@ def test_youtube_service_registry_is_read_only(tmp_path):
     assert registry.names() == [
         "youtube.account",
         "youtube.fetch_transcript",
+        "youtube.liked_videos",
         "youtube.search_videos",
+        "youtube.subscription_feed",
         "youtube.subscriptions",
+        "youtube.takeout_history",
     ]
     account = registry.invoke("youtube.account", {}, agent_name="YoutubeAgent")
     subscriptions = registry.invoke("youtube.subscriptions", {}, agent_name="YoutubeAgent")
+    liked = registry.invoke("youtube.liked_videos", {"max_results": 10}, agent_name="YoutubeAgent")
+    takeout = registry.invoke("youtube.takeout_history", {"kind": "watch", "limit": 10}, agent_name="YoutubeAgent")
+    feed = registry.invoke("youtube.subscription_feed", {}, agent_name="YoutubeAgent")
     assert account["account"]["channel_title"] == "Pratyakksh"
     assert subscriptions["items"][0]["title"] == "Channel One"
+    assert liked["items"][0]["video_id"] == "liked123456"
+    assert takeout["total"] == 2
+    assert feed["available"] is False

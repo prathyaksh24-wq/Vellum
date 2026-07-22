@@ -111,6 +111,12 @@ def test_memory_profile_bypasses_mutating_memory_instructions(tmp_path: Path) ->
     assert {"remember", "memorize", "note", "forget", "delete"} <= set(profile.cache.bypass_terms)
 
 
+def test_youtube_profile_bypasses_generic_response_cache(tmp_path: Path) -> None:
+    profile = ProfileRegistry(profile_dir=tmp_path).get("YoutubeAgent")
+
+    assert profile.memory.cache_first is False
+
+
 def test_registry_discovers_new_llm_profile_from_yaml(tmp_path: Path) -> None:
     (tmp_path / "ResearchAgent.yaml").write_text(
         yaml.safe_dump(

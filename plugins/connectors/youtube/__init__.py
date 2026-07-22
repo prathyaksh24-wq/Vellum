@@ -20,10 +20,10 @@ def register(ctx) -> None:
             "type": "connector",
             "category": "Connectors",
             "status": "backend_managed",
-            "capabilities": ["youtube.account", "youtube.subscriptions"],
+            "capabilities": ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"],
         },
         service_factory=YouTubeClient,
-        capabilities=["youtube.account", "youtube.subscriptions"],
+        capabilities=["youtube.account", "youtube.subscriptions", "youtube.liked_videos"],
     )
 
 

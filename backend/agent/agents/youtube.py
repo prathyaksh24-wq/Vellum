@@ -40,6 +40,20 @@ class YoutubeAgent:
         r"\b(?:my|our)\s+youtube\s+(?:account|channel)\b",
         r"\bcan\s+you\s+see\s+(?:my|our)\s+(?:youtube\s+)?channel\b",
     )
+    _LIKED_PATTERNS = (
+        r"\b(?:my|our)\s+(?:latest\s+|recent\s+)?(?:youtube\s+)?liked\s+videos?\b",
+        r"\bvideos?\s+(?:i|we)\s+(?:have\s+)?liked\s+on\s+youtube\b",
+    )
+    _TAKEOUT_PATTERNS = (
+        r"\byoutube\s+takeout\b",
+        r"\b(?:my|our)\s+youtube\s+(?:watch|search)\s+history\b",
+        r"\bwhat\s+did\s+(?:i|we)\s+recently\s+watch\b",
+    )
+    _SUBSCRIPTION_FEED_PATTERNS = (
+        r"\b(?:latest|new|recent)\s+videos?\s+from\s+channels?\s+(?:i|we)\s+(?:am\s+|are\s+)?subscrib(?:e|ed)\s+to\b",
+        r"\b(?:my|our)\s+youtube\s+subscriptions?\s+feed\b",
+        r"\bwhat(?:'s|\s+is)\s+new\s+in\s+(?:my|our)\s+youtube\s+subscriptions?\b",
+    )
 
     def __init__(
         self,
@@ -63,6 +77,12 @@ class YoutubeAgent:
 
     def answer(self, query: str) -> SpecialistResponse:
         lowered = query.lower()
+        if self._is_liked_query(lowered):
+            return self._answer_liked_videos()
+        if self._is_takeout_query(lowered):
+            return self._answer_takeout_history(lowered)
+        if self._is_subscription_feed_query(lowered):
+            return self._answer_subscription_feed()
         if self._is_subscriptions_query(lowered):
             return self._answer_subscriptions()
         if self._is_account_query(lowered):
@@ -145,6 +165,22 @@ class YoutubeAgent:
             return self.tool_registry.invoke("youtube.subscriptions", {}, agent_name=self.name)
         return self.youtube_service.subscriptions({})
 
+    def _liked_videos(self) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.liked_videos", {"max_results": 20}, agent_name=self.name)
+        return self.youtube_service.liked_videos({"max_results": 20})
+
+    def _takeout_history(self, kind: str) -> dict:
+        payload = {"kind": kind, "limit": 20}
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.takeout_history", payload, agent_name=self.name)
+        return self.youtube_service.takeout_history(payload)
+
+    def _subscription_feed(self) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.subscription_feed", {}, agent_name=self.name)
+        return self.youtube_service.subscription_feed({})
+
     def _answer_account(self) -> SpecialistResponse:
         try:
             result = self._account()
@@ -202,11 +238,99 @@ class YoutubeAgent:
             confidence=1.0,
         )
 
+    def _answer_liked_videos(self) -> SpecialistResponse:
+        try:
+            result = self._liked_videos()
+        except Exception as exc:
+            return self._official_error("YoutubeAgent could not read liked YouTube videos.", exc)
+        if not result.get("connected"):
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="Vellum is not connected to a YouTube account.",
+                analysis="Used youtube.liked_videos through the official OAuth connector.",
+                confidence=0.95,
+            )
+        items = list(result.get("items") or [])
+        if not items:
+            summary = "The connected YouTube account has no accessible liked videos."
+        else:
+            lines = []
+            for index, item in enumerate(items[:20], start=1):
+                title = str(item.get("title") or item.get("video_id") or "Unknown video")
+                channel = str(item.get("channel") or "")
+                lines.append(f"[{index}] {title}" + (f" by {channel}" if channel else ""))
+            summary = f"Your {len(items)} most recent accessible liked YouTube videos are:\n" + "\n".join(lines)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=summary,
+            analysis="Used youtube.liked_videos through the official OAuth connector.",
+            confidence=1.0,
+        )
+
+    def _answer_takeout_history(self, lowered_query: str) -> SpecialistResponse:
+        kind = "search" if "search" in lowered_query else "watch"
+        try:
+            result = self._takeout_history(kind)
+        except Exception as exc:
+            return self._official_error("YoutubeAgent could not read local YouTube Takeout history.", exc)
+        if not result.get("available"):
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="No imported YouTube Takeout history is available yet.",
+                analysis="Used youtube.takeout_history from the local Knowledge Core.",
+                confidence=1.0,
+            )
+        items = list(result.get("items") or [])
+        label = "searches" if kind == "search" else "watched videos"
+        lines = []
+        for index, item in enumerate(items[:20], start=1):
+            title = str(item.get("query") or item.get("title") or item.get("video_id") or "Unknown item")
+            channel = str(item.get("channel_title") or "")
+            occurred_at = str(item.get("occurred_at") or "")
+            line = f"[{index}] {title}" + (f" by {channel}" if channel else "")
+            if occurred_at:
+                line += f" ({occurred_at})"
+            lines.append(line)
+        summary = f"Your Takeout contains {int(result.get('total') or 0):,} YouTube {label}. Most recent:\n" + "\n".join(lines)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=summary,
+            analysis="Used youtube.takeout_history from the local Knowledge Core.",
+            confidence=1.0,
+        )
+
+    def _answer_subscription_feed(self) -> SpecialistResponse:
+        self._subscription_feed()
+        return SpecialistResponse(
+            agent=self.name,
+            status="needs_fetch",
+            summary=(
+                "The official YouTube API does not expose the personalized subscriptions feed. "
+                "Vellum can retrieve a specific subscribed channel's latest public videos, but a complete personal feed "
+                "requires scheduled per-channel upload polling."
+            ),
+            analysis="Used youtube.subscription_feed; no public-search substitute was used.",
+            confidence=1.0,
+        )
+
     def _is_subscriptions_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_PATTERNS)
 
     def _is_account_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._ACCOUNT_PATTERNS)
+
+    def _is_liked_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._LIKED_PATTERNS)
+
+    def _is_takeout_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._TAKEOUT_PATTERNS)
+
+    def _is_subscription_feed_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_FEED_PATTERNS)
 
     def _official_error(self, summary: str, exc: Exception) -> SpecialistResponse:
         return SpecialistResponse(

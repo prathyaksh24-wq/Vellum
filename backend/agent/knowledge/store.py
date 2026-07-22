@@ -596,6 +596,102 @@ class KnowledgeStore:
                 observation_id = str(existing["id"])
         return {"observation_id": observation_id, "event_key": event_key, "created": existing is None}
 
+    def record_observations(self, items: Iterable[ObservationInput]) -> dict[str, int]:
+        created = 0
+        existing_count = 0
+        with closing(self._connect()) as connection, connection:
+            for item in items:
+                observed_at = _iso(item.observed_at) or _now()
+                canonical_payload = _json(item.payload)
+                event_key = item.event_key.strip() or _stable_id(
+                    "evtkey",
+                    item.origin,
+                    item.actor.value,
+                    item.action,
+                    item.source_id or "",
+                    canonical_payload,
+                )
+                observation_id = _stable_id("obs", event_key)
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO observations (
+                        id, event_key, origin, actor, trigger, action, source_id,
+                        payload_json, sensitivity, confidence, observed_at, expires_at,
+                        promotion_status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        observation_id,
+                        event_key,
+                        item.origin,
+                        item.actor.value,
+                        item.trigger,
+                        item.action,
+                        item.source_id,
+                        canonical_payload,
+                        item.sensitivity.value,
+                        float(item.confidence),
+                        observed_at,
+                        _iso(item.expires_at),
+                        item.promotion_status.value,
+                        _now(),
+                    ),
+                )
+                if int(cursor.rowcount) > 0:
+                    created += 1
+                else:
+                    existing_count += 1
+        return {"created": created, "existing": existing_count}
+
+    def count_observations(self, *, origin: str = "", action: str = "") -> int:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if origin:
+            clauses.append("origin = ?")
+            params.append(origin)
+        if action:
+            clauses.append("action = ?")
+            params.append(action)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with closing(self._connect()) as connection:
+            return int(connection.execute(f"SELECT COUNT(*) FROM observations {where}", params).fetchone()[0])
+
+    def list_observation_details(
+        self,
+        *,
+        origin: str = "",
+        action: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if origin:
+            clauses.append("origin = ?")
+            params.append(origin)
+        if action:
+            clauses.append("action = ?")
+            params.append(action)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.extend([max(1, min(int(limit), 500)), max(0, int(offset))])
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, event_key, origin, actor, trigger, action, source_id,
+                       payload_json, sensitivity, confidence, observed_at,
+                       expires_at, promotion_status
+                FROM observations {where}
+                ORDER BY observed_at DESC LIMIT ? OFFSET ?
+                """,
+                params,
+            ).fetchall()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            record["payload"] = json.loads(str(record.pop("payload_json") or "{}"))
+            records.append(record)
+        return records
+
     def register_projection(self, item: ProjectionInput) -> dict[str, Any]:
         projection_id = _stable_id("prj", item.target, item.target_ref)
         now = _now()

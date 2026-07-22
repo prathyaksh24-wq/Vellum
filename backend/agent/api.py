@@ -3206,7 +3206,7 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
 def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool:
     if live_result is None or not live_result.handled:
         return False
-    if live_result.agent_name != "XAgent":
+    if live_result.agent_name not in {"XAgent", "YoutubeAgent"}:
         return False
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
 
