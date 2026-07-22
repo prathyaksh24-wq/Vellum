@@ -78,6 +78,12 @@ def capture_from_stream_event(
     """Handle a single `astream_events` event; only fires on chat-model-end."""
     if event.get("event") != "on_chat_model_end":
         return
+    # LangGraph exposes the routed facade and its nested provider run. They
+    # carry the same usage payload, so recording both silently doubles every
+    # observability total. Synthetic/legacy events may omit a name.
+    event_name = str(event.get("name") or "").strip()
+    if event_name and event_name != "RoutedChatModel":
+        return
     output = event.get("data", {}).get("output")
     usage = _extract_usage(output)
     if usage:

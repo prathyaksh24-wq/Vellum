@@ -156,3 +156,29 @@ def test_capture_from_stream_event_ignores_other_events(ledger: UsageLedger) -> 
         fallback_model="x", source="tui",
     )
     assert ledger.all_rows() == []
+
+
+def test_capture_from_stream_event_ignores_nested_provider_end(ledger: UsageLedger) -> None:
+    usage = _FakeAIMessage({
+        "input_tokens": 50,
+        "output_tokens": 25,
+        "model_name": "google/gemma-4-31b-it",
+    })
+    capture_from_stream_event(
+        ledger=ledger,
+        event={"event": "on_chat_model_end", "name": "ChatOpenAI", "data": {"output": usage}},
+        thread_id="t9",
+        fallback_model="google/gemma-4-31b-it",
+        source="api",
+    )
+    capture_from_stream_event(
+        ledger=ledger,
+        event={"event": "on_chat_model_end", "name": "RoutedChatModel", "data": {"output": usage}},
+        thread_id="t9",
+        fallback_model="google/gemma-4-31b-it",
+        source="api",
+    )
+
+    rows = ledger.all_rows()
+    assert len(rows) == 1
+    assert rows[0]["in_tokens"] == 50
