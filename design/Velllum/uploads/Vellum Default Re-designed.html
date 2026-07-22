@@ -216,6 +216,28 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .cb-act-os{text-align:right;color:#6fae84;font-variant-numeric:tabular-nums}
 .cb-act-os.low{color:#d98a8a}
 .cb-empty{font-size:12px;color:var(--dim2);padding:8px 0}
+
+/* observability — CodexBar glass + Codeburn telemetry, driven by Vellum data */
+.obs-page{--obs-cool:#5ca8ff;--obs-cyan:#5fd0cb;--obs-warm:#e6bd55;--obs-hot:#eb805d;--obs-danger:#e26268;--obs-good:#64c88a;flex:1;min-width:0;overflow:auto;padding:26px 28px 34px;background:color-mix(in srgb,var(--bg) 88%,transparent)}
+[data-theme="light"] .obs-page{--obs-cool:#2779c7;--obs-cyan:#248f8a;--obs-warm:#a87705;--obs-hot:#c55634;--obs-danger:#c13f4b;--obs-good:#24874e}
+.obs-shell{width:min(1280px,100%);margin:0 auto;display:grid;gap:12px}
+.obs-head{display:flex;align-items:flex-start;gap:14px;padding:2px 2px 4px}.obs-head-copy{flex:1;min-width:0}.obs-title{font:500 27px/1.08 var(--font-d);letter-spacing:-.025em;color:var(--txt2)}.obs-sub{margin-top:5px;color:var(--dim);font-size:11.5px}.obs-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.obs-control{height:34px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line2);border-radius:9px;padding:0 11px;background:color-mix(in srgb,var(--glass) 90%,transparent);color:var(--txt);font:500 10.5px var(--font-m);cursor:pointer;transition:background .16s,border-color .16s,transform .16s}.obs-control:hover{background:var(--hover);border-color:color-mix(in srgb,var(--ember) 42%,var(--line2));transform:translateY(-1px)}.obs-control:focus-visible{outline:2px solid color-mix(in srgb,var(--ember) 65%,transparent);outline-offset:2px}.obs-control.on{color:var(--obs-good);border-color:color-mix(in srgb,var(--obs-good) 42%,var(--line2))}.obs-control.pause.on{color:var(--obs-warm);border-color:color-mix(in srgb,var(--obs-warm) 42%,var(--line2))}.obs-control.refreshing svg{animation:obsSpin .9s linear infinite}
+.obs-live-dot,.obs-status-dot{width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;flex-shrink:0}.obs-live-dot{animation:obsPulse 1.7s ease-in-out infinite}
+.obs-source{display:flex;align-items:center;gap:7px;font:500 9.5px var(--font-m);color:var(--dim);padding:0 3px}.obs-source strong{color:var(--txt);font-weight:500}.obs-updated{font:9.5px var(--font-m);color:var(--dim2)}
+.obs-glass{border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 92%,transparent);backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);box-shadow:0 18px 50px color-mix(in srgb,var(--background-surface-shadow) 68%,transparent),inset 0 1px color-mix(in srgb,var(--txt2) 7%,transparent)}
+.obs-overview{display:grid;grid-template-columns:minmax(0,1.55fr) repeat(3,minmax(170px,.72fr));gap:12px}.obs-active{min-height:144px;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}.obs-active::after{content:"";position:absolute;width:260px;height:180px;right:-80px;bottom:-110px;border-radius:50%;background:var(--obs-usage,var(--obs-cool));filter:blur(70px);opacity:.09;pointer-events:none}.obs-kicker{display:flex;align-items:center;gap:7px;font:600 9px var(--font-m);letter-spacing:.08em;text-transform:uppercase;color:var(--obs-good)}.obs-active-title{font:500 22px/1.2 var(--font-d);color:var(--txt2);margin-top:12px}.obs-active-sub{font:10.5px/1.5 var(--font-m);color:var(--dim);margin-top:4px}.obs-run-meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:16px}.obs-meta-k{font:8.5px var(--font-m);color:var(--dim2);text-transform:uppercase;letter-spacing:.07em}.obs-meta-v{font:10.5px var(--font-m);color:var(--txt);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.obs-stat{border-radius:14px;padding:15px 16px;min-height:144px;display:flex;flex-direction:column}.obs-stat-head{display:flex;align-items:center;gap:8px;color:var(--txt2);font:500 12px var(--font-d)}.obs-stat-head svg{color:var(--dim)}.obs-stat-value{font:500 25px/1.1 var(--font-d);color:var(--txt2);margin-top:17px}.obs-stat-value.usage{color:var(--obs-usage,var(--obs-cool))}.obs-stat-note{font:9.5px/1.45 var(--font-m);color:var(--dim);margin-top:6px}.obs-mini-bar{display:flex;gap:2px;height:8px;margin-top:auto;padding-top:13px}.obs-mini-bar i{flex:1;min-width:2px;border-radius:2px;background:color-mix(in srgb,var(--obs-usage,var(--obs-cool)) var(--seg-a,42%),var(--line2));transition:background .25s ease}.obs-health-good{color:var(--obs-good)!important}.obs-health-bad{color:var(--obs-danger)!important}
+.obs-main-grid{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(260px,.62fr);gap:12px;align-items:start}.obs-observatory{border-radius:15px;overflow:hidden;position:relative}.obs-panel-head{height:48px;display:flex;align-items:center;gap:9px;padding:0 16px;border-bottom:1px solid var(--line);color:var(--txt2);font:500 13px var(--font-d)}.obs-panel-head small{font:9px var(--font-m);color:var(--dim);font-weight:400}.obs-panel-head .spacer{flex:1}.obs-pressure{display:flex;align-items:center;gap:7px;font:9px var(--font-m);color:var(--dim)}.obs-pressure b{font-weight:500;color:var(--obs-usage,var(--obs-cool))}
+.obs-path{position:relative;display:grid;grid-template-columns:repeat(7,minmax(92px,1fr));gap:0;padding:27px 14px 23px;overflow-x:auto;min-height:252px}.obs-path::before{content:"";position:absolute;left:8%;right:8%;top:55px;height:1px;background:var(--line2)}.obs-step{position:relative;min-width:92px;padding:0 5px;text-align:center}.obs-node{position:relative;z-index:2;width:43px;height:43px;margin:0 auto 13px;border-radius:50%;display:grid;place-items:center;border:1px solid var(--line2);background:color-mix(in srgb,var(--modal) 90%,transparent);color:var(--dim);box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent);transition:color .2s,border-color .2s,box-shadow .2s}.obs-step.done .obs-node{color:var(--obs-good);border-color:color-mix(in srgb,var(--obs-good) 55%,var(--line2));box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent),0 0 20px color-mix(in srgb,var(--obs-good) 25%,transparent)}.obs-step.live .obs-node{color:var(--obs-usage,var(--obs-cool));border-color:var(--obs-usage,var(--obs-cool));box-shadow:0 0 0 5px color-mix(in srgb,var(--bg) 80%,transparent),0 0 24px color-mix(in srgb,var(--obs-usage,var(--obs-cool)) 38%,transparent);animation:obsNode 1.8s ease-in-out infinite}.obs-step-label{font:500 10.5px/1.35 var(--font-d);color:var(--txt)}.obs-step-state{font:8.5px/1.4 var(--font-m);color:var(--dim2);margin-top:5px}.obs-step.done .obs-step-state{color:var(--obs-good)}.obs-step.live .obs-step-state{color:var(--obs-usage,var(--obs-cool))}.obs-step-metric{margin-top:12px;padding-top:9px;border-top:1px solid var(--line);font:8.5px/1.45 var(--font-m);color:var(--dim)}
+.obs-run-footer{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(4,minmax(90px,.45fr));gap:1px;border-top:1px solid var(--line);background:var(--line)}.obs-run-foot-cell{min-height:61px;padding:12px 14px;background:color-mix(in srgb,var(--glass) 96%,var(--bg));display:flex;flex-direction:column;justify-content:center}.obs-run-foot-cell:first-child{color:var(--obs-usage,var(--obs-cool));font:500 11px var(--font-d)}.obs-run-foot-k{font:8px var(--font-m);color:var(--dim2);text-transform:uppercase;letter-spacing:.06em}.obs-run-foot-v{font:10px var(--font-m);color:var(--txt);margin-top:4px}
+.obs-side{display:grid;gap:12px}.obs-side-card{border-radius:14px;overflow:hidden}.obs-side-body{padding:13px 15px}.obs-model-row{display:grid;grid-template-columns:minmax(0,1fr) 82px auto;align-items:center;gap:8px;padding:7px 0}.obs-model-name{font:9.5px var(--font-m);color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-model-bar{height:6px;border-radius:4px;background:var(--input);overflow:hidden}.obs-model-bar i{display:block;height:100%;border-radius:inherit;background:var(--row-color,var(--obs-cool));transition:width .35s ease}.obs-model-value{font:8.5px var(--font-m);color:var(--dim);min-width:42px;text-align:right}.obs-empty{padding:24px 15px;color:var(--dim);font:10px/1.55 var(--font-m);text-align:center}.obs-recent{display:grid}.obs-recent-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:10px 15px;border-top:1px solid var(--line)}.obs-recent-row:first-child{border-top:0}.obs-recent-main{min-width:0}.obs-recent-name{font:9.5px var(--font-m);color:var(--txt);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.obs-recent-meta{font:8px var(--font-m);color:var(--dim2);margin-top:4px}.obs-recent-status{display:flex;align-items:center;gap:5px;font:8.5px var(--font-m);color:var(--dim)}.obs-recent-status.completed{color:var(--obs-good)}.obs-recent-status.failed{color:var(--obs-danger)}.obs-recent-status.in_progress{color:var(--obs-warm)}
+.obs-activity{border-radius:14px;overflow:hidden}.obs-ribbon{display:flex;align-items:center;gap:3px;min-height:54px;padding:13px 15px;border-bottom:1px solid var(--line);overflow:hidden}.obs-ribbon i{height:9px;min-width:8px;flex:var(--event-weight,1);max-width:74px;border-radius:2px;background:var(--event-color,var(--obs-cool));opacity:.82}.obs-ribbon-empty{font:9.5px var(--font-m);color:var(--dim)}.obs-event-table{max-height:235px;overflow:auto}.obs-event-row{display:grid;grid-template-columns:68px 112px minmax(0,1fr) 74px;gap:12px;align-items:center;padding:9px 15px;border-top:1px solid var(--line);font:9px var(--font-m)}.obs-event-row:first-child{border-top:0}.obs-event-time{color:var(--dim2)}.obs-event-type{color:var(--event-color,var(--obs-cool));text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-event-label{color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.obs-event-status{text-align:right;color:var(--dim)}
+.obs-error{border:1px solid color-mix(in srgb,var(--obs-danger) 35%,var(--line2));background:color-mix(in srgb,var(--obs-danger) 7%,var(--glass));border-radius:11px;padding:10px 12px;color:var(--obs-danger);font:9.5px/1.45 var(--font-m)}
+@keyframes obsPulse{50%{opacity:.35;transform:scale(.82)}}@keyframes obsNode{50%{transform:scale(1.05)}}@keyframes obsSpin{to{transform:rotate(360deg)}}
+@media(max-width:1120px){.obs-overview{grid-template-columns:minmax(0,1.4fr) repeat(2,minmax(170px,.7fr))}.obs-stat:last-child{display:none}.obs-main-grid{grid-template-columns:1fr}.obs-side{grid-template-columns:1fr 1fr}.obs-path{grid-template-columns:repeat(7,minmax(112px,1fr))}}
+@media(max-width:760px){.obs-page{padding:18px 14px 28px}.obs-head{flex-direction:column}.obs-head-actions{justify-content:flex-start}.obs-overview{grid-template-columns:1fr 1fr}.obs-active{grid-column:1/-1}.obs-run-meta{grid-template-columns:1fr 1fr}.obs-side{grid-template-columns:1fr}.obs-run-footer{grid-template-columns:1fr 1fr}.obs-run-foot-cell:first-child{grid-column:1/-1}.obs-event-row{grid-template-columns:58px minmax(0,1fr) 68px}.obs-event-type{display:none}}
+@media(prefers-reduced-motion:reduce){.obs-live-dot,.obs-step.live .obs-node,.obs-control.refreshing svg{animation:none!important}.obs-control{transition:none}}
 /* knowledge graph */
 .kg-ic{color:var(--ember)!important}
 .kg-legend{display:flex;gap:6px;flex-shrink:0}
@@ -3132,7 +3154,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
         <div className="sb-tools">
-          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Ledger</button>
+          <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Observability</button>
           <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
           <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
           <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
@@ -3292,7 +3314,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
           </div>
         ))}
       </RailFly>
-      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Ledger ? Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
+      <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Observability · Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
       <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSkills size={17}/></button>
@@ -5454,6 +5476,222 @@ const LedgerView = () => {
   );
 };
 
+const OBS_PERIODS = [['today','Today'],['7d','7 days'],['30d','30 days'],['month','This month'],['all','All time']];
+const OBS_STEP_DEFS = [
+  {key:'user', label:'User message', types:['run_started'], Icon:IcChat},
+  {key:'thinking', label:'Planning', types:['thinking_started'], Icon:IcSparkle},
+  {key:'retrieval', label:'Retrieval', types:['memory_retrieved','source_discovered','source_reading'], Icon:IcSearch},
+  {key:'tool', label:'Tool calls', types:['tool_call_started','tool_call_delta','tool_call_completed'], Icon:IcTool},
+  {key:'agent', label:'Sub-agent', types:['sub_agent_started','sub_agent_completed'], Icon:IcBot},
+  {key:'model', label:'Model synthesis', types:['final_answer_started','final_answer_delta'], Icon:IcPenLine},
+  {key:'answer', label:'Streaming answer', types:['final_answer_completed','run_completed'], Icon:IcCheck},
+];
+const obsTokens = value => {
+  const n = Number(value || 0);
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k';
+  return n.toLocaleString();
+};
+const obsMoney = value => '$' + Number(value || 0).toFixed(Number(value || 0) < .1 ? 4 : 2);
+const obsShortId = value => String(value || '').replace(/^resp[_-]?/,'').slice(0, 9) || 'waiting';
+const obsClock = value => {
+  if (!value) return '\u2014';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '\u2014' : date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+};
+const obsDuration = run => {
+  if (!run || !run.started_at) return '\u2014';
+  const start = new Date(run.started_at).getTime();
+  const end = run.completed_at ? new Date(run.completed_at).getTime() : Date.now();
+  const seconds = Math.max(0, Math.round((end - start) / 1000));
+  if (seconds < 60) return seconds + 's';
+  return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+};
+const obsContextTokens = raw => {
+  if (typeof raw === 'number') return raw;
+  const text = String(raw || '').trim().toLowerCase().replace(/,/g,'');
+  const match = text.match(/([\d.]+)\s*([km]?)/);
+  if (!match) return 0;
+  const scale = match[2] === 'm' ? 1e6 : match[2] === 'k' ? 1e3 : 1;
+  return Number(match[1]) * scale;
+};
+const obsTone = ratio => {
+  const r = Math.max(0, Math.min(1, Number(ratio || 0)));
+  if (r < .24) return 'var(--obs-cool)';
+  if (r < .48) return 'var(--obs-cyan)';
+  if (r < .72) return 'var(--obs-warm)';
+  if (r < .9) return 'var(--obs-hot)';
+  return 'var(--obs-danger)';
+};
+const obsEventTone = type => {
+  const value = String(type || '');
+  if (value.includes('failed')) return 'var(--obs-danger)';
+  if (value.includes('tool')) return 'var(--obs-warm)';
+  if (value.includes('source') || value.includes('retriev')) return 'var(--obs-cyan)';
+  if (value.includes('agent')) return 'var(--obs-cool)';
+  if (value.includes('answer') || value.includes('model')) return 'var(--obs-usage,var(--obs-hot))';
+  if (value.includes('completed')) return 'var(--obs-good)';
+  return 'var(--obs-cool)';
+};
+
+const ObservabilityView = () => {
+  const [period, setPeriod] = useState('7d');
+  const [snapshot, setSnapshot] = useState(null);
+  const [health, setHealth] = useState(null);
+  const [models, setModels] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [connection, setConnection] = useState('connecting');
+  const [paused, setPaused] = useState(false);
+  const [streamKey, setStreamKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const lastEventId = useRef(0);
+
+  const load = async (quiet=false) => {
+    if (!quiet) setRefreshing(true);
+    try {
+      const results = await Promise.allSettled([
+        API.client.request('/api/observability/summary?period=' + encodeURIComponent(period)),
+        API.client.request('/api/health'),
+        API.client.request('/api/models'),
+      ]);
+      if (results[0].status !== 'fulfilled') throw results[0].reason;
+      setSnapshot(results[0].value);
+      if (results[1].status === 'fulfilled') setHealth(results[1].value);
+      if (results[2].status === 'fulfilled') setModels(results[2].value.models || []);
+      setError('');
+    } catch (err) {
+      setError(err && err.message ? err.message : 'Observability is unreachable.');
+    } finally {
+      if (!quiet) setRefreshing(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [period]);
+  useEffect(() => {
+    if (paused) return;
+    const timer = setInterval(() => load(true), 10000);
+    return () => clearInterval(timer);
+  }, [period, paused]);
+  useEffect(() => {
+    if (paused) { setConnection('paused'); return; }
+    setConnection('connecting');
+    const url = API.client.backendBase() + '/api/observability/stream?last_event_id=' + lastEventId.current;
+    const source = new EventSource(url);
+    const onLive = event => {
+      try {
+        const item = JSON.parse(event.data);
+        lastEventId.current = Math.max(lastEventId.current, Number(item.id || 0));
+        setEvents(previous => [item, ...previous.filter(existing => existing.id !== item.id)].slice(0, 250));
+        setConnection('live');
+        if (item.type === 'run_completed' || item.type === 'run_failed') load(true);
+      } catch (_) {}
+    };
+    source.onopen = () => setConnection('live');
+    source.onerror = () => setConnection('reconnecting');
+    source.addEventListener('observability.event', onLive);
+    return () => { source.removeEventListener('observability.event', onLive); source.close(); };
+  }, [paused, streamKey, period]);
+
+  const data = snapshot || {};
+  const usage = data.usage || {models:[], daily:[], recent:[]};
+  const runs = data.runs || {total:0, completed:0, failed:0, active:0, success_rate:0};
+  const recentRuns = data.recent_runs || [];
+  const run = runs.active_run || recentRuns[0] || null;
+  const runEvents = run ? events.filter(item => item.response_id === run.response_id) : [];
+  const usageRow = run && usage.recent ? (usage.recent.find(item => item.thread_id === run.thread_id) || usage.recent[0]) : null;
+  const runTokens = usageRow ? Number(usageRow.input_tokens || 0) + Number(usageRow.output_tokens || 0) : 0;
+  const modelInfo = usageRow ? models.find(item => item.id === usageRow.model || item.label === usageRow.model) : null;
+  const contextTokens = obsContextTokens(modelInfo && modelInfo.context);
+  const tokenRatio = contextTokens ? Math.min(runTokens / contextTokens, 1) : Math.min(runTokens / 32000, 1);
+  const usageColor = obsTone(tokenRatio);
+  const liveEvent = runEvents[0] || null;
+  const totalModelTokens = (usage.models || []).reduce((sum, item) => sum + Number(item.input_tokens || 0) + Number(item.output_tokens || 0), 0);
+  const dailyMax = Math.max(1, ...(usage.daily || []).map(item => Number(item.input_tokens || 0) + Number(item.output_tokens || 0)));
+  const style = {'--obs-usage':usageColor};
+  const statusLabel = paused ? 'Paused' : connection === 'live' ? 'Live' : connection === 'reconnecting' ? 'Reconnecting' : 'Connecting';
+
+  const stepState = definition => {
+    const matching = runEvents.filter(item => definition.types.includes(item.type));
+    if (!matching.length) return {className:'pending', label:run && run.status === 'completed' ? 'Skipped' : 'Pending'};
+    const isLive = run && run.status === 'in_progress' && liveEvent && definition.types.includes(liveEvent.type) && liveEvent.status !== 'completed';
+    return isLive ? {className:'live', label:'Live now'} : {className:'done', label:'Completed'};
+  };
+  const stepMetric = key => {
+    if (!run) return '\u2014';
+    if (key === 'user') return obsClock(run.started_at);
+    if (key === 'retrieval') return (run.source_count || 0) + ' sources';
+    if (key === 'tool') return (run.tool_count || 0) + ' tools';
+    if (key === 'model' || key === 'answer') return runTokens ? obsTokens(runTokens) + ' tokens' : 'Awaiting usage';
+    if (key === 'agent') return runEvents.filter(item => item.type === 'sub_agent_started').length + ' agents';
+    return obsDuration(run);
+  };
+
+  return (
+    <div className="obs-page" style={style}>
+      <div className="obs-shell">
+        <div className="obs-head">
+          <div className="obs-head-copy"><div className="obs-title">Observability</div><div className="obs-sub">Live insight into Vellum runs, token pressure, cost, and system health.</div></div>
+          <div className="obs-head-actions">
+            <div className="obs-source"><span className="obs-status-dot" style={{color:connection === 'live' ? 'var(--obs-good)' : 'var(--obs-warm)'}}/><span>Source</span><strong>Vellum native</strong></div>
+            <button className={'obs-control on' + (paused ? '' : ' live')} onClick={() => setPaused(false)} aria-pressed={!paused}><span className="obs-live-dot"/>Live</button>
+            <button className={'obs-control pause' + (paused ? ' on' : '')} onClick={() => setPaused(value => !value)} aria-pressed={paused}>{paused ? 'Resume' : 'Pause'}</button>
+            <button className="obs-control" onClick={() => { setPaused(false); setStreamKey(value => value + 1); }}>Reconnect</button>
+            <button className={'obs-control' + (refreshing ? ' refreshing' : '')} onClick={() => load()} disabled={refreshing}><IcRefresh size={13}/>{refreshing ? 'Refreshing' : 'Refresh'}</button>
+            <span className="obs-updated">{snapshot ? 'Updated ' + obsClock(snapshot.generated_at) : 'Waiting for data'}</span>
+          </div>
+        </div>
+
+        {error && <div className="obs-error">{error} Live data will resume automatically when the Vellum API is available.</div>}
+
+        <div className="obs-overview">
+          <section className="obs-active obs-glass">
+            <div className="obs-kicker"><span className="obs-live-dot"/>{run && run.status === 'in_progress' ? 'Live run' : run ? 'Latest run' : 'Ready'}</div>
+            <div className="obs-active-title">{run ? 'Run ' + obsShortId(run.response_id) : 'Waiting for your next Vellum turn'}</div>
+            <div className="obs-active-sub">{run ? (liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run completed' : 'Listening for live activity') : 'Start chatting or use a tool and the observatory will fill in here.'}</div>
+            <div className="obs-run-meta">
+              <div><div className="obs-meta-k">Thread</div><div className="obs-meta-v">{run ? obsShortId(run.thread_id) : '\u2014'}</div></div>
+              <div><div className="obs-meta-k">Elapsed</div><div className="obs-meta-v">{obsDuration(run)}</div></div>
+              <div><div className="obs-meta-k">Model</div><div className="obs-meta-v">{usageRow ? usageRow.model : '\u2014'}</div></div>
+              <div><div className="obs-meta-k">Stream</div><div className="obs-meta-v">{statusLabel}</div></div>
+            </div>
+          </section>
+          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcLedger size={15}/>Token usage</div><div className="obs-stat-value usage">{obsTokens(usage.total_tokens || 0)}</div><div className="obs-stat-note">{obsTokens(usage.input_tokens || 0)} in · {obsTokens(usage.output_tokens || 0)} out</div>{usage.daily && usage.daily.length ? <div className="obs-mini-bar">{usage.daily.slice(-14).map((item,index) => { const total=Number(item.input_tokens||0)+Number(item.output_tokens||0); return <i key={item.day || index} style={{'--seg-a':(25 + total/dailyMax*70)+'%'}} title={(item.day||'')+' · '+obsTokens(total)}/>; })}</div> : <div className="obs-stat-note" style={{marginTop:'auto'}}>No usage recorded in this window.</div>}</section>
+          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcFlame size={15}/>Cost</div><div className="obs-stat-value">{obsMoney(usage.cost_usd || 0)}</div><div className="obs-stat-note">{Number(usage.calls || 0).toLocaleString()} model calls · {Number(usage.sessions || 0).toLocaleString()} sessions</div></section>
+          <section className="obs-stat obs-glass"><div className="obs-stat-head"><IcShield size={15}/>System health</div><div className={'obs-stat-value ' + (health && health.ok ? 'obs-health-good' : health ? 'obs-health-bad' : '')}>{health ? (health.ok ? 'Operational' : 'Attention') : 'Checking'}</div><div className="obs-stat-note">{health && health.models ? health.models.primary : 'Waiting for the health endpoint'}</div></section>
+        </div>
+
+        <div className="obs-main-grid">
+          <section className="obs-observatory obs-glass">
+            <div className="obs-panel-head"><IcEye size={15}/>Live Run Observatory<small>{run ? run.event_count + ' events' : 'waiting'}</small><span className="spacer"/><span className="obs-pressure">Token pressure <b>{contextTokens ? Math.round(tokenRatio*100)+'%' : runTokens ? obsTokens(runTokens) : '\u2014'}</b></span></div>
+            <div className="obs-path">
+              {OBS_STEP_DEFS.map(definition => { const state=stepState(definition); const Icon=definition.Icon; return <div className={'obs-step '+state.className} key={definition.key}><div className="obs-node"><Icon size={17}/></div><div className="obs-step-label">{definition.label}</div><div className="obs-step-state">{state.label}</div><div className="obs-step-metric">{stepMetric(definition.key)}</div></div>; })}
+            </div>
+            <div className="obs-run-footer">
+              <div className="obs-run-foot-cell">{run ? (liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run complete' : 'Listening for the next event') : 'The observatory is ready'}</div>
+              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Tokens</span><span className="obs-run-foot-v">{runTokens ? obsTokens(runTokens) : '\u2014'}</span></div>
+              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Cost</span><span className="obs-run-foot-v">{usageRow ? obsMoney(usageRow.cost_usd) : '\u2014'}</span></div>
+              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Tools</span><span className="obs-run-foot-v">{run ? run.tool_count : 0}</span></div>
+              <div className="obs-run-foot-cell"><span className="obs-run-foot-k">Status</span><span className="obs-run-foot-v">{run ? run.status : 'idle'}</span></div>
+            </div>
+          </section>
+
+          <aside className="obs-side">
+            <section className="obs-side-card obs-glass"><div className="obs-panel-head"><IcLedger size={14}/>Model usage<span className="spacer"/><small>real tokens</small></div><div className="obs-side-body">{usage.models && usage.models.length ? usage.models.slice(0,6).map((item,index) => { const total=Number(item.input_tokens||0)+Number(item.output_tokens||0); const ratio=total/Math.max(totalModelTokens,1); return <div className="obs-model-row" key={item.model}><div className="obs-model-name">{item.model}</div><div className="obs-model-bar"><i style={{width:Math.max(3,ratio*100)+'%','--row-color':obsTone(Math.min(total/32000,1))}}/></div><div className="obs-model-value">{obsTokens(total)}</div></div>; }) : <div className="obs-empty">No model usage has been recorded for this period.</div>}</div></section>
+            <section className="obs-side-card obs-glass"><div className="obs-panel-head"><IcRefresh size={14}/>Recent runs<span className="spacer"/><small>{runs.total || 0} total</small></div><div className="obs-recent">{recentRuns.length ? recentRuns.slice(0,7).map(item => <div className="obs-recent-row" key={item.response_id}><div className="obs-recent-main"><div className="obs-recent-name">Run {obsShortId(item.response_id)}</div><div className="obs-recent-meta">{obsClock(item.started_at)} · {item.event_count} events · {item.tool_count} tools</div></div><div className={'obs-recent-status '+item.status}><span className="obs-status-dot"/>{item.status === 'in_progress' ? 'Live' : item.status}</div></div>) : <div className="obs-empty">Recent Vellum runs will appear here automatically.</div>}</div></section>
+          </aside>
+        </div>
+
+        <section className="obs-activity obs-glass">
+          <div className="obs-panel-head"><IcTerminal size={14}/>Live activity<small>Codeburn-style telemetry, Vellum-native events</small><span className="spacer"/><span className="obs-pressure">{connection === 'live' ? 'streaming' : statusLabel.toLowerCase()}</span></div>
+          <div className="obs-ribbon">{events.length ? events.slice(0,48).reverse().map(item => <i key={item.id} style={{'--event-color':obsEventTone(item.type),'--event-weight':item.type.includes('delta') ? .55 : item.type.includes('tool') ? 1.25 : 1}} title={item.label || item.type}/>) : <span className="obs-ribbon-empty">The ribbon animates from real model, retrieval, tool, sub-agent, and answer events.</span>}</div>
+          <div className="obs-event-table">{events.length ? events.slice(0,18).map(item => <div className="obs-event-row" key={item.id} style={{'--event-color':obsEventTone(item.type)}}><span className="obs-event-time">{obsClock(item.ts)}</span><span className="obs-event-type">{item.type.replaceAll('_',' ')}</span><span className="obs-event-label">{item.label || item.name || 'Activity'}</span><span className="obs-event-status">{item.status}</span></div>) : <div className="obs-empty">No live events yet. Keep this page open while chatting with Vellum.</div>}</div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
 /* â”€â”€â”€ skills â”€â”€â”€ */
 /* Legacy Skills view removed from runtime.
 Legacy component removed. ({skills, onApprove, onRetire}) => {
@@ -7093,6 +7331,15 @@ const isNotFoundLocation = () => {
     return false;
   }
 };
+const appViewFromLocation = () => {
+  if (isNotFoundLocation()) return '404';
+  try {
+    const requested = new URLSearchParams(window.location.search).get('view');
+    return APP_VIEW_IDS.has(requested) ? requested : null;
+  } catch {
+    return null;
+  }
+};
 
 const NotFoundView = ({onBack}) => {
   const rootRef = useRef(null);
@@ -7211,9 +7458,9 @@ const App = () => {
   const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
   useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
   useEffect(() => { try { localStorage.setItem('vellum-dock-locked', dockLocked ? '1' : '0'); } catch {} }, [dockLocked]);
-  const [view, setView] = useState(() => isNotFoundLocation() ? '404' : 'chat');
+  const [view, setView] = useState(() => appViewFromLocation() || 'chat');
   useEffect(() => {
-    const syncLocation = () => setView(current => isNotFoundLocation() ? '404' : (current === '404' ? 'chat' : current));
+    const syncLocation = () => setView(current => appViewFromLocation() || (current === '404' ? 'chat' : current));
     window.addEventListener('popstate', syncLocation);
     window.addEventListener('hashchange', syncLocation);
     return () => {
@@ -8368,7 +8615,7 @@ const App = () => {
               onViewImage={setViewer}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
-            {view === 'ledger' && <LedgerView/>}
+            {view === 'ledger' && <ObservabilityView/>}
             {view === 'skills' && <SkillsHubView/>}
             {view === 'apps' && <BackendConnectorsView apps={apps}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
@@ -8439,7 +8686,7 @@ const SHORTCUTS = {
     ['Search chats', ['Ctrl', 'K']],
     ['Open settings', ['Ctrl', ',']],
     ['Go to Library', ['Ctrl', 'Shift', 'L']],
-    ['Go to Ledger', ['Ctrl', 'Shift', 'G']],
+    ['Go to Observability', ['Ctrl', 'Shift', 'G']],
     ['Go to Skills', ['Ctrl', 'Shift', 'K']],
     ['Go to Memory', ['Ctrl', 'Shift', 'E']],
     ['Toggle dev mode', ['Ctrl', '.']],
