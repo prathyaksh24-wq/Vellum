@@ -131,7 +131,7 @@ class KnowledgeStore:
         return connection
 
     def _migrate(self) -> None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
             if version > SCHEMA_VERSION:
                 raise RuntimeError(
@@ -464,7 +464,7 @@ class KnowledgeStore:
         now = _now()
         version_id = _stable_id("ver", source_id, digest)
 
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute("SELECT id FROM sources WHERE id = ?", (source_id,)).fetchone()
             connection.execute(
                 """
@@ -564,7 +564,7 @@ class KnowledgeStore:
         )
         observation_id = _stable_id("obs", event_key)
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute("SELECT id FROM observations WHERE event_key = ?", (event_key,)).fetchone()
             if existing is None:
                 connection.execute(
@@ -599,7 +599,7 @@ class KnowledgeStore:
     def register_projection(self, item: ProjectionInput) -> dict[str, Any]:
         projection_id = _stable_id("prj", item.target, item.target_ref)
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute("SELECT id FROM projections WHERE id = ?", (projection_id,)).fetchone()
             connection.execute(
                 """
@@ -641,7 +641,7 @@ class KnowledgeStore:
         eligible = bool(item.preference_evidence and eligible_actor)
         effective_weight = min(float(item.weight), _EVIDENCE_WEIGHT_CAPS[item.evidence_class.value])
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute(
                 "SELECT id, eligible FROM user_signals WHERE event_key = ?",
                 (item.event_key,),
@@ -705,7 +705,7 @@ class KnowledgeStore:
         requires_review = bool(sensitive and not reviewed)
         annotation_id = _stable_id("ann", item.target_type, item.target_id, item.taxonomy_version)
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute(
                 "SELECT id FROM content_annotations WHERE id = ?",
                 (annotation_id,),
@@ -768,7 +768,7 @@ class KnowledgeStore:
             params.append(int(requires_review))
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.append(max(1, min(int(limit), 500)))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT * FROM content_annotations {where} ORDER BY updated_at DESC LIMIT ?",
                 params,
@@ -789,7 +789,7 @@ class KnowledgeStore:
         reference = now or datetime.now(UTC)
         if reference.tzinfo is None:
             reference = reference.replace(tzinfo=UTC)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 """
                 SELECT value, weight, observed_at, category, signal_type, evidence_class
@@ -882,7 +882,7 @@ class KnowledgeStore:
             "days_since_meaningful": None if math.isinf(days_since_meaningful) else round(days_since_meaningful, 3),
         }
         state_id = _stable_id("pref", subject_key)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO preference_states (
@@ -920,7 +920,7 @@ class KnowledgeStore:
         return self.get_preference(subject_key)
 
     def get_preference(self, subject_key: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute(
                 "SELECT * FROM preference_states WHERE subject_key = ?",
                 (subject_key,),
@@ -934,7 +934,7 @@ class KnowledgeStore:
             where = "WHERE category = ?"
             params.append(category)
         params.append(max(1, min(int(limit), 500)))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT * FROM preference_states {where} ORDER BY updated_at DESC LIMIT ?",
                 params,
@@ -952,7 +952,7 @@ class KnowledgeStore:
         job_id = _stable_id("job", scoped_key)
         now = _now()
         lease_expires_at = (datetime.now(UTC) + timedelta(seconds=item.lease_seconds)).isoformat()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             existing = connection.execute(
                 "SELECT * FROM ingestion_jobs WHERE idempotency_key = ?",
                 (scoped_key,),
@@ -1023,7 +1023,7 @@ class KnowledgeStore:
         cursor: SyncCursorInput | None = None,
     ) -> dict[str, Any]:
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown ingestion job: {job_id}")
@@ -1049,7 +1049,7 @@ class KnowledgeStore:
         safe_code = "".join(character for character in error_code.upper() if character.isalnum() or character == "_")[:80]
         safe_code = safe_code or "INGESTION_FAILED"
         now = _now()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown ingestion job: {job_id}")
@@ -1075,7 +1075,7 @@ class KnowledgeStore:
         return self._job_row(failed)
 
     def get_sync_cursor(self, connector: str, account_id: str) -> dict[str, Any] | None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute(
                 "SELECT * FROM sync_cursors WHERE connector = ? AND account_id = ?",
                 (connector, account_id),
@@ -1089,7 +1089,7 @@ class KnowledgeStore:
             where = "WHERE connector = ?"
             params.append(connector)
         params.append(max(1, min(int(limit), 500)))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT * FROM sync_cursors {where} ORDER BY updated_at DESC LIMIT ?",
                 params,
@@ -1103,7 +1103,7 @@ class KnowledgeStore:
             where = "WHERE connector = ?"
             params.append(connector)
         params.append(max(1, min(int(limit), 500)))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"SELECT * FROM ingestion_jobs {where} ORDER BY created_at DESC LIMIT ?",
                 params,
@@ -1113,7 +1113,7 @@ class KnowledgeStore:
     def heartbeat_ingestion_job(self, job_id: str, *, lease_seconds: int = 900) -> dict[str, Any]:
         bounded_lease = max(30, min(int(lease_seconds), 86400))
         lease_expires_at = (datetime.now(UTC) + timedelta(seconds=bounded_lease)).isoformat()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown ingestion job: {job_id}")
@@ -1214,7 +1214,7 @@ class KnowledgeStore:
             where = "WHERE kind = ?"
             params.append(kind)
         params.extend([max(1, min(int(limit), 500)), max(0, int(offset))])
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"""
                 SELECT id, kind, external_id, account_id, title, uri, source_path,
@@ -1234,7 +1234,7 @@ class KnowledgeStore:
             where = "WHERE origin = ?"
             params.append(origin)
         params.append(max(1, min(int(limit), 500)))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 f"""
                 SELECT id, event_key, origin, actor, trigger, action, source_id,
@@ -1260,7 +1260,7 @@ class KnowledgeStore:
             ]
         evidence: list[dict[str, Any]] = []
         scrubber = PrivacyScrubber()
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             for source in sources[:20]:
                 version = connection.execute(
                     "SELECT content_hash, blob_path, observed_at, published_at FROM source_versions WHERE id = ?",
@@ -1301,7 +1301,7 @@ class KnowledgeStore:
             "raw_private_content": "withheld" if request.destination == "external" else "local_only",
             "citations_required": request.citations_required,
         }
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
                 INSERT INTO context_packs (
@@ -1349,7 +1349,7 @@ class KnowledgeStore:
             "context_packs",
             "content_annotations",
         )
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
         return {
@@ -1367,7 +1367,7 @@ class KnowledgeStore:
             source.backup(backup)
 
     def integrity_check(self) -> dict[str, Any]:
-        with closing(self._connect()) as connection:
+        with closing(self._connect()) as connection, connection:
             result = str(connection.execute("PRAGMA integrity_check").fetchone()[0])
             foreign_key_errors = [tuple(row) for row in connection.execute("PRAGMA foreign_key_check").fetchall()]
         return {

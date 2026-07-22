@@ -1,4 +1,4 @@
-"""Operational CLI for previewing migration and backing up Knowledge Core."""
+"""Operational CLI for previewing, backing up, and restoring Knowledge Core."""
 
 from __future__ import annotations
 
@@ -67,6 +67,11 @@ def parse_args() -> argparse.Namespace:
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("archive", type=Path)
+
+    restore = subparsers.add_parser("restore")
+    restore.add_argument("archive", type=Path)
+    restore.add_argument("--rollback-output", type=Path)
+    restore.add_argument("--confirm", default="")
     return parser.parse_args()
 
 
@@ -95,8 +100,15 @@ def main() -> int:
         )
     elif args.command == "backup":
         result = KnowledgeBackupService(core.store).create(args.output)
-    else:
+    elif args.command == "verify":
         result = KnowledgeBackupService(core.store).verify(args.archive)
+    else:
+        if args.confirm != "RESTORE_KNOWLEDGE_CORE":
+            raise SystemExit("Restore requires --confirm RESTORE_KNOWLEDGE_CORE")
+        result = KnowledgeBackupService(core.store).restore(
+            args.archive,
+            rollback_destination=args.rollback_output,
+        )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0
 

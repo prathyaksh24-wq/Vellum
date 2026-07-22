@@ -224,6 +224,7 @@ The operational CLI is preview-first and prints structured JSON:
 .venv\Scripts\python.exe scripts\knowledge_core.py bootstrap
 .venv\Scripts\python.exe scripts\knowledge_core.py backup --output data\knowledge\backups\before-bootstrap.zip
 .venv\Scripts\python.exe scripts\knowledge_core.py verify data\knowledge\backups\before-bootstrap.zip
+.venv\Scripts\python.exe scripts\knowledge_core.py restore data\knowledge\backups\before-bootstrap.zip --confirm RESTORE_KNOWLEDGE_CORE
 ```
 
 Applying the existing-data bootstrap requires the literal confirmation token:
@@ -233,6 +234,9 @@ Applying the existing-data bootstrap requires the literal confirmation token:
 ```
 
 Backups use SQLite's online backup API, include content-addressed blobs and a
-checksummed manifest, and are verified before the command succeeds. Restore is
-not automated yet; it remains a cutover gate until atomic restore and rollback
-tests are implemented.
+checksummed manifest, and are verified before the command succeeds. Restore
+must run with Vellum stopped. It verifies archive paths, checksums, database
+integrity, and every referenced blob before activation; creates a verified
+pre-restore rollback archive; checkpoints SQLite; stages the replacement on the
+same filesystems; and restores the previous database and blobs if activation
+fails. Use `--rollback-output` to choose the rollback archive location.

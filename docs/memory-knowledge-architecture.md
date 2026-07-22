@@ -43,3 +43,11 @@ remain active and the Knowledge Core operates in shadow mode.
 Legacy `Agent/Queries` and `Agent/Responses` files are migration inputs, not
 canonical memory. New runtime behavior must not create timestamped per-turn
 notes in those folders.
+
+## Recovery
+
+Knowledge Core backups contain the SQLite database, content-addressed blobs,
+and a checksummed manifest. Restore is an offline maintenance operation: stop
+Vellum, verify the archive, and use the explicit `RESTORE_KNOWLEDGE_CORE`
+confirmation token. A verified pre-restore rollback archive is always created
+before the live database and blob generation are replaced.
