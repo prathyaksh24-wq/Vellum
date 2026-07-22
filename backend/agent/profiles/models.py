@@ -115,8 +115,13 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "YoutubeAgent": _profile(
             "YoutubeAgent",
-            "YouTube search, metadata, transcripts, and summaries.",
-            tools=["youtube.search_videos", "youtube.fetch_transcript"],
+            "YouTube account, subscriptions, search, metadata, transcripts, and summaries.",
+            tools=[
+                "youtube.account",
+                "youtube.subscriptions",
+                "youtube.search_videos",
+                "youtube.fetch_transcript",
+            ],
         ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",

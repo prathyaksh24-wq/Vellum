@@ -19,6 +19,8 @@ SerpApiSearchBackend = Callable[[str, int], list[dict[str, Any]]]
 SerpApiTranscriptBackend = Callable[[str], dict[str, Any] | None]
 WebSearchBackend = Callable[[str, int], list[dict[str, Any]]]
 TranscriptBackend = Callable[[dict[str, Any]], dict[str, Any] | None]
+AccountBackend = Callable[[], dict[str, Any]]
+SubscriptionsBackend = Callable[[], list[dict[str, Any]]]
 
 
 class YoutubeCapabilityService:
@@ -30,6 +32,8 @@ class YoutubeCapabilityService:
         serpapi_transcript_backend: SerpApiTranscriptBackend | None = None,
         web_search_backend: WebSearchBackend | None = None,
         transcript_backend: TranscriptBackend | None = None,
+        account_backend: AccountBackend | None = None,
+        subscriptions_backend: SubscriptionsBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
@@ -37,10 +41,22 @@ class YoutubeCapabilityService:
         self.web_search_backend = web_search_backend or self._default_web_search_videos
         self.search_backend = search_backend or self._default_search_videos
         self.transcript_backend = transcript_backend or self._default_fetch_transcript
+        self.account_backend = account_backend or self._default_account
+        self.subscriptions_backend = subscriptions_backend or self._default_subscriptions
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
         allowed_agents = frozenset({"YoutubeAgent", "VellumAgent", "ResearchAgent", "MemoryAgent"})
+        registry.register(
+            CapabilityRecord(
+                name="youtube.account",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Read YouTube account",
+                adapter=self.account,
+            )
+        )
         registry.register(
             CapabilityRecord(
                 name="youtube.search_videos",
@@ -61,7 +77,37 @@ class YoutubeCapabilityService:
                 adapter=self.fetch_transcript,
             )
         )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.subscriptions",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents,
+                stream_label="Read YouTube subscriptions",
+                adapter=self.subscriptions,
+            )
+        )
         return registry
+
+    def account(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        return {"action": "youtube.account", "account": dict(self.account_backend())}
+
+    def subscriptions(self, _payload: dict[str, Any]) -> dict[str, Any]:
+        account = dict(self.account_backend())
+        if not account.get("connected"):
+            return {
+                "action": "youtube.subscriptions",
+                "connected": False,
+                "account": account,
+                "items": [],
+            }
+        items = [self._normalize_subscription(item) for item in self.subscriptions_backend()]
+        return {
+            "action": "youtube.subscriptions",
+            "connected": True,
+            "account": account,
+            "items": [item for item in items if item["channel_id"]],
+        }
 
     def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or "").strip()
@@ -117,6 +163,25 @@ class YoutubeCapabilityService:
         if provider:
             record["provider"] = provider
         return record
+
+    def _normalize_subscription(self, item: dict[str, Any]) -> dict[str, str]:
+        channel_id = _string(item.get("channel_id") or item.get("channelId"))
+        return {
+            "channel_id": channel_id,
+            "title": _string(item.get("title") or item.get("channel_title") or channel_id),
+            "channel_url": _string(item.get("channel_url"))
+            or (f"https://www.youtube.com/channel/{channel_id}" if channel_id else ""),
+        }
+
+    def _default_account(self) -> dict[str, Any]:
+        from agent.plugins.youtube_runtime import youtube_status
+
+        return youtube_status()
+
+    def _default_subscriptions(self) -> list[dict[str, Any]]:
+        from agent.plugins.youtube_runtime import youtube_client
+
+        return youtube_client().list_subscriptions()
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:

@@ -28,6 +28,18 @@ class YoutubeAgent:
         r"\b(i\s+don'?t\s+need|don'?t\s+add|stop\s+adding|remove|hide)\s+.+\b(evidence|source|sources|format|section)\b",
         r"\b(i\s+don'?t\s+like|i\s+like|prefer|feedback)\b.+\b(answer|response|format|evidence|source|sources)\b",
     )
+    _SUBSCRIPTION_PATTERNS = (
+        r"\b(?:my|our)\s+(?:youtube\s+)?subscriptions?\b",
+        r"\b(?:which|what|who)\s+.+\bsubscribed\s+to\b",
+        r"\bchannels?\s+(?:am|are)\s+.+\bsubscribed\s+to\b",
+        r"\bsubscriptions?\s+(?:on|from)\s+youtube\b",
+    )
+    _ACCOUNT_PATTERNS = (
+        r"\b(?:are|is)\s+(?:you|vellum)\s+connected\s+to\s+youtube\b",
+        r"\byoutube\s+(?:connection|account|oauth)\s+(?:status|connected)\b",
+        r"\b(?:my|our)\s+youtube\s+(?:account|channel)\b",
+        r"\bcan\s+you\s+see\s+(?:my|our)\s+(?:youtube\s+)?channel\b",
+    )
 
     def __init__(
         self,
@@ -50,6 +62,11 @@ class YoutubeAgent:
         )
 
     def answer(self, query: str) -> SpecialistResponse:
+        lowered = query.lower()
+        if self._is_subscriptions_query(lowered):
+            return self._answer_subscriptions()
+        if self._is_account_query(lowered):
+            return self._answer_account()
         try:
             result = self._search_videos({"query": query, "max_results": 5})
         except Exception as exc:
@@ -117,6 +134,88 @@ class YoutubeAgent:
         if self.tool_registry is not None:
             return self.tool_registry.invoke("youtube.search_videos", payload, agent_name=self.name)
         return self.youtube_service.search_videos(payload)
+
+    def _account(self) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.account", {}, agent_name=self.name)
+        return self.youtube_service.account({})
+
+    def _subscriptions(self) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.subscriptions", {}, agent_name=self.name)
+        return self.youtube_service.subscriptions({})
+
+    def _answer_account(self) -> SpecialistResponse:
+        try:
+            result = self._account()
+        except Exception as exc:
+            return self._official_error("YoutubeAgent could not read the connected YouTube account.", exc)
+        account = result.get("account") or {}
+        if not account.get("configured"):
+            summary = "YouTube OAuth is not configured in Vellum."
+            status = "needs_fetch"
+            confidence = 0.95
+        elif not account.get("connected"):
+            summary = "Vellum is not connected to a YouTube account."
+            status = "needs_fetch"
+            confidence = 0.95
+        else:
+            channel = str(account.get("channel_title") or "").strip()
+            summary = f"Vellum is connected to YouTube as {channel}." if channel else "Vellum is connected to YouTube."
+            status = "answered"
+            confidence = 1.0
+        return SpecialistResponse(
+            agent=self.name,
+            status=status,
+            summary=summary,
+            analysis="Used youtube.account through the official OAuth connector.",
+            confidence=confidence,
+        )
+
+    def _answer_subscriptions(self) -> SpecialistResponse:
+        try:
+            result = self._subscriptions()
+        except Exception as exc:
+            return self._official_error("YoutubeAgent could not read YouTube subscriptions.", exc)
+        if not result.get("connected"):
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="Vellum is not connected to a YouTube account.",
+                analysis="Used youtube.subscriptions through the official OAuth connector.",
+                confidence=0.95,
+            )
+        items = list(result.get("items") or [])
+        if not items:
+            summary = "The connected YouTube account has no visible subscriptions."
+        else:
+            visible = items[:50]
+            lines = [f"[{index}] {str(item.get('title') or item.get('channel_id') or 'Unknown channel')}" for index, item in enumerate(visible, start=1)]
+            if len(items) > len(visible):
+                lines.append(f"...and {len(items) - len(visible)} more.")
+            summary = f"Your YouTube account is subscribed to {len(items)} channels:\n" + "\n".join(lines)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=summary,
+            analysis="Used youtube.subscriptions through the official OAuth connector.",
+            confidence=1.0,
+        )
+
+    def _is_subscriptions_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_PATTERNS)
+
+    def _is_account_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._ACCOUNT_PATTERNS)
+
+    def _official_error(self, summary: str, exc: Exception) -> SpecialistResponse:
+        return SpecialistResponse(
+            agent=self.name,
+            status="error",
+            summary=summary,
+            analysis=f"Official YouTube connector failed: {self._sanitize_error(exc)}",
+            confidence=0.2,
+        )
 
     def _is_youtube_url(self, url: str) -> bool:
         return "youtube.com/watch" in url or "youtu.be/" in url

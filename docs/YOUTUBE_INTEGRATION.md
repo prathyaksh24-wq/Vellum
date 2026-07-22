@@ -42,6 +42,21 @@ only non-secret channel metadata and short-lived PKCE state.
 - `POST /api/plugins/youtube/sync`
 - `DELETE /api/plugins/youtube/connection`
 
+## Query Routing
+
+Provider ownership is deterministic:
+
+- Connection, account, channel identity, and personal subscription questions
+  use the official OAuth connector through `youtube.account` or
+  `youtube.subscriptions`.
+- Public video discovery uses `youtube.search_videos`, where SerpAPI is the
+  preferred search provider.
+- Transcript requests use `youtube.fetch_transcript`, where SerpAPI may provide
+  the transcript before local-card fallback.
+
+Account and subscription questions never fall back to public web or SerpAPI
+search. A disconnected or unavailable OAuth connector is reported directly.
+
 Desktop authorization uses the Google-supported loopback redirect
 `http://127.0.0.1:8000`; the API root forwards OAuth responses to the same
 callback handler.
@@ -57,3 +72,9 @@ The YouTube Data API does not provide personal watch history or total watch
 time. Those signals will be imported from Google Takeout after previewing the
 actual archive layout. Takeout ingestion must be resumable, content-hashed, and
 idempotent; it will join OAuth and transcript evidence by video/channel ID.
+
+Large entries under `YouTube and YouTube Music/videos/` are exported media,
+not watch-history events. The Takeout importer must inventory and content-hash
+their metadata without extracting, duplicating, embedding, or ingesting raw
+media. Media analysis is a separate explicit workflow. Watch/search history
+files in other Takeout parts remain the source for behavioral timelines.

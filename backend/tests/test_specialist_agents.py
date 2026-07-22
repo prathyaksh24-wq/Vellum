@@ -1200,6 +1200,34 @@ def test_youtube_agent_answers_with_service_results_and_sources(tmp_path):
     assert "youtube.search_videos" in response.analysis
 
 
+def test_youtube_agent_uses_official_account_capabilities_without_public_search(tmp_path):
+    search_calls = []
+    youtube_service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: search_calls.append(query) or [],
+        account_backend=lambda: {
+            "configured": True,
+            "connected": True,
+            "channel_id": "UC-primary",
+            "channel_title": "Pratyakksh",
+        },
+        subscriptions_backend=lambda: [
+            {"channel_id": "UC-one", "title": "Channel One", "channel_url": "https://youtube.com/channel/UC-one"},
+            {"channel_id": "UC-two", "title": "Channel Two", "channel_url": "https://youtube.com/channel/UC-two"},
+        ],
+    )
+    agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
+
+    account = agent.answer("Are you connected to YouTube?")
+    subscriptions = agent.answer("Which channels am I subscribed to on YouTube?")
+
+    assert account.summary == "Vellum is connected to YouTube as Pratyakksh."
+    assert "youtube.account" in account.analysis
+    assert subscriptions.summary == "Your YouTube account is subscribed to 2 channels:\n[1] Channel One\n[2] Channel Two"
+    assert "youtube.subscriptions" in subscriptions.analysis
+    assert search_calls == []
+
+
 def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",

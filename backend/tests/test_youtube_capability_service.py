@@ -194,8 +194,24 @@ def test_youtube_service_fetches_local_transcript_card(tmp_path):
 
 
 def test_youtube_service_registry_is_read_only(tmp_path):
-    service = YoutubeCapabilityService(vault_root=tmp_path / "Vault", search_backend=lambda query, max_results: [])
+    service = YoutubeCapabilityService(
+        vault_root=tmp_path / "Vault",
+        search_backend=lambda query, max_results: [],
+        account_backend=lambda: {"configured": True, "connected": True, "channel_title": "Pratyakksh"},
+        subscriptions_backend=lambda: [
+            {"channel_id": "UC-one", "title": "Channel One", "channel_url": "https://youtube.com/channel/UC-one"}
+        ],
+    )
 
     registry = service.build_registry()
 
-    assert registry.names() == ["youtube.fetch_transcript", "youtube.search_videos"]
+    assert registry.names() == [
+        "youtube.account",
+        "youtube.fetch_transcript",
+        "youtube.search_videos",
+        "youtube.subscriptions",
+    ]
+    account = registry.invoke("youtube.account", {}, agent_name="YoutubeAgent")
+    subscriptions = registry.invoke("youtube.subscriptions", {}, agent_name="YoutubeAgent")
+    assert account["account"]["channel_title"] == "Pratyakksh"
+    assert subscriptions["items"][0]["title"] == "Channel One"
