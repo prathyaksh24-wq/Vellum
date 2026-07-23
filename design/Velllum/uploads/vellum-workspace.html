@@ -8,6 +8,7 @@
 <!-- React + Babel (CDN). Double-click this file to run. -->
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="vendor/vellum-motion-components.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
 
 <style>
@@ -610,9 +611,11 @@ button,input,textarea,select{font-family:var(--body-font)}
   color-scheme:dark;
   background:var(--ocx-bg);
 }
-.web-workspace,.web-workspace>.workspace{height:100%;background:var(--ocx-bg)}
+.web-workspace,.web-workspace>.workspace{height:100%}
+.web-workspace{background:var(--ocx-bg)}
+.web-workspace>.workspace{background-color:#07060c;background-image:linear-gradient(rgba(4,3,9,.32),rgba(4,3,9,.5)),url("assets/vellum-cosmic-planet.webp");background-position:center;background-size:cover;background-repeat:no-repeat}
 .workspace{--sidebar-width:248px;color:var(--ocx-text)}
-.sidebar{width:var(--sidebar-width);background:var(--ocx-rail);border-right:1px solid var(--ocx-border-soft);box-shadow:18px 0 60px rgba(0,0,0,.18);color:var(--ocx-muted);font-size:14px;backdrop-filter:blur(22px) saturate(1.2)}
+.sidebar{width:var(--sidebar-width);background:rgba(8,7,13,.8);border-right:1px solid rgba(191,173,255,.14);box-shadow:18px 0 60px rgba(0,0,0,.28);color:var(--ocx-muted);font-size:14px;backdrop-filter:blur(22px) saturate(1.2)}
 .sidebar button{color:inherit}
 .sb-top{padding:14px 10px 10px;gap:4px}
 .sb-runtime-row{display:flex;align-items:center;justify-content:space-between;gap:7px;padding:0 2px 13px;position:relative}
@@ -668,16 +671,14 @@ button,input,textarea,select{font-family:var(--body-font)}
 .settings-pop{bottom:56px;left:10px;background:#1a1a22;border-color:var(--ocx-border)}
 .sp-hdr,.sp-div{border-color:var(--ocx-border-soft)}
 .sp-item,.sp-item-row,.sp-email{color:var(--ocx-muted)}
-.main{position:relative;background:var(--ocx-bg)}
+.main{position:relative;background:transparent}
 .main.desk-inset{border-radius:0;border-top:0;border-left-color:var(--ocx-border-soft)}
 .main.desk-inset .chat-pane{border-radius:0}
-.chat-pane{background:rgba(11,11,15,.88);isolation:isolate}
+.chat-pane{background:rgba(8,7,14,.26);isolation:isolate}
 .side-rays-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;opacity:.34;filter:saturate(.75)}
-.side-rays-shade{position:absolute;inset:0;z-index:-1;background:rgba(11,11,15,.48);pointer-events:none}
+.side-rays-shade{position:absolute;inset:0;z-index:-1;background:rgba(11,11,15,.18);pointer-events:none}
 .landing{position:relative;z-index:2;padding:38px 28px;gap:0;overflow:hidden;isolation:isolate}
-.landing-cosmic-bg,.landing-cosmic-shade{position:absolute;inset:0;pointer-events:none}
-.landing-cosmic-bg{z-index:-2;background:url("assets/vellum-cosmic-planet.webp") center/cover no-repeat}
-.landing-cosmic-shade{z-index:-1;background:rgba(3,2,8,.42)}
+.landing-cosmic-shade{position:absolute;inset:0;z-index:-1;background:rgba(3,2,8,.18);pointer-events:none}
 .workspace-home{position:relative;z-index:1;width:min(820px,100%);display:flex;flex-direction:column;align-items:center}
 .workspace-home-head{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:66px;color:var(--ocx-faint);font:11px 'Geist Mono',monospace}
 .workspace-home-brand{display:flex;align-items:center;gap:8px;color:var(--ocx-muted);font-family:var(--body-font);font-size:12px;font-weight:700}
@@ -712,7 +713,8 @@ button,input,textarea,select{font-family:var(--body-font)}
 .provider-icon-mask{background:var(--provider-icon-color,currentColor);-webkit-mask:var(--provider-icon-mask) center/contain no-repeat;mask:var(--provider-icon-mask) center/contain no-repeat}
 .provider-icon-shell{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid var(--ocx-border-soft);border-radius:8px;background:var(--ocx-raised);flex-shrink:0}
 .input-ta,.modal-input,.pp-search input,.palette-in,.model-search{font-family:var(--body-font)}
-.input-box{background:rgba(21,21,27,.92);border-color:var(--ocx-border);box-shadow:0 20px 64px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.025)}
+.composer-border-beam{display:block;width:100%;border-radius:21px}
+.input-box{width:100%;background:rgba(18,16,26,.94);border-color:rgba(175,157,255,.2);box-shadow:0 20px 64px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.035);backdrop-filter:blur(18px) saturate(1.12)}
 .input-box:focus-within{border-color:#514c72;box-shadow:0 22px 68px rgba(0,0,0,.38),0 0 0 3px rgba(139,124,246,.07)}
 .input-ta{color:var(--ocx-text)}
 .input-ta::placeholder{color:#706b79}
@@ -731,6 +733,9 @@ button,input,textarea,select{font-family:var(--body-font)}
 .user-msg{margin:9px max(0px,calc((100% - 740px)/2)) 14px auto;max-width:min(72%,560px)}
 .working-line{width:100%;max-width:740px;margin:0 auto;padding:7px 0;color:var(--ocx-muted)}
 .thinking-block{width:100%;max-width:740px;margin:2px auto 8px;color:var(--ocx-muted)}
+.agent-stream-state{display:flex;align-items:center;gap:9px;margin:1px 0 9px;color:#c9c2d7;font-size:12px}
+.agent-stream-state .provider-icon{opacity:.72}
+.thinking-orb-canvas{flex:0 0 auto;filter:drop-shadow(0 0 8px rgba(213,202,255,.2))}
 .thinking-label{font-size:12px;color:var(--ocx-faint);margin-bottom:8px}
 .thinking-rule{height:1px;background:var(--ocx-border-soft)}
 .response-actions{display:flex;align-items:center;gap:2px;margin-top:7px}
@@ -751,8 +756,17 @@ button,input,textarea,select{font-family:var(--body-font)}
 .msg-text,.user-msg{font-family:var(--body-font)}
 .msg-text{color:#d7d3dc;font-size:14px;line-height:1.72}
 .user-msg{background:var(--ocx-raised);border-color:var(--ocx-border);color:var(--ocx-text);border-radius:15px 15px 5px 15px}
-.sub-panel{background:#101015!important;border-left-color:var(--ocx-border-soft)!important}
-.workspace-bar,.drawer-hdr,.files-bar{border-color:var(--ocx-border-soft);background:#121218}
+.sub-panel{background:rgba(10,9,16,.72)!important;border-left-color:rgba(191,173,255,.13)!important;backdrop-filter:blur(22px) saturate(1.05)}
+.workspace-bar,.drawer-hdr,.files-bar{border-color:rgba(191,173,255,.12);background:rgba(15,13,22,.82)}
+.workspace-body{background:rgba(8,7,14,.58)}
+.terminal-panel,.terminal-output,.browser-tool,.browser-frame-wrap{background:rgba(7,6,12,.58)}
+.terminal-toolbar,.terminal-inputbar,.browser-toolbar,.browser-status{background:rgba(14,12,21,.82);border-color:rgba(191,173,255,.11)}
+.files-left{background:rgba(8,7,14,.34);border-color:rgba(191,173,255,.1)}
+.files-tree{background:rgba(10,9,17,.66)}
+.memory-card,.learn-card,.launch-card,.launch-doc{background:rgba(17,15,25,.8);border-color:rgba(191,173,255,.13)}
+.settings-workspace{background:rgba(7,6,12,.32);backdrop-filter:blur(14px) saturate(1.08)}
+.settings-rail{background:rgba(8,7,14,.86);border-color:rgba(191,173,255,.13)}
+.settings-content{background:rgba(10,9,17,.7)}
 .workspace-tab.active{background:var(--ocx-accent-soft);color:#e6e1ff}
 .modal-overlay{background:rgba(0,0,0,.66)}
 .modal-box,.menu-pop,.proj-picker,.pp-submenu,.sb-opt-menu,.sb-submenu,.model-drop .drop-panel,.plus-drop{background:#1a1a22;border-color:var(--ocx-border)}
@@ -780,6 +794,12 @@ button,input,textarea,select{font-family:var(--body-font)}
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useLayoutEffect, useRef, Fragment } = React;
+const BorderBeam = window.VellumMotion && window.VellumMotion.BorderBeam
+  ? window.VellumMotion.BorderBeam
+  : ({children}) => <Fragment>{children}</Fragment>;
+const ThinkingOrb = window.VellumMotion && window.VellumMotion.ThinkingOrb
+  ? window.VellumMotion.ThinkingOrb
+  : ({className=""}) => <span className={"spinner"+(className?" "+className:"")}/>;
 
 /* Provider-neutral coding API. The UI only consumes Vellum events; provider SDK
    details stay behind the local backend adapter boundary. */
@@ -982,6 +1002,17 @@ function ProviderIcon({provider,size=16,className=""}){
   return <img className={"provider-icon"+(className?" "+className:"")} style={{"--provider-icon-size":size+"px"}} src={src} alt="" aria-hidden="true"/>;
 }
 function runtimeName(provider){ return provider==="claude"?"Claude Code":provider==="grok"?"Grok":provider==="kimi"?"Kimi Code":"Codex"; }
+const ORB_STATE_LABELS={working:"Working",searching:"Searching",solving:"Solving",listening:"Listening",composing:"Composing",shaping:"Shaping"};
+function orbStateForCodingEvent(type,payload){
+  const name=String(type||"").toLowerCase(),detail=JSON.stringify(payload||{}).toLowerCase();
+  if(name.includes("question")||name.includes("permission")) return "listening";
+  if(name==="assistant.delta"||name==="assistant.final") return "composing";
+  if(name==="file.changed") return "shaping";
+  if(name.startsWith("command.")) return "working";
+  if(name.startsWith("tool.")) return /search|find|read|browse|web|fetch/.test(detail)?"searching":"working";
+  if(name.includes("reason")||name==="turn.started") return "solving";
+  return null;
+}
 
 function TextCascade({phrases,interval=2800,className=""}){
   const items=Array.isArray(phrases)?phrases.filter(Boolean):[String(phrases||"")];
@@ -1395,7 +1426,8 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
       )}
       <input type="file" multiple ref={fileRef} style={{display:"none"}} onChange={onFiles}/>
       {firstQueued&&<div className="composer-queue" aria-live="polite"><div className="queue-item"><span className="queue-kicker"><i/>{queued.length>1?queued.length+" queued":"Queued"}</span><span className="queue-text" title={firstQueued.text}>{firstQueued.text||((firstQueued.atts||[]).map(item=>item.name).join(", "))}</span><button type="button" className="queue-action" onClick={()=>useQueued(firstQueued,!running)}>{running?"Steer":"Run"}</button><button type="button" className="queue-icon" title="Edit queued message" aria-label="Edit queued message" onClick={()=>useQueued(firstQueued,false)}><IcEdit size={12}/></button><button type="button" className="queue-icon" title="Remove queued message" aria-label="Remove queued message" onClick={()=>deleteQueued(firstQueued)}><IcX size={12}/></button></div></div>}
-      <div className="input-box">
+      <BorderBeam className="composer-border-beam" size="pulse-inner" colorVariant="colorful" theme="dark" strength={running?.92:.48} duration={running?1.65:2.8} active={true}>
+      <div className={"input-box"+(running?" agent-streaming":"")}>
         {atts.length>0 && <div className="att-row att-compose">{atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span><button type="button" className="att-x" title={"Remove "+at.name} aria-label={"Remove "+at.name} onClick={()=>removeAttachment(i)}><IcX size={11}/></button></div>))}</div>}
         <textarea className="input-ta" aria-label="Agent prompt" placeholder={running?"Queue a follow-up while the agent works":placeholder} rows={2} value={text} onChange={(e)=>setText(e.target.value)} onKeyDown={keyDown}/>
         <div className="input-footer">
@@ -1411,6 +1443,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
           </div>
         </div>
       </div>
+      </BorderBeam>
       {running&&text.trim()&&<span className="composer-hint">Enter queues this follow-up</span>}
     </div>
   );
@@ -1989,9 +2022,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     if(type==="provider.warning") return {id:data.id,type:"warning",label:"Provider warning",detail:compactValue(payload)||data.message,state:"error"};
     return null;
   }
-  function appendRuntimeRow(chatId,aid,row){
+  function appendRuntimeRow(chatId,aid,row,eventOrbState){
     if(!row) return;
-    setMsgsFor(chatId,m=>m.map(x=>x.id!==aid?x:{...x,thinking:false,runtimeEvents:[...(x.runtimeEvents||[]).filter(item=>item.id!==row.id),row].slice(-30)}));
+    const orbState=eventOrbState||(row.type==="file"?"shaping":row.type==="command"?"working":"solving");
+    setMsgsFor(chatId,m=>m.map(x=>x.id!==aid?x:{...x,thinking:false,orbState,runtimeEvents:[...(x.runtimeEvents||[]).filter(item=>item.id!==row.id),row].slice(-30)}));
   }
   async function ensureCodingSession(){
     const api=codingApiRef.current; if(!api) throw new Error("Coding API unavailable.");
@@ -2065,22 +2099,24 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function applyCodingEvent(chatId,aid,frame,answerRef){
     const data=frame.data||{}; if(data.sequence) lastSequenceRef.current[data.session_id]=data.sequence;
     setCodingEvents(prev=>[...prev.slice(-199),data]);
+    const nextOrbState=orbStateForCodingEvent(data.type,data.payload);
+    if(nextOrbState) setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,orbState:nextOrbState}:x));
     if(data.trace_id) setProgFor(chatId,p=>({...p,reason:data.trace_id}));
     if(data.type==="turn.started"){
       setCodingStatus("running"); setProgFor(chatId,p=>({...p,status:"running",turnId:data.turn_id}));
-      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,thinking:false,turnId:data.turn_id,traceId:data.trace_id}:x));
+      setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,thinking:false,orbState:"solving",turnId:data.turn_id,traceId:data.trace_id}:x));
       return;
     }
     if(data.type==="assistant.delta"){
       const text=String((data.payload&&data.payload.text)||""); if(!text) return;
-      answerRef.current+=text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current,thinking:false}:x)); return;
+      answerRef.current+=text; setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current,thinking:false,orbState:"composing"}:x)); return;
     }
     if(data.type==="assistant.final"){
       const text=String((data.payload&&data.payload.text)||""); if(text) answerRef.current=text;
       setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text,thinking:false}:x)); return;
     }
     if(data.type==="usage"){ setCodingUsage(data.payload||null); return; }
-    const row=runtimeRow(data); if(row){ appendRuntimeRow(chatId,aid,row); return; }
+    const row=runtimeRow(data); if(row){ appendRuntimeRow(chatId,aid,row,nextOrbState); return; }
     if(data.type==="turn.completed"){
       setCodingStatus("ready"); setProgFor(chatId,p=>({...p,status:"done"}));
       setMsgsFor(chatId,m=>m.map(x=>x.id===aid?{...x,text:answerRef.current||x.text||"Completed.",thinking:false,streaming:false,runState:"complete"}:x)); return;
@@ -2130,7 +2166,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     const guidance=[planMode?"Planning mode: inspect the workspace and produce a concrete plan, but do not edit files or run destructive commands.":"",includeIde?"Use the active Vellum workspace and its current project state as the source of truth.":""].filter(Boolean).join("\n");
     const prompt=[guidance,t||"Inspect the attached files.",...attachmentParts].filter(Boolean).join("\n\n");
     const uid=nextId(),aid=nextId(),userMsg={id:uid,type:"user",text:t,atts};
-    setMsgsFor(chatId,m=>[...m,userMsg,{id:aid,type:"assistant",provider:codingProvider,text:"",streaming:true,thinking:true,runtimeEvents:[]}]);
+    setMsgsFor(chatId,m=>[...m,userMsg,{id:aid,type:"assistant",provider:codingProvider,text:"",streaming:true,thinking:true,orbState:"working",runtimeEvents:[]}]);
     setRunning(true);streamTargetRef.current=chatId;runCodingTurn(chatId,aid,prompt);
   }
   function onMainSend(text, atts){
@@ -2463,8 +2499,9 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   function renderMsg(msg){
     if(msg.type==="user") return <div key={msg.id} className="user-msg">{msg.atts && msg.atts.length>0 && <div className="att-row" style={{marginBottom:msg.text?6:0}}>{msg.atts.map((at,i)=>(<div key={i} className="att-chip">{at.image && at.url ? <img src={at.url} alt=""/> : <IcFile size={13}/>}<span className="att-name">{at.name}</span></div>))}</div>}{msg.text}</div>;
     if(msg.type==="assistant"){
-      if(msg.thinking) return <div key={msg.id} className="thinking-block"><div className="thinking-label">Working</div><div className="thinking-rule"/><div className="working-line"><ProviderIcon provider={msg.provider} size={14}/><span className="glow-text">{runtimeName(msg.provider)} is connecting</span><span className="tdot"/><span className="tdot"/><span className="tdot"/></div></div>;
+      if(msg.thinking) return <div key={msg.id} className="thinking-block"><div className="thinking-label">Working</div><div className="thinking-rule"/><div className="working-line"><ThinkingOrb state={msg.orbState||"working"} size={20} theme="dark" className="thinking-orb-canvas"/><span className="glow-text">{runtimeName(msg.provider)} is connecting</span></div></div>;
       return <div key={msg.id} className="msg-wrap">
+        {msg.streaming&&<div className="agent-stream-state" aria-live="polite"><ThinkingOrb state={msg.orbState||"working"} size={20} theme="dark" className="thinking-orb-canvas"/><ProviderIcon provider={msg.provider} size={12}/><span>{runtimeName(msg.provider)} · {ORB_STATE_LABELS[msg.orbState]||"Working"}</span></div>}
         {msg.plan && msg.plan.length>0 && (()=>{ const pr = progressByChat[activeChat]||emptyProgress(); const byId={}; (pr.tasks||[]).forEach(t=>byId[t.id]=t); return (
           <div className="plan-block" style={{border:"1px solid #1e1e1e",borderRadius:10,padding:"8px 10px",margin:"4px 0 10px",background:"#121212"}}>
             <div className="prog-title" style={{marginBottom:4}}>Plan</div>
@@ -2671,7 +2708,6 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
         {isLanding ? (
           <Fragment>
             <div className="landing">
-              <div className="landing-cosmic-bg" aria-hidden="true"/>
               <div className="landing-cosmic-shade" aria-hidden="true"/>
               <div className="workspace-home">
                 <div className="runtime-empty">
