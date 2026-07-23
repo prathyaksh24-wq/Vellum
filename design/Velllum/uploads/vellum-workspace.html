@@ -674,17 +674,34 @@ button,input,textarea,select{font-family:var(--body-font)}
 .chat-pane{background:rgba(11,11,15,.88);isolation:isolate}
 .side-rays-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;opacity:.34;filter:saturate(.75)}
 .side-rays-shade{position:absolute;inset:0;z-index:-1;background:rgba(11,11,15,.48);pointer-events:none}
-.landing{position:relative;z-index:2;padding:38px 28px;gap:0}
-.workspace-home{width:min(820px,100%);display:flex;flex-direction:column;align-items:center}
+.landing{position:relative;z-index:2;padding:38px 28px;gap:0;overflow:hidden;isolation:isolate}
+.landing-cosmic-bg,.landing-cosmic-shade{position:absolute;inset:0;pointer-events:none}
+.landing-cosmic-bg{z-index:-2;background:url("assets/vellum-cosmic-planet.webp") center/cover no-repeat}
+.landing-cosmic-shade{z-index:-1;background:rgba(3,2,8,.42)}
+.workspace-home{position:relative;z-index:1;width:min(820px,100%);display:flex;flex-direction:column;align-items:center}
 .workspace-home-head{width:100%;display:flex;align-items:center;justify-content:space-between;margin-bottom:66px;color:var(--ocx-faint);font:11px 'Geist Mono',monospace}
 .workspace-home-brand{display:flex;align-items:center;gap:8px;color:var(--ocx-muted);font-family:var(--body-font);font-size:12px;font-weight:700}
 .workspace-home-brand .runtime-brand-mark{width:24px;height:24px}
 .workspace-home-status{display:flex;align-items:center;gap:7px}
 .workspace-home-status i{width:7px;height:7px;border-radius:50%;background:var(--ocx-green);box-shadow:0 0 0 4px rgba(78,203,157,.1)}
-.runtime-empty{max-width:640px}
-.runtime-empty-kicker{font-family:'Geist Mono',monospace;color:#afa7ff;letter-spacing:.12em}
-.runtime-empty-title{font-size:42px;line-height:1.06;color:var(--ocx-text);letter-spacing:-.035em}
-.runtime-empty-copy{font-size:15px;color:var(--ocx-muted);max-width:560px;margin-bottom:0}
+.runtime-empty{max-width:680px}
+.runtime-empty-kicker{font-family:'Geist Mono',monospace;color:#d7ccff;letter-spacing:.12em;text-shadow:0 1px 18px rgba(0,0,0,.72)}
+.runtime-empty-title{min-height:1.12em;font-size:42px;line-height:1.06;color:#fff;letter-spacing:-.035em;text-wrap:balance;text-shadow:0 2px 26px rgba(4,2,12,.9)}
+.runtime-empty-copy{font-size:15px;color:#d0cad7;max-width:560px;margin-bottom:0;text-shadow:0 1px 18px rgba(0,0,0,.82)}
+.text-cascade{position:relative;display:inline-block;overflow:hidden;white-space:nowrap;vertical-align:bottom;transition:width 220ms cubic-bezier(.16,1,.3,1)}
+.text-cascade-measure{display:inline-block;visibility:hidden;white-space:pre}
+.text-cascade-layer{position:absolute;left:50%;top:0;display:inline-block;white-space:pre;transform:translateX(-50%)}
+.text-cascade-letter{display:inline-block;white-space:pre;will-change:opacity,filter,transform}
+.text-cascade-current .text-cascade-letter{animation:cascadeLetterIn 560ms cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--cascade-index) * 25ms)}
+.text-cascade-previous .text-cascade-letter{animation:cascadeLetterOut 160ms cubic-bezier(.16,1,.3,1) both;animation-delay:calc(var(--cascade-index) * 12.5ms)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@keyframes cascadeLetterIn{from{opacity:0;transform:translateY(105%);filter:blur(3px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+@keyframes cascadeLetterOut{from{opacity:1;transform:translateY(0);filter:blur(0)}to{opacity:0;transform:translateY(-105%);filter:blur(3px)}}
+@media(prefers-reduced-motion:reduce){
+  .text-cascade{transition:none}
+  .text-cascade-current .text-cascade-letter{animation:none;opacity:1;transform:none;filter:none}
+  .text-cascade-previous{display:none}
+}
 .home-composer{width:100%;max-width:760px;margin-top:30px}
 .home-context-line{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;max-width:740px;margin-top:9px;padding:0 8px;color:var(--ocx-faint);font:10.5px 'Geist Mono',monospace}
 .home-context-item{display:flex;align-items:center;gap:7px;min-width:0}
@@ -762,7 +779,7 @@ button,input,textarea,select{font-family:var(--body-font)}
 <div id="root" style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-family:Karla,sans-serif">Loading Vellum…</div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, Fragment } = React;
+const { useState, useEffect, useLayoutEffect, useRef, Fragment } = React;
 
 /* Provider-neutral coding API. The UI only consumes Vellum events; provider SDK
    details stay behind the local backend adapter boundary. */
@@ -965,6 +982,53 @@ function ProviderIcon({provider,size=16,className=""}){
   return <img className={"provider-icon"+(className?" "+className:"")} style={{"--provider-icon-size":size+"px"}} src={src} alt="" aria-hidden="true"/>;
 }
 function runtimeName(provider){ return provider==="claude"?"Claude Code":provider==="grok"?"Grok":provider==="kimi"?"Kimi Code":"Codex"; }
+
+function TextCascade({phrases,interval=2800,className=""}){
+  const items=Array.isArray(phrases)?phrases.filter(Boolean):[String(phrases||"")];
+  const [state,setState]=useState({current:0,previous:null,sequence:0});
+  const measureRef=useRef(null);
+  const [width,setWidth]=useState();
+  const currentText=items[state.current]||"";
+  const previousText=state.previous===null?"":items[state.previous]||"";
+
+  useEffect(()=>{
+    if(items.length<2) return;
+    const id=window.setInterval(()=>{
+      setState(value=>({
+        current:(value.current+1)%items.length,
+        previous:value.current,
+        sequence:value.sequence+1
+      }));
+    },interval);
+    return ()=>window.clearInterval(id);
+  },[items.join("\u0000"),interval]);
+
+  useLayoutEffect(()=>{
+    const node=measureRef.current;
+    if(!node) return;
+    const measure=()=>setWidth(node.offsetWidth);
+    measure();
+    const observer=typeof ResizeObserver!=="undefined"?new ResizeObserver(measure):null;
+    if(observer) observer.observe(node);
+    return ()=>{ if(observer) observer.disconnect(); };
+  },[currentText]);
+
+  const letters=(text,kind)=>(
+    <span key={kind+"-"+state.sequence} className={"text-cascade-layer text-cascade-"+kind} aria-hidden="true">
+      {Array.from(text).map((char,index)=>(
+        <span key={index} className="text-cascade-letter" style={{"--cascade-index":index}}>{char}</span>
+      ))}
+    </span>
+  );
+
+  return (
+    <span className={"text-cascade"+(className?" "+className:"")} style={width?{width:width+"px"}:undefined} aria-hidden="true">
+      <span ref={measureRef} className="text-cascade-measure" aria-hidden="true">{currentText}</span>
+      {state.previous!==null&&letters(previousText,"previous")}
+      {letters(currentText,"current")}
+    </span>
+  );
+}
 
 function SideRays({speed=2.7,rayColor1="#EAB308",rayColor2="#96c8ff",intensity=1.9,spread=2.1,origin="top-right",tilt=6,saturation=1.5,blend=.75,falloff=1.6,opacity=1}){
   const canvasRef=useRef(null);
@@ -2602,18 +2666,20 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       {/* Main */}
       <div className={"main"+(shell==="desktop"&&sbPinned?" desk-inset":"")} style={sbPinned?{marginLeft:"var(--sidebar-width)"}:undefined}>
         <div className="chat-pane">
-        <SideRays speed={2.7} rayColor1="#EAB308" rayColor2="#96c8ff" intensity={1.9} spread={2.1} origin="top-right" tilt={6} saturation={1.5} blend={.75} falloff={1.6} opacity={1}/>
-        <div className="side-rays-shade" aria-hidden="true"/>
+        {!isLanding&&<SideRays speed={2.7} rayColor1="#EAB308" rayColor2="#96c8ff" intensity={1.9} spread={2.1} origin="top-right" tilt={6} saturation={1.5} blend={.75} falloff={1.6} opacity={1}/>}
+        {!isLanding&&<div className="side-rays-shade" aria-hidden="true"/>}
         {isLanding ? (
           <Fragment>
             <div className="landing">
+              <div className="landing-cosmic-bg" aria-hidden="true"/>
+              <div className="landing-cosmic-shade" aria-hidden="true"/>
               <div className="workspace-home">
                 <div className="runtime-empty">
                   <div className="runtime-empty-kicker">Vellum coding</div>
-                  <div className="runtime-empty-title">What should we build in Vellum?</div>
-                  <div className="runtime-empty-copy">Start anywhere. Vellum will use the selected local agent runtime and keep its session attached to the project when one is available.</div>
+                  <h1 className="runtime-empty-title"><span className="sr-only">Build what's next.</span><TextCascade phrases={["Build what's next.","Plan with every agent.","Ship from one place."]}/></h1>
+                  <div className="runtime-empty-copy">One workspace. Every coding agent.</div>
                 </div>
-                <div className="home-composer"><InputBox placeholder="Ask Vellum to inspect, plan, or build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
+                <div className="home-composer"><InputBox placeholder="Describe what you want to build" model="5.5" api={composerApi} onSend={onMainSend}/></div>
                 <div className="home-context-line">
                   <div className="home-context-item"><IcFolder size={13}/><span>{activeProject ? (projects.find(project=>project.id===activeProject)||{}).name||codingProjectRoot : "No project selected · local workspace"}</span></div>
                   <div className="home-context-state"><i/><ProviderIcon provider={codingProvider} size={13}/><span>{runtimeName(codingProvider)} · {codingStatus==="offline"?"offline":"local"}</span></div>
