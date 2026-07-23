@@ -81,6 +81,45 @@ final result: blocked
 
 ---
 
+## Pulse composer, streaming orbs, and full-workspace cosmic background
+
+**Source Evidence**
+
+- Border Beam pulse reference: `https://beam.jakubantalik.com/pulse`.
+- Border Beam source: `https://github.com/Jakubantalik/border-beam`, version 1.3.0 at commit `50ebc2405fca40d0b907ec4c721a3cf4b1f96e25`.
+- Thinking Orbs reference: `https://orbs.jakubantalik.com/`.
+- Thinking Orbs source: `https://github.com/Jakubantalik/thinking-orbs`, version 0.1.1 at commit `eda2d708b99ab871993bbea5a5f08d23a14da436`.
+- Both packages are MIT licensed. Their license and source details are retained in `design/Velllum/uploads/vendor/LICENSE.jakubantalik-components`.
+- Static source visuals inspected: the Border Beam demo's `og-v2.jpg` and `pulse-bg.png`, plus the Thinking Orbs demo's `header.png`.
+
+**Implemented State**
+
+- Every coding composer uses the source `pulse-inner` beam. Idle strength is 0.48 over 2.8 seconds; active streaming strength is 0.92 over 1.65 seconds.
+- The source Thinking Orb canvas is connected to provider events rather than a demo timer: turn start maps to solving, assistant deltas to composing, file changes to shaping, commands to working, search-like tools to searching, and questions or permissions to listening.
+- The supplied cosmic image now belongs to the workspace root. Chat, sidebar, drawers, files, terminal, memory, and settings use translucent surfaces so the same image remains visible across states.
+- The bundled components use the page's existing React 18 global and add no network request or new runtime package to the standalone HTML.
+- Both components retain their source reduced-motion behavior. The orb also pauses when offscreen or when the tab is hidden.
+
+**Automated Checks**
+
+- [x] Inline JSX and the component contract parse successfully.
+- [x] The vendored bundle exports `BorderBeam` and `ThinkingOrb`.
+- [x] A jsdom React smoke render produced both the pulse bloom layer and orb canvas.
+- [x] `backend/tests/test_coding_workspace_html.py`: 3 passed.
+- [x] `frontend/ui/coding-api.test.js`: 10 passed.
+- [x] The page, motion bundle, and cosmic background return HTTP 200 from the local preview.
+- [x] `git diff --check` reports no patch errors.
+
+**Visual QA Needed**
+
+- [ ] Capture the landing, active streaming chat, and settings state at 1440 x 900 in the user's in-app browser.
+- [ ] Compare the pulse boundary, 20 px orb clarity, cosmic image visibility, text contrast, and side-panel glass against the source references.
+- [ ] Verify the 390 x 844 crop and reduced-motion state.
+
+final result: blocked
+
+---
+
 ## Workspace chat navigation and live Codex connection
 
 **Validation Target**
@@ -210,8 +249,8 @@ final result: passed
 
 ## Current visual QA status
 
-- The latest change is the “Cosmic coding landing and text cascade” section above.
-- Its parse, focused tests, asset request, and patch checks passed.
-- A matched in-app-browser screenshot comparison is still required before visual sign-off.
+- The latest change is the “Pulse composer, streaming orbs, and full-workspace cosmic background” section above.
+- Its component bundle, parse, focused tests, asset requests, and patch checks passed.
+- A matched in-app-browser screenshot comparison of the landing, active streaming chat, settings, mobile crop, and reduced-motion state is still required before visual sign-off.
 
 final result: blocked
