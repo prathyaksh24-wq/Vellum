@@ -46,6 +46,41 @@ final result: passed
 
 ---
 
+## Cosmic coding landing and text cascade
+
+**Comparison Target**
+
+- Source artwork: `C:\Users\User\OneDrive\Pictures\dreamor-Image 4.png`.
+- Motion reference: BeUI Text Cascade and its ActionSwap cascade variant.
+- Browser-rendered implementation: not captured because this Codex Desktop session does not expose a callable in-app-browser screenshot tool.
+- Intended URL: `http://127.0.0.1:8765/design/Velllum/uploads/vellum-workspace.html`.
+
+**Implemented State**
+
+- The landing uses the supplied planet artwork as a responsive cover background; the checked-in WebP preserves its 2944 x 1632 dimensions while reducing transfer size to 648,234 bytes.
+- The headline cycles through “Build what's next.”, “Plan with every agent.”, and “Ship from one place.”
+- Incoming letters rise by 105% with a 25 ms left-to-right stagger. Outgoing letters move upward with the shorter 12.5 ms stagger used by the BeUI cascade design.
+- The supporting copy and composer placeholder are shorter. Existing provider selection, access controls, and message sending remain wired to the same workspace state.
+- Reduced-motion users get instantaneous text changes without blur or transforms.
+
+**Automated Checks**
+
+- [x] Inline JSX parses with the workspace Babel parser.
+- [x] `backend/tests/test_coding_workspace_html.py`: 3 passed.
+- [x] `frontend/ui/coding-api.test.js`: 10 passed.
+- [x] The local HTTP server returns 200 for the HTML and background asset.
+- [x] `git diff --check` reports no patch errors.
+
+**Visual QA Needed**
+
+- [ ] Capture the landing at 1440 x 900 in the user's in-app browser.
+- [ ] Compare the rendered crop against the supplied artwork at the same viewport.
+- [ ] Verify heading contrast over the pink rim, composer separation, mobile crop, and all three cascade transitions.
+
+final result: blocked
+
+---
+
 ## Workspace chat navigation and live Codex connection
 
 **Validation Target**
@@ -170,3 +205,13 @@ final result: passed
 - P3: the surrounding Vellum workspace remains intentionally desktop-first below tablet width; the composer itself collapses cleanly, but a future mobile workspace project would need broader shell changes.
 
 final result: passed
+
+---
+
+## Current visual QA status
+
+- The latest change is the “Cosmic coding landing and text cascade” section above.
+- Its parse, focused tests, asset request, and patch checks passed.
+- A matched in-app-browser screenshot comparison is still required before visual sign-off.
+
+final result: blocked
