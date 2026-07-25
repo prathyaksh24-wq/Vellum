@@ -22,7 +22,15 @@ from agent.coding.adapters.codex import (
     codex_sandbox_name,
     codex_sqlite_home,
 )
-from agent.coding.models import AccessMode, CodingSession, CodingSessionCreate, ProviderName, utc_now
+from agent.coding.models import (
+    AccessMode,
+    CodingSession,
+    CodingSessionCreate,
+    CodingTurnRuntime,
+    ProviderName,
+    ReasoningEffort,
+    utc_now,
+)
 
 
 def test_adapter_dependency_module_names_are_stable():
@@ -308,7 +316,12 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
         title="Repo",
     )
 
-    events = asyncio.run(_collect(CodexAdapter().run_turn(session, "fix tests", "turn_1")))
+    events = asyncio.run(_collect(CodexAdapter().run_turn(
+        session,
+        "fix tests",
+        "turn_1",
+        runtime=CodingTurnRuntime(model="gpt-turn", reasoning_effort=ReasoningEffort.xhigh),
+    )))
 
     assert [event.type for event in events] == [
         "session.resumed",
@@ -333,7 +346,7 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
                     (tmp_path / "codex-state" / "code_1").resolve()
                 )
             },
-            "config_overrides": ('model="gpt-test"',),
+            "config_overrides": ('model="gpt-turn"', 'model_reasoning_effort="xhigh"'),
         }
     ]
 
@@ -356,7 +369,8 @@ def test_codex_run_turn_binds_cwd_sandbox_resume_and_provider_session(monkeypatc
         ("turn", "review", str(tmp_path), "read_only"),
         ("close",),
     ]
-    assert configs[-1] == configs[0]
+    assert configs[-1]["env"] == configs[0]["env"]
+    assert configs[-1]["config_overrides"] == ('model="gpt-test"',)
 
 
 def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_path):
@@ -416,7 +430,12 @@ def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_p
     )
 
     adapter = ClaudeAdapter()
-    events = asyncio.run(_collect(adapter.run_turn(session, "fix tests", "turn_1")))
+    events = asyncio.run(_collect(adapter.run_turn(
+        session,
+        "fix tests",
+        "turn_1",
+        runtime=CodingTurnRuntime(model="sonnet", reasoning_effort=ReasoningEffort.high),
+    )))
 
     assert [event.type for event in events] == [
         "session.resumed",
@@ -444,6 +463,8 @@ def test_claude_run_turn_binds_cwd_permission_mode_and_resume(monkeypatch, tmp_p
             "permission_mode": "acceptEdits",
             "resume": "claude-session-1",
             "include_partial_messages": True,
+            "model": "sonnet",
+            "effort": "high",
         }
     ]
     assert calls == [("connect",), ("query", "fix tests"), ("disconnect",)]

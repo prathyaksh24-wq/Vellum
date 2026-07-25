@@ -5,6 +5,7 @@ import concurrent.futures
 from collections.abc import Callable
 from typing import Any
 
+from agent.mcp.results import normalize_mcp_text
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 
 McpRunner = Callable[[str, dict[str, Any]], str]
@@ -194,7 +195,7 @@ class McpCapabilityService:
         return self._call("firecrawl", params, "web_extract.extract")
 
     def _call(self, server: str, params: dict[str, Any], action: str) -> dict[str, str]:
-        text = self.runner(server, params)
+        text = normalize_mcp_text(self.runner(server, params))
         return {"action": action, "backend": "mcp", "server": server, "text": text}
 
     @staticmethod

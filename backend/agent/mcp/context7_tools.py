@@ -13,7 +13,6 @@ The hosted endpoint works without an API key (rate-limited); when
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any
 
@@ -21,6 +20,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 from agent.config import get_settings
+from agent.mcp.common import content_text, run_sync, run_with_timeout, tool_names
 
 logger = logging.getLogger(__name__)
 
@@ -45,20 +45,6 @@ def _context7_headers() -> dict[str, str]:
     if not key:
         return {}
     return {"Authorization": f"Bearer {key}"}
-
-
-def _content_text(result: Any) -> str:
-    content = getattr(result, "content", None) or []
-    parts = []
-    for item in content:
-        text = getattr(item, "text", None)
-        if text is not None:
-            parts.append(str(text))
-    return "\n".join(parts).strip()
-
-
-def _tool_names(tools_result: Any) -> set[str]:
-    return {tool.name for tool in getattr(tools_result, "tools", [])}
 
 
 def _action_name(params: dict[str, Any]) -> str:
@@ -107,27 +93,21 @@ async def _run_tool_inner(params: dict[str, Any]) -> str:
     ) as (read, write, _get_session_id):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            tool_names = _tool_names(await session.list_tools())
-            if tool_name not in tool_names:
+            available_tool_names = tool_names(await session.list_tools())
+            if tool_name not in available_tool_names:
                 return f"Context7 MCP server does not expose {tool_name}."
             result = await session.call_tool(tool_name, call_params)
-            return _content_text(result) or f"Context7 {action} completed."
+            return content_text(result) or f"Context7 {action} completed."
 
 
 async def run_tool_async(params: dict[str, Any]) -> str:
-    timeout = get_settings().mcp_timeout_seconds
-    try:
-        return await asyncio.wait_for(_run_tool_inner(params), timeout=timeout)
-    except TimeoutError:
-        return f"Context7 MCP timed out after {timeout} seconds."
-    except Exception as exc:
-        logger.error("[CONTEXT7_MCP] Error: %s", exc)
-        return f"Context7 MCP failed: {exc}"
+    return await run_with_timeout(
+        _run_tool_inner(params),
+        timeout=get_settings().mcp_timeout_seconds,
+        logger=logger,
+        label="CONTEXT7_MCP",
+    )
 
 
 def run_tool(params: dict[str, Any]) -> str:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(run_tool_async(params))
-    raise RuntimeError("context7_tools.run_tool cannot run inside an active event loop; use run_tool_async.")
+    return run_sync(run_tool_async, params, adapter_name="context7_tools")

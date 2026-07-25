@@ -22,7 +22,8 @@ from agent.obsidian.ingester import VaultIngester
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
-from agent.telemetry.hooks import capture_from_invoke_result
+from agent.telemetry.hooks import capture_from_invoke_result, usage_from_invoke_result
+from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 
 settings = get_settings()
@@ -188,6 +189,16 @@ async def chat_loop(
                 continue
 
             user_input = expand_skill_input(user_input)
+            thread_id = active_thread_config.get("configurable", {}).get(
+                "thread_id",
+                settings.thread_id,
+            )
+            turn_audit = TurnAudit(
+                thread_id=thread_id,
+                model=settings.primary_model,
+                provider="openrouter",
+                saved=True,
+            )
 
             active_console.print()
             try:
@@ -196,7 +207,11 @@ async def chat_loop(
                         {"messages": [{"role": "user", "content": user_input}]},
                         config=active_thread_config,
                     )
+            except asyncio.CancelledError:
+                turn_audit.finalize("cancelled")
+                raise
             except Exception as exc:
+                turn_audit.finalize("failed")
                 active_console.print(f"[red]Error: {exc}[/red]")
                 continue
 
@@ -204,10 +219,12 @@ async def chat_loop(
             answer = _message_content(messages[-1] if messages else None) or "No response."
             tool_calls = _tool_call_names(messages)
             _record_chat_usage(result, active_thread_config)
+            turn_audit.observe_usage(usage_from_invoke_result(result))
+            turn_audit.mark_first_token()
+            turn_audit.finalize("completed", tools_called=tool_calls)
             active_console.print(render_answer(answer, tool_calls))
 
             if answer and "blocked for privacy" not in answer.casefold():
-                thread_id = active_thread_config.get("configurable", {}).get("thread_id", settings.thread_id)
                 asyncio.create_task(_background_learn(user_input, answer, thread_id))
     finally:
         close = getattr(active_agent, "aclose", None)

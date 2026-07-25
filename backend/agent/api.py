@@ -41,9 +41,11 @@ from agent.coding.models import (
     CodingSession,
     CodingSessionCreate,
     CodingTurnLimits,
+    CodingTurnRuntime,
     DEFAULT_MAX_PROVIDER_EVENTS,
     DEFAULT_MAX_RUNTIME_SECONDS,
     ProviderName,
+    ReasoningEffort,
 )
 from agent.coding.service import CodingServiceError, CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
@@ -97,7 +99,13 @@ from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
-from agent.telemetry.hooks import capture_from_invoke_result, capture_from_stream_event
+from agent.telemetry.hooks import (
+    capture_from_invoke_result,
+    capture_from_stream_event,
+    usage_from_invoke_result,
+    usage_from_stream_event,
+)
+from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
 from agent.terminal.profiles import list_profiles as list_terminal_profiles
@@ -334,6 +342,8 @@ class CodingSessionBody(BaseModel):
 
 class CodingTurnBody(BaseModel):
     prompt: str = Field(min_length=1)
+    model: str | None = Field(default=None, min_length=1, max_length=128)
+    reasoning_effort: ReasoningEffort | None = None
     max_runtime_seconds: int = Field(default=DEFAULT_MAX_RUNTIME_SECONDS, ge=1, le=24 * 60 * 60)
     max_provider_events: int = Field(default=DEFAULT_MAX_PROVIDER_EVENTS, ge=1, le=100_000)
 
@@ -1255,6 +1265,7 @@ async def _run_agent(
     thread_id: str | None,
     model: str | None = None,
     attachments: list[ChatAttachment] | None = None,
+    turn_audit: TurnAudit | None = None,
 ) -> ChatResponse:
     clean_message = message.strip()
     if not clean_message:
@@ -1359,6 +1370,9 @@ async def _run_agent(
         fallback_model=get_settings().primary_model,
         source="api",
     )
+    if turn_audit is not None:
+        turn_audit.observe_usage(usage_from_invoke_result(result))
+
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _message_content(messages[-1] if messages else None) or "No response."
     tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
@@ -1393,7 +1407,7 @@ def _audit_memory_off(thread_id: str, source: str) -> None:
     try:
         from pathlib import Path
         from datetime import datetime, timezone
-        audit = Path("data/memory/audit_log.jsonl")
+        audit = Path("data/memory/memory_events.jsonl")
         audit.parent.mkdir(parents=True, exist_ok=True)
         with audit.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({
@@ -1802,7 +1816,30 @@ async def chat(request: ChatRequest) -> ChatResponse:
     from agent.skills.curator_runtime import get_curator_runtime
 
     get_curator_runtime().mark_activity()
-    return await _run_agent(request.message, request.thread_id, request.model, request.attachments)
+    audit = TurnAudit(
+        thread_id=request.thread_id or get_settings().thread_id,
+        model=request.model or get_settings().primary_model,
+        provider="openrouter",
+        saved=request.store,
+    )
+    try:
+        response = await _run_agent(
+            request.message,
+            request.thread_id,
+            request.model,
+            request.attachments,
+            audit,
+        )
+    except asyncio.CancelledError:
+        audit.finalize("cancelled")
+        raise
+    except Exception:
+        audit.finalize("failed")
+        raise
+    audit.thread_id = response.thread_id
+    audit.mark_first_token()
+    audit.finalize("completed", tools_called=response.tools)
+    return response
 
 
 @router.get("/conversations")
@@ -2554,6 +2591,33 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
 
+async def _audited_turn_stream(events: Any, audit: TurnAudit):
+    outcome = "failed"
+    tools_called: list[str] = []
+    try:
+        async for chunk in events:
+            if isinstance(chunk, str) and (
+                chunk.startswith("event: token")
+                or chunk.startswith("event: assistant_delta")
+            ):
+                audit.mark_first_token()
+            if isinstance(chunk, str) and chunk.startswith("event: final"):
+                try:
+                    data_line = next(
+                        line[6:] for line in chunk.splitlines() if line.startswith("data: ")
+                    )
+                    tools_called = list(json.loads(data_line).get("tools") or [])
+                except (StopIteration, TypeError, ValueError, json.JSONDecodeError):
+                    pass
+            yield chunk
+        outcome = "completed"
+    except (asyncio.CancelledError, GeneratorExit):
+        outcome = "cancelled"
+        raise
+    finally:
+        audit.finalize(outcome, tools_called=tools_called)
+
+
 def _stream_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex}"
 
@@ -3233,6 +3297,7 @@ async def _stream_agent_turn(
     synthesize_audio: bool = False,
     store: bool = True,
     attachments: list[ChatAttachment] | None = None,
+    turn_audit: TurnAudit | None = None,
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
@@ -3746,6 +3811,9 @@ async def _stream_agent_turn(
                     fallback_model=get_settings().primary_model,
                     source="api",
                 )
+                if turn_audit is not None:
+                    turn_audit.observe_usage(usage_from_stream_event(event))
+
             for call_id, item in function_stream_items.items():
                 if item.get("status") == "in_progress":
                     yield _response_function_call_arguments_done(
@@ -4061,6 +4129,12 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
     active_thread_id = request.thread_id or get_settings().thread_id
+    turn_audit = TurnAudit(
+        thread_id=active_thread_id,
+        model=request.model or get_settings().primary_model,
+        provider="openrouter",
+        saved=request.store,
+    )
 
     skill_command = _skill_surface().slash(clean_message)
     if skill_command["handled"]:
@@ -4072,13 +4146,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
             yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return StreamingResponse(skill_event(), media_type="text/event-stream")
+        return StreamingResponse(_audited_turn_stream(skill_event(), turn_audit), media_type="text/event-stream")
     clean_message = str(skill_command.get("expanded") or clean_message)
     skill_system_result = _skill_system_answer(clean_message)
     if skill_system_result is not None:
         answer, tools = skill_system_result
         return StreamingResponse(
-            _skill_system_stream(answer, tools, active_thread_id),
+            _audited_turn_stream(_skill_system_stream(answer, tools, active_thread_id), turn_audit),
             media_type="text/event-stream",
         )
     if request.force_web_search:
@@ -4086,13 +4160,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:
         return StreamingResponse(
-            _stream_computer_use_command(
+            _audited_turn_stream(_stream_computer_use_command(
                 clean_message=clean_message,
                 intent=computer_use_intent,
                 active_thread_id=active_thread_id,
                 source="voice" if request.voice else "text",
                 voice=request.voice,
-            ),
+            ), turn_audit),
             media_type="text/event-stream",
         )
 
@@ -4113,17 +4187,21 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
             yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return StreamingResponse(single_event(), media_type="text/event-stream")
+        return StreamingResponse(_audited_turn_stream(single_event(), turn_audit), media_type="text/event-stream")
 
     return StreamingResponse(
-        _stream_agent_turn(
-            clean_message=clean_message,
-            active_thread_id=active_thread_id,
-            model=request.model,
-            source="voice" if request.voice else "agent",
-            voice=request.voice,
-            store=request.store,
-            attachments=request.attachments,
+        _audited_turn_stream(
+            _stream_agent_turn(
+                clean_message=clean_message,
+                active_thread_id=active_thread_id,
+                model=request.model,
+                source="voice" if request.voice else "agent",
+                voice=request.voice,
+                store=request.store,
+                attachments=request.attachments,
+                turn_audit=turn_audit,
+            ),
+            turn_audit,
         ),
         media_type="text/event-stream",
     )
@@ -4775,6 +4853,10 @@ async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> Streaming
             limits=CodingTurnLimits(
                 max_runtime_seconds=body.max_runtime_seconds,
                 max_provider_events=body.max_provider_events,
+            ),
+            runtime=CodingTurnRuntime(
+                model=body.model,
+                reasoning_effort=body.reasoning_effort,
             ),
         )
         first_event = await anext(stream)

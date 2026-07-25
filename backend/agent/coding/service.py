@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from pathlib import Path
@@ -15,6 +16,7 @@ from agent.coding.models import (
     CodingSessionCreate,
     CodingTurn,
     CodingTurnLimits,
+    CodingTurnRuntime,
     ProviderHealth,
     ProviderName,
     WorkspaceKind,
@@ -176,6 +178,7 @@ class CodingSessionService:
         prompt: str,
         *,
         limits: CodingTurnLimits | None = None,
+        runtime: CodingTurnRuntime | None = None,
     ) -> AsyncIterator[CodingEvent]:
         session = self.get_session(session_id)
         if session.status == "closed":
@@ -205,10 +208,21 @@ class CodingSessionService:
                         "max_runtime_seconds": turn.max_runtime_seconds,
                         "max_provider_events": turn.max_provider_events,
                     },
+                    "runtime": (runtime or CodingTurnRuntime()).payload(),
                 },
             )
+            adapter_run = adapter.run_turn
+            if "runtime" in inspect.signature(adapter_run).parameters:
+                provider_events = adapter_run(
+                    session,
+                    prompt,
+                    turn.id,
+                    runtime=runtime,
+                )
+            else:
+                provider_events = adapter_run(session, prompt, turn.id)
             async with asyncio.timeout(turn.max_runtime_seconds):
-                async for raw_event in adapter.run_turn(session, prompt, turn.id):
+                async for raw_event in provider_events:
                     current_turn = self.store.get_turn(turn.id)
                     if current_turn is not None and current_turn.status == "stopped":
                         turn_finished = True
