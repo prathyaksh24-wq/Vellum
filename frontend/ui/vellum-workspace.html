@@ -694,6 +694,19 @@ const GOOGLE_MODELS = [
   { id:"gemini-2.0-flash", label:"Gemini 2.0 Flash" },
   { id:"gemini-1.5-pro",   label:"Gemini 1.5 Pro" },
 ];
+const CODING_MODELS = {
+  codex: [
+    { id:"", label:"Codex default" },
+    { id:"gpt-5.3-codex", label:"GPT-5.3 Codex" },
+    { id:"gpt-5.2", label:"GPT-5.2" },
+  ],
+  claude: [
+    { id:"", label:"Claude default" },
+    { id:"opus", label:"Claude Opus" },
+    { id:"sonnet", label:"Claude Sonnet" },
+    { id:"haiku", label:"Claude Haiku" },
+  ],
+};
 /* ── Coding-mode streaming protocol (Codex-shaped, JSON-RPC 2.0 frames) ── */
 const VPROTO = {
   uuid(){ try{ return crypto.randomUUID(); }catch(e){ return "id-"+Math.random().toString(36).slice(2); } },
@@ -1211,6 +1224,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [codingSession, setCodingSession] = useState(null);
   const [codingEvents, setCodingEvents] = useState([]);
   const [codingTarget, setCodingTarget] = useState("codex");
+  const [codingModel, setCodingModel] = useState("");
   const [codingProjectRoot, setCodingProjectRoot] = useState("D:\\Vellum");
   const [codingProvider, setCodingProvider] = useState("codex");
   const [codingAccessMode, setCodingAccessMode] = useState("read_only");
@@ -1534,6 +1548,9 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           setProgFor(chatId, prog=> ({...prog, status:"error"}));
           setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:"Warning: "+text, thinking:false, streaming:false}:x));
         }
+      }, {
+        model: codingModel || null,
+        reasoningEffort: ({"Low":"low","Medium":"medium","High":"high","Extra High":"xhigh"})[selReasoning] || null,
       });
       setMsgsFor(chatId, m=> m.map(x=> x.id===aid?{...x, text:answer || x.text || "Done.", thinking:false, streaming:false}:x));
     }catch(e){
@@ -1838,15 +1855,23 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     return [...cmds, ...sk];
   }
   function runSlash(item){ if(item && item.run) item.run(); }
+  const codingModelOptions = CODING_MODELS[codingTarget] || CODING_MODELS.codex;
+  const composerModels = activeMode==="coding" && codingTarget!=="computer" ? codingModelOptions : models;
+  const composerModel = activeMode==="coding" && codingTarget!=="computer" ? codingModel : selModel;
+  const setComposerModel = activeMode==="coding" && codingTarget!=="computer" ? setCodingModel : setSelModel;
+  function composerModelLabel(id){ const m = composerModels.find(x=>x.id===id); return m ? m.label : id; }
   const composerApi = {
-    accessLabel, accessMode, setAccessMode, selModel, setSelModel, selReasoning, setSelReasoning,
+    accessLabel, accessMode, setAccessMode, selModel:composerModel, setSelModel:setComposerModel, selReasoning, setSelReasoning,
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
     slashList: slashFiltered, runSlash, openModels: ()=> setShowModels(true),
-    models, modelLabel, syncModels, syncing, memoryOn, setMemoryOn,
+    models:composerModels, modelLabel:composerModelLabel, syncModels:activeMode==="coding"?null:syncModels, syncing, memoryOn, setMemoryOn,
   };
   function chooseCodingTarget(target){
     setCodingTarget(target);
-    if(target==="codex" || target==="claude") setCodingProvider(target);
+    if(target==="codex" || target==="claude"){
+      setCodingProvider(target);
+      setCodingModel("");
+    }
   }
   function codingHealthLine(){
     const providers = codingHealth.providers || [];

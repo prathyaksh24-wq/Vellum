@@ -20,6 +20,7 @@ from agent.coding.models import (
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    CodingTurnRuntime,
     ProviderCapabilities,
     ProviderHealth,
     ProviderName,
@@ -102,14 +103,21 @@ def codex_sqlite_home(session_id: str) -> str:
     return str(session_root.resolve())
 
 
-def codex_config_overrides() -> tuple[str, ...]:
-    """Apply Vellum-specific choices while preserving the user's Codex config."""
-    model = os.environ.get("VELLUM_CODEX_MODEL") or _repo_env_value(
+def codex_config_overrides(
+    *,
+    model: str | None = None,
+    reasoning_effort: str | None = None,
+) -> tuple[str, ...]:
+    """Apply turn choices while preserving the user's remaining Codex config."""
+    selected_model = model or os.environ.get("VELLUM_CODEX_MODEL") or _repo_env_value(
         "VELLUM_CODEX_MODEL"
     )
-    if not model:
-        return ()
-    return (f"model={json.dumps(model)}",)
+    overrides: list[str] = []
+    if selected_model:
+        overrides.append(f"model={json.dumps(selected_model)}")
+    if reasoning_effort:
+        overrides.append(f"model_reasoning_effort={json.dumps(reasoning_effort)}")
+    return tuple(overrides)
 
 
 def extract_codex_thread_id(thread: object) -> str | None:
@@ -219,6 +227,8 @@ class CodexAdapter:
         session: CodingSession,
         prompt: str,
         turn_id: str,
+        *,
+        runtime: CodingTurnRuntime | None = None,
     ) -> AsyncIterator[CodingEvent]:
         if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Codex SDK is not installed.")
@@ -231,7 +241,14 @@ class CodexAdapter:
         if CodexConfig:
             config_kwargs: dict[str, Any] = {
                 "env": {"CODEX_SQLITE_HOME": codex_sqlite_home(session.id)},
-                "config_overrides": codex_config_overrides(),
+                "config_overrides": codex_config_overrides(
+                    model=runtime.model if runtime else None,
+                    reasoning_effort=(
+                        runtime.reasoning_effort.value
+                        if runtime and runtime.reasoning_effort
+                        else None
+                    ),
+                ),
             }
             if runtime_path:
                 config_kwargs["codex_bin"] = runtime_path

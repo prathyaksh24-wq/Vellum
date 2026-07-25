@@ -27,6 +27,13 @@ class ProviderName(StrEnum):
     claude = "claude"
 
 
+class ReasoningEffort(StrEnum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    xhigh = "xhigh"
+
+
 class AccessMode(StrEnum):
     read_only = "read_only"
     workspace_write = "workspace_write"
@@ -68,6 +75,18 @@ class ProviderHealth:
     configured: bool
     message: str
     capabilities: ProviderCapabilities | None = None
+
+
+@dataclass(frozen=True)
+class CodingTurnRuntime:
+    model: str | None = None
+    reasoning_effort: ReasoningEffort | None = None
+
+    def payload(self) -> dict[str, str | None]:
+        return {
+            "model": self.model,
+            "reasoning_effort": self.reasoning_effort.value if self.reasoning_effort else None,
+        }
 
 
 @dataclass(frozen=True)

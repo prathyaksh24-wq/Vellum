@@ -13,6 +13,7 @@ from agent.coding.workspace import WorkspaceSnapshot
 class FakeCodingService:
     def __init__(self):
         self.last_limits = None
+        self.last_runtime = None
         self.last_after_sequence = None
         self.last_discard_changes = None
         self.last_rewind = None
@@ -60,8 +61,9 @@ class FakeCodingService:
             },
         )()
 
-    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None, runtime=None) -> AsyncIterator[CodingEvent]:
         self.last_limits = limits
+        self.last_runtime = runtime
         yield CodingEvent(
             "evt_1",
             session_id,
@@ -113,7 +115,7 @@ class MissingSessionCodingService(FakeCodingService):
     def get_session(self, session_id):
         raise CodingServiceError("Coding session not found.")
 
-    async def run_turn(self, session_id: str, prompt: str, *, limits=None) -> AsyncIterator[CodingEvent]:
+    async def run_turn(self, session_id: str, prompt: str, *, limits=None, runtime=None) -> AsyncIterator[CodingEvent]:
         raise CodingServiceError("Coding session not found.")
         yield
 
@@ -307,12 +309,14 @@ def test_coding_turn_stream_passes_bounded_run_limits(monkeypatch):
     with TestClient(api.app) as client:
         response = client.post(
             "/api/coding/sessions/code_1/turns/stream",
-            json={"prompt": "hello", "max_runtime_seconds": 45, "max_provider_events": 250},
+            json={"prompt": "hello", "model": "gpt-5.3-codex", "reasoning_effort": "xhigh", "max_runtime_seconds": 45, "max_provider_events": 250},
         )
 
     assert response.status_code == 200
     assert service.last_limits.max_runtime_seconds == 45
     assert service.last_limits.max_provider_events == 250
+    assert service.last_runtime.model == "gpt-5.3-codex"
+    assert service.last_runtime.reasoning_effort.value == "xhigh"
 
 
 def test_coding_turn_stream_rejects_invalid_run_limits(monkeypatch):

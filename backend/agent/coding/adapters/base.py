@@ -7,6 +7,7 @@ from agent.coding.models import (
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    CodingTurnRuntime,
     ProviderCapabilities,
     ProviderHealth,
     ProviderName,
@@ -29,7 +30,14 @@ class CodingProviderAdapter(Protocol):
     async def start_session(self, request: CodingSessionCreate) -> str | None:
         ...
 
-    def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+    def run_turn(
+        self,
+        session: CodingSession,
+        prompt: str,
+        turn_id: str,
+        *,
+        runtime: CodingTurnRuntime | None = None,
+    ) -> AsyncIterator[CodingEvent]:
         ...
 
     async def stop_turn(self, session: CodingSession, turn_id: str) -> None:

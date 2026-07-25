@@ -78,13 +78,15 @@ export function createCodingApi({ apiBase = "http://127.0.0.1:8000", fetchImpl =
         body: JSON.stringify({ discard_changes: discardChanges }),
       });
     },
-    async runTurn(sessionId, prompt, onEvent, { signal, maxRuntimeSeconds = 1800, maxProviderEvents = 10000 } = {}) {
+    async runTurn(sessionId, prompt, onEvent, { signal, model = null, reasoningEffort = null, maxRuntimeSeconds = 1800, maxProviderEvents = 10000 } = {}) {
       const response = await fetchImpl(`${base}/api/coding/sessions/${encodeURIComponent(sessionId)}/turns/stream`, {
         method: "POST",
         signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
+          model: model || null,
+          reasoning_effort: reasoningEffort || null,
           max_runtime_seconds: maxRuntimeSeconds,
           max_provider_events: maxProviderEvents,
         }),

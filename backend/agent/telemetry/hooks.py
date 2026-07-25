@@ -48,6 +48,25 @@ def _record_one(
         logger.warning("ledger write failed: %s", exc)
 
 
+def usage_from_invoke_result(result: dict[str, Any]) -> dict[str, int]:
+    totals = {"input_tokens": 0, "output_tokens": 0}
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    for message in messages:
+        usage = _extract_usage(message)
+        if usage:
+            totals["input_tokens"] += int(usage.get("input_tokens") or 0)
+            totals["output_tokens"] += int(usage.get("output_tokens") or 0)
+    return totals
+
+
+def usage_from_stream_event(event: dict[str, Any]) -> dict[str, Any] | None:
+    if event.get("event") != "on_chat_model_end":
+        return None
+    event_name = str(event.get("name") or "").strip()
+    if event_name and event_name != "RoutedChatModel":
+        return None
+    return _extract_usage(event.get("data", {}).get("output"))
+
 def capture_from_invoke_result(
     *,
     ledger: UsageLedger,
@@ -76,16 +95,10 @@ def capture_from_stream_event(
     source: str,
 ) -> None:
     """Handle a single `astream_events` event; only fires on chat-model-end."""
-    if event.get("event") != "on_chat_model_end":
-        return
     # LangGraph exposes the routed facade and its nested provider run. They
     # carry the same usage payload, so recording both silently doubles every
     # observability total. Synthetic/legacy events may omit a name.
-    event_name = str(event.get("name") or "").strip()
-    if event_name and event_name != "RoutedChatModel":
-        return
-    output = event.get("data", {}).get("output")
-    usage = _extract_usage(output)
+    usage = usage_from_stream_event(event)
     if usage:
         _record_one(
             ledger=ledger, usage=usage, thread_id=thread_id,

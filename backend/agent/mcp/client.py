@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 from agent.config import get_settings
+from agent.mcp.results import UNREACHABLE, looks_unreachable, normalize_mcp_text
 from agent.mcp import (
     apify_tools,
     context7_tools,
@@ -20,6 +22,8 @@ from agent.mcp import (
     tavily_tools,
 )
 
+
+logger = logging.getLogger(__name__)
 
 ToolFn = Callable[[dict[str, Any]], Awaitable[str]]
 
@@ -62,16 +66,18 @@ SERVER_RUNNERS: dict[str, ToolFn] = {
 async def _run_one(request: McpToolRequest) -> McpToolResult:
     runner = SERVER_RUNNERS.get(request.server)
     if runner is None:
-        return McpToolResult(request.server, False, f"Unknown MCP server: {request.server}")
+        logger.warning("Unknown MCP server: %s", request.server)
+        return McpToolResult(request.server, False, UNREACHABLE)
 
     timeout = get_settings().mcp_timeout_seconds
     try:
-        result = await asyncio.wait_for(runner(request.params), timeout=timeout)
-        return McpToolResult(request.server, True, result)
-    except TimeoutError:
-        return McpToolResult(request.server, False, f"{request.server} timed out after {timeout} seconds.")
+        raw_result = await asyncio.wait_for(runner(request.params), timeout=timeout)
+        if looks_unreachable(raw_result):
+            return McpToolResult(request.server, False, UNREACHABLE)
+        return McpToolResult(request.server, True, normalize_mcp_text(raw_result))
     except Exception as exc:
-        return McpToolResult(request.server, False, f"{request.server} failed: {exc}")
+        logger.warning("MCP server %s is unreachable: %s", request.server, exc)
+        return McpToolResult(request.server, False, UNREACHABLE)
 
 
 async def run_tools_async(requests: list[McpToolRequest | dict[str, Any]]) -> list[McpToolResult]:

@@ -23,6 +23,7 @@ from agent.coding.models import (
     CodingEvent,
     CodingSession,
     CodingSessionCreate,
+    CodingTurnRuntime,
     ProviderCapabilities,
     ProviderHealth,
     ProviderName,
@@ -226,18 +227,25 @@ class ClaudeAdapter:
         session: CodingSession,
         prompt: str,
         turn_id: str,
+        *,
+        runtime: CodingTurnRuntime | None = None,
     ) -> AsyncIterator[CodingEvent]:
         if importlib.util.find_spec(self.sdk_module_name) is None:
             raise CodingAdapterError("Claude Agent SDK is not installed.")
         module = importlib.import_module(self.sdk_module_name)
         ClaudeSDKClient = getattr(module, "ClaudeSDKClient")
         ClaudeAgentOptions = getattr(module, "ClaudeAgentOptions")
-        options = ClaudeAgentOptions(
-            cwd=session.cwd,
-            permission_mode=claude_permission_mode(session.access_mode),
-            resume=session.provider_session_id,
-            include_partial_messages=True,
-        )
+        option_kwargs: dict[str, Any] = {
+            "cwd": session.cwd,
+            "permission_mode": claude_permission_mode(session.access_mode),
+            "resume": session.provider_session_id,
+            "include_partial_messages": True,
+        }
+        if runtime and runtime.model:
+            option_kwargs["model"] = runtime.model
+        if runtime and runtime.reasoning_effort:
+            option_kwargs["effort"] = runtime.reasoning_effort.value
+        options = ClaudeAgentOptions(**option_kwargs)
         client = ClaudeSDKClient(options=options)
         active = _ActiveClaudeTurn(client=client, task=asyncio.current_task())
         self._active_turns[turn_id] = active

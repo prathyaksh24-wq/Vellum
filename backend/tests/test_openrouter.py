@@ -2,6 +2,7 @@ import json
 import asyncio
 
 import httpx
+import pytest
 
 from agent.graph import agent as react_agent
 from agent.llm import openrouter
@@ -58,10 +59,14 @@ def test_openrouter_chat_posts_to_chat_completions_and_audits_metadata(tmp_path,
     assert body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert body["provider"]["zdr"] is True
 
-    audit = (tmp_path / "audit_log.jsonl").read_text(encoding="utf-8")
-    assert "mock answer" not in audit
-    assert "user text" not in audit
-    assert "gen-test" in audit
+    audit_text = (tmp_path / "audit_log.jsonl").read_text(encoding="utf-8")
+    audit = json.loads(audit_text)
+    assert "mock answer" not in audit_text
+    assert "user text" not in audit_text
+    assert audit["outcome"] == "completed"
+    assert audit["prompt_tokens"] == 10
+    assert audit["completion_tokens"] == 2
+    assert audit["total_tokens"] == 12
 
 
 def test_openrouter_chat_uses_fallback_on_primary_http_error(monkeypatch, tmp_path):
@@ -89,6 +94,28 @@ def test_openrouter_chat_uses_fallback_on_primary_http_error(monkeypatch, tmp_pa
     assert answer == "fallback answer"
     assert models == ["primary/test", openrouter.get_settings().fallback_model]
 
+
+def test_openrouter_chat_audits_terminal_failure(tmp_path, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"error": "provider unavailable"})
+
+    monkeypatch.setattr(openrouter, "AUDIT_LOG", tmp_path / "audit_log.jsonl")
+
+    async def run_call():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await openrouter.openrouter_chat(
+                system="system",
+                user="user",
+                model_override="primary/test",
+                client=client,
+            )
+
+    with pytest.raises(openrouter.OpenRouterError):
+        asyncio.run(run_call())
+
+    audit = json.loads((tmp_path / "audit_log.jsonl").read_text(encoding="utf-8"))
+    assert audit["outcome"] == "failed"
+    assert audit["thread_id"] == "background"
 
 def test_openrouter_chat_delegates_to_shared_runtime_without_injected_client(monkeypatch):
     captured = {}

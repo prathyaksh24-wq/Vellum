@@ -10,8 +10,6 @@ Privacy constraints:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, UTC
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -20,6 +18,7 @@ import httpx
 
 from agent.config import get_settings
 from agent.llm.routing.runtime import get_routing_runtime
+from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 
 logger = logging.getLogger(__name__)
@@ -103,23 +102,28 @@ def _build_payload(
 
 def _audit(
     *,
+    thread_id: str,
     model: str,
     prompt_len: int,
     response_len: int,
-    response_id: str | None = None,
     usage: dict[str, Any] | None = None,
 ) -> None:
-    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
-    entry = {
-        "ts": datetime.now(UTC).isoformat(),
-        "model": model,
-        "response_id": response_id,
-        "prompt_tokens_approx": prompt_len // 4,
-        "response_tokens_approx": response_len // 4,
-        "usage": usage or {},
-    }
-    with AUDIT_LOG.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(entry, sort_keys=True) + "\n")
+    audit = TurnAudit(
+        thread_id=thread_id,
+        model=model,
+        provider="openrouter",
+        path=AUDIT_LOG,
+        saved=False,
+    )
+    audit.observe_usage(
+        usage
+        or {
+            "prompt_tokens": prompt_len // 4,
+            "completion_tokens": response_len // 4,
+        }
+    )
+    audit.mark_first_token()
+    audit.finalize("completed")
 
 
 def _extract_answer(data: dict[str, Any]) -> str:
@@ -174,10 +178,10 @@ async def _request_once(
     answer = _extract_answer(data)
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
     _audit(
+        thread_id=session_id or "background",
         model=str(data.get("model") or model),
         prompt_len=len(system) + len(user),
         response_len=len(answer),
-        response_id=data.get("id"),
         usage=usage,
     )
     try:
@@ -235,33 +239,50 @@ async def openrouter_chat(
 
     try:
         try:
-            return await _request_once(
-                client=client,
-                system=system,
-                user=user,
+            try:
+                return await _request_once(
+                    client=client,
+                    system=system,
+                    user=user,
+                    model=primary_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    session_id=session_id,
+                )
+            except (httpx.HTTPError, OpenRouterError) as exc:
+                if primary_model == fallback_model:
+                    raise
+                logger.warning(
+                    "OpenRouter model '%s' failed; trying fallback '%s': %s",
+                    primary_model,
+                    fallback_model,
+                    exc,
+                )
+                return await _request_once(
+                    client=client,
+                    system=system,
+                    user=user,
+                    model=fallback_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    session_id=session_id,
+                )
+        except asyncio.CancelledError:
+            TurnAudit(
+                thread_id=session_id or "background",
                 model=primary_model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                session_id=session_id,
-            )
-        except (httpx.HTTPError, OpenRouterError) as exc:
-            if primary_model == fallback_model:
-                raise
-            logger.warning(
-                "OpenRouter model '%s' failed; trying fallback '%s': %s",
-                primary_model,
-                fallback_model,
-                exc,
-            )
-            return await _request_once(
-                client=client,
-                system=system,
-                user=user,
-                model=fallback_model,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                session_id=session_id,
-            )
+                provider="openrouter",
+                path=AUDIT_LOG,
+            ).finalize("cancelled")
+            raise
+        except Exception:
+            TurnAudit(
+                thread_id=session_id or "background",
+                model=primary_model,
+                provider="openrouter",
+                path=AUDIT_LOG,
+            ).finalize("failed")
+            raise
     finally:
         if owns_client:
             await client.aclose()

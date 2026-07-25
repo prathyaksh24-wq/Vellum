@@ -43,14 +43,23 @@ describe("createCodingApi", () => {
     const events = [];
     const api = createCodingApi({ apiBase: "http://127.0.0.1:8000", fetchImpl });
 
-    await api.runTurn("code 1", "hello", (event) => events.push(event));
+    await api.runTurn("code 1", "hello", (event) => events.push(event), {
+      model: "gpt-5.3-codex",
+      reasoningEffort: "xhigh",
+    });
 
     expect(events).toEqual([{ event: "assistant_delta", data: { payload: { text: "hello" } } }]);
     expect(fetchImpl).toHaveBeenCalledWith("http://127.0.0.1:8000/api/coding/sessions/code%201/turns/stream", {
       method: "POST",
       signal: undefined,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt: "hello", max_runtime_seconds: 1800, max_provider_events: 10000 }),
+      body: JSON.stringify({
+        prompt: "hello",
+        model: "gpt-5.3-codex",
+        reasoning_effort: "xhigh",
+        max_runtime_seconds: 1800,
+        max_provider_events: 10000,
+      }),
     });
   });
 
