@@ -218,6 +218,7 @@ def test_youtube_service_registry_is_read_only(tmp_path):
         "youtube.account",
         "youtube.fetch_transcript",
         "youtube.liked_videos",
+        "youtube.personal_context",
         "youtube.search_videos",
         "youtube.subscription_feed",
         "youtube.subscriptions",

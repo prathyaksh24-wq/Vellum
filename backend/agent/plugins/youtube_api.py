@@ -8,11 +8,13 @@ import time
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from agent.config import get_settings
+from agent.knowledge.runtime import get_knowledge_core
+from agent.plugins.youtube_intelligence import YouTubeIntelligenceService
 from agent.plugins.youtube_runtime import (
     YouTubeAPIError,
     YouTubeAuthError,
@@ -124,6 +126,27 @@ async def sync_youtube(request: YouTubeSyncRequest) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="YouTube authorization must be renewed.") from exc
     except YouTubeAPIError as exc:
         raise HTTPException(status_code=502, detail="YouTube synchronization is unavailable.") from exc
+
+
+@router.get("/intelligence")
+async def get_youtube_intelligence(
+    limit: int = Query(default=20, ge=1, le=100),
+    query: str = Query(default="", max_length=500),
+) -> dict[str, Any]:
+    intelligence = YouTubeIntelligenceService(get_knowledge_core().store)
+    return await asyncio.to_thread(intelligence.snapshot, limit=limit, query=query)
+
+
+@router.post("/intelligence/rebuild")
+async def rebuild_youtube_intelligence() -> dict[str, Any]:
+    intelligence = YouTubeIntelligenceService(get_knowledge_core().store)
+    try:
+        return await asyncio.to_thread(intelligence.rebuild)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail="YouTube intelligence rebuild failed.",
+        ) from exc
 
 
 @router.delete("/connection")

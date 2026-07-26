@@ -23,6 +23,7 @@ AccountBackend = Callable[[], dict[str, Any]]
 SubscriptionsBackend = Callable[[], list[dict[str, Any]]]
 LikedVideosBackend = Callable[[int], list[dict[str, Any]]]
 TakeoutHistoryBackend = Callable[[str, int], dict[str, Any]]
+PersonalContextBackend = Callable[[str, int], dict[str, Any]]
 
 
 class YoutubeCapabilityService:
@@ -38,6 +39,7 @@ class YoutubeCapabilityService:
         subscriptions_backend: SubscriptionsBackend | None = None,
         liked_videos_backend: LikedVideosBackend | None = None,
         takeout_history_backend: TakeoutHistoryBackend | None = None,
+        personal_context_backend: PersonalContextBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
@@ -49,6 +51,7 @@ class YoutubeCapabilityService:
         self.subscriptions_backend = subscriptions_backend or self._default_subscriptions
         self.liked_videos_backend = liked_videos_backend or self._default_liked_videos
         self.takeout_history_backend = takeout_history_backend or self._default_takeout_history
+        self.personal_context_backend = personal_context_backend or self._default_personal_context
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -123,6 +126,16 @@ class YoutubeCapabilityService:
                 adapter=self.subscription_feed,
             )
         )
+        registry.register(
+            CapabilityRecord(
+                name="youtube.personal_context",
+                namespace="youtube",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"YoutubeAgent"}),
+                stream_label="Read local YouTube interests",
+                adapter=self.personal_context,
+            )
+        )
         return registry
 
     def account(self, _payload: dict[str, Any]) -> dict[str, Any]:
@@ -163,6 +176,12 @@ class YoutubeCapabilityService:
         limit = min(_positive_int(payload.get("limit"), default=20), 100)
         result = dict(self.takeout_history_backend(kind, limit))
         return {"action": "youtube.takeout_history", **result}
+
+    def personal_context(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload.get("query") or "").strip()
+        limit = min(_positive_int(payload.get("limit"), default=20), 100)
+        result = dict(self.personal_context_backend(query, limit))
+        return {"action": "youtube.personal_context", **result}
 
     def subscription_feed(self, _payload: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -263,6 +282,12 @@ class YoutubeCapabilityService:
             kind=kind,
             limit=limit,
         )
+
+    def _default_personal_context(self, query: str, limit: int) -> dict[str, Any]:
+        from agent.knowledge.runtime import get_knowledge_core
+        from agent.plugins.youtube_intelligence import YouTubeIntelligenceService
+
+        return YouTubeIntelligenceService(get_knowledge_core().store).snapshot(limit=limit, query=query)
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:
