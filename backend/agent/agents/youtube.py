@@ -54,6 +54,12 @@ class YoutubeAgent:
         r"\b(?:my|our)\s+youtube\s+subscriptions?\s+feed\b",
         r"\bwhat(?:'s|\s+is)\s+new\s+in\s+(?:my|our)\s+youtube\s+subscriptions?\b",
     )
+    _INTELLIGENCE_PATTERNS = (
+        r"\b(?:my|our)\s+(?:youtube\s+)?(?:interests?|taste|habits|patterns)\b",
+        r"\binterest\s+in\s+.+\s+(?:changed|change|declining|falling|waning|rising)\b",
+        r"\bwhich\s+(?:youtube\s+)?channels?\s+.+\b(?:losing|gaining)\s+interest\b",
+        r"\bwhat\s+.+\brepeatedly\s+search\b",
+    )
 
     def __init__(
         self,
@@ -71,12 +77,16 @@ class YoutubeAgent:
         lowered = query.lower()
         if self._is_meta_feedback(lowered):
             return False
-        return any(pattern.search(query) for pattern in self._INTENT_PATTERNS) or any(
-            re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS
+        return (
+            self._is_intelligence_query(lowered)
+            or any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
+            or any(re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS)
         )
 
     def answer(self, query: str) -> SpecialistResponse:
         lowered = query.lower()
+        if self._is_intelligence_query(lowered):
+            return self._answer_personal_context(query)
         if self._is_liked_query(lowered):
             return self._answer_liked_videos()
         if self._is_takeout_query(lowered):
@@ -180,6 +190,12 @@ class YoutubeAgent:
         if self.tool_registry is not None:
             return self.tool_registry.invoke("youtube.subscription_feed", {}, agent_name=self.name)
         return self.youtube_service.subscription_feed({})
+
+    def _personal_context(self, query: str) -> dict:
+        payload = {"query": query, "limit": 50}
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("youtube.personal_context", payload, agent_name=self.name)
+        return self.youtube_service.personal_context(payload)
 
     def _answer_account(self) -> SpecialistResponse:
         try:
@@ -317,6 +333,112 @@ class YoutubeAgent:
             confidence=1.0,
         )
 
+    def _answer_personal_context(self, query: str) -> SpecialistResponse:
+        try:
+            result = self._personal_context(query)
+        except Exception as exc:
+            return self._official_error("YoutubeAgent could not read local YouTube interests.", exc)
+        if not result.get("local_only"):
+            return SpecialistResponse(
+                agent=self.name,
+                status="blocked",
+                summary="YouTube personal context was withheld.",
+                analysis="youtube.personal_context did not return a local-only result.",
+                confidence=1.0,
+            )
+
+        lowered = query.casefold()
+        channels = list(result.get("channels") or [])
+        themes = list(result.get("search_themes") or [])
+        if "search" in lowered and "channel" not in lowered:
+            channels = []
+        elif "channel" in lowered and "search" not in lowered:
+            themes = []
+        if any(term in lowered for term in ("losing", "declining", "falling", "waning", "less interested")):
+            channels = [
+                item for item in channels
+                if item.get("trend") == "falling" or item.get("lifecycle") in {"waning", "dormant"}
+            ]
+        elif any(term in lowered for term in ("gaining", "rising", "more interested")):
+            channels = [
+                item for item in channels
+                if item.get("trend") == "rising" or item.get("lifecycle") == "active"
+            ]
+
+        query_terms = {
+            term
+            for term in re.findall(r"[a-z0-9]+", lowered)
+            if len(term) > 3
+            and term not in {
+                "youtube", "interest", "interests", "changed", "change", "which",
+                "channels", "channel", "losing", "gaining", "what", "have",
+            }
+        }
+        matched_channels = [
+            item for item in channels
+            if any(term in str(item.get("label") or "").casefold() for term in query_terms)
+        ]
+        matched_themes = [
+            item for item in themes
+            if any(term in str(item.get("label") or "").casefold() for term in query_terms)
+        ]
+        if matched_channels or matched_themes:
+            channels = matched_channels
+            themes = matched_themes
+        if len(query_terms) == 1:
+            exact_term = next(iter(query_terms))
+            exact_channels = [
+                item for item in channels
+                if " ".join(
+                    re.findall(r"[a-z0-9]+", str(item.get("label") or "").casefold())
+                ) == exact_term
+            ]
+            exact_themes = [
+                item for item in themes
+                if " ".join(
+                    re.findall(r"[a-z0-9]+", str(item.get("label") or "").casefold())
+                ) == exact_term
+            ]
+            if exact_channels or exact_themes:
+                channels = exact_channels
+                themes = exact_themes
+
+        lines = []
+        for item in channels[:10]:
+            lines.append(
+                f"{item.get('label') or 'Unknown channel'}: {item.get('trend')}, "
+                f"{item.get('lifecycle')}; {int(item.get('evidence_count') or 0)} watch events; "
+                f"confidence {float(item.get('confidence') or 0):.0%}; "
+                f"last observed {item.get('latest_observation_at') or 'unknown'}."
+            )
+        for item in themes:
+            if len(lines) >= 10:
+                break
+            lines.append(
+                f"Search theme \"{item.get('label') or 'Unknown query'}\": {item.get('trend')}; "
+                f"{int(item.get('evidence_count') or 0)} search events; "
+                f"confidence {float(item.get('confidence') or 0):.0%}."
+            )
+        if not lines:
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="No matching YouTube interest evidence is available yet.",
+                analysis="Used youtube.personal_context from the local Knowledge Core.",
+                confidence=1.0,
+            )
+        confidence = max(
+            [float(item.get("confidence") or 0) for item in channels[:20] + themes[:20]],
+            default=0.0,
+        )
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary="\n".join(lines),
+            analysis="Used youtube.personal_context from the local Knowledge Core.",
+            confidence=confidence,
+        )
+
     def _is_subscriptions_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_PATTERNS)
 
@@ -328,6 +450,9 @@ class YoutubeAgent:
 
     def _is_takeout_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._TAKEOUT_PATTERNS)
+
+    def _is_intelligence_query(self, lowered_query: str) -> bool:
+        return any(re.search(pattern, lowered_query) is not None for pattern in self._INTELLIGENCE_PATTERNS)
 
     def _is_subscription_feed_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_FEED_PATTERNS)

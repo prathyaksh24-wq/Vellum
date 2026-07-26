@@ -101,8 +101,9 @@ def start_scheduler(
     settings = get_settings()
     retention_enabled = bool(getattr(settings, "enable_vault_retention", True))
     if not settings.enable_nightly_digest and not retention_enabled and dreaming_job is None:
-        logger.info("[SCHEDULER] Dreaming, digest, and retention are disabled.")
-        return None
+        logger.info(
+            "[SCHEDULER] Dreaming, digest, and retention are disabled; starting local maintenance jobs."
+        )
 
     scheduler = scheduler or AsyncIOScheduler()
     if dreaming_job is not None:
@@ -113,6 +114,9 @@ def start_scheduler(
         from agent.scheduler.retention import run_retention
 
         scheduler.add_job(run_retention, "cron", hour=3, minute=0, id="vault_retention", replace_existing=True)
+    from agent.scheduler.youtube_intelligence import install_projection_job
+
+    install_projection_job(scheduler)
     from agent.skills.curator_runtime import install_curator_ticker
 
     install_curator_ticker(scheduler)

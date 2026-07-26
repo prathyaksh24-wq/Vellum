@@ -123,6 +123,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                 "youtube.subscriptions",
                 "youtube.liked_videos",
                 "youtube.takeout_history",
+                "youtube.personal_context",
                 "youtube.subscription_feed",
                 "youtube.search_videos",
                 "youtube.fetch_transcript",

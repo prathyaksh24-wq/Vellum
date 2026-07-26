@@ -783,6 +783,68 @@ class KnowledgeStore:
             "preference": state,
         }
 
+    def record_user_signals(
+        self,
+        items: Iterable[UserSignalInput],
+        *,
+        recompute: bool = True,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        created = 0
+        existing_count = 0
+        subject_keys: set[str] = set()
+        with closing(self._connect()) as connection, connection:
+            for item in items:
+                signal_id = _stable_id("sig", item.event_key)
+                observed_at = _iso(item.observed_at) or _now()
+                eligible_actor = item.actor not in {ObservationActor.AGENT, ObservationActor.SCHEDULED}
+                eligible = bool(item.preference_evidence and eligible_actor)
+                effective_weight = min(float(item.weight), _EVIDENCE_WEIGHT_CAPS[item.evidence_class.value])
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO user_signals (
+                        id, entity_id, signal_type, value, weight, actor, source_id,
+                        observation_id, observed_at, metadata_json, created_at,
+                        subject_key, category, evidence_class, eligible, event_key,
+                        sensitivity
+                    ) VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        signal_id,
+                        item.signal_type,
+                        float(item.value),
+                        effective_weight,
+                        item.actor.value,
+                        item.source_id,
+                        item.observation_id,
+                        observed_at,
+                        _json(item.metadata),
+                        _now(),
+                        item.subject_key,
+                        item.category,
+                        item.evidence_class.value,
+                        int(eligible),
+                        item.event_key,
+                        item.sensitivity.value,
+                    ),
+                )
+                subject_keys.add(item.subject_key)
+                if int(cursor.rowcount) > 0:
+                    created += 1
+                else:
+                    existing_count += 1
+
+        recomputed = 0
+        if recompute:
+            for subject_key in sorted(subject_keys):
+                if self.recompute_preference(subject_key, now=now) is not None:
+                    recomputed += 1
+        return {
+            "created": created,
+            "existing": existing_count,
+            "subjects_recomputed": recomputed,
+        }
+
     def upsert_content_annotation(
         self,
         item: ContentAnnotationInput,
@@ -945,12 +1007,26 @@ class KnowledgeStore:
             else float("inf")
         )
 
+        category = str(signals[-1]["category"])
         comparison_recent = recent if recent is not None else 0.0
         comparison_prior = prior if prior is not None else historical_peak
         delta = comparison_recent - comparison_prior
-        if delta >= 0.15:
+        recent_positive = sum(1 for item in recent_items if float(item["value"]) >= 0.35)
+        prior_positive = sum(1 for item in prior_items if float(item["value"]) >= 0.35)
+        prior_rate_per_30d = prior_positive / 5.0
+        volume_falling = (
+            category in {"youtube_channel", "youtube_search_theme"}
+            and prior_positive >= 5
+            and recent_positive <= prior_rate_per_30d * 0.5
+        )
+        volume_rising = (
+            category in {"youtube_channel", "youtube_search_theme"}
+            and prior_positive >= 5
+            and recent_positive >= max(3.0, prior_rate_per_30d * 1.5)
+        )
+        if delta >= 0.15 or volume_rising:
             trend = "rising"
-        elif delta <= -0.15 or (days_since_meaningful > 30 and historical_peak >= 0.5):
+        elif delta <= -0.15 or volume_falling or (days_since_meaningful > 30 and historical_peak >= 0.5):
             trend = "falling"
         else:
             trend = "stable"
@@ -969,7 +1045,6 @@ class KnowledgeStore:
             lifecycle = "occasional"
 
         confidence = max(0.0, min(1.0, (1.0 - math.exp(-len(signals) / 5.0)) * freshness))
-        category = str(signals[-1]["category"])
         windows = {
             "recent_30d": {"average": recent, "count": len(recent_items)},
             "prior_30_to_180d": {"average": prior, "count": len(prior_items)},
@@ -1023,6 +1098,19 @@ class KnowledgeStore:
             ).fetchone()
         return self._preference_row(row) if row is not None else None
 
+    def count_preferences(self, *, category: str = "") -> int:
+        params: list[Any] = []
+        where = ""
+        if category:
+            where = "WHERE category = ?"
+            params.append(category)
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                f"SELECT COUNT(*) AS total FROM preference_states {where}",
+                params,
+            ).fetchone()
+        return int(row["total"] if row is not None else 0)
+
     def list_preferences(self, *, category: str = "", limit: int = 100) -> list[dict[str, Any]]:
         params: list[Any] = []
         where = ""
@@ -1036,6 +1124,137 @@ class KnowledgeStore:
                 params,
             ).fetchall()
         return [self._preference_row(row) for row in rows]
+
+    def list_ranked_preferences(
+        self,
+        *,
+        category: str,
+        limit: int = 100,
+        trend: str = "",
+    ) -> list[dict[str, Any]]:
+        bounded_limit = max(1, min(int(limit), 500))
+        clauses = ["category = ?"]
+        params: list[Any] = [category]
+        if trend:
+            clauses.append("trend = ?")
+            params.append(trend)
+        params.append(bounded_limit)
+        order = (
+            "evidence_count DESC, confidence DESC, current_score DESC"
+            if trend == "falling"
+            else "current_score DESC, confidence DESC, evidence_count DESC"
+        )
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM preference_states
+                WHERE {" AND ".join(clauses)}
+                ORDER BY {order}
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return [self._preference_row(row) for row in rows]
+
+    def preferences_for_subjects(
+        self,
+        subject_keys: Iterable[str],
+    ) -> list[dict[str, Any]]:
+        keys = list(dict.fromkeys(str(key) for key in subject_keys if str(key)))
+        if not keys:
+            return []
+        if len(keys) > 500:
+            raise ValueError("preferences_for_subjects accepts at most 500 subject keys")
+        placeholders = ", ".join("?" for _ in keys)
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"SELECT * FROM preference_states WHERE subject_key IN ({placeholders})",
+                keys,
+            ).fetchall()
+        return [self._preference_row(row) for row in rows]
+
+    def search_latest_signal_metadata(
+        self,
+        *,
+        category: str,
+        query_terms: Iterable[str],
+        limit: int = 100,
+    ) -> dict[str, dict[str, Any]]:
+        terms = list(
+            dict.fromkeys(
+                str(term).casefold().strip()
+                for term in query_terms
+                if str(term).strip()
+            )
+        )
+        if not terms:
+            return {}
+        bounded_limit = max(1, min(int(limit), 500))
+        filters = " AND ".join("LOWER(metadata_json) LIKE ?" for _ in terms)
+        params: list[Any] = [category]
+        params.extend(f"%{term}%" for term in terms)
+        params.append(bounded_limit)
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT subject_key, observed_at, metadata_json
+                FROM (
+                    SELECT
+                        subject_key,
+                        observed_at,
+                        metadata_json,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY subject_key
+                            ORDER BY observed_at DESC, id DESC
+                        ) AS row_number
+                    FROM user_signals
+                    WHERE category = ? AND eligible = 1 AND {filters}
+                )
+                WHERE row_number = 1
+                ORDER BY observed_at DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        return {
+            str(row["subject_key"]): {
+                "observed_at": str(row["observed_at"] or ""),
+                "metadata": json.loads(str(row["metadata_json"] or "{}")),
+            }
+            for row in rows
+        }
+
+    def latest_signal_metadata(
+        self,
+        subject_keys: Iterable[str],
+    ) -> dict[str, dict[str, Any]]:
+        keys = list(dict.fromkeys(str(key) for key in subject_keys if str(key)))
+        if not keys:
+            return {}
+        if len(keys) > 500:
+            raise ValueError("latest_signal_metadata accepts at most 500 subject keys")
+        placeholders = ", ".join("?" for _ in keys)
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT subject_key, observed_at, metadata_json
+                FROM user_signals
+                WHERE eligible = 1 AND subject_key IN ({placeholders})
+                ORDER BY subject_key ASC, observed_at DESC, id DESC
+                """,
+                keys,
+            ).fetchall()
+        latest: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            subject_key = str(row["subject_key"])
+            if subject_key in latest:
+                continue
+            latest[subject_key] = {
+                "observed_at": str(row["observed_at"] or ""),
+                "metadata": json.loads(str(row["metadata_json"] or "{}")),
+            }
+        return latest
 
     @staticmethod
     def _preference_row(row: sqlite3.Row) -> dict[str, Any]:
