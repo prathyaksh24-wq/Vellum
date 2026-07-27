@@ -1,5 +1,19 @@
 {
   "skills": {
+    "codex": {
+      "content_hash": "55fb4e9fda405a12c4f370d3a7dba52303a2fa9d494be721b7839fe8516625f1",
+      "description": "Use Codex safely for repo-aware coding with explicit approvals, sandbox choices, MCP boundaries, and PR-ready verification workflows.",
+      "identifier": "clawhub/codex",
+      "install_path": "packages/community/codex",
+      "installed_at": "2026-07-19T01:47:14.019142+00:00",
+      "name": "codex",
+      "repository_url": null,
+      "scan_verdict": "safe",
+      "source": "clawhub",
+      "source_path": null,
+      "source_ref": null,
+      "trust_level": "community"
+    },
     "nano-pdf": {
       "content_hash": "5a4f4a23df594787fc0be68a0dd7fdcdf931729cb9d0b8b742e210db5db8134d",
       "description": "Edit PDFs with natural-language instructions using the nano-pdf CLI.",
