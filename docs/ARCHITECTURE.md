@@ -124,6 +124,12 @@ Plugins are exposed as capability-owned feature surfaces. Current plugin areas i
 
 The frontend should discover plugin availability through the capability contract and plugin endpoints rather than assuming all plugin routes are available.
 
+`PluginRegistry` merges portable manifests, installed OpenAI/Codex bundles,
+the local Matt Pocock suite, and configured MCP status into one catalog. It owns
+enablement and exposes each plugin's apps, MCP connectors, tools, capabilities,
+and Hermes skills. `SkillRegistry` remains the only procedural-skill discovery
+authority and receives enabled plugin-owned roots as read-only sources.
+
 ## Skills System
 
 Procedural memory is stored as Hermes-compatible `SKILL.md` packages under the `.skills/` tree. The package tree is canonical; catalog databases are rebuildable projections.

@@ -116,6 +116,7 @@ class SkillPackage(BaseModel):
     body: str
     state: Literal["active", "proposed", "retired", "archived"] = "active"
     source_root: Path
+    owner_plugin: str | None = None
     is_external: bool = False
 
 
@@ -127,6 +128,7 @@ class SkillIndexEntry(BaseModel):
     available: bool
     unavailable_reason: str | None = None
     package_root: str
+    owner_plugin: str | None = None
     is_external: bool
 
 

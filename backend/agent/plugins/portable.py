@@ -17,6 +17,10 @@ class PortablePluginManifest:
     version: str = "0.1.0"
     description: str = ""
     capabilities: list[str] = field(default_factory=list)
+    provides_tools: list[str] = field(default_factory=list)
+    apps: list[dict[str, Any]] = field(default_factory=list)
+    mcp_connectors: list[dict[str, Any]] = field(default_factory=list)
+    required: bool = False
     path: Path = Path()
 
 
@@ -145,6 +149,10 @@ def _read_manifest(path: Path) -> PortablePluginManifest:
         version=str(data.get("version") or "0.1.0"),
         description=str(data.get("description") or ""),
         capabilities=[str(item) for item in data.get("capabilities", [])],
+        provides_tools=[str(item) for item in data.get("provides_tools", [])],
+        apps=[dict(item) for item in data.get("apps", []) if isinstance(item, dict)],
+        mcp_connectors=[dict(item) for item in data.get("mcp_connectors", []) if isinstance(item, dict)],
+        required=_as_bool(data.get("required")),
         path=path.parent,
     )
 
@@ -183,3 +191,9 @@ def _parse_simple_yaml(path: Path) -> dict[str, Any]:
         else:
             data[key] = value.strip("'\"")
     return data
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}

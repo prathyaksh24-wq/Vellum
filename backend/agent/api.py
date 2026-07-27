@@ -79,6 +79,7 @@ from agent.obsidian.watcher import start_vault_watcher
 from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
+from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
 from agent.plugins.portable import discover_portable_plugins
 from agent.plugins.spotify_runtime import (
     SpotifyAuthError,
@@ -95,6 +96,7 @@ from agent.plugins.spotify_runtime import (
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.plugins.youtube_runtime import portable_youtube_status
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
+from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
@@ -142,6 +144,7 @@ SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback
 
 _project_context_singleton: ProjectContext | None = None
 _skill_surface_singleton: SkillSurfaceService | None = None
+_plugin_registry_singleton: PluginRegistry | None = None
 
 
 def _context_vault_root() -> Path:
@@ -156,6 +159,13 @@ def _project_context() -> ProjectContext:
     return _project_context_singleton
 
 
+def _plugin_registry() -> PluginRegistry:
+    global _plugin_registry_singleton
+    if _plugin_registry_singleton is None:
+        _plugin_registry_singleton = get_plugin_registry()
+    return _plugin_registry_singleton
+
+
 def _skill_surface() -> SkillSurfaceService:
     global _skill_surface_singleton
     if _skill_surface_singleton is None:
@@ -163,6 +173,7 @@ def _skill_surface() -> SkillSurfaceService:
             REPO_ROOT / ".skills",
             logs_root=REPO_ROOT / "data" / "logs" / "curator",
             sources=create_skill_source_router(skills_root=REPO_ROOT / ".skills"),
+            owned_external_dirs=_plugin_registry().skill_roots(),
         )
     return _skill_surface_singleton
 
@@ -4675,12 +4686,27 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
     }
 
 
+class PluginStateRequest(BaseModel):
+    enabled: bool
+
+
 @router.get("/plugins")
 async def list_plugins() -> dict[str, Any]:
     health_result = mcp_health(probe=False)
     if inspect.isawaitable(health_result):
         health_result = await health_result
     servers = health_result.get("mcp_servers", []) if isinstance(health_result, dict) else []
+    runtime_statuses = [
+        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
+        agent_reach_plugin_status().model_dump(),
+        portable_spotify_status(),
+    ]
+    return {
+        "plugins": _plugin_registry().catalog(
+            runtime_statuses=runtime_statuses,
+            mcp_servers=servers,
+        )
+    }
     plugins = [
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
@@ -4722,6 +4748,24 @@ def _attach_portable_plugin_metadata(plugins: list[dict[str, Any]]) -> None:
             "path": manifest.path.as_posix(),
             "capabilities": list(manifest.capabilities),
         }
+
+
+@router.post("/plugins/{plugin_id}/state")
+async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[str, Any]:
+    global _skill_surface_singleton
+    try:
+        plugin = _plugin_registry().set_enabled(plugin_id, request.enabled)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown plugin: {plugin_id}") from exc
+    except PluginRegistryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    reset_skill_registry()
+    _skill_surface_singleton = None
+    agent_graph = importlib.import_module("agent.graph.agent")
+    agent_graph._prompt_skill_registry = None
+    async with _agent_runtime_lock:
+        await agent.aclose()
+    return {"ok": True, "plugin": plugin}
 
 
 @router.post("/settings/active-model", response_model=ActiveModelResponse)

@@ -2,6 +2,7 @@
   var client = window.VellumApi.client;
   window.VellumApi.plugins = {
     list: function () { return client.request("/api/plugins"); },
+    setEnabled: function (id, enabled) { return client.request("/api/plugins/" + encodeURIComponent(id) + "/state", client.jsonOptions("POST", {enabled:!!enabled})); },
     skills: function () { return client.request("/api/skills"); },
     skillsOverview: function (signal) { return client.request("/api/skills/v2/overview", { signal: signal }); },
     skillsCatalog: function (params, signal) {

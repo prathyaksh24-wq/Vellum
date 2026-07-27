@@ -6024,10 +6024,12 @@ const CONNECTOR_STATUS_LABELS = {
   missing_twitter_cli: 'Install twitter-cli',
   not_authenticated: 'Authenticate X',
   error: 'Error',
+  disabled: 'Disabled',
   off: 'Not configured',
 };
 function connectorStatus(app){
   if (!app) return 'off';
+  if (app.enabled === false) return 'disabled';
   if (app.status) return app.status;
   return app.state === 'ready' || app.configured ? 'ready' : 'off';
 }
@@ -6042,11 +6044,31 @@ function connectorSetupNote(app){
 }
 const BackendConnectorsView = ({apps = []}) => {
   const [query, setQuery] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [busyPlugin, setBusyPlugin] = useState('');
+  const [pluginError, setPluginError] = useState('');
+  const togglePlugin = async app => {
+    if (!app.manageable || app.required || busyPlugin) return;
+    setBusyPlugin(app.id);
+    setPluginError('');
+    try {
+      const result = await API.plugins.setEnabled(app.id, !app.enabled);
+      Object.assign(app, result.plugin || {});
+      setRevision(value => value + 1);
+    } catch (error) {
+      setPluginError((error && error.message) || 'Plugin state could not be updated.');
+    } finally {
+      setBusyPlugin('');
+    }
+  };
   const rows = (apps || []).map(a => ({
     ...a,
     type: a.type || (a.id === 'agent-reach' ? 'connector' : 'mcp'),
     category: a.category || (a.id === 'agent-reach' ? 'Connectors' : 'MCP'),
     capabilities: Array.isArray(a.capabilities) ? a.capabilities : [],
+    apps: Array.isArray(a.apps) ? a.apps : [],
+    mcp_connectors: Array.isArray(a.mcp_connectors) ? a.mcp_connectors : [],
+    skills: Array.isArray(a.skills) ? a.skills : [],
   })).filter(a => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
@@ -6060,10 +6082,11 @@ const BackendConnectorsView = ({apps = []}) => {
           <span className="page-head-ic"><IcPlugins/></span>
           <div style={{flex: 1}}>
             <div className="page-title">Plugins</div>
-            <div className="page-sub">Live connector, MCP, and system plugin status from the Vellum backend.</div>
+            <div className="page-sub">Live apps, MCP connectors, system plugins, tools, and Hermes skills from the Vellum backend.</div>
           </div>
           <span className="cu-pill">{ready}/{rows.length} ready</span>
         </div>
+        {pluginError && <div className="set-note" style={{color:'var(--danger)'}}>{pluginError}</div>}
         <div className="conn-toolbar">
           <div className="conn-search"><IcSearch size={15}/><input placeholder="Search connectors, MCP tools, and capabilities" value={query} onChange={e => setQuery(e.target.value)}/></div>
         </div>
@@ -6078,10 +6101,16 @@ const BackendConnectorsView = ({apps = []}) => {
                   <span className="conn-ic"><ConnLogo c={app} size={20}/></span>
                   <div className="conn-card-head">
                     <div className="conn-name">{app.name || app.id}<span className={'conn-trust ' + (readyState ? 'verified' : st === 'error' ? 'unverified' : 'community')}><IcShield size={11}/>{statusText}</span></div>
-                    <div className="conn-meta">{app.category} · {app.type} · {app.id}</div>
+                    <div className="conn-meta">{app.category} · {app.developer || app.type} · {app.id}</div>
                   </div>
+                  {app.manageable && <button className="btn" disabled={app.required || busyPlugin === app.id} onClick={() => togglePlugin(app)}>{app.required ? 'Required' : app.enabled === false ? 'Enable' : 'Disable'}</button>}
                 </div>
                 <div className="conn-desc">{connectorSetupNote(app)}</div>
+                <div className="conn-tools">
+                  {app.apps.map(item => <span key={'app-'+(item.name||item.id)} className="conn-tool">App: {item.name || item.id}</span>)}
+                  {app.mcp_connectors.map(item => <span key={'mcp-'+(item.name||item.id)} className="conn-tool">MCP: {item.name || item.id}</span>)}
+                  {app.skills.map(item => <span key={'skill-'+(item.id||item.name)} className="conn-tool">Skill: {item.name || item.id}</span>)}
+                </div>
                 <div className="conn-tools">
                   {app.capabilities.length ? app.capabilities.slice(0, 8).map(t => <span key={t} className="conn-tool">{t}</span>) : <span className="conn-tool">No capabilities reported</span>}
                   {app.capabilities.length > 8 && <span className="conn-tool more">+{app.capabilities.length - 8}</span>}
