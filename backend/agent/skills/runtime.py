@@ -4,6 +4,7 @@ from functools import lru_cache
 import os
 from pathlib import Path
 
+from agent.plugins.registry import get_plugin_registry
 from agent.skills.registry import SkillRegistry
 from agent.skills.configuration import SkillConfigStore
 
@@ -52,9 +53,11 @@ CORE_TOOLSETS = {"browser", "filesystem", "github", "memory", "skills", "termina
 def get_skill_registry() -> SkillRegistry:
     config = SkillConfigStore(SKILLS_PATH / "config.yaml")
     external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
+    plugin_skill_roots = get_plugin_registry().skill_roots()
     return SkillRegistry(
         local_root=SKILLS_PATH / "packages",
         external_dirs=external_dirs,
+        owned_external_dirs=plugin_skill_roots,
         available_tools=set(CORE_TOOL_NAMES),
         available_toolsets=set(CORE_TOOLSETS),
     )
@@ -72,3 +75,7 @@ def build_skill_index_block(registry: SkillRegistry | None = None) -> str:
     for entry in entries:
         lines.append(f"- {entry.name} [{entry.category}]: {entry.description}")
     return "\n".join(lines)
+
+
+def reset_skill_registry() -> None:
+    get_skill_registry.cache_clear()

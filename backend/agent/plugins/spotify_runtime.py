@@ -13,6 +13,7 @@ from agent.plugins.portable import (
     PortableRegisteredTool,
     load_portable_plugin,
 )
+from agent.plugins.registry import get_plugin_registry
 from agent.privacy.classifier import RED_PATTERNS
 
 
@@ -103,6 +104,8 @@ def as_langchain_tool(record: PortableRegisteredTool) -> StructuredTool:
 
 
 def portable_agent_tools() -> list[StructuredTool]:
+    if not get_plugin_registry().is_enabled("spotify"):
+        return []
     if not spotify_is_authenticated():
         return []
     context = registered_spotify_context()

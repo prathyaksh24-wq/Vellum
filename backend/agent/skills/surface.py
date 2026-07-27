@@ -21,11 +21,18 @@ from agent.skills.hub import HubLockFile
 
 
 class SkillSurfaceService:
-    def __init__(self, root: str | Path, *, logs_root: str | Path, sources: list):
+    def __init__(
+        self,
+        root: str | Path,
+        *,
+        logs_root: str | Path,
+        sources: list,
+        owned_external_dirs: dict[str | Path, str] | None = None,
+    ):
         self.root = Path(root)
         config = SkillConfigStore(self.root / "config.yaml")
         external_dirs = [Path(os.path.expandvars(os.path.expanduser(str(path)))) for path in config.get_option("external_dirs", []) or []]
-        self.registry = SkillRegistry(local_root=self.root / "packages", external_dirs=external_dirs)
+        self.registry = SkillRegistry(local_root=self.root / "packages", external_dirs=external_dirs, owned_external_dirs=owned_external_dirs)
         self.manager = SkillManager(self.root)
         self.mutations = SkillMutationCoordinator(self.root)
         self.migrator = JsonSkillMigrator(self.root)
@@ -239,12 +246,15 @@ class SkillSurfaceService:
             "state": state,
             "category": package.metadata.metadata.hermes.category or package.root.parent.name,
             "origin": self._origin(package, usage),
+            "owner_plugin": package.owner_plugin,
             "pinned": bool(usage.get("pinned")),
             "created_by": usage.get("created_by"),
             "is_external": bool(package.is_external),
         }
 
     def _origin(self, package, usage: dict[str, Any]) -> str:
+        if package.owner_plugin:
+            return "plugin"
         if package.is_external:
             return "external"
         if HubLockFile(self.root).get(package.metadata.name) is not None:

@@ -4,6 +4,7 @@ type: system
 category: Memory
 version: 0.1.0
 description: Portable wrapper for Vellum's core memory orchestration system.
+required: true
 capabilities:
   - memory.status
   - memory.search

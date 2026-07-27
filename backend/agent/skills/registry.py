@@ -16,6 +16,7 @@ class SkillRegistry:
         *,
         local_root: str | Path,
         external_dirs: list[str | Path] | None = None,
+        owned_external_dirs: dict[str | Path, str] | None = None,
         parser: SkillPackageParser | None = None,
         platform_name: str | None = None,
         available_toolsets: set[str] | None = None,
@@ -23,6 +24,7 @@ class SkillRegistry:
     ):
         self.local_root = Path(local_root)
         self.external_dirs = [Path(path) for path in external_dirs or []]
+        self.owned_external_dirs = {Path(path): owner for path, owner in (owned_external_dirs or {}).items()}
         self.parser = parser or SkillPackageParser()
         detected = platform_name or _PLATFORM_MAP.get(platform.system().casefold(), platform.system().casefold())
         self.platform_name = detected.casefold()
@@ -46,6 +48,7 @@ class SkillRegistry:
                     available=available,
                     unavailable_reason=reason,
                     package_root=str(package.root),
+                    owner_plugin=package.owner_plugin,
                     is_external=package.is_external,
                 )
             )
@@ -71,9 +74,10 @@ class SkillRegistry:
     def _packages(self) -> dict[str, SkillPackage]:
         self._diagnostics = []
         packages: dict[str, SkillPackage] = {}
-        for root, is_external in [
-            *[(path, True) for path in self.external_dirs],
-            (self.local_root, False),
+        for root, is_external, owner_plugin in [
+            *[(path, True, None) for path in self.external_dirs],
+            *[(path, True, owner) for path, owner in self.owned_external_dirs.items()],
+            (self.local_root, False, None),
         ]:
             if not root.exists():
                 continue
@@ -85,6 +89,8 @@ class SkillRegistry:
                         source_root=root,
                         is_external=is_external,
                     )
+                    if owner_plugin:
+                        package = package.model_copy(update={"owner_plugin": owner_plugin})
                 except SkillPackageError as exc:
                     self._diagnostics.append({"path": str(package_root), "error": str(exc)})
                     continue

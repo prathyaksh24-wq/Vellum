@@ -48,6 +48,20 @@ run before approval. The inspected bundle hash is pinned, so changed upstream co
 invalidates approval. Skill details expose the actual `SKILL.md`, verified repository
 URL, source ref, support files, and scan findings.
 
+## Plugin ownership
+
+`PluginRegistry` is the canonical owner for portable Vellum plugins, installed
+OpenAI/Codex plugin bundles, the Matt Pocock engineering skill bundle, and
+configured MCP connector records. A plugin catalog record contains its apps,
+MCP connectors, tools, capabilities, and owned Hermes skills.
+
+OpenAI/Codex cache directories and the Matt Pocock source directory are read-only
+adapters. Their `SKILL.md` packages are loaded by the existing `SkillRegistry`;
+they are not copied into a parallel store. Disabling a manageable plugin removes
+its owned roots from skill discovery and its portable tools from the next agent
+runtime build. Required system plugins cannot be disabled. Enablement state is
+local metadata under `data/plugins/state.json` and never contains credentials.
+
 ## Intentional Hermes divergences
 
 - Write approval defaults on.
