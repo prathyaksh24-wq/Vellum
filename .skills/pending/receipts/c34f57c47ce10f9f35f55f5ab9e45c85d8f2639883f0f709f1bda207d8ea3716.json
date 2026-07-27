@@ -1,0 +1,23 @@
+{
+  "completed_at": "2026-07-19T01:47:14.700471+00:00",
+  "id": "e9cd246f31b646e392c3f3a58acde40b",
+  "idempotency_key": "768fa6ddedeb1c1ee27d2cc65f71048d8441b61dc16fa2d235f43cb9f37b0b51",
+  "result": {
+    "content_hash": "55fb4e9fda405a12c4f370d3a7dba52303a2fa9d494be721b7839fe8516625f1",
+    "description": "Use Codex safely for repo-aware coding with explicit approvals, sandbox choices, MCP boundaries, and PR-ready verification workflows.",
+    "id": "e9cd246f31b646e392c3f3a58acde40b",
+    "idempotency_key": "768fa6ddedeb1c1ee27d2cc65f71048d8441b61dc16fa2d235f43cb9f37b0b51",
+    "identifier": "clawhub/codex",
+    "install_path": "packages/community/codex",
+    "installed_at": "2026-07-19T01:47:14.019142+00:00",
+    "name": "codex",
+    "ok": true,
+    "repository_url": null,
+    "scan_verdict": "safe",
+    "source": "clawhub",
+    "source_path": null,
+    "source_ref": null,
+    "status": "applied",
+    "trust_level": "community"
+  }
+}

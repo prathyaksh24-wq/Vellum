@@ -1,0 +1,12 @@
+{
+  "completed_at": "2026-07-19T01:46:15.511014+00:00",
+  "id": "9c3182a922124a0e91a49859da27aa21",
+  "idempotency_key": "2391c13b9c6faf9702a25a3fa744152c9eeb1907b106e5470900f7e1e60845a7",
+  "result": {
+    "action": "reject",
+    "id": "9c3182a922124a0e91a49859da27aa21",
+    "name": "code",
+    "ok": true,
+    "status": "rejected"
+  }
+}
