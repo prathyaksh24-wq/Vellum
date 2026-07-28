@@ -9,6 +9,16 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert settings.filesystem_mcp_path.is_relative_to(settings.obsidian_vault_path)
     assert settings.zdr_only is True
     assert settings.enable_pii_scrubbing is True
+    assert settings.privacy_mode == "protect_for_me"
+    assert settings.privacy_receipt_path.is_absolute()
+    assert settings.privacy_receipt_path.name == "privacy-receipts.jsonl"
+    assert settings.reviewed_openrouter_providers == (
+        "Fireworks",
+        "Together",
+        "DeepInfra",
+    )
+    assert settings.primary_model in settings.reviewed_openrouter_models
+    assert settings.cloud_escalation_model in settings.reviewed_openrouter_models
     assert 0 <= settings.min_retrieval_score <= 1
     assert settings.fast_model == "google/gemma-3-12b-it"
     assert settings.fast_model != "google/gemma-4-12b-it"

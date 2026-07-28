@@ -28,10 +28,15 @@ class Settings:
         self.llm_routing_max_targets = 4
         self.llm_routing_max_transient_retries = 2
         self.openrouter_base_url = "https://openrouter.test/v1"
-        self.openai_base_url = "https://openai.test/v1"
+        self.primary_model = "google/test"
         self.fallback_model = ""
+        self.fast_model = "google/test"
+        self.cloud_escalation_model = "google/test"
         self.openrouter_api_key = "or-secret"
-        self.openai_api_key = "oa-secret"
+        self.privacy_mode = "protect_for_me"
+        self.privacy_receipt_path = path.parent / "privacy-receipts.jsonl"
+        self.reviewed_openrouter_providers = ("Fireworks", "Together", "DeepInfra")
+        self.reviewed_openrouter_models = ("google/test",)
 
 
 def _tool_call(**kwargs):

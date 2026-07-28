@@ -175,6 +175,7 @@ class RoutingEngine:
                         )
                     model = adapter.build_model(
                         target=target,
+                        thread_id=thread_id,
                         secret=secret,
                         temperature=temperature,
                         policy=policy,
@@ -370,6 +371,7 @@ class RoutingEngine:
                         )
                     model = adapter.build_model(
                         target=target,
+                        thread_id=thread_id,
                         secret=secret,
                         temperature=temperature,
                         policy=policy,

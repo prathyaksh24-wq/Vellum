@@ -19,6 +19,11 @@ import httpx
 from agent.config import get_settings
 from agent.llm.routing.runtime import get_routing_runtime
 from agent.privacy.classifier import classify
+from agent.privacy.disclosure import (
+    DisclosureBroker,
+    DisclosureGrant,
+    ProtectionMode,
+)
 from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 
@@ -77,13 +82,14 @@ def _build_payload(
     session_id: str | None,
 ) -> dict[str, Any]:
     settings = get_settings()
+    reviewed_providers = list(settings.reviewed_openrouter_providers)
     provider: dict[str, Any] = {
         "data_collection": "deny",
-        "order": ["Fireworks", "Together", "DeepInfra"],
+        "only": reviewed_providers,
+        "order": reviewed_providers,
         "allow_fallbacks": True,
+        "zdr": True,
     }
-    if settings.zdr_only:
-        provider["zdr"] = True
 
     payload: dict[str, Any] = {
         "model": model,
@@ -158,27 +164,47 @@ async def _request_once(
     max_tokens: int,
     temperature: float,
     session_id: str | None,
+    broker: DisclosureBroker,
+    privacy_mode: ProtectionMode | str | None,
+    disclosure_grant: DisclosureGrant | None,
+    disclosure_purpose: str,
 ) -> str:
     settings = get_settings()
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+    prepared = broker.prepare_messages(
+        [SystemMessage(content=system), HumanMessage(content=user)],
+        destination="openrouter",
+        model=model,
+        purpose=disclosure_purpose,
+        thread_id=session_id or "background",
+        mode=privacy_mode,
+        grant=disclosure_grant,
+    )
     payload = _build_payload(
-        system=system,
-        user=user,
+        system=str(prepared.messages[0].content),
+        user=str(prepared.messages[1].content),
         model=model,
         max_tokens=max_tokens,
         temperature=temperature,
         session_id=session_id,
     )
-    response = await client.post(
-        _chat_url(settings.openrouter_base_url),
-        headers=_headers(settings.openrouter_api_key),
-        json=payload,
-    )
     try:
+        response = await client.post(
+            _chat_url(settings.openrouter_base_url),
+            headers=_headers(settings.openrouter_api_key),
+            json=payload,
+        )
         response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        raise OpenRouterError(_http_error_message(exc)) from exc
-    data = response.json()
-    answer = _extract_answer(data)
+        data = response.json()
+        answer = _extract_answer(data)
+    except BaseException as exc:
+        broker.complete(prepared, outcome="failed")
+        if isinstance(exc, httpx.HTTPStatusError):
+            raise OpenRouterError(_http_error_message(exc)) from exc
+        raise
+    broker.complete(prepared, outcome="success")
+    answer = str(prepared.restore_message(AIMessage(content=answer)).content)
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else None
     _audit(
         thread_id=session_id or "background",
@@ -214,6 +240,10 @@ async def openrouter_chat(
     temperature: float = 0.3,
     session_id: str | None = None,
     client: httpx.AsyncClient | None = None,
+    broker: DisclosureBroker | None = None,
+    privacy_mode: ProtectionMode | str | None = None,
+    disclosure_grant: DisclosureGrant | None = None,
+    disclosure_purpose: str = "chat",
 ) -> str:
     settings = get_settings()
     primary_model = model_override or settings.primary_model
@@ -231,67 +261,71 @@ async def openrouter_chat(
             temperature=temperature,
             max_tokens=max_tokens,
             thread_id=session_id or "background",
+            privacy_mode=privacy_mode,
+            disclosure_grant=disclosure_grant,
+            disclosure_purpose=disclosure_purpose,
         )
         answer = getattr(result, "content", None)
         if not isinstance(answer, str) or not answer.strip():
             raise OpenRouterError("Routed model returned an empty answer.")
         return answer.strip()
 
-    owns_client = client is None
-    if client is None:
-        client = httpx.AsyncClient(timeout=90.0)
-
+    broker = broker or get_routing_runtime().broker
     try:
         try:
-            try:
-                return await _request_once(
-                    client=client,
-                    system=system,
-                    user=user,
-                    model=primary_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    session_id=session_id,
-                )
-            except (httpx.HTTPError, OpenRouterError) as exc:
-                if primary_model == fallback_model:
-                    raise
-                logger.warning(
-                    "OpenRouter model '%s' failed; trying fallback '%s': %s",
-                    primary_model,
-                    fallback_model,
-                    exc,
-                )
-                return await _request_once(
-                    client=client,
-                    system=system,
-                    user=user,
-                    model=fallback_model,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    session_id=session_id,
-                )
-        except asyncio.CancelledError:
-            TurnAudit(
-                thread_id=session_id or "background",
+            return await _request_once(
+                client=client,
+                system=system,
+                user=user,
                 model=primary_model,
-                provider="openrouter",
-                privacy_class=classify(user)[0].value,
-                path=AUDIT_LOG,
-            ).finalize("cancelled")
-            raise
-        except Exception:
-            TurnAudit(
-                thread_id=session_id or "background",
-                model=primary_model,
-                provider="openrouter",
-                privacy_class=classify(user)[0].value,
-                path=AUDIT_LOG,
-            ).finalize("failed")
-            raise
-    finally:
-        if owns_client:
-            await client.aclose()
+                max_tokens=max_tokens,
+                temperature=temperature,
+                session_id=session_id,
+                broker=broker,
+                privacy_mode=privacy_mode,
+                disclosure_grant=disclosure_grant,
+                disclosure_purpose=disclosure_purpose,
+            )
+        except (httpx.HTTPError, OpenRouterError) as exc:
+            if primary_model == fallback_model:
+                raise
+            logger.warning(
+                "OpenRouter model '%s' failed; trying fallback '%s': %s",
+                primary_model,
+                fallback_model,
+                exc,
+            )
+            return await _request_once(
+                client=client,
+                system=system,
+                user=user,
+                model=fallback_model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                session_id=session_id,
+                broker=broker,
+                privacy_mode=privacy_mode,
+                disclosure_grant=disclosure_grant,
+                disclosure_purpose=disclosure_purpose,
+            )
+    except asyncio.CancelledError:
+        TurnAudit(
+            thread_id=session_id or "background",
+            model=primary_model,
+            provider="openrouter",
+            privacy_class=classify(user)[0].value,
+            path=AUDIT_LOG,
+        ).finalize("cancelled")
+        raise
+    except Exception:
+        TurnAudit(
+            thread_id=session_id or "background",
+            model=primary_model,
+            provider="openrouter",
+            privacy_class=classify(user)[0].value,
+            path=AUDIT_LOG,
+        ).finalize("failed")
+        raise
 
 
 def openrouter_chat_sync(**kwargs: Any) -> str:

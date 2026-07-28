@@ -39,8 +39,9 @@ def test_openrouter_adapter_builds_effective_provider_body() -> None:
     assert model.openai_api_base == "https://openrouter.ai/api/v1"
     assert model.extra_body["provider"] == {
         "sort": "price",
+        "only": ["Fireworks", "DeepInfra"],
         "ignore": ["Together"],
-        "order": ["Fireworks", "Together", "DeepInfra"],
+        "order": ["Fireworks", "DeepInfra"],
         "require_parameters": True,
         "data_collection": "deny",
         "zdr": True,

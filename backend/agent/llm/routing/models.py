@@ -95,7 +95,12 @@ class ProviderRoutingPolicy(BaseModel):
             value = getattr(self, field)
             if value is not None and value != []:
                 body[field] = value
-        body.setdefault("order", list(OPENROUTER_DEFAULT_PROVIDER_ORDER))
+        ignored = _normalized_names(self.ignore)
+        body.setdefault(
+            "only",
+            [value for value in OPENROUTER_DEFAULT_PROVIDER_ORDER if value.casefold() not in ignored],
+        )
+        body.setdefault("order", list(body["only"]))
         body["data_collection"] = "deny"
         body["zdr"] = True
         return body
@@ -211,6 +216,48 @@ def merge_policy(
     values = base.model_dump()
     if override is not None:
         values.update(override.model_dump(exclude_unset=True))
+    values["data_collection"] = "deny"
+    values["zdr"] = True
+    return ProviderRoutingPolicy(**values)
+
+def enforce_provider_allowlist(
+    policy: ProviderRoutingPolicy,
+    reviewed_providers: list[str] | tuple[str, ...],
+) -> ProviderRoutingPolicy:
+    """Pin OpenRouter routing to a reviewed set without weakening other policy."""
+
+    reviewed = [value.strip() for value in reviewed_providers if value.strip()]
+    reviewed_by_key = {value.casefold(): value for value in reviewed}
+    if not reviewed_by_key:
+        raise ValueError("reviewed provider allowlist cannot be empty")
+    ignored = _normalized_names(policy.ignore)
+    requested = policy.only or [
+        value for value in reviewed if value.casefold() not in ignored
+    ]
+    if not requested:
+        raise ValueError("provider policy excludes every reviewed provider")
+    unreviewed = [
+        value for value in requested if value.casefold() not in reviewed_by_key
+    ]
+    if unreviewed:
+        raise ValueError(
+            "provider is outside the reviewed provider allowlist: "
+            + ", ".join(unreviewed)
+        )
+    values = policy.model_dump()
+    only = [reviewed_by_key[value.casefold()] for value in requested]
+    only_keys = _normalized_names(only)
+    requested_order = policy.order or only
+    unreviewed_order = [
+        value for value in requested_order if value.casefold() not in reviewed_by_key
+    ]
+    if unreviewed_order:
+        raise ValueError(
+            "provider order is outside the reviewed provider allowlist: "
+            + ", ".join(unreviewed_order)
+        )
+    values["only"] = only
+    values["order"] = [value for value in requested_order if value.casefold() in only_keys]
     values["data_collection"] = "deny"
     values["zdr"] = True
     return ProviderRoutingPolicy(**values)

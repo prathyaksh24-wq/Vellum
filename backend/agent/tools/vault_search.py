@@ -12,7 +12,6 @@ from langchain_core.tools import tool
 from agent.config import get_settings
 from agent.obsidian.folder_policy import can_send_to_llm, needs_scrubbing
 from agent.obsidian.vault import ObsidianVault
-from agent.privacy.classifier import DataClass, classify
 from agent.privacy.metadata_strip import strip_obsidian_metadata
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.rag.embedder import get_embedder
@@ -84,12 +83,6 @@ def search_my_notes(query: str) -> str:
 
     settings = _settings()
     scrubber = PrivacyScrubber()
-    data_class, reason = classify(query)
-    if data_class == DataClass.RED:
-        logger.warning("[TOOL:vault] Blocked RED query: %s", reason)
-        return f"Query blocked for privacy reasons: {reason}. Please rephrase without sensitive personal identifiers."
-
-    clean_query = scrubber.scrub(query)[0] if data_class == DataClass.YELLOW else query
     _LAST_CITATIONS.clear()
     _store_query(query)
 
@@ -98,23 +91,23 @@ def search_my_notes(query: str) -> str:
         try:
             results = get_vector_store().search(
                 collection="obsidian_vault",
-                embedding=get_embedder().embed(clean_query),
+                embedding=get_embedder().embed(query),
                 top_k=12,
                 score_threshold=0.40,
             )
         except Exception as exc:
             logger.warning("[TOOL:vault] Vector search unavailable; using vault fallback: %s", exc)
             vault = ObsidianVault(settings.obsidian_vault_path)
-            results = vault.search_notes(clean_query, limit=12)
+            results = vault.search_notes(query, limit=12)
     else:
         logger.info("[TOOL:vault] Vector search disabled; using vault fallback.")
         vault = ObsidianVault(settings.obsidian_vault_path)
-        results = vault.search_notes(clean_query, limit=12)
+        results = vault.search_notes(query, limit=12)
 
     if not results:
         return "No relevant notes found in vault for this query."
 
-    ranked = _rerank(clean_query, results)
+    ranked = _rerank(query, results)
     top_score = float(ranked[0][0]) if ranked else 0.0
     if top_score < settings.min_retrieval_score:
         return (

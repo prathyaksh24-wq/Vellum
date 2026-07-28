@@ -69,6 +69,23 @@ def test_parse_non_json_cloud_text_as_best_effort():
     assert parsed["lesson_for_vellum"]
 
 
+def test_cloud_model_uses_shared_disclosure_routing(monkeypatch):
+    captured = {}
+
+    def fake_openrouter_chat_sync(**kwargs):
+        captured.update(kwargs)
+        return '{"answer":"done"}'
+
+    monkeypatch.setattr(cloud_escalation, "openrouter_chat_sync", fake_openrouter_chat_sync)
+
+    parsed = cloud_escalation._call_cloud_model("task", "context", "public")
+
+    assert parsed["answer"] == "done"
+    assert captured["model_override"] == cloud_escalation.get_settings().cloud_escalation_model
+    assert captured["disclosure_purpose"] == "cloud_escalation"
+    assert captured["session_id"].startswith("cloud-escalation-")
+
+
 def test_escalate_to_cloud_blocks_private_without_approval():
     result = cloud_escalation.escalate_to_cloud.invoke(
         {"task": "Use my memory", "context": "Agent/Memories/private.md", "approval": False}

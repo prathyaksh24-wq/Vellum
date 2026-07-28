@@ -6,13 +6,21 @@ import os
 from typing import Any
 
 from agent.config import get_settings
-from agent.llm.routing.adapters import OpenAIAdapter, OpenRouterAdapter
+from agent.llm.routing.adapters import OpenRouterAdapter
 from agent.llm.routing.chat_model import RoutedChatModel
 from agent.llm.routing.engine import RoutingEngine
 from agent.llm.routing.models import FallbackTarget
 from agent.llm.routing.pool import CredentialPool
 from agent.llm.routing.secrets import KeyringBackend, SecretResolver
 from agent.llm.routing.store import RoutingStore
+from agent.privacy.disclosure import (
+    DestinationPolicy,
+    DisclosureBroker,
+    DisclosureModelAdapter,
+    DisclosurePolicy,
+    ProtectionMode,
+)
+
 
 
 @dataclass(frozen=True)
@@ -20,6 +28,7 @@ class RoutingRuntime:
     store: RoutingStore
     secrets: SecretResolver
     pool: CredentialPool
+    broker: DisclosureBroker
     engine: RoutingEngine
     chat_model: RoutedChatModel
 
@@ -44,12 +53,9 @@ def build_routing_runtime(
         service=settings.llm_routing_keyring_service,
         fingerprint_salt=fingerprint_salt,
     )
-    resolver.reconcile_environment(
-        {"openrouter": "OPENROUTER_API_KEY", "openai": "OPENAI_API_KEY"}
-    )
+    resolver.reconcile_environment({"openrouter": "OPENROUTER_API_KEY"})
     borrowed = {
         "openrouter": ("OPENROUTER_API_KEY", getattr(settings, "openrouter_api_key", None)),
-        "openai": ("OPENAI_API_KEY", getattr(settings, "openai_api_key", None)),
     }
     for provider, (variable, value) in borrowed.items():
         if value and not os.environ.get(variable):
@@ -61,19 +67,58 @@ def build_routing_runtime(
         )
 
     pool = CredentialPool(store)
+    approved_models = set(settings.reviewed_openrouter_models)
+    configured_models = {
+        model
+        for model in (
+            settings.primary_model,
+            settings.fallback_model,
+            settings.fast_model,
+            settings.cloud_escalation_model,
+        )
+        if model
+    }
+    unreviewed_models = configured_models - approved_models
+    if unreviewed_models:
+        raise ValueError(
+            "configured model is outside OPENROUTER_MODEL_ALLOWLIST: "
+            + ", ".join(sorted(unreviewed_models))
+        )
+    broker = DisclosureBroker(
+        policy=DisclosurePolicy(
+            mode=ProtectionMode(settings.privacy_mode),
+            receipt_path=settings.privacy_receipt_path,
+            destinations={
+                "openrouter": DestinationPolicy(
+                    name="openrouter",
+                    endpoint=settings.openrouter_base_url,
+                    approved_models=frozenset(approved_models),
+                    data_collection="deny",
+                    zdr=True,
+                    prompt_logging=False,
+                    response_caching=False,
+                )
+            },
+        )
+    )
     engine = RoutingEngine(
         store=store,
         pool=pool,
         secret_resolver=resolver,
         adapters={
-            "openrouter": OpenRouterAdapter(base_url=settings.openrouter_base_url),
-            "openai": OpenAIAdapter(base_url=settings.openai_base_url),
+            "openrouter": DisclosureModelAdapter(
+                adapter=OpenRouterAdapter(
+                    base_url=settings.openrouter_base_url,
+                    reviewed_providers=settings.reviewed_openrouter_providers,
+                ),
+                broker=broker,
+            ),
         },
         max_targets=settings.llm_routing_max_targets,
         max_transient_retries=settings.llm_routing_max_transient_retries,
     )
     chat_model = RoutedChatModel(engine=engine, primary_model_resolver=_active_model)
-    return RoutingRuntime(store, resolver, pool, engine, chat_model)
+    return RoutingRuntime(store, resolver, pool, broker, engine, chat_model)
 
 
 @lru_cache(maxsize=1)

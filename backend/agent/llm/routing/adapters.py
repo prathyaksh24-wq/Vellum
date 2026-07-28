@@ -5,10 +5,12 @@ from typing import Any
 import httpx
 
 from agent.llm.routing.models import (
+    OPENROUTER_DEFAULT_PROVIDER_ORDER,
     FailureKind,
     FallbackTarget,
     ProviderFailure,
     ProviderRoutingPolicy,
+    enforce_provider_allowlist,
 )
 
 
@@ -108,8 +110,14 @@ def classify_provider_exception(exc: BaseException) -> ProviderFailure:
 class OpenRouterAdapter:
     provider = "openrouter"
 
-    def __init__(self, *, base_url: str) -> None:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        reviewed_providers: tuple[str, ...] = OPENROUTER_DEFAULT_PROVIDER_ORDER,
+    ) -> None:
         self.base_url = base_url
+        self.reviewed_providers = reviewed_providers
 
     def build_model(
         self,
@@ -123,9 +131,13 @@ class OpenRouterAdapter:
     ):
         from langchain_openai import ChatOpenAI
 
-        effective = policy or ProviderRoutingPolicy(
-            require_parameters=True,
-            allow_fallbacks=True,
+        effective = enforce_provider_allowlist(
+            policy
+            or ProviderRoutingPolicy(
+                require_parameters=True,
+                allow_fallbacks=True,
+            ),
+            self.reviewed_providers,
         )
         return ChatOpenAI(
             model=target.model,

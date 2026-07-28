@@ -6,6 +6,37 @@ import pytest
 
 from agent.graph import agent as react_agent
 from agent.llm import openrouter
+from agent.privacy.disclosure import (
+    DestinationPolicy,
+    DisclosureBlocked,
+    DisclosureBroker,
+    DisclosurePolicy,
+    ProtectionMode,
+)
+
+
+def _client_broker(tmp_path):
+    settings = openrouter.get_settings()
+    return DisclosureBroker(
+        policy=DisclosurePolicy(
+            mode=ProtectionMode.protect_for_me,
+            receipt_path=tmp_path / "privacy-receipts.jsonl",
+            destinations={
+                "openrouter": DestinationPolicy(
+                    name="openrouter",
+                    endpoint=settings.openrouter_base_url,
+                    approved_models=frozenset(
+                        {"test/model", "primary/test", settings.fallback_model}
+                    ),
+                    data_collection="deny",
+                    zdr=True,
+                    prompt_logging=False,
+                    response_caching=False,
+                )
+            },
+        ),
+        alias_key=b"test-client-broker",
+    )
 
 
 def test_openrouter_payload_enforces_privacy_policy():
@@ -19,6 +50,7 @@ def test_openrouter_payload_enforces_privacy_policy():
     )
 
     assert payload["provider"]["data_collection"] == "deny"
+    assert payload["provider"]["only"] == ["Fireworks", "Together", "DeepInfra"]
     assert payload["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert payload["provider"]["zdr"] is True
     assert payload["stream"] is False
@@ -48,6 +80,7 @@ def test_openrouter_chat_posts_to_chat_completions_and_audits_metadata(tmp_path,
                 user="user text",
                 model_override="test/model",
                 client=client,
+                broker=_client_broker(tmp_path),
             )
 
     answer = asyncio.run(run_call())
@@ -56,6 +89,7 @@ def test_openrouter_chat_posts_to_chat_completions_and_audits_metadata(tmp_path,
     assert requests[0].url.path.endswith("/chat/completions")
     body = json.loads(requests[0].content)
     assert body["provider"]["data_collection"] == "deny"
+    assert body["provider"]["only"] == ["Fireworks", "Together", "DeepInfra"]
     assert body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
     assert body["provider"]["zdr"] is True
 
@@ -87,6 +121,7 @@ def test_openrouter_chat_uses_fallback_on_primary_http_error(monkeypatch, tmp_pa
                 user="user",
                 model_override="primary/test",
                 client=client,
+                broker=_client_broker(tmp_path),
             )
 
     answer = asyncio.run(run_call())
@@ -108,6 +143,7 @@ def test_openrouter_chat_audits_terminal_failure(tmp_path, monkeypatch):
                 user="user",
                 model_override="primary/test",
                 client=client,
+                broker=_client_broker(tmp_path),
             )
 
     with pytest.raises(openrouter.OpenRouterError):
@@ -116,6 +152,29 @@ def test_openrouter_chat_audits_terminal_failure(tmp_path, monkeypatch):
     audit = json.loads((tmp_path / "audit_log.jsonl").read_text(encoding="utf-8"))
     assert audit["outcome"] == "failed"
     assert audit["thread_id"] == "background"
+
+
+def test_injected_client_blocks_secrets_before_http(tmp_path):
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "no"}}]})
+
+    async def run_call():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await openrouter.openrouter_chat(
+                system="system",
+                user="Use api_key=super-secret-value",
+                model_override="test/model",
+                client=client,
+                broker=_client_broker(tmp_path),
+            )
+
+    with pytest.raises(DisclosureBlocked, match="sensitive content"):
+        asyncio.run(run_call())
+    assert requests == []
+
 
 def test_openrouter_chat_delegates_to_shared_runtime_without_injected_client(monkeypatch):
     captured = {}
@@ -141,6 +200,7 @@ def test_openrouter_chat_delegates_to_shared_runtime_without_injected_client(mon
         )
     )
 
+    assert captured["disclosure_purpose"] == "chat"
     assert answer == "routed answer"
     assert captured["primary_model"] == "primary/test"
     assert captured["thread_id"] == "thread-1"
