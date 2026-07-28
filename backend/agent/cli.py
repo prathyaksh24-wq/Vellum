@@ -197,6 +197,7 @@ async def chat_loop(
                 thread_id=thread_id,
                 model=settings.primary_model,
                 provider="openrouter",
+                privacy_class=classify(user_input)[0].value,
                 saved=True,
             )
 

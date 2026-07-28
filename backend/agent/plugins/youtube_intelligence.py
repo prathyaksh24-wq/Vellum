@@ -21,6 +21,7 @@ WATCH_ACTION = "youtube.watch"
 SEARCH_ACTION = "youtube.search"
 CHANNEL_CATEGORY = "youtube_channel"
 SEARCH_CATEGORY = "youtube_search_theme"
+MIN_SEARCH_THEME_EVIDENCE = 2
 PAGE_SIZE = 500
 
 SignalFactory = Callable[[dict[str, Any]], UserSignalInput | None]
@@ -38,6 +39,7 @@ class YouTubeIntelligenceService:
         created = 0
         existing = 0
         subjects: set[str] = set()
+        expected_event_keys: set[str] = set()
 
         for action, factory in (
             (WATCH_ACTION, self._channel_signal),
@@ -52,10 +54,17 @@ class YouTubeIntelligenceService:
                         continue
                     signals.append(signal)
                     subjects.add(signal.subject_key)
+                    expected_event_keys.add(signal.event_key)
                 result = self.store.record_user_signals(signals, recompute=False)
                 created += result["created"]
                 existing += result["existing"]
 
+        pruned = self.store.prune_user_signals(
+            event_key_prefix="youtube:intelligence:",
+            categories=(CHANNEL_CATEGORY, SEARCH_CATEGORY),
+            keep_event_keys=expected_event_keys,
+        )
+        subjects.update(pruned["subject_keys"])
         recomputed = 0
         for subject_key in sorted(subjects):
             if self.store.recompute_preference(subject_key, now=reference) is not None:
@@ -64,6 +73,7 @@ class YouTubeIntelligenceService:
             "observations_scanned": scanned,
             "signals_created": created,
             "signals_existing": existing,
+            "signals_removed": int(pruned["removed"]),
             "subjects_recomputed": recomputed,
         }
 
@@ -78,17 +88,26 @@ class YouTubeIntelligenceService:
         bounded_limit = max(1, min(int(limit), 100))
         query_terms = _query_terms(query)
         trend_filter = _trend_filter(query) if not query_terms else ""
-        channels = self._preference_items(
-            category=CHANNEL_CATEGORY,
-            limit=bounded_limit,
-            query_terms=query_terms,
-            trend_filter=trend_filter,
+        categories = _query_categories(query)
+        channels = (
+            self._preference_items(
+                category=CHANNEL_CATEGORY,
+                limit=bounded_limit,
+                query_terms=query_terms,
+                trend_filter=trend_filter,
+            )
+            if CHANNEL_CATEGORY in categories
+            else []
         )
-        search_themes = self._preference_items(
-            category=SEARCH_CATEGORY,
-            limit=bounded_limit,
-            query_terms=query_terms,
-            trend_filter=trend_filter,
+        search_themes = (
+            self._preference_items(
+                category=SEARCH_CATEGORY,
+                limit=bounded_limit,
+                query_terms=query_terms,
+                trend_filter=trend_filter,
+            )
+            if SEARCH_CATEGORY in categories
+            else []
         )
         projection_updated_at = max(
             [str(item["updated_at"]) for item in channels + search_themes],
@@ -101,7 +120,10 @@ class YouTubeIntelligenceService:
             "source": ORIGIN,
             "counts": {
                 "channels": self.store.count_preferences(category=CHANNEL_CATEGORY),
-                "search_themes": self.store.count_preferences(category=SEARCH_CATEGORY),
+                "search_themes": self.store.count_preferences(
+                    category=SEARCH_CATEGORY,
+                    min_evidence_count=MIN_SEARCH_THEME_EVIDENCE,
+                ),
             },
             "returned_counts": {
                 "channels": len(channels),
@@ -126,11 +148,22 @@ class YouTubeIntelligenceService:
                 limit=500,
             )
             states = self.store.preferences_for_subjects(evidence)
+            if category == SEARCH_CATEGORY:
+                states = [
+                    state
+                    for state in states
+                    if int(state["evidence_count"]) >= MIN_SEARCH_THEME_EVIDENCE
+                ]
         else:
             states = self.store.list_ranked_preferences(
                 category=category,
                 limit=limit,
                 trend=trend_filter,
+                min_evidence_count=(
+                    MIN_SEARCH_THEME_EVIDENCE
+                    if category == SEARCH_CATEGORY
+                    else 0
+                ),
             )
             evidence = self.store.latest_signal_metadata(
                 str(state["subject_key"]) for state in states
@@ -292,7 +325,8 @@ def _query_terms(value: str) -> set[str]:
     ignored = {
         "about", "changed", "change", "channel", "channels", "from",
         "gaining", "have", "interest", "interests", "losing", "more",
-        "search", "searched", "theme", "themes", "what", "which",
+        "repeat", "repeated", "repeatedly", "search", "searched", "theme",
+        "themes", "what", "which",
         "youtube",
     }
     return {
@@ -300,6 +334,17 @@ def _query_terms(value: str) -> set[str]:
         for term in re.findall(r"[a-z0-9]+", value.casefold())
         if len(term) > 3 and term not in ignored
     }
+
+
+def _query_categories(value: str) -> set[str]:
+    normalized = value.casefold()
+    asks_for_search = re.search(r"\bsearch(?:ed|es|ing)?\b", normalized) is not None
+    asks_for_channel = re.search(r"\bchannels?\b", normalized) is not None
+    if asks_for_search and not asks_for_channel:
+        return {SEARCH_CATEGORY}
+    if asks_for_channel and not asks_for_search:
+        return {CHANNEL_CATEGORY}
+    return {CHANNEL_CATEGORY, SEARCH_CATEGORY}
 
 
 def _trend_filter(value: str) -> str:

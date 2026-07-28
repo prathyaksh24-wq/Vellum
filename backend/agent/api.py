@@ -1644,6 +1644,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         thread_id=request.thread_id or get_settings().thread_id,
         model=request.model or get_settings().primary_model,
         provider="openrouter",
+        privacy_class=classify(request.message)[0].value,
         saved=request.store,
     )
     try:
@@ -2418,8 +2419,14 @@ def _sse(event: str, payload: dict[str, Any] | str) -> str:
 async def _audited_turn_stream(events: Any, audit: TurnAudit):
     outcome = "failed"
     tools_called: list[str] = []
+    terminal_error = False
     try:
         async for chunk in events:
+            if isinstance(chunk, str) and (
+                chunk.startswith("event: error")
+                or chunk.startswith("event: response.failed")
+            ):
+                terminal_error = True
             if isinstance(chunk, str) and (
                 chunk.startswith("event: token")
                 or chunk.startswith("event: assistant_delta")
@@ -2434,7 +2441,7 @@ async def _audited_turn_stream(events: Any, audit: TurnAudit):
                 except (StopIteration, TypeError, ValueError, json.JSONDecodeError):
                     pass
             yield chunk
-        outcome = "completed"
+        outcome = "failed" if terminal_error else "completed"
     except (asyncio.CancelledError, GeneratorExit):
         outcome = "cancelled"
         raise
@@ -3957,6 +3964,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         thread_id=active_thread_id,
         model=request.model or get_settings().primary_model,
         provider="openrouter",
+        privacy_class=classify(clean_message)[0].value,
         saved=request.store,
     )
 

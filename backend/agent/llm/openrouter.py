@@ -18,6 +18,7 @@ import httpx
 
 from agent.config import get_settings
 from agent.llm.routing.runtime import get_routing_runtime
+from agent.privacy.classifier import classify
 from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 
@@ -104,6 +105,7 @@ def _audit(
     *,
     thread_id: str,
     model: str,
+    privacy_class: str,
     prompt_len: int,
     response_len: int,
     usage: dict[str, Any] | None = None,
@@ -112,6 +114,7 @@ def _audit(
         thread_id=thread_id,
         model=model,
         provider="openrouter",
+        privacy_class=privacy_class,
         path=AUDIT_LOG,
         saved=False,
     )
@@ -180,6 +183,7 @@ async def _request_once(
     _audit(
         thread_id=session_id or "background",
         model=str(data.get("model") or model),
+        privacy_class=classify(user)[0].value,
         prompt_len=len(system) + len(user),
         response_len=len(answer),
         usage=usage,
@@ -272,6 +276,7 @@ async def openrouter_chat(
                 thread_id=session_id or "background",
                 model=primary_model,
                 provider="openrouter",
+                privacy_class=classify(user)[0].value,
                 path=AUDIT_LOG,
             ).finalize("cancelled")
             raise
@@ -280,6 +285,7 @@ async def openrouter_chat(
                 thread_id=session_id or "background",
                 model=primary_model,
                 provider="openrouter",
+                privacy_class=classify(user)[0].value,
                 path=AUDIT_LOG,
             ).finalize("failed")
             raise

@@ -67,6 +67,7 @@ def test_rebuild_creates_idempotent_channel_interest_snapshot(tmp_path: Path) ->
         "observations_scanned": 2,
         "signals_created": 2,
         "signals_existing": 0,
+        "signals_removed": 0,
         "subjects_recomputed": 1,
     }
     assert second["signals_created"] == 0
@@ -134,3 +135,34 @@ def test_snapshot_reads_labels_from_derived_signals_not_raw_observations(
     snapshot = intelligence.snapshot(now=now)
 
     assert snapshot["channels"][0]["label"] == "Derived Channel"
+
+
+def test_rebuild_removes_projection_state_for_deleted_observations(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    now = datetime(2026, 7, 23, tzinfo=UTC)
+    _watch(
+        store,
+        event="watch-deleted",
+        channel_id="UC-deleted",
+        channel_title="Deleted Channel",
+        observed_at=now - timedelta(days=1),
+    )
+    intelligence = YouTubeIntelligenceService(store)
+    intelligence.rebuild(now=now)
+
+    connection = store._connect()
+    try:
+        with connection:
+            connection.execute(
+                "DELETE FROM observations WHERE event_key = ?",
+                ("watch-deleted",),
+            )
+    finally:
+        connection.close()
+
+    rebuilt = intelligence.rebuild(now=now)
+    snapshot = intelligence.snapshot(now=now)
+
+    assert rebuilt["signals_removed"] == 1
+    assert snapshot["channels"] == []
+    assert snapshot["counts"]["channels"] == 0

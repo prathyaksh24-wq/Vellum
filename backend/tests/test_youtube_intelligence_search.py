@@ -35,6 +35,14 @@ def test_rebuild_groups_repeated_searches_as_local_search_themes(tmp_path: Path)
     assert result["signals_created"] == 4
     assert result["subjects_recomputed"] == 2
     assert snapshot["local_only"] is True
-    assert snapshot["search_themes"][0]["label"] == "Arsenal tactics"
+    assert [item["label"] for item in snapshot["search_themes"]] == ["Arsenal tactics"]
     assert snapshot["search_themes"][0]["evidence_count"] == 3
-    assert snapshot["search_themes"][0]["confidence"] > snapshot["search_themes"][1]["confidence"]
+    assert snapshot["counts"]["search_themes"] == 1
+
+    repeated = intelligence.snapshot(
+        now=now,
+        query="What do I repeatedly search on YouTube?",
+    )
+
+    assert repeated["channels"] == []
+    assert [item["label"] for item in repeated["search_themes"]] == ["Arsenal tactics"]

@@ -23,8 +23,8 @@ class TurnAudit:
     thread_id: str
     model: str
     provider: str
+    privacy_class: str
     path: Path = DEFAULT_AUDIT_LOG
-    privacy_class: str = "unknown"
     retrieval_confidence: float | None = None
     followup_detected: bool = False
     saved: bool = False

@@ -347,61 +347,8 @@ class YoutubeAgent:
                 confidence=1.0,
             )
 
-        lowered = query.casefold()
         channels = list(result.get("channels") or [])
         themes = list(result.get("search_themes") or [])
-        if "search" in lowered and "channel" not in lowered:
-            channels = []
-        elif "channel" in lowered and "search" not in lowered:
-            themes = []
-        if any(term in lowered for term in ("losing", "declining", "falling", "waning", "less interested")):
-            channels = [
-                item for item in channels
-                if item.get("trend") == "falling" or item.get("lifecycle") in {"waning", "dormant"}
-            ]
-        elif any(term in lowered for term in ("gaining", "rising", "more interested")):
-            channels = [
-                item for item in channels
-                if item.get("trend") == "rising" or item.get("lifecycle") == "active"
-            ]
-
-        query_terms = {
-            term
-            for term in re.findall(r"[a-z0-9]+", lowered)
-            if len(term) > 3
-            and term not in {
-                "youtube", "interest", "interests", "changed", "change", "which",
-                "channels", "channel", "losing", "gaining", "what", "have",
-            }
-        }
-        matched_channels = [
-            item for item in channels
-            if any(term in str(item.get("label") or "").casefold() for term in query_terms)
-        ]
-        matched_themes = [
-            item for item in themes
-            if any(term in str(item.get("label") or "").casefold() for term in query_terms)
-        ]
-        if matched_channels or matched_themes:
-            channels = matched_channels
-            themes = matched_themes
-        if len(query_terms) == 1:
-            exact_term = next(iter(query_terms))
-            exact_channels = [
-                item for item in channels
-                if " ".join(
-                    re.findall(r"[a-z0-9]+", str(item.get("label") or "").casefold())
-                ) == exact_term
-            ]
-            exact_themes = [
-                item for item in themes
-                if " ".join(
-                    re.findall(r"[a-z0-9]+", str(item.get("label") or "").casefold())
-                ) == exact_term
-            ]
-            if exact_channels or exact_themes:
-                channels = exact_channels
-                themes = exact_themes
 
         lines = []
         for item in channels[:10]:

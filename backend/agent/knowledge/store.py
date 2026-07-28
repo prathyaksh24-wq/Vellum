@@ -845,6 +845,45 @@ class KnowledgeStore:
             "subjects_recomputed": recomputed,
         }
 
+    def prune_user_signals(
+        self,
+        *,
+        event_key_prefix: str,
+        categories: Iterable[str],
+        keep_event_keys: Iterable[str],
+    ) -> dict[str, Any]:
+        """Remove derived signals in one owned namespace that are no longer canonical."""
+        prefix = str(event_key_prefix).strip()
+        if not prefix or "%" in prefix or "_" in prefix:
+            raise ValueError("event_key_prefix must be a non-empty literal prefix")
+        owned_categories = sorted({str(category).strip() for category in categories if str(category).strip()})
+        if not owned_categories:
+            raise ValueError("categories cannot be empty")
+        keep = {str(event_key) for event_key in keep_event_keys if str(event_key)}
+        placeholders = ", ".join("?" for _ in owned_categories)
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, event_key, subject_key
+                FROM user_signals
+                WHERE event_key LIKE ? AND category IN ({placeholders})
+                """,
+                [f"{prefix}%", *owned_categories],
+            ).fetchall()
+            stale = [row for row in rows if str(row["event_key"]) not in keep]
+            for offset in range(0, len(stale), 400):
+                batch = stale[offset:offset + 400]
+                ids = [str(row["id"]) for row in batch]
+                id_placeholders = ", ".join("?" for _ in ids)
+                connection.execute(
+                    f"DELETE FROM user_signals WHERE id IN ({id_placeholders})",
+                    ids,
+                )
+        return {
+            "removed": len(stale),
+            "subject_keys": sorted({str(row["subject_key"]) for row in stale}),
+        }
+
     def upsert_content_annotation(
         self,
         item: ContentAnnotationInput,
@@ -958,6 +997,11 @@ class KnowledgeStore:
                 (subject_key,),
             ).fetchall()
         if not rows:
+            with closing(self._connect()) as connection, connection:
+                connection.execute(
+                    "DELETE FROM preference_states WHERE subject_key = ?",
+                    (subject_key,),
+                )
             return None
 
         signals: list[dict[str, Any]] = []
@@ -971,6 +1015,11 @@ class KnowledgeStore:
             age_days = max(0.0, (reference - observed.astimezone(UTC)).total_seconds() / 86400.0)
             signals.append({**dict(row), "observed": observed.astimezone(UTC), "age_days": age_days})
         if not signals:
+            with closing(self._connect()) as connection, connection:
+                connection.execute(
+                    "DELETE FROM preference_states WHERE subject_key = ?",
+                    (subject_key,),
+                )
             return None
 
         def window(days_min: float, days_max: float) -> list[dict[str, Any]]:
@@ -1098,12 +1147,16 @@ class KnowledgeStore:
             ).fetchone()
         return self._preference_row(row) if row is not None else None
 
-    def count_preferences(self, *, category: str = "") -> int:
+    def count_preferences(self, *, category: str = "", min_evidence_count: int = 0) -> int:
+        clauses: list[str] = []
         params: list[Any] = []
-        where = ""
         if category:
-            where = "WHERE category = ?"
+            clauses.append("category = ?")
             params.append(category)
+        if min_evidence_count > 0:
+            clauses.append("evidence_count >= ?")
+            params.append(int(min_evidence_count))
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with closing(self._connect()) as connection, connection:
             row = connection.execute(
                 f"SELECT COUNT(*) AS total FROM preference_states {where}",
@@ -1131,6 +1184,7 @@ class KnowledgeStore:
         category: str,
         limit: int = 100,
         trend: str = "",
+        min_evidence_count: int = 0,
     ) -> list[dict[str, Any]]:
         bounded_limit = max(1, min(int(limit), 500))
         clauses = ["category = ?"]
@@ -1138,6 +1192,9 @@ class KnowledgeStore:
         if trend:
             clauses.append("trend = ?")
             params.append(trend)
+        if min_evidence_count > 0:
+            clauses.append("evidence_count >= ?")
+            params.append(int(min_evidence_count))
         params.append(bounded_limit)
         order = (
             "evidence_count DESC, confidence DESC, current_score DESC"
