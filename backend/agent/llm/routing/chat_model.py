@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -40,6 +40,23 @@ class RoutedChatModel(BaseChatModel):
                 "tool_binding_kwargs": binding_kwargs,
             },
             deep=False,
+        )
+
+    async def ainvoke(
+        self,
+        input: Any,
+        config: Mapping[str, Any] | None = None,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> AIMessage:
+        invoke_kwargs = dict(kwargs)
+        configurable = config.get("configurable", {}) if config is not None else {}
+        thread_id = configurable.get("thread_id") if isinstance(configurable, Mapping) else None
+        if thread_id and "thread_id" not in invoke_kwargs:
+            invoke_kwargs["thread_id"] = str(thread_id)
+        return await super().ainvoke(
+            input, config=config, stop=stop, **invoke_kwargs
         )
 
     async def _agenerate(
@@ -83,6 +100,24 @@ class RoutedChatModel(BaseChatModel):
                 )
             )
         raise RuntimeError("synchronous routed chat cannot run inside an active event loop")
+
+    async def astream(
+        self,
+        input: Any,
+        config: Mapping[str, Any] | None = None,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[AIMessageChunk]:
+        stream_kwargs = dict(kwargs)
+        configurable = config.get("configurable", {}) if config is not None else {}
+        thread_id = configurable.get("thread_id") if isinstance(configurable, Mapping) else None
+        if thread_id and "thread_id" not in stream_kwargs:
+            stream_kwargs["thread_id"] = str(thread_id)
+        async for chunk in super().astream(
+            input, config=config, stop=stop, **stream_kwargs
+        ):
+            yield chunk
 
     async def _astream(
         self,

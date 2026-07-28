@@ -208,10 +208,32 @@ def test_vault_search_falls_back_to_vault_when_vector_backend_unavailable(monkey
     assert "NBA fallback context" in result
 
 
-def test_vault_search_blocks_red_queries():
+def test_vault_search_uses_exact_sensitive_query_locally_and_scrubs_outbound_chunks(monkeypatch):
+    seen_queries = []
+
+    class FakeVault:
+        def __init__(self, vault_path):
+            self.vault_path = vault_path
+
+        def search_notes(self, query, limit=12):
+            seen_queries.append(query)
+            return [
+                {
+                    "text": "Contact Jane Doe with password=super-secret",
+                    "score": 1.0,
+                    "metadata": {"folder": "Projects", "path": "Projects/private.md"},
+                }
+            ]
+
+    monkeypatch.setattr(vault_search, "_settings", lambda: FakeSettings())
+    monkeypatch.setattr(vault_search, "ObsidianVault", FakeVault)
+    monkeypatch.setattr(vault_search, "_store_query", lambda query: None)
+
     result = vault_search.search_my_notes.func("password=super-secret")
 
-    assert "blocked for privacy" in result.casefold()
+    assert seen_queries == ["password=super-secret"]
+    assert "super-secret" not in result
+    assert "Jane Doe" not in result
 
 
 def test_vault_search_default_path_does_not_require_vector_backend(monkeypatch):

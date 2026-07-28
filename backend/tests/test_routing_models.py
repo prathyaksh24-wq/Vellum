@@ -12,6 +12,7 @@ from agent.llm.routing.models import (
     ProviderFailure,
     ProviderRoutingPolicy,
     RoutingTerminalError,
+    enforce_provider_allowlist,
     validate_fallback_chain,
     merge_policy,
 )
@@ -51,10 +52,34 @@ def test_openrouter_body_omits_unset_and_empty_optional_values() -> None:
 
     assert policy.to_openrouter_body() == {
         "sort": "latency",
+        "only": ["Fireworks", "Together", "DeepInfra"],
         "order": ["Fireworks", "Together", "DeepInfra"],
         "data_collection": "deny",
         "zdr": True,
     }
+
+def test_provider_allowlist_rejects_unreviewed_endpoint() -> None:
+    with pytest.raises(ValueError, match="reviewed provider allowlist"):
+        enforce_provider_allowlist(
+            ProviderRoutingPolicy(only=["UnknownCloud"]),
+            ["Fireworks", "Together", "DeepInfra"],
+        )
+
+
+def test_provider_allowlist_pins_fallbacks_to_reviewed_endpoints() -> None:
+    restricted = enforce_provider_allowlist(
+        ProviderRoutingPolicy(order=["Together"], allow_fallbacks=True),
+        ["Fireworks", "Together", "DeepInfra"],
+    )
+
+    assert restricted.only == ["Fireworks", "Together", "DeepInfra"]
+    assert restricted.order == ["Together"]
+    assert restricted.to_openrouter_body()["only"] == [
+        "Fireworks",
+        "Together",
+        "DeepInfra",
+    ]
+
 
 
 def test_fallback_requires_supported_provider_and_model() -> None:

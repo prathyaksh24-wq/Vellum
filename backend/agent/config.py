@@ -90,6 +90,30 @@ class Settings(BaseSettings):
     # Privacy
     enable_pii_scrubbing: bool = Field(default=True, alias="ENABLE_PII_SCRUBBING")
     zdr_only: bool = Field(default=True, alias="ZDR_ONLY")
+    privacy_mode: Literal[
+        "local_only",
+        "ask_before_sharing",
+        "protect_for_me",
+        "full_context",
+    ] = Field(default="protect_for_me", alias="PRIVACY_MODE")
+    privacy_receipt_path: Path = Field(
+        default=Path("data/privacy/privacy-receipts.jsonl"), alias="PRIVACY_RECEIPT_PATH"
+    )
+    openrouter_provider_allowlist: str = Field(
+        default="Fireworks,Together,DeepInfra", alias="OPENROUTER_PROVIDER_ALLOWLIST"
+    )
+    openrouter_model_allowlist: str = Field(
+        default=(
+            "google/gemma-4-26b-a4b-it,google/gemma-4-31b-it,"
+            "google/gemma-3-12b-it,qwen/qwen3.5-35b-a3b,minimax/minimax-m2.7,"
+            "anthropic/claude-opus-4.7,anthropic/claude-opus-4.6,"
+            "anthropic/claude-sonnet-4.5,openai/gpt-5.5,"
+            "deepseek/deepseek-v4-pro,deepseek/deepseek-v4-flash,"
+            "google/gemini-3-flash-preview,google/gemini-2.5-pro,"
+            "moonshotai/kimi-k2.6"
+        ),
+        alias="OPENROUTER_MODEL_ALLOWLIST",
+    )
     min_retrieval_score: float = Field(default=0.65, alias="MIN_RETRIEVAL_SCORE")
     max_context_chunks: int = Field(default=5, alias="MAX_CONTEXT_CHUNKS")
     max_context_tokens: int = Field(default=3000, alias="MAX_CONTEXT_TOKENS")
@@ -190,6 +214,7 @@ class Settings(BaseSettings):
         "voice_model_dir",
         "computer_use_screenshot_dir",
         "llm_routing_db_path",
+        "privacy_receipt_path",
         mode="before",
     )
     @classmethod
@@ -213,6 +238,7 @@ class Settings(BaseSettings):
         self.voice_model_dir = _resolve_against_repo(self.voice_model_dir)
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
         self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
+        self.privacy_receipt_path = _resolve_against_repo(self.privacy_receipt_path)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
@@ -224,6 +250,12 @@ class Settings(BaseSettings):
             raise ValueError(f"Filesystem MCP path is not a directory: {self.filesystem_mcp_path}")
         if not self.filesystem_mcp_path.resolve().is_relative_to(self.obsidian_vault_path):
             raise ValueError("Filesystem MCP path must stay inside the Obsidian vault path.")
+        if not self.enable_pii_scrubbing:
+            raise ValueError("ENABLE_PII_SCRUBBING must remain true for cloud-capable modes.")
+        if not self.reviewed_openrouter_providers:
+            raise ValueError("OPENROUTER_PROVIDER_ALLOWLIST cannot be empty.")
+        if not self.reviewed_openrouter_models:
+            raise ValueError("OPENROUTER_MODEL_ALLOWLIST cannot be empty.")
         if not self.zdr_only:
             raise ValueError("ZDR_ONLY must remain true for this privacy-first agent.")
         if not 0 <= self.min_retrieval_score <= 1:
@@ -268,6 +300,22 @@ class Settings(BaseSettings):
             raise ValueError("GITMCP_MCP_URL must be an HTTP(S) URL.")
 
         return self
+
+    @property
+    def reviewed_openrouter_providers(self) -> tuple[str, ...]:
+        return tuple(
+            value
+            for raw in self.openrouter_provider_allowlist.split(",")
+            if (value := raw.strip())
+        )
+
+    @property
+    def reviewed_openrouter_models(self) -> tuple[str, ...]:
+        return tuple(
+            value
+            for raw in self.openrouter_model_allowlist.split(",")
+            if (value := raw.strip())
+        )
 
 
 @lru_cache(maxsize=1)

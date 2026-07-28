@@ -6,11 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import re
+from uuid import uuid4
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import tool
 
 from agent.config import get_settings
+from agent.llm.openrouter import openrouter_chat_sync
 from agent.mcp.obsidian_tools import run_tool as obsidian_run
 
 PRIVACY_PUBLIC = "public"
@@ -162,35 +163,21 @@ tags:
 """
 
 
-def _build_cloud_llm():
-    from langchain_openai import ChatOpenAI
-
+def _call_cloud_model(task: str, context: str, privacy_class: str) -> dict[str, str]:
     settings = get_settings()
-    return ChatOpenAI(
-        model=settings.cloud_escalation_model,
-        api_key=settings.openrouter_api_key,
-        base_url=settings.openrouter_base_url,
+    result = openrouter_chat_sync(
+        system=(
+            "You are Vellum's cloud escalation helper. Return only valid JSON with keys "
+            "answer, what_gemma_missed, workflow_used, lesson_for_vellum, suggested_skill."
+        ),
+        user=f"Privacy class: {privacy_class}\n\nTask:\n{task}\n\nContext:\n{context}",
+        model_override=settings.cloud_escalation_model,
         temperature=0.2,
         max_tokens=2048,
-        default_headers={"HTTP-Referer": "http://localhost", "X-Title": "Vellum"},
-        extra_body={"provider": {"data_collection": "deny", "zdr": settings.zdr_only}},
+        session_id=f"cloud-escalation-{uuid4().hex}",
+        disclosure_purpose="cloud_escalation",
     )
-
-
-def _call_cloud_model(task: str, context: str, privacy_class: str) -> dict[str, str]:
-    llm = _build_cloud_llm()
-    result = llm.invoke(
-        [
-            SystemMessage(
-                content=(
-                    "You are Vellum's cloud escalation helper. Return only valid JSON with keys "
-                    "answer, what_gemma_missed, workflow_used, lesson_for_vellum, suggested_skill."
-                )
-            ),
-            HumanMessage(content=f"Privacy class: {privacy_class}\n\nTask:\n{task}\n\nContext:\n{context}"),
-        ]
-    )
-    return parse_cloud_response(str(result.content))
+    return parse_cloud_response(result)
 
 
 @tool

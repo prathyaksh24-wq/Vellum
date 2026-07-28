@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import pytest
+
 
 from agent.llm.routing.models import FallbackTarget
 from agent.llm.routing.runtime import build_routing_runtime
@@ -27,16 +29,25 @@ def settings_for(tmp_path):
         llm_routing_max_targets=4,
         llm_routing_max_transient_retries=2,
         openrouter_base_url="https://openrouter.test/v1",
-        openai_base_url="https://openai.test/v1",
         openrouter_api_key=None,
-        openai_api_key=None,
+        primary_model="google/primary",
         fallback_model="qwen/fallback",
+        fast_model="google/fast",
+        cloud_escalation_model="anthropic/escalation",
+        privacy_mode="protect_for_me",
+        privacy_receipt_path=tmp_path / "privacy-receipts.jsonl",
+        reviewed_openrouter_providers=("Fireworks", "Together", "DeepInfra"),
+        reviewed_openrouter_models=(
+            "google/primary",
+            "qwen/fallback",
+            "google/fast",
+            "anthropic/escalation",
+        ),
     )
 
 
-def test_runtime_seeds_environment_credentials_and_legacy_fallback(monkeypatch, tmp_path) -> None:
+def test_runtime_seeds_openrouter_credentials_and_legacy_fallback(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
-    monkeypatch.setenv("OPENAI_API_KEY", "oa-key")
 
     runtime = build_routing_runtime(
         settings=settings_for(tmp_path),
@@ -45,8 +56,20 @@ def test_runtime_seeds_environment_credentials_and_legacy_fallback(monkeypatch, 
     )
 
     assert len(runtime.store.list_credentials("openrouter")) == 1
-    assert len(runtime.store.list_credentials("openai")) == 1
+    assert len(runtime.store.list_credentials("openai")) == 0
     assert runtime.store.list_fallbacks()[0].model == "qwen/fallback"
+
+
+def test_runtime_rejects_configured_model_outside_allowlist(tmp_path) -> None:
+    settings = settings_for(tmp_path)
+    settings.primary_model = "unreviewed/model"
+
+    with pytest.raises(ValueError, match="OPENROUTER_MODEL_ALLOWLIST"):
+        build_routing_runtime(
+            settings=settings,
+            keyring_backend=FakeKeyring(),
+            fingerprint_salt=b"test-salt",
+        )
 
 
 def test_runtime_does_not_overwrite_explicit_fallback_chain(tmp_path) -> None:
