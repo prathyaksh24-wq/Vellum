@@ -1,4 +1,5 @@
 import pytest
+from langchain_core.tools import tool
 
 from agent.tools.registry import (
     CapabilityAccess,
@@ -149,3 +150,22 @@ def test_tool_registry_observer_failure_does_not_break_a_successful_tool():
     )
 
     assert registry.invoke("x.search_posts", {"query": "topic"}, agent_name="XAgent")["items"]
+
+
+def test_tool_registry_wraps_langchain_tool_without_changing_its_schema():
+    @tool
+    def echo_topic(topic: str, limit: int = 3) -> str:
+        """Echo a topic through the registry."""
+        return f"{topic}:{limit}"
+
+    registry = ToolRegistry()
+    registry.register_langchain(
+        echo_topic,
+        access=CapabilityAccess.READ,
+        allowed_agents=frozenset({"VellumAgent"}),
+    )
+
+    wrapped = registry.langchain_tools(agent_name="VellumAgent")[0]
+
+    assert wrapped.args_schema is echo_topic.args_schema
+    assert wrapped.invoke({"topic": "vellum", "limit": 2}) == "vellum:2"

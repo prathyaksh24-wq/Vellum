@@ -5,6 +5,10 @@ import { dirname, resolve } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
+const selectComponent = readFileSync(
+  resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
+  "utf8",
+);
 
 describe("Vellum default redesigned frontend", () => {
   test("loads the modular frontend API bridge used by backend integrations", () => {
@@ -15,6 +19,16 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toMatch(/<script src="api\/settings\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toMatch(/<script src="api\/knowledge\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/runtimes.js"></script>');
+  });
+
+  test("loads the shared select component outside the application shell", () => {
+    expect(html).toContain('src="components/v-select.jsx"');
+    expect(html).toContain("const VSelect = window.VellumUI.VSelect");
+    expect(html).not.toContain("const normalizeSelectOptions");
+    expect(selectComponent).toContain("window.VellumUI");
+    expect(selectComponent).toContain('role="combobox"');
+    expect(selectComponent).toContain('role="listbox"');
+    expect(selectComponent).toContain('event.key === "ArrowDown"');
   });
 
   test("keeps the approved web UI shell instead of the old desktop chrome", () => {

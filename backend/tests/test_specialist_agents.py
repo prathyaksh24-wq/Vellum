@@ -526,7 +526,7 @@ def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypat
     assert response.sources[0].path_or_url == "https://www.nba.com/schedule"
 
 
-def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_path):
+def test_live_dispatcher_routes_sports_without_writing_legacy_query_projection(tmp_path):
     search_output = (
         "**Last F1 race result**\n"
         "The last Grand Prix was won from pole after a late safety-car restart.\n"
@@ -544,9 +544,7 @@ def test_live_dispatcher_routes_sports_to_sports_agent_and_records_handoff(tmp_p
     assert result.agent_name == "SportsAgent"
     assert result.handled is True
     assert result.sources[0]["url"] == "https://www.formula1.com/en/latest/article/race-report"
-    handoffs = list((tmp_path / "Vault" / "Agent" / "Queries").glob("*.md"))
-    assert handoffs
-    assert "routed_to: SportsAgent" in handoffs[0].read_text(encoding="utf-8")
+    assert not (tmp_path / "Vault" / "Agent" / "Queries").exists()
 
 
 def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_prompt(tmp_path):

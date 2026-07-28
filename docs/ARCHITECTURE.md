@@ -27,7 +27,7 @@ Frontend view code should use adapter modules under `frontend/ui/api/` or the de
 
 ## Backend
 
-The backend entry point is `backend/agent/api.py`. It defines the FastAPI app, chat routes, streaming routes, settings routes, plugin routes, coding routes, terminal routes, memory routes, Knowledge Wiki routes, Spotify routes, voice routes, computer-use routes, and capability discovery.
+The backend entry point is `backend/agent/api.py`. It composes the FastAPI app and shared routes. Feature-owned HTTP adapters should live with their subsystem and expose an `APIRouter`; coding mode follows this boundary in `backend/agent/coding/api.py`.
 
 Important backend modules:
 
@@ -116,7 +116,7 @@ Supported integration areas include:
 - Tavily, Firecrawl, SerpAPI, DuckDuckGo, and web extraction helpers
 - X, YouTube, Sports, Spotify, terminal, coding, voice, and computer-use tools
 
-Tool exposure is controlled through registry and capability services. Mutating or destructive operations are guarded by configuration and policy.
+Tool exposure is controlled through `ToolRegistry`. Main LangGraph tools are registered there and receive schema-preserving wrappers, so profile authorization and invocation observation share the same boundary as specialist capabilities. Mutating or destructive operations remain guarded by their feature-level configuration and policy.
 
 ## Plugin System
 
@@ -154,7 +154,13 @@ Computer-use modules support guarded local workflows, browser/desktop routing, i
 
 ## Coding-Assistant Mode
 
-Coding mode is separate from default chat. It has its own session service, event model, storage, and adapters for Codex and Claude. The frontend consumes coding-specific events rather than treating coding mode as a normal chat stream.
+Coding mode is separate from default chat. It owns its HTTP adapter, session service, event model, storage, bounded workspace reads, and adapters for Codex and Claude under `backend/agent/coding/`. The root API injects the process-owned session service into that router. The frontend consumes coding-specific events rather than treating coding mode as a normal chat stream.
+
+## Canonical Writers
+
+- Delegation state and metadata stay in the master runtime stores; the live dispatcher does not create raw `Agent/Queries` notes.
+- Durable memory changes flow through the Memory Orchestrator review/consolidation path. `MemoryCapabilityService` exposes lookup, conflict review, and proposals, not a second card writer.
+- Automated and manual skill archives flow through `SkillMutationCoordinator`. With write approval enabled, automatic curator decisions are staged for review.
 
 ## Data Storage
 

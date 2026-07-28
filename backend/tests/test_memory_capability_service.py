@@ -36,106 +36,38 @@ def test_memory_service_reviews_proposals_and_detects_conflicts(tmp_path):
     assert conflicts["conflicts"]
 
 
-def test_memory_service_create_card_writes_durable_memory(tmp_path):
-    vault = tmp_path / "Vault"
-    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
+def test_memory_service_exposes_proposals_but_not_direct_durable_writes(tmp_path):
+    service = MemoryCapabilityService(vault_root=tmp_path / "Vault", sessions_db=tmp_path / "sessions.db")
 
-    result = service.create_card(
-        {
-            "scope": "shared",
-            "title": "Answer style",
-            "summary": "User prefers concise answers.",
-            "evidence": "Repeated corrections.",
-            "visible_to": ["VellumAgent", "MemoryAgent"],
-        }
-    )
+    names = service.build_registry().names()
 
-    path = vault / result["path"]
-    assert path.exists()
-    assert "User prefers concise answers." in path.read_text(encoding="utf-8")
-
-
-def test_memory_service_create_card_sanitizes_traversal_scope(tmp_path):
-    vault = tmp_path / "Vault"
-    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-
-    result = service.create_card(
-        {
-            "scope": "../../../Outside",
-            "title": "Traversal",
-            "summary": "Should stay in memories.",
-        }
-    )
-
-    memory_root = (vault / "Agent" / "Memories").resolve()
-    path = (vault / result["path"]).resolve()
-    assert path.is_relative_to(memory_root)
-    assert ".." not in result["path"].split("/")
-    assert path.exists()
-
-
-def test_memory_service_create_card_does_not_overwrite_rapid_duplicates(tmp_path):
-    vault = tmp_path / "Vault"
-    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-
-    first = service.create_card({"scope": "shared", "title": "Duplicate", "summary": "First"})
-    second = service.create_card({"scope": "shared", "title": "Duplicate", "summary": "Second"})
-
-    first_path = vault / first["path"]
-    second_path = vault / second["path"]
-    assert first_path != second_path
-    assert first_path.exists()
-    assert second_path.exists()
-    assert "First" in first_path.read_text(encoding="utf-8")
-    assert "Second" in second_path.read_text(encoding="utf-8")
-
-
-def test_memory_service_create_card_writes_safe_frontmatter(tmp_path):
-    vault = tmp_path / "Vault"
-    service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-
-    result = service.create_card(
-        {
-            "scope": 'shared"\nattacker: true',
-            "title": "Injected\nattacker: true",
-            "summary": "Summary",
-            "visible_to": ['VellumAgent"\nattacker: true', "MemoryAgent"],
-        }
-    )
-
-    text = (vault / result["path"]).read_text(encoding="utf-8")
-    frontmatter = text.split("---", 2)[1]
-    assert 'scope: "shared-attacker-true"' in frontmatter
-    assert 'visible_to: ["VellumAgent\\"\\nattacker: true", "MemoryAgent"]' in frontmatter
-    assert "\nattacker: true\n" not in frontmatter
+    assert "memory.propose_card" in names
+    assert "memory.create_card" not in names
 
 
 def test_memory_card_search_enforces_agent_scope_and_visibility(tmp_path):
     vault = tmp_path / "Vault"
     service = MemoryCapabilityService(vault_root=vault, sessions_db=tmp_path / "sessions.db")
-    service.create_card(
-        {
-            "scope": "shared",
-            "title": "Shared preference",
-            "summary": "User prefers direct answers.",
-        }
-    )
-    service.create_card(
-        {
-            "scope": "agent:XAgent",
-            "title": "X private context",
-            "summary": "Private X drafting context.",
-            "visible_to": ["XAgent", "VellumAgent", "MemoryAgent"],
-        }
-    )
-    service.create_card(
-        {
-            "scope": "agent:SportsAgent",
-            "title": "Sports private context",
-            "summary": "Private sports analysis context.",
-            "visible_to": ["SportsAgent", "MemoryAgent"],
-        }
-    )
+    memory_dir = vault / "Agent" / "Memories"
+    fixtures = {
+        "shared.md": (
+            '---\nscope: "shared"\nvisible_to: []\n---\n\n'
+            "# Shared preference\n\nUser prefers direct answers.\n"
+        ),
+        "x.md": (
+            '---\nscope: "agent:xagent"\n'
+            'visible_to: ["XAgent", "VellumAgent", "MemoryAgent"]\n---\n\n'
+            "# X private context\n\nPrivate X drafting context.\n"
+        ),
+        "sports.md": (
+            '---\nscope: "agent:sportsagent"\n'
+            'visible_to: ["SportsAgent", "MemoryAgent"]\n---\n\n'
+            "# Sports private context\n\nPrivate sports analysis context.\n"
+        ),
+    }
+    memory_dir.mkdir(parents=True)
+    for name, text in fixtures.items():
+        (memory_dir / name).write_text(text, encoding="utf-8")
 
     x_cards = service.search_cards({"agent_name": "XAgent", "query": "context", "limit": 20})["cards"]
     vellum_cards = service.search_cards({"agent_name": "VellumAgent", "query": "context", "limit": 20})["cards"]

@@ -20,7 +20,7 @@ class ToolPermissionError(PermissionError):
     pass
 
 
-CapabilityAdapter = Callable[[dict[str, Any]], dict[str, Any]]
+CapabilityAdapter = Callable[[dict[str, Any]], Any]
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ class CapabilityRecord:
     adapter: CapabilityAdapter
     requires_confirmation: bool = False
     required_env_flags: frozenset[str] = frozenset()
+    runtime_tool: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -45,7 +46,7 @@ class ToolInvocation:
     access: CapabilityAccess
     agent_name: str
     payload: dict[str, Any]
-    result: dict[str, Any]
+    result: Any
 
 
 ToolInvocationObserver = Callable[[ToolInvocation], None]
@@ -67,7 +68,7 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._records)
 
-    def invoke(self, name: str, payload: dict[str, Any], *, agent_name: str) -> dict[str, Any]:
+    def invoke(self, name: str, payload: dict[str, Any], *, agent_name: str) -> Any:
         record = self.get(name)
         self._check_permission(record, payload, agent_name=agent_name)
         result = record.adapter(payload)
@@ -86,6 +87,58 @@ class ToolRegistry:
             except Exception:
                 logger.exception("Tool observation failed for %s.", record.name)
         return result
+
+    def register_langchain(
+        self,
+        tool: Any,
+        *,
+        access: CapabilityAccess,
+        allowed_agents: frozenset[str],
+        namespace: str | None = None,
+        stream_label: str | None = None,
+    ) -> None:
+        """Register a LangChain tool without replacing its input schema or behavior."""
+        name = str(tool.name)
+        self.register(
+            CapabilityRecord(
+                name=name,
+                namespace=namespace or name.split("_", 1)[0],
+                access=access,
+                allowed_agents=allowed_agents,
+                stream_label=stream_label or name.replace("_", " ").strip().capitalize(),
+                adapter=lambda payload, runtime_tool=tool: runtime_tool.invoke(payload),
+                runtime_tool=tool,
+            )
+        )
+
+    def langchain_tools(self, *, agent_name: str) -> list[Any]:
+        """Return schema-preserving wrappers that authorize every invocation."""
+        from langchain_core.tools import StructuredTool
+
+        wrapped = []
+        for record in self._records.values():
+            tool = record.runtime_tool
+            if tool is None:
+                continue
+
+            def invoke(_capability_name=record.name, **payload):
+                return self.invoke(_capability_name, payload, agent_name=agent_name)
+
+            wrapped.append(
+                StructuredTool(
+                    name=tool.name,
+                    description=tool.description,
+                    args_schema=tool.args_schema,
+                    return_direct=tool.return_direct,
+                    tags=tool.tags,
+                    metadata=tool.metadata,
+                    handle_tool_error=tool.handle_tool_error,
+                    handle_validation_error=tool.handle_validation_error,
+                    response_format=tool.response_format,
+                    func=invoke,
+                )
+            )
+        return wrapped
 
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
         if agent_name not in record.allowed_agents:

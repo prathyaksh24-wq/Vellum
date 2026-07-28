@@ -139,7 +139,6 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                     "memory.search_cards",
                     "memory.review_proposals",
                     "memory.detect_conflicts",
-                    "memory.create_card",
                     "memory.propose_card",
                 ]
             ),

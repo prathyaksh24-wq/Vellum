@@ -50,6 +50,7 @@ from agent.tools.skill_curator import skill_curator
 from agent.tools.skill_hub import skill_hub
 from agent.tools.skill_manage import skill_learn, skill_manage
 from agent.tools.skills import skill_view, skills_history, skills_list
+from agent.tools.registry import CapabilityAccess, ToolRegistry
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
 from agent.tools.web_extract import web_extract
@@ -282,51 +283,91 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
     return saver
 
 
+def core_tool_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+    write_tool_names = {
+        "computer_use",
+        "browser_navigate",
+        "browser_click",
+        "browser_type",
+        "browser_press_key",
+        "browser_select_option",
+        "browser_hover",
+        "browser_wait",
+        "browser_close",
+        "browser_action",
+        "github_write",
+        "git_action",
+        "obsidian_api",
+        "llm_routing",
+        "knowledge_wiki",
+        "memory_orchestrator",
+        "skill_manage",
+        "skill_learn",
+        "skill_bundles",
+        "skill_curator",
+        "skill_hub",
+        "context_mode",
+        "escalate_to_cloud",
+        "create_note",
+        "append_to_note",
+        "x_action",
+    }
+    tools = [
+        search_my_notes,
+        web_search,
+        search_amazon,
+        read_file,
+        list_files,
+        computer_use_route,
+        computer_use,
+        browser_navigate,
+        browser_snapshot,
+        browser_tabs,
+        browser_click,
+        browser_type,
+        browser_press_key,
+        browser_select_option,
+        browser_hover,
+        browser_wait,
+        browser_close,
+        browser_action,
+        github_read,
+        github_write,
+        git_action,
+        obsidian_api,
+        library_docs,
+        llm_routing,
+        knowledge_wiki,
+        memory_orchestrator,
+        skills_list,
+        skills_history,
+        skill_view,
+        skill_manage,
+        skill_learn,
+        skill_bundles,
+        skill_curator,
+        skill_hub,
+        repo_docs,
+        context_mode,
+        web_research,
+        web_extract,
+        escalate_to_cloud,
+        create_note,
+        append_to_note,
+        x_action,
+    ]
+    for tool in tools:
+        registry.register_langchain(
+            tool,
+            access=CapabilityAccess.WRITE if tool.name in write_tool_names else CapabilityAccess.READ,
+            allowed_agents=frozenset({"VellumAgent"}),
+        )
+    return registry
+
+
 def core_tools() -> list:
-    return [
-            search_my_notes,
-            web_search,
-            search_amazon,
-            read_file,
-            list_files,
-            computer_use_route,
-            computer_use,
-            browser_navigate,
-            browser_snapshot,
-            browser_tabs,
-            browser_click,
-            browser_type,
-            browser_press_key,
-            browser_select_option,
-            browser_hover,
-            browser_wait,
-            browser_close,
-            browser_action,
-            github_read,
-            github_write,
-            git_action,
-            obsidian_api,
-            library_docs,
-            llm_routing,
-            knowledge_wiki,
-            memory_orchestrator,
-            skills_list,
-            skills_history,
-            skill_view,
-            skill_manage,
-            skill_learn,
-            skill_bundles,
-            skill_curator,
-            skill_hub,
-            repo_docs,
-            context_mode,
-            web_research,
-            web_extract,
-            escalate_to_cloud,
-            create_note,
-            append_to_note,
-            x_action,
-        ]
+    return core_tool_registry().langchain_tools(agent_name="VellumAgent")
 
 
 def build_agent(model: str | None = None):

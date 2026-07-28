@@ -55,6 +55,7 @@ def test_curator_first_run_defers_then_transitions_only_eligible_skills(tmp_path
         logs_root=tmp_path / "logs",
         config=CuratorConfig(stale_after_days=30, archive_after_days=90),
     )
+    curator.mutations.set_write_approval(False)
 
     first = curator.run(now=now, idle_hours=10)
     second = curator.run(now=now, idle_hours=10, force=True)
@@ -62,12 +63,34 @@ def test_curator_first_run_defers_then_transitions_only_eligible_skills(tmp_path
     assert first["status"] == "deferred_first_run"
     assert second["stale"] == ["stale-agent"]
     assert second["archived"] == ["old-agent"]
+    assert second["applied_archives"] == ["old-agent"]
+    assert second["pending_archives"] == []
     assert SkillUsageStore(root).get("stale-agent")["state"] == "stale"
     assert (root / ".archive" / "uncategorized" / "old-agent" / "SKILL.md").exists()
     assert manager.package("foreground")
     assert manager.package("pinned-agent")
     assert (tmp_path / "logs" / second["run_id"] / "run.json").exists()
     assert (tmp_path / "logs" / second["run_id"] / "REPORT.md").exists()
+
+
+def test_curator_stages_automatic_archive_through_mutation_coordinator_by_default(tmp_path: Path) -> None:
+    root = tmp_path / ".skills"
+    manager = SkillManager(root)
+    manager.create(skill_md("old-agent"), origin="background_review", confirm=True)
+    set_created(root, "old-agent", "2026-01-01T00:00:00+00:00")
+    curator = SkillCurator(root, logs_root=tmp_path / "logs")
+    now = datetime(2026, 7, 3, tzinfo=timezone.utc)
+    curator.run(now=now, idle_hours=10)
+
+    result = curator.run(now=now, idle_hours=10, force=True)
+
+    assert result["archived"] == ["old-agent"]
+    assert result["applied_archives"] == []
+    assert result["pending_archives"] == ["old-agent"]
+    assert result["archive_mutations"][0]["status"] == "pending"
+    assert result["archive_mutations"][0]["origin"] == "curator_automatic"
+    assert manager.package("old-agent")
+    assert len(curator.mutations.list_pending()) == 1
 
 
 def test_curator_dry_run_pause_and_status_do_not_mutate(tmp_path: Path) -> None:

@@ -479,7 +479,7 @@ Resolved questions cache check
   │  Otherwise continue
   │
   ▼
-Query stored to Agent/Queries/ + agent_queries Qdrant collection
+Query retained in canonical conversation storage; derived retrieval indexes update through the Memory Orchestrator
   │
   ▼
 Parallel context gathering

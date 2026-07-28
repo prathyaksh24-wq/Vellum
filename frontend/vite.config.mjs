@@ -15,6 +15,7 @@ function copyStaticUiAssets() {
       rmSync(target, { recursive: true, force: true });
       cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
       cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'components'), resolve(here, 'ui-dist/components'), { recursive: true });
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
@@ -80,7 +81,8 @@ export default defineConfig({
   },
   test: {
     root: here,
-    exclude: ['node_modules/**', 'ui-dist/**'],
+    include: ['ui/**/*.test.js'],
+    exclude: ['node_modules/**', 'ui-dist/**', '.pytest_cache/**'],
   },
   build: {
     outDir: resolve(here, 'ui-dist'),

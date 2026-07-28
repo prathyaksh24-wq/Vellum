@@ -35,19 +35,8 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
-from agent.coding.events import event_payload, sse as coding_sse
-from agent.coding.models import (
-    AccessMode,
-    CodingSession,
-    CodingSessionCreate,
-    CodingTurnLimits,
-    CodingTurnRuntime,
-    DEFAULT_MAX_PROVIDER_EVENTS,
-    DEFAULT_MAX_RUNTIME_SECONDS,
-    ProviderName,
-    ReasoningEffort,
-)
-from agent.coding.service import CodingServiceError, CodingSessionService
+from agent.coding.api import create_coding_router
+from agent.coding.service import CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
 from agent.computer_use.session import ComputerUseSession, ComputerUseSessionError, NoopOverlay
 from agent.computer_use_runtime import computer_use_runtime
@@ -342,30 +331,6 @@ class SpotifyPlayerActionRequest(BaseModel):
     shuffle: bool | None = None
     state: Literal["track", "context", "off"] | None = None
     play: bool = False
-
-
-class CodingSessionBody(BaseModel):
-    provider: ProviderName
-    cwd: str = Field(min_length=1)
-    access_mode: AccessMode = AccessMode.read_only
-    title: str = ""
-
-
-class CodingTurnBody(BaseModel):
-    prompt: str = Field(min_length=1)
-    model: str | None = Field(default=None, min_length=1, max_length=128)
-    reasoning_effort: ReasoningEffort | None = None
-    max_runtime_seconds: int = Field(default=DEFAULT_MAX_RUNTIME_SECONDS, ge=1, le=24 * 60 * 60)
-    max_provider_events: int = Field(default=DEFAULT_MAX_PROVIDER_EVENTS, ge=1, le=100_000)
-
-
-class CodingSessionCloseBody(BaseModel):
-    discard_changes: bool = False
-
-
-class CodingSessionRewindBody(BaseModel):
-    phase: Literal["before", "after"] = "after"
-    confirm_discard: bool = False
 
 
 class ConversationContextRequest(BaseModel):
@@ -1618,56 +1583,6 @@ def _embedding_health() -> dict[str, Any]:
         return {"ok": False, "provider": "sentence-transformers", "error": str(exc)}
 
 
-def _coding_session_json(session: CodingSession) -> dict[str, Any]:
-    workspace_kind = getattr(session, "workspace_kind", "direct")
-    return {
-        "id": session.id,
-        "provider": session.provider.value,
-        "provider_session_id": session.provider_session_id,
-        "cwd": session.cwd,
-        "source_cwd": getattr(session, "source_cwd", session.cwd) or session.cwd,
-        "workspace_kind": getattr(workspace_kind, "value", str(workspace_kind)),
-        "workspace_root": getattr(session, "workspace_root", session.cwd) or session.cwd,
-        "workspace_repository_root": getattr(session, "workspace_repository_root", ""),
-        "workspace_branch": getattr(session, "workspace_branch", ""),
-        "workspace_base_commit": getattr(session, "workspace_base_commit", ""),
-        "access_mode": session.access_mode.value,
-        "title": session.title,
-        "status": session.status,
-        "created_at": session.created_at,
-        "updated_at": session.updated_at,
-        "tenant_id": getattr(session, "tenant_id", "local"),
-        "principal_id": getattr(session, "principal_id", "local-user"),
-        "workspace_generation": getattr(session, "workspace_generation", 1),
-        "trace_id": getattr(session, "trace_id", ""),
-    }
-
-
-def _hidden_coding_file(name: str) -> bool:
-    lowered = name.casefold()
-    secret_names = {
-        ".aws",
-        ".env",
-        ".envrc",
-        ".netrc",
-        ".npmrc",
-        ".pypirc",
-        ".ssh",
-        "id_dsa",
-        "id_ecdsa",
-        "id_ed25519",
-        "id_rsa",
-    }
-    return (
-        lowered in secret_names
-        or lowered.startswith(".env.")
-        or lowered.endswith(".pem")
-        or lowered.endswith(".key")
-        or lowered.endswith(".p12")
-        or lowered.endswith(".pfx")
-    )
-
-
 def _coding_project_roots() -> list[Path]:
     roots = {REPO_ROOT.resolve(), Path.cwd().resolve()}
     try:
@@ -1684,108 +1599,6 @@ def _coding_project_roots() -> list[Path]:
     except Exception:
         pass
     return sorted(roots, key=lambda path: str(path).casefold())
-
-
-def _is_allowed_coding_project_root(path: Path) -> bool:
-    return any(path == root or path.is_relative_to(root) for root in _coding_project_roots())
-
-
-def _project_tree(root: str) -> dict[str, Any]:
-    base = Path(root).expanduser().resolve()
-    if not base.exists() or not base.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if not _is_allowed_coding_project_root(base):
-        raise HTTPException(status_code=403, detail="Project root is not allowed.")
-    items: list[dict[str, Any]] = []
-    try:
-        paths = sorted(base.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold()))
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="Project root is not readable.") from exc
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail="Project root could not be read.") from exc
-    for path in paths:
-        if _hidden_coding_file(path.name):
-            continue
-        items.append(
-            {
-                "name": path.name,
-                "path": path.relative_to(base).as_posix(),
-                "kind": "directory" if path.is_dir() else "file",
-            }
-        )
-        if len(items) >= 250:
-            break
-    return {"root": str(base), "items": items}
-
-
-def _project_file(root: str, relative_path: str) -> dict[str, Any]:
-    base = Path(root).expanduser().resolve()
-    if not base.exists() or not base.is_dir():
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if not _is_allowed_coding_project_root(base):
-        raise HTTPException(status_code=403, detail="Project root is not allowed.")
-    if "\x00" in relative_path:
-        raise HTTPException(status_code=400, detail="Project file path is invalid.")
-    requested = Path(relative_path)
-    if requested.is_absolute() or not requested.parts or any(part in {"", ".", ".."} for part in requested.parts):
-        raise HTTPException(status_code=400, detail="Project file path is invalid.")
-    if any(_hidden_coding_file(part) for part in requested.parts):
-        raise HTTPException(status_code=403, detail="Project file is protected.")
-    target = (base / requested).resolve()
-    if not target.is_relative_to(base):
-        raise HTTPException(status_code=403, detail="Project file is outside the workspace.")
-    if any(_hidden_coding_file(part) for part in target.relative_to(base).parts):
-        raise HTTPException(status_code=403, detail="Project file is protected.")
-    if not target.exists() or not target.is_file():
-        raise HTTPException(status_code=404, detail="Project file not found.")
-    try:
-        size = target.stat().st_size
-        limit = 512 * 1024
-        with target.open("rb") as handle:
-            raw = handle.read(limit)
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail="Project file is not readable.") from exc
-    except OSError as exc:
-        raise HTTPException(status_code=400, detail="Project file could not be read.") from exc
-    return {
-        "root": str(base),
-        "path": target.relative_to(base).as_posix(),
-        "content": raw.decode("utf-8", errors="replace"),
-        "size": size,
-        "truncated": size > limit,
-    }
-
-
-def _coding_http_exception(exc: CodingServiceError) -> HTTPException:
-    message = str(exc)
-    cause = exc.__cause__
-    cause_message = str(cause) if cause is not None else ""
-    searchable = f"{message} {cause_message}".casefold()
-    if "not found" in searchable:
-        return HTTPException(status_code=404, detail=message)
-    if (
-        "already has a running turn" in searchable
-        or "running coding turn" in searchable
-        or "session is closed" in searchable
-    ):
-        return HTTPException(status_code=409, detail=message)
-    if (
-        "not installed" in searchable
-        or "not configured" in searchable
-        or "sdk unavailable" in searchable
-        or "failed to start" in searchable
-    ):
-        return HTTPException(status_code=503, detail=message)
-    return HTTPException(status_code=400, detail=message)
-
-
-def _ensure_coding_provider_ready(provider: ProviderName) -> None:
-    for health in coding_service.health():
-        if health.provider == provider:
-            if not health.available or not health.configured:
-                raise CodingServiceError(health.message)
-            return
-    raise CodingServiceError("Provider is not configured.")
 
 
 @router.get("/health")
@@ -4838,183 +4651,6 @@ async def set_provider_key(request: ProviderKeyRequest, response: Response) -> d
     }
 
 
-@router.get("/coding/health")
-async def coding_health() -> dict[str, Any]:
-    providers = []
-    for health in coding_service.health():
-        providers.append(
-            {
-                "provider": health.provider.value,
-                "available": health.available,
-                "configured": health.configured,
-                "message": health.message,
-                "capabilities": health.capabilities.payload() if health.capabilities else None,
-            }
-        )
-    return {"providers": providers}
-
-
-@router.get("/coding/sessions")
-async def coding_sessions() -> dict[str, Any]:
-    return {"sessions": [_coding_session_json(session) for session in coding_service.list_sessions()]}
-
-
-@router.post("/coding/sessions")
-async def coding_session_create(body: CodingSessionBody) -> dict[str, Any]:
-    try:
-        _ensure_coding_provider_ready(body.provider)
-        session = await coding_service.create_session(
-            CodingSessionCreate(
-                provider=body.provider,
-                cwd=body.cwd,
-                access_mode=body.access_mode,
-                title=body.title,
-            )
-        )
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-    return _coding_session_json(session)
-
-
-@router.get("/coding/sessions/{session_id}")
-async def coding_session_get(session_id: str) -> dict[str, Any]:
-    try:
-        return _coding_session_json(coding_service.get_session(session_id))
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-
-
-@router.post("/coding/sessions/{session_id}/turns/stream")
-async def coding_turn_stream(session_id: str, body: CodingTurnBody) -> StreamingResponse:
-    try:
-        session = coding_service.get_session(session_id)
-        if session.status == "running":
-            raise CodingServiceError("Coding session already has a running turn.")
-        _ensure_coding_provider_ready(session.provider)
-        stream = coding_service.run_turn(
-            session_id,
-            body.prompt,
-            limits=CodingTurnLimits(
-                max_runtime_seconds=body.max_runtime_seconds,
-                max_provider_events=body.max_provider_events,
-            ),
-            runtime=CodingTurnRuntime(
-                model=body.model,
-                reasoning_effort=body.reasoning_effort,
-            ),
-        )
-        first_event = await anext(stream)
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-    except StopAsyncIteration:
-        async def empty_events():
-            if False:
-                yield ""
-
-        return StreamingResponse(empty_events(), media_type="text/event-stream")
-
-    async def events():
-        yield coding_sse(first_event)
-        try:
-            async for event in stream:
-                yield coding_sse(event)
-        except CodingServiceError as exc:
-            yield _sse("error", {"type": "error", "message": str(exc)})
-
-    return StreamingResponse(events(), media_type="text/event-stream")
-
-
-@router.post("/coding/sessions/{session_id}/stop")
-async def coding_session_stop(session_id: str) -> dict[str, Any]:
-    try:
-        await coding_service.stop_turn(session_id)
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-    return {"ok": True}
-
-
-@router.post("/coding/sessions/{session_id}/close")
-async def coding_session_close(session_id: str, body: CodingSessionCloseBody) -> dict[str, Any]:
-    try:
-        session = await coding_service.close_session(
-            session_id,
-            discard_changes=body.discard_changes,
-        )
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-    return _coding_session_json(session)
-
-
-@router.get("/coding/sessions/{session_id}/events")
-async def coding_session_events(
-    session_id: str,
-    after_sequence: int = Query(default=0, ge=0),
-) -> dict[str, Any]:
-    try:
-        return {
-            "events": [
-                event_payload(event)
-                for event in coding_service.list_events(session_id, after_sequence=after_sequence)
-            ]
-        }
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-
-
-@router.get("/coding/sessions/{session_id}/checkpoints")
-async def coding_session_checkpoints(session_id: str) -> dict[str, Any]:
-    try:
-        return {
-            "checkpoints": [
-                checkpoint.payload(include_patch=False)
-                for checkpoint in coding_service.list_checkpoints(session_id)
-            ]
-        }
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-
-
-@router.get("/coding/sessions/{session_id}/checkpoints/{checkpoint_id}")
-async def coding_session_checkpoint(session_id: str, checkpoint_id: str) -> dict[str, Any]:
-    try:
-        return coding_service.get_checkpoint(session_id, checkpoint_id).payload(include_patch=True)
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-
-
-@router.post("/coding/sessions/{session_id}/rewind/{checkpoint_id}")
-async def coding_session_rewind(
-    session_id: str,
-    checkpoint_id: str,
-    body: CodingSessionRewindBody,
-) -> dict[str, Any]:
-    try:
-        session = await coding_service.rewind_session(
-            session_id,
-            checkpoint_id,
-            phase=body.phase,
-            confirm_discard=body.confirm_discard,
-        )
-    except CodingServiceError as exc:
-        raise _coding_http_exception(exc) from exc
-    return _coding_session_json(session)
-
-
-@router.get("/coding/projects/tree")
-async def coding_project_tree(root: str) -> dict[str, Any]:
-    return _project_tree(root)
-
-
-@router.get("/coding/projects/file")
-async def coding_project_file(root: str, path: str) -> dict[str, Any]:
-    return _project_file(root, path)
-
-
-@router.get("/coding/projects/recent")
-async def coding_recent_projects() -> dict[str, Any]:
-    return {"projects": []}
-
-
 _SETUP_STATE_PATH = Path("data/memory/setup_state.json")
 
 
@@ -5174,6 +4810,12 @@ async def terminal_ws(websocket: WebSocket) -> None:
             await terminal_session_manager.terminate(session.id)
 
 
+router.include_router(
+    create_coding_router(
+        service_provider=lambda: coding_service,
+        project_roots_provider=lambda: _coding_project_roots(),
+    )
+)
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(youtube_router)

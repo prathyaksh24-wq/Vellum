@@ -8,6 +8,7 @@ dependencies = [
   "apify-client>=1.10.0",
   "aiosqlite>=0.20.0",
   "httpx>=0.28.0",
+  "honcho-ai>=2.1.1",
   "duckduckgo-search>=6.3.0",
   "fastapi>=0.115.0",
   "openai-codex>=0.1.0b3",
@@ -28,7 +29,6 @@ dependencies = [
   "pydantic-settings>=2.6.0",
   "PyYAML>=6.0.2",
   "python-dotenv>=1.0.1",
-  "PyYAML>=6.0.2",
   "pillow>=10.0.0",
   "chromadb>=0.5.0",
   "rich>=13.7.1",
@@ -49,6 +49,7 @@ personal-agent = "agent.cli:main"
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3.0",
+  "pytest-asyncio>=0.24.0",
 ]
 
 [tool.pytest.ini_options]

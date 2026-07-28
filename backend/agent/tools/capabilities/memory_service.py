@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -60,16 +59,6 @@ class MemoryCapabilityService:
         )
         registry.register(
             CapabilityRecord(
-                name="memory.create_card",
-                namespace="memory",
-                access=CapabilityAccess.WRITE,
-                allowed_agents=frozenset({"MemoryAgent", "VellumAgent"}),
-                stream_label="Created memory card",
-                adapter=self.create_card,
-            )
-        )
-        registry.register(
-            CapabilityRecord(
                 name="memory.propose_card",
                 namespace="memory",
                 access=CapabilityAccess.READ,
@@ -104,15 +93,16 @@ class MemoryCapabilityService:
         limit = _positive_int(payload.get("limit"))
         agent_name = str(payload.get("agent_name") or "VellumAgent").strip() or "VellumAgent"
         requested_scopes = payload.get("scopes")
-        allowed_scopes = {
-            _canonical_scope(scope)
-            for scope in requested_scopes
-        } if isinstance(requested_scopes, list) else {
-            "global",
-            "user_profile",
-            "shared",
-            f"agent:{agent_name}",
-        }
+        allowed_scopes = (
+            {_canonical_scope(scope) for scope in requested_scopes}
+            if isinstance(requested_scopes, list)
+            else {
+                "global",
+                "user_profile",
+                "shared",
+                f"agent:{agent_name}",
+            }
+        )
         cards: list[dict[str, str]] = []
         memory_root = self.vault_root / "Agent" / "Memories"
         if limit == 0:
@@ -161,45 +151,6 @@ class MemoryCapabilityService:
                 if _is_simple_conflict(left, right):
                     conflicts.append({"left": left, "right": right})
         return {"action": "memory.detect_conflicts", "conflicts": conflicts}
-
-    def create_card(self, payload: dict[str, Any]) -> dict[str, str]:
-        raw_scope = str(payload.get("scope") or "shared").strip() or "shared"
-        scope = _canonical_scope(raw_scope)
-        scope_parts = _scope_path_parts(scope.replace(":", "/", 1))
-        title = str(payload.get("title") or payload.get("claim") or "Memory").strip() or "Memory"
-        summary = str(payload.get("summary") or payload.get("claim") or "").strip()
-        evidence = str(payload.get("evidence") or "").strip()
-        visible_to = _normalize_visible_to(payload.get("visible_to"))
-        now = datetime.now(timezone.utc)
-        created = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-        stamp = now.strftime("%Y%m%d-%H%M%S-%f")
-        memory_root = (self.vault_root / "Agent" / "Memories").resolve()
-        directory = memory_root.joinpath(*(_scope_folder_name(part) for part in scope_parts)).resolve()
-        if not directory.is_relative_to(memory_root):
-            raise ValueError("Memory scope resolved outside the memories vault")
-        directory.mkdir(parents=True, exist_ok=True)
-
-        text = "\n".join(
-            [
-                "---",
-                "type: memory",
-                f"scope: {_yaml_json(scope)}",
-                f"created: {_yaml_json(created)}",
-                f"visible_to: {_yaml_json(visible_to)}",
-                "---",
-                "",
-                f"# {title}",
-                "",
-                summary,
-                "",
-                "## Evidence",
-                "",
-                evidence,
-                "",
-            ]
-        )
-        path = _write_new_card(directory, stamp, _slug(title), text)
-        return {"action": "memory.create_card", "path": path.relative_to(self.vault_root.resolve()).as_posix()}
 
     def propose_card(self, payload: dict[str, Any]) -> dict[str, Any]:
         proposal = MemoryProposal(
@@ -276,30 +227,6 @@ def _slug(text: str) -> str:
     return slug or "memory"
 
 
-def _scope_path_parts(scope: str) -> list[str]:
-    parts = []
-    for raw_part in re.split(r"[\\/]+", scope):
-        stripped = raw_part.strip()
-        if stripped in {"", ".", ".."}:
-            continue
-        part = _slug(stripped)
-        if part not in {".", ".."}:
-            parts.append(part)
-    return parts or ["shared"]
-
-
-def _scope_folder_name(part: str) -> str:
-    if part == "shared":
-        return "Shared"
-    return part.title()
-
-
-def _normalize_visible_to(value: Any) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item) for item in value]
-
-
 def _canonical_scope(value: Any) -> str:
     raw = str(value or "shared").strip()
     lowered = raw.casefold().replace("-", "_")
@@ -335,21 +262,3 @@ def _visible_to(value: Any) -> set[str]:
     if isinstance(value, list):
         return {str(item) for item in value if str(item).strip()}
     return set()
-
-
-def _yaml_json(value: str | list[str]) -> str:
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _write_new_card(directory: Path, stamp: str, slug: str, text: str) -> Path:
-    counter = 1
-    while True:
-        suffix = "" if counter == 1 else f"-{counter}"
-        path = directory / f"{stamp}-{slug}{suffix}.md"
-        try:
-            with path.open("x", encoding="utf-8", newline="\n") as handle:
-                handle.write(text)
-            return path
-        except FileExistsError:
-            pass
-        counter += 1

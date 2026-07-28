@@ -11,7 +11,6 @@ import tempfile
 from typing import Any, Callable
 
 from agent.skills.hub import HubLockFile
-from agent.skills.manager import SkillManager
 from agent.skills.mutation import SkillMutationCoordinator
 from agent.skills.parser import SkillPackageParser
 from agent.skills.usage import SkillUsageStore
@@ -121,7 +120,6 @@ class SkillCurator:
         self.protected = protected or {"skill-skill-creator-v1", "plan"}
         self.reviewer = reviewer
         self.usage = SkillUsageStore(self.root)
-        self.manager = SkillManager(self.root)
         self.parser = SkillPackageParser()
         self.mutations = SkillMutationCoordinator(self.root)
         self.backups = CuratorBackupStore(self.root, keep=self.config.backup_keep)
@@ -161,6 +159,9 @@ class SkillCurator:
             "run_id": run_id,
             "stale": decisions["stale"],
             "archived": decisions["archived"],
+            "archive_mutations": [],
+            "applied_archives": [],
+            "pending_archives": [],
             "kept": decisions["kept"],
             "consolidated": [],
         }
@@ -170,7 +171,10 @@ class SkillCurator:
             for name in decisions["stale"]:
                 self.usage.set_state(name, "stale")
             for name in decisions["archived"]:
-                self.manager.archive(name, confirm=True)
+                mutation = self.mutations.submit("archive", name=name, origin="curator_automatic")
+                result["archive_mutations"].append(mutation)
+                key = "applied_archives" if mutation["status"] == "applied" else "pending_archives"
+                result[key].append(name)
             should_consolidate = self.config.consolidate if consolidate is None else consolidate
             if should_consolidate and self.reviewer and decisions["review"]:
                 review_result = self.reviewer(decisions["review"], max_iterations=8)
@@ -252,6 +256,9 @@ class SkillCurator:
     def prune(self, *, days: int = 90, now: datetime | None = None, dry_run: bool = False) -> dict[str, Any]:
         current = now or datetime.now(timezone.utc)
         names = []
+        mutations: list[dict[str, Any]] = []
+        applied: list[str] = []
+        pending: list[str] = []
         for name, record in self.usage.all().items():
             if not self._is_agent_created(name) or record.get("pinned") or record.get("state") == "archived":
                 continue
@@ -262,8 +269,17 @@ class SkillCurator:
             if names and self.config.backup_enabled:
                 self.backups.create(f"curator prune {days} days")
             for name in names:
-                self.manager.archive(name, confirm=True)
-        return {"ok": True, "archived": sorted(names), "dry_run": dry_run}
+                mutation = self.mutations.submit("archive", name=name, origin="curator_prune")
+                mutations.append(mutation)
+                (applied if mutation["status"] == "applied" else pending).append(name)
+        return {
+            "ok": True,
+            "archived": sorted(names),
+            "applied_archives": sorted(applied),
+            "pending_archives": sorted(pending),
+            "mutations": mutations,
+            "dry_run": dry_run,
+        }
 
     def _is_agent_created(self, name: str) -> bool:
         if HubLockFile(self.root).get(name) is not None or name in self._bundled_names():

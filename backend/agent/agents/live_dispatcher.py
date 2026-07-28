@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import logging
 from pathlib import Path
 import re
@@ -132,16 +131,6 @@ class LiveAgentDispatcher:
             if active_agent != agent_name:
                 self.state_store.set_active_agent(thread_id, agent_name)
                 self.state_store.clear_pending_reroute(thread_id)
-                self._record_handoff(
-                    message=message,
-                    thread_id=thread_id,
-                    agent_name=agent_name,
-                    reason=(
-                        f"routing skill selected {agent_name}"
-                        if route_source == "skill"
-                        else f"{agent_name} intent detected"
-                    ),
-                )
             try:
                 run = None
                 if self.delegation_runtime is None:
@@ -217,24 +206,6 @@ class LiveAgentDispatcher:
             cache_reason=run.cache_reason if run is not None else "",
             route_source=route_source,
         )
-
-    def _record_handoff(self, *, message: str, thread_id: str, agent_name: str, reason: str) -> None:
-        folder = self.vault_root / "Agent" / "Queries"
-        folder.mkdir(parents=True, exist_ok=True)
-        now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        slug = re.sub(r"[^A-Za-z0-9]+", "-", message).strip("-").lower()[:60] or "pupil-query"
-        path = folder / f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{slug}.md"
-        content = (
-            "---\n"
-            f"created: \"{now}\"\n"
-            f"thread_id: \"{thread_id}\"\n"
-            f"routed_to: {agent_name}\n"
-            f"reason: \"{reason}\"\n"
-            "---\n\n"
-            "## Query\n"
-            f"{message}\n"
-        )
-        path.write_text(content, encoding="utf-8", newline="\n")
 
     def _domain(self, url: str) -> str:
         match = re.match(r"https?://(?:www\.)?([^/]+)", url)
