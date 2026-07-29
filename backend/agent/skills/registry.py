@@ -54,6 +54,14 @@ class SkillRegistry:
             )
         return entries
 
+    def list_packages(self, *, include_unavailable: bool = False) -> list[SkillPackage]:
+        packages = self._packages()
+        return [
+            package
+            for _, package in sorted(packages.items())
+            if include_unavailable or self._availability(package)[0]
+        ]
+
     def view(self, name: str, *, include_unavailable: bool = False) -> SkillPackage:
         package = self._packages().get(name)
         if package is None:

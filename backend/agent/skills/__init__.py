@@ -55,7 +55,13 @@ from agent.skills.mutation import (
 )
 from agent.skills.parser import SkillPackageError, SkillPackageParser
 from agent.skills.registry import SkillRegistry
-from agent.skills.runtime import CORE_TOOL_NAMES, CORE_TOOLSETS, build_skill_index_block, get_skill_registry
+from agent.skills.runtime import (
+    CORE_TOOL_NAMES,
+    CORE_TOOLSETS,
+    build_skill_activation_block,
+    build_skill_index_block,
+    get_skill_registry,
+)
 from agent.skills.security import (
     SkillSecurityFinding,
     SkillSecurityResult,
@@ -136,6 +142,7 @@ __all__ = [
     "VellumMetadata",
     "WellKnownSkillSource",
     "build_learn_prompt",
+    "build_skill_activation_block",
     "build_skill_index_block",
     "get_skill_registry",
     "allow_skill_install",

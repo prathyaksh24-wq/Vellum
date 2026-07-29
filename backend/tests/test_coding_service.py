@@ -43,6 +43,16 @@ class FakeAdapter:
         return None
 
 
+class PromptRecordingAdapter(FakeAdapter):
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    async def run_turn(self, session: CodingSession, prompt: str, turn_id: str) -> AsyncIterator[CodingEvent]:
+        self.prompts.append(prompt)
+        async for event in super().run_turn(session, prompt, turn_id):
+            yield event
+
+
 class FailingStartAdapter(FakeAdapter):
     async def start_session(self, request: CodingSessionCreate):
         raise RuntimeError("sdk unavailable")
@@ -490,6 +500,56 @@ def test_service_streams_turn_and_persists_events(tmp_path: Path):
     ]
     assistant_event = next(event for event in persisted if event.type == "assistant.final")
     assert assistant_event.payload == {"text": "answer: hello"}
+
+
+def test_running_session_refreshes_skill_context_for_each_turn(monkeypatch, tmp_path: Path):
+    adapter = PromptRecordingAdapter()
+    active_context = {"value": "## Active Skill\nUse the plugin workflow."}
+    monkeypatch.setattr(
+        "agent.coding.service.build_skill_activation_block",
+        lambda _prompt: active_context["value"],
+    )
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: adapter},
+    )
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect(prompt: str):
+        return [event async for event in service.run_turn(session.id, prompt)]
+
+    first_events = asyncio.run(collect("Build the dashboard"))
+    active_context["value"] = ""
+    second_events = asyncio.run(collect("Fix the tests"))
+
+    assert adapter.prompts == [
+        "## Active Skill\nUse the plugin workflow.\n\n## User Task\nBuild the dashboard",
+        "Fix the tests",
+    ]
+    assert first_events[0].payload["prompt"] == "Build the dashboard"
+    assert second_events[0].payload["prompt"] == "Fix the tests"
+
+
+def test_skill_context_failure_does_not_block_coding_turn(tmp_path: Path):
+    adapter = PromptRecordingAdapter()
+
+    def fail_to_load(_prompt: str) -> str:
+        raise OSError("catalog unavailable")
+
+    service = CodingSessionService(
+        store=CodingSessionStore(tmp_path / "coding.db"),
+        adapters={ProviderName.codex: adapter},
+        skill_context_provider=fail_to_load,
+    )
+    session = asyncio.run(service.create_session(CodingSessionCreate(provider=ProviderName.codex, cwd=str(tmp_path))))
+
+    async def collect():
+        return [event async for event in service.run_turn(session.id, "Fix the tests")]
+
+    events = asyncio.run(collect())
+
+    assert adapter.prompts == ["Fix the tests"]
+    assert events[-1].type == "turn.completed"
 
 
 def test_service_captures_before_and_after_workspace_checkpoint(tmp_path: Path):

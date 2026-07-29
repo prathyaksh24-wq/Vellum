@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from agent.skills import SkillRegistry, build_skill_index_block
+from agent.skills import SkillRegistry, build_skill_activation_block, build_skill_index_block
 
 
 def write_skill(root: Path, name: str, description: str, body: str) -> None:
@@ -42,3 +42,37 @@ def test_skill_index_omits_unavailable_skills(tmp_path: Path) -> None:
     block = build_skill_index_block(SkillRegistry(local_root=root, platform_name="windows"))
 
     assert block == ""
+
+
+def test_skill_activation_loads_matching_procedure_only(tmp_path: Path) -> None:
+    root = tmp_path / "packages"
+    review = root / "engineering" / "code-review"
+    review.mkdir(parents=True)
+    (review / "SKILL.md").write_text(
+        "---\n"
+        "name: code-review\n"
+        "description: Review a pull request for correctness\n"
+        "metadata:\n"
+        "  vellum:\n"
+        "    trigger: [review pull request, code review]\n"
+        "---\n"
+        "# Code Review\n\n## Procedure\nInspect the diff before reporting findings.\n",
+        encoding="utf-8",
+    )
+    write_skill(
+        root / "research" / "sports-brief",
+        "sports-brief",
+        "Prepare sports briefs",
+        "# Sports Brief\n\n## Procedure\nCheck live scores.",
+    )
+
+    block = build_skill_activation_block(
+        "Review this pull request for correctness",
+        SkillRegistry(local_root=root),
+    )
+
+    assert "## Activated Vellum Skills" in block
+    assert "### code-review" in block
+    assert "Inspect the diff before reporting findings." in block
+    assert "sports-brief" not in block
+    assert str(tmp_path) not in block
