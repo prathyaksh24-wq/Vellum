@@ -208,6 +208,38 @@ def test_vellum_prompt_includes_compact_skill_index_without_skill_body(tmp_path:
     assert "C:/private/path" not in messages[0].content
 
 
+def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path, monkeypatch):
+    class FakeRegistry:
+        def list_skills(self):
+            return []
+
+    registry = FakeRegistry()
+    seen = {}
+
+    def activate(query, active_registry):
+        seen["query"] = query
+        seen["registry"] = active_registry
+        return "## Activated Vellum Skills\n\n### code-review\nInspect the diff first."
+
+    monkeypatch.setattr(agent_graph, "_prompt_skill_registry", registry, raising=False)
+    monkeypatch.setattr(agent_graph, "build_skill_activation_block", activate, raising=False)
+    monkeypatch.setattr(
+        agent_graph,
+        "_prompt_project_ctx",
+        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
+        raising=False,
+    )
+
+    messages = agent_graph.vellum_prompt(
+        {"messages": [HumanMessage(content="Review this pull request")]},
+        {},
+    )
+
+    assert seen == {"query": "Review this pull request", "registry": registry}
+    assert "### code-review" in messages[0].content
+    assert "Inspect the diff first." in messages[0].content
+
+
 def test_agent_tool_list_includes_progressive_skill_tools(monkeypatch):
     captured = {}
 

@@ -16,7 +16,12 @@ from agent.memory.project_context import ProjectContext
 from agent.llm.providers import get_provider_registry
 from agent.llm.routing.runtime import get_routed_chat_model
 from agent.plugins.spotify_runtime import portable_agent_tools
-from agent.skills import SkillRegistry, build_skill_index_block, get_skill_registry
+from agent.skills import (
+    SkillRegistry,
+    build_skill_activation_block,
+    build_skill_index_block,
+    get_skill_registry,
+)
 from agent.tools.apify import search_amazon
 from agent.tools.browser import (
     browser_action,
@@ -209,11 +214,17 @@ def vellum_prompt(state, config=None):
         memory_block = ""
 
     skill_index = ""
+    skill_activation = ""
     try:
-        skill_index = build_skill_index_block(_get_skill_registry())
+        skill_registry = _get_skill_registry()
+        skill_index = build_skill_index_block(skill_registry)
+        skill_activation = build_skill_activation_block(
+            _latest_user_query(state),
+            skill_registry,
+        )
     except Exception as exc:
         import logging
-        logging.getLogger(__name__).warning("skill index load failed: %s", exc)
+        logging.getLogger(__name__).warning("skill context load failed: %s", exc)
 
     active_model = get_provider_registry().current_model()
     current_date = datetime.now().date().isoformat()
@@ -227,8 +238,11 @@ def vellum_prompt(state, config=None):
     system_body = f"{runtime_text}\n\n{VELLUM_SYSTEM_PROMPT}"
     if memory_block:
         system_body = f"{memory_block}\n\n{system_body}"
-    if skill_index:
-        system_body = f"{skill_index}\n\n{system_body}"
+    skill_context = "\n\n".join(
+        block for block in (skill_index, skill_activation) if block
+    )
+    if skill_context:
+        system_body = f"{skill_context}\n\n{system_body}"
     system_text = f"{identity}\n\n{system_body}" if identity else system_body
     return [SystemMessage(content=system_text)] + list(state.get("messages", []))
 
