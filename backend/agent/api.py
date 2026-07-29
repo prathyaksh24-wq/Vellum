@@ -4543,6 +4543,7 @@ async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[
     agent_graph._prompt_skill_registry = None
     async with _agent_runtime_lock:
         await agent.aclose()
+        agent.invalidate()
     return {"ok": True, "plugin": plugin}
 
 
