@@ -69,7 +69,6 @@ from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
-from agent.plugins.portable import discover_portable_plugins
 from agent.plugins.spotify_runtime import (
     SpotifyAuthError,
     SpotifyError,
@@ -83,7 +82,6 @@ from agent.plugins.spotify_runtime import (
     spotify_store as runtime_spotify_store,
 )
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
-from agent.plugins.youtube_runtime import portable_youtube_status
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
@@ -4528,47 +4526,6 @@ async def list_plugins() -> dict[str, Any]:
             mcp_servers=servers,
         )
     }
-    plugins = [
-        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
-        agent_reach_plugin_status().model_dump(),
-        portable_spotify_status(),
-        portable_youtube_status(),
-        *[
-        {
-            "id": str(server.get("name") or ""),
-            "name": str(server.get("name") or "").replace("_", " ").title(),
-            "type": "mcp",
-            "configured": bool(server.get("configured")),
-            "status": str(server.get("status") or "unknown"),
-            "notes": str(server.get("notes") or ""),
-        }
-        for server in servers
-        if server.get("name")
-        ],
-    ]
-    _attach_portable_plugin_metadata(plugins)
-    return {"plugins": plugins}
-
-
-def _attach_portable_plugin_metadata(plugins: list[dict[str, Any]]) -> None:
-    try:
-        manifests = {manifest.id: manifest for manifest in discover_portable_plugins(REPO_ROOT / "plugins")}
-    except Exception:
-        manifests = {}
-    for plugin in plugins:
-        manifest = manifests.get(str(plugin.get("id") or ""))
-        if manifest is None:
-            continue
-        metadata = plugin.setdefault("metadata", {})
-        metadata["portable_plugin"] = {
-            "id": manifest.id,
-            "name": manifest.name,
-            "type": manifest.type,
-            "category": manifest.category,
-            "version": manifest.version,
-            "path": manifest.path.as_posix(),
-            "capabilities": list(manifest.capabilities),
-        }
 
 
 @router.post("/plugins/{plugin_id}/state")
