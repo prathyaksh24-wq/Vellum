@@ -62,6 +62,20 @@ its owned roots from skill discovery and its portable tools from the next agent
 runtime build. Required system plugins cannot be disabled. Enablement state is
 local metadata under `data/plugins/state.json` and never contains credentials.
 
+The reasoning runtime accesses enabled plugin connectors through the generic
+`plugin_mcp` tool. Connector manifests are catalog metadata until the agent asks
+for their live tools; catalog responses do not start servers or claim a remote
+connection is active. Stdio commands are constrained to their plugin root, HTTP
+connectors use bounded MCP timeouts, and resolved credentials are never returned
+by the API or tool. Mutating or unannotated MCP tools require an explicit
+confirmation flag tied to the user's requested external action.
+
+Both production HTML surfaces load the same plugin and skill catalogs for their
+slash menus. Reasoning sessions rebuild their tool registry after a plugin state
+change. Coding turns resolve matching skills from `SkillRegistry`; installed
+Codex bundles remain available to the Codex coding provider through its own
+runtime as well.
+
 ## Intentional Hermes divergences
 
 - Write approval defaults on.

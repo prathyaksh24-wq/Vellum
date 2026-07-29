@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -29,6 +30,10 @@ from agent.coding.workspace import (
     WorkspaceProvision,
     WorkspaceSnapshot,
 )
+from agent.skills.runtime import build_skill_activation_block
+
+
+logger = logging.getLogger(__name__)
 
 
 class CodingServiceError(RuntimeError):
@@ -48,6 +53,7 @@ class CodingSessionService:
         store: CodingSessionStore | None = None,
         adapters: dict[ProviderName, CodingProviderAdapter] | None = None,
         workspace_manager: CodingWorkspaceManager | None = None,
+        skill_context_provider: Callable[[str], str] | None = None,
     ) -> None:
         self.store = store or CodingSessionStore()
         self.adapters = adapters if adapters is not None else {
@@ -55,6 +61,7 @@ class CodingSessionService:
             ProviderName.claude: ClaudeAdapter(),
         }
         self.workspace_manager = workspace_manager or CodingWorkspaceManager()
+        self.skill_context_provider = skill_context_provider or build_skill_activation_block
         self._checkpoint_git_capability: dict[str, bool] = {}
         self._cleanup_stale_running_state()
 
@@ -212,15 +219,25 @@ class CodingSessionService:
                 },
             )
             adapter_run = adapter.run_turn
+            try:
+                skill_context = self.skill_context_provider(prompt).strip()
+            except Exception:
+                logger.warning("skill context load failed")
+                skill_context = ""
+            provider_prompt = (
+                f"{skill_context}\n\n## User Task\n{prompt}"
+                if skill_context
+                else prompt
+            )
             if "runtime" in inspect.signature(adapter_run).parameters:
                 provider_events = adapter_run(
                     session,
-                    prompt,
+                    provider_prompt,
                     turn.id,
                     runtime=runtime,
                 )
             else:
-                provider_events = adapter_run(session, prompt, turn.id)
+                provider_events = adapter_run(session, provider_prompt, turn.id)
             async with asyncio.timeout(turn.max_runtime_seconds):
                 async for raw_event in provider_events:
                     current_turn = self.store.get_turn(turn.id)

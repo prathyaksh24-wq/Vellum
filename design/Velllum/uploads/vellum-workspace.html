@@ -382,6 +382,33 @@ button,input,textarea,select{font-family:var(--body-font)}
 .slash-tag{margin-left:auto;font-size:11px;color:#6a6a6a;flex-shrink:0;padding-left:12px}
 .slash-sec{font-size:11px;color:#6a6a6a;padding:8px 12px 4px}
 
+/* Clip-derived extensions manager: quiet list, persistent detail, no card grid. */
+.ext-overlay{position:absolute;inset:0;z-index:600;background:#070908;display:flex;animation:fadeIn .16s ease}
+.ext-side{width:244px;border-right:1px solid #1d211f;padding:18px 12px;display:flex;flex-direction:column;gap:5px;background:#080a09}
+.ext-back{display:flex;align-items:center;gap:8px;color:#858b87;background:none;border:0;padding:8px;border-radius:7px;cursor:pointer;text-align:left}
+.ext-back:hover{background:#131614;color:#e6ebe7}
+.ext-side-title{margin:20px 8px 8px;color:#626963;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.ext-nav{display:flex;align-items:center;justify-content:space-between;border:0;background:none;color:#a6aca8;padding:8px 10px;border-radius:7px;cursor:pointer;text-align:left}
+.ext-nav:hover,.ext-nav.active{background:#18211b;color:#eaf2ec}
+.ext-count{color:#5f6861;font-size:11px}
+.ext-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.ext-toolbar{height:64px;border-bottom:1px solid #1d211f;display:flex;align-items:center;padding:0 28px;gap:14px}
+.ext-breadcrumb{font-size:13px;color:#858b87}.ext-breadcrumb b{color:#e2e8e4;font-weight:500}
+.ext-search{margin-left:auto;width:min(290px,32vw);height:34px;border:1px solid #29302c;border-radius:8px;background:#111512;color:#dce3de;padding:0 11px;outline:none}
+.ext-search:focus{border-color:#4e6656;box-shadow:0 0 0 2px rgba(92,139,105,.13)}
+.ext-content{flex:1;min-height:0;display:grid;grid-template-columns:minmax(320px,.9fr) minmax(360px,1.1fr)}
+.ext-list{overflow-y:auto;padding:22px 24px;border-right:1px solid #1d211f}
+.ext-heading{font:600 24px var(--heading-font);color:#e8eee9;margin-bottom:5px}.ext-sub{color:#6f7872;font-size:12px;margin-bottom:20px}
+.ext-row{width:100%;display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:11px;padding:10px;border:0;border-radius:9px;background:none;color:inherit;text-align:left;cursor:pointer}
+.ext-row:hover,.ext-row.selected{background:#111713}.ext-row-icon{width:32px;height:32px;border:1px solid #273029;border-radius:9px;display:grid;place-items:center;color:#99b9a2}
+.ext-row-name{color:#d8dfda;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ext-row-desc{color:#69716c;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
+.ext-row-state{color:#707972;font-size:11px}.ext-row-state.on{color:#78c98c}
+.ext-detail{overflow-y:auto;padding:38px 42px}.ext-detail-empty{height:100%;display:grid;place-items:center;color:#535b55}
+.ext-detail-head{display:flex;align-items:flex-start;gap:14px}.ext-detail-icon{width:48px;height:48px;border:1px solid #2b342e;border-radius:13px;display:grid;place-items:center;color:#a8d7b3}.ext-detail-title{font:600 24px var(--heading-font);color:#edf2ee}.ext-detail-desc{color:#768078;line-height:1.5;margin-top:5px}
+.ext-actions{margin-left:auto;display:flex;gap:8px}.ext-action{border:1px solid #2c3730;background:#111713;color:#cfd8d1;border-radius:8px;padding:7px 11px;cursor:pointer}.ext-action.primary{background:#b9f6c8;color:#102015;border-color:#b9f6c8}.ext-action:hover{filter:brightness(1.08)}
+.ext-section{margin-top:28px}.ext-section h3{font-size:13px;color:#dce4de;font-weight:500;padding-bottom:10px;border-bottom:1px solid #1c231e}.ext-child{display:flex;align-items:center;gap:10px;padding:10px 2px;border-bottom:1px solid #111612}.ext-child-copy{min-width:0;flex:1}.ext-child-name{color:#cbd4cd}.ext-child-desc{color:#657069;font-size:11.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:850px){.ext-side{width:190px}.ext-content{grid-template-columns:1fr}.ext-detail{display:none}}
+
 /* Progress floating card (inside chat) */
 .prog-float{position:absolute;top:54px;right:18px;bottom:18px;border:1px solid #2a2a2d;border-radius:14px;background:#101011;overflow-y:auto;z-index:8;box-shadow:0 18px 50px rgba(0,0,0,.5);animation:popIn .16s ease}
 .prog-empty-card{position:absolute;top:64px;right:24px;width:min(300px,calc(100% - 48px));border:1px solid #2a2a2d;border-radius:16px;background:#242424;padding:16px 18px;z-index:7;box-shadow:0 18px 50px rgba(0,0,0,.45)}
@@ -830,6 +857,9 @@ function createCodingApi(apiBase){
     rewind:(id,checkpointId,phase="after",confirmDiscard=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/rewind/"+encodeURIComponent(checkpointId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phase,confirm_discard:confirmDiscard})}),
     projectTree:(root)=>json("/api/coding/projects/tree?root="+encodeURIComponent(root)),
     projectFile:(root,path)=>json("/api/coding/projects/file?root="+encodeURIComponent(root)+"&path="+encodeURIComponent(path)),
+    plugins:()=>json("/api/plugins"),
+    skills:()=>json("/api/skills/v2/catalog?view=installed&limit=200"),
+    setPlugin:(id,enabled)=>json("/api/plugins/"+encodeURIComponent(id)+"/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:!!enabled})}),
     stop:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/stop",{method:"POST"}),
     closeSession:(id,discardChanges=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/close",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({discard_changes:discardChanges})}),
     async runTurn(id,prompt,onEvent,{signal,maxRuntimeSeconds=1800,maxProviderEvents=10000}={}){
@@ -1171,14 +1201,6 @@ const LEARNING_EVENTS = [
   { title:"Preference captured", body:"User wants Codex-level transparency without losing ChatGPT-style simplicity.", confidence:"High" },
   { title:"Pattern reinforced", body:"Coding mode and normal mode should share the same mental model.", confidence:"High" },
 ];
-const PLUGINS = [
-  { id:"browser",     name:"Browser",          ic:<IcGlobe size={13}/>,   bg:"#13233a", fg:"#5b9bd5" },
-  { id:"computer",    name:"Computer",         ic:<IcMonitor size={13}/>, bg:"#2a1633", fg:"#c084fc" },
-  { id:"superpowers", name:"Superpowers",      ic:<IcSpark size={13}/>,   bg:"#2a1d10", fg:"#e35d2b" },
-  { id:"github",      name:"GitHub",           ic:<IcGitHub size={13}/>,  bg:"#1c1c1c", fg:"#ddd" },
-  { id:"macos",       name:"Build macOS Apps", ic:<IcMonitor size={13}/>, bg:"#15243a", fg:"#7aa2d6" },
-  { id:"remotion",    name:"Remotion",         ic:<IcSpark size={13}/>,   bg:"#241033", fg:"#b07cf0" },
-];
 const DESKTOP_MENUS = {
   File: [ {l:"Close",k:"Ctrl+W"},{l:"New Window",k:"Ctrl+Shift+N"},{l:"New Chat",k:"Ctrl+N",act:"new"},{l:"Quick Chat",k:"Alt+Ctrl+N"},{l:"Open Folder…",k:"Ctrl+O"},"-",{l:"Settings…",k:"Ctrl+Comma"},"-",{l:"Log Out"},{l:"Exit"} ],
   Edit: [ {l:"Undo",k:"Ctrl+Z"},{l:"Redo",k:"Ctrl+Y"},"-",{l:"Cut",k:"Ctrl+X"},{l:"Copy",k:"Ctrl+C"},{l:"Paste",k:"Ctrl+V"},{l:"Delete"},"-",{l:"Select All",k:"Ctrl+A"} ],
@@ -1342,7 +1364,7 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
   }
   function releaseAttachments(items){ (items||[]).forEach(item=>{ if(item.url){ try{URL.revokeObjectURL(item.url);}catch(error){} } }); }
   function removeAttachment(index){ setAtts(prev=>{ const item=prev[index]; releaseAttachments(item?[item]:[]); return prev.filter((_,i)=>i!==index); }); }
-  const slashOpen = !a.runtimeLabel && text.trimStart().startsWith("/");
+  const slashOpen = text.trimStart().startsWith("/");
   const list = (slashOpen && a.slashList) ? a.slashList(text) : [];
   useEffect(()=>{
     const h = (e)=>{ if(ref.current && !ref.current.contains(e.target)){ setOpenMenu(null); setPluginsSub(false); } };
@@ -1406,10 +1428,10 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
           <div className="menu-item" onClick={()=>a.setIncludeIde(v=>!v)}><div className="menu-item-l"><IcColumns size={15}/><span>Include IDE context</span></div><Toggle on={a.includeIde}/></div>
           <div className="menu-item" onClick={()=>a.setPlanMode(v=>!v)}><div className="menu-item-l"><IcLayout size={15}/><span>Plan mode</span></div><Toggle on={a.planMode}/></div>
           {!a.runtimeLabel&&<div className="menu-item" onClick={()=>a.setPursueGoal(v=>!v)}><div className="menu-item-l"><IcTarget size={15}/><span>Pursue goal</span></div><Toggle on={a.pursueGoal}/></div>}
-          {!a.runtimeLabel&&<div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
+          <div className="menu-item" style={{position:"relative"}} onMouseEnter={()=>setPluginsSub(true)} onMouseLeave={()=>setPluginsSub(false)}>
             <div className="menu-item-l"><IcPlugin size={15}/><span>Plugins</span></div><IcChevR size={13}/>
-            {pluginsSub && (<div className="submenu pop-in"><div className="menu-sec">6 installed plugins</div>{PLUGINS.map(p=>(<div key={p.id} className="menu-item" onClick={(e)=>{e.stopPropagation(); a.setPluginsOn(o=>({...o,[p.id]:!o[p.id]}));}}><div className="menu-item-l"><span className="plug-ic" style={{background:p.bg,color:p.fg}}>{p.ic}</span><span>{p.name}</span></div><Toggle on={a.pluginsOn && a.pluginsOn[p.id]}/></div>))}</div>)}
-          </div>}
+            {pluginsSub && (<div className="submenu pop-in"><div className="menu-sec">{(a.plugins||[]).length} installed plugins</div>{(a.plugins||[]).map(p=>(<div key={p.id} className="menu-item" onClick={(e)=>{e.stopPropagation(); a.togglePlugin&&a.togglePlugin(p);}}><div className="menu-item-l"><span className="plug-ic"><IcPlugin size={13}/></span><span>{p.name}</span></div><Toggle on={p.enabled!==false}/></div>))}<div className="menu-item" onClick={()=>{a.openExtensions&&a.openExtensions();setOpenMenu(null);}}><div className="menu-item-l"><IcSettings size={14}/><span>Manage plugins…</span></div></div></div>)}
+          </div>
         </div>
       )}
       {openMenu==="access" && (
@@ -1418,10 +1440,20 @@ function InputBox({ running=false, onSend, onStop, placeholder="Ask for follow-u
         </div>
       )}
       {slashOpen && list.length>0 && (
-        <div className="slash-pop pop-in">
-          {list.filter(x=>x.group==="cmd").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic">{c.ic}</span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span></div>); })}
-          {list.some(x=>x.group==="skill") && <div className="slash-sec">Skills</div>}
-          {list.filter(x=>x.group==="skill").map((c)=>{ const gi=list.indexOf(c); return (<div key={c.id} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(c); setText(""); setSlashIdx(0);}}><span className="slash-ic"><IcSpark size={14}/></span><span className="slash-name">{c.name}</span><span className="slash-desc">{c.desc}</span><span className="slash-tag">Personal</span></div>); })}
+        <div className="slash-pop pop-in" role="listbox" aria-label="Slash commands">
+          {["cmd","skill","plugin","app","mcp","agent"].map(group=>{
+            const rows=list.filter(item=>item.group===group);
+            if(!rows.length) return null;
+            const label={cmd:"Commands",skill:"Skills",plugin:"Plugins",app:"Apps",mcp:"MCPs",agent:"Agents"}[group];
+            return <Fragment key={group}><div className="slash-sec">{label}</div>{rows.map(item=>{
+              const gi=list.indexOf(item);
+              return <div key={group+":"+item.id} role="option" aria-selected={slashIdx===gi} className={"slash-item"+(slashIdx===gi?" hi":"")} onMouseEnter={()=>setSlashIdx(gi)} onClick={()=>{a.runSlash(item); setText(""); setSlashIdx(0);}}>
+                <span className="slash-ic">{item.ic||(group==="skill"?<IcSpark size={14}/>:<IcPlugin size={14}/>)}</span>
+                <span className="slash-name">{item.name}</span><span className="slash-desc">{item.desc}</span>
+                {item.owner&&<span className="slash-tag">{item.owner}</span>}
+              </div>;
+            })}</Fragment>;
+          })}
         </div>
       )}
       <input type="file" multiple ref={fileRef} style={{display:"none"}} onChange={onFiles}/>
@@ -1713,6 +1745,53 @@ function TerminalPane({ backendBase }){
   );
 }
 
+function ExtensionsManager({plugins,skills,initialTab="plugins",initialSelection,onClose,onTogglePlugin,onTrySkill,error}){
+  const [tab,setTab]=useState(initialTab);
+  const [query,setQuery]=useState("");
+  const [selected,setSelected]=useState(initialSelection?{kind:initialTab==="skills"?"skill":"plugin",data:initialSelection}:null);
+  useEffect(()=>{setTab(initialTab);setSelected(initialSelection?{kind:initialTab==="skills"?"skill":"plugin",data:initialSelection}:null);},[initialTab,initialSelection]);
+  const appRows=(plugins||[]).flatMap(plugin=>(plugin.apps||[]).map(item=>({kind:"app",data:item,parent:plugin})));
+  const mcpRows=(plugins||[]).flatMap(plugin=>(plugin.mcp_connectors||[]).map(item=>({kind:"mcp",data:item,parent:plugin})));
+  const rowsByTab={plugins:(plugins||[]).map(data=>({kind:"plugin",data})),apps:appRows,mcps:mcpRows,skills:(skills||[]).map(data=>({kind:"skill",data}))};
+  const counts={plugins:(plugins||[]).length,apps:appRows.length,mcps:mcpRows.length,skills:(skills||[]).length};
+  const rowName=row=>row.kind==="skill"?(row.data.display_name||row.data.normalized_name):String(row.data.name||row.data.id||row.parent?.name||"Unnamed");
+  const rowDescription=row=>String(row.data.description||row.data.notes||(row.kind==="mcp"?(row.data.transport||row.data.command):""));
+  const rows=(rowsByTab[tab]||[]).filter(row=>!query||[rowName(row),rowDescription(row),row.parent?.name].join(" ").toLowerCase().includes(query.toLowerCase()));
+  const detail=selected, detailName=detail?rowName(detail):"", detailDescription=detail?rowDescription(detail):"";
+  const detailPlugin=detail&&(detail.kind==="plugin"?detail.data:detail.parent);
+  return <div className="ext-overlay" role="dialog" aria-modal="true" aria-label="Plugins and skills manager">
+    <aside className="ext-side">
+      <button className="ext-back" onClick={onClose}><IcChevL size={14}/> Back to coding</button>
+      <div className="ext-side-title">Manage</div>
+      {[["plugins","Plugins"],["apps","Apps"],["mcps","MCPs"],["skills","Skills"]].map(([id,label])=><button key={id} className={"ext-nav"+(tab===id?" active":"")} onClick={()=>{setTab(id);setSelected(null);}}><span>{label}</span><span className="ext-count">{counts[id]}</span></button>)}
+    </aside>
+    <main className="ext-main">
+      <div className="ext-toolbar"><span className="ext-breadcrumb">Manage {detail&&<Fragment><IcChevR size={11}/> <b>{detailName}</b></Fragment>}</span><input className="ext-search" aria-label={"Search "+tab} placeholder={"Search "+tab} value={query} onChange={event=>setQuery(event.target.value)}/></div>
+      <div className="ext-content">
+        <section className="ext-list"><div className="ext-heading">{({plugins:"Plugins",apps:"Apps",mcps:"MCPs",skills:"Skills"})[tab]}</div><div className="ext-sub">Manage plugins, skills, and MCP connections used by Vellum.</div>
+          {error&&<div className="runtime-error">{error}</div>}
+          {rows.map(row=>{const name=rowName(row),active=selected&&selected.kind===row.kind&&rowName(selected)===name;const enabled=row.kind==="plugin"?row.data.enabled!==false:row.parent?row.parent.enabled!==false:true;return <button key={row.kind+":"+name+":"+(row.parent?.id||"")} className={"ext-row"+(active?" selected":"")} onClick={()=>setSelected(row)}><span className="ext-row-icon">{row.kind==="skill"?<IcSpark size={15}/>:row.kind==="app"?<IcGrid size={15}/>:<IcPlugin size={15}/>}</span><span style={{minWidth:0}}><div className="ext-row-name">{name}</div><div className="ext-row-desc">{rowDescription(row)}</div></span><span className={"ext-row-state"+(enabled?" on":"")}>{enabled?"Active":"Disabled"}</span></button>;})}
+          {!rows.length&&!error&&<div className="palette-empty">No {tab} match this search.</div>}
+        </section>
+        <section className="ext-detail">
+          {!detail?<div className="ext-detail-empty">Select an item to inspect its capabilities.</div>:<Fragment>
+            <div className="ext-detail-head"><span className="ext-detail-icon">{detail.kind==="skill"?<IcSpark size={20}/>:detail.kind==="app"?<IcGrid size={20}/>:<IcPlugin size={20}/>}</span><div style={{minWidth:0}}><div className="ext-detail-title">{detailName}</div><div className="ext-detail-desc">{detailDescription||"No description provided."}</div></div><div className="ext-actions">
+              {detail.kind==="skill"&&<button className="ext-action primary" onClick={()=>onTrySkill(detail.data)}>Try now</button>}
+              {detail.kind==="plugin"&&detail.data.manageable&&!detail.data.required&&<button className="ext-action" onClick={()=>onTogglePlugin(detail.data)}>{detail.data.enabled===false?"Enable":"Disable"}</button>}
+            </div></div>
+            {detailPlugin&&<Fragment>
+              <div className="ext-section"><h3>Apps {(detailPlugin.apps||[]).length}</h3>{(detailPlugin.apps||[]).map(item=><div className="ext-child" key={item.id||item.name}><span className="ext-row-icon"><IcGrid size={14}/></span><span className="ext-child-copy"><div className="ext-child-name">{item.name||item.id}</div><div className="ext-child-desc">{item.description||"Included app"}</div></span></div>)}</div>
+              <div className="ext-section"><h3>MCPs {(detailPlugin.mcp_connectors||[]).length}</h3>{(detailPlugin.mcp_connectors||[]).map(item=><div className="ext-child" key={item.id||item.name}><span className="ext-row-icon"><IcPlugin size={14}/></span><span className="ext-child-copy"><div className="ext-child-name">{item.name||item.id}</div><div className="ext-child-desc">{item.description||item.transport||item.command||"Included connector"}</div></span></div>)}</div>
+              <div className="ext-section"><h3>Skills {(detailPlugin.skills||[]).length}</h3>{(detailPlugin.skills||[]).map(item=><div className="ext-child" key={item.id||item.name}><span className="ext-row-icon"><IcSpark size={14}/></span><span className="ext-child-copy"><div className="ext-child-name">{item.name||item.id}</div><div className="ext-child-desc">{item.description||"Included skill"}</div></span></div>)}</div>
+            </Fragment>}
+            {detail.kind==="skill"&&<div className="ext-section"><h3>Skill package</h3><div className="ext-child"><span className="ext-child-copy"><div className="ext-child-name">{detail.data.category||"Personal"}</div><div className="ext-child-desc">Hermes SKILL.md package · automatically available when the task matches</div></span></div></div>}
+          </Fragment>}
+        </section>
+      </div>
+    </main>
+  </div>;
+}
+
 function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [sbPinned, setSbPinned]       = useState(shell==="web");   // web starts as a persistent workspace sidebar
   const [sbHover, setSbHover]         = useState(false);   // edge-hover reveals it
@@ -1732,7 +1811,13 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const [planMode, setPlanMode]       = useState(false);
   const [pursueGoal, setPursueGoal]   = useState(false);
   const [includeIde, setIncludeIde]   = useState(false);
-  const [pluginsOn, setPluginsOn]     = useState({browser:true, computer:true, superpowers:true, github:true, macos:false, remotion:false});
+  const [pluginsOn, setPluginsOn]     = useState({});
+  const [pluginCatalog, setPluginCatalog] = useState([]);
+  const [skillCatalog, setSkillCatalog] = useState([]);
+  const [showExtensions, setShowExtensions] = useState(false);
+  const [extensionTab, setExtensionTab] = useState("plugins");
+  const [selectedExtension, setSelectedExtension] = useState(null);
+  const [extensionError, setExtensionError] = useState("");
   const [accessMode, setAccessMode]   = useState("full");
   const [selModel, setSelModel]       = useState(DEFAULT_MODEL);
   const [selReasoning, setSelReasoning] = useState("High");
@@ -1957,6 +2042,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     codingApiRef.current=createCodingApi(backendUrl);
     saveLocalPref("vellum.coding.backend",backendUrl);
     refreshCodingRuntime();
+    refreshExtensions();
     const timer=setInterval(refreshCodingHealth,30000);
     return ()=>clearInterval(timer);
   },[backendUrl]);
@@ -1995,6 +2081,28 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       const [health,sessions]=await Promise.all([api.health(),api.sessions()]);
       setCodingHealth(health); setCodingSessions(sessions.sessions||[]); setCodingStatus("ready"); setCodingError("");
     }catch(e){ setCodingHealth({providers:[]}); setCodingSessions([]); setCodingStatus("offline"); setCodingError((e&&e.message)||"Coding backend unavailable."); }
+  }
+  async function refreshExtensions(){
+    const api=codingApiRef.current; if(!api) return;
+    try{
+      const [pluginsResult,skillsResult]=await Promise.all([api.plugins(),api.skills()]);
+      const plugins=pluginsResult.plugins||[], skills=skillsResult.items||[];
+      setPluginCatalog(plugins); setSkillCatalog(skills);
+      setPluginsOn(Object.fromEntries(plugins.map(item=>[item.id,item.enabled!==false])));
+      setExtensionError("");
+    }catch(error){
+      setExtensionError((error&&error.message)||"Plugin catalog unavailable.");
+    }
+  }
+  async function togglePlugin(plugin){
+    if(!plugin||plugin.required||!plugin.manageable||!codingApiRef.current) return;
+    try{
+      const result=await codingApiRef.current.setPlugin(plugin.id,plugin.enabled===false);
+      const updated=result.plugin||{};
+      setPluginCatalog(items=>items.map(item=>item.id===plugin.id?{...item,...updated}:item));
+      setPluginsOn(current=>({...current,[plugin.id]:updated.enabled!==false}));
+      setExtensionError("");
+    }catch(error){setExtensionError((error&&error.message)||"Plugin state could not be updated.");}
   }
   function compactValue(value){
     if(value===null||value===undefined||value==="") return "";
@@ -2410,6 +2518,8 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     { id:"feedback", name:"Feedback", desc:"Send feedback about this chat", ic:<IcChat size={14}/> },
     { id:"goal", name:"Goal", desc:"Set a goal that Vellum keeps working towards", ic:<IcTarget size={14}/>, run:()=> setPursueGoal(true) },
     { id:"mcp", name:"MCP", desc:"Show MCP server status", ic:<IcPlugin size={14}/> },
+    { id:"plugins", name:"Plugins", desc:"Manage plugins, apps, MCPs, and skills", ic:<IcPlugin size={14}/>, run:()=>{setExtensionTab("plugins");setShowExtensions(true);} },
+    { id:"skills", name:"Skills", desc:"Search and manage installed Hermes skills", ic:<IcSpark size={14}/>, run:()=>{setExtensionTab("skills");setShowExtensions(true);} },
     { id:"memories", name:"Memories", desc:"Generate on", ic:<IcBook size={14}/>, run:()=> addTab("memory") },
     { id:"model", name:"Model", desc:selModel, ic:<IcGauge size={14}/> },
     { id:"personality", name:"Personality", desc:"Choose how Vellum responds", ic:<IcUser size={14}/> },
@@ -2419,20 +2529,16 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     { id:"side", name:"Side", desc:"Start a side conversation in an ephemeral fork", ic:<IcChat size={14}/>, run:()=> addTab("side") },
     { id:"status", name:"Status", desc:"Show chat id, context usage, and rate limits", ic:<IcGauge size={14}/> },
   ];
-  const SLASH_SKILLS = [
-    { id:"brainstorming", name:"Brainstorming", desc:"Explore intent, requirements, and design before implementation" },
-    { id:"browser-skill", name:"Browser", desc:"Let Vellum open and control the in-app browser" },
-    { id:"ci-debug", name:"CI Debug", desc:"Debug failing GitHub Actions checks" },
-    { id:"computer-use", name:"Computer Use", desc:"Control Windows apps from Vellum" },
-    { id:"dispatch", name:"Dispatching Parallel Agents", desc:"Split independent work across parallel agents" },
-    { id:"exec-plans", name:"Executing Plans", desc:"Execute written implementation plans with review checkpoints" },
-    { id:"finish-branch", name:"Finishing a Development Branch", desc:"Wrap up implementation and choose integration path" },
-  ];
   function slashFiltered(text){
     const s = (text||"").trimStart().slice(1).toLowerCase();
-    const cmds = SLASH_CMDS.filter(c=> !s || c.name.toLowerCase().includes(s)).map(c=>({...c, group:"cmd"}));
-    const sk = SLASH_SKILLS.filter(c=> !s || c.name.toLowerCase().includes(s)).map(c=>({...c, group:"skill"}));
-    return [...cmds, ...sk];
+    const matches=item=>!s||[item.name,item.desc,item.owner].join(" ").toLowerCase().includes(s);
+    const cmds = SLASH_CMDS.filter(matches).map(c=>({...c, group:"cmd"}));
+    const skills = skillCatalog.map(item=>({id:item.normalized_name||item.id,name:item.display_name||item.normalized_name,desc:item.description||"Installed Hermes skill",owner:item.category||"Personal",group:"skill",run:()=>{setExtensionTab("skills");setSelectedExtension(item);setShowExtensions(true);}})).filter(matches);
+    const plugins = pluginCatalog.map(item=>({id:item.id,name:item.name,desc:item.description||item.notes||"Plugin bundle",owner:item.developer||"",group:"plugin",ic:<IcPlugin size={14}/>,run:()=>{setExtensionTab("plugins");setSelectedExtension(item);setShowExtensions(true);}})).filter(matches);
+    const apps = pluginCatalog.flatMap(plugin=>(plugin.apps||[]).map(item=>({id:plugin.id+":"+(item.id||item.name),name:item.name||item.id,desc:item.description||("App included with "+plugin.name),owner:plugin.name,group:"app",ic:<IcGrid size={14}/>,run:()=>{setExtensionTab("apps");setSelectedExtension(plugin);setShowExtensions(true);}}))).filter(matches);
+    const mcps = pluginCatalog.flatMap(plugin=>(plugin.mcp_connectors||[]).map(item=>({id:plugin.id+":"+(item.id||item.name),name:item.name||item.id||plugin.name,desc:item.description||item.transport||item.command||"MCP connector",owner:plugin.name,group:"mcp",ic:<IcPlugin size={14}/>,run:()=>{setExtensionTab("mcps");setSelectedExtension(plugin);setShowExtensions(true);}}))).filter(matches);
+    const agents = SUBAGENTS.map(agent=>({id:agent.id,name:agent.name,desc:agent.role||"Specialized coding agent",owner:"Vellum",group:"agent",ic:<PixelSprite name={agent.sprite} color={agent.color} px={2}/>,run:()=>openAgentTab(agent)})).filter(matches);
+    return [...cmds, ...skills, ...plugins, ...apps, ...mcps, ...agents];
   }
   function runSlash(item){ if(item && item.run) item.run(); }
   const providerAccessModes=CODING_ACCESS_MODES.filter(item=>supportedAccessModeIds(codingProvider).includes(item.id));
@@ -2448,6 +2554,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     selModel:codingModel, setSelModel:setCodingModel, selReasoning:codingReasoning, setSelReasoning:setCodingReasoning, reasoningOptions:CODING_REASONING[codingProvider]||["Default"], runtimeLabel:runtimeName(codingProvider),
     providerId:codingProvider, providerOptions:["codex","claude","grok","kimi"].map(id=>({id,label:runtimeName(id),icon:id,available:!!(healthFor(id)||{}).available})), chooseProvider:chooseCodingProvider,
     planMode, setPlanMode, pursueGoal, setPursueGoal, includeIde, setIncludeIde, pluginsOn, setPluginsOn,
+    plugins:pluginCatalog, togglePlugin, openExtensions:()=>{setExtensionTab("plugins");setShowExtensions(true);},
     slashList: slashFiltered, runSlash, openModels: ()=>{setSettingsSection("models");setSettingsModelProvider(codingProvider);setShowModels(true);},
     models:codingModels, modelLabel:codingModelLabel, syncModels:()=>{}, syncing:false, memoryOn, setMemoryOn,
   };
@@ -2998,6 +3105,10 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
           </section>
         </div>;
       })()}
+
+      {showExtensions&&<ExtensionsManager plugins={pluginCatalog} skills={skillCatalog} initialTab={extensionTab} initialSelection={selectedExtension}
+        error={extensionError} onTogglePlugin={togglePlugin} onClose={()=>{setShowExtensions(false);setSelectedExtension(null);}}
+        onTrySkill={skill=>{const name=skill.display_name||skill.normalized_name;setShowExtensions(false);setSelectedExtension(null);setActiveChat("new");setTimeout(()=>sendToChat("new","Use the "+name+" skill for this task.",[]),0);}}/>}
 
       {/* Context menu */}
       {ctxMenu && (

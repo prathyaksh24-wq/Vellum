@@ -130,6 +130,13 @@ enablement and exposes each plugin's apps, MCP connectors, tools, capabilities,
 and Hermes skills. `SkillRegistry` remains the only procedural-skill discovery
 authority and receives enabled plugin-owned roots as read-only sources.
 
+Enabled plugin MCP manifests are resolved by `PluginMcpRuntime`. It supports
+stdio and streamable HTTP connectors, exposes live tool schemas to the reasoning
+agent, and keeps credentials in local environment or header resolution. Calls
+pass through the privacy classifier and scrubber. Tools explicitly annotated as
+read-only may run automatically; every other plugin MCP tool requires user
+confirmation. Disabling a plugin removes its connectors from new tool calls.
+
 ## Skills System
 
 Procedural memory is stored as Hermes-compatible `SKILL.md` packages under the `.skills/` tree. The package tree is canonical; catalog databases are rebuildable projections.

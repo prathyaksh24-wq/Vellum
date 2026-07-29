@@ -69,7 +69,7 @@ from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
-from agent.plugins.portable import discover_portable_plugins
+from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError
 from agent.plugins.spotify_runtime import (
     SpotifyAuthError,
     SpotifyError,
@@ -83,7 +83,6 @@ from agent.plugins.spotify_runtime import (
     spotify_store as runtime_spotify_store,
 )
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
-from agent.plugins.youtube_runtime import portable_youtube_status
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
@@ -4522,53 +4521,36 @@ async def list_plugins() -> dict[str, Any]:
         agent_reach_plugin_status().model_dump(),
         portable_spotify_status(),
     ]
-    return {
-        "plugins": _plugin_registry().catalog(
+    plugins = _plugin_registry().catalog(
             runtime_statuses=runtime_statuses,
             mcp_servers=servers,
         )
-    }
-    plugins = [
-        memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
-        agent_reach_plugin_status().model_dump(),
-        portable_spotify_status(),
-        portable_youtube_status(),
-        *[
-        {
-            "id": str(server.get("name") or ""),
-            "name": str(server.get("name") or "").replace("_", " ").title(),
-            "type": "mcp",
-            "configured": bool(server.get("configured")),
-            "status": str(server.get("status") or "unknown"),
-            "notes": str(server.get("notes") or ""),
-        }
-        for server in servers
-        if server.get("name")
-        ],
-    ]
-    _attach_portable_plugin_metadata(plugins)
-    return {"plugins": plugins}
-
-
-def _attach_portable_plugin_metadata(plugins: list[dict[str, Any]]) -> None:
     try:
-        manifests = {manifest.id: manifest for manifest in discover_portable_plugins(REPO_ROOT / "plugins")}
-    except Exception:
-        manifests = {}
-    for plugin in plugins:
-        manifest = manifests.get(str(plugin.get("id") or ""))
-        if manifest is None:
-            continue
-        metadata = plugin.setdefault("metadata", {})
-        metadata["portable_plugin"] = {
-            "id": manifest.id,
-            "name": manifest.name,
-            "type": manifest.type,
-            "category": manifest.category,
-            "version": manifest.version,
-            "path": manifest.path.as_posix(),
-            "capabilities": list(manifest.capabilities),
+        declared_connectors = {
+            (connector.plugin_id, connector.name): connector.public()
+            for connector in PluginMcpRuntime(_plugin_registry()).connectors()
         }
+        connector_error = ""
+    except PluginMcpRuntimeError as exc:
+        declared_connectors = {}
+        connector_error = str(exc)
+    for plugin in plugins:
+        plugin_id = str(plugin.get("id") or "")
+        enriched = []
+        for raw_connector in plugin.get("mcp_connectors", []):
+            connector = dict(raw_connector)
+            name = str(connector.get("name") or connector.get("id") or "")
+            runtime = declared_connectors.get((plugin_id, name))
+            if runtime:
+                connector.update(runtime)
+                connector["status"] = "configured" if runtime["configured"] else "needs_configuration"
+            else:
+                connector.setdefault("status", "disabled" if plugin.get("enabled") is False else "declared")
+            enriched.append(connector)
+        plugin["mcp_connectors"] = enriched
+        if connector_error:
+            plugin.setdefault("metadata", {})["connector_runtime_error"] = connector_error
+    return {"plugins": plugins}
 
 
 @router.post("/plugins/{plugin_id}/state")
@@ -4586,6 +4568,7 @@ async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[
     agent_graph._prompt_skill_registry = None
     async with _agent_runtime_lock:
         await agent.aclose()
+        agent.invalidate()
     return {"ok": True, "plugin": plugin}
 
 
