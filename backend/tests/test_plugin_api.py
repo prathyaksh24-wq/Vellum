@@ -11,12 +11,19 @@ def _write_plugin(root: Path, plugin_id: str, *, required: bool = False) -> None
     plugin = root / "connectors" / plugin_id
     skill = plugin / "skills" / f"{plugin_id}-skill"
     skill.mkdir(parents=True)
+    (plugin / "mcp").mkdir()
+    (plugin / "mcp" / "server.mjs").write_text("", encoding="utf-8")
     (plugin / "plugin.yaml").write_text(
         f"id: {plugin_id}\n"
         f"name: {plugin_id.title()}\n"
         "type: connector\n"
         "category: Connectors\n"
-        f"required: {'true' if required else 'false'}\n",
+        f"required: {'true' if required else 'false'}\n"
+        "mcp_connectors:\n"
+        "  - name: demo-mcp\n"
+        "    command: node\n"
+        "    args:\n"
+        "      - ./mcp/server.mjs\n",
         encoding="utf-8",
     )
     (skill / "SKILL.md").write_text(
@@ -81,6 +88,9 @@ def test_plugin_api_lists_owned_skills_and_persists_state(monkeypatch, tmp_path:
     assert before.status_code == 200
     demo = next(item for item in before.json()["plugins"] if item["id"] == "demo")
     assert demo["skills"][0]["owner_plugin"] == "demo"
+    assert demo["mcp_connectors"][0]["transport"] == "stdio"
+    assert demo["mcp_connectors"][0]["configured"] is True
+    assert demo["mcp_connectors"][0]["status"] == "configured"
     assert disabled.status_code == 200
     assert disabled.json()["plugin"]["enabled"] is False
     disabled_demo = next(item for item in after.json()["plugins"] if item["id"] == "demo")

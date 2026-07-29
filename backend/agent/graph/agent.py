@@ -50,6 +50,7 @@ from agent.tools.memory_orchestrator import memory_orchestrator
 from agent.tools.obsidian_api import obsidian_api
 from agent.tools.obsidian_write import append_to_note, create_note
 from agent.tools.repo_docs import repo_docs
+from agent.tools.plugin_mcp import plugin_mcp
 from agent.tools.skill_bundles import skill_bundles
 from agent.tools.skill_curator import skill_curator
 from agent.tools.skill_hub import skill_hub
@@ -82,21 +83,22 @@ Tools:
 15. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
 16. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
-18. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-19. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
-20. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
-21. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
-22. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
-23. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
-24. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
-25. skills_list - List compact metadata for installed skills.
-26. skills_history - Query immutable install, archive, restore, update, and delete history.
-27. skill_view - Load one skill's full instructions or one relative support file.
-28. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
-29. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
-30. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
-30. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
-31. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
+18. plugin_mcp - Inspect and call MCP tools contributed by enabled plugins. Read-only annotated tools may run automatically; unannotated or mutating tools require confirmation.
+19. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
+20. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+21. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
+22. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
+23. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
+24. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
+25. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
+26. skills_list - List compact metadata for installed skills.
+27. skills_history - Query immutable install, archive, restore, update, and delete history.
+28. skill_view - Load one skill's full instructions or one relative support file.
+29. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
+30. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
+31. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
+32. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
+33. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -136,6 +138,7 @@ Rules:
 - Use repo_docs when the user asks for context on a specific GitHub project (its docs or code search) and the vault does not cover it. Prefer library_docs for well-known libraries, github_read for structured PR/issue/commit data, and repo_docs for arbitrary repo documentation and code search.
 - Use context_mode action='execute' when a question can be answered by computing on data rather than pulling many files into context — write the script, let only stdout return. Use action='index'/'search' for ad-hoc local indices that should not pollute the main Chroma/FTS5 vault stores. Treat action='fetch_and_index' output as external and unscrubbed: summarize before quoting, and never feed it raw into responses that mix with private folder content.
 - Never call context_mode action='purge' unless the user explicitly asks for it and passes confirm=true.
+- Use plugin_mcp only for connectors listed by action='list_connectors'. Inspect live tools first. Never pass credentials in arguments, and never confirm a mutating plugin tool unless the user explicitly requested that external change.
 - Use escalate_to_cloud when a public/code/docs task is too hard, tool calls fail repeatedly, you cannot form a reliable plan, or the user asks for a stronger/cloud model.
 - Public code, docs, public GitHub, and public web tasks may be escalated automatically.
 - Private vault notes, memories, personal files, personal preferences, and user history require explicit approval before cloud escalation.
@@ -322,6 +325,7 @@ def core_tool_registry() -> ToolRegistry:
         "skill_curator",
         "skill_hub",
         "context_mode",
+        "plugin_mcp",
         "escalate_to_cloud",
         "create_note",
         "append_to_note",
@@ -363,6 +367,7 @@ def core_tool_registry() -> ToolRegistry:
         skill_curator,
         skill_hub,
         repo_docs,
+        plugin_mcp,
         context_mode,
         web_research,
         web_extract,

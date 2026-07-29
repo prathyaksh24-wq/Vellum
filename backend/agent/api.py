@@ -69,6 +69,7 @@ from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
+from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError
 from agent.plugins.spotify_runtime import (
     SpotifyAuthError,
     SpotifyError,
@@ -4520,12 +4521,36 @@ async def list_plugins() -> dict[str, Any]:
         agent_reach_plugin_status().model_dump(),
         portable_spotify_status(),
     ]
-    return {
-        "plugins": _plugin_registry().catalog(
+    plugins = _plugin_registry().catalog(
             runtime_statuses=runtime_statuses,
             mcp_servers=servers,
         )
-    }
+    try:
+        declared_connectors = {
+            (connector.plugin_id, connector.name): connector.public()
+            for connector in PluginMcpRuntime(_plugin_registry()).connectors()
+        }
+        connector_error = ""
+    except PluginMcpRuntimeError as exc:
+        declared_connectors = {}
+        connector_error = str(exc)
+    for plugin in plugins:
+        plugin_id = str(plugin.get("id") or "")
+        enriched = []
+        for raw_connector in plugin.get("mcp_connectors", []):
+            connector = dict(raw_connector)
+            name = str(connector.get("name") or connector.get("id") or "")
+            runtime = declared_connectors.get((plugin_id, name))
+            if runtime:
+                connector.update(runtime)
+                connector["status"] = "configured" if runtime["configured"] else "needs_configuration"
+            else:
+                connector.setdefault("status", "disabled" if plugin.get("enabled") is False else "declared")
+            enriched.append(connector)
+        plugin["mcp_connectors"] = enriched
+        if connector_error:
+            plugin.setdefault("metadata", {})["connector_runtime_error"] = connector_error
+    return {"plugins": plugins}
 
 
 @router.post("/plugins/{plugin_id}/state")
