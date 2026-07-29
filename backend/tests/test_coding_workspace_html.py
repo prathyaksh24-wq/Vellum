@@ -51,3 +51,26 @@ def test_workspace_html_exposes_functional_studio_composer() -> None:
     assert "setQueued(prev=>[...prev" in html
     assert "attachmentBudget=131072" in html
     assert "content=await f.text()" in html
+
+
+def test_workspace_slash_menu_uses_live_plugin_and_skill_catalogs() -> None:
+    html = WORKSPACE_HTML.read_text(encoding="utf-8")
+
+    assert 'plugins:()=>json("/api/plugins")' in html
+    assert 'skills:()=>json("/api/skills/v2/catalog?view=installed&limit=200")' in html
+    assert 'group:"skill"' in html
+    assert 'group:"plugin"' in html
+    assert 'group:"app"' in html
+    assert 'group:"mcp"' in html
+    assert 'group:"agent"' in html
+    assert 'aria-label="Slash commands"' in html
+    assert 'role="listbox"' in html
+    assert "const PLUGINS = [" not in html
+    assert "const SLASH_SKILLS = [" not in html
+    assert 'const slashOpen = text.trimStart().startsWith("/")' in html
+    assert 'const slashOpen = !a.runtimeLabel' not in html
+    assert "function ExtensionsManager" in html
+    assert 'aria-label="Plugins and skills manager"' in html
+    assert '["plugins","Plugins"],["apps","Apps"],["mcps","MCPs"],["skills","Skills"]' in html
+    assert "onTogglePlugin={togglePlugin}" in html
+    assert "Hermes SKILL.md package" in html
