@@ -117,7 +117,69 @@ _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SEC
 _dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
-_agent_runtime_lock = asyncio.Lock()
+
+
+class _ThreadTurnCoordinator:
+    """Serialize each chat while allowing safe runtime-wide mutations."""
+
+    def __init__(self) -> None:
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._references: dict[str, int] = {}
+        self._condition = asyncio.Condition()
+        self._active_turns = 0
+        self._mutation_pending = False
+
+    @asynccontextmanager
+    async def hold(self, thread_id: str):
+        lock = self._locks.setdefault(thread_id, asyncio.Lock())
+        self._references[thread_id] = self._references.get(thread_id, 0) + 1
+        acquired = False
+        active = False
+        try:
+            await lock.acquire()
+            acquired = True
+            async with self._condition:
+                await self._condition.wait_for(lambda: not self._mutation_pending)
+                self._active_turns += 1
+                active = True
+            yield
+        finally:
+            if active:
+                async with self._condition:
+                    self._active_turns -= 1
+                    self._condition.notify_all()
+            if acquired:
+                lock.release()
+            remaining = self._references[thread_id] - 1
+            if remaining:
+                self._references[thread_id] = remaining
+            else:
+                self._references.pop(thread_id, None)
+                self._locks.pop(thread_id, None)
+
+    @asynccontextmanager
+    async def mutate(self):
+        claimed = False
+        async with self._condition:
+            await self._condition.wait_for(lambda: not self._mutation_pending)
+            self._mutation_pending = True
+            claimed = True
+            try:
+                await self._condition.wait_for(lambda: self._active_turns == 0)
+            except BaseException:
+                self._mutation_pending = False
+                self._condition.notify_all()
+                raise
+        try:
+            yield
+        finally:
+            if claimed:
+                async with self._condition:
+                    self._mutation_pending = False
+                    self._condition.notify_all()
+
+
+_agent_turns = _ThreadTurnCoordinator()
 _profile_registry = ProfileRegistry()
 _delegation_runtime = DelegationRuntime(
     profile_registry=_profile_registry,
@@ -188,7 +250,7 @@ def _load_script_module(name: str):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     thread_id: str | None = None
-    model: str | None = None  # OpenRouter model id; switches the active model for this turn + subsequent
+    model: str | None = None  # OpenRouter model id for this turn
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
     force_web_search: bool = False
@@ -1217,21 +1279,15 @@ async def _repair_incomplete_tool_history(thread_id: str) -> int:
         return 0
 
 
-async def _ensure_model(model: str | None) -> str | None:
-    """If `model` is provided and differs from the current active model,
-    switch the registry and invalidate the cached agent so it rebuilds.
-    Returns the resolved model id (or None if no switch happened)."""
-    if not model:
-        return None
+async def _ensure_model(model: str | None) -> str:
+    """Resolve one turn's model without mutating the process-wide default."""
     from agent.llm.providers import get_provider_registry
 
     registry = get_provider_registry()
-    current_id = registry.current_model().id
-    if model == current_id:
-        return current_id
-    entry = registry.set_active(model)
-    if entry.id != current_id:
-        await agent.aclose()
+    requested = model or registry.current_model().id
+    entry = registry.resolve(requested)
+    if entry is None:
+        raise ValueError(f"Unknown model: {requested}")
     return entry.id
 
 
@@ -1318,9 +1374,9 @@ async def _run_agent(
     if direct_skill:
         skill_usage_scope.activate(direct_skill.group(1), "direct_slash")
     try:
-        async with _agent_runtime_lock:
+        async with _agent_turns.hold(active_thread_id):
             try:
-                await _ensure_model(model)
+                resolved_model = await _ensure_model(model)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1329,6 +1385,7 @@ async def _run_agent(
             result = await agent.ainvoke(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
+                model=resolved_model,
             )
     except asyncio.CancelledError:
         skill_usage_scope.finish("cancelled")
@@ -3388,7 +3445,7 @@ async def _stream_agent_turn(
     direct_skill = re.match(r"Load ([a-z][a-z0-9_-]*) with skill_view", clean_message, re.I)
     if direct_skill:
         stream_skill_usage.activate(direct_skill.group(1), "direct_slash")
-    async with _agent_runtime_lock:
+    async with _agent_turns.hold(active_thread_id):
         answer_parts: list[str] = []
         tool_names: list[str] = list(delegated_tools)
         sources: list[dict] = list(live_sources)
@@ -3405,7 +3462,7 @@ async def _stream_agent_turn(
         message_item_started = False
         final_answer_started = False
         try:
-            await _ensure_model(model)
+            resolved_model = await _ensure_model(model)
             await _repair_incomplete_tool_history(active_thread_id)
             if computer_use_runtime.status().get("enabled") and not computer_use_runtime.status().get("paused"):
                 try:
@@ -3422,6 +3479,7 @@ async def _stream_agent_turn(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
                 version="v2",
+                model=resolved_model,
             )
             stream_iterator = stream.__aiter__()
             timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
@@ -4566,7 +4624,7 @@ async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[
     _skill_surface_singleton = None
     agent_graph = importlib.import_module("agent.graph.agent")
     agent_graph._prompt_skill_registry = None
-    async with _agent_runtime_lock:
+    async with _agent_turns.mutate():
         await agent.aclose()
         agent.invalidate()
     return {"ok": True, "plugin": plugin}
@@ -4574,19 +4632,14 @@ async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[
 
 @router.post("/settings/active-model", response_model=ActiveModelResponse)
 async def set_active_model(request: SetActiveModelRequest) -> ActiveModelResponse:
-    """Switch the runtime active model and invalidate the cached LangGraph agent
-    so the next chat turn rebuilds with the new model."""
+    """Set the default for model-less callers without interrupting active turns."""
     from agent.llm.providers import get_provider_registry
 
-    async with _agent_runtime_lock:
-        registry = get_provider_registry()
-        current_id = registry.current_model().id
-        try:
-            entry = registry.set_active(request.model)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if entry.id != current_id:
-            await agent.aclose()  # force rebuild on next invoke
+    registry = get_provider_registry()
+    try:
+        entry = registry.set_active(request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ActiveModelResponse(
         id=entry.id,
         label=entry.label,

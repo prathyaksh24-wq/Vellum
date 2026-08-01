@@ -23,7 +23,7 @@ class FakeAgent:
     def __init__(self):
         self.calls = []
 
-    async def ainvoke(self, payload, config=None):
+    async def ainvoke(self, payload, config=None, model=None):
         self.calls.append((payload, config))
         message = SimpleNamespace(content="API fake answer", tool_calls=[{"name": "search_my_notes"}])
         return {"messages": [message]}
@@ -1460,7 +1460,7 @@ def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
         async def aupdate_state(self, config, values):
             self.events.append(("update_state", config["configurable"]["thread_id"], values))
 
-        async def ainvoke(self, payload, config=None):
+        async def ainvoke(self, payload, config=None, model=None):
             self.events.append(("ainvoke", config["configurable"]["thread_id"]))
             return {"messages": [SimpleNamespace(content="recovered", tool_calls=[])]}
 
@@ -1647,12 +1647,12 @@ def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
     ]
 
 
-def test_active_model_switch_waits_for_active_stream(monkeypatch):
+def test_active_model_switch_does_not_wait_for_active_stream(monkeypatch):
     async def run_case():
         from agent.llm import providers as providers_mod
 
         providers_mod.get_provider_registry.cache_clear()
-        api._agent_runtime_lock = asyncio.Lock()
+        api._agent_turns = api._ThreadTurnCoordinator()
 
         class StreamingAgent:
             def __init__(self):
@@ -1660,8 +1660,10 @@ def test_active_model_switch_waits_for_active_stream(monkeypatch):
                 self.finish = asyncio.Event()
                 self.streaming = False
                 self.closed_while_streaming = False
+                self.models = []
 
             async def astream_events(self, *args, **kwargs):
+                self.models.append(kwargs.pop('model', None))
                 self.streaming = True
                 self.started.set()
                 yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="ok")}}
@@ -1692,26 +1694,142 @@ def test_active_model_switch_waits_for_active_stream(monkeypatch):
             model="google/gemma-4-31b-it",
         ))
 
-        async def consume_response():
-            async for _chunk in response.body_iterator:
+        async def consume_response_for(stream_response):
+            async for _chunk in stream_response.body_iterator:
                 pass
 
-        consume_task = asyncio.create_task(consume_response())
+        consume_task = asyncio.create_task(consume_response_for(response))
         await asyncio.wait_for(streaming_agent.started.wait(), timeout=1)
 
         switch_task = asyncio.create_task(api.set_active_model(
             api.SetActiveModelRequest(model="deepseek/deepseek-v4-pro")
         ))
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(switch_task, timeout=1)
 
-        assert not switch_task.done()
+        assert switch_task.done()
         assert streaming_agent.closed_while_streaming is False
 
         streaming_agent.finish.set()
         await asyncio.wait_for(consume_task, timeout=1)
-        await asyncio.wait_for(switch_task, timeout=1)
 
         assert streaming_agent.closed_while_streaming is False
+
+        second = await api.chat_stream(api.ChatRequest(
+            message='continue in this chat',
+            thread_id='stream-lock-test',
+            model='qwen/qwen3.5-35b-a3b',
+        ))
+        await asyncio.wait_for(consume_response_for(second), timeout=1)
+
+        assert streaming_agent.models == [
+            'google/gemma-4-31b-it',
+            'qwen/qwen3.5-35b-a3b',
+        ]
+        assert providers_mod.get_provider_registry().current_model().id == 'deepseek/deepseek-v4-pro'
         providers_mod.get_provider_registry.cache_clear()
+
+    asyncio.run(run_case())
+
+
+def test_stalled_chat_does_not_block_another_conversation(monkeypatch):
+    async def run_case():
+        api._agent_turns = api._ThreadTurnCoordinator()
+
+        class PerConversationAgent:
+            def __init__(self):
+                self.first_started = asyncio.Event()
+                self.release_first = asyncio.Event()
+                self.calls = []
+
+            async def astream_events(self, *args, **kwargs):
+                model = kwargs.pop("model", None)
+                thread_id = kwargs["config"]["configurable"]["thread_id"]
+                self.calls.append((thread_id, model))
+                if thread_id == "current-chat":
+                    self.first_started.set()
+                    await self.release_first.wait()
+                yield {"event": "on_chat_model_stream", "data": {"chunk": SimpleNamespace(content="ok")}}
+
+        fake_agent = PerConversationAgent()
+        monkeypatch.setattr(api, "agent", fake_agent)
+
+        class NoopLiveDispatcher:
+            def maybe_handle(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(api, "_live_dispatcher", NoopLiveDispatcher())
+
+        async def fake_background_learn(*args, **kwargs):
+            return None
+
+        monkeypatch.setattr(api, "_background_learn", fake_background_learn)
+
+        async def consume(stream_response):
+            async for _chunk in stream_response.body_iterator:
+                pass
+
+        first_response = await api.chat_stream(api.ChatRequest(
+            message="first",
+            thread_id="current-chat",
+            model="openai/gpt-5.6-sol",
+        ))
+        first_task = asyncio.create_task(consume(first_response))
+        await asyncio.wait_for(fake_agent.first_started.wait(), timeout=1)
+
+        second_response = await api.chat_stream(api.ChatRequest(
+            message="second",
+            thread_id="past-chat",
+            model="anthropic/claude-opus-5",
+        ))
+        await asyncio.wait_for(consume(second_response), timeout=1)
+
+        assert ("past-chat", "anthropic/claude-opus-5") in fake_agent.calls
+        assert not first_task.done()
+
+        fake_agent.release_first.set()
+        await asyncio.wait_for(first_task, timeout=1)
+
+    asyncio.run(run_case())
+
+def test_runtime_mutation_waits_for_turns_and_blocks_new_turns():
+    async def run_case():
+        coordinator = api._ThreadTurnCoordinator()
+        first_entered = asyncio.Event()
+        release_first = asyncio.Event()
+        mutation_entered = asyncio.Event()
+        release_mutation = asyncio.Event()
+        second_entered = asyncio.Event()
+
+        async def first_turn():
+            async with coordinator.hold("first-chat"):
+                first_entered.set()
+                await release_first.wait()
+
+        async def mutate_runtime():
+            async with coordinator.mutate():
+                mutation_entered.set()
+                await release_mutation.wait()
+
+        async def second_turn():
+            async with coordinator.hold("second-chat"):
+                second_entered.set()
+
+        first_task = asyncio.create_task(first_turn())
+        await first_entered.wait()
+        mutation_task = asyncio.create_task(mutate_runtime())
+        await asyncio.sleep(0)
+        second_task = asyncio.create_task(second_turn())
+        await asyncio.sleep(0)
+
+        assert not mutation_entered.is_set()
+        assert not second_entered.is_set()
+
+        release_first.set()
+        await asyncio.wait_for(mutation_entered.wait(), timeout=1)
+        assert not second_entered.is_set()
+
+        release_mutation.set()
+        await asyncio.wait_for(second_entered.wait(), timeout=1)
+        await asyncio.gather(first_task, mutation_task, second_task)
 
     asyncio.run(run_case())

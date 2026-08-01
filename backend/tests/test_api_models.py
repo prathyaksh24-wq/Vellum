@@ -39,7 +39,14 @@ def test_list_models_returns_catalog(client: TestClient) -> None:
     assert "google/gemma-4-31b-it" in ids
     assert "anthropic/claude-opus-4.7" in ids
     assert "openai/gpt-5.5" in ids
-    assert "moonshotai/kimi-k2.6" in ids
+    assert {
+        "openai/gpt-5.6-sol",
+        "openai/gpt-5.6-terra",
+        "openai/gpt-5.6-luna",
+        "anthropic/claude-opus-5",
+        "moonshotai/kimi-k3",
+        "deepseek/deepseek-v4-flash-0731",
+    }.issubset(ids)
 
 
 def test_set_active_model_by_id(client: TestClient) -> None:

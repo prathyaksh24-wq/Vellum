@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 import sqlite3
@@ -408,48 +409,78 @@ async def build_async_agent(model: str | None = None):
 
 
 class LazyAgent:
+    """Cache LangGraph runtimes by model so turn selection stays request-scoped."""
+
     def __init__(self):
-        self._agent = None
-        self._async_agent = None
+        self._agents: dict[str, object] = {}
+        self._async_agents: dict[str, object] = {}
+        self._async_build_locks: dict[str, asyncio.Lock] = {}
 
-    def _get(self):
-        if self._agent is None:
-            self._agent = build_agent()
-        return self._agent
+    @staticmethod
+    def _model_key(model: str | None) -> str:
+        return model or "__default__"
 
-    def invalidate(self) -> None:
-        self._agent = None
-        self._async_agent = None
+    def _get(self, model: str | None = None):
+        key = self._model_key(model)
+        if key not in self._agents:
+            self._agents[key] = build_agent(model)
+        return self._agents[key]
 
-    async def _aget(self):
-        if self._async_agent is None:
-            self._async_agent = await build_async_agent()
-        return self._async_agent
+    def invalidate(self, model: str | None = None) -> None:
+        if model is None:
+            self._agents.clear()
+            self._async_agents.clear()
+            self._async_build_locks.clear()
+            return
+        key = self._model_key(model)
+        self._agents.pop(key, None)
+        self._async_agents.pop(key, None)
+        self._async_build_locks.pop(key, None)
 
-    async def ainvoke(self, *args, **kwargs):
-        return await (await self._aget()).ainvoke(*args, **kwargs)
+    async def _aget(self, model: str | None = None):
+        key = self._model_key(model)
+        target = self._async_agents.get(key)
+        if target is not None:
+            return target
+        lock = self._async_build_locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            target = self._async_agents.get(key)
+            if target is None:
+                target = await build_async_agent(model)
+                self._async_agents[key] = target
+        return target
 
-    async def astream_events(self, *args, **kwargs):
-        target = await self._aget()
+    async def ainvoke(self, *args, model: str | None = None, **kwargs):
+        return await (await self._aget(model)).ainvoke(*args, **kwargs)
+
+    async def astream_events(self, *args, model: str | None = None, **kwargs):
+        target = await self._aget(model)
         async for event in target.astream_events(*args, **kwargs):
             yield event
 
-    async def aget_state(self, *args, **kwargs):
-        return await (await self._aget()).aget_state(*args, **kwargs)
+    async def aget_state(self, *args, model: str | None = None, **kwargs):
+        return await (await self._aget(model)).aget_state(*args, **kwargs)
 
-    async def aupdate_state(self, *args, **kwargs):
-        return await (await self._aget()).aupdate_state(*args, **kwargs)
+    async def aupdate_state(self, *args, model: str | None = None, **kwargs):
+        return await (await self._aget(model)).aupdate_state(*args, **kwargs)
 
-    def invoke(self, *args, **kwargs):
-        return self._get().invoke(*args, **kwargs)
+    def invoke(self, *args, model: str | None = None, **kwargs):
+        return self._get(model).invoke(*args, **kwargs)
 
-    async def aclose(self) -> None:
-        if self._async_agent is not None:
-            checkpointer = getattr(self._async_agent, "checkpointer", None)
+    async def aclose(self, model: str | None = None) -> None:
+        if model is None:
+            targets = list(self._async_agents.values())
+            self._async_agents.clear()
+            self._async_build_locks.clear()
+        else:
+            key = self._model_key(model)
+            target = self._async_agents.pop(key, None)
+            self._async_build_locks.pop(key, None)
+            targets = [target] if target is not None else []
+        for target in targets:
+            checkpointer = getattr(target, "checkpointer", None)
             conn = getattr(checkpointer, "conn", None)
             if conn is not None:
                 await conn.close()
-            self._async_agent = None
-
 
 agent = LazyAgent()

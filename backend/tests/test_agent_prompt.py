@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
@@ -281,3 +282,32 @@ def test_agent_prompt_documents_skill_mutation_safety():
     assert "force" in prompt
     assert "never auto-deletes" in prompt
     assert "rollback" in prompt
+
+
+def test_lazy_agent_caches_async_runtimes_by_model(monkeypatch):
+    builds = []
+
+    class FakeRuntime:
+        def __init__(self, model):
+            self.model = model
+
+        async def ainvoke(self, *_args, **_kwargs):
+            return self.model
+
+    async def fake_build(model=None):
+        await asyncio.sleep(0)
+        builds.append(model)
+        return FakeRuntime(model)
+
+    monkeypatch.setattr(agent_graph, "build_async_agent", fake_build)
+    lazy = agent_graph.LazyAgent()
+
+    async def run_case():
+        return await asyncio.gather(
+            lazy.ainvoke({}, model="model-a"),
+            lazy.ainvoke({}, model="model-b"),
+            lazy.ainvoke({}, model="model-a"),
+        )
+
+    assert asyncio.run(run_case()) == ["model-a", "model-b", "model-a"]
+    assert sorted(builds) == ["model-a", "model-b"]
