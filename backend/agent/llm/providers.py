@@ -31,7 +31,7 @@ class ProviderGroup:
     default_id: str
 
 
-# All IDs below verified against https://openrouter.ai/api/v1/models on 16/05/2026.
+# All IDs below verified against https://openrouter.ai/api/v1/models on 01/08/2026.
 # Curated to the models the user listed; remove entries here to hide them from
 # the picker, add entries (with valid OpenRouter IDs) to expose new ones.
 _CATALOG: tuple[ModelEntry, ...] = (
@@ -41,13 +41,23 @@ _CATALOG: tuple[ModelEntry, ...] = (
     ModelEntry("qwen/qwen3.5-35b-a3b", "Qwen 3.5 35B A3B", "qwen", 262_144, "flagship", True),
     ModelEntry("minimax/minimax-m2.7", "MiniMax M2.7", "minimax", 204_800, "flagship", True),
     # ---- Cloud (closed-weights, OpenRouter-routed) ----
+    ModelEntry("anthropic/claude-opus-5", "Claude Opus 5", "anthropic", 1_000_000, "flagship", False),
+    ModelEntry("anthropic/claude-opus-5-fast", "Claude Opus 5 (Fast)", "anthropic", 1_000_000, "fast", False),
     ModelEntry("anthropic/claude-opus-4.7", "Claude Opus 4.7", "anthropic", 1_000_000, "flagship", False),
     ModelEntry("anthropic/claude-opus-4.6", "Claude Opus 4.6", "anthropic", 1_000_000, "flagship", False),
     ModelEntry("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5", "anthropic", 1_000_000, "flagship", False),
+    ModelEntry("openai/gpt-5.6-sol-pro", "GPT-5.6 Sol Pro", "openai", 1_050_000, "flagship", False),
+    ModelEntry("openai/gpt-5.6-sol", "GPT-5.6 Sol", "openai", 1_050_000, "flagship", False),
+    ModelEntry("openai/gpt-5.6-terra-pro", "GPT-5.6 Terra Pro", "openai", 1_050_000, "flagship", False),
+    ModelEntry("openai/gpt-5.6-terra", "GPT-5.6 Terra", "openai", 1_050_000, "flagship", False),
+    ModelEntry("openai/gpt-5.6-luna-pro", "GPT-5.6 Luna Pro", "openai", 1_050_000, "fast", False),
+    ModelEntry("openai/gpt-5.6-luna", "GPT-5.6 Luna", "openai", 1_050_000, "fast", False),
     ModelEntry("openai/gpt-5.5", "GPT 5.5", "openai", 1_050_000, "flagship", False),
     ModelEntry("deepseek/deepseek-v4-pro", "DeepSeek V4 Pro", "deepseek", 1_048_576, "flagship", False),
+    ModelEntry("deepseek/deepseek-v4-flash-0731", "DeepSeek V4 Flash 0731", "deepseek", 1_048_576, "fast", False),
     ModelEntry("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash", "deepseek", 1_048_576, "fast", False),
     ModelEntry("google/gemini-3-flash-preview", "Gemini 3 Flash (preview)", "google", 1_048_576, "fast", False),
+    ModelEntry("moonshotai/kimi-k3", "Kimi K3", "moonshot", 1_048_576, "flagship", False),
     ModelEntry("moonshotai/kimi-k2.6", "Kimi K2.6", "moonshot", 262_144, "flagship", False),
 )
 
@@ -55,10 +65,10 @@ _GROUPS: tuple[ProviderGroup, ...] = (
     ProviderGroup("google", "Google", "google/gemma-4-31b-it"),
     ProviderGroup("qwen", "Qwen", "qwen/qwen3.5-35b-a3b"),
     ProviderGroup("minimax", "MiniMax", "minimax/minimax-m2.7"),
-    ProviderGroup("anthropic", "Anthropic", "anthropic/claude-opus-4.7"),
-    ProviderGroup("openai", "OpenAI", "openai/gpt-5.5"),
-    ProviderGroup("deepseek", "DeepSeek", "deepseek/deepseek-v4-pro"),
-    ProviderGroup("moonshot", "MoonshotAI", "moonshotai/kimi-k2.6"),
+    ProviderGroup("anthropic", "Anthropic", "anthropic/claude-opus-5"),
+    ProviderGroup("openai", "OpenAI", "openai/gpt-5.6-sol"),
+    ProviderGroup("deepseek", "DeepSeek", "deepseek/deepseek-v4-flash-0731"),
+    ProviderGroup("moonshot", "MoonshotAI", "moonshotai/kimi-k3"),
 )
 
 _MODEL_ALIASES: dict[str, str] = {
