@@ -58,6 +58,24 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("Manage videos and drafts on your behalf");
   });
 
+  test("keeps model selection request-scoped and persisted with conversations", () => {
+    for (const id of [
+      "openai/gpt-5.6-sol",
+      "openai/gpt-5.6-terra",
+      "openai/gpt-5.6-luna",
+      "anthropic/claude-opus-5",
+      "moonshotai/kimi-k3",
+      "deepseek/deepseek-v4-flash-0731",
+    ]) {
+      expect(html).toContain(id);
+    }
+    expect(html).toContain("model: turnModel");
+    expect(html).toContain("model: modelId");
+    expect(html).toContain("chat.model || selModel");
+    expect(html).toContain("updateChat(activeChatId, chat => ({...chat, model: id}), true)");
+    expect(html).not.toContain("API.settings.setActiveModel(id)");
+  });
+
   test("does not contain unresolved Git conflict markers", () => {
     expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
   });

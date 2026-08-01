@@ -3333,16 +3333,27 @@ let MODELS = [
   { id: 'google/gemma-4-26b-a4b-it',      label: 'Gemma 4 26B A4B' },
   { id: 'qwen/qwen3.5-35b-a3b',           label: 'Qwen 3.5 35B A3B' },
   { id: 'minimax/minimax-m2.7',           label: 'MiniMax M2.7' },
+  { id: 'anthropic/claude-opus-5',        label: 'Claude Opus 5' },
+  { id: 'anthropic/claude-opus-5-fast',   label: 'Claude Opus 5 (Fast)' },
   { id: 'anthropic/claude-opus-4.7',      label: 'Claude Opus 4.7' },
   { id: 'anthropic/claude-opus-4.6',      label: 'Claude Opus 4.6' },
   { id: 'anthropic/claude-sonnet-4.5',    label: 'Claude Sonnet 4.5' },
+  { id: 'openai/gpt-5.6-sol-pro',         label: 'GPT-5.6 Sol Pro' },
+  { id: 'openai/gpt-5.6-sol',             label: 'GPT-5.6 Sol' },
+  { id: 'openai/gpt-5.6-terra-pro',       label: 'GPT-5.6 Terra Pro' },
+  { id: 'openai/gpt-5.6-terra',           label: 'GPT-5.6 Terra' },
+  { id: 'openai/gpt-5.6-luna-pro',        label: 'GPT-5.6 Luna Pro' },
+  { id: 'openai/gpt-5.6-luna',            label: 'GPT-5.6 Luna' },
   { id: 'openai/gpt-5.5',                 label: 'GPT 5.5' },
   { id: 'deepseek/deepseek-v4-pro',       label: 'DeepSeek V4 Pro' },
+  { id: 'deepseek/deepseek-v4-flash-0731',label: 'DeepSeek V4 Flash 0731' },
   { id: 'deepseek/deepseek-v4-flash',     label: 'DeepSeek V4 Flash' },
   { id: 'google/gemini-3-flash-preview',  label: 'Gemini 3 Flash (preview)' },
+  { id: 'moonshotai/kimi-k3',             label: 'Kimi K3' },
   { id: 'moonshotai/kimi-k2.6',           label: 'Kimi K2.6' },
 ];
 const DEFAULT_MODEL = 'google/gemma-4-31b-it';
+const readDefaultModel = () => { try { return localStorage.getItem('vellum-default-model') || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; } };
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
   { id: 'anthropic',  name: 'Anthropic',  note: 'Claude models' },
@@ -7417,8 +7428,13 @@ const App = () => {
   const [profile, setProfile] = useState(PROFILE_DEFAULT);
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
-  const [selModel, setSelModel] = useState(DEFAULT_MODEL);
+  const [selModel, setSelModel] = useState(readDefaultModel);
   const [models, setModels] = useState(MODELS);
+  useEffect(() => {
+    if (!activeChatId) return;
+    const chat = chats.find(item => item.id === activeChatId);
+    if (chat) setSelModel(chat.model || readDefaultModel());
+  }, [activeChatId, chats.length]);
   const [backendSettings, setBackendSettings] = useState(null);
   const [memoryData, setMemoryData] = useState({facts: [], entries: [], saved: [], archived: [], summary: null, settings: null, loading: true, error: ''});
 const [apps, setApps] = useState(SEED_APPS);
@@ -7630,7 +7646,10 @@ const [slashSkills, setSlashSkills] = useState([]);
             MODELS = liveModels;
             setModels(liveModels);
           }
-          if (modelData.active && modelData.active.id) setSelModel(modelData.active.id);
+          const preferred = readDefaultModel();
+          const availableIds = new Set(liveModels.map(model => model.id));
+          if (availableIds.has(preferred)) setSelModel(preferred);
+          else if (modelData.active && modelData.active.id) setSelModel(modelData.active.id);
         }
         if (settingsData) setBackendSettings(settingsData);
         if (pluginData && Array.isArray(pluginData.plugins)) {
@@ -7690,7 +7709,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const newChat = () => { setView('chat'); setActiveChatId(null); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const newChat = () => { setView('chat'); setActiveChatId(null); setSelModel(readDefaultModel()); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
   const leaveNotFound = () => {
     try {
       const url = new URL(window.location.href);
@@ -7702,7 +7721,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     newChat();
   };
   const openChat = (id, messageId) => {
-    setView('chat'); setActiveChatId(id);
+    const chat = chats.find(item => item.id === id);
+    setView('chat'); setActiveChatId(id); setSelModel((chat && chat.model) || readDefaultModel());
     try { localStorage.setItem('vellum-active-chat-id', id); } catch {}
     setMenu(null); setActivityMsg(null);
     if (window.matchMedia('(max-width: 720px)').matches) setSidebarPinned(false);
@@ -8019,7 +8039,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const contextMessage = {id:uid(), role:'assistant', text:'Using “' + (page.title || 'Knowledge') + '” as live ' + (page.kind === 'vault_note' ? 'Vault' : 'wiki') + ' context.', streaming:false, phase:'done', sources:[], tools:[]};
     if (!chatId) {
       chatId = uid();
-      const record = {id: chatId, thread_id: chatId, title: 'Context: ' + (page.title || 'Knowledge'), pinned:false, archived:false, projectId:null, created:'Today', appIds:[], messages:[contextMessage]};
+      const record = {id: chatId, thread_id: chatId, model: selModel, title: 'Context: ' + (page.title || 'Knowledge'), pinned:false, archived:false, projectId:null, created:'Today', appIds:[], messages:[contextMessage]};
       threadRef.current[chatId] = chatId;
       setChats(items => [record, ...items]);
       saveConversation(record);
@@ -8248,11 +8268,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     turnCtl.current[msgId].timers.push(setTimeout(startAnswer, 2600));
   };
 
-  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}) => {
+  const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
+        {message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
@@ -8359,6 +8379,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const sendMessage = (text, attach, opts = {}) => {
     let chatId = opts.forceNew ? null : activeChatId;
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
+    const turnModel = (existingChat && existingChat.model) || selModel;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const act = activitySeedForMode(text);
@@ -8374,7 +8395,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!chatId) {
       chatId = uid();
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
-      const record = {id: chatId, thread_id: chatId, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
+      const record = {id: chatId, thread_id: chatId, model: turnModel, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
       saveConversation(record);
       setDraftApps([]);
@@ -8383,14 +8404,14 @@ const [slashSkills, setSlashSkills] = useState([]);
     } else {
       setChats(cs => cs.map(c => {
         if (c.id !== chatId) return c;
-        const next = {...c, messages: [...c.messages, userMsg, aMsg]};
+        const next = {...c, model: turnModel, messages: [...c.messages, userMsg, aMsg]};
         setTimeout(() => saveConversation(next), 0);
         return next;
       }));
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, opts);
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, opts, turnModel);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
@@ -8414,7 +8435,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : []);
+      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : [], {}, chat.model || selModel);
     } else {
       streamReply(chat.id, msgId, {...act, answer: reply});
     }
@@ -8432,14 +8453,13 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
 
   const pushToast = msg => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2200); };
-  const selectModel = async id => {
+  const selectModel = id => {
     setSelModel(id);
-    if (!FEATURE_FLAGS.realModels) return;
-    try {
-      const active = await API.settings.setActiveModel(id);
-      if (active && active.id) setSelModel(active.id);
+    if (view === 'chat' && activeChatId) {
+      updateChat(activeChatId, chat => ({...chat, model: id}), true);
+      return;
     }
-    catch (err) { pushToast('Model switch failed'); }
+    try { localStorage.setItem('vellum-default-model', id); } catch {}
   };
   const saveProviderKey = async (provider, apiKey) => {
     const result = await API.settings.setProviderKey(provider, apiKey);
