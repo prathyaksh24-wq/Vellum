@@ -9,6 +9,7 @@ Orchestrator, or the YouTube connector.
 ```text
 Google Takeout / OAuth
   -> Knowledge Core sources and observations
+  -> channel entities and observed aliases
   -> user signals
   -> preference states
   -> youtube.personal_context
@@ -24,6 +25,9 @@ Google Takeout / OAuth
 - **Preference state**: a rebuildable summary containing score, trend,
   lifecycle, confidence, time windows, and evidence count.
 - **Snapshot**: the local read model returned to the YouTube agent or frontend.
+- **YouTube channel entity**: one local canonical entity keyed by the official YouTube channel ID.
+- **Channel alias**: a title observed for a channel entity, including historical titles.
+- **Identity collision candidate**: one normalized alias observed for more than one channel ID; it is review-only.
 
 ## Ownership
 
@@ -32,6 +36,10 @@ Google Takeout / OAuth
 - `KnowledgeStore.preference_states` stores rebuildable interest projections.
 - `YouTubeIntelligenceService` owns YouTube-specific observation translation
   and snapshot formatting.
+- `YouTubeChannelIdentityService` reconciles official channel IDs and aliases
+  through the existing Knowledge Core entity tables.
+- Cross-channel identity candidates remain separate entities and are never
+  automatically merged.
 - `YoutubeCapabilityService` owns the `youtube.personal_context` capability.
 - APScheduler owns the nightly projection rebuild.
 
@@ -67,6 +75,7 @@ without inventing watch duration or completion data.
 
 ```text
 GET  /api/plugins/youtube/intelligence?limit=20&query=Sidemen
+GET  /api/plugins/youtube/intelligence/identities?limit=100
 POST /api/plugins/youtube/intelligence/rebuild
 ```
 
@@ -86,6 +95,8 @@ personal channel or search labels.
 
 Implemented:
 
+- canonical channel entities and historical aliases from Takeout watch events;
+- read-only identity collision candidates for human review;
 - channel interest from Takeout watch events;
 - repeated search themes from Takeout search events;
 - rising, stable, falling, active, waning, dormant, and occasional states;

@@ -69,9 +69,23 @@ def test_rebuild_creates_idempotent_channel_interest_snapshot(tmp_path: Path) ->
         "signals_existing": 0,
         "signals_removed": 0,
         "subjects_recomputed": 1,
+        "identity": {
+            "records_scanned": 2,
+            "entities_created": 1,
+            "entities_existing": 0,
+            "aliases_created": 1,
+            "aliases_existing": 0,
+        },
     }
     assert second["signals_created"] == 0
     assert second["signals_existing"] == 2
+    assert second["identity"] == {
+        "records_scanned": 2,
+        "entities_created": 0,
+        "entities_existing": 1,
+        "aliases_created": 0,
+        "aliases_existing": 1,
+    }
     assert snapshot["local_only"] is True
     assert snapshot["channels"][0]["subject_key"] == "youtube:channel:UC-sidemen"
     assert snapshot["channels"][0]["label"] == "Sidemen"

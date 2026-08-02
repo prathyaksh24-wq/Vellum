@@ -14,6 +14,10 @@ from agent.knowledge.models import (
     UserSignalInput,
 )
 from agent.knowledge.store import KnowledgeStore
+from agent.plugins.youtube_channel_identity import (
+    ChannelIdentityRecord,
+    YouTubeChannelIdentityService,
+)
 
 
 ORIGIN = "youtube_takeout"
@@ -30,16 +34,22 @@ SignalFactory = Callable[[dict[str, Any]], UserSignalInput | None]
 class YouTubeIntelligenceService:
     """Build and read rebuildable YouTube preference projections."""
 
-    def __init__(self, store: KnowledgeStore) -> None:
+    def __init__(
+        self,
+        store: KnowledgeStore,
+        identities: YouTubeChannelIdentityService | None = None,
+    ) -> None:
         self.store = store
+        self.identities = identities or YouTubeChannelIdentityService(store)
 
-    def rebuild(self, *, now: datetime | None = None) -> dict[str, int]:
+    def rebuild(self, *, now: datetime | None = None) -> dict[str, Any]:
         reference = _utc(now)
         scanned = 0
         created = 0
         existing = 0
         subjects: set[str] = set()
         expected_event_keys: set[str] = set()
+        identity_records: list[ChannelIdentityRecord] = []
 
         for action, factory in (
             (WATCH_ACTION, self._channel_signal),
@@ -49,6 +59,9 @@ class YouTubeIntelligenceService:
                 signals: list[UserSignalInput] = []
                 for row in rows:
                     scanned += 1
+                    if action == WATCH_ACTION:
+                        if identity_record := self._channel_identity_record(row):
+                            identity_records.append(identity_record)
                     signal = factory(row)
                     if signal is None:
                         continue
@@ -59,6 +72,7 @@ class YouTubeIntelligenceService:
                 created += result["created"]
                 existing += result["existing"]
 
+        identity_result = self.identities.reconcile(identity_records)
         pruned = self.store.prune_user_signals(
             event_key_prefix="youtube:intelligence:",
             categories=(CHANNEL_CATEGORY, SEARCH_CATEGORY),
@@ -75,6 +89,7 @@ class YouTubeIntelligenceService:
             "signals_existing": existing,
             "signals_removed": int(pruned["removed"]),
             "subjects_recomputed": recomputed,
+            "identity": identity_result,
         }
 
     def snapshot(
@@ -168,6 +183,22 @@ class YouTubeIntelligenceService:
             evidence = self.store.latest_signal_metadata(
                 str(state["subject_key"]) for state in states
             )
+        identity_by_channel: dict[str, dict] = {}
+        if category == CHANNEL_CATEGORY:
+            channel_ids = [
+                str(
+                    (
+                        evidence.get(str(state["subject_key"]), {}).get(
+                            "metadata"
+                        )
+                        or {}
+                    ).get("channel_id")
+                    or ""
+                )
+                for state in states
+            ]
+            identity_by_channel = self.identities.resolve_many(channel_ids)
+
         items = []
         for state in states:
             signal = evidence.get(str(state["subject_key"]), {})
@@ -189,7 +220,21 @@ class YouTubeIntelligenceService:
                 "updated_at": state["updated_at"],
             }
             if category == CHANNEL_CATEGORY:
-                item["channel_id"] = source.get("channel_id", "")
+                channel_id = str(source.get("channel_id") or "")
+                identity = (
+                    identity_by_channel.get(channel_id.casefold())
+                    if channel_id
+                    else None
+                )
+                item["channel_id"] = channel_id
+                item["entity_id"] = (
+                    str(identity["entity_id"]) if identity is not None else ""
+                )
+                item["aliases"] = (
+                    list(identity["aliases"]) if identity is not None else []
+                )
+                if identity is not None:
+                    item["label"] = str(identity["canonical_name"])
             items.append(item)
         if query_terms:
             single_term = next(iter(query_terms)) if len(query_terms) == 1 else ""
@@ -228,6 +273,24 @@ class YouTubeIntelligenceService:
             if len(rows) < PAGE_SIZE:
                 return
             offset += len(rows)
+
+    @staticmethod
+    def _channel_identity_record(
+        row: dict[str, Any],
+    ) -> ChannelIdentityRecord | None:
+        payload = dict(row.get("payload") or {})
+        channel_id = str(payload.get("channel_id") or "").strip()
+        if not channel_id:
+            return None
+        observed_at = _parse_time(row.get("observed_at"))
+        if observed_at is None:
+            return None
+        return ChannelIdentityRecord(
+            channel_id=channel_id,
+            title=str(payload.get("channel_title") or "").strip(),
+            observed_at=observed_at,
+            source_id=row.get("source_id"),
+        )
 
     def _channel_signal(self, row: dict[str, Any]) -> UserSignalInput | None:
         payload = dict(row.get("payload") or {})

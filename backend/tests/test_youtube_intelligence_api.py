@@ -59,3 +59,43 @@ def test_youtube_intelligence_api_rebuilds_only_derived_state(monkeypatch) -> No
 
     assert response.status_code == 200
     assert response.json()["subjects_recomputed"] == 4
+
+
+def test_youtube_identity_api_returns_local_review_candidates(monkeypatch) -> None:
+    class FakeIdentityService:
+        def __init__(self, store):
+            assert store == "knowledge-store"
+
+        def profile(self, *, limit):
+            assert limit == 25
+            return {
+                "local_only": True,
+                "counts": {
+                    "entities": 2,
+                    "aliases": 2,
+                    "collision_candidates": 1,
+                },
+                "candidates": [
+                    {
+                        "candidate_id": "ytcol-example",
+                        "alias": "Shared Name",
+                        "external_ids": ["UC-one", "UC-two"],
+                        "entity_ids": ["ent-one", "ent-two"],
+                        "reason": "shared_alias_distinct_external_ids",
+                        "requires_review": True,
+                        "auto_merge": False,
+                    }
+                ],
+            }
+
+    monkeypatch.setattr(youtube_api, "get_knowledge_core", lambda: SimpleNamespace(store="knowledge-store"))
+    monkeypatch.setattr(youtube_api, "YouTubeChannelIdentityService", FakeIdentityService, raising=False)
+
+    response = _client().get(
+        "/api/plugins/youtube/intelligence/identities",
+        params={"limit": 25},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["local_only"] is True
+    assert response.json()["candidates"][0]["auto_merge"] is False
