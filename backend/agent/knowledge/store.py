@@ -22,6 +22,7 @@ from typing import Any, Iterable
 from agent.knowledge.models import (
     ContentAnnotationInput,
     ContextPackRequest,
+    EntityIdentityInput,
     IngestionJobInput,
     ObservationActor,
     ObservationInput,
@@ -448,6 +449,257 @@ class KnowledgeStore:
             ON content_annotations(requires_review, updated_at DESC);
             """
         )
+
+    def record_entity_identities(
+        self,
+        items: Iterable[EntityIdentityInput],
+    ) -> dict[str, int]:
+        entities_created = 0
+        entities_existing = 0
+        aliases_created = 0
+        aliases_existing = 0
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            for item in items:
+                identity_key = item.external_id.casefold()
+                entity_id = _stable_id("ent", item.entity_type.casefold(), identity_key)
+                existing = connection.execute(
+                    "SELECT id FROM entities WHERE id = ?",
+                    (entity_id,),
+                ).fetchone()
+                metadata = {
+                    **item.metadata,
+                    "external_id": item.external_id,
+                    "identity_key": identity_key,
+                    "observed_at": _iso(item.observed_at),
+                }
+                connection.execute(
+                    """
+                    INSERT INTO entities (
+                        id, entity_type, canonical_name, normalized_name,
+                        sensitivity, metadata_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        canonical_name = excluded.canonical_name,
+                        sensitivity = excluded.sensitivity,
+                        metadata_json = excluded.metadata_json,
+                        updated_at = excluded.updated_at
+                    WHERE canonical_name IS NOT excluded.canonical_name
+                       OR sensitivity IS NOT excluded.sensitivity
+                       OR metadata_json IS NOT excluded.metadata_json
+                    """,
+                    (
+                        entity_id,
+                        item.entity_type,
+                        item.canonical_name,
+                        identity_key,
+                        item.sensitivity.value,
+                        _json(metadata),
+                        now,
+                        now,
+                    ),
+                )
+                if existing is None:
+                    entities_created += 1
+                else:
+                    entities_existing += 1
+
+                for alias in item.aliases:
+                    normalized_alias = " ".join(alias.casefold().split())
+                    if not normalized_alias:
+                        continue
+                    alias_id = _stable_id("alias", entity_id, normalized_alias)
+                    cursor = connection.execute(
+                        """
+                        INSERT OR IGNORE INTO entity_aliases (
+                            id, entity_id, alias, normalized_alias, source_id, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            alias_id,
+                            entity_id,
+                            alias,
+                            normalized_alias,
+                            item.source_id,
+                            now,
+                        ),
+                    )
+                    if int(cursor.rowcount) > 0:
+                        aliases_created += 1
+                    else:
+                        aliases_existing += 1
+        return {
+            "entities_created": entities_created,
+            "entities_existing": entities_existing,
+            "aliases_created": aliases_created,
+            "aliases_existing": aliases_existing,
+        }
+
+    def get_entity_identity(
+        self,
+        *,
+        entity_type: str,
+        external_id: str,
+    ) -> dict[str, Any] | None:
+        identities = self.get_entity_identities(
+            entity_type=entity_type,
+            external_ids=(external_id,),
+        )
+        return identities.get(external_id.strip().casefold())
+
+    def get_entity_identities(
+        self,
+        *,
+        entity_type: str,
+        external_ids: Iterable[str],
+    ) -> dict[str, dict[str, Any]]:
+        identity_keys = sorted(
+            {
+                external_id.strip().casefold()
+                for external_id in external_ids
+                if external_id.strip()
+            }
+        )
+        if not identity_keys:
+            return {}
+        placeholders = ", ".join("?" for _ in identity_keys)
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT * FROM entities
+                WHERE entity_type = ? AND normalized_name IN ({placeholders})
+                ORDER BY normalized_name ASC
+                """,
+                (entity_type, *identity_keys),
+            ).fetchall()
+            entity_ids = [str(row["id"]) for row in rows]
+            aliases_by_entity: dict[str, list[str]] = {
+                entity_id: [] for entity_id in entity_ids
+            }
+            if entity_ids:
+                entity_placeholders = ", ".join("?" for _ in entity_ids)
+                aliases = connection.execute(
+                    f"""
+                    SELECT entity_id, alias FROM entity_aliases
+                    WHERE entity_id IN ({entity_placeholders})
+                    ORDER BY entity_id ASC, normalized_alias ASC
+                    """,
+                    entity_ids,
+                ).fetchall()
+                for alias in aliases:
+                    aliases_by_entity[str(alias["entity_id"])].append(
+                        str(alias["alias"])
+                    )
+        identities: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            entity_id = str(row["id"])
+            metadata = json.loads(str(row["metadata_json"] or "{}"))
+            identity = {
+                "entity_id": entity_id,
+                "entity_type": str(row["entity_type"]),
+                "external_id": str(
+                    metadata.get("external_id") or row["normalized_name"]
+                ),
+                "canonical_name": str(row["canonical_name"]),
+                "aliases": aliases_by_entity[entity_id],
+                "sensitivity": str(row["sensitivity"]),
+                "metadata": metadata,
+                "updated_at": str(row["updated_at"]),
+            }
+            identities[str(identity["external_id"]).casefold()] = identity
+        return identities
+
+    def entity_identity_profile(
+        self,
+        *,
+        entity_type: str,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        bounded_limit = max(1, min(int(limit), 500))
+        with closing(self._connect()) as connection, connection:
+            entity_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM entities WHERE entity_type = ?",
+                    (entity_type,),
+                ).fetchone()[0]
+            )
+            alias_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM entity_aliases aliases
+                    JOIN entities entities ON entities.id = aliases.entity_id
+                    WHERE entities.entity_type = ?
+                    """,
+                    (entity_type,),
+                ).fetchone()[0]
+            )
+            collision_count = int(
+                connection.execute(
+                    """
+                    SELECT COUNT(*) FROM (
+                        SELECT aliases.normalized_alias
+                        FROM entity_aliases aliases
+                        JOIN entities entities ON entities.id = aliases.entity_id
+                        WHERE entities.entity_type = ?
+                        GROUP BY aliases.normalized_alias
+                        HAVING COUNT(DISTINCT aliases.entity_id) > 1
+                    )
+                    """,
+                    (entity_type,),
+                ).fetchone()[0]
+            )
+            collisions = connection.execute(
+                """
+                SELECT aliases.normalized_alias, MIN(aliases.alias) AS alias
+                FROM entity_aliases aliases
+                JOIN entities entities ON entities.id = aliases.entity_id
+                WHERE entities.entity_type = ?
+                GROUP BY aliases.normalized_alias
+                HAVING COUNT(DISTINCT aliases.entity_id) > 1
+                ORDER BY aliases.normalized_alias ASC
+                LIMIT ?
+                """,
+                (entity_type, bounded_limit),
+            ).fetchall()
+            items = []
+            for collision in collisions:
+                entities = connection.execute(
+                    """
+                    SELECT entities.id, entities.metadata_json
+                    FROM entity_aliases aliases
+                    JOIN entities entities ON entities.id = aliases.entity_id
+                    WHERE entities.entity_type = ?
+                      AND aliases.normalized_alias = ?
+                    ORDER BY entities.id ASC
+                    """,
+                    (entity_type, str(collision["normalized_alias"])),
+                ).fetchall()
+                items.append(
+                    {
+                        "normalized_alias": str(collision["normalized_alias"]),
+                        "alias": str(collision["alias"]),
+                        "entities": [
+                            {
+                                "entity_id": str(entity["id"]),
+                                "external_id": str(
+                                    json.loads(str(entity["metadata_json"] or "{}"))
+                                    .get("external_id")
+                                    or ""
+                                ),
+                            }
+                            for entity in entities
+                        ],
+                    }
+                )
+        return {
+            "counts": {
+                "entities": entity_count,
+                "aliases": alias_count,
+                "collision_candidates": collision_count,
+            },
+            "collisions": items,
+        }
 
     def upsert_source(self, item: SourceItemInput) -> dict[str, Any]:
         source_id = _stable_id("src", item.kind.casefold(), item.external_id)

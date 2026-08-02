@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from agent.config import get_settings
 from agent.knowledge.runtime import get_knowledge_core
+from agent.plugins.youtube_channel_identity import YouTubeChannelIdentityService
 from agent.plugins.youtube_intelligence import YouTubeIntelligenceService
 from agent.plugins.youtube_runtime import (
     YouTubeAPIError,
@@ -135,6 +136,14 @@ async def get_youtube_intelligence(
 ) -> dict[str, Any]:
     intelligence = YouTubeIntelligenceService(get_knowledge_core().store)
     return await asyncio.to_thread(intelligence.snapshot, limit=limit, query=query)
+
+
+@router.get("/intelligence/identities")
+async def get_youtube_identity_profile(
+    limit: int = Query(default=100, ge=1, le=100),
+) -> dict[str, Any]:
+    identities = YouTubeChannelIdentityService(get_knowledge_core().store)
+    return await asyncio.to_thread(identities.profile, limit=limit)
 
 
 @router.post("/intelligence/rebuild")

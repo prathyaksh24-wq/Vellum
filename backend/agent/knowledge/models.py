@@ -83,6 +83,30 @@ class SourceItemInput(BaseModel):
         return clean
 
 
+class EntityIdentityInput(BaseModel):
+    entity_type: str = Field(min_length=1, max_length=80)
+    external_id: str = Field(min_length=1, max_length=500)
+    canonical_name: str = Field(min_length=1, max_length=500)
+    aliases: list[str] = Field(default_factory=list, max_length=500)
+    source_id: str | None = None
+    observed_at: datetime | None = None
+    sensitivity: Sensitivity = Sensitivity.PRIVATE
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("entity_type", "external_id", "canonical_name")
+    @classmethod
+    def clean_entity_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("entity identity fields cannot be blank")
+        return clean
+
+    @field_validator("aliases")
+    @classmethod
+    def clean_aliases(cls, aliases: list[str]) -> list[str]:
+        return list(dict.fromkeys(alias.strip() for alias in aliases if alias.strip()))
+
+
 class ObservationInput(BaseModel):
     origin: str = Field(min_length=1, max_length=120)
     action: str = Field(min_length=1, max_length=160)
