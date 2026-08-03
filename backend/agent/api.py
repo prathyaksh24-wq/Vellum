@@ -58,6 +58,7 @@ from agent.memory.project_context import ProjectContext
 from agent.memory.sessions import SessionsReader
 from agent.master.runtime import DelegationRuntime
 from agent.profiles import ProfileRegistry
+from agent.automations.api import router as automations_router
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
 from agent.obsidian.ingester import VaultIngester
@@ -2366,36 +2367,6 @@ async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
         return _skill_surface().detail(skill_name, path=path)
     except (KeyError, ValueError, OSError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.get("/automations")
-async def list_automation_templates() -> dict[str, Any]:
-    return {
-        "mock": True,
-        "automations": [
-            {
-                "id": "nightly-digest",
-                "name": "Nightly digest",
-                "schedule": "Daily at 02:00",
-                "status": "template",
-                "description": "Summarize new memories, sports changes, and notable watched sources.",
-            },
-            {
-                "id": "sports-matchday-brief",
-                "name": "Sports matchday brief",
-                "schedule": "On demand",
-                "status": "template",
-                "description": "Prepare scores, fixtures, injuries, and source-backed context when asked.",
-            },
-            {
-                "id": "memory-card-rollup",
-                "name": "Memory card rollup",
-                "schedule": "Before deletion windows",
-                "status": "template",
-                "description": "Condense aging memories into durable memory cards.",
-            },
-        ],
-    }
 
 
 @router.get("/subagents")
@@ -4882,6 +4853,7 @@ router.include_router(
 )
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
+router.include_router(automations_router)
 router.include_router(youtube_router)
 app.include_router(router)
 
