@@ -990,7 +990,17 @@ def test_model_catalog_filters_cloud_models_by_configured_keys(monkeypatch):
     assert not any(item.provider == "anthropic" and not item.open_weights for item in models)
 
 
-def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(monkeypatch):
+def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(monkeypatch, tmp_path):
+    from agent.automations import api as automations_api
+    from agent.automations.store import AutomationStore
+
+    automations_api.set_store(AutomationStore(tmp_path / "data"))
+    automations_api.get_store().create(
+        name="Nightly digest",
+        instructions="Summarize notable changes.",
+        schedule={"kind": "cron", "expression": "0 2 * * *"},
+        destination={"kind": "new_chat"},
+    )
     monkeypatch.setattr(api, "mcp_health", lambda probe=False: {"mcp_servers": [{"name": "serpapi", "configured": True, "status": "probe_disabled"}]})
     monkeypatch.setattr(
         api,
@@ -1030,7 +1040,9 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert skills.json()["mock"] is False
     assert any(item["id"] == "skill-skill-creator-v1" for item in skills.json()["skills"]["active"])
     assert automations.status_code == 200
-    assert any(item["id"] == "nightly-digest" for item in automations.json()["automations"])
+    automations_body = automations.json()
+    assert "mock" not in automations_body
+    assert any(item["name"] == "Nightly digest" for item in automations_body["automations"])
     assert subagents.status_code == 200
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
 
