@@ -277,11 +277,12 @@ def test_install_automation_jobs_wires_mutation_hook(tmp_path) -> None:
     automations_api.set_store(store)
     try:
         automation_scheduler = install_automation_jobs(scheduler)
-        assert len(scheduler.jobs) == 1
+        builtin_ids = {r["id"] for r in store.list() if r.get("builtin")}
+        assert len(scheduler.jobs) == 1 + len(builtin_ids)
         assert automations_api._MUTATION_HOOK is not None
         created = _create(store, name="after-hook")
         automations_api._notify_mutation(created["id"])
-        assert len(scheduler.jobs) == 2
+        assert len(scheduler.jobs) == 2 + len(builtin_ids)
         assert automations_api._MUTATION_HOOK == automation_scheduler.sync_one
         automations_api._notify_mutation("automation-ghost")
     finally:

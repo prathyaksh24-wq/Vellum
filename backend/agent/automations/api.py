@@ -201,10 +201,18 @@ async def run_automation_now(automation_id: str) -> dict[str, Any]:
 
 @router.delete("/{automation_id}")
 async def delete_automation(automation_id: str) -> dict[str, Any]:
+    store = get_store()
     try:
-        get_store().remove(automation_id)
+        record = store.get(automation_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if record.get("builtin"):
+        from agent.automations.builtins import reset_builtin
+
+        reset_builtin(store, record)
+        _notify_mutation(automation_id)
+        return {"ok": True, "restored": True, "automation": store.get(automation_id)}
+    store.remove(automation_id)
     _notify_mutation(automation_id)
     return {"ok": True}
 

@@ -41,6 +41,8 @@ class AutomationStore:
         model_profile: dict[str, Any] | None = None,
         permission: dict[str, Any] | None = None,
         builtin: bool = False,
+        builtin_key: str | None = None,
+        state: str = "active",
     ) -> dict[str, Any]:
         automation_id = self._new_id(name)
         now = utc_now()
@@ -52,12 +54,14 @@ class AutomationStore:
             "destination": dict(destination),
             "model_profile": dict(model_profile) if model_profile else {},
             "permission": dict(permission) if permission else {"full_access": False},
-            "state": "active",
+            "state": state,
             "builtin": bool(builtin),
             "created_at": now,
             "updated_at": now,
             "run_history": [],
         }
+        if builtin_key is not None:
+            record["builtin_key"] = builtin_key
         with self._lock:
             data = self._read()
             data[automation_id] = record

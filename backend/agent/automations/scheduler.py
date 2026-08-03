@@ -100,6 +100,11 @@ class AutomationScheduler:
         if self._busy(automation):
             logger.info("[AUTOMATIONS] Skip fire for %s: a run is already in flight", automation_id)
             return
+        if automation.get("builtin"):
+            from agent.automations.builtins import run_builtin
+
+            await run_builtin(automation)
+            return
         try:
             await self.executor(automation, self.store)
         except Exception as exc:  # noqa: BLE001
@@ -167,11 +172,30 @@ def _one_shot_run_at(schedule: dict[str, Any]) -> datetime | None:
     return None
 
 
-def install_automation_jobs(scheduler: Any, store: AutomationStore | None = None) -> AutomationScheduler:
-    """Register every active store automation and hook future mutations."""
+def install_automation_jobs(
+    scheduler: Any,
+    store: AutomationStore | None = None,
+    *,
+    builtins_enabled: dict[str, bool] | None = None,
+) -> AutomationScheduler:
+    """Seed built-in jobs, register every active automation, hook mutations."""
     from agent.automations.api import get_store, set_mutation_hook
+    from agent.automations.builtins import seed_builtins
 
-    automation_scheduler = AutomationScheduler(store if store is not None else get_store(), scheduler=scheduler)
+    store = store if store is not None else get_store()
+    seed_builtins(store, enabled=builtins_enabled)
+    _startup_curator_tick()
+    automation_scheduler = AutomationScheduler(store, scheduler=scheduler)
     automation_scheduler.install_all()
     set_mutation_hook(automation_scheduler.sync_one)
     return automation_scheduler
+
+
+def _startup_curator_tick() -> None:
+    """Preserve the legacy behavior of running one curator tick at startup."""
+    try:
+        from agent.skills.curator_runtime import get_curator_runtime
+
+        get_curator_runtime().tick()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[AUTOMATIONS] startup curator tick failed: %s", exc)
