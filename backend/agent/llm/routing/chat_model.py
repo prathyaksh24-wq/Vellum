@@ -17,6 +17,7 @@ class RoutedChatModel(BaseChatModel):
     primary_model_resolver: Callable[[], str] = Field(exclude=True)
     temperature: float = 0.3
     max_tokens: int = 2048
+    reasoning_mode: Any = None
     bound_tools: tuple[Any, ...] = ()
     tool_binding_kwargs: dict[str, Any] = Field(default_factory=dict)
 
@@ -77,6 +78,7 @@ class RoutedChatModel(BaseChatModel):
             tools=self.bound_tools,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            reasoning_mode=self.reasoning_mode,
             **invoke_kwargs,
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
@@ -137,6 +139,7 @@ class RoutedChatModel(BaseChatModel):
             tools=self.bound_tools,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            reasoning_mode=self.reasoning_mode,
             **stream_kwargs,
         ):
             yield ChatGenerationChunk(message=chunk)

@@ -222,7 +222,7 @@ def test_langchain_agent_uses_shared_routed_model(monkeypatch):
     sentinel = object()
     captured = {}
 
-    def fake_routed(model=None):
+    def fake_routed(model=None, reasoning_mode=None):
         captured["model"] = model
         return sentinel
 
@@ -234,7 +234,7 @@ def test_langchain_agent_uses_shared_routed_model(monkeypatch):
 
 def test_legacy_fallback_builder_is_alias_for_routed_model(monkeypatch):
     sentinel = object()
-    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None: sentinel)
+    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None, reasoning_mode=None: sentinel)
 
     assert react_agent.build_llm_with_fallback("primary/test") is sentinel
 
@@ -259,7 +259,7 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
         captured.update(kwargs)
         return "compiled-agent"
 
-    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: "llm")
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 
@@ -290,7 +290,7 @@ def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monk
     def fail_if_cross_model_fallback_is_used(model=None):
         raise AssertionError("agent chat should not silently fall back to a different model")
 
-    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: f"llm:{model}")
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: f"llm:{model}")
     monkeypatch.setattr(react_agent, "build_llm_with_fallback", fail_if_cross_model_fallback_is_used)
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
@@ -311,7 +311,7 @@ def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
     async def fake_build_async_checkpointer():
         return "async-checkpointer"
 
-    monkeypatch.setattr(react_agent, "build_llm", lambda model=None: "llm")
+    monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: "llm")
     monkeypatch.setattr(react_agent, "build_async_checkpointer", fake_build_async_checkpointer)
     monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
 

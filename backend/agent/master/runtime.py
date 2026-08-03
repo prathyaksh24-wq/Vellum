@@ -47,10 +47,12 @@ class DelegationRuntime:
         llm_factory: Callable[[str | None], Any] = get_routed_chat_model,
         now: Callable[[], datetime] | None = None,
         audit_path: str | Path = Path("data/memory/delegation-runs.jsonl"),
+        reasoning_mode: Any = None,
     ) -> None:
         self.profile_registry = profile_registry
         self.memory_orchestrator = memory_orchestrator
         self.llm_factory = llm_factory
+        self.reasoning_mode = reasoning_mode
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
 
@@ -169,6 +171,11 @@ class DelegationRuntime:
                 parent_thread_id=parent_thread_id,
             )
 
+    def _llm_for(self, model_id: str | None) -> Any:
+        if self.reasoning_mode is not None and self.llm_factory is get_routed_chat_model:
+            return get_routed_chat_model(model_id, reasoning_mode=self.reasoning_mode)
+        return self.llm_factory(model_id)
+
     def _execute_llm(
         self,
         *,
@@ -188,7 +195,7 @@ class DelegationRuntime:
             SystemMessage(content=instructions or f"You are {profile.id}. Return a focused specialist result."),
             HumanMessage(content=_llm_task_packet(goal=goal, context=context, memory_packet=packet)),
         ]
-        model = self.llm_factory(profile.model)
+        model = self._llm_for(profile.model)
         output = model.invoke(messages)
         content = getattr(output, "content", output)
         if isinstance(content, list):

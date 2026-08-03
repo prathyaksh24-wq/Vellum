@@ -23,8 +23,8 @@ class FakeAgent:
     def __init__(self):
         self.calls = []
 
-    async def ainvoke(self, payload, config=None, model=None):
-        self.calls.append((payload, config))
+    async def ainvoke(self, payload, config=None, model=None, reasoning_mode=None):
+        self.calls.append((payload, config, reasoning_mode))
         message = SimpleNamespace(content="API fake answer", tool_calls=[{"name": "search_my_notes"}])
         return {"messages": [message]}
 
@@ -193,6 +193,57 @@ def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     assert body["tools"] == ["search_my_notes"]
     assert fake_agent.calls[0][0]["messages"][0]["content"] == "hello"
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
+
+
+def test_chat_endpoint_forwards_reasoning_mode_to_agent(monkeypatch, tmp_path):
+    from agent.llm.reasoning import ReasoningMode
+
+    fake_agent = FakeAgent()
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+
+    def fake_create_task(coro):
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api.asyncio, "create_task", fake_create_task)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/chat",
+            json={"message": "hello", "thread_id": "frontend", "reasoning_mode": "ultra"},
+        )
+
+    assert response.status_code == 200
+    assert fake_agent.calls[0][2] == ReasoningMode.ultra
+
+
+def test_chat_endpoint_rejects_unknown_reasoning_mode(monkeypatch, tmp_path):
+    fake_agent = FakeAgent()
+    runtime = ComputerUseRuntime(
+        state_path=tmp_path / "mode.json",
+        event_log_path=tmp_path / "events.jsonl",
+    )
+
+    def fake_create_task(coro):
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(api, "agent", fake_agent)
+    monkeypatch.setattr(api, "computer_use_runtime", runtime)
+    monkeypatch.setattr(api.asyncio, "create_task", fake_create_task)
+
+    with TestClient(api.app) as client:
+        response = client.post(
+            "/api/chat",
+            json={"message": "hello", "thread_id": "frontend", "reasoning_mode": "galaxy"},
+        )
+
+    assert response.status_code == 400
 
 
 def test_chat_endpoint_passes_through_x_agent_result_without_model_rewrite(monkeypatch):
@@ -1460,7 +1511,7 @@ def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
         async def aupdate_state(self, config, values):
             self.events.append(("update_state", config["configurable"]["thread_id"], values))
 
-        async def ainvoke(self, payload, config=None, model=None):
+        async def ainvoke(self, payload, config=None, model=None, reasoning_mode=None):
             self.events.append(("ainvoke", config["configurable"]["thread_id"]))
             return {"messages": [SimpleNamespace(content="recovered", tool_calls=[])]}
 

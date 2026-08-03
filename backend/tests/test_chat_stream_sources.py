@@ -134,7 +134,7 @@ class _FakeAgent:
     """Replaces the module-level agent: astream_events yields synthetic v2
     events in the order a real web_search turn would produce them."""
 
-    async def astream_events(self, payload, config=None, version=None, model=None):
+    async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
         # Tool starts -> drives 'tool' + 'activity' SSE.
         yield {
             "event": "on_tool_start",
@@ -355,7 +355,7 @@ def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypat
             )
 
     class FakeAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             yield {
                 "event": "on_chat_model_stream",
                 "data": {"chunk": SimpleNamespace(content="Done.")},
@@ -391,7 +391,7 @@ def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypat
 
 def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):
     class FunctionStreamingAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             yield {
                 "event": "on_chat_model_stream",
                 "data": {
@@ -454,7 +454,7 @@ def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):
 
 def test_stream_agent_turn_emits_agent_activity_for_function_calls(monkeypatch):
     class FunctionStreamingAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             yield {
                 "event": "on_chat_model_stream",
                 "data": {

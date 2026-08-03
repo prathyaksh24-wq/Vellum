@@ -8,7 +8,7 @@ from agent.agents.live_dispatcher import LiveAgentResult
 def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
     calls = []
 
-    async def _natural_answer(payload, config=None, model=None):
+    async def _natural_answer(payload, config=None, model=None, reasoning_mode=None):
         calls.append((payload, config))
         return {"messages": [type("Msg", (), {"content": "Natural Vellum answer.", "tool_calls": []})()]}
 
@@ -50,7 +50,7 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
 def test_run_agent_includes_specialist_snippets_and_fact_priority(monkeypatch):
     calls = []
 
-    async def _natural_answer(payload, config=None, model=None):
+    async def _natural_answer(payload, config=None, model=None, reasoning_mode=None):
         calls.append((payload, config))
         return {"messages": [type("Msg", (), {"content": "The next F1 race is the Austrian Grand Prix.", "tool_calls": []})()]}
 
@@ -124,7 +124,7 @@ def test_stream_agent_turn_emits_sports_dispatch_then_main_agent_answer(monkeypa
         return None
 
     class FakeAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             assert "Live sports answer" in payload["messages"][0]["content"]
             yield {
                 "event": "on_chat_model_stream",
@@ -182,7 +182,7 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
         return None
 
     class FakeAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             yield {
                 "event": "on_chat_model_stream",
                 "data": {"chunk": type("Chunk", (), {"content": "Natural streamed answer."})()},
@@ -251,7 +251,7 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
         return None
 
     class FakeAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             yield {
                 "event": "on_chat_model_stream",
                 "data": {"chunk": type("Chunk", (), {"content": "I could not complete the X lookup, but I can keep helping."})()},
@@ -283,7 +283,7 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
 
 def test_stream_agent_turn_times_out_silent_model_stream(monkeypatch):
     class SilentAgent:
-        async def astream_events(self, payload, config=None, version=None, model=None):
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
             await asyncio.sleep(1)
             yield {
                 "event": "on_chat_model_stream",
