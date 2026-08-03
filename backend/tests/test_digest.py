@@ -52,11 +52,12 @@ def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
     assert captured["session_id"] == "digest-2026-05-05"
 
 
-def test_start_scheduler_registers_nightly_job(monkeypatch, tmp_path):
+def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path):
     from agent.automations import api as automations_api
     from agent.automations.store import AutomationStore
 
-    automations_api.set_store(AutomationStore(tmp_path / "automations"))
+    store = AutomationStore(tmp_path / "automations")
+    automations_api.set_store(store)
 
     class FakeScheduler:
         def __init__(self):
@@ -84,15 +85,58 @@ def test_start_scheduler_registers_nightly_job(monkeypatch, tmp_path):
     assert result is scheduler
     assert scheduler.started is True
     jobs = {job[2]["id"]: job for job in scheduler.jobs}
-    assert set(jobs) == {
+    assert "memory_dreaming" in jobs  # legacy dreaming_job param
+    assert jobs["memory_dreaming"][2]["hour"] == 2
+    records = {r["builtin_key"]: r for r in store.list()}
+    assert set(records) == {
         "memory_dreaming",
         "nightly_digest",
         "vault_retention",
         "youtube_intelligence_projection",
         "skill_curator_tick",
     }
-    assert jobs["memory_dreaming"][2]["hour"] == 2
-    assert jobs["nightly_digest"][2]["minute"] == 15
-    assert jobs["youtube_intelligence_projection"][2]["minute"] == 30
-    assert jobs["youtube_intelligence_projection"][2]["max_instances"] == 1
-    assert jobs["vault_retention"][2]["hour"] == 3
+    assert all(r["builtin"] for r in records.values())
+    assert all(r["state"] == "active" for r in records.values())
+    assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"
+    assert records["youtube_intelligence_projection"]["schedule"]["expression"] == "30 2 * * *"
+    assert records["vault_retention"]["schedule"]["expression"] == "0 3 * * *"
+    assert records["memory_dreaming"]["schedule"]["expression"] == "0 2 * * *"
+    assert records["skill_curator_tick"]["schedule"]["seconds"] == 3600
+    for record in records.values():
+        assert f"automation-{record['id']}" in jobs
+        assert jobs[f"automation-{record['id']}"][2]["max_instances"] == 1
+
+
+def test_start_scheduler_pauses_disabled_builtins(monkeypatch, tmp_path):
+    from agent.automations import api as automations_api
+    from agent.automations.store import AutomationStore
+
+    store = AutomationStore(tmp_path / "automations")
+    automations_api.set_store(store)
+
+    class FakeScheduler:
+        def __init__(self):
+            self.jobs = []
+            self.started = False
+
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs.append((func, trigger, kwargs))
+
+        def start(self):
+            self.started = True
+
+    scheduler = FakeScheduler()
+    monkeypatch.setattr(
+        digest,
+        "get_settings",
+        lambda: SimpleNamespace(enable_nightly_digest=False, enable_vault_retention=True),
+    )
+
+    digest.start_scheduler(scheduler=scheduler)
+
+    records = {r["builtin_key"]: r for r in store.list()}
+    assert records["nightly_digest"]["state"] == "paused"
+    assert records["vault_retention"]["state"] == "active"
+    job_ids = {job[2]["id"] for job in scheduler.jobs}
+    assert f"automation-{records['vault_retention']['id']}" in job_ids
+    assert f"automation-{records['nightly_digest']['id']}" not in job_ids

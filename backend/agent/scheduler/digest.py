@@ -97,32 +97,27 @@ def start_scheduler(
     scheduler: AsyncIOScheduler | None = None,
     *,
     dreaming_job: Callable[[], Awaitable[object]] | None = None,
+    automation_store=None,
 ) -> AsyncIOScheduler | None:
     settings = get_settings()
     retention_enabled = bool(getattr(settings, "enable_vault_retention", True))
-    if not settings.enable_nightly_digest and not retention_enabled and dreaming_job is None:
-        logger.info(
-            "[SCHEDULER] Dreaming, digest, and retention are disabled; starting local maintenance jobs."
-        )
 
     scheduler = scheduler or AsyncIOScheduler()
+    # Legacy direct registration kept for callers that pass an explicit job;
+    # otherwise the built-in background jobs live in the automation store
+    # (seeded idempotently) and are registered from there.
     if dreaming_job is not None:
         scheduler.add_job(dreaming_job, "cron", hour=2, minute=0, id="memory_dreaming", replace_existing=True)
-    if settings.enable_nightly_digest:
-        scheduler.add_job(run_digest, "cron", hour=2, minute=15, id="nightly_digest", replace_existing=True)
-    if retention_enabled:
-        from agent.scheduler.retention import run_retention
-
-        scheduler.add_job(run_retention, "cron", hour=3, minute=0, id="vault_retention", replace_existing=True)
-    from agent.scheduler.youtube_intelligence import install_projection_job
-
-    install_projection_job(scheduler)
-    from agent.skills.curator_runtime import install_curator_ticker
-
-    install_curator_ticker(scheduler)
     from agent.automations.scheduler import install_automation_jobs
 
-    install_automation_jobs(scheduler)
+    install_automation_jobs(
+        scheduler,
+        store=automation_store,
+        builtins_enabled={
+            "nightly_digest": bool(getattr(settings, "enable_nightly_digest", True)),
+            "vault_retention": retention_enabled,
+        },
+    )
     scheduler.start()
     logger.info("[SCHEDULER] Dreaming/digest/retention scheduler started.")
     return scheduler

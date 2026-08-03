@@ -705,19 +705,7 @@ def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) ->
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async def scheduled_dreaming() -> bool:
-        return await _maybe_run_dreaming(reason="scheduled", force=True)
-
     scheduler = start_scheduler()
-    if scheduler is not None and hasattr(scheduler, "add_job"):
-        scheduler.add_job(
-            scheduled_dreaming,
-            "cron",
-            hour=2,
-            minute=0,
-            id="memory_dreaming",
-            replace_existing=True,
-        )
     watcher = start_vault_watcher()
     app.state.scheduler = scheduler
     app.state.vault_watcher = watcher
