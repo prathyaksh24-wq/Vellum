@@ -75,21 +75,30 @@ without inventing watch duration or completion data.
 
 ```text
 GET  /api/plugins/youtube/intelligence?limit=20&query=Sidemen
+GET  /api/plugins/youtube/intelligence/status
 GET  /api/plugins/youtube/intelligence/identities?limit=100
-POST /api/plugins/youtube/intelligence/rebuild
+POST /api/plugins/youtube/intelligence/rebuild?mode=backfill|incremental
 ```
 
-The scheduled rebuild runs daily at 02:30 with one active instance, coalescing,
-and a one-hour misfire window.
+The scheduled projection runs daily at 02:30 with one active instance,
+coalescing, and a one-hour misfire window. It reads only observations appended
+after the durable Knowledge Core checkpoint. The first run, or an interrupted
+backfill, resumes the full history before marking the projection ready.
 
 Manual rebuild:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\rebuild_youtube_intelligence.py
+.\.venv\Scripts\python.exe scripts\rebuild_youtube_intelligence.py --mode incremental
+.\.venv\Scripts\python.exe scripts\rebuild_youtube_intelligence.py --mode backfill
 ```
 
-The command prints aggregate counts and projection freshness. It does not print
+Use `backfill` after deleting or correcting canonical YouTube observations. The
+command prints aggregate counts and projection readiness. It does not print
 personal channel or search labels.
+
+Before the first backfill, channel snapshots expose deterministic entity IDs
+with `identity_status: pending_backfill`; this avoids blank IDs while making
+the missing materialization visible to the frontend.
 
 ## Current scope
 

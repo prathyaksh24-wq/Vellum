@@ -10,7 +10,7 @@ def test_projection_job_rebuilds_local_youtube_intelligence() -> None:
     calls = []
 
     class FakeIntelligence:
-        def rebuild(self, *, now):
+        def rebuild_incremental(self, *, now):
             calls.append(now)
             return {"observations_scanned": 12, "signals_created": 4}
 

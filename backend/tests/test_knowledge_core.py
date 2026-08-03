@@ -355,6 +355,33 @@ def test_preference_state_preserves_historical_peak_and_detects_waning_interest(
     assert state["windows"]["prior_30_to_180d"]["count"] == 0
 
 
+def test_recompute_preferences_updates_multiple_subjects_from_one_public_seam(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    now = datetime(2026, 7, 23, tzinfo=UTC)
+    for subject_key in ("youtube:channel:one", "youtube:channel:two"):
+        core.store.record_user_signal(
+            UserSignalInput(
+                subject_key=subject_key,
+                category="youtube_channel",
+                signal_type="watch_event",
+                event_key=f"youtube:batch:{subject_key}",
+                value=0.6,
+                weight=1.0,
+                actor=ObservationActor.IMPORTED,
+                evidence_class=EvidenceClass.IMPORTED,
+                observed_at=now,
+            )
+        )
+
+    states = core.store.recompute_preferences(
+        ["youtube:channel:one", "youtube:channel:two"],
+        now=now,
+    )
+
+    assert set(states) == {"youtube:channel:one", "youtube:channel:two"}
+    assert all(state["evidence_count"] == 1 for state in states.values())
+
+
 def test_agent_selected_tool_signal_cannot_change_preferences(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     result = core.store.record_user_signal(
@@ -394,7 +421,7 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
 
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
-    assert migrated.status()["schema_version"] == 4
+    assert migrated.status()["schema_version"] == 5
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}

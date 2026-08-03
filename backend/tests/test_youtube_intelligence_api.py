@@ -39,6 +39,30 @@ def test_youtube_intelligence_api_returns_local_snapshot(monkeypatch) -> None:
     assert response.json()["channels"][0] == {"label": "Sidemen", "trend": "falling"}
 
 
+def test_youtube_intelligence_status_exposes_backfill_readiness(monkeypatch) -> None:
+    class FakeIntelligence:
+        def __init__(self, store):
+            assert store == "knowledge-store"
+
+        def status(self):
+            return {
+                "local_only": True,
+                "ready": False,
+                "phase": "backfill_required",
+                "projection_ready": False,
+                "identity_ready": False,
+            }
+
+    monkeypatch.setattr(youtube_api, "get_knowledge_core", lambda: SimpleNamespace(store="knowledge-store"))
+    monkeypatch.setattr(youtube_api, "YouTubeIntelligenceService", FakeIntelligence)
+
+    response = _client().get("/api/plugins/youtube/intelligence/status")
+
+    assert response.status_code == 200
+    assert response.json()["phase"] == "backfill_required"
+    assert response.json()["identity_ready"] is False
+
+
 def test_youtube_intelligence_api_rebuilds_only_derived_state(monkeypatch) -> None:
     class FakeIntelligence:
         def __init__(self, store):
