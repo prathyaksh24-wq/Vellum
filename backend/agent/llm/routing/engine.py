@@ -109,6 +109,7 @@ class RoutingEngine:
         temperature: float = 0.3,
         max_tokens: int = 2048,
         thread_id: str = "background",
+        reasoning_mode: Any = None,
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -173,13 +174,15 @@ class RoutingEngine:
                                 self.store.get_model_policy(target.model),
                             )
                         )
+                    effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
                     model = adapter.build_model(
                         target=target,
                         thread_id=thread_id,
                         secret=secret,
                         temperature=temperature,
                         policy=policy,
-                        max_tokens=max_tokens,
+                        max_tokens=effective_max_tokens,
+                        reasoning_mode=reasoning_mode,
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
@@ -300,6 +303,17 @@ class RoutingEngine:
             or getattr(chunk, "tool_call_chunks", None)
         )
 
+    @staticmethod
+    def _effective_max_tokens(max_tokens: int, reasoning_mode: Any) -> int:
+        if reasoning_mode is None:
+            return max_tokens
+        from agent.llm.reasoning import reasoning_profile
+
+        profile = reasoning_profile(reasoning_mode)
+        if profile is None:
+            return max_tokens
+        return profile.scaled_max_tokens(max_tokens)
+
     async def astream(
         self,
         *,
@@ -310,6 +324,7 @@ class RoutingEngine:
         temperature: float = 0.3,
         max_tokens: int = 2048,
         thread_id: str = "background",
+        reasoning_mode: Any = None,
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -375,7 +390,8 @@ class RoutingEngine:
                         secret=secret,
                         temperature=temperature,
                         policy=policy,
-                        max_tokens=max_tokens,
+                        max_tokens=self._effective_max_tokens(max_tokens, reasoning_mode),
+                        reasoning_mode=reasoning_mode,
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:

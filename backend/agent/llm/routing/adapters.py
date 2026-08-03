@@ -127,9 +127,12 @@ class OpenRouterAdapter:
         temperature: float,
         policy: ProviderRoutingPolicy | None,
         max_tokens: int = 2048,
+        reasoning_mode: Any = None,
         **kwargs: Any,
     ):
         from langchain_openai import ChatOpenAI
+
+        from agent.llm.reasoning import reasoning_extra_body
 
         effective = enforce_provider_allowlist(
             policy
@@ -139,6 +142,8 @@ class OpenRouterAdapter:
             ),
             self.reviewed_providers,
         )
+        extra: dict[str, Any] = {"provider": effective.to_openrouter_body()}
+        extra.update(reasoning_extra_body(reasoning_mode))
         return ChatOpenAI(
             model=target.model,
             api_key=secret,
@@ -149,7 +154,7 @@ class OpenRouterAdapter:
                 "HTTP-Referer": "http://localhost",
                 "X-Title": "Vellum",
             },
-            extra_body={"provider": effective.to_openrouter_body()},
+            extra_body=extra,
             **kwargs,
         )
 
@@ -168,9 +173,12 @@ class OpenAIAdapter:
         temperature: float,
         policy: ProviderRoutingPolicy | None = None,
         max_tokens: int = 2048,
+        reasoning_mode: Any = None,
         **kwargs: Any,
     ):
         from langchain_openai import ChatOpenAI
+
+        from agent.llm.reasoning import reasoning_extra_body
 
         model_id = target.model.removeprefix("openai/")
         return ChatOpenAI(
@@ -179,5 +187,6 @@ class OpenAIAdapter:
             base_url=self.base_url,
             temperature=temperature,
             max_tokens=max(256, max_tokens),
+            extra_body=reasoning_extra_body(reasoning_mode) or None,
             **kwargs,
         )

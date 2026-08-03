@@ -126,14 +126,16 @@ def get_routing_runtime() -> RoutingRuntime:
     return build_routing_runtime()
 
 
-def get_routed_chat_model(model: str | None = None) -> RoutedChatModel:
+def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None) -> RoutedChatModel:
     routed = get_routing_runtime().chat_model
-    if model is None:
+    updates: dict[str, Any] = {}
+    if model is not None:
+        updates["primary_model_resolver"] = lambda: model
+    if reasoning_mode is not None:
+        updates["reasoning_mode"] = reasoning_mode
+    if not updates:
         return routed
-    return routed.model_copy(
-        update={"primary_model_resolver": lambda: model},
-        deep=False,
-    )
+    return routed.model_copy(update=updates, deep=False)
 
 
 def reset_routing_runtime() -> None:

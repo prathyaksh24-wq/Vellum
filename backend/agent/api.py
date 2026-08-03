@@ -251,6 +251,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     thread_id: str | None = None
     model: str | None = None  # OpenRouter model id for this turn
+    reasoning_mode: str | None = None  # light/medium/high/extra high/max/ultra
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
     force_web_search: bool = False
@@ -1291,12 +1292,25 @@ async def _ensure_model(model: str | None) -> str:
     return entry.id
 
 
+def _resolve_reasoning_mode(reasoning_mode: str | None):
+    """Validate a turn's reasoning-mode label; None keeps the standard profile."""
+    if reasoning_mode is None:
+        return None
+    from agent.llm.reasoning import resolve_reasoning_mode
+
+    try:
+        return resolve_reasoning_mode(reasoning_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 async def _run_agent(
     message: str,
     thread_id: str | None,
     model: str | None = None,
     attachments: list[ChatAttachment] | None = None,
     turn_audit: TurnAudit | None = None,
+    reasoning_mode: str | None = None,
 ) -> ChatResponse:
     clean_message = message.strip()
     if not clean_message:
@@ -1382,10 +1396,12 @@ async def _run_agent(
 
             await _repair_incomplete_tool_history(active_thread_id)
             agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
+            resolved_reasoning = _resolve_reasoning_mode(reasoning_mode)
             result = await agent.ainvoke(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
                 model=resolved_model,
+                reasoning_mode=resolved_reasoning,
             )
     except asyncio.CancelledError:
         skill_usage_scope.finish("cancelled")
@@ -1710,6 +1726,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             request.model,
             request.attachments,
             audit,
+            reasoning_mode=request.reasoning_mode,
         )
     except asyncio.CancelledError:
         audit.finalize("cancelled")
@@ -3185,6 +3202,7 @@ async def _stream_agent_turn(
     store: bool = True,
     attachments: list[ChatAttachment] | None = None,
     turn_audit: TurnAudit | None = None,
+    reasoning_mode: str | None = None,
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
@@ -3480,6 +3498,7 @@ async def _stream_agent_turn(
                 config=_thread_config(active_thread_id),
                 version="v2",
                 model=resolved_model,
+                reasoning_mode=_resolve_reasoning_mode(reasoning_mode),
             )
             stream_iterator = stream.__aiter__()
             timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
@@ -4089,6 +4108,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 store=request.store,
                 attachments=request.attachments,
                 turn_audit=turn_audit,
+                reasoning_mode=request.reasoning_mode,
             ),
             turn_audit,
         ),

@@ -60,6 +60,47 @@ def test_openai_adapter_strips_vendor_prefix_and_has_no_openrouter_body() -> Non
     assert not model.extra_body
 
 
+def test_openrouter_adapter_applies_reasoning_mode_body() -> None:
+    from agent.llm.reasoning import ReasoningMode
+
+    adapter = OpenRouterAdapter(base_url="https://openrouter.ai/api/v1")
+    model = adapter.build_model(
+        target=FallbackTarget(provider="openrouter", model="google/test"),
+        secret="key",
+        temperature=0.2,
+        policy=None,
+        reasoning_mode=ReasoningMode.high,
+    )
+
+    assert model.extra_body["reasoning"] == {"effort": "medium"}
+
+
+def test_openrouter_adapter_no_reasoning_body_without_mode() -> None:
+    adapter = OpenRouterAdapter(base_url="https://openrouter.ai/api/v1")
+    model = adapter.build_model(
+        target=FallbackTarget(provider="openrouter", model="google/test"),
+        secret="key",
+        temperature=0.2,
+        policy=None,
+    )
+
+    assert "reasoning" not in model.extra_body
+
+
+def test_openai_adapter_applies_reasoning_mode_body() -> None:
+    from agent.llm.reasoning import ReasoningMode
+
+    model = OpenAIAdapter(base_url="https://api.openai.com/v1").build_model(
+        target=FallbackTarget(provider="openai", model="openai/gpt-test"),
+        secret="key",
+        temperature=0.3,
+        policy=None,
+        reasoning_mode=ReasoningMode.ultra,
+    )
+
+    assert model.extra_body["reasoning"] == {"effort": "high"}
+
+
 @pytest.mark.parametrize(
     ("status", "message", "kind"),
     [

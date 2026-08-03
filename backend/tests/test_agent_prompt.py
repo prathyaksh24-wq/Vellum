@@ -98,7 +98,7 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
         return object()
 
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
-    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
     spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
     monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
@@ -126,7 +126,7 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
         return object()
 
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
-    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_async_checkpointer", fake_checkpointer)
     spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
     monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [spotify_tool])
@@ -249,7 +249,7 @@ def test_agent_tool_list_includes_progressive_skill_tools(monkeypatch):
         return object()
 
     monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
-    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None: object())
+    monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
     monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [])
 
@@ -294,10 +294,10 @@ def test_lazy_agent_caches_async_runtimes_by_model(monkeypatch):
         async def ainvoke(self, *_args, **_kwargs):
             return self.model
 
-    async def fake_build(model=None):
+    async def fake_build(model=None, reasoning_mode=None):
         await asyncio.sleep(0)
-        builds.append(model)
-        return FakeRuntime(model)
+        builds.append((model, reasoning_mode.value if reasoning_mode is not None else None))
+        return FakeRuntime((model, reasoning_mode))
 
     monkeypatch.setattr(agent_graph, "build_async_agent", fake_build)
     lazy = agent_graph.LazyAgent()
@@ -309,5 +309,47 @@ def test_lazy_agent_caches_async_runtimes_by_model(monkeypatch):
             lazy.ainvoke({}, model="model-a"),
         )
 
-    assert asyncio.run(run_case()) == ["model-a", "model-b", "model-a"]
-    assert sorted(builds) == ["model-a", "model-b"]
+    assert asyncio.run(run_case()) == [
+        ("model-a", None),
+        ("model-b", None),
+        ("model-a", None),
+    ]
+    assert sorted(builds) == [("model-a", None), ("model-b", None)]
+
+
+def test_lazy_agent_caches_separately_per_reasoning_mode(monkeypatch):
+    builds = []
+
+    class FakeRuntime:
+        def __init__(self, model, reasoning_mode):
+            self.key = (model, reasoning_mode)
+
+        async def ainvoke(self, *_args, **_kwargs):
+            return self.key
+
+    async def fake_build(model=None, reasoning_mode=None):
+        await asyncio.sleep(0)
+        builds.append((model, reasoning_mode.value if reasoning_mode is not None else None))
+        return FakeRuntime(model, reasoning_mode)
+
+    monkeypatch.setattr(agent_graph, "build_async_agent", fake_build)
+    lazy = agent_graph.LazyAgent()
+
+    async def run_case():
+        from agent.llm.reasoning import ReasoningMode
+
+        return await asyncio.gather(
+            lazy.ainvoke({}, model="model-a", reasoning_mode=ReasoningMode.high),
+            lazy.ainvoke({}, model="model-a", reasoning_mode=ReasoningMode.ultra),
+            lazy.ainvoke({}, model="model-a", reasoning_mode=ReasoningMode.high),
+        )
+
+    assert asyncio.run(run_case()) == [
+        ("model-a", "high"),
+        ("model-a", "ultra"),
+        ("model-a", "high"),
+    ]
+    assert sorted(builds) == [
+        ("model-a", "high"),
+        ("model-a", "ultra"),
+    ]

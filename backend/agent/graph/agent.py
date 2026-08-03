@@ -272,12 +272,12 @@ def _latest_user_query(state) -> str:
 CHECKPOINT_DB = REPO_ROOT / "data" / "memory" / "checkpoints.db"
 
 
-def build_llm(model: str | None = None):
-    return get_routed_chat_model(model)
+def build_llm(model: str | None = None, reasoning_mode: Any = None):
+    return get_routed_chat_model(model, reasoning_mode=reasoning_mode)
 
-def build_llm_with_fallback(model: str | None = None):
+def build_llm_with_fallback(model: str | None = None, reasoning_mode: Any = None):
     """Compatibility alias; fallback is handled by the routing engine."""
-    return get_routed_chat_model(model)
+    return get_routed_chat_model(model, reasoning_mode=reasoning_mode)
 
 
 def build_checkpointer() -> SqliteSaver:
@@ -390,18 +390,18 @@ def core_tools() -> list:
     return core_tool_registry().langchain_tools(agent_name="VellumAgent")
 
 
-def build_agent(model: str | None = None):
+def build_agent(model: str | None = None, reasoning_mode: Any = None):
     return create_react_agent(
-        model=build_llm(model),
+        model=build_llm(model, reasoning_mode=reasoning_mode),
         tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=build_checkpointer(),
         prompt=vellum_prompt,
     )
 
 
-async def build_async_agent(model: str | None = None):
+async def build_async_agent(model: str | None = None, reasoning_mode: Any = None):
     return create_react_agent(
-        model=build_llm(model),
+        model=build_llm(model, reasoning_mode=reasoning_mode),
         tools=[*core_tools(), *portable_agent_tools()],
         checkpointer=await build_async_checkpointer(),
         prompt=vellum_prompt,
@@ -409,36 +409,36 @@ async def build_async_agent(model: str | None = None):
 
 
 class LazyAgent:
-    """Cache LangGraph runtimes by model so turn selection stays request-scoped."""
+    """Cache LangGraph runtimes by model + reasoning mode so turn selection stays request-scoped."""
 
     def __init__(self):
-        self._agents: dict[str, object] = {}
-        self._async_agents: dict[str, object] = {}
-        self._async_build_locks: dict[str, asyncio.Lock] = {}
+        self._agents: dict[tuple[str, str | None], object] = {}
+        self._async_agents: dict[tuple[str, str | None], object] = {}
+        self._async_build_locks: dict[tuple[str, str | None], asyncio.Lock] = {}
 
     @staticmethod
-    def _model_key(model: str | None) -> str:
-        return model or "__default__"
+    def _model_key(model: str | None, reasoning_mode: Any = None) -> tuple[str, str | None]:
+        return (model or "__default__", reasoning_mode.value if reasoning_mode is not None else None)
 
-    def _get(self, model: str | None = None):
-        key = self._model_key(model)
+    def _get(self, model: str | None = None, reasoning_mode: Any = None):
+        key = self._model_key(model, reasoning_mode)
         if key not in self._agents:
-            self._agents[key] = build_agent(model)
+            self._agents[key] = build_agent(model, reasoning_mode=reasoning_mode)
         return self._agents[key]
 
-    def invalidate(self, model: str | None = None) -> None:
+    def invalidate(self, model: str | None = None, reasoning_mode: Any = None) -> None:
         if model is None:
             self._agents.clear()
             self._async_agents.clear()
             self._async_build_locks.clear()
             return
-        key = self._model_key(model)
+        key = self._model_key(model, reasoning_mode)
         self._agents.pop(key, None)
         self._async_agents.pop(key, None)
         self._async_build_locks.pop(key, None)
 
-    async def _aget(self, model: str | None = None):
-        key = self._model_key(model)
+    async def _aget(self, model: str | None = None, reasoning_mode: Any = None):
+        key = self._model_key(model, reasoning_mode)
         target = self._async_agents.get(key)
         if target is not None:
             return target
@@ -446,26 +446,26 @@ class LazyAgent:
         async with lock:
             target = self._async_agents.get(key)
             if target is None:
-                target = await build_async_agent(model)
+                target = await build_async_agent(model, reasoning_mode=reasoning_mode)
                 self._async_agents[key] = target
         return target
 
-    async def ainvoke(self, *args, model: str | None = None, **kwargs):
-        return await (await self._aget(model)).ainvoke(*args, **kwargs)
+    async def ainvoke(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
+        return await (await self._aget(model, reasoning_mode)).ainvoke(*args, **kwargs)
 
-    async def astream_events(self, *args, model: str | None = None, **kwargs):
-        target = await self._aget(model)
+    async def astream_events(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
+        target = await self._aget(model, reasoning_mode)
         async for event in target.astream_events(*args, **kwargs):
             yield event
 
-    async def aget_state(self, *args, model: str | None = None, **kwargs):
-        return await (await self._aget(model)).aget_state(*args, **kwargs)
+    async def aget_state(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
+        return await (await self._aget(model, reasoning_mode)).aget_state(*args, **kwargs)
 
-    async def aupdate_state(self, *args, model: str | None = None, **kwargs):
-        return await (await self._aget(model)).aupdate_state(*args, **kwargs)
+    async def aupdate_state(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
+        return await (await self._aget(model, reasoning_mode)).aupdate_state(*args, **kwargs)
 
-    def invoke(self, *args, model: str | None = None, **kwargs):
-        return self._get(model).invoke(*args, **kwargs)
+    def invoke(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
+        return self._get(model, reasoning_mode).invoke(*args, **kwargs)
 
     async def aclose(self, model: str | None = None) -> None:
         if model is None:
