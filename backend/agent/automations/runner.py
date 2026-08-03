@@ -1,18 +1,23 @@
 """Run-now execution for automations.
 
 Records the run, executes a full reasoning turn through the same agent path
-interactive chat uses (model profile + reasoning mode applied), and writes the
-outcome to run history. Failures are recorded with the error surfaced; they
-never crash the API. Scheduler wiring, destination delivery, and permission
-gating for unattended fires land with the run-engine ticket.
+interactive chat uses (model profile + reasoning mode applied), delivers the
+result to the destination (append into the pinned thread for ``existing_chat``,
+a new conversation in the UI feed for ``new_chat``), and writes the outcome to
+run history. Failures are recorded with the error surfaced; they never crash
+the API. Scheduled fires and the skip-if-busy / full-access gates live in
+``agent.automations.scheduler``.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import uuid4
 
 from agent.automations.store import AutomationStore
+
+logger = logging.getLogger(__name__)
 
 
 def _run_id() -> str:
@@ -26,6 +31,7 @@ async def run_automation_now(
     run = store.record_run(automation["id"], _run_id())
     try:
         answer = await _execute_reasoning_turn(automation)
+        _deliver_result(automation, answer)
         return store.finish_run(automation["id"], run["id"], status="complete", output=answer)
     except Exception as exc:
         return store.finish_run(automation["id"], run["id"], status="failed", error=str(exc))
@@ -69,3 +75,70 @@ def _fresh_thread_id(automation: dict[str, Any]) -> str:
     if destination.get("kind") == "existing_chat":
         return str(destination.get("thread_id") or "")
     return f"automation-{uuid4().hex[:16]}"
+
+
+def _deliver_result(automation: dict[str, Any], answer: str) -> None:
+    """Land the run's result where the destination says.
+
+    ``existing_chat`` appends a user/assistant turn to the pinned conversation;
+    ``new_chat`` creates a fresh conversation in the UI feed (linked to the
+    thread the turn ran in). Delivery problems never fail the run — the output
+    stays visible in run history either way.
+    """
+    from agent import api  # lazy import: the main api module mounts this router
+
+    destination = automation.get("destination") or {}
+    thread_id = _fresh_thread_id(automation)
+    user_text = automation["instructions"]
+    try:
+        if destination.get("kind") == "existing_chat":
+            _append_thread_turn(api, thread_id, user_text, answer)
+        else:
+            _append_feed_conversation(api, automation, thread_id, user_text, answer)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[AUTOMATIONS] delivery failed for %s: %s", automation["id"], exc)
+
+
+def _append_thread_turn(api, thread_id: str, user_text: str, answer: str) -> None:
+    conversations = api._read_ui_conversations()
+    for conversation in conversations:
+        if str(conversation.get("thread_id")) != thread_id:
+            continue
+        messages = conversation.setdefault("messages", [])
+        messages.extend(
+            [
+                {"role": "user", "text": user_text, "id": f"automation-{uuid4().hex[:12]}"},
+                {"role": "assistant", "text": answer, "id": f"automation-{uuid4().hex[:12]}"},
+            ]
+        )
+        conversation["updated_at"] = api._conversation_timestamp()
+        api._write_ui_conversations(conversations)
+        return
+    logger.warning("[AUTOMATIONS] pinned thread %s not found; result kept in run history", thread_id)
+
+
+def _append_feed_conversation(
+    api,
+    automation: dict[str, Any],
+    thread_id: str,
+    user_text: str,
+    answer: str,
+) -> None:
+    conversations = api._read_ui_conversations()
+    record = {
+        "id": thread_id,
+        "thread_id": thread_id,
+        "title": f"Automation: {automation.get('name', 'Scheduled run')}",
+        "created": api._conversation_timestamp(),
+        "pinned": False,
+        "archived": False,
+        "projectId": None,
+        "messages": [
+            {"role": "user", "text": user_text, "id": f"automation-{uuid4().hex[:12]}"},
+            {"role": "assistant", "text": answer, "id": f"automation-{uuid4().hex[:12]}"},
+        ],
+        "updated_at": api._conversation_timestamp(),
+        "organization": {},
+    }
+    conversations.insert(0, record)
+    api._write_ui_conversations(conversations)

@@ -120,6 +120,9 @@ def start_scheduler(
     from agent.skills.curator_runtime import install_curator_ticker
 
     install_curator_ticker(scheduler)
+    from agent.automations.scheduler import install_automation_jobs
+
+    install_automation_jobs(scheduler)
     scheduler.start()
     logger.info("[SCHEDULER] Dreaming/digest/retention scheduler started.")
     return scheduler

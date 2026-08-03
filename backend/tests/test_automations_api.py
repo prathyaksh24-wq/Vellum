@@ -5,6 +5,8 @@ turn is monkeypatched. Heavy side-effecting api-module services are disabled,
 matching the pattern of tests/test_api.py.
 """
 
+import json
+
 from fastapi.testclient import TestClient
 import pytest
 
@@ -235,3 +237,103 @@ def test_run_now_missing_automation_is_404() -> None:
         response = client.post("/api/automations/automation-nope/run")
 
     assert response.status_code == 404
+
+
+def test_run_now_delivers_new_chat_to_feed(monkeypatch, tmp_path) -> None:
+    from agent.automations import runner
+
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text('{"conversations": []}', encoding="utf-8")
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    async def fake_turn(automation):
+        return "Feed summary."
+
+    monkeypatch.setattr(runner, "_execute_reasoning_turn", fake_turn)
+
+    with TestClient(api.app) as client:
+        automation_id = _create(client).json()["automation"]["id"]
+        ran = client.post(f"/api/automations/{automation_id}/run")
+
+    assert ran.status_code == 200
+    assert ran.json()["run"]["status"] == "complete"
+    conversations = json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"]
+    assert len(conversations) == 1
+    assert conversations[0]["title"] == "Automation: Morning brief"
+    texts = [message["text"] for message in conversations[0]["messages"]]
+    assert texts == ["Summarize what changed overnight.", "Feed summary."]
+
+
+def test_run_now_appends_to_pinned_existing_chat(monkeypatch, tmp_path) -> None:
+    from agent.automations import runner
+
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "pinned-1",
+                        "thread_id": "thread-pinned",
+                        "title": "Pinned briefing",
+                        "created": "Today",
+                        "pinned": True,
+                        "archived": False,
+                        "messages": [
+                            {"role": "user", "text": "old question", "id": "m1"},
+                            {"role": "assistant", "text": "old answer", "id": "m2"},
+                        ],
+                        "updated_at": "2026-01-01T00:00:00+00:00",
+                        "organization": {},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    async def fake_turn(automation):
+        return "Pinned summary."
+
+    monkeypatch.setattr(runner, "_execute_reasoning_turn", fake_turn)
+
+    with TestClient(api.app) as client:
+        automation_id = _create(
+            client,
+            destination={"kind": "existing_chat", "thread_id": "thread-pinned"},
+        ).json()["automation"]["id"]
+        ran = client.post(f"/api/automations/{automation_id}/run")
+
+    assert ran.status_code == 200
+    assert ran.json()["run"]["status"] == "complete"
+    conversations = json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"]
+    assert len(conversations) == 1
+    texts = [message["text"] for message in conversations[0]["messages"]]
+    assert texts == ["old question", "old answer", "Summarize what changed overnight.", "Pinned summary."]
+    assert conversations[0]["updated_at"] != "2026-01-01T00:00:00+00:00"
+
+
+def test_run_now_keeps_result_when_pinned_thread_missing(monkeypatch, tmp_path) -> None:
+    from agent.automations import runner
+
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text('{"conversations": []}', encoding="utf-8")
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    async def fake_turn(automation):
+        return "Orphaned summary."
+
+    monkeypatch.setattr(runner, "_execute_reasoning_turn", fake_turn)
+
+    with TestClient(api.app) as client:
+        automation_id = _create(
+            client,
+            destination={"kind": "existing_chat", "thread_id": "thread-gone"},
+        ).json()["automation"]["id"]
+        ran = client.post(f"/api/automations/{automation_id}/run")
+
+    assert ran.status_code == 200
+    assert ran.json()["run"]["status"] == "complete"
+    assert ran.json()["run"]["output"] == "Orphaned summary."
+    assert json.loads(conversations_path.read_text(encoding="utf-8"))["conversations"] == []
