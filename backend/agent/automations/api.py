@@ -23,6 +23,8 @@ router = APIRouter(prefix="/automations", tags=["automations"])
 
 _AUTOMATIONS_STORE: AutomationStore | None = None
 
+_MUTATION_HOOK: Any | None = None
+
 
 def get_store() -> AutomationStore:
     global _AUTOMATIONS_STORE
@@ -35,6 +37,22 @@ def set_store(store: AutomationStore | None) -> None:
     """Point the router at a different store (tests) or reset to default."""
     global _AUTOMATIONS_STORE
     _AUTOMATIONS_STORE = store
+
+
+def set_mutation_hook(hook: Any | None) -> None:
+    """Install a callback invoked after create/update/delete (scheduler sync)."""
+    global _MUTATION_HOOK
+    _MUTATION_HOOK = hook
+
+
+def _notify_mutation(automation_id: str) -> None:
+    hook = _MUTATION_HOOK
+    if hook is None:
+        return
+    try:
+        hook(automation_id)
+    except Exception:  # noqa: BLE001 — the scheduler must never break the API
+        pass
 
 
 class AutomationDestination(BaseModel):
@@ -137,6 +155,7 @@ async def create_automation(request: AutomationCreateRequest) -> dict[str, Any]:
             request.permission.model_dump() if request.permission else {"full_access": False}
         ),
     )
+    _notify_mutation(record["id"])
     return {"automation": record}
 
 
@@ -163,6 +182,7 @@ async def update_automation(automation_id: str, request: AutomationUpdateRequest
         record = get_store().update(automation_id, **fields)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _notify_mutation(automation_id)
     return {"automation": record}
 
 
@@ -185,6 +205,7 @@ async def delete_automation(automation_id: str) -> dict[str, Any]:
         get_store().remove(automation_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _notify_mutation(automation_id)
     return {"ok": True}
 
 

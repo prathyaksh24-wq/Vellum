@@ -52,7 +52,12 @@ def test_run_digest_writes_summary_note(monkeypatch, tmp_path):
     assert captured["session_id"] == "digest-2026-05-05"
 
 
-def test_start_scheduler_registers_nightly_job(monkeypatch):
+def test_start_scheduler_registers_nightly_job(monkeypatch, tmp_path):
+    from agent.automations import api as automations_api
+    from agent.automations.store import AutomationStore
+
+    automations_api.set_store(AutomationStore(tmp_path / "automations"))
+
     class FakeScheduler:
         def __init__(self):
             self.jobs = []
