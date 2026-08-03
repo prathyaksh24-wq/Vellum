@@ -21,7 +21,7 @@ def run_projection(
     reference = now or datetime.now(UTC)
     service = intelligence or YouTubeIntelligenceService(get_knowledge_core().store)
     try:
-        result = service.rebuild(now=reference)
+        result = service.rebuild_incremental(now=reference)
     except Exception as exc:  # noqa: BLE001
         error_code = exc.__class__.__name__
         logger.warning("[YOUTUBE_INTELLIGENCE] Projection rebuild failed: %s", error_code)

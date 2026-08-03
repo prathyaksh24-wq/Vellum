@@ -37,10 +37,16 @@ def main() -> int:
         type=Path,
         default=Path(os.getenv("KNOWLEDGE_BLOB_PATH") or REPO_ROOT / "data" / "knowledge" / "blobs"),
     )
+    parser.add_argument(
+        "--mode",
+        choices=("incremental", "backfill"),
+        default="incremental",
+        help="Use incremental ingestion, or explicitly reconcile the full history.",
+    )
     args = parser.parse_args()
 
     intelligence = YouTubeIntelligenceService(KnowledgeStore(args.database, args.blobs))
-    result = intelligence.rebuild()
+    result = intelligence.rebuild(mode=args.mode)
     status = intelligence.snapshot(limit=1)
     print(
         json.dumps(
@@ -48,6 +54,7 @@ def main() -> int:
                 "rebuild": result,
                 "projection_updated_at": status["projection_updated_at"],
                 "counts": status["counts"],
+                "readiness": status["readiness"],
                 "local_only": status["local_only"],
             },
             ensure_ascii=False,

@@ -11,6 +11,7 @@ from agent.knowledge.models import (
     EvidenceClass,
     ObservationActor,
     Sensitivity,
+    SyncCursorInput,
     UserSignalInput,
 )
 from agent.knowledge.store import KnowledgeStore
@@ -27,6 +28,9 @@ CHANNEL_CATEGORY = "youtube_channel"
 SEARCH_CATEGORY = "youtube_search_theme"
 MIN_SEARCH_THEME_EVIDENCE = 2
 PAGE_SIZE = 500
+PROJECTION_CONNECTOR = "youtube_intelligence_projection"
+PROJECTION_ACCOUNT = "local"
+CHECKPOINT_VERSION = 1
 
 SignalFactory = Callable[[dict[str, Any]], UserSignalInput | None]
 
@@ -42,47 +46,143 @@ class YouTubeIntelligenceService:
         self.store = store
         self.identities = identities or YouTubeChannelIdentityService(store)
 
-    def rebuild(self, *, now: datetime | None = None) -> dict[str, Any]:
+    def rebuild(self, *, now: datetime | None = None, mode: str = "backfill") -> dict[str, Any]:
+        """Rebuild the projection, or run the explicit incremental mode."""
+        if mode == "incremental":
+            return self.rebuild_incremental(now=now)
+        if mode != "backfill":
+            raise ValueError("mode must be backfill or incremental")
+        return self._run_rebuild(
+            now=now,
+            start_rowid=0,
+            full_reconcile=True,
+        )
+
+    def rebuild_incremental(self, *, now: datetime | None = None) -> dict[str, Any]:
+        checkpoint = self._checkpoint()
+        state = dict(checkpoint.get("state") or {}) if checkpoint else {}
+        phase = str(state.get("phase") or "")
+        start_rowid = int(str(checkpoint.get("cursor") or "0")) if checkpoint else 0
+        needs_backfill = checkpoint is None or phase == "backfill"
+        result = self._run_rebuild(
+            now=now,
+            start_rowid=start_rowid,
+            full_reconcile=needs_backfill,
+        )
+        result["mode"] = "backfill" if needs_backfill else "incremental"
+        result["initial_backfill"] = checkpoint is None
+        result["resumed"] = bool(checkpoint is not None and phase == "backfill")
+        return result
+
+    def status(self) -> dict[str, Any]:
+        checkpoint = self._checkpoint()
+        state = dict(checkpoint.get("state") or {}) if checkpoint else {}
+        phase = str(state.get("phase") or "backfill_required")
+        last_rowid = int(str(checkpoint.get("cursor") or "0")) if checkpoint else 0
+        ready = phase == "ready"
+        return {
+            "local_only": True,
+            "ready": ready,
+            "phase": phase,
+            "projection_ready": bool(state.get("projection_ready", ready)),
+            "identity_ready": bool(state.get("identity_ready", ready)),
+            "last_observation_rowid": last_rowid,
+            "updated_at": str(checkpoint.get("updated_at") or "") if checkpoint else "",
+        }
+
+    def _run_rebuild(
+        self,
+        *,
+        now: datetime | None,
+        start_rowid: int,
+        full_reconcile: bool,
+    ) -> dict[str, Any]:
         reference = _utc(now)
         scanned = 0
         created = 0
         existing = 0
-        subjects: set[str] = set()
-        expected_event_keys: set[str] = set()
-        identity_records: list[ChannelIdentityRecord] = []
-
-        for action, factory in (
-            (WATCH_ACTION, self._channel_signal),
-            (SEARCH_ACTION, self._search_signal),
-        ):
-            for rows in self._observation_pages(action):
-                signals: list[UserSignalInput] = []
-                for row in rows:
-                    scanned += 1
-                    if action == WATCH_ACTION:
-                        if identity_record := self._channel_identity_record(row):
-                            identity_records.append(identity_record)
-                    signal = factory(row)
-                    if signal is None:
-                        continue
-                    signals.append(signal)
-                    subjects.add(signal.subject_key)
-                    expected_event_keys.add(signal.event_key)
-                result = self.store.record_user_signals(signals, recompute=False)
-                created += result["created"]
-                existing += result["existing"]
-
-        identity_result = self.identities.reconcile(identity_records)
-        pruned = self.store.prune_user_signals(
-            event_key_prefix="youtube:intelligence:",
-            categories=(CHANNEL_CATEGORY, SEARCH_CATEGORY),
-            keep_event_keys=expected_event_keys,
-        )
-        subjects.update(pruned["subject_keys"])
         recomputed = 0
-        for subject_key in sorted(subjects):
-            if self.store.recompute_preference(subject_key, now=reference) is not None:
-                recomputed += 1
+        last_rowid = max(0, int(start_rowid))
+        identity_result = {
+            "records_scanned": 0,
+            "entities_created": 0,
+            "entities_existing": 0,
+            "aliases_created": 0,
+            "aliases_existing": 0,
+        }
+
+        for rows in self._observation_pages_after_rowid(last_rowid):
+            signals: list[UserSignalInput] = []
+            identity_records: list[ChannelIdentityRecord] = []
+            page_subjects: set[str] = set()
+            for row in rows:
+                scanned += 1
+                if str(row.get("action") or "") == WATCH_ACTION:
+                    if identity_record := self._channel_identity_record(row):
+                        identity_records.append(identity_record)
+                    signal = self._channel_signal(row)
+                else:
+                    signal = self._search_signal(row)
+                if signal is not None:
+                    signals.append(signal)
+                    page_subjects.add(signal.subject_key)
+            result = self.store.record_user_signals(signals, recompute=False)
+            created += result["created"]
+            existing += result["existing"]
+            if identity_records:
+                self._merge_identity_counts(
+                    identity_result,
+                    self.identities.reconcile(identity_records),
+                )
+            last_rowid = int(rows[-1]["observation_rowid"])
+            if not full_reconcile:
+                recomputed += len(
+                    self.store.recompute_preferences(page_subjects, now=reference)
+                )
+            self.store.save_sync_cursor(
+                SyncCursorInput(
+                    connector=PROJECTION_CONNECTOR,
+                    account_id=PROJECTION_ACCOUNT,
+                    cursor=str(last_rowid),
+                    state={
+                        "version": CHECKPOINT_VERSION,
+                        "phase": "backfill" if full_reconcile else "incremental",
+                        "projection_ready": False if full_reconcile else True,
+                        "identity_ready": False if full_reconcile else True,
+                    },
+                )
+            )
+
+        pruned = {"removed": 0, "subject_keys": []}
+        if full_reconcile:
+            pruned = self.store.prune_user_signals_against_observations(
+                event_key_prefix="youtube:intelligence:",
+                categories=(CHANNEL_CATEGORY, SEARCH_CATEGORY),
+                origin=ORIGIN,
+                actions=(WATCH_ACTION, SEARCH_ACTION),
+            )
+            subjects = set(
+                self.store.list_user_signal_subject_keys(
+                    event_key_prefix="youtube:intelligence:",
+                    categories=(CHANNEL_CATEGORY, SEARCH_CATEGORY),
+                )
+            )
+            subjects.update(pruned["subject_keys"])
+            recomputed = len(self.store.recompute_preferences(subjects, now=reference))
+
+        self.store.save_sync_cursor(
+            SyncCursorInput(
+                connector=PROJECTION_CONNECTOR,
+                account_id=PROJECTION_ACCOUNT,
+                cursor=str(last_rowid),
+                state={
+                    "version": CHECKPOINT_VERSION,
+                    "phase": "ready",
+                    "projection_ready": True,
+                    "identity_ready": True,
+                },
+            )
+        )
         return {
             "observations_scanned": scanned,
             "signals_created": created,
@@ -91,6 +191,14 @@ class YouTubeIntelligenceService:
             "subjects_recomputed": recomputed,
             "identity": identity_result,
         }
+
+    def _checkpoint(self) -> dict[str, Any] | None:
+        return self.store.get_sync_cursor(PROJECTION_CONNECTOR, PROJECTION_ACCOUNT)
+
+    @staticmethod
+    def _merge_identity_counts(target: dict[str, int], result: dict[str, int]) -> None:
+        for key in target:
+            target[key] += int(result.get(key, 0))
 
     def snapshot(
         self,
@@ -133,6 +241,7 @@ class YouTubeIntelligenceService:
             "projection_updated_at": projection_updated_at,
             "local_only": True,
             "source": ORIGIN,
+            "readiness": self.status(),
             "counts": {
                 "channels": self.store.count_preferences(category=CHANNEL_CATEGORY),
                 "search_themes": self.store.count_preferences(
@@ -228,10 +337,17 @@ class YouTubeIntelligenceService:
                 )
                 item["channel_id"] = channel_id
                 item["entity_id"] = (
-                    str(identity["entity_id"]) if identity is not None else ""
+                    str(identity["entity_id"])
+                    if identity is not None
+                    else self.identities.expected_entity_id(channel_id)
                 )
                 item["aliases"] = (
                     list(identity["aliases"]) if identity is not None else []
+                )
+                item["identity_status"] = (
+                    "ready"
+                    if identity is not None
+                    else ("pending_backfill" if channel_id else "unresolved")
                 )
                 if identity is not None:
                     item["label"] = str(identity["canonical_name"])
@@ -258,21 +374,20 @@ class YouTubeIntelligenceService:
             )
         return items[:limit]
 
-    def _observation_pages(self, action: str) -> Iterator[list[dict[str, Any]]]:
-        offset = 0
+    def _observation_pages_after_rowid(self, after_rowid: int) -> Iterator[list[dict[str, Any]]]:
         while True:
-            rows = self.store.list_observation_details(
+            rows = self.store.list_observation_details_after_rowid(
                 origin=ORIGIN,
-                action=action,
+                actions=(WATCH_ACTION, SEARCH_ACTION),
+                after_rowid=after_rowid,
                 limit=PAGE_SIZE,
-                offset=offset,
             )
             if not rows:
                 return
             yield rows
             if len(rows) < PAGE_SIZE:
                 return
-            offset += len(rows)
+            after_rowid = int(rows[-1]["observation_rowid"])
 
     @staticmethod
     def _channel_identity_record(

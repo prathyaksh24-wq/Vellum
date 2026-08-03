@@ -180,3 +180,45 @@ def test_rebuild_removes_projection_state_for_deleted_observations(tmp_path: Pat
     assert rebuilt["signals_removed"] == 1
     assert snapshot["channels"] == []
     assert snapshot["counts"]["channels"] == 0
+
+
+def test_incremental_rebuild_uses_checkpoint_and_recomputes_only_new_subjects(
+    tmp_path: Path,
+) -> None:
+    store = _store(tmp_path)
+    now = datetime(2026, 7, 23, tzinfo=UTC)
+    _watch(
+        store,
+        event="watch-initial",
+        channel_id="UC-incremental",
+        channel_title="Incremental Channel",
+        observed_at=now - timedelta(days=2),
+    )
+    intelligence = YouTubeIntelligenceService(store)
+
+    first = intelligence.rebuild_incremental(now=now)
+    second = intelligence.rebuild_incremental(now=now)
+
+    assert first["mode"] == "backfill"
+    assert first["initial_backfill"] is True
+    assert first["observations_scanned"] == 1
+    assert second["mode"] == "incremental"
+    assert second["initial_backfill"] is False
+    assert second["observations_scanned"] == 0
+    assert second["subjects_recomputed"] == 0
+
+    _watch(
+        store,
+        event="watch-new",
+        channel_id="UC-incremental",
+        channel_title="Incremental Channel",
+        observed_at=now,
+    )
+    third = intelligence.rebuild_incremental(now=now)
+
+    assert third["mode"] == "incremental"
+    assert third["observations_scanned"] == 1
+    assert third["signals_created"] == 1
+    assert third["subjects_recomputed"] == 1
+    assert intelligence.status()["ready"] is True
+    assert intelligence.snapshot(now=now)["readiness"]["phase"] == "ready"

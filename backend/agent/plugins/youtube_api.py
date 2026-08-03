@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, Query
@@ -138,6 +138,12 @@ async def get_youtube_intelligence(
     return await asyncio.to_thread(intelligence.snapshot, limit=limit, query=query)
 
 
+@router.get("/intelligence/status")
+async def get_youtube_intelligence_status() -> dict[str, Any]:
+    intelligence = YouTubeIntelligenceService(get_knowledge_core().store)
+    return await asyncio.to_thread(intelligence.status)
+
+
 @router.get("/intelligence/identities")
 async def get_youtube_identity_profile(
     limit: int = Query(default=100, ge=1, le=100),
@@ -147,10 +153,14 @@ async def get_youtube_identity_profile(
 
 
 @router.post("/intelligence/rebuild")
-async def rebuild_youtube_intelligence() -> dict[str, Any]:
+async def rebuild_youtube_intelligence(
+    mode: Literal["backfill", "incremental"] | None = Query(default=None),
+) -> dict[str, Any]:
     intelligence = YouTubeIntelligenceService(get_knowledge_core().store)
     try:
-        return await asyncio.to_thread(intelligence.rebuild)
+        if mode is None:
+            return await asyncio.to_thread(intelligence.rebuild)
+        return await asyncio.to_thread(intelligence.rebuild, mode=mode)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(
             status_code=500,

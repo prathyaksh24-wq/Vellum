@@ -99,6 +99,17 @@ class YouTubeChannelIdentityService:
             external_ids=channel_ids,
         )
 
+    @staticmethod
+    def expected_entity_id(channel_id: str) -> str:
+        """Return the deterministic entity ID even before backfill materializes its row."""
+        identity_key = channel_id.strip().casefold()
+        if not identity_key:
+            return ""
+        digest = sha256(
+            "\x1f".join((YOUTUBE_CHANNEL_ENTITY, identity_key)).encode("utf-8")
+        ).hexdigest()[:32]
+        return f"ent_{digest}"
+
     def profile(self, *, limit: int = 100) -> dict:
         raw = self.store.entity_identity_profile(
             entity_type=YOUTUBE_CHANNEL_ENTITY,
