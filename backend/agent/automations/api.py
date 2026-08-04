@@ -14,8 +14,12 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from agent.automations.schedules import ScheduleParseError, parse_schedule
 from agent.automations.store import AutomationStore
+from agent.automations.validation import (
+    parse_schedule_expression,
+    validate_destination,
+    validate_model_profile,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -108,34 +112,25 @@ class AutomationUpdateRequest(BaseModel):
 
 
 def _parsed_schedule(expression: str) -> dict[str, Any]:
-    try:
-        return parse_schedule(expression).to_dict()
-    except ScheduleParseError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return parse_schedule_expression(expression)
 
 
 def _validated_destination(destination: AutomationDestination) -> dict[str, Any]:
-    fields = destination.model_dump(exclude_none=True)
-    if fields.get("kind") == "existing_chat" and not fields.get("thread_id"):
-        raise HTTPException(
-            status_code=400,
-            detail="existing_chat destination requires a thread_id",
-        )
-    return fields
+    return validate_destination(destination.kind, destination.thread_id)
 
 
 def _validated_model_profile(profile: AutomationModelProfile | None) -> dict[str, Any]:
     if profile is None:
         return {}
-    fields = profile.model_dump(exclude_none=True)
-    if fields.get("reasoning_mode"):
-        from agent.llm.reasoning import resolve_reasoning_mode
+    return validate_model_profile(
+        tier=profile.tier,
+        model=profile.model,
+        reasoning_mode=profile.reasoning_mode,
+    )
 
-        try:
-            resolve_reasoning_mode(fields["reasoning_mode"])
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return fields
+
+def _bad_request(exc: ValueError) -> HTTPException:
+    return HTTPException(status_code=400, detail=str(exc))
 
 
 @router.get("")
@@ -143,14 +138,28 @@ async def list_automations() -> dict[str, Any]:
     return {"automations": get_store().list()}
 
 
+@router.get("/create-prompt")
+async def automation_create_prompt() -> dict[str, Any]:
+    """Explainer prompt used to prefill a new chat for chat-guided creation."""
+    from agent.automations.prompts import CREATE_AUTOMATION_PROMPT
+
+    return {"prompt": CREATE_AUTOMATION_PROMPT}
+
+
 @router.post("")
 async def create_automation(request: AutomationCreateRequest) -> dict[str, Any]:
+    try:
+        schedule = _parsed_schedule(request.schedule)
+        destination = _validated_destination(request.destination)
+        model_profile = _validated_model_profile(request.model_profile)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
     record = get_store().create(
         name=request.name.strip(),
         instructions=request.instructions.strip(),
-        schedule=_parsed_schedule(request.schedule),
-        destination=_validated_destination(request.destination),
-        model_profile=_validated_model_profile(request.model_profile),
+        schedule=schedule,
+        destination=destination,
+        model_profile=model_profile,
         permission=(
             request.permission.model_dump() if request.permission else {"full_access": False}
         ),
@@ -162,16 +171,19 @@ async def create_automation(request: AutomationCreateRequest) -> dict[str, Any]:
 @router.patch("/{automation_id}")
 async def update_automation(automation_id: str, request: AutomationUpdateRequest) -> dict[str, Any]:
     fields: dict[str, Any] = {}
-    if request.name is not None:
-        fields["name"] = request.name.strip()
-    if request.instructions is not None:
-        fields["instructions"] = request.instructions.strip()
-    if request.schedule is not None:
-        fields["schedule"] = _parsed_schedule(request.schedule)
-    if request.destination is not None:
-        fields["destination"] = _validated_destination(request.destination)
-    if request.model_profile is not None:
-        fields["model_profile"] = _validated_model_profile(request.model_profile)
+    try:
+        if request.name is not None:
+            fields["name"] = request.name.strip()
+        if request.instructions is not None:
+            fields["instructions"] = request.instructions.strip()
+        if request.schedule is not None:
+            fields["schedule"] = _parsed_schedule(request.schedule)
+        if request.destination is not None:
+            fields["destination"] = _validated_destination(request.destination)
+        if request.model_profile is not None:
+            fields["model_profile"] = _validated_model_profile(request.model_profile)
+    except ValueError as exc:
+        raise _bad_request(exc) from exc
     if request.permission is not None:
         fields["permission"] = request.permission.model_dump()
     if request.state is not None:
