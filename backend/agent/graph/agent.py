@@ -41,6 +41,7 @@ from agent.tools.cloud_escalation import escalate_to_cloud
 from agent.tools.computer_use import computer_use
 from agent.tools.computer_use_route import computer_use_route
 from agent.tools.context_mode import context_mode
+from agent.tools.cronjob import cronjob
 from agent.tools.filesystem import list_files, read_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
@@ -100,6 +101,7 @@ Tools:
 31. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
 32. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
 33. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
+34. cronjob - Create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -161,6 +163,7 @@ Rules:
 - A skill blueprint creates an automation suggestion only and never schedules a job. Use skill_bundles to load related skills in declared order; bundle creation and deletion require confirmation.
 - Treat every remote skill as untrusted until skill_hub has placed it in quarantine and completed validation and security scanning. The force option may override a community caution verdict only; it never overrides a dangerous verdict. Installation, update, uninstall, and tap mutations require confirmation.
 - The skill curator never auto-deletes. It archives eligible inactive skills only after taking a backup, keeps hub and foreground-created skills out of its jurisdiction, and supports rollback. Consolidation is opt-in and pinned skills are excluded.
+- Use cronjob to create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from any reasoning chat. Confirm the full plan — instructions, schedule, destination, and the full-access opt-in — with the user before creating, and confirm before removing or running an automation. Schedule formats: '30m' (one-shot), 'every 2h' (interval), '0 9 * * *' (5-field cron, UTC), or an ISO timestamp. The tool returns validation errors in its result; pass them back to the user rather than rephrasing.
 """
 
 _prompt_project_ctx: ProjectContext | None = None
@@ -331,6 +334,7 @@ def core_tool_registry() -> ToolRegistry:
         "create_note",
         "append_to_note",
         "x_action",
+        "cronjob",
     }
     tools = [
         search_my_notes,
@@ -376,6 +380,7 @@ def core_tool_registry() -> ToolRegistry:
         create_note,
         append_to_note,
         x_action,
+        cronjob,
     ]
     for tool in tools:
         registry.register_langchain(
