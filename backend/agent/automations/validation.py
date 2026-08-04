@@ -11,6 +11,8 @@ from typing import Any
 
 from agent.automations.schedules import ScheduleParseError, parse_schedule
 
+NOTIFICATION_LEVELS = frozenset({"all", "important", "failures", "none"})
+
 
 def parse_schedule_expression(expression: str) -> dict[str, Any]:
     """Parse a schedule expression into its canonical record."""
@@ -51,3 +53,11 @@ def validate_model_profile(
         resolve_reasoning_mode(reasoning_mode)  # raises ValueError when unknown
         fields["reasoning_mode"] = reasoning_mode
     return fields
+
+
+def validate_notifications_level(level: str | None = None) -> dict[str, str]:
+    """Validate the notification preference shared by the API and cronjob tool."""
+    value = (level or "all").strip().casefold()
+    if value not in NOTIFICATION_LEVELS:
+        raise ValueError(f"invalid notifications level: {level!r}")
+    return {"level": value}

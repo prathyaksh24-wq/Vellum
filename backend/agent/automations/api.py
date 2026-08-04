@@ -80,15 +80,24 @@ class AutomationPermission(BaseModel):
     full_access: bool = False
 
 
+class AutomationNotifications(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    level: Literal["all", "important", "failures", "none"] = "all"
+
+
 class AutomationCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
+    description: str = ""
     instructions: str = Field(min_length=1)
     schedule: str = Field(min_length=1)
     destination: AutomationDestination = Field(default_factory=AutomationDestination)
+    project_id: str | None = None
     model_profile: AutomationModelProfile | None = None
     permission: AutomationPermission | None = None
+    notifications: AutomationNotifications | None = None
 
     @field_validator("name", "instructions", "schedule")
     @classmethod
@@ -98,17 +107,40 @@ class AutomationCreateRequest(BaseModel):
             raise ValueError("cannot be blank")
         return stripped
 
+    @field_validator("description")
+    @classmethod
+    def _strip_description(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("project_id")
+    @classmethod
+    def _strip_project_id(cls, value: str | None) -> str | None:
+        return value.strip() if value and value.strip() else None
+
 
 class AutomationUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1)
+    description: str | None = None
     instructions: str | None = Field(default=None, min_length=1)
     schedule: str | None = None
     destination: AutomationDestination | None = None
+    project_id: str | None = None
     model_profile: AutomationModelProfile | None = None
     permission: AutomationPermission | None = None
+    notifications: AutomationNotifications | None = None
     state: Literal["active", "paused"] | None = None
+
+    @field_validator("name", "description", "instructions", "schedule")
+    @classmethod
+    def _strip_optional_text(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("project_id")
+    @classmethod
+    def _strip_optional_project_id(cls, value: str | None) -> str | None:
+        return value.strip() if value and value.strip() else None
 
 
 def _parsed_schedule(expression: str) -> dict[str, Any]:
@@ -156,12 +188,17 @@ async def create_automation(request: AutomationCreateRequest) -> dict[str, Any]:
         raise _bad_request(exc) from exc
     record = get_store().create(
         name=request.name.strip(),
+        description=request.description.strip(),
         instructions=request.instructions.strip(),
         schedule=schedule,
         destination=destination,
+        project_id=request.project_id,
         model_profile=model_profile,
         permission=(
             request.permission.model_dump() if request.permission else {"full_access": False}
+        ),
+        notifications=(
+            request.notifications.model_dump() if request.notifications else {"level": "all"}
         ),
     )
     _notify_mutation(record["id"])
@@ -174,18 +211,24 @@ async def update_automation(automation_id: str, request: AutomationUpdateRequest
     try:
         if request.name is not None:
             fields["name"] = request.name.strip()
+        if request.description is not None:
+            fields["description"] = request.description.strip()
         if request.instructions is not None:
             fields["instructions"] = request.instructions.strip()
         if request.schedule is not None:
             fields["schedule"] = _parsed_schedule(request.schedule)
         if request.destination is not None:
             fields["destination"] = _validated_destination(request.destination)
+        if "project_id" in request.model_fields_set:
+            fields["project_id"] = request.project_id
         if request.model_profile is not None:
             fields["model_profile"] = _validated_model_profile(request.model_profile)
     except ValueError as exc:
         raise _bad_request(exc) from exc
     if request.permission is not None:
         fields["permission"] = request.permission.model_dump()
+    if request.notifications is not None:
+        fields["notifications"] = request.notifications.model_dump()
     if request.state is not None:
         fields["state"] = request.state
     if not fields:

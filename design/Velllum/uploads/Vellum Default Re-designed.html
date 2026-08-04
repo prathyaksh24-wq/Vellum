@@ -1690,23 +1690,79 @@ body{font-size:14px}
 .spotify-player-error{padding:8px 2px 2px;color:var(--danger);font-size:10.5px;line-height:1.4}.spotify-reconnect{margin-top:8px}
 @media(max-width:720px){.spotify-player-shell.side-top,.spotify-player-shell.side-right{top:58px;right:10px}.spotify-player-pill{max-width:178px}.spotify-now{display:none}.spotify-player-panel{width:min(310px,calc(100vw - 20px))}}
 @media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
-.au-actions{display:flex;align-items:center;gap:8px;margin:14px 0 6px}.au-actions .au-hint{margin-left:auto;font-size:10.5px;color:var(--dim2)}
-.au-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
-.au-row-main{min-width:0}
-.au-name{font-family:var(--font-d);font-size:13px;color:var(--txt2);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.au-meta{font-size:11px;color:var(--dim2);margin-top:3px}
-.au-run{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.45}.au-run.failed{color:var(--danger)}
-.au-row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.au-row-actions .btn{padding:6px 9px;font-size:10.5px}.au-row-actions .btn.danger{color:var(--danger)}
-.au-form{display:flex;flex-direction:column;gap:12px;padding-top:8px}
-.au-field{min-width:0}.au-field>label{display:block;font-size:10.5px;color:var(--dim);letter-spacing:.03em;margin-bottom:5px}
-.au-field input[type=text],.au-field textarea{width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:11.5px;padding:8px 10px;outline:none}
-.au-field input[type=text]:focus,.au-field textarea:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
-.au-field textarea{min-height:74px;resize:vertical;line-height:1.5}
-.au-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.au-warn{font-size:10.5px;color:var(--danger);line-height:1.5;margin-top:5px}
-.au-form-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:4px}.au-form-error{color:var(--danger);font-size:10.5px;margin-right:auto;line-height:1.45;overflow-wrap:anywhere}
-.au-empty{padding:26px 4px;color:var(--dim);font-size:11.5px;text-align:center}
+.au-page{padding:28px 30px 34px}
+.au-page-shell{width:min(1180px,100%);height:100%;margin:0 auto;display:flex;flex-direction:column;min-height:0}
+.au-page-head{display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-shrink:0}
+.au-page-head .page-sub{margin-top:4px}
+.au-head-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+.au-head-actions .btn,.au-head-actions .new-btn{white-space:nowrap}
+.au-layout{display:grid;grid-template-columns:minmax(290px,350px) minmax(0,1fr);gap:16px;flex:1;min-height:0}
+.au-list-panel,.au-detail-panel{border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 88%,transparent);border-radius:14px;min-height:0;overflow:hidden}
+.au-list-panel{display:flex;flex-direction:column}
+.au-list-toolbar{padding:14px 14px 8px;display:flex;align-items:center;gap:8px}
+.au-search{display:flex;align-items:center;gap:8px;min-width:0;flex:1;background:var(--input);border:1px solid var(--line);border-radius:14px;padding:8px 11px;color:var(--dim)}
+.au-search input{min-width:0;flex:1;border:none;background:transparent;outline:none;color:var(--txt2);font:inherit;font-size:11.5px}
+.au-filter-row{display:flex;align-items:center;gap:3px;padding:0 14px 10px;border-bottom:1px solid var(--line)}
+.au-filter{border:none;background:none;color:var(--dim);font:inherit;font-size:11.5px;padding:5px 8px;border-radius:14px;cursor:pointer}
+.au-filter:hover{background:var(--hover);color:var(--txt2)}
+.au-filter.on{color:var(--txt2);background:color-mix(in srgb,var(--ember) 14%,transparent)}
+.au-task-list{flex:1;overflow:auto;padding:4px 8px 12px}
+.au-task{position:relative;display:flex;align-items:flex-start;gap:9px;padding:12px 9px;border-bottom:1px solid var(--line);cursor:pointer;min-height:56px}
+.au-task:hover{background:var(--hover)}
+.au-task.active{background:color-mix(in srgb,var(--active) 80%,transparent)}
+.au-task-dot{width:8px;height:8px;border-radius:50%;background:var(--ember);margin-top:5px;flex-shrink:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 13%,transparent)}
+.au-task-dot.paused{background:var(--dim2);box-shadow:none}
+.au-task-copy{min-width:0;flex:1}
+.au-task-title{font-family:var(--font-d);font-size:13px;color:var(--txt2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-task-meta{font-size:10.5px;line-height:1.45;color:var(--dim2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-task-note{font-size:10px;color:var(--dim2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.au-task-menu{width:26px;height:26px;display:flex;align-items:center;justify-content:center;flex-shrink:0;border:none;border-radius:6px;background:none;color:var(--dim2);cursor:pointer;opacity:0}
+.au-task:hover .au-task-menu,.au-task.active .au-task-menu{opacity:1}
+.au-task-menu:hover{background:var(--hover);color:var(--txt2)}
+.au-list-empty{padding:38px 20px;text-align:center;color:var(--dim);font-size:12px;line-height:1.55}
+.au-list-empty strong{display:block;color:var(--txt2);font-family:var(--font-d);font-size:15px;margin-bottom:5px}
+.au-detail-panel{overflow:auto;padding:26px 28px 34px}
+.au-detail{max-width:620px;margin:0 auto}
+.au-detail-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:16px}
+.au-detail-head-copy{min-width:0;flex:1}
+.au-detail-status{display:flex;align-items:center;gap:7px;color:var(--dim);font-size:10.5px;margin-bottom:7px}
+.au-detail-status .au-task-dot{margin:0;width:7px;height:7px;box-shadow:none}
+.au-detail-title{font-family:var(--font-d);font-weight:600;letter-spacing:-.02em;font-size:24px;color:var(--txt2);line-height:1.15}
+.au-detail-sub{color:var(--dim);font-size:11.5px;line-height:1.5;margin-top:5px}
+.au-detail-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.au-detail-actions .btn{font-size:11px;padding:6px 10px}
+.au-prompt-card{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--active) 70%,transparent);padding:15px 16px;color:var(--txt);font-size:12px;line-height:1.6;white-space:pre-wrap;margin-bottom:21px}
+.au-section-label{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim2);margin:0 0 7px}
+.au-detail-card{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--glass) 86%,transparent);padding:1px 15px;margin-bottom:20px}
+.au-detail-row{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:39px;border-bottom:1px solid var(--line);font-size:11.5px}
+.au-detail-row:last-child{border-bottom:none}
+.au-detail-row span{color:var(--dim)}
+.au-detail-row strong{color:var(--txt2);font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.au-detail-row strong.au-detail-muted{color:var(--dim2);font-weight:400}
+.au-last-run{font-size:10.5px;color:var(--dim);line-height:1.5;margin-top:-8px;margin-bottom:18px}
+.au-form{display:flex;flex-direction:column;gap:16px;max-width:620px;margin:0 auto}
+.au-form-head{display:flex;align-items:center;gap:10px;margin-bottom:2px}
+.au-form-head h2{font-family:var(--font-d);font-size:21px;font-weight:600;color:var(--txt2);margin:0;flex:1}
+.au-field{min-width:0}.au-field>label{display:block;font-size:10.5px;color:var(--dim);letter-spacing:.03em;margin-bottom:6px}
+.au-field input[type=text],.au-field input[type=number],.au-field input[type=time],.au-field textarea{width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:6px;color:var(--txt);font:inherit;font-size:11.5px;padding:9px 10px;outline:none}
+.au-form input[type=time]{color-scheme:dark}
+.au-field input[type=text]:focus,.au-field input[type=number]:focus,.au-field input[type=time]:focus,.au-field textarea:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
+.au-field textarea{min-height:82px;resize:vertical;line-height:1.5}
+.au-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.au-form-section{border:1px solid var(--line2);border-radius:14px;background:color-mix(in srgb,var(--glass) 86%,transparent);padding:14px 15px;display:flex;flex-direction:column;gap:13px}
+.au-form-section-title{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim2);margin-bottom:-2px}
+.au-form-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px}
+.au-form-row>span:first-child{color:var(--dim);font-size:11.5px}
+.au-form-row .v-select,.au-form-row .dock-pos-select{margin-left:auto;min-width:165px}
+.au-form-hint{color:var(--dim2);font-size:10.5px;line-height:1.45;margin-top:-5px}
+.au-warn{font-size:10.5px;color:var(--ember);line-height:1.5;margin-top:-4px}
+.au-form-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:2px}.au-form-error{color:var(--ember);font-size:10.5px;margin-right:auto;line-height:1.45}
+.au-form-actions .btn{font-size:11.5px}
+.au-danger-btn{color:var(--ember)!important}
+.au-confirm{width:min(390px,calc(100vw - 32px));background:var(--modal);border:1px solid var(--line2);border-radius:14px;padding:20px;box-shadow:0 18px 60px rgba(0,0,0,.46)}
+.au-confirm h3{font-family:var(--font-d);font-size:17px;color:var(--txt2);margin:0 0 6px}.au-confirm p{color:var(--dim);font-size:11.5px;line-height:1.5;margin:0 0 16px}.au-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:900px){.au-layout{grid-template-columns:minmax(250px,310px) minmax(0,1fr)}.au-page{padding:22px 18px 28px}.au-detail-panel{padding:22px 20px 30px}}
+@media(max-width:720px){.au-page-shell{height:auto}.au-page-head{align-items:flex-start;flex-wrap:wrap}.au-head-actions{width:100%;margin-left:46px;justify-content:flex-start}.au-layout{grid-template-columns:1fr}.au-list-panel{min-height:300px;max-height:48vh}.au-detail-panel{min-height:500px}.au-form-grid{grid-template-columns:1fr}.au-detail-title{font-size:21px}}
 </style>
 </head>
 <body>
@@ -3063,6 +3119,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
         <div className="sb-tools">
+          <button className={'sb-row' + (view === 'scheduled' ? ' active' : '')} onClick={() => onNav('scheduled')}><span className="sb-ic"><IcGCal/></span>Scheduled</button>
           <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Observability</button>
           <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
           <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
@@ -3223,6 +3280,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
           </div>
         ))}
       </RailFly>
+      <button className={'rail-btn' + (view === 'scheduled' ? ' active' : '')} title="Scheduled" onClick={() => onNav('scheduled')}><IcGCal size={17}/></button>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Observability · Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
@@ -6974,7 +7032,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onClose}) => {
+const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
@@ -7229,7 +7287,12 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
             </React.Fragment>
           )}
           {tab === 'Automations' && (
-            <AutomationManager automations={automations} onStartChat={onStartAutomationChat}/>
+            <React.Fragment>
+              <div className="set-h">Scheduled</div>
+              <div className="set-note">Scheduled tasks have their own workspace for creating, editing, pausing, and reviewing runs.</div>
+              <div className="set-row"><div>Scheduled tasks<span className="sr-sub">{automations.length} task{automations.length === 1 ? '' : 's'} currently saved.</span></div><span className="sr-end"><button className="btn primary" onClick={() => { onClose(); if (onOpenScheduled) onOpenScheduled(); }}>Open Scheduled</button></span></div>
+              <div className="set-row"><div>Chat-guided setup<span className="sr-sub">Ask Vellum to draft the schedule in a new project chat.</span></div><span className="sr-end"><button className="btn" onClick={() => { onClose(); if (onStartAutomationChat) onStartAutomationChat(); }}>Create with Vellum</button></span></div>
+            </React.Fragment>
           )}
           {tab === 'Computer use' && (
             <React.Fragment>
@@ -7274,8 +7337,35 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
 };
 
 const AUTOMATION_DESTINATIONS = [
-  {value: 'new_chat', label: 'New chat (Scheduled feed)'},
-  {value: 'existing_chat', label: 'Pinned conversation'},
+  {value: 'new_chat', label: 'New chat'},
+  {value: 'existing_chat', label: 'Existing chat'},
+];
+const AUTOMATION_REPEAT_OPTIONS = [
+  {value: 'daily', label: 'Daily'},
+  {value: 'weekdays', label: 'Weekdays'},
+  {value: 'weekly', label: 'Weekly'},
+  {value: 'custom', label: 'Custom'},
+];
+const AUTOMATION_WEEKDAYS = [
+  {value: '0', label: 'Sunday'},
+  {value: '1', label: 'Monday'},
+  {value: '2', label: 'Tuesday'},
+  {value: '3', label: 'Wednesday'},
+  {value: '4', label: 'Thursday'},
+  {value: '5', label: 'Friday'},
+  {value: '6', label: 'Saturday'},
+];
+const AUTOMATION_INTERVAL_UNITS = [
+  {value: 'minutes', label: 'Minutes'},
+  {value: 'hours', label: 'Hours'},
+  {value: 'days', label: 'Days'},
+  {value: 'weeks', label: 'Weeks'},
+];
+const AUTOMATION_NOTIFICATIONS = [
+  {value: 'all', label: 'All runs'},
+  {value: 'important', label: 'Important updates'},
+  {value: 'failures', label: 'Failures only'},
+  {value: 'none', label: 'None'},
 ];
 const AUTOMATION_TIERS = [
   {value: '', label: 'Default tier'},
@@ -7291,236 +7381,318 @@ const AUTOMATION_REASONING_MODES = [
   {value: 'max', label: 'Max'},
   {value: 'ultra', label: 'Ultra'},
 ];
-const scheduleLabel = (schedule) => {
-  if (!schedule) return 'no schedule';
-  if (schedule.kind === 'interval') return 'every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
-  if (schedule.kind === 'relative') return 'in ' + schedule.value + ' ' + schedule.unit;
-  return schedule.expression || schedule.run_at || '—';
+const automationWeekdayLabel = value => (AUTOMATION_WEEKDAYS.find(day => String(day.value) === String(value)) || AUTOMATION_WEEKDAYS[1]).label;
+const automationNotificationLabel = value => (AUTOMATION_NOTIFICATIONS.find(item => item.value === value) || AUTOMATION_NOTIFICATIONS[0]).label;
+const scheduleLabel = schedule => {
+  if (!schedule) return 'Not scheduled';
+  if (schedule.kind === 'interval') return 'Every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
+  if (schedule.kind === 'relative') return 'In ' + schedule.value + ' ' + schedule.unit;
+  if (schedule.kind === 'cron') {
+    const parts = String(schedule.expression || '').trim().split(/\s+/);
+    if (parts.length === 5) {
+      const time = String(parts[1]).padStart(2, '0') + ':' + String(parts[0]).padStart(2, '0');
+      if (parts[4] === '1-5') return 'Weekdays at ' + time;
+      if (/^\d$/.test(parts[4])) return 'Every ' + automationWeekdayLabel(parts[4]) + ' at ' + time;
+      if (parts[4] === '*') return 'Daily at ' + time;
+    }
+  }
+  return schedule.expression || schedule.run_at || 'Not scheduled';
 };
-const scheduleToString = (schedule) => {
-  if (!schedule) return '';
-  if (schedule.kind === 'interval') return 'every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
-  if (schedule.kind === 'relative') return '' + schedule.value + schedule.unit.slice(0, 1);
-  return schedule.expression || schedule.run_at || '';
+const destinationLabel = (destination, chats = []) => {
+  if (!destination || destination.kind !== 'existing_chat') return 'New chat';
+  const chat = chats.find(item => String(item.thread_id || item.id) === String(destination.thread_id));
+  return chat ? 'Pinned · ' + chat.title : 'Pinned chat';
 };
-const destinationLabel = (destination) => {
-  if (!destination) return 'New chat';
-  return destination.kind === 'existing_chat' ? 'Pinned thread ' + (destination.thread_id || '?') : 'New chat';
-};
-const lastRun = (a) => {
-  const runs = (a && a.run_history) || [];
+const lastRun = automation => {
+  const runs = (automation && automation.run_history) || [];
   return runs.length ? runs[runs.length - 1] : null;
 };
-const runStatusLabel = (run) => {
+const runStatusLabel = run => {
   if (!run) return '';
-  const when = run.finished_at || run.started_at || '';
-  return (run.status || '') + (when ? ' · ' + when : '') + (run.error ? ' · ' + run.error : '');
+  if (run.status === 'failed') return 'Last run failed';
+  if (run.status === 'running') return 'Running now';
+  return 'Last run complete';
+};
+const frequencyFromSchedule = schedule => {
+  const fallback = {repeat: 'daily', time: '09:00', weekday: '1', intervalValue: '2', intervalUnit: 'days'};
+  if (!schedule) return fallback;
+  if (schedule.kind === 'interval') {
+    const value = String(schedule.value || 1);
+    const unit = String(schedule.unit || 'days').toLowerCase();
+    const time = schedule.at_time || fallback.time;
+    if (value === '1' && unit === 'days') return {...fallback, repeat: 'daily', time};
+    if (value === '1' && unit === 'weeks') return {...fallback, repeat: 'weekly', time};
+    return {...fallback, repeat: 'custom', time, intervalValue: value, intervalUnit: unit};
+  }
+  if (schedule.kind === 'cron') {
+    const parts = String(schedule.expression || '').trim().split(/\s+/);
+    if (parts.length === 5) {
+      const time = String(parts[1]).padStart(2, '0') + ':' + String(parts[0]).padStart(2, '0');
+      if (parts[4] === '1-5') return {...fallback, repeat: 'weekdays', time};
+      if (/^\d$/.test(parts[4])) return {...fallback, repeat: 'weekly', time, weekday: parts[4]};
+      if (parts[4] === '*') return {...fallback, repeat: 'daily', time};
+    }
+  }
+  return fallback;
+};
+const buildScheduleExpression = ({repeat, time, weekday, intervalValue, intervalUnit}) => {
+  const safeTime = /^\d{2}:\d{2}$/.test(time || '') ? time : '09:00';
+  const [hour, minute] = safeTime.split(':');
+  if (repeat === 'weekdays') return `${Number(minute)} ${Number(hour)} * * 1-5`;
+  if (repeat === 'weekly') return `${Number(minute)} ${Number(hour)} * * ${weekday || '1'}`;
+  if (repeat === 'daily') return `every 1d at ${safeTime}`;
+  const value = Math.max(1, Number(intervalValue) || 1);
+  const unit = AUTOMATION_INTERVAL_UNITS.some(item => item.value === intervalUnit) ? intervalUnit : 'days';
+  const withTime = (unit === 'days' || unit === 'weeks') && safeTime ? ` at ${safeTime}` : '';
+  return `every ${value}${unit}${withTime}`;
 };
 
-const AutomationForm = ({record, onSave, onCancel}) => {
+const AutomationForm = ({record, onSave, onCancel, projects = [], chats = [], models = MODELS}) => {
   const isNew = !record;
-  const [name, setName] = useState(record ? record.name : '');
-  const [instructions, setInstructions] = useState(record ? record.instructions : '');
-  const [schedule, setSchedule] = useState(record ? scheduleToString(record.schedule) : '');
+  const modelOptions = [{value: '', label: 'Default model'}, ...(models || []).map(model => ({value: model.id, label: model.label || model.id}))];
+  const projectOptions = [{value: '', label: 'None'}, ...(projects || []).map(project => ({value: project.id, label: project.name}))];
+  const pinnedChats = (chats || []).filter(chat => chat.pinned && !chat.archived);
+  const chatOptions = [{value: '', label: 'Choose a pinned chat'}, ...pinnedChats.map(chat => ({value: chat.thread_id || chat.id, label: chat.title}))];
+  const initialFrequency = frequencyFromSchedule(record && record.schedule);
+  const [name, setName] = useState(record ? record.name || '' : '');
+  const [description, setDescription] = useState(record ? record.description || '' : '');
+  const [instructions, setInstructions] = useState(record ? record.instructions || '' : '');
   const [destination, setDestination] = useState(record && record.destination ? (record.destination.kind || 'new_chat') : 'new_chat');
   const [threadId, setThreadId] = useState(record && record.destination ? (record.destination.thread_id || '') : '');
+  const [projectId, setProjectId] = useState(record ? record.project_id || '' : '');
+  const [model, setModel] = useState(record && record.model_profile ? (record.model_profile.model || '') : '');
   const [tier, setTier] = useState(record && record.model_profile ? (record.model_profile.tier || '') : '');
   const [reasoningMode, setReasoningMode] = useState(record && record.model_profile ? (record.model_profile.reasoning_mode || '') : '');
-  const [model, setModel] = useState(record && record.model_profile ? (record.model_profile.model || '') : '');
+  const [repeat, setRepeat] = useState(initialFrequency.repeat);
+  const [time, setTime] = useState(initialFrequency.time);
+  const [weekday, setWeekday] = useState(initialFrequency.weekday);
+  const [intervalValue, setIntervalValue] = useState(initialFrequency.intervalValue);
+  const [intervalUnit, setIntervalUnit] = useState(initialFrequency.intervalUnit);
+  const [notification, setNotification] = useState(record && record.notifications ? (record.notifications.level || 'all') : 'all');
   const [fullAccess, setFullAccess] = useState(record ? !!(record.permission && record.permission.full_access) : false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const showTime = repeat !== 'custom' || intervalUnit === 'days' || intervalUnit === 'weeks';
+  const initialDestination = record && record.destination ? (record.destination.kind || 'new_chat') : 'new_chat';
+  const initialThreadId = record && record.destination ? (record.destination.thread_id || '') : '';
+  const initialProjectId = record ? record.project_id || '' : '';
+  const initialModel = record && record.model_profile ? (record.model_profile.model || '') : '';
+  const initialTier = record && record.model_profile ? (record.model_profile.tier || '') : '';
+  const initialReasoningMode = record && record.model_profile ? (record.model_profile.reasoning_mode || '') : '';
+  const initialNotification = record && record.notifications ? (record.notifications.level || 'all') : 'all';
+  const initialFullAccess = record ? !!(record.permission && record.permission.full_access) : false;
+  const hasChanges = isNew
+    ? Boolean(name.trim() || description.trim() || instructions.trim() || destination !== 'new_chat' || threadId || projectId || model || tier || reasoningMode || repeat !== 'daily' || time !== '09:00' || weekday !== '1' || intervalValue !== '2' || intervalUnit !== 'days' || notification !== 'all' || fullAccess)
+    : name.trim() !== String(record.name || '').trim()
+      || description.trim() !== String(record.description || '').trim()
+      || instructions.trim() !== String(record.instructions || '').trim()
+      || destination !== initialDestination
+      || threadId !== initialThreadId
+      || projectId !== initialProjectId
+      || model !== initialModel
+      || tier !== initialTier
+      || reasoningMode !== initialReasoningMode
+      || repeat !== initialFrequency.repeat
+      || time !== initialFrequency.time
+      || weekday !== initialFrequency.weekday
+      || String(intervalValue) !== String(initialFrequency.intervalValue)
+      || intervalUnit !== initialFrequency.intervalUnit
+      || notification !== initialNotification
+      || fullAccess !== initialFullAccess;
+  const requestDiscard = () => {
+    if (hasChanges) setDiscardOpen(true);
+    else onCancel();
+  };
 
-  const submit = async () => {
+  const submit = async event => {
+    if (event) event.preventDefault();
     setError('');
+    if (!name.trim() || !instructions.trim()) { setError('Title and instructions are required'); return; }
+    if (destination === 'existing_chat' && !threadId) { setError('Choose a pinned chat'); return; }
+    if (repeat === 'custom' && (!Number(intervalValue) || Number(intervalValue) < 1)) { setError('Choose a valid interval'); return; }
+    const modelProfile = {};
+    if (model.trim()) modelProfile.model = model.trim();
+    if (tier) modelProfile.tier = tier;
+    if (reasoningMode) modelProfile.reasoning_mode = reasoningMode;
     const payload = {
       name: name.trim(),
+      description: description.trim(),
       instructions: instructions.trim(),
-      schedule: schedule.trim(),
-      destination: {kind: destination},
-      model_profile: {},
+      schedule: buildScheduleExpression({repeat, time, weekday, intervalValue, intervalUnit}),
+      destination: {kind: destination, ...(destination === 'existing_chat' ? {thread_id: threadId} : {})},
+      project_id: projectId || null,
+      model_profile: modelProfile,
       permission: {full_access: fullAccess},
+      notifications: {level: notification},
     };
-    if (destination === 'existing_chat' && threadId.trim()) payload.destination.thread_id = threadId.trim();
-    if (tier) payload.model_profile.tier = tier;
-    if (reasoningMode) payload.model_profile.reasoning_mode = reasoningMode;
-    if (model.trim()) payload.model_profile.model = model.trim();
     setSaving(true);
     try {
-      if (isNew) await API.automations.create(payload);
-      else await API.automations.update(record.id, payload);
-      onSave();
-    } catch (err) {
-      setError(String((err && err.message) || err || 'Save failed'));
+      await onSave(payload);
+    } catch (_) {
+      setError('Save failed');
+    } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="au-form">
-      <div className="au-field">
-        <label htmlFor="au-name">Name</label>
-        <input id="au-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning briefing"/>
+    <form className="au-form" onSubmit={submit}>
+      <div className="au-form-head"><h2>{isNew ? 'New scheduled task' : 'Edit scheduled task'}</h2><button type="button" className="tbtn" title="Discard" onClick={requestDiscard}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div>
+      <div className="au-field"><label htmlFor="au-name">Title</label><input id="au-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Scheduled task title" autoFocus/></div>
+      <div className="au-field"><label htmlFor="au-description">Description</label><textarea id="au-description" value={description} onChange={e => setDescription(e.target.value)} placeholder="A short note about what this task is for."/></div>
+      <div className="au-field"><label htmlFor="au-instructions">Instructions</label><textarea id="au-instructions" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="Describe what Vellum should do when this task runs."/></div>
+      <div className="au-form-section">
+        <div className="au-form-section-title">Details</div>
+        <div className="au-form-row"><span>Runs in</span><VSelect className="dock-pos-select" ariaLabel="Runs in" value={destination} onValueChange={setDestination} options={AUTOMATION_DESTINATIONS}/></div>
+        {destination === 'existing_chat' && <div className="au-form-row"><span>Chat</span><VSelect className="dock-pos-select" ariaLabel="Pinned chat" value={threadId} onValueChange={setThreadId} options={chatOptions}/></div>}
+        <div className="au-form-row"><span>Project</span><VSelect className="dock-pos-select" ariaLabel="Automation project" value={projectId} onValueChange={setProjectId} options={projectOptions}/></div>
+        <div className="au-form-row"><span>Model</span><VSelect className="dock-pos-select" ariaLabel="Automation model" value={model} onValueChange={setModel} options={modelOptions}/></div>
+        <div className="au-form-row"><span>Reasoning</span><VSelect className="dock-pos-select" ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/></div>
       </div>
-      <div className="au-field">
-        <label htmlFor="au-instructions">Instructions</label>
-        <textarea id="au-instructions" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="What should each run do? Write one clear paragraph Vellum follows when it runs."/>
+      <div className="au-form-section">
+        <div className="au-form-section-title">Frequency</div>
+        <div className="au-form-row"><span>Repeat</span><VSelect className="dock-pos-select" ariaLabel="Automation frequency" value={repeat} onValueChange={setRepeat} options={AUTOMATION_REPEAT_OPTIONS}/></div>
+        {repeat === 'weekly' && <div className="au-form-row"><span>On</span><VSelect className="dock-pos-select" ariaLabel="Weekday" value={weekday} onValueChange={setWeekday} options={AUTOMATION_WEEKDAYS}/></div>}
+        {repeat === 'custom' && <div className="au-form-grid"><div className="au-field"><label htmlFor="au-interval-value">Every</label><input id="au-interval-value" type="number" min="1" value={intervalValue} onChange={e => setIntervalValue(e.target.value)}/></div><div className="au-field"><label htmlFor="au-interval-unit">Unit</label><VSelect className="dock-pos-select" ariaLabel="Interval unit" value={intervalUnit} onValueChange={setIntervalUnit} options={AUTOMATION_INTERVAL_UNITS}/></div></div>}
+        {showTime && <div className="au-form-row"><span>At</span><input id="au-time" aria-label="Automation time" type="time" value={time} onChange={e => setTime(e.target.value)}/></div>}
+        <div className="au-form-row"><span>Notifications</span><VSelect className="dock-pos-select" ariaLabel="Automation notifications" value={notification} onValueChange={setNotification} options={AUTOMATION_NOTIFICATIONS}/></div>
       </div>
-      <div className="au-field">
-        <label htmlFor="au-schedule">Schedule</label>
-        <input id="au-schedule" type="text" value={schedule} onChange={e => setSchedule(e.target.value)} placeholder="every 2h · 0 9 * * * · 30m · 2026-08-03T09:00:00Z"/>
+      <div className="au-form-section">
+        <div className="au-form-section-title">Access</div>
+        <div className="au-form-row"><span>Run unattended</span><div className={'sw' + (fullAccess ? ' on' : '')} role="switch" aria-checked={fullAccess} aria-label="Full access opt-in" tabIndex="0" onClick={() => setFullAccess(!fullAccess)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullAccess(!fullAccess); } }}/></div>
+        {fullAccess && <div className="au-warn">Unattended runs can perform actions without asking first. Enable this only for tasks you trust.</div>}
       </div>
-      <div className="au-form-grid">
-        <div className="au-field">
-          <label htmlFor="au-destination">Destination</label>
-          <VSelect className="dock-pos-select" ariaLabel="Automation destination" value={destination} onValueChange={setDestination} options={AUTOMATION_DESTINATIONS}/>
+      <div className="au-form-actions">{error && <div className="au-form-error" role="alert">{error}</div>}<button type="button" className="btn" onClick={requestDiscard}>Discard</button><button type="submit" className="btn primary" disabled={saving}>{saving ? 'Saving…' : (isNew ? 'Create task' : 'Save changes')}</button></div>
+      {discardOpen && <div className="backdrop dim" style={{display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100}}>
+        <div className="au-confirm" role="dialog" aria-modal="true" aria-labelledby="au-discard-title">
+          <h3 id="au-discard-title">Discard changes?</h3>
+          <p>Your unsaved changes will be lost.</p>
+          <div className="au-confirm-actions"><button type="button" className="btn" onClick={() => setDiscardOpen(false)}>Keep editing</button><button type="button" className="btn au-danger-btn" onClick={onCancel}>Discard changes</button></div>
         </div>
-        {destination === 'existing_chat' && (
-          <div className="au-field">
-            <label htmlFor="au-thread-id">Pinned thread id</label>
-            <input id="au-thread-id" type="text" value={threadId} onChange={e => setThreadId(e.target.value)} placeholder="thread-…"/>
-          </div>
-        )}
-        <div className="au-field">
-          <label htmlFor="au-tier">Model tier</label>
-          <VSelect className="dock-pos-select" ariaLabel="Model tier" value={tier} onValueChange={setTier} options={AUTOMATION_TIERS}/>
-        </div>
-        <div className="au-field">
-          <label htmlFor="au-reasoning">Reasoning mode</label>
-          <VSelect className="dock-pos-select" ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/>
-        </div>
-      </div>
-      <div className="au-field">
-        <label htmlFor="au-model">Model id (optional — overrides the tier)</label>
-        <input id="au-model" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. openai/gpt-5.6-luna"/>
-      </div>
-      <div className="set-row">
-        <div>Full access<span className="sr-sub">Runs unattended and bypasses confirmation gates.</span></div>
-        <span className="sr-end">
-          <div className={'sw' + (fullAccess ? ' on' : '')} role="switch" aria-checked={fullAccess} aria-label="Full access opt-in" tabIndex="0" onClick={() => setFullAccess(!fullAccess)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullAccess(!fullAccess); } }}/>
-        </span>
-      </div>
-      {fullAccess && <div className="au-warn">Opting in means this automation runs entirely unattended and can perform actions without asking you each time. Only enable it for tasks you fully trust.</div>}
-      <div className="au-form-actions">
-        {error && <div className="au-form-error">{error}</div>}
-        <button className="btn" onClick={onCancel}>Cancel</button>
-        <button className="btn primary" disabled={saving} onClick={submit}>{saving ? 'Saving…' : (isNew ? 'Create automation' : 'Save changes')}</button>
-      </div>
-    </div>
+      </div>}
+    </form>
   );
 };
 
-const AutomationManager = ({automations, onStartChat}) => {
+const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy}) => (
+  <div className="backdrop dim" style={{display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100}}>
+    <div className="au-confirm" role="dialog" aria-modal="true" aria-labelledby="au-confirm-title">
+      <h3 id="au-confirm-title">{builtin ? 'Reset ' : 'Delete '}{record.name}?</h3>
+      <p>{builtin ? 'This restores the built-in task to its default settings.' : 'This permanently deletes the scheduled task and stops future runs.'}</p>
+      <div className="au-confirm-actions"><button className="btn" onClick={onCancel}>Keep task</button><button className="btn au-danger-btn" disabled={busy} onClick={onConfirm}>{builtin ? 'Reset task' : 'Delete task'}</button></div>
+    </div>
+  </div>
+);
+
+const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, onStartChat, onItemsChange}) => {
   const [items, setItems] = useState(automations || []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [confirmId, setConfirmId] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [selectedId, setSelectedId] = useState(automations && automations[0] ? automations[0].id : null);
+  const [menu, setMenu] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
 
   const refresh = async () => {
     try {
       const data = await API.automations.list();
-      setItems((data && data.automations) || []);
+      const next = (data && Array.isArray(data.automations)) ? data.automations : [];
+      setItems(next);
+      if (onItemsChange) onItemsChange(next);
+      setSelectedId(current => next.some(item => item.id === current) ? current : (next[0] ? next[0].id : null));
       setError('');
-    } catch (err) {
-      setError(String((err && err.message) || err || 'Failed to load automations'));
+    } catch (_) {
+      setError('Unavailable');
     } finally {
       setLoading(false);
     }
   };
   useEffect(() => { refresh(); }, []);
 
-  const runNow = async (a) => {
-    setBusy(a.id); setError('');
+  const runNow = async record => {
+    setMenu(null); setBusy(record.id); setError('');
+    try { await API.automations.run(record.id); await refresh(); }
+    catch (_) { setError('Run failed'); }
+    finally { setBusy(''); }
+  };
+  const toggleState = async record => {
+    setMenu(null); setBusy(record.id); setError('');
+    try { await API.automations.update(record.id, {state: record.state === 'active' ? 'paused' : 'active'}); await refresh(); }
+    catch (_) { setError('Update failed'); }
+    finally { setBusy(''); }
+  };
+  const removeAutomation = async record => {
+    setMenu(null); setBusy(record.id); setError('');
+    try { await API.automations.remove(record.id); setConfirm(null); await refresh(); }
+    catch (_) { setError('Delete failed'); }
+    finally { setBusy(''); }
+  };
+  const saveAutomation = async payload => {
+    setBusy('save');
     try {
-      await API.automations.run(a.id);
+      const response = editing && editing.mode === 'edit' ? await API.automations.update(editing.record.id, payload) : await API.automations.create(payload);
+      const saved = response && response.automation;
+      setEditing(null);
+      if (saved) setSelectedId(saved.id);
       await refresh();
-    } catch (err) {
-      setError(String((err && err.message) || err || 'Run failed'));
     } finally {
       setBusy('');
     }
   };
-  const toggleState = async (a) => {
-    setBusy(a.id); setError('');
-    try {
-      await API.automations.update(a.id, {state: a.state === 'active' ? 'paused' : 'active'});
-      await refresh();
-    } catch (err) {
-      setError(String((err && err.message) || err || 'Update failed'));
-    } finally {
-      setBusy('');
-    }
-  };
-  const removeAutomation = async (a) => {
-    setBusy(a.id); setError('');
-    try {
-      await API.automations.remove(a.id);
-      setConfirmId(null);
-      await refresh();
-    } catch (err) {
-      setError(String((err && err.message) || err || 'Delete failed'));
-    } finally {
-      setBusy('');
-    }
-  };
-  const saveAutomation = async () => {
-    setEditing(null);
-    await refresh();
-  };
-  const cancelEdit = () => { setEditing(null); setError(''); };
-
-  if (editing) {
-    return (
-      <React.Fragment>
-        <div className="set-h">{editing.mode === 'new' ? 'New automation' : 'Edit automation'}</div>
-        <AutomationForm record={editing.mode === 'new' ? null : editing.record} onSave={saveAutomation} onCancel={cancelEdit}/>
-      </React.Fragment>
-    );
-  }
+  const selected = items.find(item => item.id === selectedId) || null;
+  const filtered = items.filter(item => {
+    if (filter !== 'all' && item.state !== filter) return false;
+    if (!query.trim()) return true;
+    const haystack = `${item.name || ''} ${item.description || ''} ${item.instructions || ''}`.toLowerCase();
+    return haystack.includes(query.trim().toLowerCase());
+  });
 
   return (
-    <React.Fragment>
-      <div className="set-h">Automations</div>
-      <div className="au-actions">
-        <button className="btn primary" onClick={() => setEditing({mode: 'new'})}>New automation</button>
-        <button className="btn" onClick={onStartChat}>Create with chat</button>
-        <span className="au-hint">{items.length} scheduled task{items.length === 1 ? '' : 's'}</span>
+    <div className="page au-page">
+      <div className="au-page-shell">
+        <div className="au-page-head"><div className="page-head-ic"><IcGCal size={17}/></div><div><div className="page-title">Scheduled</div><div className="page-sub">Automations that run on your time.</div></div><div className="au-head-actions"><button className="btn" onClick={onStartChat}><IcSparkle size={14}/>Create with Vellum</button><button className="new-btn" onClick={() => { setSelectedId(null); setEditing({mode:'new'}); }}><I d="M12 5v14M5 12h14" size={14}/>Set up manually</button></div></div>
+        <div className="au-layout">
+          <section className="au-list-panel" aria-label="Scheduled tasks">
+            <div className="au-list-toolbar"><label className="au-search"><IcSearch size={14}/><input aria-label="Search scheduled tasks" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search scheduled tasks"/></label></div>
+            <div className="au-filter-row">{[['all','All'],['active','Active'],['paused','Paused']].map(([value,label]) => <button key={value} className={'au-filter' + (filter === value ? ' on' : '')} onClick={() => setFilter(value)}>{label}</button>)}</div>
+            <div className="au-task-list">
+              {filtered.map(record => {
+                const run = lastRun(record);
+                return <div key={record.id} className={'au-task' + (record.id === selectedId && !editing ? ' active' : '')} onClick={() => { setSelectedId(record.id); setEditing(null); }}>
+                  <span className={'au-task-dot' + (record.state === 'paused' ? ' paused' : '')} aria-hidden="true"/>
+                  <div className="au-task-copy"><div className="au-task-title">{record.name}</div><div className="au-task-meta">{scheduleLabel(record.schedule)}{run && run.status === 'complete' ? ' · Next run follows schedule' : ''}</div>{record.builtin && <div className="au-task-note">Built-in task</div>}</div>
+                  <button className="au-task-menu" aria-label={'Actions for ' + record.name} title="Actions" onClick={event => { event.stopPropagation(); setMenu({record, x:event.clientX, y:event.clientY}); }}><IcDots size={15}/></button>
+                </div>;
+              })}
+              {!loading && filtered.length === 0 && <div className="au-list-empty"><strong>{items.length ? 'No matching tasks' : 'No scheduled tasks'}</strong>{items.length ? 'Try another search or filter.' : 'Create a task manually or ask Vellum to draft one with you.'}</div>}
+              {loading && <div className="au-list-empty">Loading scheduled tasks…</div>}
+            </div>
+          </section>
+          <section className="au-detail-panel" aria-label="Scheduled task details">
+            {editing ? <AutomationForm key={editing.mode + ':' + (editing.record ? editing.record.id : 'new')} record={editing.mode === 'edit' ? editing.record : null} projects={projects} chats={chats} models={models} onSave={saveAutomation} onCancel={() => setEditing(null)}/> : selected ? <div className="au-detail">
+              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
+              <div className="au-prompt-card">{selected.instructions}</div>
+              <div className="au-section-label">Details</div>
+              <div className="au-detail-card"><div className="au-detail-row"><span>Runs in</span><strong>{destinationLabel(selected.destination, chats)}</strong></div><div className="au-detail-row"><span>Project</span><strong className={!selected.project_id ? 'au-detail-muted' : ''}>{selected.project_id ? ((projects.find(project => project.id === selected.project_id) || {}).name || selected.project_id) : 'None'}</strong></div><div className="au-detail-row"><span>Model</span><strong>{(selected.model_profile && selected.model_profile.model) || 'Default model'}</strong></div><div className="au-detail-row"><span>Reasoning</span><strong>{(selected.model_profile && selected.model_profile.reasoning_mode) || 'Default'}</strong></div></div>
+              <div className="au-section-label">Frequency</div>
+              <div className="au-detail-card"><div className="au-detail-row"><span>Repeat</span><strong>{scheduleLabel(selected.schedule)}</strong></div><div className="au-detail-row"><span>Notifications</span><strong>{automationNotificationLabel(selected.notifications && selected.notifications.level)}</strong></div></div>
+              {lastRun(selected) && <div className="au-last-run">{runStatusLabel(lastRun(selected))}</div>}
+              {error && <div className="au-form-error" role="alert">{error}</div>}
+            </div> : <div className="au-list-empty"><strong>Select a scheduled task</strong>Choose a task to see its instructions and details.</div>}
+          </section>
+        </div>
       </div>
-      <div className="set-note">Automations run a reasoning turn on their schedule; each run lands in the Scheduled feed or a pinned conversation. Built-in jobs can be edited and paused but never deleted.</div>
-      {error && <div className="set-note" style={{color: 'var(--danger)'}}>{error}</div>}
-      {items.map(a => {
-        const run = lastRun(a);
-        return (
-          <div key={a.id} className="au-row">
-            <div className="au-row-main">
-              <div className="au-name">{a.name}
-                {a.builtin ? <span className="cu-pill">built-in</span> : null}
-                <span className={'cu-pill' + (a.state === 'active' ? ' on' : '')}>{a.state === 'active' ? 'active' : 'paused'}</span>
-              </div>
-              <div className="au-meta">{scheduleLabel(a.schedule)} · {destinationLabel(a.destination)}</div>
-              {run && <div className={'au-run' + (run.status === 'failed' ? ' failed' : '')}>{runStatusLabel(run)}</div>}
-            </div>
-            <div className="au-row-actions">
-              <button className="btn" disabled={busy === a.id} onClick={() => runNow(a)}>Run now</button>
-              <button className="btn" disabled={busy === a.id} onClick={() => toggleState(a)}>{a.state === 'active' ? 'Pause' : 'Resume'}</button>
-              <button className="btn" disabled={busy === a.id} onClick={() => setEditing({mode: 'edit', record: a})}>Edit</button>
-              {confirmId === a.id ? (
-                <button className="btn danger" disabled={busy === a.id} onClick={() => removeAutomation(a)}>Confirm</button>
-              ) : (
-                <button className="btn danger" onClick={() => setConfirmId(a.id)}>{a.builtin ? 'Reset' : 'Delete'}</button>
-              )}
-            </div>
-          </div>
-        );
-      })}
-      {!loading && items.length === 0 && <div className="au-empty">No automations yet — create one with the form, or use "Create with chat" and let Vellum draft it with you.</div>}
-    </React.Fragment>
+      {menu && <Popover portal className="ctx-menu" style={clampMenuPosition(menu, 220, 210)} onClose={() => setMenu(null)}><div className="ctx-item" onClick={() => runNow(menu.record)}>Run now</div><div className="ctx-item" onClick={() => toggleState(menu.record)}>{menu.record.state === 'active' ? 'Pause' : 'Resume'}</div><div className="ctx-item" onClick={() => { setMenu(null); setSelectedId(menu.record.id); setEditing({mode:'edit', record:menu.record}); }}>Edit</div><div className="ctx-div"/><div className="ctx-item danger" onClick={() => { setMenu(null); setConfirm(menu.record); }}>{menu.record.builtin ? 'Reset task' : 'Delete task'}</div></Popover>}
+      {confirm && <AutomationConfirmModal record={confirm} builtin={!!confirm.builtin} busy={busy === confirm.id} onCancel={() => setConfirm(null)} onConfirm={() => removeAutomation(confirm)}/>}
+    </div>
   );
 };
 
-const APP_VIEW_IDS = new Set(['chat','library','projects','project','ledger','skills','apps','memory','kg','archive','agent']);
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','memory','kg','archive','agent']);
 const isNotFoundLocation = () => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -7972,7 +8144,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       if (data && data.prompt) prompt = data.prompt;
     } catch (_) {}
     setSettingsOpen(false);
-    sendMessage(prompt, [], {forceNew: true});
+    const projectId = activeProjectId || (projects[0] && projects[0].id) || null;
+    if (projectId) setActiveProjectId(projectId);
+    sendMessage(prompt, [], {forceNew: true, projectId});
   };
   const leaveNotFound = () => {
     try {
@@ -8807,7 +8981,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const activeChatProject = activeChat && activeChat.projectId ? projects.find(p => p.id === activeChat.projectId) : null;
   const activeProject = projects.find(p => p.id === activeProjectId) || null;
-  const dockSide = dockPosition === 'auto' ? (['library','ledger','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
+  const dockSide = dockPosition === 'auto' ? (['library','ledger','scheduled','apps','kg','skills','memory','archive'].includes(view) ? 'right' : 'top') : dockPosition;
 
   return (
     <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds}}>
@@ -8861,6 +9035,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onViewImage={setViewer}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills')}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
+            {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
             {view === 'ledger' && <ObservabilityView/>}
             {view === 'skills' && <SkillsHubView/>}
             {view === 'apps' && <BackendConnectorsView apps={apps} onOpenSkills={() => nav('skills')}/>}
@@ -8908,6 +9083,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
+          onOpenScheduled={() => nav('scheduled')}
           onClose={() => setSettingsOpen(false)}/>} 
         {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
