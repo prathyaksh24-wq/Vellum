@@ -1690,6 +1690,23 @@ body{font-size:14px}
 .spotify-player-error{padding:8px 2px 2px;color:var(--danger);font-size:10.5px;line-height:1.4}.spotify-reconnect{margin-top:8px}
 @media(max-width:720px){.spotify-player-shell.side-top,.spotify-player-shell.side-right{top:58px;right:10px}.spotify-player-pill{max-width:178px}.spotify-now{display:none}.spotify-player-panel{width:min(310px,calc(100vw - 20px))}}
 @media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
+.au-actions{display:flex;align-items:center;gap:8px;margin:14px 0 6px}.au-actions .au-hint{margin-left:auto;font-size:10.5px;color:var(--dim2)}
+.au-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.au-row-main{min-width:0}
+.au-name{font-family:var(--font-d);font-size:13px;color:var(--txt2);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.au-meta{font-size:11px;color:var(--dim2);margin-top:3px}
+.au-run{font-size:10.5px;color:var(--dim);margin-top:3px;line-height:1.45}.au-run.failed{color:var(--danger)}
+.au-row-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.au-row-actions .btn{padding:6px 9px;font-size:10.5px}.au-row-actions .btn.danger{color:var(--danger)}
+.au-form{display:flex;flex-direction:column;gap:12px;padding-top:8px}
+.au-field{min-width:0}.au-field>label{display:block;font-size:10.5px;color:var(--dim);letter-spacing:.03em;margin-bottom:5px}
+.au-field input[type=text],.au-field textarea{width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:11.5px;padding:8px 10px;outline:none}
+.au-field input[type=text]:focus,.au-field textarea:focus{border-color:color-mix(in srgb,var(--ember) 45%,var(--line2))}
+.au-field textarea{min-height:74px;resize:vertical;line-height:1.5}
+.au-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.au-warn{font-size:10.5px;color:var(--danger);line-height:1.5;margin-top:5px}
+.au-form-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end;margin-top:4px}.au-form-error{color:var(--danger);font-size:10.5px;margin-right:auto;line-height:1.45;overflow-wrap:anywhere}
+.au-empty{padding:26px 4px;color:var(--dim);font-size:11.5px;text-align:center}
 </style>
 </head>
 <body>
@@ -6957,7 +6974,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onClose}) => {
+const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
@@ -7212,16 +7229,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
             </React.Fragment>
           )}
           {tab === 'Automations' && (
-            <React.Fragment>
-              <div className="set-h">Automations</div>
-              {(automations || []).map(a => (
-                <div key={a.id} className="set-row" style={{alignItems: 'flex-start'}}>
-                  <div>{a.name}<span className="sr-sub">{a.schedule} ? {a.description}</span></div>
-                  <span className="sr-end"><span className="cu-pill">{a.status || 'template'}</span></span>
-                </div>
-              ))}
-              <div className="set-note">Template list only. Live automation management is intentionally not enabled from this default UI yet.</div>
-            </React.Fragment>
+            <AutomationManager automations={automations} onStartChat={onStartAutomationChat}/>
           )}
           {tab === 'Computer use' && (
             <React.Fragment>
@@ -7261,6 +7269,253 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
       </div>
       {memCardOpen && <MemorySummaryCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setMemoryToggle('memory', 'memory_enabled', false); setMemCardOpen(false); }}/>} 
       {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setSavedMemOpen(false)}/>}
+    </React.Fragment>
+  );
+};
+
+const AUTOMATION_DESTINATIONS = [
+  {value: 'new_chat', label: 'New chat (Scheduled feed)'},
+  {value: 'existing_chat', label: 'Pinned conversation'},
+];
+const AUTOMATION_TIERS = [
+  {value: '', label: 'Default tier'},
+  {value: 'primary', label: 'Primary model'},
+  {value: 'fast', label: 'Fast model'},
+];
+const AUTOMATION_REASONING_MODES = [
+  {value: '', label: 'Default reasoning'},
+  {value: 'light', label: 'Light'},
+  {value: 'medium', label: 'Medium'},
+  {value: 'high', label: 'High'},
+  {value: 'extra high', label: 'Extra high'},
+  {value: 'max', label: 'Max'},
+  {value: 'ultra', label: 'Ultra'},
+];
+const scheduleLabel = (schedule) => {
+  if (!schedule) return 'no schedule';
+  if (schedule.kind === 'interval') return 'every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
+  if (schedule.kind === 'relative') return 'in ' + schedule.value + ' ' + schedule.unit;
+  return schedule.expression || schedule.run_at || '—';
+};
+const scheduleToString = (schedule) => {
+  if (!schedule) return '';
+  if (schedule.kind === 'interval') return 'every ' + schedule.value + ' ' + schedule.unit + (schedule.at_time ? ' at ' + schedule.at_time : '');
+  if (schedule.kind === 'relative') return '' + schedule.value + schedule.unit.slice(0, 1);
+  return schedule.expression || schedule.run_at || '';
+};
+const destinationLabel = (destination) => {
+  if (!destination) return 'New chat';
+  return destination.kind === 'existing_chat' ? 'Pinned thread ' + (destination.thread_id || '?') : 'New chat';
+};
+const lastRun = (a) => {
+  const runs = (a && a.run_history) || [];
+  return runs.length ? runs[runs.length - 1] : null;
+};
+const runStatusLabel = (run) => {
+  if (!run) return '';
+  const when = run.finished_at || run.started_at || '';
+  return (run.status || '') + (when ? ' · ' + when : '') + (run.error ? ' · ' + run.error : '');
+};
+
+const AutomationForm = ({record, onSave, onCancel}) => {
+  const isNew = !record;
+  const [name, setName] = useState(record ? record.name : '');
+  const [instructions, setInstructions] = useState(record ? record.instructions : '');
+  const [schedule, setSchedule] = useState(record ? scheduleToString(record.schedule) : '');
+  const [destination, setDestination] = useState(record && record.destination ? (record.destination.kind || 'new_chat') : 'new_chat');
+  const [threadId, setThreadId] = useState(record && record.destination ? (record.destination.thread_id || '') : '');
+  const [tier, setTier] = useState(record && record.model_profile ? (record.model_profile.tier || '') : '');
+  const [reasoningMode, setReasoningMode] = useState(record && record.model_profile ? (record.model_profile.reasoning_mode || '') : '');
+  const [model, setModel] = useState(record && record.model_profile ? (record.model_profile.model || '') : '');
+  const [fullAccess, setFullAccess] = useState(record ? !!(record.permission && record.permission.full_access) : false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setError('');
+    const payload = {
+      name: name.trim(),
+      instructions: instructions.trim(),
+      schedule: schedule.trim(),
+      destination: {kind: destination},
+      model_profile: {},
+      permission: {full_access: fullAccess},
+    };
+    if (destination === 'existing_chat' && threadId.trim()) payload.destination.thread_id = threadId.trim();
+    if (tier) payload.model_profile.tier = tier;
+    if (reasoningMode) payload.model_profile.reasoning_mode = reasoningMode;
+    if (model.trim()) payload.model_profile.model = model.trim();
+    setSaving(true);
+    try {
+      if (isNew) await API.automations.create(payload);
+      else await API.automations.update(record.id, payload);
+      onSave();
+    } catch (err) {
+      setError(String((err && err.message) || err || 'Save failed'));
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="au-form">
+      <div className="au-field">
+        <label htmlFor="au-name">Name</label>
+        <input id="au-name" type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Morning briefing"/>
+      </div>
+      <div className="au-field">
+        <label htmlFor="au-instructions">Instructions</label>
+        <textarea id="au-instructions" value={instructions} onChange={e => setInstructions(e.target.value)} placeholder="What should each run do? Write one clear paragraph Vellum follows when it runs."/>
+      </div>
+      <div className="au-field">
+        <label htmlFor="au-schedule">Schedule</label>
+        <input id="au-schedule" type="text" value={schedule} onChange={e => setSchedule(e.target.value)} placeholder="every 2h · 0 9 * * * · 30m · 2026-08-03T09:00:00Z"/>
+      </div>
+      <div className="au-form-grid">
+        <div className="au-field">
+          <label htmlFor="au-destination">Destination</label>
+          <VSelect className="dock-pos-select" ariaLabel="Automation destination" value={destination} onValueChange={setDestination} options={AUTOMATION_DESTINATIONS}/>
+        </div>
+        {destination === 'existing_chat' && (
+          <div className="au-field">
+            <label htmlFor="au-thread-id">Pinned thread id</label>
+            <input id="au-thread-id" type="text" value={threadId} onChange={e => setThreadId(e.target.value)} placeholder="thread-…"/>
+          </div>
+        )}
+        <div className="au-field">
+          <label htmlFor="au-tier">Model tier</label>
+          <VSelect className="dock-pos-select" ariaLabel="Model tier" value={tier} onValueChange={setTier} options={AUTOMATION_TIERS}/>
+        </div>
+        <div className="au-field">
+          <label htmlFor="au-reasoning">Reasoning mode</label>
+          <VSelect className="dock-pos-select" ariaLabel="Reasoning mode" value={reasoningMode} onValueChange={setReasoningMode} options={AUTOMATION_REASONING_MODES}/>
+        </div>
+      </div>
+      <div className="au-field">
+        <label htmlFor="au-model">Model id (optional — overrides the tier)</label>
+        <input id="au-model" type="text" value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. openai/gpt-5.6-luna"/>
+      </div>
+      <div className="set-row">
+        <div>Full access<span className="sr-sub">Runs unattended and bypasses confirmation gates.</span></div>
+        <span className="sr-end">
+          <div className={'sw' + (fullAccess ? ' on' : '')} role="switch" aria-checked={fullAccess} aria-label="Full access opt-in" tabIndex="0" onClick={() => setFullAccess(!fullAccess)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFullAccess(!fullAccess); } }}/>
+        </span>
+      </div>
+      {fullAccess && <div className="au-warn">Opting in means this automation runs entirely unattended and can perform actions without asking you each time. Only enable it for tasks you fully trust.</div>}
+      <div className="au-form-actions">
+        {error && <div className="au-form-error">{error}</div>}
+        <button className="btn" onClick={onCancel}>Cancel</button>
+        <button className="btn primary" disabled={saving} onClick={submit}>{saving ? 'Saving…' : (isNew ? 'Create automation' : 'Save changes')}</button>
+      </div>
+    </div>
+  );
+};
+
+const AutomationManager = ({automations, onStartChat}) => {
+  const [items, setItems] = useState(automations || []);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+  const [confirmId, setConfirmId] = useState(null);
+  const [editing, setEditing] = useState(null);
+
+  const refresh = async () => {
+    try {
+      const data = await API.automations.list();
+      setItems((data && data.automations) || []);
+      setError('');
+    } catch (err) {
+      setError(String((err && err.message) || err || 'Failed to load automations'));
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const runNow = async (a) => {
+    setBusy(a.id); setError('');
+    try {
+      await API.automations.run(a.id);
+      await refresh();
+    } catch (err) {
+      setError(String((err && err.message) || err || 'Run failed'));
+    } finally {
+      setBusy('');
+    }
+  };
+  const toggleState = async (a) => {
+    setBusy(a.id); setError('');
+    try {
+      await API.automations.update(a.id, {state: a.state === 'active' ? 'paused' : 'active'});
+      await refresh();
+    } catch (err) {
+      setError(String((err && err.message) || err || 'Update failed'));
+    } finally {
+      setBusy('');
+    }
+  };
+  const removeAutomation = async (a) => {
+    setBusy(a.id); setError('');
+    try {
+      await API.automations.remove(a.id);
+      setConfirmId(null);
+      await refresh();
+    } catch (err) {
+      setError(String((err && err.message) || err || 'Delete failed'));
+    } finally {
+      setBusy('');
+    }
+  };
+  const saveAutomation = async () => {
+    setEditing(null);
+    await refresh();
+  };
+  const cancelEdit = () => { setEditing(null); setError(''); };
+
+  if (editing) {
+    return (
+      <React.Fragment>
+        <div className="set-h">{editing.mode === 'new' ? 'New automation' : 'Edit automation'}</div>
+        <AutomationForm record={editing.mode === 'new' ? null : editing.record} onSave={saveAutomation} onCancel={cancelEdit}/>
+      </React.Fragment>
+    );
+  }
+
+  return (
+    <React.Fragment>
+      <div className="set-h">Automations</div>
+      <div className="au-actions">
+        <button className="btn primary" onClick={() => setEditing({mode: 'new'})}>New automation</button>
+        <button className="btn" onClick={onStartChat}>Create with chat</button>
+        <span className="au-hint">{items.length} scheduled task{items.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="set-note">Automations run a reasoning turn on their schedule; each run lands in the Scheduled feed or a pinned conversation. Built-in jobs can be edited and paused but never deleted.</div>
+      {error && <div className="set-note" style={{color: 'var(--danger)'}}>{error}</div>}
+      {items.map(a => {
+        const run = lastRun(a);
+        return (
+          <div key={a.id} className="au-row">
+            <div className="au-row-main">
+              <div className="au-name">{a.name}
+                {a.builtin ? <span className="cu-pill">built-in</span> : null}
+                <span className={'cu-pill' + (a.state === 'active' ? ' on' : '')}>{a.state === 'active' ? 'active' : 'paused'}</span>
+              </div>
+              <div className="au-meta">{scheduleLabel(a.schedule)} · {destinationLabel(a.destination)}</div>
+              {run && <div className={'au-run' + (run.status === 'failed' ? ' failed' : '')}>{runStatusLabel(run)}</div>}
+            </div>
+            <div className="au-row-actions">
+              <button className="btn" disabled={busy === a.id} onClick={() => runNow(a)}>Run now</button>
+              <button className="btn" disabled={busy === a.id} onClick={() => toggleState(a)}>{a.state === 'active' ? 'Pause' : 'Resume'}</button>
+              <button className="btn" disabled={busy === a.id} onClick={() => setEditing({mode: 'edit', record: a})}>Edit</button>
+              {confirmId === a.id ? (
+                <button className="btn danger" disabled={busy === a.id} onClick={() => removeAutomation(a)}>Confirm</button>
+              ) : (
+                <button className="btn danger" onClick={() => setConfirmId(a.id)}>{a.builtin ? 'Reset' : 'Delete'}</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      {!loading && items.length === 0 && <div className="au-empty">No automations yet — create one with the form, or use "Create with chat" and let Vellum draft it with you.</div>}
     </React.Fragment>
   );
 };
@@ -7710,6 +7965,15 @@ const [slashSkills, setSlashSkills] = useState([]);
   }, []);
 
   const newChat = () => { setView('chat'); setActiveChatId(null); setSelModel(readDefaultModel()); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const startAutomationChat = async () => {
+    let prompt = "I'd like to create a new automation — a scheduled reasoning task that Vellum runs on its own. Draft the instructions, propose a schedule and destination, confirm the plan with me, then create it with the cronjob tool.";
+    try {
+      const data = await API.automations.createPrompt();
+      if (data && data.prompt) prompt = data.prompt;
+    } catch (_) {}
+    setSettingsOpen(false);
+    sendMessage(prompt, [], {forceNew: true});
+  };
   const leaveNotFound = () => {
     try {
       const url = new URL(window.location.href);
@@ -8643,6 +8907,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
+          onStartAutomationChat={startAutomationChat}
           onClose={() => setSettingsOpen(false)}/>} 
         {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}

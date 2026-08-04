@@ -26,9 +26,9 @@ for (const src of requiredScripts) {
   }
 }
 
-const m = html.match(/<script type="text\/babel"[^>]*>([\s\S]*?)<\/script>/);
+const m = html.match(/<script type="text\/babel"(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/);
 if (!m) {
-  console.error("FAIL: no <script type=text/babel> block found");
+  console.error("FAIL: no inline <script type=text/babel> block found");
   process.exit(1);
 }
 
@@ -38,10 +38,15 @@ const required = [
   "API.chat.stream",
   "API.conversations.list",
   "API.conversations.save",
-  "API.settings.models",
-  "API.settings.setActiveModel",
+  "API.settings.get",
+  "API.settings.setProviderKey",
   "API.plugins.list",
   "API.automations.list",
+  "API.automations.create",
+  "API.automations.update",
+  "API.automations.remove",
+  "API.automations.run",
+  "API.automations.createPrompt",
   "API.runtimes.subagents",
   "FEATURE_FLAGS",
 ];
