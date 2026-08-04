@@ -68,6 +68,37 @@ def test_cronjob_tool_creates_existing_chat_destination(store):
     assert automation["model_profile"]["reasoning_mode"] == "high"
 
 
+def test_cronjob_tool_persists_project_and_notification_preferences(store):
+    result = _invoke(
+        action="create",
+        name="Project tidy",
+        description="Keep the project organized.",
+        instructions="Review the project files and suggest tidy-up work.",
+        schedule="every 2d at 09:00",
+        project_id="project-vellum",
+        notifications="failures",
+    )
+
+    assert result["ok"] is True
+    automation = result["automation"]
+    assert automation["description"] == "Keep the project organized."
+    assert automation["project_id"] == "project-vellum"
+    assert automation["notifications"] == {"level": "failures"}
+
+
+def test_cronjob_tool_rejects_invalid_notification_level(store):
+    result = _invoke(
+        action="create",
+        name="Noisy",
+        instructions="Do a thing.",
+        schedule="30m",
+        notifications="everything",
+    )
+
+    assert result["ok"] is False
+    assert "notifications" in result["error"]
+
+
 def test_cronjob_tool_rejects_bad_schedule(store):
     result = _invoke(
         action="create",

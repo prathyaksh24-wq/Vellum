@@ -20,6 +20,7 @@ from agent.automations.validation import (
     parse_schedule_expression,
     validate_destination,
     validate_model_profile,
+    validate_notifications_level,
 )
 
 
@@ -37,11 +38,14 @@ def _record_summary(record: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": record["id"],
         "name": record["name"],
+        "description": record.get("description") or "",
         "instructions": record.get("instructions"),
         "schedule": record.get("schedule"),
         "destination": record.get("destination"),
+        "project_id": record.get("project_id"),
         "model_profile": record.get("model_profile") or {},
         "permission": record.get("permission") or {},
+        "notifications": record.get("notifications") or {"level": "all"},
         "state": record.get("state"),
         "builtin": bool(record.get("builtin")),
         "run_count": len(runs),
@@ -56,6 +60,7 @@ def _lookup(automation_id: str) -> dict[str, Any]:
 def _create(payload: dict[str, Any]) -> dict[str, Any]:
     name = str(payload.get("name") or "").strip()
     instructions = str(payload.get("instructions") or "").strip()
+    description = str(payload.get("description") or "").strip()
     schedule_expression = str(payload.get("schedule") or "").strip()
     if not name:
         raise ValueError("name is required")
@@ -65,6 +70,7 @@ def _create(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("schedule is required")
     record = _store().create(
         name=name,
+        description=description,
         instructions=instructions,
         schedule=parse_schedule_expression(schedule_expression),
         destination=validate_destination(
@@ -77,6 +83,8 @@ def _create(payload: dict[str, Any]) -> dict[str, Any]:
             reasoning_mode=str(payload.get("reasoning_mode") or "") or None,
         ),
         permission={"full_access": bool(payload.get("full_access"))},
+        project_id=str(payload.get("project_id") or "").strip() or None,
+        notifications=validate_notifications_level(str(payload.get("notifications") or "all")),
     )
     automations_api._notify_mutation(record["id"])
     return {"ok": True, "automation": _record_summary(record)}
@@ -99,6 +107,8 @@ def _update(payload: dict[str, Any]) -> dict[str, Any]:
     instructions = str(payload.get("instructions") or "").strip()
     if instructions:
         fields["instructions"] = instructions
+    if "description" in payload:
+        fields["description"] = str(payload.get("description") or "").strip()
     schedule_expression = str(payload.get("schedule") or "").strip()
     if schedule_expression:
         fields["schedule"] = parse_schedule_expression(schedule_expression)
@@ -113,6 +123,10 @@ def _update(payload: dict[str, Any]) -> dict[str, Any]:
         )
     if payload.get("full_access") is not None:
         fields["permission"] = {"full_access": bool(payload["full_access"])}
+    if "project_id" in payload:
+        fields["project_id"] = str(payload.get("project_id") or "").strip() or None
+    if payload.get("notifications"):
+        fields["notifications"] = validate_notifications_level(str(payload["notifications"]))
     if not fields:
         raise ValueError("no fields to update; pass at least one of name/instructions/schedule/destination/model/full_access")
     updated = _store().update(automation_id, **fields)
@@ -172,6 +186,7 @@ def cronjob(
     automation_id: str = "",
     name: str = "",
     instructions: str = "",
+    description: str = "",
     schedule: str = "",
     destination: str = "new_chat",
     thread_id: str = "",
@@ -179,6 +194,8 @@ def cronjob(
     tier: str = "",
     reasoning_mode: str = "",
     full_access: bool | None = None,
+    project_id: str = "",
+    notifications: str = "",
 ) -> str:
     """Create, list, update, pause, resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
 
@@ -202,6 +219,7 @@ def cronjob(
         "automation_id": automation_id,
         "name": name,
         "instructions": instructions,
+        "description": description,
         "schedule": schedule,
         "destination": destination,
         "thread_id": thread_id,
@@ -209,6 +227,8 @@ def cronjob(
         "tier": tier,
         "reasoning_mode": reasoning_mode,
         "full_access": full_access,
+        "project_id": project_id,
+        "notifications": notifications,
     }
     try:
         if normalized in ("create", "add"):

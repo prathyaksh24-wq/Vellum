@@ -62,6 +62,24 @@ def test_create_persists_parsed_schedule_and_defaults() -> None:
     assert automation["run_history"] == []
 
 
+def test_create_persists_schedule_details_for_scheduled_view() -> None:
+    with TestClient(api.app) as client:
+        response = _create(
+            client,
+            description="Keep the project tidy.",
+            project_id="project-vellum",
+            notifications={"level": "failures"},
+            model_profile={"model": "gpt-5.6-luna", "reasoning_mode": "high"},
+        )
+
+    assert response.status_code == 200
+    automation = response.json()["automation"]
+    assert automation["description"] == "Keep the project tidy."
+    assert automation["project_id"] == "project-vellum"
+    assert automation["notifications"] == {"level": "failures"}
+    assert automation["model_profile"] == {"model": "gpt-5.6-luna", "reasoning_mode": "high"}
+
+
 def test_create_accepts_all_schedule_formats() -> None:
     with TestClient(api.app) as client:
         relative = _create(client, name="One-shot", schedule="30m")
@@ -146,6 +164,20 @@ def test_patch_edits_fields_and_pauses() -> None:
     assert updated["schedule"]["at_time"] == "09:00"
 
 
+def test_patch_can_clear_project_and_change_notifications() -> None:
+    with TestClient(api.app) as client:
+        automation_id = _create(client, project_id="project-vellum").json()["automation"]["id"]
+        response = client.patch(
+            f"/api/automations/{automation_id}",
+            json={"project_id": None, "notifications": {"level": "important"}},
+        )
+
+    assert response.status_code == 200
+    updated = response.json()["automation"]
+    assert updated["project_id"] is None
+    assert updated["notifications"] == {"level": "important"}
+
+
 def test_patch_rejects_invalid_schedule_and_state() -> None:
     with TestClient(api.app) as client:
         automation_id = _create(client).json()["automation"]["id"]
@@ -160,6 +192,13 @@ def test_patch_rejects_invalid_schedule_and_state() -> None:
 
     assert bad_schedule.status_code == 400
     assert bad_state.status_code == 422
+
+
+def test_create_rejects_invalid_notification_level() -> None:
+    with TestClient(api.app) as client:
+        response = _create(client, notifications={"level": "everything"})
+
+    assert response.status_code == 422
 
 
 def test_patch_missing_automation_is_404() -> None:

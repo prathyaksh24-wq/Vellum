@@ -132,7 +132,7 @@ def _append_feed_conversation(
         "created": api._conversation_timestamp(),
         "pinned": False,
         "archived": False,
-        "projectId": None,
+        "projectId": automation.get("project_id"),
         "messages": [
             {"role": "user", "text": user_text, "id": f"automation-{uuid4().hex[:12]}"},
             {"role": "assistant", "text": answer, "id": f"automation-{uuid4().hex[:12]}"},
