@@ -42,14 +42,16 @@ describe("Vellum plugins API adapter", () => {
     const api = await loadPluginsApi(fetchImpl);
 
     await api.youtubeStatus();
+    await api.youtubeIntelligenceStatus();
     await api.youtubeOAuthStart();
     await api.youtubeSync("snapshot-1");
     await api.youtubeDisconnect();
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/plugins/youtube/status");
-    expect(fetchImpl.mock.calls[1][0]).toBe("/api/plugins/youtube/oauth/start");
-    expect(fetchImpl.mock.calls[2][0]).toBe("/api/plugins/youtube/sync");
-    expect(fetchImpl.mock.calls[3]).toEqual([
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/plugins/youtube/intelligence/status");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/plugins/youtube/oauth/start");
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/plugins/youtube/sync");
+    expect(fetchImpl.mock.calls[4]).toEqual([
       "/api/plugins/youtube/connection",
       { method: "DELETE" },
     ]);
