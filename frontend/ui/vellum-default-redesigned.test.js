@@ -50,6 +50,7 @@ describe("Vellum default redesigned frontend", () => {
 
   test("uses backend-owned YouTube OAuth without collecting credentials in the UI", () => {
     expect(html).toContain("const YouTubeAPI");
+    expect(html).toContain("YouTubeAPI.intelligenceStatus()");
     expect(html).toContain("API.plugins.youtubeOAuthStart()");
     expect(html).toContain("API.plugins.youtubeSync");
     expect(html).toContain("API.plugins.youtubeDisconnect()");
