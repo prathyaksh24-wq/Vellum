@@ -569,7 +569,7 @@ Response displayed to user
 | `agent/rag/reranker.py` | Cross-encoder reranking |
 | `agent/rag/graph_retriever.py` | Wikilink-aware retrieval |
 | `agent/llm/openrouter.py` | OpenRouter client, ZDR enforced |
-| `agent/mcp/filesystem_tools.py` | Filesystem MCP wrapper |
+| `agent/tools/filesystem.py` | PowerShell CLI file tools (vault-confined, no MCP) |
 | `agent/mcp/apify_tools.py` | Apify MCP wrapper |
 | `agent/memory/honcho_client.py` | Honcho self-hosted user model client |
 | `agent/memory/fts5.py` | FTS5 full-text search index |

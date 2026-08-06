@@ -1652,7 +1652,6 @@ def _coding_project_roots() -> list[Path]:
     try:
         settings = get_settings()
         roots.add(settings.obsidian_vault_path.resolve())
-        roots.add(settings.filesystem_mcp_path.resolve())
     except Exception:
         pass
     try:
@@ -1679,7 +1678,6 @@ async def health(deep: bool = Query(default=False)) -> dict[str, Any]:
         },
         "mcp": {
             "apify_url": settings.apify_mcp_url,
-            "filesystem_path": str(settings.filesystem_mcp_path),
         },
         "checks": {"mode": "deep" if deep else "lightweight"},
     }
@@ -2764,6 +2762,10 @@ _ACTIVITY_LABELS = {
     "list_files": "Browsed your vault",
     "create_note": "Wrote a note",
     "append_to_note": "Updated a note",
+    "write_file": "Wrote a file",
+    "edit_file": "Edited a file",
+    "delete_file": "Deleted a file",
+    "create_directory": "Created a folder",
     "context_mode": "Fetched a page",
     "x_action": "Searched X",
     "search_amazon": "Checked Amazon",
@@ -4409,13 +4411,6 @@ def _probe_mcp_server(entry: dict[str, Any]) -> dict[str, Any]:
 
     name = str(entry.get("name") or "")
     endpoint = str(entry.get("endpoint") or "")
-    if name == "filesystem":
-        path = Path(endpoint)
-        return {
-            "reachable": path.exists() and path.is_dir(),
-            "status": "directory_ok" if path.exists() and path.is_dir() else "directory_missing",
-        }
-
     if name in {"playwright", "context_mode"}:
         command = endpoint.split(" ", 1)[0]
         available = bool(shutil.which(command))
@@ -4442,7 +4437,7 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
     """Per-MCP-server configuration + reachability hint.
 
     Reports whether each server has its required env vars set. With
-    probe=true, performs side-effect-free filesystem, command, and HTTP
+    probe=true, performs side-effect-free command and HTTP
     reachability checks. It does not invoke MCP tools."""
     settings = get_settings()
     servers: list[dict[str, Any]] = []
@@ -4462,12 +4457,6 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
             entry["probe"] = "live"
         return entry
 
-    servers.append(_entry(
-        "filesystem",
-        configured=settings.filesystem_mcp_path.exists(),
-        url_or_cmd=str(settings.filesystem_mcp_path),
-        notes="Restricted to vault path; reads only.",
-    ))
     servers.append(_entry(
         "apify",
         configured=bool(settings.apify_api_token) and settings.apify_mcp_url.startswith("http"),
@@ -4727,14 +4716,6 @@ def _setup_catalog() -> dict[str, Any]:
     ]
     settings = get_settings()
     mcp_builtin = [
-        {
-            "id": "builtin.filesystem",
-            "label": "Filesystem",
-            "category": "Built-in",
-            "url": f"builtin://filesystem?root={settings.filesystem_mcp_path}",
-            "scope": str(settings.filesystem_mcp_path),
-            "enabled": True,
-        },
         {
             "id": "builtin.apify",
             "label": "Apify",

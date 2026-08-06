@@ -14,7 +14,6 @@ from agent.mcp import (
     context7_tools,
     context_mode_tools,
     firecrawl_tools,
-    filesystem_tools,
     github_tools,
     gitmcp_tools,
     obsidian_tools,
@@ -42,7 +41,6 @@ class McpToolResult:
 
 
 SERVER_RUNNERS: dict[str, ToolFn] = {
-    "filesystem": filesystem_tools.run_tool_async,
     "apify_amazon": apify_tools.run_tool_async,
     "apify": apify_tools.run_tool_async,
     "github": github_tools.run_tool_async,

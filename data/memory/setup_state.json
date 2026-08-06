@@ -137,15 +137,6 @@
   ],
   "mcp": [
     {
-      "id": "builtin.filesystem",
-      "category": "Built-in",
-      "label": "Filesystem",
-      "sub": "\u2014 scoped to OBSIDIAN_VAULT_PATH \u00b7 read-only fetch",
-      "url": "builtin://filesystem",
-      "enabled": true,
-      "builtin": true
-    },
-    {
       "id": "builtin.apify",
       "category": "Built-in",
       "label": "Apify",

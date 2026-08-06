@@ -64,7 +64,7 @@ from agent.tools.computer_use import computer_use
 from agent.tools.computer_use_route import computer_use_route
 from agent.tools.context_mode import context_mode
 from agent.tools.cronjob import cronjob
-from agent.tools.filesystem import list_files, read_file
+from agent.tools.filesystem import create_directory, delete_file, edit_file, list_files, read_file, write_file
 from agent.tools.git_local import git_action
 from agent.tools.github import github_read, github_write
 from agent.tools.library_docs import library_docs
@@ -124,6 +124,7 @@ Tools:
 32. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
 33. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
 34. cronjob - Create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
+35. write_file/edit_file/delete_file/create_directory - Vault file operations via PowerShell CLI: write_file creates or overwrites a UTF-8 file, edit_file replaces the first occurrence of text, create_directory makes folders (with parents), and delete_file removes a single file and requires confirm=true. All paths stay inside the Obsidian vault.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -360,6 +361,10 @@ def core_tool_registry() -> ToolRegistry:
         "escalate_to_cloud",
         "create_note",
         "append_to_note",
+        "write_file",
+        "edit_file",
+        "delete_file",
+        "create_directory",
         "x_action",
         "cronjob",
     }
@@ -369,6 +374,10 @@ def core_tool_registry() -> ToolRegistry:
         search_amazon,
         read_file,
         list_files,
+        write_file,
+        edit_file,
+        delete_file,
+        create_directory,
         computer_use_route,
         computer_use,
         browser_navigate,
@@ -422,6 +431,7 @@ def core_tool_registry() -> ToolRegistry:
             tool,
             access=CapabilityAccess.WRITE if tool.name in write_tool_names else CapabilityAccess.READ,
             allowed_agents=frozenset({"VellumAgent"}),
+            requires_confirmation=tool.name == "delete_file",
         )
     return registry
 

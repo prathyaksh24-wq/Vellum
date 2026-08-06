@@ -222,10 +222,10 @@ entire Obsidian vault into context.
 
 ### Active MCP Servers
 
-**Filesystem MCP** (`@modelcontextprotocol/server-filesystem`)
-- Scope: restricted to `OBSIDIAN_VAULT_PATH` only
-- Used for: reading specific note files when the agent needs the full text
-  of a note it has already identified via vector retrieval
+**Filesystem (PowerShell CLI, no MCP)**
+- Implemented in `agent/tools/filesystem.py`; calls `powershell -NoProfile -NonInteractive`
+- Scope: confined to `OBSIDIAN_VAULT_PATH` (+ browser cache for reads)
+- Used for: reading/writing/editing/deleting vault notes; `delete_file` requires `confirm=true`
 - Never used for: bulk reading, directory traversal, writing outside `Agent/`
 
 **Apify MCP** (via `https://mcp.apify.com/sse`)
@@ -517,7 +517,7 @@ agent/
 ├── obsidian/                 ← vault.py, ingester.py, folder_policy.py, watcher.py
 ├── rag/                      ← embedder.py, store.py, reranker.py, graph_retriever.py
 ├── llm/                      ← openrouter.py (ZDR enforced)
-├── mcp/                      ← client.py, filesystem_tools.py, apify_tools.py
+├── mcp/                      ← client.py, apify_tools.py (filesystem tools live in tools/filesystem.py)
 ├── memory/                   ← honcho_client.py, fts5.py, resolved.py, skills.py, sessions.py
 ├── usage/                    ← audit_log.py, suggestions.py, pricing.py
 ├── scheduler/                ← digest.py, reflection.py, skill_detector.py

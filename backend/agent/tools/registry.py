@@ -96,6 +96,7 @@ class ToolRegistry:
         allowed_agents: frozenset[str],
         namespace: str | None = None,
         stream_label: str | None = None,
+        requires_confirmation: bool = False,
     ) -> None:
         """Register a LangChain tool without replacing its input schema or behavior."""
         name = str(tool.name)
@@ -105,6 +106,7 @@ class ToolRegistry:
                 namespace=namespace or name.split("_", 1)[0],
                 access=access,
                 allowed_agents=allowed_agents,
+                requires_confirmation=requires_confirmation,
                 stream_label=stream_label or name.replace("_", " ").strip().capitalize(),
                 adapter=lambda payload, runtime_tool=tool: runtime_tool.invoke(payload),
                 runtime_tool=tool,

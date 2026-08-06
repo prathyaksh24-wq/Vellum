@@ -122,7 +122,6 @@ class Settings(BaseSettings):
     enable_query_vector_storage: bool = Field(default=False, alias="ENABLE_QUERY_VECTOR_STORAGE")
 
     # MCP
-    filesystem_mcp_path: Path = Field(alias="FILESYSTEM_MCP_PATH")
     apify_mcp_url: str = Field(default="https://mcp.apify.com", alias="APIFY_MCP_URL")
     apify_api_token: str = Field(default="", alias="APIFY_API_TOKEN")
     apify_amazon_actor: str = Field(default="scrapeai/amazon-product-scraper", alias="APIFY_AMAZON_ACTOR")
@@ -224,7 +223,6 @@ class Settings(BaseSettings):
 
     @field_validator(
         "obsidian_vault_path",
-        "filesystem_mcp_path",
         "chroma_path",
         "knowledge_core_db_path",
         "knowledge_blob_path",
@@ -247,7 +245,6 @@ class Settings(BaseSettings):
         # produce split-brain databases (one when started from Vellum/, another
         # from Vellum/backend/).
         self.obsidian_vault_path = _resolve_against_repo(self.obsidian_vault_path)
-        self.filesystem_mcp_path = _resolve_against_repo(self.filesystem_mcp_path)
         if self.chroma_path is not None:
             self.chroma_path = _resolve_against_repo(self.chroma_path)
         self.knowledge_core_db_path = _resolve_against_repo(self.knowledge_core_db_path)
@@ -261,12 +258,6 @@ class Settings(BaseSettings):
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
         if not self.obsidian_vault_path.is_dir():
             raise ValueError(f"Obsidian vault path is not a directory: {self.obsidian_vault_path}")
-        if not self.filesystem_mcp_path.exists():
-            raise ValueError(f"Filesystem MCP path does not exist: {self.filesystem_mcp_path}")
-        if not self.filesystem_mcp_path.is_dir():
-            raise ValueError(f"Filesystem MCP path is not a directory: {self.filesystem_mcp_path}")
-        if not self.filesystem_mcp_path.resolve().is_relative_to(self.obsidian_vault_path):
-            raise ValueError("Filesystem MCP path must stay inside the Obsidian vault path.")
         if not self.enable_pii_scrubbing:
             raise ValueError("ENABLE_PII_SCRUBBING must remain true for cloud-capable modes.")
         if not self.reviewed_openrouter_providers:
