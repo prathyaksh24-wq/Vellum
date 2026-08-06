@@ -138,6 +138,17 @@ class Settings(BaseSettings):
     playwright_mcp_command: str = Field(default="npx", alias="PLAYWRIGHT_MCP_COMMAND")
     playwright_mcp_args: str = Field(default="-y @playwright/mcp@latest --isolated", alias="PLAYWRIGHT_MCP_ARGS")
     playwright_mcp_allow_mutations: bool = Field(default=False, alias="PLAYWRIGHT_MCP_ALLOW_MUTATIONS")
+    browser_inactivity_timeout: int = Field(default=120, alias="BROWSER_INACTIVITY_TIMEOUT")
+    browser_cleanup_interval: int = Field(default=30, alias="BROWSER_CLEANUP_INTERVAL")
+    browser_headed: bool = Field(default=False, alias="BROWSER_HEADED")
+    browser_snapshot_budget: int = Field(default=15000, alias="BROWSER_SNAPSHOT_BUDGET")
+    browser_cache_dir: Path = Field(default=Path("data/browser-cache"), alias="BROWSER_CACHE_DIR")
+    browser_cdp_url: str = Field(default="", alias="BROWSER_CDP_URL")
+    browser_dialog_policy: Literal["must_respond", "auto_dismiss", "auto_accept"] = Field(
+        default="must_respond",
+        alias="BROWSER_DIALOG_POLICY",
+    )
+    browser_dialog_timeout_s: int = Field(default=300, alias="BROWSER_DIALOG_TIMEOUT_S")
     github_mcp_url: str = Field(default="https://api.githubcopilot.com/mcp/", alias="GITHUB_MCP_URL")
     github_mcp_token: str = Field(default="", alias="GITHUB_MCP_TOKEN")
     github_pat: str = Field(default="", alias="GITHUB_PAT")
@@ -168,6 +179,12 @@ class Settings(BaseSettings):
     context_mode_mcp_command: str = Field(default="npx", alias="CONTEXT_MODE_MCP_COMMAND")
     context_mode_mcp_args: str = Field(default="-y context-mode", alias="CONTEXT_MODE_MCP_ARGS")
     mcp_timeout_seconds: int = Field(default=300, alias="MCP_TIMEOUT_SECONDS")
+
+    # Tool search (progressive tool disclosure)
+    tool_search_enabled: str = Field(default="auto", alias="TOOL_SEARCH_ENABLED")
+    tool_search_threshold_ratio: float = Field(default=0.05, alias="TOOL_SEARCH_THRESHOLD_RATIO")
+    tool_search_listing_max_tokens: int = Field(default=4000, alias="TOOL_SEARCH_LISTING_MAX_TOKENS")
+    tool_search_context_length: int = Field(default=0, alias="TOOL_SEARCH_CONTEXT_LENGTH")
 
     # Agent
     thread_id: str = Field(default="default", alias="THREAD_ID")

@@ -255,35 +255,34 @@ def test_vellum_prompt_includes_active_model_for_self_reporting():
 def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured.update(kwargs)
         return "compiled-agent"
 
     monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: "llm")
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
-    monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(react_agent, "_build_agent_runtime", fake_build_agent_runtime)
 
     compiled = react_agent.build_agent()
 
     assert compiled == "compiled-agent"
-    assert captured["model"] == "llm"
+    assert captured["llm"] == "llm"
     assert captured["checkpointer"] == "checkpointer"
-    # Prompt is now a callable (vellum_prompt) that prepends ProjectContext IDENTITY
-    # to VELLUM_SYSTEM_PROMPT per turn. The static string still backs it.
-    assert captured["prompt"] is react_agent.vellum_prompt
     assert {tool.name for tool in captured["tools"]} >= {
         "search_my_notes",
         "web_search",
         "search_amazon",
         "knowledge_wiki",
     }
+    # plugin_mcp is the deferrable surface of the tool-search bridge
+    assert "plugin_mcp" in captured["deferred_names"]
     assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
 
 
 def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured.update(kwargs)
         return "compiled-agent"
 
@@ -293,18 +292,18 @@ def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monk
     monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: f"llm:{model}")
     monkeypatch.setattr(react_agent, "build_llm_with_fallback", fail_if_cross_model_fallback_is_used)
     monkeypatch.setattr(react_agent, "build_checkpointer", lambda: "checkpointer")
-    monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(react_agent, "_build_agent_runtime", fake_build_agent_runtime)
 
     compiled = react_agent.build_agent("deepseek/deepseek-v4-pro")
 
     assert compiled == "compiled-agent"
-    assert captured["model"] == "llm:deepseek/deepseek-v4-pro"
+    assert captured["llm"] == "llm:deepseek/deepseek-v4-pro"
 
 
 def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured.update(kwargs)
         return "async-compiled-agent"
 
@@ -313,10 +312,10 @@ def test_async_react_agent_wiring_uses_async_checkpointer(monkeypatch):
 
     monkeypatch.setattr(react_agent, "build_llm", lambda model=None, reasoning_mode=None: "llm")
     monkeypatch.setattr(react_agent, "build_async_checkpointer", fake_build_async_checkpointer)
-    monkeypatch.setattr(react_agent, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(react_agent, "_build_agent_runtime", fake_build_agent_runtime)
 
     compiled = asyncio.run(react_agent.build_async_agent())
 
     assert compiled == "async-compiled-agent"
-    assert captured["model"] == "llm"
+    assert captured["llm"] == "llm"
     assert captured["checkpointer"] == "async-checkpointer"

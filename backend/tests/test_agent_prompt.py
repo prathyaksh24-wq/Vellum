@@ -93,11 +93,11 @@ def test_agent_prompt_checks_permissions_before_asking_again():
 def test_agent_tool_list_includes_x_action(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured["tools"] = kwargs["tools"]
         return object()
 
-    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "_build_agent_runtime", fake_build_agent_runtime)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
     spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
@@ -118,14 +118,14 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
 def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured["tools"] = kwargs["tools"]
         return object()
 
     async def fake_checkpointer():
         return object()
 
-    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "_build_agent_runtime", fake_build_agent_runtime)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_async_checkpointer", fake_checkpointer)
     spotify_tool = type("SpotifyTool", (), {"name": "spotify_playback"})()
@@ -244,11 +244,11 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
 def test_agent_tool_list_includes_progressive_skill_tools(monkeypatch):
     captured = {}
 
-    def fake_create_react_agent(**kwargs):
+    def fake_build_agent_runtime(**kwargs):
         captured["tools"] = kwargs["tools"]
         return object()
 
-    monkeypatch.setattr(agent_graph, "create_react_agent", fake_create_react_agent)
+    monkeypatch.setattr(agent_graph, "_build_agent_runtime", fake_build_agent_runtime)
     monkeypatch.setattr(agent_graph, "build_llm", lambda model=None, reasoning_mode=None: object())
     monkeypatch.setattr(agent_graph, "build_checkpointer", lambda: object())
     monkeypatch.setattr(agent_graph, "portable_agent_tools", lambda: [])

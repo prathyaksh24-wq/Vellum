@@ -1,4 +1,4 @@
-"""Core ReAct agent using LangGraph's create_react_agent."""
+"""Core ReAct agent: manual StateGraph with progressive tool search."""
 
 from __future__ import annotations
 
@@ -6,11 +6,15 @@ import asyncio
 from datetime import datetime
 from pathlib import Path
 import sqlite3
+from typing import Annotated, Any, TypedDict
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.tools import StructuredTool
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.prebuilt import create_react_agent
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 
 from agent.config import REPO_ROOT, get_settings
 from agent.memory.project_context import ProjectContext
@@ -23,18 +27,36 @@ from agent.skills import (
     build_skill_index_block,
     get_skill_registry,
 )
+from agent.tools.tool_search import (
+    BRIDGE_TOOL_NAMES,
+    assemble_tool_defs,
+    build_bridge_tools,
+    build_catalog,
+    build_deferred_catalog,
+    load_tool_search_config,
+    search_catalog,
+    to_openai_defs,
+)
 from agent.tools.apify import search_amazon
 from agent.tools.browser import (
     browser_action,
+    browser_back,
+    browser_cdp,
     browser_click,
     browser_close,
+    browser_console,
+    browser_dialog,
+    browser_get_images,
     browser_hover,
     browser_navigate,
+    browser_press,
     browser_press_key,
+    browser_scroll,
     browser_select_option,
     browser_snapshot,
     browser_tabs,
     browser_type,
+    browser_vision,
     browser_wait,
 )
 from agent.tools.cloud_escalation import escalate_to_cloud
@@ -77,7 +99,7 @@ Tools:
 7. append_to_note - Append to an existing Obsidian note.
 8. computer_use - Full local computer use. mode='workspace' controls Vellum's visible workspace for browser, click, type, scroll, terminal commands, and screenshots. mode='desktop' controls the host OS screen/mouse/keyboard. Native desktop actions include action='open_app', action='launch_app', action='list_windows', action='observe' with target window IDs like target='hwnd:123', action='activate_window', action='click', action='type', action='keypress', action='scroll', action='drag', and accessibility clicks with accessibility element indexes via element_index. Native desktop mode shows a blue edge-glow/status-pill Esc overlay while control is active. mode='browser' controls the persistent Playwright browser. Desktop input requires COMPUTER_USE_ALLOW_DESKTOP=true plus runtime permission grants.
 9. computer_use_route - Non-mutating routing advice for computer-use requests. Use it when the correct surface is ambiguous; it returns browser, workspace, desktop, or coming_soon plus recommended first actions.
-10. browser_navigate/browser_snapshot/browser_tabs/browser_click/browser_type/browser_press_key/browser_select_option/browser_hover/browser_wait/browser_close - Use one persistent Playwright MCP browser. Open/select tabs with browser_tabs instead of launching new browsers. Click/type require explicit config.
+10. browser_navigate/browser_snapshot/browser_click/browser_type/browser_scroll/browser_press/browser_back/browser_get_images/browser_vision/browser_console/browser_cdp/browser_dialog (plus browser_tabs/browser_select_option/browser_hover/browser_wait/browser_close) - One persistent browser, Hermes-style. Start with browser_navigate then browser_snapshot to reason from the accessibility tree (refs like @e1). browser_snapshot full=true gets complete content; big snapshots are truncated with a cache path for read_file paging. browser_type clears fields first. browser_console reports JS errors and evaluates expressions. browser_vision saves a screenshot and returns its path. Click/type/press/cdp/dialog require PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true; cdp and dialog additionally require BROWSER_CDP_URL. Open/select tabs with browser_tabs instead of launching new browsers.
 11. github_read - Read/search GitHub via GitHub MCP. Write actions are blocked.
 12. github_write - Create/update GitHub resources via GitHub MCP. Requires explicit env flags.
 13. git_action - Local git status/log/branch/pull/commit/push. Writes require explicit env flag.
@@ -128,7 +150,7 @@ Rules:
 - If a desktop action returns a permission-required message, first check persisted grants with computer_use(mode='desktop', action='permissions'). Do not ask again for a permission that is already true. If it is false, ask the user plainly for that permission. Only after an explicit user grant, call computer_use(mode='desktop', action='grant_permission', permission='<permission>', confirm=True).
 - CUA driver and cloud VM control are coming soon. If computer_use_route returns mode='coming_soon', say that this mode is not active yet and use browser/workspace/native desktop only if the user asks for an available local fallback.
 - Desktop mode launches installed apps through action='open_app' or action='launch_app'. Use workspace/browser tools where possible for web and terminal tasks; use native desktop only for host app/window work.
-- For website tasks like "open Chrome, open YouTube, search KSI", prefer browser automation: use mode='browser' or browser_navigate to go directly to the target URL, then browser_snapshot/browser_type/browser_press_key. For YouTube searches, navigate directly to https://www.youtube.com/results?search_query=<query> when possible. Do not stop after opening Chrome; continue with navigation/search and verify with a snapshot.
+- For website tasks like "open Chrome, open YouTube, search KSI", prefer browser automation: use mode='browser' or browser_navigate to go directly to the target URL, then browser_snapshot/browser_type/browser_press. For YouTube searches, navigate directly to https://www.youtube.com/results?search_query=<query> when possible. Do not stop after opening Chrome; continue with navigation/search and verify with a snapshot.
 - For terminal work, use computer_use(mode='workspace', action='terminal.run', command='<command>') for Vellum's visible workspace terminal. Do not type terminal commands into the current focused desktop window unless a desktop screenshot confirms the terminal is focused; if focus cannot be verified, report that clearly.
 - Desktop computer_use input actions are powerful. Never use desktop mode for purchases, banking, password managers, account settings, sending messages, deleting files, or irreversible actions.
 - Use browser tools only when the user asks for browser automation or live page inspection. Prefer browser_navigate + browser_snapshot before any interaction. Use browser_tabs(action='new') for parallel browser tasks in the same browser instance, and browser_tabs(action='select') before operating on a different tab.
@@ -312,6 +334,11 @@ def core_tool_registry() -> ToolRegistry:
         "browser_click",
         "browser_type",
         "browser_press_key",
+        "browser_press",
+        "browser_scroll",
+        "browser_back",
+        "browser_dialog",
+        "browser_cdp",
         "browser_select_option",
         "browser_hover",
         "browser_wait",
@@ -349,6 +376,14 @@ def core_tool_registry() -> ToolRegistry:
         browser_tabs,
         browser_click,
         browser_type,
+        browser_scroll,
+        browser_press,
+        browser_back,
+        browser_get_images,
+        browser_vision,
+        browser_console,
+        browser_cdp,
+        browser_dialog,
         browser_press_key,
         browser_select_option,
         browser_hover,
@@ -395,22 +430,141 @@ def core_tools() -> list:
     return core_tool_registry().langchain_tools(agent_name="VellumAgent")
 
 
+class AgentState(TypedDict):
+    messages: Annotated[list[Any], add_messages]
+
+
+def _all_runtime_tools() -> tuple[list[StructuredTool], set[str]]:
+    portables = portable_agent_tools()
+    deferred_names = {"plugin_mcp"} | {tool.name for tool in portables}
+    return [*core_tools(), *portables], deferred_names
+
+
+def _source_labels_for(deferred_names: set[str]) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for name in deferred_names:
+        labels[name] = "mcp" if name == "plugin_mcp" else "plugin"
+    return labels
+
+
+def _make_model_node(bound_model):
+    def model_node(state, config):
+        messages = vellum_prompt(state, config)
+        response = bound_model.invoke(messages, config)
+        return {"messages": [response]}
+
+    return model_node
+
+
+def _build_agent_runtime(
+    *,
+    llm,
+    tools,
+    checkpointer,
+    deferred_names: set[str] | None = None,
+):
+    if deferred_names is None:
+        deferred_names = {"plugin_mcp"}
+    tool_defs = to_openai_defs(tools)
+    config = load_tool_search_config()
+    assembled = assemble_tool_defs(
+        tool_defs,
+        deferred_names=deferred_names,
+        source_labels=_source_labels_for(deferred_names),
+        config=config,
+    )
+    bound_model = llm.bind_tools(assembled.tool_defs) if assembled.tool_defs else llm
+    runtime_tools = list(tools)
+    if assembled.activated:
+        catalog = build_deferred_catalog(tool_defs, deferred_names, _source_labels_for(deferred_names))
+        runtime_tools = [*runtime_tools, *build_bridge_tools(tools, catalog)]
+    graph = StateGraph(AgentState)
+    graph.add_node("agent", _make_model_node(bound_model))
+    graph.add_node("tools", ToolNode(runtime_tools))
+    graph.add_edge(START, "agent")
+    graph.add_conditional_edges("agent", tools_condition)
+    graph.add_edge("tools", "agent")
+    return graph.compile(checkpointer=checkpointer)
+
+
 def build_agent(model: str | None = None, reasoning_mode: Any = None):
-    return create_react_agent(
-        model=build_llm(model, reasoning_mode=reasoning_mode),
-        tools=[*core_tools(), *portable_agent_tools()],
+    tools, deferred_names = _all_runtime_tools()
+    return _build_agent_runtime(
+        llm=build_llm(model, reasoning_mode=reasoning_mode),
+        tools=tools,
+        deferred_names=deferred_names,
         checkpointer=build_checkpointer(),
-        prompt=vellum_prompt,
     )
 
 
 async def build_async_agent(model: str | None = None, reasoning_mode: Any = None):
-    return create_react_agent(
-        model=build_llm(model, reasoning_mode=reasoning_mode),
-        tools=[*core_tools(), *portable_agent_tools()],
+    tools, deferred_names = _all_runtime_tools()
+    return _build_agent_runtime(
+        llm=build_llm(model, reasoning_mode=reasoning_mode),
+        tools=tools,
+        deferred_names=deferred_names,
         checkpointer=await build_async_checkpointer(),
-        prompt=vellum_prompt,
     )
+
+
+def tool_search_status() -> dict[str, Any]:
+    tools, deferred_names = _all_runtime_tools()
+    tool_defs = to_openai_defs(tools)
+    config = load_tool_search_config()
+    result = assemble_tool_defs(
+        tool_defs,
+        deferred_names=deferred_names,
+        source_labels=_source_labels_for(deferred_names),
+        config=config,
+    )
+    return {
+        **result.to_dict(),
+        "enabled": config.enabled,
+        "threshold_ratio": config.threshold_ratio,
+        "listing_max_tokens": config.listing_max_tokens,
+        "context_length": config.context_length,
+        "deferred_names": result.deferred_names,
+    }
+
+
+def tool_search_catalog(scope: str = "all", query: str = "", limit: int = 20) -> dict[str, Any]:
+    tools, deferred_names = _all_runtime_tools()
+    tool_defs = to_openai_defs(tools)
+    labels = _source_labels_for(deferred_names)
+    if scope == "deferred":
+        entries = build_deferred_catalog(tool_defs, deferred_names, labels)
+    else:
+        entries = build_catalog(tool_defs, labels)
+    total = len(entries)
+    if query.strip():
+        matches = search_catalog(entries, query, limit=limit)
+    else:
+        matches = entries[:limit]
+    return {
+        "query": query,
+        "scope": scope,
+        "total": total,
+        "matches": [
+            {
+                "name": entry.name,
+                "description": entry.description,
+                "source": entry.source,
+                "required": entry.required,
+                "schema": entry.schema,
+            }
+            for entry in matches
+        ],
+    }
+
+
+def apply_tool_search_config(overlay: dict[str, Any]) -> dict[str, Any]:
+    from agent.tools.tool_search import load_runtime_config, save_runtime_config
+
+    current = load_runtime_config()
+    current.update({key: value for key, value in overlay.items() if value is not None})
+    save_runtime_config(current)
+    agent.invalidate()
+    return tool_search_status()
 
 
 class LazyAgent:

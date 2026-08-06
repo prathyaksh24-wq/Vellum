@@ -24,6 +24,8 @@ import urllib.request
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+import httpx
+
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
@@ -96,6 +98,7 @@ from agent.telemetry.hooks import (
     usage_from_invoke_result,
     usage_from_stream_event,
 )
+from agent.tools.tool_search import TOOL_DESCRIBE_NAME, TOOL_SEARCH_NAME, unwrap_bridge_call
 from agent.telemetry.turn_audit import TurnAudit
 from agent.telemetry.usage_ledger import UsageLedger
 from agent.terminal.profiles import get_profile as get_terminal_profile
@@ -2766,6 +2769,8 @@ _ACTIVITY_LABELS = {
     "search_amazon": "Checked Amazon",
     "computer_use": "Used the desktop",
     "knowledge_wiki": "Maintained your knowledge wiki",
+    "tool_search": "Searched the tool catalog",
+    "tool_describe": "Inspected a tool",
 }
 
 
@@ -3559,10 +3564,10 @@ async def _stream_agent_turn(
                         )
                         yield _sse("token", {"text": text})
                 elif kind == "on_tool_start":
-                    name = event.get("name") or ""
-                    if name:
+                    raw_name = event.get("name") or ""
+                    if raw_name:
                         for call_id, item in list(function_stream_items.items()):
-                            if item.get("status") == "in_progress" and (not item.get("name") or item.get("name") in {"function", str(name)}):
+                            if item.get("status") == "in_progress" and (not item.get("name") or item.get("name") in {"function", str(raw_name)}):
                                 yield _response_function_call_arguments_done(
                                     response_id=response_id,
                                     thread_id=active_thread_id,
@@ -3584,9 +3589,12 @@ async def _stream_agent_turn(
                                     name=str(item.get("name") or "function"),
                                 )
                                 item["status"] = "completed"
+                        name = raw_name
+                        tool_input = event.get("data", {}).get("input")
+                        name, tool_input = unwrap_bridge_call(name, tool_input)
                         if str(name) not in tool_names:
                             tool_names.append(str(name))
-                        label, detail = _activity_for(str(name), event.get("data", {}).get("input"))
+                        label, detail = _activity_for(str(name), tool_input)
                         item = {
                             "id": _stream_id("item"),
                             "type": "tool_call",
@@ -3595,7 +3603,7 @@ async def _stream_agent_turn(
                             "label": label,
                             "detail": detail,
                         }
-                        active_tool_items[str(name)] = item
+                        active_tool_items[raw_name] = item
                         lifecycle_type = "memory_retrieved" if str(name) in {"search_my_notes", "memory_search", "obsidian_search"} else "tool_call_started"
                         lifecycle_label = "Using memory..." if lifecycle_type == "memory_retrieved" else f"Using {name}..."
                         yield _agent_activity_event(
@@ -4488,7 +4496,12 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         "playwright",
         configured=bool(settings.playwright_mcp_command),
         url_or_cmd=f"{settings.playwright_mcp_command} {settings.playwright_mcp_args}",
-        notes=f"Mutations allowed: {settings.playwright_mcp_allow_mutations}.",
+        notes=(
+            f"Mutations allowed: {settings.playwright_mcp_allow_mutations}; "
+            f"headed: {settings.browser_headed}; CDP: {bool(settings.browser_cdp_url)}; "
+            f"inactivity timeout: {settings.browser_inactivity_timeout}s; "
+            f"snapshot budget: {settings.browser_snapshot_budget} chars."
+        ),
     ))
     servers.append(_entry(
         "github",
@@ -4843,6 +4856,104 @@ router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
+
+# --- Petdex gallery proxy -------------------------------------------------
+# Browsers on this machine cannot reach petdex.dev directly: the site
+# advertises Cloudflare HTTP/3 over IPv6 and Chromium gives up on QUIC
+# without falling back to TCP. The API fetches the manifest and sprite
+# assets on the browser's behalf instead.
+
+_PETDEX_MANIFEST_URL = "https://petdex.dev/api/manifest"
+_PETDEX_ASSETS_ORIGIN = "https://assets.petdex.dev"
+_PETDEX_MANIFEST_TTL = 24 * 60 * 60
+_petdex_manifest: dict[str, Any] | None = None
+_petdex_manifest_at: float = 0.0
+_petdex_http: httpx.AsyncClient | None = None
+
+
+def _petdex_client() -> httpx.AsyncClient:
+    global _petdex_http
+    if _petdex_http is None:
+        _petdex_http = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+    return _petdex_http
+
+
+async def _fetch_petdex_manifest() -> dict[str, Any]:
+    global _petdex_manifest, _petdex_manifest_at
+    now = time.time()
+    if _petdex_manifest is not None and now - _petdex_manifest_at < _PETDEX_MANIFEST_TTL:
+        return _petdex_manifest
+    response = await _petdex_client().get(_PETDEX_MANIFEST_URL)
+    response.raise_for_status()
+    data = response.json()
+    _petdex_manifest = data
+    _petdex_manifest_at = now
+    return data
+
+
+@router.get("/petdex/manifest")
+async def petdex_manifest_proxy() -> Response:
+    try:
+        data = await _fetch_petdex_manifest()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Petdex gallery unreachable")
+    return Response(
+        content=json.dumps(data),
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@router.get("/petdex/assets/{asset_path:path}")
+async def petdex_asset_proxy(asset_path: str) -> Response:
+    url = f"{_PETDEX_ASSETS_ORIGIN}/{asset_path}"
+    try:
+        response = await _petdex_client().get(url)
+    except Exception:
+        raise HTTPException(status_code=502, detail="Petdex assets unreachable")
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail="Petdex asset not reachable")
+    return Response(
+        content=response.content,
+        media_type=response.headers.get("content-type") or "application/octet-stream",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.get("/tools/status")
+async def tool_search_status() -> dict[str, Any]:
+    from agent.graph.agent import tool_search_status as compute_tool_search_status
+
+    return compute_tool_search_status()
+
+
+@router.get("/tools/search")
+async def tool_search_catalog_endpoint(
+    q: str = Query(default="", max_length=200),
+    scope: str = Query(default="all", pattern="^(all|deferred)$"),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, Any]:
+    from agent.graph.agent import tool_search_catalog
+
+    return tool_search_catalog(scope=scope, query=q, limit=limit)
+
+
+class ToolSearchConfigPatch(BaseModel):
+    enabled: str | None = None
+    threshold_ratio: float | None = None
+    listing_max_tokens: int | None = None
+    context_length: int | None = None
+
+
+@router.post("/tools/config")
+async def tool_search_config_patch(patch: ToolSearchConfigPatch) -> dict[str, Any]:
+    from agent.graph.agent import apply_tool_search_config
+
+    overlay = patch.model_dump(exclude_none=True)
+    if "enabled" in overlay and overlay["enabled"] not in {"auto", "on", "off"}:
+        raise HTTPException(status_code=400, detail="enabled must be 'auto', 'on', or 'off'")
+    return apply_tool_search_config(overlay)
+
 app.include_router(router)
 
 
