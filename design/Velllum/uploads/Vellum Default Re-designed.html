@@ -1764,6 +1764,28 @@ body{font-size:14px}
 .au-confirm h3{font-family:var(--font-d);font-size:17px;color:var(--txt2);margin:0 0 6px}.au-confirm p{color:var(--dim);font-size:11.5px;line-height:1.5;margin:0 0 16px}.au-confirm-actions{display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:900px){.au-layout{grid-template-columns:minmax(250px,310px) minmax(0,1fr)}.au-page{padding:22px 18px 28px}.au-detail-panel{padding:22px 20px 30px}}
 @media(max-width:720px){.au-page-shell{height:auto}.au-page-head{align-items:flex-start;flex-wrap:wrap}.au-head-actions{width:100%;margin-left:46px;justify-content:flex-start}.au-layout{grid-template-columns:1fr}.au-list-panel{min-height:300px;max-height:48vh}.au-detail-panel{min-height:500px}.au-form-grid{grid-template-columns:1fr}.au-detail-title{font-size:21px}}
+.px-sprite-box{position:relative;overflow:hidden;flex:none}
+.px-sprite{position:absolute;left:0;top:0;width:192px;height:208px;transform-origin:top left;transform:scale(var(--px-scale));background-image:var(--px-url);background-size:1536px auto;background-repeat:no-repeat;background-position-y:calc(var(--px-row) * -208px);animation:px-walk var(--px-ms) steps(calc(var(--px-frames) - 1)) infinite;image-rendering:pixelated}
+@keyframes px-walk{from{background-position-x:0}to{background-position-x:calc((var(--px-frames) - 1) * -192px)}}
+.px-floater{position:fixed;z-index:40;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none}.px-floater.dragging{cursor:grabbing}
+.px-floater .px-sprite-box{filter:drop-shadow(0 6px 18px rgba(0,0,0,.42))}
+.px-dot{position:absolute;top:-14px;right:0;width:16px;height:16px;border-radius:50%;background:var(--menu-solid,#1b1819);border:1px solid var(--line2);display:flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:var(--dim);cursor:pointer;opacity:0;transition:opacity .18s}.px-floater:hover .px-dot{opacity:1}
+.px-menu{position:absolute;bottom:calc(100% + 6px);right:0;background:var(--menu-solid,#1b1819);border:1px solid var(--line2);border-radius:10px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:128px;box-shadow:0 12px 34px rgba(0,0,0,.4);z-index:50}
+.px-menu button{background:none;border:none;color:var(--txt);font:inherit;font-size:11px;text-align:left;padding:6px 9px;border-radius:6px;cursor:pointer}.px-menu button:hover{background:var(--hover)}.px-menu button.on{color:var(--txt2)}
+.px-chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.px-chip{padding:5px 10px;border:1px solid var(--line2);border-radius:999px;font-size:10.5px;color:var(--dim);cursor:pointer;background:none}.px-chip.on{color:var(--txt2);border-color:var(--ember);background:var(--hover)}
+.px-search{width:100%;box-sizing:border-box;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:11.5px;padding:7px 10px;outline:none;margin-top:8px}
+.px-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-top:10px}
+.px-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer}.px-card:hover{border-color:var(--line2)}.px-card.on{border-color:var(--ember)}
+.px-card-name{font-size:10.5px;color:var(--txt);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.px-card-sub{font-size:9px;color:var(--dim2)}
+.px-card .btn{padding:4px 8px;font-size:9.5px}
+.px-installed{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}
+.px-in-card{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 10px 6px 4px;background:var(--panel);cursor:pointer}.px-in-card:hover{border-color:var(--line2)}.px-in-card.on{border-color:var(--ember)}
+.px-in-name{font-size:11px;color:var(--txt);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.px-sizes{display:flex;gap:6px}.px-size{padding:4px 10px;border:1px solid var(--line2);border-radius:8px;font-size:10.5px;color:var(--dim);cursor:pointer;background:none}.px-size.on{color:var(--txt2);border-color:var(--ember);background:var(--hover)}
+.px-preview{display:flex;align-items:center;gap:14px;padding:10px 0 4px}
+.px-preview-copy{min-width:0}.px-preview-name{font-family:var(--font-d);font-size:14px;color:var(--txt2)}.px-preview-sub{font-size:10.5px;color:var(--dim2);margin-top:2px}
+@media(max-width:720px){.px-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}}
 </style>
 </head>
 <body>
@@ -7051,7 +7073,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onClose}) => {
+const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
@@ -7106,6 +7128,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
     {k: 'Feeds', ic: <IcGlobe size={14}/>},
     {k: 'Plugins', ic: <IcPlugins size={14}/>},
     {k: 'Automations', ic: <IcSparkle size={14}/>},
+    {k: 'Petdex', ic: <I d="M12 20s-7-4.6-9.2-8.6C1.2 8.6 3.2 5 6.6 5c2 0 3.6 1.1 4.6 2.7C12.2 6.1 13.8 5 15.8 5c3.4 0 5.4 3.6 3.6 6.4C19 15.4 12 20 12 20z" size={14}/>},
     {k: 'Computer use', ic: <IcTerminal size={14}/>},
     {k: 'Shortcuts', ic: <I d="M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10" size={14}/>},
   ];
@@ -7312,6 +7335,9 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="set-row"><div>Scheduled tasks<span className="sr-sub">{automations.length} task{automations.length === 1 ? '' : 's'} currently saved.</span></div><span className="sr-end"><button className="btn primary" onClick={() => { onClose(); if (onOpenScheduled) onOpenScheduled(); }}>Open Scheduled</button></span></div>
               <div className="set-row"><div>Chat-guided setup<span className="sr-sub">Ask Vellum to draft the schedule in a new project chat.</span></div><span className="sr-end"><button className="btn" onClick={() => { onClose(); if (onStartAutomationChat) onStartAutomationChat(); }}>Create with Vellum</button></span></div>
             </React.Fragment>
+          )}
+          {tab === 'Petdex' && (
+            <PetdexTab manifest={petManifest} loading={petLoading} error={petError} installed={petInstalled} active={petActive} size={petSize} hidden={petHidden} onToggleInstall={onPetToggleInstall} onSetActive={onPetSetActive} onSize={onPetSize} onHidden={onPetHidden}/>
           )}
           {tab === 'Computer use' && (
             <React.Fragment>
@@ -7711,6 +7737,191 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   );
 };
 
+const PETDEX_MANIFEST = 'https://petdex.dev/api/manifest';
+const PETDEX_MANIFEST_TTL = 24 * 60 * 60 * 1000;
+const PETDEX_FALLBACK = {slug: 'boba', displayName: 'Boba', submittedBy: 'Petdex', spritesheetUrl: 'assets/pets/boba.webp'};
+const PETDEX_LS = {manifest: 'vellum-pet-manifest', manifestAt: 'vellum-pet-manifest-at', installed: 'vellum-pet-installed', active: 'vellum-pet-active', hidden: 'vellum-pet-hidden', size: 'vellum-pet-size', pos: 'vellum-pet-pos'};
+const PETDEX_COLLECTIONS = [
+  {id: 'pokemon', label: 'Pokemon', slugs: ['giratina', 'goose-default', 'kabi', 'gardevoir', 'kaka-2', 'capvolt', 'chimchar']},
+  {id: 'anime-heroes', label: 'Anime Heroes', slugs: ['luffy', 'luffy-2', 'zoro', 'sabo', 'naruto', 'itachi', 'goku', 'goku-blue', 'yamcha', 'nezuko', 'kyojuro-rengoku', 'gojo', 'sukuna', 'frieren-3', 'frieren-4', 'totoro', 'gon', 'killua', 'futuduozaemon', 'ryo-yamada-bass', 'marcille-dungeon-meshi', 'bochi-guitar']},
+  {id: 'meme-lords', label: 'Meme Lords', slugs: ['pepe', 'apupepe', 'wojak', 'batmeme', 'doodlebob', 'oo-ee-a-e-a-cat', 'daodun', 'daodun-dog', 'kun', 'crow']},
+  {id: 'jojo', label: 'JoJo', slugs: ['dio', 'gappy', 'jonathan', 'jolyne', 'johnny-joestar', 'giorno', 'joseph', 'josuke4', 'jodio', 'jotaro']},
+  {id: 'coders-club', label: 'Coders Club', slugs: ['octohack', 'codex', 'midudev', 'cogwick', 'clawdex', 'byte-bunny', 'denissexy-itier', 'codeberg', 'savage-codex-hacker', 'macintosh', 'mini-elon', 'axel', 'snoopy', 'elfie', 'barry', 'steve-jobs', 'bonzibuddy', 'shrimpy']},
+];
+const PETDEX_STATES = {
+  idle: {row: 0, frames: 6, ms: 1100},
+  'running-right': {row: 1, frames: 8, ms: 1060},
+  'running-left': {row: 2, frames: 8, ms: 1060},
+  waving: {row: 3, frames: 4, ms: 700},
+  jumping: {row: 4, frames: 5, ms: 840},
+  failed: {row: 5, frames: 8, ms: 1220},
+  waiting: {row: 6, frames: 6, ms: 1010},
+  running: {row: 7, frames: 6, ms: 820},
+  review: {row: 8, frames: 6, ms: 1030},
+};
+const PETDEX_SIZES = {sm: 0.5, md: 0.75, lg: 1};
+const pxLsGet = (key, fallback) => { try { const v = localStorage.getItem(key); return v == null ? fallback : JSON.parse(v); } catch { return fallback; } };
+const pxLsSet = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch {} };
+const pxPetRecord = (manifest, slug) => {
+  if (!slug) return null;
+  const list = manifest && manifest.pets;
+  const found = list && list.find(p => p.slug === slug);
+  if (found) return found;
+  return slug === 'boba' ? PETDEX_FALLBACK : null;
+};
+const PetSprite = ({record, state = 'idle', size = 'md', label}) => {
+  const st = PETDEX_STATES[state] || PETDEX_STATES.idle;
+  const scale = PETDEX_SIZES[size] || PETDEX_SIZES.md;
+  if (!record || !record.spritesheetUrl) return <div className="px-sprite-box" style={{width: 192 * scale, height: 208 * scale}}/>;
+  return (
+    <div className="px-sprite-box" role="img" aria-label={label || record.displayName} style={{width: 192 * scale, height: 208 * scale}}>
+      <div className="px-sprite" style={{'--px-url': 'url("' + record.spritesheetUrl + '")', '--px-row': st.row, '--px-frames': st.frames, '--px-ms': st.ms + 'ms', '--px-scale': scale}}/>
+    </div>
+  );
+};
+const usePetActivity = (messages) => {
+  const [flash, setFlash] = useState(null);
+  const flashTimer = useRef(null);
+  const was = useRef({streaming: false, error: false});
+  const streaming = messages.some(m => m && m.streaming);
+  const thinking = messages.some(m => m && m.streaming && m.phase === 'thinking');
+  const toolsBusy = messages.some(m => m && m.streaming && ((m.tools && m.tools.length > 0) || (m.activity && m.activity.some(a => a && a.status === 'in_progress' && (a.type !== 'reasoning' || a.name)))));
+  const errored = messages.some(m => !m.streaming && (String(m.text || '').startsWith('Backend error') || String(m.text || '').indexOf('Backend unreachable') !== -1));
+  const trigger = (name, ms) => {
+    clearTimeout(flashTimer.current);
+    setFlash(name);
+    flashTimer.current = setTimeout(() => setFlash(null), ms);
+  };
+  useEffect(() => {
+    if (was.current.streaming && !streaming) trigger('waving', 1400);
+    if (errored && !was.current.error) trigger('failed', 2400);
+    was.current.streaming = streaming;
+    was.current.error = errored;
+  }, [messages]);
+  const base = !streaming ? 'idle' : (toolsBusy ? 'running' : (thinking ? 'review' : 'idle'));
+  return {state: flash || base, trigger};
+};
+const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed, active, onSwitch}) => {
+  const drag = useRef(null);
+  const [menu, setMenu] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const p = pos || {};
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.px-menu')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    drag.current = {x: e.clientX, y: e.clientY, px: rect.left, py: rect.top, moved: false};
+    setDragging(true);
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e) => {
+    const d = drag.current;
+    if (!d) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
+    if (d.moved) onPos({x: Math.max(0, Math.min(d.px + dx, window.innerWidth - 200)), y: Math.max(0, Math.min(d.py + dy, window.innerHeight - 240))});
+  };
+  const onPointerUp = () => {
+    const d = drag.current;
+    if (!d) return;
+    const moved = d.moved;
+    drag.current = null;
+    setDragging(false);
+    if (!moved) onJump();
+  };
+  return (
+    <div className={'px-floater' + (dragging ? ' dragging' : '')} style={{left: p.x != null ? p.x : window.innerWidth - 190, top: p.y != null ? p.y : window.innerHeight - 250}}
+      onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+      onMouseEnter={() => setMenu(true)} onMouseLeave={() => setMenu(false)}>
+      <PetSprite record={record} state={state} size={size}/>
+      {menu && (
+        <div className="px-menu">
+          <button onClick={() => { setMenu(false); onHide(); }}>Hide pet</button>
+          {(installed || []).filter(s => s !== active).slice(0, 6).map(slug => (
+            <button key={slug} onClick={() => { setMenu(false); onSwitch(slug); }}>{slug}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+const PetdexTab = ({manifest, loading, error, installed = [], active, size, hidden, onToggleInstall, onSetActive, onSize, onHidden}) => {
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+  const activeRecord = pxPetRecord(manifest, active) || PETDEX_FALLBACK;
+  const all = (manifest && manifest.pets) || [];
+  const coll = PETDEX_COLLECTIONS.find(c => c.id === filter);
+  let shown = all;
+  if (coll) shown = shown.filter(p => coll.slugs.indexOf(p.slug) !== -1);
+  const q = query.trim().toLowerCase();
+  if (q) shown = shown.filter(p => String(p.displayName || '').toLowerCase().indexOf(q) !== -1);
+  const isInstalled = slug => installed.indexOf(slug) !== -1;
+  return (
+    <React.Fragment>
+      <div className="set-h">Petdex</div>
+      <div className="set-note">Animated companions from the open Petdex gallery. Your pet reacts to what Vellum is doing and stays with you across every view.</div>
+      <div className="px-preview">
+        <PetSprite record={activeRecord} state="idle" size="lg" label={activeRecord.displayName}/>
+        <div className="px-preview-copy">
+          <div className="px-preview-name">{activeRecord.displayName}</div>
+          <div className="px-preview-sub">by {activeRecord.submittedBy || 'Petdex'} · the floating companion</div>
+          <div className="set-row" style={{marginTop: 6}}>
+            <div>Show pet<span className="sr-sub">Toggles the floating companion.</span></div>
+            <span className="sr-end"><div className={'sw' + (hidden ? '' : ' on')} role="switch" aria-checked={!hidden} aria-label="Show pet" tabIndex="0" onClick={() => onHidden(!hidden)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onHidden(!hidden); } }}/></span>
+          </div>
+        </div>
+      </div>
+      <div className="set-row">
+        <div>Size<span className="sr-sub">Sprite scale for the floating pet.</span></div>
+        <span className="sr-end"><span className="px-sizes">
+          {[{id: 'sm', label: 'Small'}, {id: 'md', label: 'Medium'}, {id: 'lg', label: 'Large'}].map(s => (
+            <button key={s.id} className={'px-size' + (size === s.id ? ' on' : '')} onClick={() => onSize(s.id)}>{s.label}</button>
+          ))}
+        </span></span>
+      </div>
+      <div className="set-h" style={{marginTop: 18}}>Your pets</div>
+      <div className="set-note">Installed pets appear here. Pick one to make it the floating companion, or remove it to free the slot.</div>
+      <div className="px-installed">
+        {installed.length === 0 && <div className="set-note" style={{color: 'var(--dim2)'}}>Nothing installed yet — choose a pet below.</div>}
+        {installed.map(slug => {
+          const rec = pxPetRecord(manifest, slug);
+          if (!rec) return null;
+          return (
+            <div key={slug} className={'px-in-card' + (active === slug ? ' on' : '')} onClick={() => onSetActive(slug)} title="Set as the floating companion">
+              <PetSprite record={rec} state="idle" size="sm"/>
+              <span className="px-in-name">{rec.displayName}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="px-chips">
+        <button className={'px-chip' + (filter === 'all' ? ' on' : '')} onClick={() => setFilter('all')}>All pets</button>
+        {PETDEX_COLLECTIONS.map(c => (
+          <button key={c.id} className={'px-chip' + (filter === c.id ? ' on' : '')} onClick={() => setFilter(c.id)}>{c.label}</button>
+        ))}
+      </div>
+      <input className="px-search" type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search the gallery…" aria-label="Search the pet gallery"/>
+      {loading && <div className="set-note" style={{marginTop: 10}}>Loading the Petdex gallery…</div>}
+      {!loading && error && <div className="set-note" style={{color: 'var(--ember)', marginTop: 10}}>{error} The bundled default pet still works.</div>}
+      {!loading && !error && shown.length === 0 && <div className="set-note" style={{marginTop: 10}}>No pets match.</div>}
+      {!loading && !error && shown.length > 0 && (
+        <div className="px-grid">
+          {shown.slice(0, 120).map(p => {
+            const has = isInstalled(p.slug);
+            return (
+              <div key={p.slug} className={'px-card' + (active === p.slug ? ' on' : '')} onClick={() => { if (has) onSetActive(p.slug); }}>
+                <PetSprite record={p} state="idle" size="sm" label={p.displayName}/>
+                <div className="px-card-name">{p.displayName}</div>
+                <div className="px-card-sub">{p.kind}</div>
+                <button className={'btn' + (has ? '' : ' primary')} onClick={e => { e.stopPropagation(); onToggleInstall(p.slug); }}>{has ? (active === p.slug ? 'Active' : 'Installed') : 'Install'}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </React.Fragment>
+  );
+};
 const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','memory','kg','archive','agent']);
 const isNotFoundLocation = () => {
   try {
@@ -7888,6 +8099,46 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [spotify, setSpotify] = useState({connected:false,status:'loading',account_name:'',product:''});
   const [spotifyConnectOpen, setSpotifyConnectOpen] = useState(false);
   const [automations, setAutomations] = useState([]);
+  const [petManifest, setPetManifest] = useState(null);
+  const [petLoading, setPetLoading] = useState(true);
+  const [petError, setPetError] = useState('');
+  const [petInstalled, setPetInstalled] = useState(() => { const v = pxLsGet(PETDEX_LS.installed, null); return Array.isArray(v) ? v : ['boba']; });
+  const [petActive, setPetActive] = useState(() => pxLsGet(PETDEX_LS.active, 'boba'));
+  const [petHidden, setPetHidden] = useState(() => pxLsGet(PETDEX_LS.hidden, false));
+  const [petSize, setPetSize] = useState(() => pxLsGet(PETDEX_LS.size, 'md'));
+  const [petPos, setPetPos] = useState(() => pxLsGet(PETDEX_LS.pos, null));
+  useEffect(() => { pxLsSet(PETDEX_LS.installed, petInstalled); pxLsSet(PETDEX_LS.active, petActive); }, [petInstalled, petActive]);
+  useEffect(() => { pxLsSet(PETDEX_LS.hidden, petHidden); }, [petHidden]);
+  useEffect(() => { pxLsSet(PETDEX_LS.size, petSize); }, [petSize]);
+  useEffect(() => { if (petPos) pxLsSet(PETDEX_LS.pos, petPos); }, [petPos]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const cached = pxLsGet(PETDEX_LS.manifest, null);
+      const at = pxLsGet(PETDEX_LS.manifestAt, 0);
+      if (cached && Date.now() - at < PETDEX_MANIFEST_TTL) { setPetManifest(cached); setPetLoading(false); return; }
+      setPetLoading(true);
+      try {
+        const res = await fetch(PETDEX_MANIFEST);
+        if (!res.ok) throw new Error('bad status');
+        const data = await res.json();
+        if (cancelled) return;
+        setPetManifest(data);
+        pxLsSet(PETDEX_LS.manifest, data);
+        pxLsSet(PETDEX_LS.manifestAt, Date.now());
+        setPetError('');
+      } catch (_) {
+        if (!cancelled) { setPetManifest(cached); setPetError(cached ? 'Gallery unreachable. Showing the cached list.' : 'Gallery unreachable.'); }
+      } finally { if (!cancelled) setPetLoading(false); }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+  const petMessages = (chats || []).reduce((acc, c) => acc.concat(c.messages || []), []).concat(Object.values(agentConvos || {}).reduce((acc, c) => acc.concat((c || {}).messages || []), []));
+  const petActivity = usePetActivity(petMessages);
+  const activePetRecord = pxPetRecord(petManifest, petActive) || PETDEX_FALLBACK;
+  const petToggleInstall = slug => { setPetInstalled(list => list.indexOf(slug) === -1 ? list.concat(slug) : list.filter(s => s !== slug)); };
+  const petSetActive = slug => setPetActive(slug);
   const [subagents, setSubagents] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -8135,7 +8386,8 @@ const [slashSkills, setSlashSkills] = useState([]);
         setConversationLibrary(next);
         setChats(current => {
           const localById = new Map(current.map(chat => [chat.id, chat]));
-          return next.conversations.map(serverChat => {
+          const serverIds = new Set(next.conversations.map(chat => chat.id));
+          const merged = next.conversations.map(serverChat => {
             const localChat = localById.get(serverChat.id);
             if (!localChat) return serverChat;
             return {
@@ -8147,6 +8399,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               organization: serverChat.organization,
             };
           });
+          return merged.concat(current.filter(chat => !serverIds.has(chat.id)));
         });
       }
       return next;
@@ -9082,6 +9335,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
+        {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={setPetPos} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => setPetHidden(true)} installed={petInstalled} active={petActive} onSwitch={setPetActive}/>}
         </React.Fragment>}
         {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
@@ -9117,6 +9371,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
           onOpenScheduled={() => nav('scheduled')}
+          petManifest={petManifest} petLoading={petLoading} petError={petError} petInstalled={petInstalled} petActive={petActive} petSize={petSize} petHidden={petHidden} onPetToggleInstall={petToggleInstall} onPetSetActive={petSetActive} onPetSize={setPetSize} onPetHidden={setPetHidden}
           onClose={() => setSettingsOpen(false)}/>} 
         {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}

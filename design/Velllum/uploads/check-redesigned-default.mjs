@@ -49,6 +49,8 @@ const required = [
   "API.automations.createPrompt",
   "API.runtimes.subagents",
   "FEATURE_FLAGS",
+  "PETDEX_MANIFEST",
+  "assets/pets/boba.webp",
 ];
 
 for (const needle of required) {
