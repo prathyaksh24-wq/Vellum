@@ -7766,7 +7766,7 @@ const usePetActivity = (messages) => {
   const was = useRef({streaming: false, error: false});
   const streaming = messages.some(m => m && m.streaming);
   const thinking = messages.some(m => m && m.streaming && m.phase === 'thinking');
-  const toolsBusy = messages.some(m => m && m.streaming && ((m.tools && m.tools.length > 0) || (m.activity && m.activity.some(a => a && a.status === 'in_progress'))));
+  const toolsBusy = messages.some(m => m && m.streaming && ((m.tools && m.tools.length > 0) || (m.activity && m.activity.some(a => a && a.status === 'in_progress' && (a.type !== 'reasoning' || a.name)))));
   const errored = messages.some(m => !m.streaming && (String(m.text || '').startsWith('Backend error') || String(m.text || '').indexOf('Backend unreachable') !== -1));
   const trigger = (name, ms) => {
     clearTimeout(flashTimer.current);
@@ -7789,7 +7789,9 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
   const p = pos || {};
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
-    drag.current = {x: e.clientX, y: e.clientY, px: p.x, py: p.y, moved: false};
+    if (e.target.closest('.px-menu')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    drag.current = {x: e.clientX, y: e.clientY, px: rect.left, py: rect.top, moved: false};
     setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -8351,7 +8353,8 @@ const [slashSkills, setSlashSkills] = useState([]);
         setConversationLibrary(next);
         setChats(current => {
           const localById = new Map(current.map(chat => [chat.id, chat]));
-          return next.conversations.map(serverChat => {
+          const serverIds = new Set(next.conversations.map(chat => chat.id));
+          const merged = next.conversations.map(serverChat => {
             const localChat = localById.get(serverChat.id);
             if (!localChat) return serverChat;
             return {
@@ -8363,6 +8366,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               organization: serverChat.organization,
             };
           });
+          return merged.concat(current.filter(chat => !serverIds.has(chat.id)));
         });
       }
       return next;
