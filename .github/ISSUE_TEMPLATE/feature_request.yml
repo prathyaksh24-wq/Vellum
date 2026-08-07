@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a new capability or improvement for Vellum
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the feature you want and the problem it solves. Keep it focused: one idea per issue.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and why do the current capabilities fall short?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should the feature behave? Include API/UI sketches if useful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other tools you tried.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Backend (API / agent / tools)
+        - Frontend (web UI)
+        - Desktop shell
+        - Memory / vault / knowledge
+        - Skills / plugins
+        - Model routing / providers
+        - CI / tooling
+        - Other

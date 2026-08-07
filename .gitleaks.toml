@@ -1,0 +1,12 @@
+# Gitleaks configuration for Vellum
+
+[extend]
+# Use the default ruleset, then add allowlist below.
+
+[allowlist]
+description = "Vellum test fixtures and example values"
+regexes = [
+  '''test-key''',
+  '''sk-test''',
+  '''ghp_test''',
+]

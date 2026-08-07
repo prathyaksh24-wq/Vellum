@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible problem in Vellum
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Fill in the fields below; the more precise the reproduction, the faster it gets fixed.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen, and what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps (commands, UI actions, chat prompts) to trigger the bug.
+      placeholder: |
+        1. Start backend with `uvicorn agent.api:app`
+        2. Open the web UI and send "…"
+        3. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste the error traceback, console output, or audit log excerpt. Redact any personal data or API keys.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: e.g. main @ abc1234, or a release tag if tagged.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Backend (API / agent / tools)
+        - Frontend (web UI)
+        - Desktop shell
+        - Memory / vault / knowledge
+        - Skills / plugins
+        - Model routing / providers
+        - CI / tooling
+        - Other
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, Node version, Obsidian status, whether memory indexes are present.
+      placeholder: "Windows 11, Python 3.14, Node 22, Obsidian vault configured"

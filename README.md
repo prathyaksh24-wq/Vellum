@@ -2,6 +2,11 @@
 
 Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, a Tauri desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, coding mode, computer-use foundations, and a Hermes-compatible skills system.
 
+![CI](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/ci.yml/badge.svg)
+![CodeQL](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/codeql.yml/badge.svg)
+![Release](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/release.yml/badge.svg)
+![License](https://img.shields.io/badge/license-proprietary-blue)
+
 > [!WARNING]
 > Vellum is in active alpha development. Features, data formats, APIs, and installation steps may change without notice.
 
@@ -108,6 +113,26 @@ Backend checks:
 cd backend
 ..\.venv\Scripts\python.exe -m pytest
 ```
+
+> [!NOTE]
+> A few backend tests import the `plugins/` package at the repository root.
+> If those fail to collect, run pytest with `$env:PYTHONPATH = "D:\Vellum"`
+> (or `PYTHONPATH=$PWD` on Unix) set.
+
+## Continuous Integration
+
+Every pull request and push to `main` runs the following checks (`.github/workflows/ci.yml`), and merges to `main` additionally trigger CodeQL and release automation:
+
+- **Backend tests** — full pytest suite on Python 3.13.
+- **Frontend build + tests** — production Vite build and the Vitest suite.
+- **Secret scanning (gitleaks)** — fails on committed API keys, tokens, or credentials.
+- **Python dependency audit (pip-audit)** — fails on known-vulnerable installed packages.
+- **Frontend dependency audit (npm audit)** — fails on high/critical severity advisories.
+- **Dependency review** — checks every PR's dependency changes against GitHub advisories.
+- **CodeQL code scanning** (`.github/workflows/codeql.yml`) — security-extended queries on Python and JavaScript, plus a weekly scheduled run.
+- **Release automation** (`.github/workflows/release.yml`) — [release-please](https://github.com/googleapis/release-please) maintains `CHANGELOG.md`, bumps `backend/pyproject.toml`, tags releases (`vX.Y.Z`), and publishes GitHub Releases from conventional-commit messages (`feat:`, `fix:`, `chore:`, …).
+
+Dependency updates arrive via [Dependabot](.github/dependabot.yml) as grouped weekly PRs for Python, npm, and GitHub Actions.
 
 ## Configuration
 
