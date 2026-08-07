@@ -134,6 +134,7 @@ def test_codex_runtime_prefers_native_binary_behind_npm_wrapper(monkeypatch, tmp
     wrapper = tmp_path / "bin" / "codex.cmd"
     wrapper.parent.mkdir(parents=True)
     wrapper.write_text("@echo off", encoding="utf-8")
+    executable = "codex.exe" if os.name == "nt" else "codex"
     native = (
         wrapper.parent
         / "node_modules"
@@ -145,7 +146,7 @@ def test_codex_runtime_prefers_native_binary_behind_npm_wrapper(monkeypatch, tmp
         / "vendor"
         / "x86_64-pc-windows-msvc"
         / "bin"
-        / "codex.exe"
+        / executable
     )
     native.parent.mkdir(parents=True)
     native.write_bytes(b"")

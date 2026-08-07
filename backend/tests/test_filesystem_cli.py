@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import sys
 
 import pytest
 
 from agent.tools import filesystem as fs
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="PowerShell-CLI filesystem tools are Windows-native",
+)
 
 
 @pytest.fixture

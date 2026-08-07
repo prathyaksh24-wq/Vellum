@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures
 from types import SimpleNamespace
+import sys
 
 import pytest
 
@@ -600,6 +601,7 @@ def test_browser_hermes_tools_call_playwright_actions(monkeypatch):
     ]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="PowerShell-CLI filesystem tools are Windows-native")
 def test_read_file_pages_browser_cache_snapshot(monkeypatch, tmp_path):
     from agent.tools import filesystem as fs_tools
 
