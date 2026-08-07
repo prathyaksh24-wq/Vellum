@@ -1,5 +1,5 @@
 APScheduler>=3.10.4
-croniter>=2.0.0
+croniter>=6.2.4
 apify-client>=1.10.0
 aiosqlite>=0.20.0
 httpx>=0.28.0
@@ -17,7 +17,7 @@ mcp>=1.27.0
 numpy>=2.0.0
 moonshine-voice>=0.0.39
 kokoro-onnx>=0.5.0; python_version < "3.14"
-onnxruntime>=1.20.0; python_version < "3.14"
+onnxruntime>=1.28.0; python_version < "3.14"
 soundfile>=0.12.1
 pydantic-settings>=2.6.0
 PyYAML>=6.0.2
