@@ -52,6 +52,9 @@ dev = [
   "pytest-asyncio>=0.24.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["agent*", "evals*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
