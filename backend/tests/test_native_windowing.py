@@ -6,6 +6,13 @@ from agent.computer_use.operator import ComputerWindow
 from agent.computer_use.native_windows import windowing
 
 
+@pytest.fixture(autouse=True)
+def _fake_winfunc_type(monkeypatch):
+    monkeypatch.setattr(
+        ctypes, "WINFUNCTYPE", lambda *_args, **_kwargs: lambda fn: fn, raising=False
+    )
+
+
 def test_window_id_round_trip():
     assert windowing.window_id(1234) == "hwnd:1234"
     assert windowing.parse_window_id("hwnd:1234") == 1234

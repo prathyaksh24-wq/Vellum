@@ -5,6 +5,9 @@ import pytest
 
 from agent.plugins.portable import PortablePluginContext, load_portable_plugin
 from agent.plugins.spotify_runtime import spotify_catalog_query_gate
+
+pytestmark = pytest.mark.usefixtures("repo_root_cwd")
+
 from plugins.connectors.spotify.errors import SpotifyNoActiveDevice
 from plugins.connectors.spotify.tools import (
     spotify_albums,

@@ -11,6 +11,8 @@ from agent.knowledge.store import KnowledgeStore
 from agent.plugins.portable import PortablePluginContext, load_portable_plugin
 from agent.plugins.youtube_runtime import YouTubeKnowledgeSync
 
+pytestmark = pytest.mark.usefixtures("repo_root_cwd")
+
 
 class FakeKeyring:
     def __init__(self) -> None:

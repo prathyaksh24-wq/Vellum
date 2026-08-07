@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import sys
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -138,6 +139,7 @@ def test_voice_turn_streams_transcript_text_final_then_audio(monkeypatch):
     assert learned == [("tell me about stillness", "Hello there.", "voice-thread", "voice")]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="computer use overlay is Windows-native")
 def test_voice_turn_intercepts_computer_use_mode_command(monkeypatch, tmp_path):
     class FailingAgent:
         async def astream_events(self, *args, **kwargs):

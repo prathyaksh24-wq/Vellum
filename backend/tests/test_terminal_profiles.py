@@ -86,5 +86,5 @@ def test_terminal_profile_serializes_for_api():
         "label": "PowerShell",
         "available": True,
         "reason": None,
-        "cwd": "C:\\work",
+        "cwd": str(Path("C:/work")),
     }

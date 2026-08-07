@@ -19,6 +19,17 @@ def test_environment() -> None:
     return None
 
 
+@pytest.fixture(scope="module")
+def repo_root_cwd() -> Path:
+    """Run tests with cwd at the repository root (plugins/, design/ are root-relative)."""
+
+    repo_root = Path(__file__).resolve().parents[2]
+    previous = Path.cwd()
+    os.chdir(repo_root)
+    yield repo_root
+    os.chdir(previous)
+
+
 @pytest.fixture(autouse=True)
 def reset_process_configuration_caches():
     """Prevent provider-key tests from leaking cached settings into later tests."""

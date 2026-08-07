@@ -3,8 +3,12 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 from agent.plugins import spotify_runtime
 from agent.plugins.portable import PortablePluginContext, PortableRegisteredTool
+
+pytestmark = pytest.mark.usefixtures("repo_root_cwd")
 
 
 def test_spotify_tools_absent_when_not_authenticated(monkeypatch):

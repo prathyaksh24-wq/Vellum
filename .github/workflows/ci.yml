@@ -76,7 +76,7 @@ jobs:
       - name: Install backend + pip-audit
         run: pip install -e "backend[dev]" pip-audit
       - name: Audit installed Python packages
-        run: pip-audit --disable-pip --progress-spinner off
+        run: pip-audit --progress-spinner off
 
   npm-audit:
     name: Frontend dependency audit

@@ -5,6 +5,8 @@ import pytest
 
 from agent.plugins.portable import PortablePluginContext, discover_portable_plugins, load_portable_plugin
 
+pytestmark = pytest.mark.usefixtures("repo_root_cwd")
+
 
 def test_discovers_hermes_style_agent_reach_and_memory_plugins():
     plugins = {plugin.id: plugin for plugin in discover_portable_plugins(Path("plugins"))}

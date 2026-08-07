@@ -1,7 +1,13 @@
 from pathlib import Path
 
 
-HTML_PATH = Path("design/Velllum/uploads/Vellum Default Re-designed.html")
+HTML_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "design"
+    / "Velllum"
+    / "uploads"
+    / "Vellum Default Re-designed.html"
+)
 
 
 def test_spotify_connection_ui_contract_is_present():
