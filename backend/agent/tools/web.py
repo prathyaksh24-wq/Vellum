@@ -1,14 +1,22 @@
-"""Privacy-gated DuckDuckGo web search tool."""
+"""Privacy-gated multi-provider web search tool (Hermes-style registry).
 
+Returns structured JSON: ``{"success": bool, "data": {"web": [{title, url,
+description, position}]}}`` or ``{"success": False, "error": str}``.
+
+Backend selection: ``WEB_SEARCH_BACKEND`` -> ``WEB_BACKEND`` -> availability
+walk (serpapi -> exa -> brave -> tavily -> ddgs). On a transient failure the
+next available provider is tried within the same call.
+"""
+
+import json
 import logging
 from urllib.parse import urlparse
 
 from langchain_core.tools import tool
 
-from agent.config import get_settings
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
-from agent.tools.serpapi import SerpApiClient
+from agent.tools.providers import available_providers, provider_chain
 
 logger = logging.getLogger(__name__)
 
@@ -23,50 +31,57 @@ _WEB_ERROR_PREFIXES = (
 
 
 @tool
-def web_search(query: str) -> str:
-    """Search the public web for current or factual information not found in the vault."""
+def web_search(query: str, limit: int = 5) -> str:
+    """Search the public web for current or factual information not found in the vault.
+
+    Returns result metadata only (titles, URLs, descriptions) as JSON.
+    Use web_extract_pages to read full content from specific URLs.
+    """
 
     data_class, reason = classify(query)
     if data_class == DataClass.RED:
-        return f"Web search blocked for privacy: {reason}"
+        return json.dumps(
+            {"success": False, "error": f"Web search blocked for privacy: {reason}"},
+            ensure_ascii=False,
+        )
 
     clean_query = public_web_search_query(query)
-    settings = get_settings()
-    if getattr(settings, "serpapi_api_key", ""):
+    try:
+        limit = min(max(int(limit), 1), 100)
+    except (TypeError, ValueError):
+        limit = 5
+
+    providers = provider_chain("search")
+    if not providers:
+        return json.dumps(
+            {
+                "success": False,
+                "error": (
+                    "No web search provider configured. Configure a search backend "
+                    "(SerpAPI, Exa, Brave, or Tavily API key) or set WEB_SEARCH_BACKEND."
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+    failed: list[str] = []
+    for provider in providers:
         try:
-            result = SerpApiClient(
-                api_key=settings.serpapi_api_key,
-                log_path=settings.serpapi_log_path,
-            )
-            if hasattr(result, "fresh_google_search"):
-                search_result = result.fresh_google_search(clean_query, num=8, min_sources=3)
-                text = str(search_result.get("text") or "")
-            else:
-                text = str(result.fresh_google_search_text(clean_query, num=5))
-            text_for_check = text.strip()
-            if text_for_check and text_for_check != "No web results found.":
-                return text
-        except Exception as exc:
-            logger.warning("[TOOL:web] SerpAPI search failed; falling back to DuckDuckGo: %s", exc)
+            response = provider.search(clean_query, limit)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[TOOL:web] %s search failed; trying next provider: %s", provider.name, exc)
+            failed.append(provider.display_name)
+            continue
+        if response.get("success") and response.get("data", {}).get("web"):
+            return json.dumps(response, indent=2, ensure_ascii=False)
+        failed.append(provider.display_name)
 
-    try:
-        from duckduckgo_search import DDGS
-    except ImportError:
-        return "Web search is unavailable because duckduckgo-search is not installed."
-
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(clean_query, max_results=5))
-    except Exception as exc:
-        logger.error("[TOOL:web] DuckDuckGo error: %s", exc)
-        return f"Web search failed: {exc}"
-
-    if not results:
-        return "No web results found."
-
-    return WEB_RESULT_SEPARATOR.join(
-        f"**{item.get('title', '')}**\n{item.get('body', '')}\n{item.get('href', '')}"
-        for item in results
+    return json.dumps(
+        {
+            "success": False,
+            "error": "Web search failed via all providers" + (f": {', '.join(failed)}" if failed else "."),
+        },
+        ensure_ascii=False,
     )
 
 
@@ -91,13 +106,51 @@ def public_web_search_query(query: str) -> str:
 
 
 def extract_web_sources(tool_output: str) -> list[dict]:
-    """Reverse web_search's formatted output into structured source records.
+    """Reverse web_search's output into structured source records.
 
-    Returns a list of {title, url, snippet, domain}. web_search owns the output
-    format, so this parser stays in lockstep with how that string is produced.
+    Handles both the Hermes-style JSON output (``{success, data: {web:
+    [{title, url, description, position}]}}``) and the legacy text-block
+    format. Returns a list of {title, url, snippet, domain}.
     """
     if not tool_output or tool_output.startswith(_WEB_ERROR_PREFIXES):
         return []
+    parsed_json = _try_parse_web_json(tool_output)
+    if parsed_json is not None:
+        return _sources_from_web_json(parsed_json)
+    return _sources_from_text(tool_output)
+
+
+def _try_parse_web_json(tool_output: str) -> dict | None:
+    try:
+        payload = json.loads(tool_output)
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    if isinstance(data, dict) and isinstance(data.get("web"), list):
+        return payload
+    return None
+
+
+def _sources_from_web_json(payload: dict) -> list[dict]:
+    sources: list[dict] = []
+    for item in payload.get("data", {}).get("web", []):
+        if not isinstance(item, dict):
+            continue
+        url = item.get("url", "")
+        if not url:
+            continue
+        title = str(item.get("title", "") or "").strip()
+        snippet = str(item.get("description", "") or "").strip()
+        domain = urlparse(url).netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        sources.append({"title": title or domain, "url": url, "snippet": snippet[:300], "domain": domain})
+    return sources
+
+
+def _sources_from_text(tool_output: str) -> list[dict]:
     sources: list[dict] = []
     for block in tool_output.split(WEB_RESULT_SEPARATOR):
         lines = [line for line in block.splitlines() if line.strip()]
@@ -119,3 +172,6 @@ def extract_web_sources(tool_output: str) -> list[dict]:
         sources.append({"title": title or domain, "url": url, "snippet": snippet[:300], "domain": domain})
     return sources
 
+
+# Keep `available_providers` importable here for introspection/health UIs.
+__all__ = ["web_search", "public_web_search_query", "extract_web_sources", "available_providers"]

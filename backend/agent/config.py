@@ -129,6 +129,12 @@ class Settings(BaseSettings):
     serpapi_api_key: str = Field(default="", alias="SERPAPI_API_KEY")
     serpapi_base_url: str = Field(default="https://serpapi.com/search.json", alias="SERPAPI_BASE_URL")
     serpapi_log_path: Path = Field(default=Path("data/logs/serpapi-searches.jsonl"), alias="SERPAPI_LOG_PATH")
+    exa_api_key: str = Field(default="", alias="EXA_API_KEY")
+    exa_base_url: str = Field(default="https://api.exa.ai/search", alias="EXA_BASE_URL")
+    exa_log_path: Path = Field(default=Path("data/logs/exa-searches.jsonl"), alias="EXA_LOG_PATH")
+    brave_api_key: str = Field(default="", alias="BRAVE_API_KEY")
+    brave_base_url: str = Field(default="https://api.search.brave.com/res/v1/web/search", alias="BRAVE_BASE_URL")
+    brave_log_path: Path = Field(default=Path("data/logs/brave-searches.jsonl"), alias="BRAVE_LOG_PATH")
     tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
     tavily_mcp_url: str = Field(default="https://mcp.tavily.com/mcp/", alias="TAVILY_MCP_URL")
     firecrawl_api_key: str = Field(default="", alias="FIRECRAWL_API_KEY")
@@ -178,6 +184,16 @@ class Settings(BaseSettings):
     context_mode_mcp_command: str = Field(default="npx", alias="CONTEXT_MODE_MCP_COMMAND")
     context_mode_mcp_args: str = Field(default="-y context-mode", alias="CONTEXT_MODE_MCP_ARGS")
     mcp_timeout_seconds: int = Field(default=300, alias="MCP_TIMEOUT_SECONDS")
+
+    # Web provider registry (Hermes-style backend selection)
+    web_backend: str = Field(default="", alias="WEB_BACKEND")
+    web_search_backend: str = Field(default="", alias="WEB_SEARCH_BACKEND")
+    web_extract_backend: str = Field(default="", alias="WEB_EXTRACT_BACKEND")
+    tavily_base_url: str = Field(default="https://api.tavily.com", alias="TAVILY_BASE_URL")
+    firecrawl_base_url: str = Field(default="https://api.firecrawl.dev", alias="FIRECRAWL_BASE_URL")
+    exa_contents_url: str = Field(default="https://api.exa.ai/contents", alias="EXA_CONTENTS_URL")
+    web_extract_char_limit: int = Field(default=15000, alias="WEB_EXTRACT_CHAR_LIMIT")
+    web_extract_cache_dir: Path = Field(default=Path("data/web-cache"), alias="WEB_EXTRACT_CACHE_DIR")
 
     # Tool search (progressive tool disclosure)
     tool_search_enabled: str = Field(default="auto", alias="TOOL_SEARCH_ENABLED")
@@ -230,6 +246,7 @@ class Settings(BaseSettings):
         "computer_use_screenshot_dir",
         "llm_routing_db_path",
         "privacy_receipt_path",
+        "web_extract_cache_dir",
         mode="before",
     )
     @classmethod
@@ -253,6 +270,7 @@ class Settings(BaseSettings):
         self.computer_use_screenshot_dir = _resolve_against_repo(self.computer_use_screenshot_dir)
         self.llm_routing_db_path = _resolve_against_repo(self.llm_routing_db_path)
         self.privacy_receipt_path = _resolve_against_repo(self.privacy_receipt_path)
+        self.web_extract_cache_dir = _resolve_against_repo(self.web_extract_cache_dir)
 
         if not self.obsidian_vault_path.exists():
             raise ValueError(f"Obsidian vault path does not exist: {self.obsidian_vault_path}")
@@ -296,8 +314,18 @@ class Settings(BaseSettings):
             raise ValueError("APIFY_MCP_URL must be an HTTP(S) URL.")
         if not self.serpapi_base_url.startswith(("https://", "http://")):
             raise ValueError("SERPAPI_BASE_URL must be an HTTP(S) URL.")
+        if not self.exa_base_url.startswith(("https://", "http://")):
+            raise ValueError("EXA_BASE_URL must be an HTTP(S) URL.")
+        if not self.brave_base_url.startswith(("https://", "http://")):
+            raise ValueError("BRAVE_BASE_URL must be an HTTP(S) URL.")
         if not self.tavily_mcp_url.startswith(("https://", "http://")):
             raise ValueError("TAVILY_MCP_URL must be an HTTP(S) URL.")
+        if not self.tavily_base_url.startswith(("https://", "http://")):
+            raise ValueError("TAVILY_BASE_URL must be an HTTP(S) URL.")
+        if not self.firecrawl_base_url.startswith(("https://", "http://")):
+            raise ValueError("FIRECRAWL_BASE_URL must be an HTTP(S) URL.")
+        if not self.exa_contents_url.startswith(("https://", "http://")):
+            raise ValueError("EXA_CONTENTS_URL must be an HTTP(S) URL.")
         if not self.github_mcp_url.startswith(("https://", "http://")):
             raise ValueError("GITHUB_MCP_URL must be an HTTP(S) URL.")
         if not self.obsidian_mcp_url.startswith(("https://", "http://")):

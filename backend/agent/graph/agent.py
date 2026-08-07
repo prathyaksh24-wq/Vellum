@@ -84,6 +84,7 @@ from agent.tools.registry import CapabilityAccess, ToolRegistry
 from agent.tools.vault_search import search_my_notes
 from agent.tools.web import web_search
 from agent.tools.web_extract import web_extract
+from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
 from agent.tools.x import x_action
 
@@ -112,19 +113,20 @@ Tools:
 20. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 21. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 22. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
-23. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
-24. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
-25. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
-26. skills_list - List compact metadata for installed skills.
-27. skills_history - Query immutable install, archive, restore, update, and delete history.
-28. skill_view - Load one skill's full instructions or one relative support file.
-29. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
-30. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
-31. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
-32. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
-33. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
-34. cronjob - Create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
-35. write_file/edit_file/delete_file/create_directory - Vault file operations via PowerShell CLI: write_file creates or overwrites a UTF-8 file, edit_file replaces the first occurrence of text, create_directory makes folders (with parents), and delete_file removes a single file and requires confirm=true. All paths stay inside the Obsidian vault.
+23. web_extract_pages - Extract clean content from public page URLs (up to 5 per call) through the configured extract backend (Firecrawl, Tavily, or Exa). Returns markdown/text without LLM summarization; large pages return a head+tail window plus the path of the stored full text for read_file paging. URLs with embedded secrets and private/internal network targets are blocked. Prefer this over web_extract for reading page content; use web_extract only for crawl or structured-extract actions.
+24. memory_orchestrator - Inspect and operate Vellum's core Memory Orchestrator plugin. Use for memory status, Dreaming status, memory toggles/settings, memory summary, manual Dreaming/consolidation, and scoped memory lookup. Do not infer Dreaming status from old vault digest files.
+25. llm_routing - Inspect and change backend-owned LLM routing: OpenRouter provider sort/require-parameters/fallbacks, fallback model chain, credential rotation strategy, and pool reset. Do not pass raw API keys or secrets through chat; credential secrets are configured through backend env/keyring paths only.
+26. knowledge_wiki - Maintain the compiled Obsidian Knowledge wiki. Query reads index.md first and returns opaque page refs; read_page reads only selected pages; ingest_source compiles immutable Library sources; upsert_page revises complete wiki pages with version history; update_overview maintains the high-level synthesis; lint checks health without deleting content.
+27. skills_list - List compact metadata for installed skills.
+28. skills_history - Query immutable install, archive, restore, update, and delete history.
+29. skill_view - Load one skill's full instructions or one relative support file.
+30. skill_manage - Stage a local skill-package mutation in the persistent approval queue.
+31. skill_learn - Build standards-guided instructions for learning a reusable skill from supplied sources.
+32. skill_bundles - List, inspect, create, delete, or load a validated bundle of installed skills.
+33. skill_hub - Search, inspect, quarantine, scan, install, update, audit, uninstall, and manage skill sources/taps.
+34. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
+35. cronjob - Create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
+36. write_file/edit_file/delete_file/create_directory - Vault file operations via PowerShell CLI: write_file creates or overwrites a UTF-8 file, edit_file replaces the first occurrence of text, create_directory makes folders (with parents), and delete_file removes a single file and requires confirm=true. All paths stay inside the Obsidian vault.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -177,7 +179,7 @@ Rules:
 - Run knowledge_wiki(action='lint') when the user asks to check wiki health. Never delete or rewrite pages based only on lint output. Save a valuable answer as an analysis page only when the user asks or approves it.
 - For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and answer from those sources.
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
-- Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract to read/crawl/extract a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
+- Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract_pages to read a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Use x_action for explicit X requests and Agent-Reach/X capability questions. For "do you have Agent-Reach/X access" or similar status questions, call x_action with action='status' before answering. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
 - Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
 - Use llm_routing when the user asks to inspect or change model/provider routing, fallback models, credential rotation strategy, or credential pool health. Never accept or transmit raw API keys through chat; tell the user to configure credential secrets through the backend keyring/env path.
@@ -420,6 +422,7 @@ def core_tool_registry() -> ToolRegistry:
         context_mode,
         web_research,
         web_extract,
+        web_extract_pages,
         escalate_to_cloud,
         create_note,
         append_to_note,

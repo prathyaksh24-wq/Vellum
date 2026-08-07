@@ -24,7 +24,7 @@ def test_mcp_health_returns_all_servers(client: TestClient) -> None:
     body = r.json()
     servers = {s["name"] for s in body["mcp_servers"]}
     assert servers == {
-        "filesystem", "apify", "serpapi", "playwright", "github",
+        "apify", "serpapi", "exa", "brave", "playwright", "github",
         "obsidian", "context7", "gitmcp", "context_mode",
         "tavily", "firecrawl",
     }

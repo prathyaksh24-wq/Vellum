@@ -4437,8 +4437,8 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
     """Per-MCP-server configuration + reachability hint.
 
     Reports whether each server has its required env vars set. With
-    probe=true, performs side-effect-free command and HTTP
-    reachability checks. It does not invoke MCP tools."""
+    probe=true, performs side-effect-free command and HTTP reachability
+    checks. It does not invoke MCP tools."""
     settings = get_settings()
     servers: list[dict[str, Any]] = []
 
@@ -4468,6 +4468,18 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
         configured=bool(settings.serpapi_api_key) and settings.serpapi_base_url.startswith("http"),
         url_or_cmd=settings.serpapi_base_url,
         notes="Sports Google results plus YouTube search/video/transcript APIs; logs redacted search metadata.",
+    ))
+    servers.append(_entry(
+        "exa",
+        configured=bool(settings.exa_api_key) and settings.exa_base_url.startswith("http"),
+        url_or_cmd=settings.exa_base_url,
+        notes="Neural web search provider; second in web_search fallback chain; logs redacted search metadata.",
+    ))
+    servers.append(_entry(
+        "brave",
+        configured=bool(settings.brave_api_key) and settings.brave_base_url.startswith("http"),
+        url_or_cmd=settings.brave_base_url,
+        notes="Private index web search provider; third in web_search fallback chain; logs redacted search metadata.",
     ))
     servers.append(_entry(
         "tavily",

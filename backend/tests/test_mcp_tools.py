@@ -397,8 +397,226 @@ def test_browser_click_and_type_tools_call_playwright_actions(monkeypatch):
     assert type_result == "ok"
     assert calls == [
         {"action": "click", "ref": "e5", "element": "Search"},
-        {"action": "type", "ref": "e6", "element": "Search input", "text": "vellum", "submit": True},
+        {"action": "type", "ref": "e6", "element": "Search input", "text": "vellum", "submit": True, "clear": True},
     ]
+
+
+def _fake_browser_settings(**overrides):
+    values = {
+        "playwright_mcp_command": "npx",
+        "playwright_mcp_args": "-y @playwright/mcp@latest --isolated",
+        "playwright_mcp_allow_mutations": True,
+        "mcp_timeout_seconds": 300,
+        "browser_inactivity_timeout": 120,
+        "browser_cleanup_interval": 30,
+        "browser_headed": False,
+        "browser_snapshot_budget": 15000,
+        "browser_cache_dir": "data/browser-cache",
+        "browser_cdp_url": "",
+        "browser_dialog_policy": "must_respond",
+        "browser_dialog_timeout_s": 300,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_playwright_snapshot_passes_full_param(monkeypatch):
+    fake_session = FakeSession(tools=["browser_snapshot"], text="- link @e1 [text]")
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "snapshot", "full": True}))
+
+    assert "- link @e1" in result
+    assert fake_session.calls[0] == ("browser_snapshot", {"full": True})
+
+
+def test_playwright_snapshot_truncates_and_caches_full_tree(monkeypatch, tmp_path):
+    long_snapshot = ("- link @e1 [item]\n" * 400)
+    fake_session = FakeSession(tools=["browser_snapshot"], text=long_snapshot)
+    monkeypatch.setattr(
+        playwright_tools,
+        "get_settings",
+        lambda: _fake_browser_settings(browser_snapshot_budget=1000, browser_cache_dir=str(tmp_path)),
+    )
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "snapshot"}))
+
+    assert "truncated at 1000 characters" in result
+    assert "read_file" in result
+    cached = list((tmp_path / "web").glob("snapshot-*.txt"))
+    assert len(cached) == 1
+    assert cached[0].read_text(encoding="utf-8") == long_snapshot.strip()
+
+
+def test_playwright_scroll_maps_to_evaluate(monkeypatch):
+    fake_session = FakeSession(tools=["browser_evaluate"], text="undefined")
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "scroll", "direction": "up"}))
+
+    assert result == "Scrolled up."
+    assert fake_session.calls[0][0] == "browser_evaluate"
+    assert "scrollBy" in fake_session.calls[0][1]["function"]
+    assert "innerHeight" in fake_session.calls[0][1]["function"]
+
+
+def test_playwright_get_images_formats_result(monkeypatch):
+    fake_session = FakeSession(
+        tools=["browser_evaluate"],
+        text='[{"src": "https://example.com/a.png", "alt": "Alpha", "width": 100, "height": 50}]',
+    )
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "get_images"}))
+
+    assert result == "- Alpha: https://example.com/a.png (100x50)"
+
+
+def test_playwright_vision_saves_screenshot_to_cache(monkeypatch, tmp_path):
+    class ImageSession(FakeSession):
+        async def call_tool(self, name, params):
+            self.calls.append((name, params))
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="image", data="aGVsbG8=", mimeType="image/png")]
+            )
+
+    fake_session = ImageSession(tools=["browser_take_screenshot"])
+    monkeypatch.setattr(
+        playwright_tools,
+        "get_settings",
+        lambda: _fake_browser_settings(browser_cache_dir=str(tmp_path)),
+    )
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "vision"}))
+
+    assert "Screenshot saved to" in result
+    saved = list((tmp_path / "screenshots").glob("vision-*.png"))
+    assert len(saved) == 1
+    assert saved[0].read_bytes() == b"hello"
+
+
+def test_playwright_console_expression_routes_to_evaluate(monkeypatch):
+    fake_session = FakeSession(tools=["browser_evaluate"], text='"Example Title"')
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "console", "expression": "document.title"}))
+
+    assert result == '"Example Title"'
+    assert fake_session.calls[0] == ("browser_evaluate", {"function": "document.title"})
+
+
+def test_playwright_console_clear_retries_without_clear_param(monkeypatch):
+    class FlakyClearSession(FakeSession):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.failed = False
+
+        async def call_tool(self, name, params):
+            if name == "browser_console_messages" and params.get("clear") and not self.failed:
+                self.failed = True
+                raise RuntimeError("clear param not supported")
+            self.calls.append((name, params))
+            return SimpleNamespace(content=[SimpleNamespace(text="console ok")])
+
+    fake_session = FlakyClearSession(tools=["browser_console_messages"])
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "console", "clear": True}))
+
+    assert result == "console ok"
+    assert fake_session.calls == [("browser_console_messages", {"level": "info"})]
+
+
+def test_playwright_type_clears_field_before_typing(monkeypatch):
+    fake_session = FakeSession(tools=["browser_evaluate", "browser_type"], text="typed")
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda params: AsyncPairContext())
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "type", "ref": "e6", "text": "hi", "clear": True}))
+
+    assert result == "typed"
+    assert fake_session.calls[0] == (
+        "browser_evaluate",
+        {"function": "(el) => { el.value = ''; }", "target": "e6"},
+    )
+    assert fake_session.calls[1] == ("browser_type", {"target": "e6", "text": "hi"})
+
+
+def test_playwright_cdp_requires_configured_endpoint(monkeypatch):
+    monkeypatch.setattr(playwright_tools, "get_settings", lambda: _fake_browser_settings(browser_cdp_url=""))
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "cdp", "method": "Target.getTargets"}))
+
+    assert "BROWSER_CDP_URL" in result
+
+
+def test_playwright_dialog_without_cdp_reports_availability(monkeypatch):
+    monkeypatch.setattr(playwright_tools, "get_settings", lambda: _fake_browser_settings(browser_cdp_url=""))
+
+    result = asyncio.run(playwright_tools.run_tool_async({"action": "dialog", "dialog_action": "accept"}))
+
+    assert "no CDP endpoint" in result
+
+
+def test_browser_hermes_tools_call_playwright_actions(monkeypatch):
+    calls = []
+    monkeypatch.setattr(browser_tools, "playwright_run", lambda params: calls.append(params) or "ok")
+
+    results = [
+        browser_tools.browser_navigate.invoke({"url": "https://example.com"}),
+        browser_tools.browser_snapshot.invoke({"full": True}),
+        browser_tools.browser_press.invoke({"key": "Enter"}),
+        browser_tools.browser_back.invoke({}),
+        browser_tools.browser_scroll.invoke({"direction": "up"}),
+        browser_tools.browser_get_images.invoke({}),
+        browser_tools.browser_vision.invoke({}),
+        browser_tools.browser_console.invoke({"clear": True}),
+        browser_tools.browser_cdp.invoke({"method": "Target.getTargets"}),
+        browser_tools.browser_dialog.invoke({"action": "dismiss"}),
+    ]
+
+    assert results == ["ok"] * 10
+    assert calls == [
+        {"action": "navigate", "url": "https://example.com"},
+        {"action": "snapshot", "full": True},
+        {"action": "press_key", "key": "Enter"},
+        {"action": "back"},
+        {"action": "scroll", "direction": "up"},
+        {"action": "get_images"},
+        {"action": "vision"},
+        {"action": "console", "clear": True, "expression": ""},
+        {"action": "cdp", "method": "Target.getTargets", "params": "", "target_id": "", "frame_id": ""},
+        {"action": "dialog", "dialog_action": "dismiss", "prompt_text": ""},
+    ]
+
+
+def test_read_file_pages_browser_cache_snapshot(monkeypatch, tmp_path):
+    from agent.tools import filesystem as fs_tools
+
+    snapshot = tmp_path / "snapshot-test.txt"
+    snapshot.write_text("full snapshot body", encoding="utf-8")
+    monkeypatch.setattr(
+        fs_tools,
+        "get_settings",
+        lambda: SimpleNamespace(
+            browser_cache_dir=tmp_path,
+            obsidian_vault_path=tmp_path / "vault",
+        ),
+    )
+
+    result = fs_tools.read_file.invoke({"path": str(snapshot)})
+
+    assert result == "full snapshot body"
 
 
 def test_github_search_repositories_calls_remote_mcp(monkeypatch):
@@ -822,7 +1040,7 @@ def test_multiple_mcp_servers_can_run_concurrently(monkeypatch):
     results = asyncio.run(
         run_tools_async(
             [
-                McpToolRequest("tavily", {"query": "search the web"}),
+                McpToolRequest("tavily", {"query": "show files"}),
                 McpToolRequest("apify_amazon", {"query": "amazon notebook price"}),
                 McpToolRequest("playwright", {"action": "snapshot"}),
                 McpToolRequest("github", {"action": "search_repositories", "query": "vellum"}),
