@@ -3789,8 +3789,9 @@ async def _stream_agent_turn(
             stream_skill_usage.__exit__(None, None, None)
             await _repair_incomplete_tool_history(active_thread_id)
             _LOGGER.exception("Agent stream failed")
-            yield _response_error(response_id=response_id, thread_id=active_thread_id, message="Unreachable.")
-            yield _sse("error", {"error": "Unreachable."})
+            public_error = "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable."
+            yield _response_error(response_id=response_id, thread_id=active_thread_id, message=public_error)
+            yield _sse("error", {"error": public_error})
 
 
 async def _synthesize_audio_event(text: str):
