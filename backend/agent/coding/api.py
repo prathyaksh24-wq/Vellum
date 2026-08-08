@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -24,6 +25,9 @@ from agent.coding.models import (
     ReasoningEffort,
 )
 from agent.coding.service import CodingServiceError, CodingSessionService
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CodingSessionBody(BaseModel):
@@ -136,8 +140,9 @@ def create_coding_router(
             try:
                 async for event in stream:
                     yield sse(event)
-            except CodingServiceError as exc:
-                yield _error_event(str(exc))
+            except CodingServiceError:
+                _LOGGER.exception("Coding provider stream failed")
+                yield _error_event("Unreachable.")
 
         return StreamingResponse(events(), media_type="text/event-stream")
 

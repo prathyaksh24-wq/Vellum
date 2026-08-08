@@ -758,11 +758,22 @@ function sourceDomain(source){
   if(source && source.domain) return String(source.domain).replace(/^www\./,"");
   try{ return new URL(source.url).hostname.replace(/^www\./,""); }catch(e){ return ""; }
 }
+function normalizedSourceHost(value){
+  const text = String(value || "").trim();
+  if(!text) return "";
+  try{
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : "https://" + text);
+    return url.hostname.replace(/^www\./,"").toLowerCase();
+  }catch(e){ return ""; }
+}
+function isKnownSourceHost(host, base){
+  return host === base || host.endsWith("." + base);
+}
 function sourceIconClass(domain){
-  const d = (domain||"").toLowerCase();
-  if(d.indexOf("reddit.com")>=0) return " reddit";
-  if(d==="x.com" || d==="twitter.com") return " x";
-  if(d.indexOf("youtube.com")>=0 || d.indexOf("youtu.be")>=0) return " youtube";
+  const host = normalizedSourceHost(domain);
+  if(isKnownSourceHost(host, "reddit.com")) return " reddit";
+  if(host==="x.com" || host==="twitter.com") return " x";
+  if(isKnownSourceHost(host, "youtube.com") || host==="youtu.be") return " youtube";
   return "";
 }
 function sourceInitial(domain){

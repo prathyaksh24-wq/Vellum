@@ -45,7 +45,7 @@ class SkillBundleStore:
                 self.registry.view(member, include_unavailable=True)
             except KeyError as exc:
                 raise SkillBundleError(f"unknown skill in bundle: {member}") from exc
-        path = self.directory / f"{slug}.yaml"
+        path = self._bundle_path(slug)
         if path.exists():
             raise SkillBundleError(f"bundle already exists: {slug}")
         payload = {
@@ -63,7 +63,7 @@ class SkillBundleStore:
         return [self._read(path) for path in sorted(self.directory.glob("*.yaml"))]
 
     def show(self, name: str) -> dict[str, Any]:
-        path = self.directory / f"{self._slug(name)}.yaml"
+        path = self._bundle_path(name)
         if not path.is_file():
             raise SkillBundleError(f"bundle not found: {name}")
         return self._read(path)
@@ -94,13 +94,14 @@ class SkillBundleStore:
     def delete(self, name: str, *, confirm: bool = False) -> dict[str, Any]:
         if not confirm:
             raise SkillBundleError("bundle mutation requires confirmation")
-        path = self.directory / f"{self._slug(name)}.yaml"
+        path = self._bundle_path(name)
         if not path.is_file():
             raise SkillBundleError(f"bundle not found: {name}")
         path.unlink()
         return {"ok": True, "action": "delete", "name": self._slug(name)}
 
     def _read(self, path: Path) -> dict[str, Any]:
+        path = self._safe_path(path)
         loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if not isinstance(loaded, dict):
             raise SkillBundleError(f"invalid bundle mapping: {path.stem}")
@@ -115,10 +116,21 @@ class SkillBundleStore:
         }
 
     def _write(self, path: Path, payload: dict[str, Any]) -> None:
+        path = self._safe_path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".yaml.tmp")
         temporary.write_text(yaml.safe_dump(payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
         os.replace(temporary, path)
+
+    def _bundle_path(self, name: str) -> Path:
+        return self._safe_path(self.directory / f"{self._slug(name)}.yaml")
+
+    def _safe_path(self, path: Path) -> Path:
+        root = self.directory.resolve()
+        resolved = path.resolve()
+        if not resolved.is_relative_to(root) or resolved.suffix.casefold() != ".yaml":
+            raise SkillBundleError("bundle path is invalid")
+        return resolved
 
     @staticmethod
     def _slug(value: str) -> str:

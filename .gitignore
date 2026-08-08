@@ -8,10 +8,22 @@ __pycache__/
 data/memory/*.db
 data/memory/*.db-*
 data/memory/audit_log.jsonl
+data/memory/*.json
+data/memory/*.jsonl
+data/memory/MEMORY.md
+data/memory/USER.md
 data/llm-routing/*.db
 data/llm-routing/*.db-*
 data/skills/*.db
 data/skills/*.db-*
+data/automations.json
+data/privacy/
+data/apify-budget.json
+data/oauth-flows/
+data/computer-use/events.jsonl
+data/computer-use/mode.json
+data/computer-use/permissions.json
+data/computer-use/screenshots/
 data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
@@ -26,6 +38,8 @@ data/ui/
 data/knowledge/
 backend/data/
 backend/.test-data/
+backend/.skills/
+backend/*.egg-info/
 backend/*.log
 design/Velllum/uploads/*.log
 ui-dist/
@@ -39,12 +53,16 @@ ui-dist/
 .skills/.staging/
 .skills/.curator_state.json
 .skills/.curator_backups/
+.skills/.hub/audit.log
+.skills/.hub/lock.json
+.skills/pending/receipts/
 node_modules/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml
 desktop/src-tauri/target/
 .playwright-mcp/
 .codex-activity-qa-profile/
+.test-data/
 .DS_Store
 
 # Personal data — never commit

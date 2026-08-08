@@ -79,6 +79,16 @@ class SkillRegistry:
         self._packages()
         return list(self._diagnostics)
 
+    def public_diagnostics(self) -> list[dict[str, str]]:
+        self._packages()
+        return [
+            {
+                "path": Path(item["path"]).name or "skill-package",
+                "error": "Skill package unavailable.",
+            }
+            for item in self._diagnostics
+        ]
+
     def _packages(self) -> dict[str, SkillPackage]:
         self._diagnostics = []
         packages: dict[str, SkillPackage] = {}

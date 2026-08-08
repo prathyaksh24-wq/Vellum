@@ -58,8 +58,13 @@ class SkillPackageParser:
 
     def read_support_file(self, root: str | Path, relative_path: str) -> str:
         package_root = Path(root).resolve()
-        target = (package_root / relative_path).resolve()
-        if target == package_root or package_root not in target.parents:
+        if "\x00" in relative_path:
+            raise SkillPackageError("support file path is invalid")
+        requested = Path(relative_path)
+        if requested.is_absolute() or requested.anchor or not requested.parts or any(part in {"", ".", ".."} for part in requested.parts):
+            raise SkillPackageError("support file must stay inside the skill package")
+        target = (package_root / requested).resolve()
+        if not target.is_relative_to(package_root):
             raise SkillPackageError("support file must stay inside the skill package")
         if target.name == "SKILL.md":
             raise SkillPackageError("use package parsing to read SKILL.md")

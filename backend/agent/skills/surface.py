@@ -63,7 +63,7 @@ class SkillSurfaceService:
             "curator": self.curator.status(),
             "pending_writes": self.mutations.list_pending(),
             "write_approval": self.mutations.write_approval,
-            "external_diagnostics": self.registry.diagnostics(),
+            "external_diagnostics": self.registry.public_diagnostics(),
         }
 
     def detail(self, name: str, *, path: str = "") -> dict[str, Any]:

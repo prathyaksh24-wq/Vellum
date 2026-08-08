@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import os
 import secrets
 from typing import Protocol
@@ -59,13 +58,21 @@ class SecretResolver:
             self._fingerprint_salt = salt
             return salt
         except Exception:
-            self._fingerprint_salt = hashlib.sha256(
-                f"{self.service}:vellum-fingerprint-fallback-v1".encode("utf-8")
+            self._fingerprint_salt = hashlib.blake2b(
+                f"{self.service}:vellum-fingerprint-fallback-v1".encode("utf-8"),
+                digest_size=32,
             ).digest()
             return self._fingerprint_salt
 
     def fingerprint(self, secret: str) -> str:
-        digest = hmac.new(self._salt(), secret.encode("utf-8"), hashlib.sha256).hexdigest()
+        """Return a stable keyed fingerprint, never a password hash or plaintext."""
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            secret.encode("utf-8"),
+            self._salt(),
+            120_000,
+            dklen=32,
+        ).hex()
         return f"hmac-sha256:{digest}"
 
     def reconcile_environment(self, provider_variables: dict[str, str]) -> None:

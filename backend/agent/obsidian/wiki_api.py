@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -15,6 +16,9 @@ from agent.obsidian.vault import ObsidianVault
 from agent.obsidian.conversation_context import is_sensitive_context
 from agent.config import get_settings
 from agent.knowledge.api import router as knowledge_core_router
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
@@ -81,7 +85,8 @@ async def knowledge_status() -> dict[str, Any]:
 
             status["personal_intelligence"] = await asyncio.to_thread(get_knowledge_core().status)
         except Exception as exc:
-            status["personal_intelligence"] = {"ready": False, "error": str(exc)[:300]}
+            _LOGGER.exception("Personal intelligence status check failed")
+            status["personal_intelligence"] = {"ready": False, "error": "unavailable"}
         return status
     except KnowledgeWikiError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
