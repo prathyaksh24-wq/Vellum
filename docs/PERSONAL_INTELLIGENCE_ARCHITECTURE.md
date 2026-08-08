@@ -97,12 +97,32 @@ retrieval evaluations, privacy checks, and count reconciliation pass.
 The bootstrap API previews by default. Applying it is explicit and repeatable.
 
 - Conversations become private-local source records with content-addressed versions.
+- Memory Orchestrator `memory_items` become private-local source records. Saved,
+  pending, and archived status stays in source metadata; the Memory Orchestrator
+  remains the current owner.
 - `Library/` notes become raw source records according to folder policy.
 - `Knowledge/` pages are imported as legacy maintained evidence and registered as projections.
 - `Agent/Conversations` and `Agent/Memories` are registered as projections only.
+- Archived conversation projections under `Archive/Agent/Conversations` and
+  `Archive/Legacy Agent Logs` are registered as archived projections only.
+- Memory summaries and generated `data/memory/USER.md` / `MEMORY.md` snapshots
+  are registered as projections, not independent source evidence.
+- Existing FTS5 rows and Chroma identifiers are registered by logical reference,
+  content hash, and lineage metadata. Indexed text and embeddings are not copied
+  into the Knowledge Core by this adapter.
 - Notes marked `do_not_reingest` never become independent evidence.
 
-No adapter deletes, renames, or rewrites existing files.
+All existing stores are opened read-only. The `apply` operation writes only to
+the shadow Knowledge Core. No adapter deletes, renames, or rewrites existing
+files or retrieval indexes. Every generated projection is marked
+`do_not_reingest: true` so a later vault scan cannot turn it into duplicate
+evidence.
+
+The CLI supports explicit opt-out for each source group:
+
+```powershell
+.venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --no-memories --no-archives --no-retrieval-indexes
+```
 
 The YouTube connector keeps provider boundaries additive: official OAuth owns
 channel identity and subscription snapshots, Google Takeout owns historical

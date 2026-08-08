@@ -19,6 +19,7 @@ def build_knowledge_core() -> KnowledgeCore:
         KnowledgeStore(settings.knowledge_core_db_path, settings.knowledge_blob_path),
         conversations_path=REPO_ROOT / "data" / "ui" / "conversations.json",
         vault_root=settings.obsidian_vault_path,
+        vector_path=settings.chroma_path,
         shadow_write=settings.knowledge_shadow_write,
         read_enabled=settings.knowledge_read_enabled,
         tool_learning_enabled=settings.knowledge_tool_observation_learning,

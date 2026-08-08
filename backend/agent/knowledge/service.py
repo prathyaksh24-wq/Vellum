@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent.knowledge.adapters import ConversationAdapter, ObsidianAdapter
+from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
@@ -26,6 +26,11 @@ class KnowledgeCore:
         *,
         conversations_path: Path,
         vault_root: Path,
+        memory_db_path: Path | None = None,
+        fts5_db_path: Path | None = None,
+        memory_snapshot_dir: Path | None = None,
+        vector_path: Path | None = None,
+        vector_reader: Any | None = None,
         shadow_write: bool = True,
         read_enabled: bool = False,
         tool_learning_enabled: bool = False,
@@ -33,6 +38,14 @@ class KnowledgeCore:
         self.store = store
         self.conversations_path = Path(conversations_path)
         self.vault_root = Path(vault_root)
+        data_root = self.conversations_path.parent.parent
+        self.memory_db_path = Path(memory_db_path) if memory_db_path is not None else data_root / "memory" / "sessions.db"
+        self.fts5_db_path = Path(fts5_db_path) if fts5_db_path is not None else data_root / "memory" / "fts5.db"
+        self.memory_snapshot_dir = (
+            Path(memory_snapshot_dir) if memory_snapshot_dir is not None else self.memory_db_path.parent
+        )
+        self.vector_path = Path(vector_path) if vector_path is not None else None
+        self.vector_reader = vector_reader
         self.shadow_write = bool(shadow_write)
         self.read_enabled = bool(read_enabled)
         self.tool_learning_enabled = bool(tool_learning_enabled)
@@ -161,8 +174,18 @@ class KnowledgeCore:
         )
 
     def bootstrap(self, request: BootstrapRequest) -> dict[str, Any]:
-        conversation_stats = {"scanned": 0, "imported": 0, "versions": 0, "projections": 0, "skipped": 0, "errors": []}
+        conversation_stats = {
+            "scanned": 0,
+            "imported": 0,
+            "versions": 0,
+            "projections": 0,
+            "archived": 0,
+            "skipped": 0,
+            "errors": [],
+        }
+        memory_stats = dict(conversation_stats)
         vault_stats = dict(conversation_stats)
+        index_stats = dict(conversation_stats)
         if request.conversations:
             adapter = ConversationAdapter(self.store)
             conversation_stats = adapter.import_records(
@@ -170,18 +193,36 @@ class KnowledgeCore:
                 apply=request.apply,
                 limit=request.limit,
             ).as_dict()
-        if request.vault_library or request.knowledge_wiki or request.agent_projections:
+        if request.memories:
+            adapter = MemoryAdapter(
+                self.store,
+                self.memory_db_path,
+                snapshot_dir=self.memory_snapshot_dir,
+            )
+            memory_stats = adapter.import_records(apply=request.apply, limit=request.limit).as_dict()
+        if request.vault_library or request.knowledge_wiki or request.agent_projections or request.archives:
             adapter = ObsidianAdapter(self.store, self.vault_root)
             paths = adapter.candidate_paths(
                 library=request.vault_library,
                 knowledge_wiki=request.knowledge_wiki,
                 agent_projections=request.agent_projections,
+                archives=request.archives,
             )
             vault_stats = adapter.import_paths(paths, apply=request.apply, limit=request.limit).as_dict()
+        if request.retrieval_indexes:
+            adapter = RetrievalIndexAdapter(
+                self.store,
+                fts5_path=self.fts5_db_path,
+                vector_path=self.vector_path,
+                vector_reader=self.vector_reader,
+            )
+            index_stats = adapter.import_records(apply=request.apply, limit=request.limit).as_dict()
         return {
             "mode": "apply" if request.apply else "preview",
             "conversations": conversation_stats,
+            "memories": memory_stats,
             "vault": vault_stats,
+            "retrieval_indexes": index_stats,
             "status": self.store.status() if request.apply else None,
         }
 
