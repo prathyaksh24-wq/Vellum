@@ -3,7 +3,6 @@
 Vellum is a privacy-first, local-first personal agent workspace. It combines a FastAPI agent backend, a Vite web interface, a Tauri desktop shell, Obsidian-backed memory and knowledge, model routing, tools, plugins, coding mode, computer-use foundations, and a Hermes-compatible skills system.
 
 ![CI](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/ci.yml/badge.svg)
-![CodeQL](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/codeql.yml/badge.svg)
 ![Release](https://github.com/prathyaksh24-wq/Vellum/actions/workflows/release.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-proprietary-blue)
 
@@ -14,7 +13,7 @@ Vellum is a privacy-first, local-first personal agent workspace. It combines a F
 
 Vellum is a development-stage personal agent runtime. The current implementation is focused on making the core loops reliable: chat, memory, model routing, retrieval, skills, plugins, coding workflows, knowledge management, and local privacy boundaries.
 
-There are no tagged releases yet. The next release should be treated as the first documented alpha milestone.
+The repository currently has the alpha tag `v0.1.0-alpha.1`. It is a development milestone, not a production release.
 
 ## Principles
 
@@ -121,7 +120,7 @@ cd backend
 
 ## Continuous Integration
 
-Every pull request and push to `main` runs the following checks (`.github/workflows/ci.yml`), and merges to `main` additionally trigger CodeQL and release automation:
+Every pull request and push to `main` runs the checks in [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
 
 - **Backend tests** — full pytest suite on Python 3.13.
 - **Frontend build + tests** — production Vite build and the Vitest suite.
@@ -129,10 +128,10 @@ Every pull request and push to `main` runs the following checks (`.github/workfl
 - **Python dependency audit (pip-audit)** — fails on known-vulnerable installed packages.
 - **Frontend dependency audit (npm audit)** — fails on high/critical severity advisories.
 - **Dependency review** — checks every PR's dependency changes against GitHub advisories.
-- **CodeQL code scanning** (`.github/workflows/codeql.yml`) — security-extended queries on Python and JavaScript, plus a weekly scheduled run.
-- **Release automation** (`.github/workflows/release.yml`) — [release-please](https://github.com/googleapis/release-please) maintains `CHANGELOG.md`, bumps `backend/pyproject.toml`, tags releases (`vX.Y.Z`), and publishes GitHub Releases from conventional-commit messages (`feat:`, `fix:`, `chore:`, …).
+- **CodeQL code scanning** — GitHub's repository-level default setup scans the supported languages without a duplicate workflow in this repository.
+- **Release preparation** — [release-please](https://github.com/googleapis/release-please) is manual through [`.github/workflows/release.yml`](.github/workflows/release.yml) until the repository Actions permission and release token are configured.
 
-Dependency updates arrive via [Dependabot](.github/dependabot.yml) as grouped weekly PRs for Python, npm, and GitHub Actions.
+Dependency alerts and update PRs are managed through GitHub repository settings. Dependabot is not configured as a second local workflow in this repository.
 
 ## Configuration
 
@@ -178,7 +177,7 @@ Vellum treats privacy as part of the runtime boundary:
 ## Known Limitations
 
 - Vellum is not production-ready.
-- The repository has no formal tagged release history yet.
+- The repository has only an alpha tag and no production release history.
 - Some older documentation still exists as operational reference and may include historical design notes.
 - The desktop shell, voice mode, and computer-use flows are still alpha surfaces.
 - External connectors require local credentials and may be unavailable without provider setup.

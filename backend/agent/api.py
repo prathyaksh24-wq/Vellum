@@ -9,7 +9,9 @@ from datetime import datetime, timedelta, timezone
 import importlib.util
 import inspect
 import hashlib
+import html
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -25,6 +27,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import httpx
+
+_LOGGER = logging.getLogger(__name__)
 
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -670,8 +674,9 @@ def _project_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
         )
         entry = (manifest.get("entries") or [{}])[0]
         return {"ok": True, "action": entry.get("action"), "path": entry.get("path")}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)[:500]}
+    except Exception:
+        _LOGGER.exception("Conversation projection failed")
+        return {"ok": False, "error": "unavailable"}
 
 
 def _archive_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
@@ -683,8 +688,9 @@ def _archive_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
             dry_run=False,
         )
         return {"ok": True, **result}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)[:500]}
+    except Exception:
+        _LOGGER.exception("Conversation archive failed")
+        return {"ok": False, "error": "unavailable"}
 
 
 def _conversation_timestamp() -> str:
@@ -909,7 +915,8 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
     if provider not in {"xai", "xapi"}:
         raise HTTPException(status_code=404, detail="Unknown OAuth provider.")
     if error:
-        return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{error_description or error}</p></body></html>", status_code=400)
+        detail = html.escape(error_description or error, quote=True)
+        return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{detail}</p></body></html>", status_code=400)
     flow = _load_x_oauth_flow(provider)
     if not flow or state != flow.get("state"):
         return HTMLResponse("<html><body><h1>X OAuth failed</h1><p>State mismatch. Start the connection again from Vellum.</p></body></html>", status_code=400)
@@ -942,8 +949,12 @@ async def x_oauth_callback(provider: str, code: str = "", state: str = "", error
                 timeout_secs=60,
             )
             await asyncio.to_thread(mod.save_oauth_file, _x_oauth_file("xapi"), client_id=flow["client_id"], tokens=tokens)
-    except Exception as exc:
-        return HTMLResponse(f"<html><body><h1>X OAuth failed</h1><p>{str(exc)}</p></body></html>", status_code=500)
+    except Exception:
+        _LOGGER.exception("X OAuth callback failed")
+        return HTMLResponse(
+            "<html><body><h1>X OAuth failed</h1><p>Connection failed. Check the Vellum logs.</p></body></html>",
+            status_code=500,
+        )
     finally:
         _clear_x_oauth_flow(provider)
 
@@ -1634,8 +1645,9 @@ def _vector_health() -> dict[str, Any]:
         store = get_vector_store()
         collections = store.collection_names()
         return {"ok": True, "mode": mode, "location": location, "collections": collections}
-    except Exception as exc:
-        return {"ok": False, "mode": mode, "location": location, "error": str(exc)}
+    except Exception:
+        _LOGGER.exception("Vector health check failed")
+        return {"ok": False, "mode": mode, "location": location, "error": "unavailable"}
 
 
 def _embedding_health() -> dict[str, Any]:
@@ -1643,8 +1655,9 @@ def _embedding_health() -> dict[str, Any]:
         import sentence_transformers  # noqa: F401
 
         return {"ok": True, "provider": "sentence-transformers"}
-    except Exception as exc:
-        return {"ok": False, "provider": "sentence-transformers", "error": str(exc)}
+    except Exception:
+        _LOGGER.exception("Embedding health check failed")
+        return {"ok": False, "provider": "sentence-transformers", "error": "unavailable"}
 
 
 def _coding_project_roots() -> list[Path]:
@@ -1921,7 +1934,7 @@ async def attach_conversation_context(conversation_id: str, request: Conversatio
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Vault or wiki reference was not found.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise HTTPException(status_code=422, detail="Invalid context attachment.") from exc
     return {"attachment": attachment}
 
 
@@ -1946,7 +1959,8 @@ async def mutate_skill(payload: dict[str, Any]) -> dict[str, Any]:
             **{key: value for key, value in payload.items() if key not in {"action", "name", "confirm"}},
         )
     except (SkillMutationError, ValueError, OSError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _LOGGER.exception("Skill mutation failed")
+        raise HTTPException(status_code=400, detail="Skill operation could not be completed.") from exc
     return {"ok": True, "result": result, "catalog": _skill_surface().catalog()}
 
 
@@ -2354,8 +2368,11 @@ async def skills_v2_usage_feedback(event_id: str, request: UsageFeedbackRequest)
 async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
     try:
         return _skill_surface().detail(skill_name, path=path)
-    except (KeyError, ValueError, OSError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Skill not found.") from exc
+    except (ValueError, OSError) as exc:
+        _LOGGER.exception("Skill detail lookup failed")
+        raise HTTPException(status_code=404, detail="Skill detail unavailable.") from exc
 
 
 @router.get("/subagents")
@@ -2387,7 +2404,7 @@ async def list_subagents() -> dict[str, Any]:
 async def list_agent_profiles() -> dict[str, Any]:
     return {
         "profiles": _profile_registry.public_summaries(),
-        "diagnostics": _profile_registry.diagnostics(),
+        "diagnostics": _profile_registry.public_diagnostics(),
     }
 
 
@@ -3771,8 +3788,10 @@ async def _stream_agent_turn(
             stream_skill_usage.finish("failed", tool_count=len(set(tool_names)))
             stream_skill_usage.__exit__(None, None, None)
             await _repair_incomplete_tool_history(active_thread_id)
-            yield _response_error(response_id=response_id, thread_id=active_thread_id, message=str(exc))
-            yield _sse("error", {"error": str(exc)})
+            _LOGGER.exception("Agent stream failed")
+            public_error = "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable."
+            yield _response_error(response_id=response_id, thread_id=active_thread_id, message=public_error)
+            yield _sse("error", {"error": public_error})
 
 
 async def _synthesize_audio_event(text: str):
@@ -4092,9 +4111,11 @@ async def _read_voice_transcript(audio: UploadFile) -> VoiceTranscribeResponse:
         stt = get_stt_engine()
         transcript = await asyncio.to_thread(stt.transcribe_wav, audio_bytes)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        _LOGGER.exception("Voice transcription engine failed")
+        raise HTTPException(status_code=503, detail="Voice transcription is unavailable.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _LOGGER.exception("Voice transcription rejected audio")
+        raise HTTPException(status_code=400, detail="Audio could not be transcribed.") from exc
     transcript = " ".join((transcript or "").split())
     if not transcript:
         raise HTTPException(status_code=400, detail="No speech detected.")
@@ -4152,9 +4173,11 @@ async def voice_speak(request: VoiceSpeakRequest) -> Response:
     try:
         wav = await asyncio.to_thread(get_tts_engine().synthesize_wav, request.text)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        _LOGGER.exception("Voice synthesis engine failed")
+        raise HTTPException(status_code=503, detail="Voice synthesis is unavailable.") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        _LOGGER.exception("Voice synthesis rejected text")
+        raise HTTPException(status_code=400, detail="Audio could not be synthesized.") from exc
     return Response(content=wav, media_type="audio/wav")
 
 
@@ -4584,7 +4607,8 @@ async def list_plugins() -> dict[str, Any]:
         connector_error = ""
     except PluginMcpRuntimeError as exc:
         declared_connectors = {}
-        connector_error = str(exc)
+        _LOGGER.exception("Plugin connector discovery failed")
+        connector_error = "unavailable"
     for plugin in plugins:
         plugin_id = str(plugin.get("id") or "")
         enriched = []

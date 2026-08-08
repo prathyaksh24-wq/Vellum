@@ -25,11 +25,6 @@ class ScheduleParseError(ValueError):
 
 
 _RELATIVE_RE = re.compile(r"^\s*(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\s*$", re.I)
-_INTERVAL_RE = re.compile(
-    r"^\s*every\s+(\d+)\s*(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|week|weeks)\s*"
-    r"(?:\s+at\s+(\d{1,2}):(\d{2})\s*)?$",
-    re.I,
-)
 
 _UNIT_SECONDS = {
     "m": 60,
@@ -108,17 +103,58 @@ def _parse_relative(expression: str) -> ScheduleRecord:
 
 
 def _parse_interval(expression: str) -> ScheduleRecord:
-    match = _INTERVAL_RE.match(expression)
-    if match is None:
+    tokens = expression.strip()[5:].strip().split()
+    if not tokens:
         raise ScheduleParseError(
             f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
         )
-    value = int(match.group(1))
-    unit = _canonical_unit(match.group(2))
+
+    quantity = tokens.pop(0)
+    if quantity.isdecimal():
+        value_text = quantity
+        if not tokens:
+            raise ScheduleParseError(
+                f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
+            )
+        unit_text = tokens.pop(0)
+    else:
+        split_at = next((index for index, char in enumerate(quantity) if not char.isdecimal()), 0)
+        value_text = quantity[:split_at]
+        unit_text = quantity[split_at:]
+        if not value_text or not unit_text:
+            raise ScheduleParseError(
+                f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
+            )
+    if not value_text.isdecimal() or len(value_text) > 9:
+        raise ScheduleParseError(
+            f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
+        )
+    value = int(value_text)
+    try:
+        unit = _canonical_unit(unit_text)
+        seconds = value * _unit_seconds(unit_text)
+    except (IndexError, KeyError):
+        raise ScheduleParseError(
+            f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
+        ) from None
+
     at_time: str | None = None
-    if match.group(3) is not None:
-        hour = int(match.group(3))
-        minute = int(match.group(4))
+    if tokens:
+        if len(tokens) != 2 or tokens[0].casefold() != "at":
+            raise ScheduleParseError(
+                f"invalid interval {expression!r}; expected e.g. 'every 2h', 'every 1d at 09:00'"
+            )
+        clock = tokens[1]
+        clock_parts = clock.split(":")
+        if (
+            len(clock_parts) != 2
+            or len(clock_parts[0]) > 2
+            or len(clock_parts[1]) != 2
+            or not all(part.isdecimal() for part in clock_parts)
+        ):
+            raise ScheduleParseError(f"invalid time-of-day {clock!r} in {expression!r}")
+        hour = int(clock_parts[0])
+        minute = int(clock_parts[1])
         if hour > 23 or minute > 59:
             raise ScheduleParseError(f"invalid time-of-day {hour:02d}:{minute:02d} in {expression!r}")
         at_time = f"{hour:02d}:{minute:02d}"
@@ -129,7 +165,7 @@ def _parse_interval(expression: str) -> ScheduleRecord:
         expression=expression.strip(),
         value=value,
         unit=unit,
-        seconds=value * _unit_seconds(match.group(2)),
+        seconds=seconds,
         at_time=at_time,
     )
 
@@ -153,7 +189,7 @@ def parse_schedule(expression: str) -> ScheduleRecord:
     text = expression.strip()
     if not text:
         raise ScheduleParseError("schedule expression cannot be empty")
-    if text.lower().startswith("every"):
+    if text.casefold().startswith("every "):
         return _parse_interval(text)
     if _looks_like_cron(text):
         return _parse_cron(text)

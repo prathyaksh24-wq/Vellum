@@ -595,7 +595,10 @@ class SkillMutationCoordinator:
         for record in self.list_pending():
             if record.get("idempotency_key") == key:
                 return record
-        receipt_path = self.receipts_dir / f"{hashlib.sha256(key.encode('utf-8')).hexdigest()}.json"
+        receipt_path = self._safe_record_path(
+            self.receipts_dir,
+            hashlib.sha256(key.encode("utf-8")).hexdigest(),
+        )
         if receipt_path.is_file():
             try:
                 return json.loads(receipt_path.read_text(encoding="utf-8"))["result"]
@@ -625,7 +628,7 @@ class SkillMutationCoordinator:
 
     def _read_receipt(self, identifier: str) -> dict[str, Any] | None:
         self._validate_identifier(identifier)
-        path = self.receipts_dir / f"{identifier}.json"
+        path = self._safe_record_path(self.receipts_dir, identifier)
         if not path.is_file():
             return None
         return json.loads(path.read_text(encoding="utf-8"))
@@ -650,12 +653,23 @@ class SkillMutationCoordinator:
 
     def _pending_path(self, identifier: str) -> Path:
         self._validate_identifier(identifier)
-        return self.pending_dir / f"{identifier}.json"
+        return self._safe_record_path(self.pending_dir, identifier)
 
     @staticmethod
     def _validate_identifier(identifier: str) -> None:
-        if not identifier or any(character not in "0123456789abcdef" for character in identifier.casefold()):
+        if (
+            len(identifier) not in {32, 64}
+            or any(character not in "0123456789abcdef" for character in identifier.casefold())
+        ):
             raise SkillMutationError("invalid pending mutation id")
+
+    @staticmethod
+    def _safe_record_path(directory: Path, identifier: str) -> Path:
+        root_text = os.path.realpath(os.fspath(directory))
+        path_text = os.path.realpath(os.path.join(root_text, f"{identifier}.json"))
+        if path_text != root_text and not path_text.startswith(root_text + os.sep):
+            raise SkillMutationError("record path is invalid")
+        return Path(path_text)
 
     @staticmethod
     def _atomic_json(path: Path, value: dict[str, Any]) -> None:

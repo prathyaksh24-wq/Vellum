@@ -16,6 +16,46 @@ from agent.skills.privacy import SkillPrivacyGate
 _CURRENT_SCOPE: ContextVar["SkillUsageScope | None"] = ContextVar("skill_usage_scope", default=None)
 
 
+def _decrement_aggregate_sql(outcome: str) -> str:
+    if outcome == "completed":
+        return "UPDATE usage_aggregates SET completed=MAX(completed-1,0) WHERE skill_name=?"
+    if outcome == "failed":
+        return "UPDATE usage_aggregates SET failed=MAX(failed-1,0) WHERE skill_name=?"
+    if outcome == "corrected":
+        return "UPDATE usage_aggregates SET corrected=MAX(corrected-1,0) WHERE skill_name=?"
+    if outcome == "cancelled":
+        return "UPDATE usage_aggregates SET cancelled=MAX(cancelled-1,0) WHERE skill_name=?"
+    raise ValueError(f"invalid tracked skill usage outcome: {outcome}")
+
+
+def _increment_aggregate_sql(outcome: str) -> str:
+    if outcome == "completed":
+        return (
+            "INSERT INTO usage_aggregates(skill_name,total_uses,completed,total_latency_ms,total_tools) VALUES(?,?,1,?,?) "
+            "ON CONFLICT(skill_name) DO UPDATE SET total_uses=total_uses+?,completed=completed+1,"
+            "total_latency_ms=total_latency_ms+?,total_tools=total_tools+?"
+        )
+    if outcome == "failed":
+        return (
+            "INSERT INTO usage_aggregates(skill_name,total_uses,failed,total_latency_ms,total_tools) VALUES(?,?,1,?,?) "
+            "ON CONFLICT(skill_name) DO UPDATE SET total_uses=total_uses+?,failed=failed+1,"
+            "total_latency_ms=total_latency_ms+?,total_tools=total_tools+?"
+        )
+    if outcome == "corrected":
+        return (
+            "INSERT INTO usage_aggregates(skill_name,total_uses,corrected,total_latency_ms,total_tools) VALUES(?,?,1,?,?) "
+            "ON CONFLICT(skill_name) DO UPDATE SET total_uses=total_uses+?,corrected=corrected+1,"
+            "total_latency_ms=total_latency_ms+?,total_tools=total_tools+?"
+        )
+    if outcome == "cancelled":
+        return (
+            "INSERT INTO usage_aggregates(skill_name,total_uses,cancelled,total_latency_ms,total_tools) VALUES(?,?,1,?,?) "
+            "ON CONFLICT(skill_name) DO UPDATE SET total_uses=total_uses+?,cancelled=cancelled+1,"
+            "total_latency_ms=total_latency_ms+?,total_tools=total_tools+?"
+        )
+    raise ValueError(f"invalid tracked skill usage outcome: {outcome}")
+
+
 class SkillUsageIntelligence:
     OUTCOMES = {"completed", "failed", "corrected", "cancelled", "unknown"}
 
@@ -49,12 +89,10 @@ class SkillUsageIntelligence:
             tracked = {"completed", "failed", "corrected", "cancelled"}
             if previous != normalized and normalized in tracked:
                 if previous in tracked:
-                    connection.execute(f"UPDATE usage_aggregates SET {previous}=MAX({previous}-1,0) WHERE skill_name=?", (row["skill_name"],))
-                column = normalized
+                    connection.execute(_decrement_aggregate_sql(previous), (row["skill_name"],))
                 use_increment = 1 if previous == "unknown" else 0
                 connection.execute(
-                    f"INSERT INTO usage_aggregates(skill_name,total_uses,{column},total_latency_ms,total_tools) VALUES(?,?,1,?,?) "
-                    f"ON CONFLICT(skill_name) DO UPDATE SET total_uses=total_uses+?,{column}={column}+1,total_latency_ms=total_latency_ms+?,total_tools=total_tools+?",
+                    _increment_aggregate_sql(normalized),
                     (row["skill_name"], use_increment, max(latency_ms, 0), max(tool_count, 0), use_increment,
                      max(latency_ms, 0) if previous == "unknown" else 0, max(tool_count, 0) if previous == "unknown" else 0),
                 )

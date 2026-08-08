@@ -76,6 +76,16 @@ class ProfileRegistry:
     def diagnostics(self) -> list[dict[str, str]]:
         return list(self._diagnostics)
 
+    def public_diagnostics(self) -> list[dict[str, str]]:
+        return [
+            {
+                "profile_id": item["profile_id"],
+                "status": item["status"],
+                "detail": "Profile configuration unavailable.",
+            }
+            for item in self._diagnostics
+        ]
+
     def public_summaries(self) -> list[dict[str, Any]]:
         summaries = []
         for profile in self.list():
