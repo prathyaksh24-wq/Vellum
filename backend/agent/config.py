@@ -106,11 +106,16 @@ class Settings(BaseSettings):
         default=(
             "google/gemma-4-26b-a4b-it,google/gemma-4-31b-it,"
             "google/gemma-3-12b-it,qwen/qwen3.5-35b-a3b,minimax/minimax-m2.7,"
+            "anthropic/claude-opus-5,anthropic/claude-opus-5-fast,"
             "anthropic/claude-opus-4.7,anthropic/claude-opus-4.6,"
-            "anthropic/claude-sonnet-4.5,openai/gpt-5.5,"
-            "deepseek/deepseek-v4-pro,deepseek/deepseek-v4-flash,"
+            "anthropic/claude-sonnet-4.5,openai/gpt-5.6-sol-pro,"
+            "openai/gpt-5.6-sol,openai/gpt-5.6-terra-pro,"
+            "openai/gpt-5.6-terra,openai/gpt-5.6-luna-pro,"
+            "openai/gpt-5.6-luna,openai/gpt-5.5,"
+            "deepseek/deepseek-v4-pro,deepseek/deepseek-v4-flash-0731,"
+            "deepseek/deepseek-v4-flash,"
             "google/gemini-3-flash-preview,google/gemini-2.5-pro,"
-            "moonshotai/kimi-k2.6"
+            "moonshotai/kimi-k3,moonshotai/kimi-k2.6"
         ),
         alias="OPENROUTER_MODEL_ALLOWLIST",
     )
@@ -205,6 +210,7 @@ class Settings(BaseSettings):
     thread_id: str = Field(default="default", alias="THREAD_ID")
     cloud_escalation_model: str = Field(default="google/gemini-2.5-pro", alias="CLOUD_ESCALATION_MODEL")
     cloud_escalation_enabled: bool = Field(default=True, alias="CLOUD_ESCALATION_ENABLED")
+    llm_request_timeout_seconds: float = Field(default=30.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
     llm_stream_timeout_seconds: float = Field(default=90.0, alias="LLM_STREAM_TIMEOUT_SECONDS")
     honcho_base_url: str = Field(default="http://localhost:8001", alias="HONCHO_BASE_URL")
     honcho_app_id: str = Field(default="vellum", alias="HONCHO_APP_ID")
@@ -296,6 +302,8 @@ class Settings(BaseSettings):
             raise ValueError("LLM_ROUTING_MAX_TRANSIENT_RETRIES cannot be negative.")
         if self.mcp_timeout_seconds < 1:
             raise ValueError("MCP_TIMEOUT_SECONDS must be at least 1.")
+        if self.llm_request_timeout_seconds <= 0:
+            raise ValueError("LLM_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
         if self.llm_stream_timeout_seconds <= 0:
             raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
         if self.vault_watcher_debounce_seconds < 0:

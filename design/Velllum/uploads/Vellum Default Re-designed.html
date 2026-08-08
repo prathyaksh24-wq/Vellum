@@ -847,6 +847,9 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-drop{position:absolute;right:44px;bottom:44px;z-index:50;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
 .drop-lbl{font-size:10.5px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.model-provider-filters{display:flex;gap:4px;overflow-x:auto;padding:0 9px 6px;scrollbar-width:thin}
+.model-provider-filter{border:1px solid var(--line2);background:transparent;color:var(--dim);border-radius:10px;padding:4px 7px;font:inherit;font-size:10px;cursor:pointer;white-space:nowrap}
+.model-provider-filter.active,.model-provider-filter:hover{background:var(--hover);color:var(--txt2);border-color:var(--line2)}
 .model-search{width:calc(100% - 18px);margin:2px 9px 4px;background:var(--input);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--txt2);font:inherit;font-size:12px;outline:none}
 .model-search::placeholder{color:var(--dim2)}
 .model-list{max-height:240px;overflow-y:auto}
@@ -3389,12 +3392,33 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
+const MODEL_PROVIDER_FILTERS = [
+  {id: 'all', label: 'All'},
+  {id: 'openai', label: 'OpenAI'},
+  {id: 'anthropic', label: 'Claude'},
+  {id: 'google', label: 'Google'},
+  {id: 'deepseek', label: 'DeepSeek'},
+  {id: 'other', label: 'Other'},
+];
+const modelFamily = model => {
+  const vendor = String(model.provider || model.id || '').split('/')[0].toLowerCase();
+  if (vendor === 'anthropic') return 'anthropic';
+  if (vendor === 'openai') return 'openai';
+  if (vendor === 'google') return 'google';
+  if (vendor === 'deepseek') return 'deepseek';
+  return 'other';
+};
 const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
   const [q, setQ] = useState('');
+  const [providerFilter, setProviderFilter] = useState('all');
   const [idx, setIdx] = useState(0);
   const listRef = useRef(null);
-  const hits = models.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
-  useEffect(() => { setIdx(0); }, [q]);
+  const query = q.toLowerCase();
+  const hits = models.filter(m =>
+    (providerFilter === 'all' || modelFamily(m) === providerFilter)
+    && (!query || m.label.toLowerCase().includes(query) || m.id.toLowerCase().includes(query))
+  );
+  useEffect(() => { setIdx(0); }, [q, providerFilter]);
   useEffect(() => {
     const p = listRef.current; if (!p) return;
     const el = p.querySelector('.drop-item.active'); if (!el) return;
@@ -3410,6 +3434,20 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
   return (
     <Popover className={'model-drop select-motion' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
       <div className="drop-lbl"><span>Model</span></div>
+      <div className="model-provider-filters" role="tablist" aria-label="Model provider">
+        {MODEL_PROVIDER_FILTERS.map(filter => (
+          <button
+            key={filter.id}
+            type="button"
+            role="tab"
+            aria-selected={providerFilter === filter.id}
+            className={'model-provider-filter' + (providerFilter === filter.id ? ' active' : '')}
+            onClick={() => setProviderFilter(filter.id)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
       <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey}/>
       <div className="model-list" ref={listRef}>
         {hits.map((m, i) => (
@@ -3454,8 +3492,8 @@ const DEFAULT_MODEL = 'google/gemma-4-31b-it';
 const readDefaultModel = () => { try { return localStorage.getItem('vellum-default-model') || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; } };
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
-  { id: 'anthropic',  name: 'Anthropic',  note: 'Claude models' },
-  { id: 'openai',     name: 'OpenAI',     note: 'GPT-4.1, GPT-4o' },
+  { id: 'anthropic',  name: 'Anthropic',  note: 'Claude Opus 5 / Sonnet 4.5' },
+  { id: 'openai',     name: 'OpenAI',     note: 'GPT-5.6 Sol / Terra / Luna' },
   { id: 'google',     name: 'Google',     note: 'Gemini models' },
   { id: 'openrouter', name: 'OpenRouter', note: 'DeepSeek, MiniMax & more' },
 ];
@@ -8352,7 +8390,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           } catch {}
         }
         if (modelData && Array.isArray(modelData.models)) {
-          const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id}));
+          const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
           if (liveModels.length) {
             MODELS = liveModels;
             setModels(liveModels);
@@ -9188,7 +9226,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const saveProviderKey = async (provider, apiKey) => {
     const result = await API.settings.setProviderKey(provider, apiKey);
     if (Array.isArray(result.models)) {
-      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id}));
+      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
       if (liveModels.length) {
         MODELS = liveModels;
         setModels(liveModels);
