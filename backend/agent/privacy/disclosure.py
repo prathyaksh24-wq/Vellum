@@ -9,7 +9,9 @@ import hashlib
 import hmac
 import json
 from pathlib import Path
+import re
 import secrets
+import sqlite3
 import threading
 from types import MappingProxyType
 from typing import Any, AsyncIterator, Mapping, Sequence
@@ -160,6 +162,157 @@ class DisclosureGrant:
         )
 
 
+class DisclosureGrantStore:
+    """Local persistence for scoped disclosure grants issued by the user API."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS disclosure_grants (
+                    id TEXT PRIMARY KEY,
+                    mode TEXT NOT NULL,
+                    destinations_json TEXT NOT NULL,
+                    purposes_json TEXT NOT NULL,
+                    thread_id TEXT NOT NULL,
+                    categories_json TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    revoked_at TEXT
+                )
+                """
+            )
+
+    def issue(
+        self,
+        *,
+        mode: ProtectionMode,
+        destinations: set[str] | frozenset[str],
+        purposes: set[str] | frozenset[str],
+        thread_id: str,
+        categories: set[str] | frozenset[str],
+        expires_at: datetime,
+    ) -> DisclosureGrant:
+        if mode not in {ProtectionMode.ask_before_sharing, ProtectionMode.full_context}:
+            raise ValueError("only approval-gated privacy modes can receive grants")
+        if not thread_id.strip():
+            raise ValueError("thread_id is required")
+        if expires_at.tzinfo is None or expires_at.astimezone(UTC) <= datetime.now(UTC):
+            raise ValueError("grant expiry must be in the future")
+        grant = DisclosureGrant(
+            mode=mode,
+            destinations=frozenset(item.casefold() for item in destinations if item.strip()),
+            purposes=frozenset(item.casefold() for item in purposes if item.strip()),
+            thread_id=thread_id,
+            categories=frozenset(item.upper() for item in categories if item.strip()),
+            expires_at=expires_at.astimezone(UTC),
+        )
+        if not grant.destinations or not grant.purposes:
+            raise ValueError("grant destination and purpose scopes are required")
+        now = datetime.now(UTC).isoformat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO disclosure_grants
+                (id,mode,destinations_json,purposes_json,thread_id,categories_json,expires_at,created_at,revoked_at)
+                VALUES (?,?,?,?,?,?,?,?,NULL)
+                """,
+                (
+                    grant.id,
+                    grant.mode.value,
+                    json.dumps(sorted(grant.destinations)),
+                    json.dumps(sorted(grant.purposes)),
+                    grant.thread_id,
+                    json.dumps(sorted(grant.categories)),
+                    grant.expires_at.isoformat(),
+                    now,
+                ),
+            )
+        return grant
+
+    def find(
+        self,
+        *,
+        mode: ProtectionMode,
+        destination: str,
+        purpose: str,
+        thread_id: str,
+        categories: frozenset[str],
+    ) -> DisclosureGrant | None:
+        now = datetime.now(UTC)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM disclosure_grants
+                WHERE mode=? AND thread_id=? AND revoked_at IS NULL AND expires_at>?
+                ORDER BY created_at DESC
+                """,
+                (mode.value, thread_id, now.isoformat()),
+            ).fetchall()
+        for row in rows:
+            grant = self._from_row(row)
+            if grant.permits(
+                mode=mode,
+                destination=destination,
+                purpose=purpose,
+                thread_id=thread_id,
+                categories=categories,
+                now=now,
+            ):
+                return grant
+        return None
+
+    def revoke(self, grant_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE disclosure_grants SET revoked_at=? WHERE id=? AND revoked_at IS NULL",
+                (datetime.now(UTC).isoformat(), grant_id),
+            )
+            return cursor.rowcount == 1
+
+    def list_active(self, *, thread_id: str | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM disclosure_grants WHERE revoked_at IS NULL AND expires_at>?"
+        params: list[Any] = [datetime.now(UTC).isoformat()]
+        if thread_id:
+            query += " AND thread_id=?"
+            params.append(thread_id)
+        query += " ORDER BY created_at DESC"
+        with self._connect() as connection:
+            rows = connection.execute(query, tuple(params)).fetchall()
+        return [self.public(self._from_row(row)) for row in rows]
+
+    @staticmethod
+    def public(grant: DisclosureGrant) -> dict[str, Any]:
+        return {
+            "id": grant.id,
+            "mode": grant.mode.value,
+            "destinations": sorted(grant.destinations),
+            "purposes": sorted(grant.purposes),
+            "thread_id": grant.thread_id,
+            "categories": sorted(grant.categories),
+            "expires_at": grant.expires_at.isoformat(),
+        }
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> DisclosureGrant:
+        return DisclosureGrant(
+            id=str(row["id"]),
+            mode=ProtectionMode(str(row["mode"])),
+            destinations=frozenset(json.loads(str(row["destinations_json"]))),
+            purposes=frozenset(json.loads(str(row["purposes_json"]))),
+            thread_id=str(row["thread_id"]),
+            categories=frozenset(json.loads(str(row["categories_json"]))),
+            expires_at=datetime.fromisoformat(str(row["expires_at"])).astimezone(UTC),
+        )
+
+
 @dataclass(frozen=True)
 class PreparedDisclosure:
     messages: tuple[Any, ...]
@@ -188,10 +341,12 @@ class DisclosureBroker:
         policy: DisclosurePolicy,
         scrubber: PrivacyScrubber | None = None,
         alias_key: bytes | None = None,
+        grant_store: DisclosureGrantStore | None = None,
     ) -> None:
         self.policy = policy
         self.scrubber = scrubber or PrivacyScrubber()
         self._alias_key = alias_key or secrets.token_bytes(32)
+        self.grant_store = grant_store
         self._receipt_lock = threading.Lock()
 
     def prepare_messages(
@@ -230,8 +385,11 @@ class DisclosureBroker:
             )
             raise DisclosureBlocked("external model is not approved")
 
-        detections = self._analyze_messages(messages)
-        categories = frozenset(item.label for item in detections)
+        message_categories = tuple(
+            frozenset(item.label for item in self._analyze_messages((message,)))
+            for message in messages
+        )
+        categories = frozenset().union(*message_categories)
         if categories & HARD_BLOCKED_LABELS:
             self._block(
                 destination=destination,
@@ -255,11 +413,20 @@ class DisclosureBroker:
             )
             raise DisclosureBlocked("cloud disclosure is disabled for this task")
 
+        effective_grant = grant
+        if effective_grant is None and self.grant_store is not None:
+            effective_grant = self.grant_store.find(
+                mode=selected_mode,
+                destination=destination,
+                purpose=purpose,
+                thread_id=thread_id,
+                categories=categories,
+            )
+
         decision_source = "mode:protect_for_me"
-        exact = False
         if selected_mode is ProtectionMode.ask_before_sharing:
             if not self._grant_permits(
-                grant,
+                effective_grant,
                 mode=ProtectionMode.ask_before_sharing,
                 destination=destination,
                 purpose=purpose,
@@ -269,10 +436,10 @@ class DisclosureBroker:
                 self._approval_block(
                     destination_policy, destination, model, purpose, selected_mode, categories
                 )
-            decision_source = f"grant:{grant.id}"
+            decision_source = f"grant:{effective_grant.id}"
         elif selected_mode is ProtectionMode.full_context:
             if not self._grant_permits(
-                grant,
+                effective_grant,
                 mode=ProtectionMode.full_context,
                 destination=destination,
                 purpose=purpose,
@@ -282,32 +449,31 @@ class DisclosureBroker:
                 self._approval_block(
                     destination_policy, destination, model, purpose, selected_mode, categories
                 )
-            decision_source = f"grant:{grant.id}"
-            exact = True
-        elif grant is not None and self._grant_permits(
-            grant,
-            mode=ProtectionMode.full_context,
-            destination=destination,
-            purpose=purpose,
-            thread_id=thread_id,
-            categories=categories,
-        ):
-            decision_source = f"grant:{grant.id}"
-            exact = True
+            decision_source = f"grant:{effective_grant.id}"
 
         replacements: list[Replacement] = []
-        outbound_messages = tuple(messages)
-        if not exact:
-            scope = f"{normalized_destination}\0{purpose.casefold()}\0{thread_id}"
-            outbound_messages = tuple(
-                _copy_message(
-                    message,
-                    lambda value: self._protect_value(value, scope, replacements),
-                )
-                for message in messages
+        scope = f"{normalized_destination}\0{purpose.casefold()}\0{thread_id}"
+        outbound_messages = tuple(
+            _copy_message(
+                message,
+                lambda value: self._protect_value(value, scope, replacements),
             )
+            for message in messages
+        )
 
-        transformations = ("meaning_preserving_scoped_alias",) if replacements else ()
+        outbound_messages = tuple(
+            self._tag_message(
+                message,
+                protected=bool(own_categories),
+                categories=own_categories,
+            )
+            for message, own_categories in zip(outbound_messages, message_categories)
+        )
+
+        transformations = []
+        if replacements:
+            transformations.append("meaning_preserving_scoped_alias")
+        transformations.append("privacy_boundary_tags")
         receipt_id = uuid4().hex
         policy_flags = self._policy_flags(destination_policy)
         prepared = PreparedDisclosure(
@@ -320,7 +486,7 @@ class DisclosureBroker:
             purpose=purpose,
             mode=selected_mode,
             categories=tuple(sorted(categories)),
-            transformations=transformations,
+            transformations=tuple(transformations),
             decision_source=decision_source,
             policy_flags=MappingProxyType(policy_flags),
         )
@@ -360,6 +526,20 @@ class DisclosureBroker:
                 for key, item in value.items()
             }
         return value
+
+    def _tag_message(
+        self,
+        message: Any,
+        *,
+        protected: bool,
+        categories: frozenset[str],
+    ) -> Any:
+        fields = getattr(message.__class__, "model_fields", {})
+        if "content" not in fields:
+            return message
+        content = getattr(message, "content")
+        tagged = _tag_content(content, protected=protected, categories=categories)
+        return message.model_copy(update={"content": tagged}, deep=True)
 
     def _alias(self, *, scope: str, label: str, value: str) -> str:
         digest = hmac.new(
@@ -577,7 +757,10 @@ class _StreamRestorer:
         self.prepared = prepared
         self.pending = ""
         self.last_chunk: Any | None = None
-        self.tokens = tuple(item.token for item in prepared.replacements)
+        aliases = (item.token for item in prepared.replacements)
+        self.tokens = tuple(
+            dict.fromkeys((*aliases, *_privacy_tag_markers(prepared.messages)))
+        )
 
     def restore(self, chunk: Any) -> Any:
         self.last_chunk = chunk
@@ -651,9 +834,68 @@ def _copy_message(message: Any, transform) -> Any:
     return message.model_copy(update=update, deep=True)
 
 
+def _tag_content(
+    value: Any,
+    *,
+    protected: bool,
+    categories: frozenset[str],
+) -> Any:
+    if isinstance(value, str):
+        query = f"<QUERY>\n{value}\n</QUERY>"
+        if not protected:
+            return query
+        category_text = ", ".join(sorted(categories))
+        return (
+            "<PROTECTED>\n"
+            f"Protected locally: {category_text}\n"
+            "</PROTECTED>\n\n"
+            f"{query}"
+        )
+    if isinstance(value, list):
+        tagged = []
+        for item in value:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                tagged.append(
+                    {
+                        **item,
+                        "text": _tag_content(
+                            item["text"],
+                            protected=protected,
+                            categories=categories,
+                        ),
+                    }
+                )
+            else:
+                tagged.append(item)
+        return tagged
+    return value
+
+
+def _strip_privacy_tags(value: str) -> str:
+    without_metadata = re.sub(
+        r"<PROTECTED>\nProtected locally: [^\n]*\n</PROTECTED>\n\n",
+        "",
+        value,
+    )
+    return without_metadata.replace("<QUERY>\n", "").replace("\n</QUERY>", "")
+
+
+def _privacy_tag_markers(messages: Sequence[Any]) -> tuple[str, ...]:
+    markers = {"<QUERY>\n", "\n</QUERY>"}
+    for message in messages:
+        for value in _message_values(message):
+            markers.update(
+                re.findall(
+                    r"<PROTECTED>\nProtected locally: [^\n]*\n</PROTECTED>\n\n",
+                    value,
+                )
+            )
+    return tuple(sorted(markers, key=len, reverse=True))
+
+
 def _restore_value(value: Any, replacements: Sequence[Replacement]) -> Any:
     if isinstance(value, str):
-        restored = value
+        restored = _strip_privacy_tags(value)
         mapping = {item.token: item.value for item in replacements}
         for token in sorted(mapping, key=len, reverse=True):
             restored = restored.replace(token, mapping[token])

@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import re
+import time
 from typing import Any, AsyncIterator, Protocol
 from urllib.parse import urlsplit, urlunsplit
 
@@ -18,7 +19,14 @@ from mcp.client.streamable_http import streamablehttp_client
 
 from agent.config import get_settings
 from agent.mcp.common import content_text
-from agent.mcp.results import normalize_mcp_text
+from agent.mcp.audit import McpAuditLog
+from agent.mcp.plugin_approvals import (
+    PluginMcpApprovalError,
+    PluginMcpOperation,
+    PluginMcpApprovalStore,
+    get_plugin_mcp_approval_store,
+)
+from agent.mcp.results import summarize_mcp_text
 from agent.plugins.registry import PluginRegistry
 from agent.privacy.classifier import DataClass, classify
 from agent.privacy.scrubber import PrivacyScrubber
@@ -123,9 +131,13 @@ class PluginMcpRuntime:
         registry: PluginRegistry,
         *,
         transport: PluginMcpTransport | None = None,
+        approval_store: PluginMcpApprovalStore | None = None,
+        audit_log: McpAuditLog | None = None,
     ) -> None:
         self.registry = registry
         self.transport = transport or SdkPluginMcpTransport()
+        self.approval_store = approval_store or get_plugin_mcp_approval_store()
+        self.audit_log = audit_log or McpAuditLog()
 
     def connectors(self) -> list[PluginMcpConnector]:
         connectors: list[PluginMcpConnector] = []
@@ -158,10 +170,31 @@ class PluginMcpRuntime:
         if not connector.configured:
             missing = ", ".join(connector.missing_env)
             raise PluginMcpRuntimeError(f"Plugin MCP connector needs environment configuration: {missing}")
-        return await asyncio.wait_for(
-            self.transport.list_tools(connector),
-            timeout=get_settings().mcp_timeout_seconds,
+        started = time.perf_counter()
+        try:
+            result = await asyncio.wait_for(
+                self.transport.list_tools(connector),
+                timeout=get_settings().mcp_timeout_seconds,
+            )
+        except BaseException:
+            self._audit(
+                plugin_id,
+                connector_name,
+                operation="list_tools",
+                tool_name="*",
+                started=started,
+                outcome="failed",
+            )
+            raise
+        self._audit(
+            plugin_id,
+            connector_name,
+            operation="list_tools",
+            tool_name="*",
+            started=started,
+            outcome="success",
         )
+        return result
 
     async def call_tool(
         self,
@@ -170,21 +203,74 @@ class PluginMcpRuntime:
         tool_name: str,
         arguments: dict[str, Any],
         *,
-        confirm: bool = False,
+        approval_id: str = "",
     ) -> str:
         connector = self.connector(plugin_id, connector_name)
         tools = await self.list_tools(plugin_id, connector_name)
         tool = next((item for item in tools if item.get("name") == tool_name), None)
         if tool is None:
             raise PluginMcpRuntimeError("Plugin MCP tool is not exposed by this connector.")
-        if not tool.get("read_only") and not confirm:
-            raise PluginMcpRuntimeError(f"Plugin MCP tool '{tool_name}' requires confirmation.")
         clean_arguments = _privacy_safe_arguments(arguments)
-        return normalize_mcp_text(
-            await asyncio.wait_for(
+        if not tool.get("read_only"):
+            operation = PluginMcpOperation.from_arguments(
+                plugin_id=plugin_id,
+                connector=connector_name,
+                tool_name=tool_name,
+                arguments=clean_arguments,
+            )
+            if not approval_id:
+                approval = self.approval_store.request(operation)
+                raise PluginMcpRuntimeError(
+                    f"Plugin MCP tool '{tool_name}' requires user approval: {approval['id']}"
+                )
+            try:
+                self.approval_store.consume(approval_id, operation)
+            except PluginMcpApprovalError as exc:
+                raise PluginMcpRuntimeError(str(exc)) from exc
+
+        started = time.perf_counter()
+        try:
+            result = await asyncio.wait_for(
                 self.transport.call_tool(connector, tool_name, clean_arguments),
                 timeout=get_settings().mcp_timeout_seconds,
             )
+        except BaseException:
+            self._audit(
+                plugin_id,
+                connector_name,
+                operation="call_tool",
+                tool_name=tool_name,
+                started=started,
+                outcome="failed",
+            )
+            raise
+        self._audit(
+            plugin_id,
+            connector_name,
+            operation="call_tool",
+            tool_name=tool_name,
+            started=started,
+            outcome="success",
+        )
+        return summarize_mcp_text(result)
+
+    def _audit(
+        self,
+        plugin_id: str,
+        connector: str,
+        *,
+        operation: str,
+        tool_name: str,
+        started: float,
+        outcome: str,
+    ) -> None:
+        self.audit_log.record(
+            plugin_id=plugin_id,
+            connector=connector,
+            operation=operation,
+            tool_name=tool_name,
+            latency_ms=round((time.perf_counter() - started) * 1000),
+            outcome=outcome,
         )
 
 

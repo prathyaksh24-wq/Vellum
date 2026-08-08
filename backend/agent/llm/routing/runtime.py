@@ -16,6 +16,7 @@ from agent.llm.routing.store import RoutingStore
 from agent.privacy.disclosure import (
     DestinationPolicy,
     DisclosureBroker,
+    DisclosureGrantStore,
     DisclosureModelAdapter,
     DisclosurePolicy,
     ProtectionMode,
@@ -99,7 +100,10 @@ def build_routing_runtime(
                     response_caching=False,
                 )
             },
-        )
+        ),
+        grant_store=DisclosureGrantStore(
+            settings.privacy_receipt_path.with_name("disclosure-grants.db")
+        ),
     )
     engine = RoutingEngine(
         store=store,

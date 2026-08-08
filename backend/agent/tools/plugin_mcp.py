@@ -24,7 +24,7 @@ def plugin_mcp(
     connector: str = "",
     tool_name: str = "",
     arguments: dict[str, Any] | None = None,
-    confirm: bool = False,
+    approval_id: str = "",
 ) -> str:
     """Use an MCP connector contributed by an enabled plugin.
 
@@ -35,7 +35,8 @@ def plugin_mcp(
         live MCP tools and read-only annotations.
       - call: plugin_id=<plugin>, connector=<name>, tool_name=<tool>,
         arguments=<object>. Read-only annotated tools can run automatically.
-        Any tool not explicitly marked read-only requires confirm=true.
+        Any tool not explicitly marked read-only requires a locally approved,
+        operation-bound approval_id.
 
     Never put credentials in arguments. Connector authentication is resolved
     locally from its manifest-declared environment variables.
@@ -62,7 +63,7 @@ def plugin_mcp(
                     connector,
                     tool_name,
                     dict(arguments or {}),
-                    confirm=confirm,
+                    approval_id=approval_id,
                 )
             )
         return "Unsupported plugin MCP action."

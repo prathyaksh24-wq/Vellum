@@ -108,7 +108,7 @@ Tools:
 15. library_docs - Look up current documentation for a software library via Context7 MCP. Two-step: resolve a name to a library_id, then fetch docs.
 16. repo_docs - Fetch documentation and search code for any public GitHub repository via GitMCP (gitmcp.io). Read-only.
 17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
-18. plugin_mcp - Inspect and call MCP tools contributed by enabled plugins. Read-only annotated tools may run automatically; unannotated or mutating tools require confirmation.
+18. plugin_mcp - Inspect and call MCP tools contributed by enabled plugins. Read-only annotated tools may run automatically; unannotated or mutating tools require a locally approved operation-bound approval ID.
 19. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
 20. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
 21. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
@@ -166,7 +166,7 @@ Rules:
 - Use repo_docs when the user asks for context on a specific GitHub project (its docs or code search) and the vault does not cover it. Prefer library_docs for well-known libraries, github_read for structured PR/issue/commit data, and repo_docs for arbitrary repo documentation and code search.
 - Use context_mode action='execute' when a question can be answered by computing on data rather than pulling many files into context — write the script, let only stdout return. Use action='index'/'search' for ad-hoc local indices that should not pollute the main Chroma/FTS5 vault stores. Treat action='fetch_and_index' output as external and unscrubbed: summarize before quoting, and never feed it raw into responses that mix with private folder content.
 - Never call context_mode action='purge' unless the user explicitly asks for it and passes confirm=true.
-- Use plugin_mcp only for connectors listed by action='list_connectors'. Inspect live tools first. Never pass credentials in arguments, and never confirm a mutating plugin tool unless the user explicitly requested that external change.
+- Use plugin_mcp only for connectors listed by action='list_connectors'. Inspect live tools first. Never pass credentials in arguments. A blocked mutation creates a pending local approval; retry with its approval_id only after the user approves it outside the model tool call.
 - Use escalate_to_cloud when a public/code/docs task is too hard, tool calls fail repeatedly, you cannot form a reliable plan, or the user asks for a stronger/cloud model.
 - Public code, docs, public GitHub, and public web tasks may be escalated automatically.
 - Private vault notes, memories, personal files, personal preferences, and user history require explicit approval before cloud escalation.
@@ -210,7 +210,7 @@ def _get_skill_registry() -> SkillRegistry:
     return _prompt_skill_registry
 
 
-def vellum_prompt(state, config=None):
+def vellum_prompt(state, config=None, *, runtime_model: str | None = None):
     """Dynamic prompt: prepend per-thread IDENTITY block to VELLUM_SYSTEM_PROMPT.
 
     LangGraph version compatibility: `create_react_agent` calls this with
@@ -258,7 +258,14 @@ def vellum_prompt(state, config=None):
         import logging
         logging.getLogger(__name__).warning("skill context load failed: %s", exc)
 
-    active_model = get_provider_registry().current_model()
+    provider_registry = get_provider_registry()
+    active_model = (
+        provider_registry.resolve(runtime_model)
+        if runtime_model is not None
+        else provider_registry.current_model()
+    )
+    if active_model is None:
+        raise ValueError(f"Unknown runtime model: {runtime_model}")
     current_date = datetime.now().date().isoformat()
     runtime_text = (
         f"Runtime current date: {current_date}. "
@@ -460,9 +467,9 @@ def _source_labels_for(deferred_names: set[str]) -> dict[str, str]:
     return labels
 
 
-def _make_model_node(bound_model):
+def _make_model_node(bound_model, *, runtime_model: str | None = None):
     def model_node(state, config):
-        messages = vellum_prompt(state, config)
+        messages = vellum_prompt(state, config, runtime_model=runtime_model)
         response = bound_model.invoke(messages, config)
         return {"messages": [response]}
 
@@ -474,6 +481,7 @@ def _build_agent_runtime(
     llm,
     tools,
     checkpointer,
+    runtime_model: str | None = None,
     deferred_names: set[str] | None = None,
 ):
     if deferred_names is None:
@@ -492,7 +500,7 @@ def _build_agent_runtime(
         catalog = build_deferred_catalog(tool_defs, deferred_names, _source_labels_for(deferred_names))
         runtime_tools = [*runtime_tools, *build_bridge_tools(tools, catalog)]
     graph = StateGraph(AgentState)
-    graph.add_node("agent", _make_model_node(bound_model))
+    graph.add_node("agent", _make_model_node(bound_model, runtime_model=runtime_model))
     graph.add_node("tools", ToolNode(runtime_tools))
     graph.add_edge(START, "agent")
     graph.add_conditional_edges("agent", tools_condition)
@@ -507,6 +515,7 @@ def build_agent(model: str | None = None, reasoning_mode: Any = None):
         tools=tools,
         deferred_names=deferred_names,
         checkpointer=build_checkpointer(),
+        runtime_model=model,
     )
 
 
@@ -517,6 +526,7 @@ async def build_async_agent(model: str | None = None, reasoning_mode: Any = None
         tools=tools,
         deferred_names=deferred_names,
         checkpointer=await build_async_checkpointer(),
+        runtime_model=model,
     )
 
 

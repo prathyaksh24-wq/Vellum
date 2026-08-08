@@ -77,6 +77,7 @@ from agent.plugins.agent_reach import agent_reach_plugin_status
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
 from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError
+from agent.mcp.api import router as plugin_mcp_router
 from agent.plugins.spotify_runtime import (
     SpotifyAuthError,
     SpotifyError,
@@ -94,6 +95,7 @@ from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligen
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
 from agent.privacy.classifier import DataClass, classify
+from agent.privacy.api import router as privacy_router
 from agent.privacy.scrubber import PrivacyScrubber
 from agent.scheduler.digest import start_scheduler
 from agent.telemetry.hooks import (
@@ -4873,6 +4875,8 @@ router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
+router.include_router(privacy_router)
+router.include_router(plugin_mcp_router)
 
 # --- Petdex gallery proxy -------------------------------------------------
 # Browsers on this machine cannot reach petdex.dev directly: the site
