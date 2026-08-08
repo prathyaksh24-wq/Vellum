@@ -30,6 +30,7 @@ from agent.knowledge.service import KnowledgeCore
 from agent.knowledge.store import KnowledgeStore
 from agent.knowledge.runtime import set_knowledge_core
 from agent.knowledge.tool_observer import KnowledgeToolObserver
+from agent.memory.fts5 import FTS5Memory
 from agent.tools.registry import CapabilityAccess, ToolInvocation
 
 
@@ -172,6 +173,90 @@ def test_bootstrap_preview_is_read_only_and_apply_is_repeatable(tmp_path: Path) 
     assert counts["sources"] == 2
     assert counts["source_versions"] == 2
     assert counts["projections"] == 1
+
+
+def test_existing_data_adapters_import_memory_archives_and_indexes_idempotently(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    core.memory_db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(core.memory_db_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE memory_items (
+                id INTEGER PRIMARY KEY,
+                scope TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                text TEXT NOT NULL,
+                status TEXT NOT NULL,
+                source_thread_id TEXT,
+                confidence REAL NOT NULL,
+                pinned INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                archived_at TEXT
+            );
+            CREATE TABLE memory_summaries (
+                scope TEXT PRIMARY KEY,
+                summary TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO memory_items VALUES
+                (1, 'global', 'preference', 'Prefers local-first storage.', 'archived', 'thread-1', 0.9, 0,
+                 '2026-07-01T00:00:00+00:00', '2026-07-02T00:00:00+00:00', '2026-07-03T00:00:00+00:00');
+            INSERT INTO memory_summaries VALUES
+                ('global', 'Local-first storage remains important.', '2026-07-03T00:00:00+00:00');
+            """
+        )
+    core.memory_snapshot_dir.mkdir(parents=True, exist_ok=True)
+    (core.memory_snapshot_dir / "MEMORY.md").write_text("# Generated memory snapshot\n", encoding="utf-8")
+    FTS5Memory(core.fts5_db_path).add_document(
+        content="Conversation about local-first storage.",
+        thread_id="thread-1",
+        source_paths=["ui-conversation:thread-1:turn-1"],
+    )
+    archive = core.vault_root / "Archive" / "Agent" / "Conversations"
+    archive.mkdir(parents=True)
+    (archive / "chat-1.md").write_text(
+        "---\nconversation_id: chat-1\ngenerated_by: vellum\n---\n# Archived chat\n",
+        encoding="utf-8",
+    )
+    core.vector_reader = lambda _limit: [
+        {
+            "collection": "obsidian_vault",
+            "id": "vector-1",
+            "metadata": {"source": "note-1", "text": "raw index text is not imported"},
+        }
+    ]
+
+    sessions_before = core.memory_db_path.read_bytes()
+    fts_before = core.fts5_db_path.read_bytes()
+    preview = core.bootstrap(BootstrapRequest(apply=False))
+
+    assert preview["memories"]["scanned"] == 1
+    assert preview["memories"]["archived"] == 1
+    assert preview["memories"]["projections"] == 2
+    assert preview["vault"]["projections"] == 1
+    assert preview["vault"]["archived"] == 1
+    assert preview["retrieval_indexes"]["scanned"] == 2
+    assert core.store.status()["counts"]["sources"] == 0
+    assert core.store.status()["counts"]["projections"] == 0
+    assert core.memory_db_path.read_bytes() == sessions_before
+    assert core.fts5_db_path.read_bytes() == fts_before
+
+    first = core.bootstrap(BootstrapRequest(apply=True, confirm=True))
+    second = core.bootstrap(BootstrapRequest(apply=True, confirm=True))
+
+    assert first["memories"]["imported"] == 1
+    assert first["memories"]["versions"] == 1
+    assert first["retrieval_indexes"]["projections"] == 2
+    assert second["memories"]["imported"] == 0
+    assert second["memories"]["versions"] == 0
+    counts = core.store.status()["counts"]
+    assert counts["sources"] == 1
+    assert counts["source_versions"] == 1
+    assert counts["projections"] == 5
+    memory_source = core.store.list_sources(kind="memory_item")[0]
+    assert memory_source["external_policy"] == "deny_raw"
+    assert memory_source["sensitivity"] == "private_local_only"
 
 
 def test_shadow_turn_learning_does_not_treat_agent_tools_as_user_interest(tmp_path: Path) -> None:

@@ -58,9 +58,12 @@ def parse_args() -> argparse.Namespace:
     bootstrap.add_argument("--confirm", default="")
     bootstrap.add_argument("--limit", type=int)
     bootstrap.add_argument("--no-conversations", action="store_true")
+    bootstrap.add_argument("--no-memories", action="store_true")
     bootstrap.add_argument("--no-library", action="store_true")
     bootstrap.add_argument("--no-wiki", action="store_true")
     bootstrap.add_argument("--no-agent-projections", action="store_true")
+    bootstrap.add_argument("--no-archives", action="store_true")
+    bootstrap.add_argument("--no-retrieval-indexes", action="store_true")
 
     backup = subparsers.add_parser("backup")
     backup.add_argument("--output", type=Path, required=True)
@@ -90,9 +93,12 @@ def main() -> int:
         result = core.bootstrap(
             BootstrapRequest(
                 conversations=not args.no_conversations,
+                memories=not args.no_memories,
                 vault_library=not args.no_library,
                 knowledge_wiki=not args.no_wiki,
                 agent_projections=not args.no_agent_projections,
+                archives=not args.no_archives,
+                retrieval_indexes=not args.no_retrieval_indexes,
                 apply=args.apply,
                 confirm=args.apply,
                 limit=args.limit,

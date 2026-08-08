@@ -96,6 +96,22 @@ def _stage_local_import(name: str, *, category: str) -> dict:
     )
 
 
+def uninstall_confirmed(name: str) -> dict:
+    """Apply an explicitly confirmed HTTP uninstall without creating a draft."""
+    try:
+        from agent.skills.catalog import SkillCatalog
+        from agent.skills.curator import CuratorBackupStore
+
+        hub = _hub()
+        snapshot = CuratorBackupStore(hub.root).create(f"pre-uninstall {name}")
+        result = hub.uninstall(name, confirm=True)
+        SkillCatalog(hub.root).reconcile(embed_semantics=False)
+        result["snapshot"] = snapshot
+        return result
+    except (SkillHubError, OSError, ValueError, KeyError) as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 @tool
 def skill_hub(
     action: str,
