@@ -14,6 +14,10 @@ def test_settings_loads_paths_and_privacy_defaults():
         "Fireworks",
         "Together",
         "DeepInfra",
+        "Azure",
+        "Amazon Bedrock",
+        "CoreWeave",
+        "DigitalOcean",
     )
     assert settings.primary_model in settings.reviewed_openrouter_models
     assert settings.cloud_escalation_model in settings.reviewed_openrouter_models

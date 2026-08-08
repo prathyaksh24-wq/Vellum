@@ -100,7 +100,7 @@ class Settings(BaseSettings):
         default=Path("data/privacy/privacy-receipts.jsonl"), alias="PRIVACY_RECEIPT_PATH"
     )
     openrouter_provider_allowlist: str = Field(
-        default="Fireworks,Together,DeepInfra", alias="OPENROUTER_PROVIDER_ALLOWLIST"
+        default="Fireworks,Together,DeepInfra,Azure,Amazon Bedrock,CoreWeave,DigitalOcean", alias="OPENROUTER_PROVIDER_ALLOWLIST"
     )
     openrouter_model_allowlist: str = Field(
         default=(
