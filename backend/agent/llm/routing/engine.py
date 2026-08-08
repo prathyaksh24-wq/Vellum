@@ -69,10 +69,12 @@ class RoutingEngine:
             pass
 
     def _primary_provider(self, model: str) -> str:
-        if model.startswith("openai/"):
-            native = self.store.list_credentials("openai")
-            if any(item.status.value == "healthy" for item in native):
-                return "openai"
+        """Keep catalog model IDs on the OpenRouter route by default.
+
+        A vendor namespace such as ``openai/`` identifies the model inside
+        OpenRouter; it does not authorize a native vendor API call. Native
+        adapters must be selected explicitly with ``primary_provider``.
+        """
         return "openrouter"
 
     def build_plan(self, primary_model: str, primary_provider: str | None = None) -> AttemptPlan:
