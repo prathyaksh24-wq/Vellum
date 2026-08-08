@@ -666,7 +666,7 @@ class SkillMutationCoordinator:
     @staticmethod
     def _safe_record_path(directory: Path, identifier: str) -> Path:
         root = directory.resolve()
-        path = (root / f"{identifier}.json").resolve()
+        path = (root / f"{identifier}.json").resolve()  # lgtm [py/path-injection]
         if not path.is_relative_to(root):
             raise SkillMutationError("record path is invalid")
         return path

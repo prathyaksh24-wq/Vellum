@@ -163,7 +163,7 @@ class JsonSkillMigrator:
         ):
             raise SkillCatalogError("migration snapshot identifier is invalid")
         snapshots_root = self.snapshots.resolve()
-        archive = (snapshots_root / snapshot_name / "skills.tar.gz").resolve()
+        archive = (snapshots_root / snapshot_name / "skills.tar.gz").resolve()  # lgtm [py/path-injection]
         if not archive.is_relative_to(snapshots_root):
             raise SkillCatalogError("migration snapshot path is invalid")
         if not archive.is_file():
