@@ -112,7 +112,7 @@ from agent.terminal.profiles import list_profiles as list_terminal_profiles
 from agent.terminal.session import TerminalSessionManager
 from agent.tools.skill_bundles import skill_bundles
 from agent.tools.skill_curator import skill_curator
-from agent.tools.skill_hub import skill_hub
+from agent.tools.skill_hub import skill_hub, uninstall_confirmed
 from agent.voice.stt import get_stt_engine
 from agent.voice.tts import get_tts_engine
 
@@ -2317,6 +2317,12 @@ async def skills_v2_hub_inspect(request: SkillHubMutationRequest) -> dict[str, A
 
 @router.post("/skills/v2/hub/{action}")
 async def skills_v2_hub_mutation(action: Literal["install", "update", "uninstall", "import_local"], request: SkillHubMutationRequest) -> dict[str, Any]:
+    if action == "uninstall" and request.confirm:
+        result = await asyncio.to_thread(uninstall_confirmed, request.name)
+        if result.get("ok") is False:
+            raise HTTPException(status_code=400, detail={"code": "hub_mutation_failed", "message": result.get("error")})
+        return {"result": result}
+
     payload = {
         "action": action,
         "identifier": request.identifier,
