@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -63,9 +64,11 @@ class SkillPackageParser:
         requested = Path(relative_path)
         if requested.is_absolute() or requested.anchor or not requested.parts or any(part in {"", ".", ".."} for part in requested.parts):
             raise SkillPackageError("support file must stay inside the skill package")
-        target = (package_root / requested).resolve()  # lgtm [py/path-injection]
-        if not target.is_relative_to(package_root):
+        root_text = os.path.realpath(os.fspath(package_root))
+        target_text = os.path.realpath(os.path.join(root_text, os.fspath(requested)))
+        if target_text != root_text and not target_text.startswith(root_text + os.sep):
             raise SkillPackageError("support file must stay inside the skill package")
+        target = Path(target_text)
         if target.name == "SKILL.md":
             raise SkillPackageError("use package parsing to read SKILL.md")
         if target.is_symlink() or not target.is_file():

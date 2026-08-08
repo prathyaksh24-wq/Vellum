@@ -162,10 +162,13 @@ class JsonSkillMigrator:
             or not re.fullmatch(r"\d{8}T\d{6}\.\d{6}Z", snapshot_name)
         ):
             raise SkillCatalogError("migration snapshot identifier is invalid")
-        snapshots_root = self.snapshots.resolve()
-        archive = (snapshots_root / snapshot_name / "skills.tar.gz").resolve()  # lgtm [py/path-injection]
-        if not archive.is_relative_to(snapshots_root):
+        snapshots_root = Path(os.path.realpath(os.fspath(self.snapshots)))
+        archive_text = os.path.realpath(
+            os.path.join(os.fspath(snapshots_root), snapshot_name, "skills.tar.gz")
+        )
+        if not archive_text.startswith(os.fspath(snapshots_root) + os.sep):
             raise SkillCatalogError("migration snapshot path is invalid")
+        archive = Path(archive_text)
         if not archive.is_file():
             raise SkillCatalogError(f"migration snapshot not found: {snapshot}")
         staging = Path(tempfile.mkdtemp(prefix="skill-rollback-", dir=self.root.parent))

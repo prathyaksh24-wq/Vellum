@@ -126,9 +126,15 @@ class SkillBundleStore:
         return self._safe_path(self.directory / f"{self._slug(name)}.yaml")
 
     def _safe_path(self, path: Path) -> Path:
-        root = self.directory.resolve()
-        resolved = path.resolve()  # lgtm [py/path-injection]
-        if not resolved.is_relative_to(root) or resolved.suffix.casefold() != ".yaml":
+        root_text = os.path.realpath(os.fspath(self.directory))
+        resolved_text = os.path.realpath(os.fspath(path))
+        if (
+            resolved_text != root_text
+            and not resolved_text.startswith(root_text + os.sep)
+        ):
+            raise SkillBundleError("bundle path is invalid")
+        resolved = Path(resolved_text)
+        if resolved.suffix.casefold() != ".yaml":
             raise SkillBundleError("bundle path is invalid")
         return resolved
 

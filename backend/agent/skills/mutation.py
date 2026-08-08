@@ -665,11 +665,11 @@ class SkillMutationCoordinator:
 
     @staticmethod
     def _safe_record_path(directory: Path, identifier: str) -> Path:
-        root = directory.resolve()
-        path = (root / f"{identifier}.json").resolve()  # lgtm [py/path-injection]
-        if not path.is_relative_to(root):
+        root_text = os.path.realpath(os.fspath(directory))
+        path_text = os.path.realpath(os.path.join(root_text, f"{identifier}.json"))
+        if path_text != root_text and not path_text.startswith(root_text + os.sep):
             raise SkillMutationError("record path is invalid")
-        return path
+        return Path(path_text)
 
     @staticmethod
     def _atomic_json(path: Path, value: dict[str, Any]) -> None:
