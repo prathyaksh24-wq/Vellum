@@ -53,12 +53,18 @@ def test_skill_hub_tool_routes_read_and_confirmed_mutation_actions(tmp_path, mon
     assert staged["status"] == "pending"
     assert installed["ok"] is True
 
-    uninstalled = json.loads(
+    uninstall_staged = json.loads(
         hub_tools.skill_hub.invoke(
             {"action": "uninstall", "name": "remote-skill", "confirm": True}
         )
     )
+    uninstalled = json.loads(
+        hub_tools.skill_hub.invoke(
+            {"action": "approve", "identifier": uninstall_staged["id"]}
+        )
+    )
 
+    assert uninstall_staged["status"] == "pending"
     assert uninstalled["ok"] is True
     assert uninstalled["action"] == "uninstall"
     assert uninstalled["snapshot"]

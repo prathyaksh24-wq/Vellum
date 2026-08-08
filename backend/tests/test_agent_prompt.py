@@ -49,6 +49,21 @@ def test_vellum_prompt_includes_runtime_date_grounding(tmp_path: Path, monkeypat
     assert "Do not answer from training cutoff dates" in messages[0].content
 
 
+def test_vellum_prompt_reports_request_scoped_runtime_model(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(
+        "agent.graph.agent._prompt_project_ctx",
+        pc.ProjectContext(vault_root=tmp_path, sessions_db=tmp_path / "s.db"),
+    )
+
+    messages = vellum_prompt(
+        {"messages": [HumanMessage(content="which model?")]},
+        {"configurable": {"thread_id": "t1"}},
+        runtime_model="openai/gpt-5.6-sol",
+    )
+
+    assert "Runtime selected model: openai/gpt-5.6-sol" in messages[0].content
+
+
 def test_vellum_prompt_documents_x_action_safety_rules():
     assert "x_action" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
