@@ -205,15 +205,26 @@ def configured_provider_keys() -> dict[str, bool]:
 
 
 def available_models() -> list[ModelEntry]:
+    """Return models that have a usable, approved route for this installation.
+
+    When OpenRouter is configured, the disclosure broker is the authority for
+    every catalog model, so the picker must not expose an ID outside its model
+    allowlist. The native OpenAI-key branch is retained for legacy settings
+    screens; chat routing still requires an explicitly configured adapter.
+    """
     settings = get_settings()
     has_openrouter = bool(settings.openrouter_api_key)
     has_openai = bool(settings.openai_api_key)
+    approved = {
+        value.strip()
+        for value in getattr(settings, "reviewed_openrouter_models", ())
+        if value and value.strip()
+    }
     visible: list[ModelEntry] = []
     for entry in _CATALOG:
-        if entry.open_weights:
-            visible.append(entry)
-        elif has_openrouter:
-            visible.append(entry)
-        elif entry.provider == "openai" and has_openai:
+        if has_openrouter:
+            if entry.id in approved:
+                visible.append(entry)
+        elif entry.open_weights or (entry.provider == "openai" and has_openai):
             visible.append(entry)
     return visible

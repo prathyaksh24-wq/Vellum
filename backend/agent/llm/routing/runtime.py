@@ -114,6 +114,7 @@ def build_routing_runtime(
                 adapter=OpenRouterAdapter(
                     base_url=settings.openrouter_base_url,
                     reviewed_providers=settings.reviewed_openrouter_providers,
+                    request_timeout=getattr(settings, "llm_request_timeout_seconds", 30.0),
                 ),
                 broker=broker,
             ),

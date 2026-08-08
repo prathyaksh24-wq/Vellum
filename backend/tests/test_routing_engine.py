@@ -5,6 +5,7 @@ import asyncio
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from agent.llm.routing.engine import RoutingEngine
+from agent.privacy.disclosure import DisclosureBlocked
 from agent.llm.routing.models import (
     CredentialRecord,
     FallbackTarget,
@@ -123,6 +124,20 @@ def test_pool_rotation_precedes_model_fallback(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_catalog_openai_model_uses_openrouter_when_no_native_route_is_configured(tmp_path) -> None:
+    store, engine, _, _ = build_engine(
+        tmp_path,
+        openrouter_outcomes=[AIMessage(content="ok")],
+        openai_outcomes=[AIMessage(content="native")],
+    )
+    add_credential(store, "openrouter", "or-key")
+    add_credential(store, "openai", "oa-key")
+
+    plan = engine.build_plan("openai/gpt-5.6-sol")
+
+    assert plan.targets[0].provider == "openrouter"
+
+
 def test_model_unavailable_uses_fallback_and_next_call_restores_primary(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, openrouter, openai = build_engine(
@@ -180,6 +195,37 @@ def test_generic_429_retries_same_key_once(tmp_path) -> None:
             ("google/primary", "same-key"),
             ("google/primary", "same-key"),
         ]
+
+    asyncio.run(scenario())
+
+
+def test_disclosure_block_fails_without_retry_or_fallback(tmp_path) -> None:
+    async def scenario() -> None:
+        store, engine, _, openai = build_engine(
+            tmp_path,
+            openrouter_outcomes=[DisclosureBlocked("model is not approved")],
+            openai_outcomes=[AIMessage(content="must not run")],
+        )
+        add_credential(store, "openrouter", "or-key")
+        add_credential(store, "openai", "oa-key")
+        store.replace_fallbacks(
+            [FallbackTarget(provider="openai", model="openai/fallback")]
+        )
+
+        async def unexpected_sleep(_seconds: float) -> None:
+            raise AssertionError("locally blocked requests must not enter retry backoff")
+
+        engine.async_sleep = unexpected_sleep
+        try:
+            await engine.ainvoke(
+                messages=[HumanMessage(content="hello")],
+                primary_model="openai/gpt-5.6-sol",
+            )
+        except RoutingTerminalError as exc:
+            assert exc.failures[0].kind == "invalid_request"
+        else:
+            raise AssertionError("disclosure blocks must fail immediately")
+        assert openai.calls == []
 
     asyncio.run(scenario())
 

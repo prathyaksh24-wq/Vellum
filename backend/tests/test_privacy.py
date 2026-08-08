@@ -46,3 +46,14 @@ def test_classifier_allows_public_queries():
 
     assert data_class == DataClass.GREEN
     assert "no sensitive" in reason.casefold()
+
+def test_government_id_pattern_does_not_block_prompt_phrases():
+    scrubber = PrivacyScrubber()
+
+    prompt_text = "Never use account settings or account lookup for this task."
+    detections = scrubber.analyze(prompt_text)
+    assert not any(item.label == "GOVERNMENT_ID" for item in detections)
+
+    clean, replacements = scrubber.scrub("account number: 1234")
+    assert "1234" not in clean
+    assert any(item.label == "GOVERNMENT_ID" for item in replacements)

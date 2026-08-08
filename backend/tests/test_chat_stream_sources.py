@@ -173,8 +173,8 @@ class _FakeAgent:
         return None
 
 
-def _run_stream(monkeypatch):
-    fake_agent = _FakeAgent()
+def _run_stream(monkeypatch, fake_agent=None):
+    fake_agent = fake_agent or _FakeAgent()
     monkeypatch.setattr(api, "agent", fake_agent)
     monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
 
@@ -210,6 +210,27 @@ def _run_stream(monkeypatch):
         return chunks
 
     return asyncio.run(_collect())
+
+
+def test_stream_agent_turn_emits_chat_model_end_answer(monkeypatch):
+    class EndOnlyAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {
+                "event": "on_chat_model_end",
+                "name": "RoutedChatModel",
+                "data": {"output": SimpleNamespace(content="OK")},
+            }
+
+        async def aclose(self):
+            return None
+
+    chunks = _run_stream(monkeypatch, EndOnlyAgent())
+    events = _parse_sse(chunks)
+    tokens = [json.loads(data)["text"] for name, data in events if name == "token"]
+
+    assert tokens == ["OK"]
+    final = json.loads(next(data for name, data in events if name == "final"))
+    assert final["answer"] == "OK"
 
 
 def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):

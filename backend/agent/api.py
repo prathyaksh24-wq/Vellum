@@ -3462,6 +3462,7 @@ async def _stream_agent_turn(
         active_tool_items: dict[str, dict[str, Any]] = {}
         function_stream_items: dict[str, dict[str, Any]] = {}
         function_stream_args: dict[str, str] = {}
+        last_chat_model_output: Any | None = None
         message_item = {
             "id": message_item_id,
             "type": "message",
@@ -3499,7 +3500,10 @@ async def _stream_agent_turn(
                 except StopAsyncIteration:
                     break
                 kind = event.get("event")
-                if kind == "on_chat_model_stream":
+                if kind == "on_chat_model_end":
+                    if _is_primary_chat_model_stream_event(event):
+                        last_chat_model_output = event.get("data", {}).get("output")
+                elif kind == "on_chat_model_stream":
                     if not _is_primary_chat_model_stream_event(event):
                         continue
                     chunk = event.get("data", {}).get("chunk")
@@ -3714,6 +3718,45 @@ async def _stream_agent_turn(
                 )
                 if turn_audit is not None:
                     turn_audit.observe_usage(usage_from_stream_event(event))
+
+            # RoutedChatModel currently completes some provider calls through
+            # `invoke`, which emits a routed `on_chat_model_end` event without
+            # token chunks. Preserve that answer instead of reporting "No response.".
+            if not "".join(answer_parts).strip() and last_chat_model_output is not None:
+                final_text = _message_content(last_chat_model_output)
+                if final_text:
+                    answer_parts.append(final_text)
+                    if not message_item_started:
+                        yield _response_output_item_added(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            item=message_item,
+                        )
+                        message_item_started = True
+                    if not final_answer_started:
+                        final_answer_started = True
+                        yield _agent_activity_event(
+                            response_id=response_id,
+                            thread_id=active_thread_id,
+                            activity_type="final_answer_started",
+                            label="Writing answer...",
+                            item_id=message_item_id,
+                        )
+                    yield _response_output_text_delta(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item_id=message_item_id,
+                        delta=final_text,
+                    )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_delta",
+                        label="Writing answer...",
+                        detail=final_text,
+                        item_id=message_item_id,
+                    )
+                    yield _sse("token", {"text": final_text})
 
             for call_id, item in function_stream_items.items():
                 if item.get("status") == "in_progress":
