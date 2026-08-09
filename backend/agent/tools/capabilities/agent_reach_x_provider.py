@@ -75,7 +75,10 @@ class AgentReachXProvider:
         return self._normalize_posts(output)
 
     def likes(self, handle: str, max_results: int = 20) -> list[dict[str, Any]]:
-        output = self._exec("likes", handle.lstrip("@"), "--max", str(max_results), "--json")
+        target = handle.strip().lstrip("@")
+        if target.casefold() in {"", "me", "self"}:
+            target = self._authenticated_username()
+        output = self._exec("likes", target, "--max", str(max_results), "--json")
         return self._normalize_posts(output)
 
     def profile(self, handle: str) -> dict[str, Any]:
@@ -160,6 +163,24 @@ class AgentReachXProvider:
                 return dict(payload["data"])
             return dict(payload)
         return {"text": str(payload)}
+
+    def _authenticated_username(self) -> str:
+        payload = self._exec("status", "--json")
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, dict):
+            data = payload if isinstance(payload, dict) else {}
+        user = data.get("user") if isinstance(data.get("user"), dict) else data
+        username = (
+            user.get("username")
+            or user.get("screenName")
+            or user.get("screen_name")
+            if isinstance(user, dict)
+            else ""
+        )
+        normalized = str(username or "").strip().lstrip("@")
+        if not normalized:
+            raise AgentReachCommandError("twitter-cli did not report the authenticated username.")
+        return normalized
 
     def _extract_items(self, payload: Any) -> list[Any]:
         if isinstance(payload, list):

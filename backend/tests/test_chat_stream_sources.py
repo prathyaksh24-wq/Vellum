@@ -9,6 +9,7 @@ yielded by api._stream_agent_turn.
 from types import SimpleNamespace
 import asyncio
 import json
+import time
 
 from langchain_core.messages import ToolMessage
 
@@ -408,6 +409,80 @@ def test_stream_agent_turn_emits_delegated_agent_reach_activity_events(monkeypat
 
     assert any(activity["label"] == "Posting to X..." for activity in activities)
     assert any(activity["label"] == "X action completed" and activity["status"] == "completed" for activity in activities)
+
+
+def test_stream_agent_turn_starts_before_slow_x_dispatch_finishes(monkeypatch):
+    class SlowDispatcher:
+        def maybe_handle(self, message, thread_id):
+            time.sleep(0.15)
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                answer="X search is unavailable.",
+                status="error",
+                tools=["x_agent"],
+            )
+
+    monkeypatch.setattr(api, "_live_dispatcher", SlowDispatcher())
+
+    async def _first_event():
+        stream = api._stream_agent_turn(
+            clean_message="search X for Vellum",
+            active_thread_id="x-slow-stream",
+            model=None,
+            store=False,
+        )
+        started = time.perf_counter()
+        first = await anext(stream)
+        elapsed = time.perf_counter() - started
+        await stream.aclose()
+        return first, elapsed
+
+    first, elapsed = asyncio.run(_first_event())
+
+    assert "event: response.created" in first
+    assert elapsed < 0.1
+
+
+def test_stream_agent_turn_chunks_x_passthrough_answer(monkeypatch):
+    answer = "First X result.\nSecond X result.\nThird X result."
+
+    class FakeDispatcher:
+        def maybe_handle(self, message, thread_id):
+            return LiveAgentResult(
+                handled=True,
+                agent_name="XAgent",
+                answer=answer,
+                status="answered",
+                tools=["x_agent"],
+            )
+
+    async def _async_noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
+    monkeypatch.setattr(api, "_background_learn", _async_noop)
+
+    async def _collect():
+        chunks = []
+        async for chunk in api._stream_agent_turn(
+            clean_message="show X results",
+            active_thread_id="x-chunk-stream",
+            model=None,
+            store=False,
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    events = _parse_sse(asyncio.run(_collect()))
+    deltas = [
+        json.loads(data)["delta"]
+        for event, data in events
+        if event == "response.output_text.delta"
+    ]
+
+    assert len(deltas) > 1
+    assert "".join(deltas) == answer
 
 
 def test_stream_agent_turn_emits_function_call_argument_deltas(monkeypatch):

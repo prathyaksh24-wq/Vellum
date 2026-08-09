@@ -57,6 +57,7 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert isinstance(settings.youtube_oauth_client_secret, str)
     assert settings.youtube_oauth_keyring_service == "vellum.youtube"
     assert settings.youtube_oauth_account_label == "primary"
+    assert settings.x_tool_allow_xai_fallback is False
 
 
 def test_auto_gui_removed_from_dependency_files():

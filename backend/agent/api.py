@@ -3170,6 +3170,18 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
 
 
+def _passthrough_text_deltas(text: str, max_chars: int = 160) -> list[str]:
+    if not text:
+        return []
+    deltas: list[str] = []
+    for line in text.splitlines(keepends=True):
+        if len(line) <= max_chars:
+            deltas.append(line)
+            continue
+        deltas.extend(line[offset : offset + max_chars] for offset in range(0, len(line), max_chars))
+    return deltas or [text]
+
+
 async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
     try:
         return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
@@ -3197,6 +3209,16 @@ async def _stream_agent_turn(
 ):
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
+    yield _response_created(response_id=response_id, thread_id=active_thread_id)
+    yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
+    yield _agent_activity_event(
+        response_id=response_id,
+        thread_id=active_thread_id,
+        activity_type="thinking_started",
+        label="Thinking...",
+        detail=clean_message[:200],
+    )
+    yield _sse("meta", {"thread_id": active_thread_id})
     attached_context = await asyncio.to_thread(
         _conversation_context_store.resolve,
         active_thread_id,
@@ -3210,16 +3232,6 @@ async def _stream_agent_turn(
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None
     agent_input_message = _with_attached_conversation_context(clean_message, attached_context)
-    yield _response_created(response_id=response_id, thread_id=active_thread_id)
-    yield _response_in_progress(response_id=response_id, thread_id=active_thread_id)
-    yield _agent_activity_event(
-        response_id=response_id,
-        thread_id=active_thread_id,
-        activity_type="thinking_started",
-        label="Thinking...",
-        detail=clean_message[:200],
-    )
-    yield _sse("meta", {"thread_id": active_thread_id})
     for context_item in attached_context["attachments"]:
         if context_item.get("status") != "ready":
             continue
@@ -3390,21 +3402,23 @@ async def _stream_agent_turn(
                 item_id=message_item_id,
             )
             if answer:
-                yield _response_output_text_delta(
-                    response_id=response_id,
-                    thread_id=active_thread_id,
-                    item_id=message_item_id,
-                    delta=answer,
-                )
-                yield _agent_activity_event(
-                    response_id=response_id,
-                    thread_id=active_thread_id,
-                    activity_type="final_answer_delta",
-                    label="Writing answer...",
-                    detail=answer[:1000],
-                    item_id=message_item_id,
-                )
-                yield _sse("token", {"text": answer})
+                for delta in _passthrough_text_deltas(answer):
+                    yield _response_output_text_delta(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item_id=message_item_id,
+                        delta=delta,
+                    )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_delta",
+                        label="Writing answer...",
+                        detail=delta[:1000],
+                        item_id=message_item_id,
+                    )
+                    yield _sse("token", {"text": delta})
+                    await asyncio.sleep(0)
             yield _response_output_item_done(
                 response_id=response_id,
                 thread_id=active_thread_id,

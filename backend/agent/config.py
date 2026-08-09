@@ -166,6 +166,7 @@ class Settings(BaseSettings):
     github_mcp_allow_destructive: bool = Field(default=False, alias="GITHUB_MCP_ALLOW_DESTRUCTIVE")
     git_tool_allow_writes: bool = Field(default=False, alias="GIT_TOOL_ALLOW_WRITES")
     x_tool_allow_private_reads: bool = Field(default=False, alias="X_TOOL_ALLOW_PRIVATE_READS")
+    x_tool_allow_xai_fallback: bool = Field(default=False, alias="X_TOOL_ALLOW_XAI_FALLBACK")
     x_tool_allow_posts: bool = Field(default=False, alias="X_TOOL_ALLOW_POSTS")
     x_api_client_id: str = Field(default="", alias="X_API_CLIENT_ID")
     x_api_client_secret: str = Field(default="", alias="X_API_CLIENT_SECRET")

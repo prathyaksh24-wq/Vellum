@@ -29,6 +29,8 @@ class XAgent:
         r"(?<!\w)x\s+feed(?:s)?(?!\w)",
         r"(?<!\w)x\s+post(?:s)?(?!\w)",
         r"(?<!\w)on\s+x(?!\w)",
+        r"(?<!\w)(?:my\s+)?(?:latest|recent|last)?\s*(?:liked\s+posts?|x\s+likes?)(?!\w)",
+        r"(?<!\w)(?:posts?|tweets?)\s+(?:did|have)\s+i\s+like(?:d)?\s+(?:on\s+)?x(?!\w)",
         r"^\s*(?:please\s+)?(?:post|publish|tweet)\s+(?:this\s+)?(?:to|on)\s+x(?!\w)",
     )
 
@@ -67,11 +69,15 @@ class XAgent:
         try:
             result = self._search_posts({"query": query, "max_results": 5})
         except Exception as exc:
+            detail = self._sanitize_error(exc)
+            summary = "XAgent could not fetch X posts right now."
+            if "404" in detail:
+                summary += " Agent-Reach X search returned HTTP 404."
             return SpecialistResponse(
                 agent=self.name,
                 status="error",
-                summary="XAgent could not fetch X posts right now.",
-                analysis=f"X search failed: {self._sanitize_error(exc)}",
+                summary=summary,
+                analysis=f"X search failed: {detail}",
                 confidence=0.2,
             )
         items = result.get("items", [])
@@ -511,6 +517,9 @@ class XAgent:
             re.search(
                 r"(?<!\w)(?:my\s+)?(?:latest|recent|last)?\s*(?:liked\s+posts?|likes?|x\s+likes?)\b",
                 lowered_query,
+            )
+            or re.search(
+                r"(?<!\w)(?:posts?|tweets?)\s+(?:did|have)\s+i\s+like(?:d)?\s+(?:on\s+)?x(?!\w)", lowered_query
             )
         ) and not re.search(r"(?<!\w)(?:like|favorite)\s+(?:this|that|the)\b", lowered_query)
 
