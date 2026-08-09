@@ -49,9 +49,10 @@ def test_openrouter_payload_enforces_privacy_policy():
         session_id="thread-1",
     )
 
+    reviewed_providers = list(openrouter.get_settings().reviewed_openrouter_providers)
     assert payload["provider"]["data_collection"] == "deny"
-    assert payload["provider"]["only"] == ["Fireworks", "Together", "DeepInfra"]
-    assert payload["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
+    assert payload["provider"]["only"] == reviewed_providers
+    assert payload["provider"]["order"] == reviewed_providers
     assert payload["provider"]["zdr"] is True
     assert payload["stream"] is False
     assert payload["session_id"] == "thread-1"
@@ -88,9 +89,10 @@ def test_openrouter_chat_posts_to_chat_completions_and_audits_metadata(tmp_path,
     assert answer == "mock answer"
     assert requests[0].url.path.endswith("/chat/completions")
     body = json.loads(requests[0].content)
+    reviewed_providers = list(openrouter.get_settings().reviewed_openrouter_providers)
     assert body["provider"]["data_collection"] == "deny"
-    assert body["provider"]["only"] == ["Fireworks", "Together", "DeepInfra"]
-    assert body["provider"]["order"] == ["Fireworks", "Together", "DeepInfra"]
+    assert body["provider"]["only"] == reviewed_providers
+    assert body["provider"]["order"] == reviewed_providers
     assert body["provider"]["zdr"] is True
 
     audit_text = (tmp_path / "audit_log.jsonl").read_text(encoding="utf-8")

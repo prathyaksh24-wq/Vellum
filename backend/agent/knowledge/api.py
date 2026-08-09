@@ -7,9 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
+from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
+    MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
     ProjectionInput,
@@ -122,6 +124,21 @@ async def core_annotations(
     return {"annotations": items, "count": len(items)}
 
 
+@router.get("/projections")
+async def core_projections(
+    target: str = "",
+    target_ref: str = "",
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, Any]:
+    items = await asyncio.to_thread(
+        get_knowledge_core().store.list_projections,
+        target=target,
+        target_ref=target_ref,
+        limit=limit,
+    )
+    return {"projections": items, "count": len(items)}
+
+
 @router.post("/projections")
 async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().store.register_projection, request)
@@ -137,3 +154,28 @@ async def core_bootstrap(request: BootstrapRequest) -> dict[str, Any]:
     if request.apply and not request.confirm:
         raise HTTPException(status_code=409, detail="Bootstrap apply requires explicit confirmation.")
     return await asyncio.to_thread(get_knowledge_core().bootstrap, request)
+
+
+@router.post("/materialization-canary")
+async def core_materialization_canary(request: MaterializationCanaryRequest) -> dict[str, Any]:
+    if request.apply:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "canary_apply_offline",
+                "message": "Stop Vellum and run materialize-canary from the local CLI.",
+            },
+        )
+    try:
+        result = await asyncio.to_thread(get_knowledge_core().materialize_canary, request)
+    except MaterializationCanaryError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "canary_not_ready", "message": str(exc)},
+        ) from exc
+    if result.get("status") == "rolled_back":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "canary_rolled_back", "report": result},
+        )
+    return result

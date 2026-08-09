@@ -215,3 +215,8 @@ class BootstrapRequest(BaseModel):
     apply: bool = False
     confirm: bool = False
     limit: int | None = Field(default=None, ge=1, le=100000)
+
+
+class MaterializationCanaryRequest(BaseModel):
+    apply: bool = False
+    confirmation: str = Field(default="", max_length=80)

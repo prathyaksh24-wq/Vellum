@@ -1198,6 +1198,42 @@ class KnowledgeStore:
             )
         return {"projection_id": projection_id, "created": existing is None}
 
+    def list_projections(
+        self,
+        *,
+        target: str = "",
+        target_ref: str = "",
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        params: list[Any] = []
+        clauses = []
+        if target:
+            clauses.append("target = ?")
+            params.append(target)
+        if target_ref:
+            clauses.append("target_ref = ?")
+            params.append(target_ref)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(int(limit), 500)))
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, canonical_type, canonical_id, target, target_ref,
+                       projection_type, content_hash, generated_by, do_not_reingest,
+                       metadata_json, last_exported_at
+                FROM projections {where}
+                ORDER BY target, target_ref LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        items = []
+        for row in rows:
+            item = dict(row)
+            item["do_not_reingest"] = bool(item["do_not_reingest"])
+            item["metadata"] = json.loads(str(item.pop("metadata_json") or "{}"))
+            items.append(item)
+        return items
+
     def record_user_signal(self, item: UserSignalInput) -> dict[str, Any]:
         signal_id = _stable_id("sig", item.event_key)
         observed_at = _iso(item.observed_at) or _now()

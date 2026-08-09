@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
+from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
+    MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
     Sensitivity,
@@ -225,6 +227,13 @@ class KnowledgeCore:
             "retrieval_indexes": index_stats,
             "status": self.store.status() if request.apply else None,
         }
+
+    def materialize_canary(self, request: MaterializationCanaryRequest) -> dict[str, Any]:
+        return MaterializationCanary(
+            self.store,
+            conversations_path=self.conversations_path,
+            vault_root=self.vault_root,
+        ).run(request)
 
     def create_context_pack(self, request: ContextPackRequest) -> dict[str, Any]:
         return self.store.create_context_pack(request)
