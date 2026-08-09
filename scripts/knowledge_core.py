@@ -1,4 +1,4 @@
-"""Operational CLI for previewing, backing up, and restoring Knowledge Core."""
+"""Operational CLI for previewing, proving, backing up, and restoring Knowledge Core."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from agent.knowledge.backup import KnowledgeBackupService  # noqa: E402
-from agent.knowledge.models import BootstrapRequest  # noqa: E402
+from agent.knowledge.materialization import CANARY_CONFIRMATION  # noqa: E402
+from agent.knowledge.models import BootstrapRequest, MaterializationCanaryRequest  # noqa: E402
 from agent.knowledge.service import KnowledgeCore  # noqa: E402
 from agent.knowledge.store import KnowledgeStore  # noqa: E402
 
@@ -65,6 +66,10 @@ def parse_args() -> argparse.Namespace:
     bootstrap.add_argument("--no-archives", action="store_true")
     bootstrap.add_argument("--no-retrieval-indexes", action="store_true")
 
+    canary = subparsers.add_parser("materialize-canary")
+    canary.add_argument("--apply", action="store_true")
+    canary.add_argument("--confirm", default="")
+
     backup = subparsers.add_parser("backup")
     backup.add_argument("--output", type=Path, required=True)
 
@@ -104,6 +109,15 @@ def main() -> int:
                 limit=args.limit,
             )
         )
+    elif args.command == "materialize-canary":
+        if args.apply and args.confirm != CANARY_CONFIRMATION:
+            raise SystemExit(f"Apply requires --confirm {CANARY_CONFIRMATION}")
+        result = core.materialize_canary(
+            MaterializationCanaryRequest(
+                apply=args.apply,
+                confirmation=args.confirm,
+            )
+        )
     elif args.command == "backup":
         result = KnowledgeBackupService(core.store).create(args.output)
     elif args.command == "verify":
@@ -116,6 +130,8 @@ def main() -> int:
             rollback_destination=args.rollback_output,
         )
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
+    if args.command == "materialize-canary" and args.apply and result.get("passed") is not True:
+        return 1
     return 0
 
 

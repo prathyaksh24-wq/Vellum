@@ -2,6 +2,7 @@
 
 from agent.knowledge.models import (
     ContextPackRequest,
+    MaterializationCanaryRequest,
     ObservationInput,
     ProjectionInput,
     SourceItemInput,
@@ -13,6 +14,7 @@ __all__ = [
     "ContextPackRequest",
     "KnowledgeCore",
     "KnowledgeStore",
+    "MaterializationCanaryRequest",
     "ObservationInput",
     "ProjectionInput",
     "SourceItemInput",

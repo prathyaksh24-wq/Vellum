@@ -124,6 +124,20 @@ The CLI supports explicit opt-out for each source group:
 .venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --no-memories --no-archives --no-retrieval-indexes
 ```
 
+## Phase 3 Materialization Canary
+
+Phase 3 does not change read ownership. It proves the existing adapters and
+Knowledge Core can materialize a bounded evidence set safely before any cutover.
+The canary selects exactly one conversation, one non-X vault source, one X item,
+and one generated wiki projection marked `do_not_reingest: true`.
+
+Preview performs no writes. Apply requires the literal confirmation token,
+creates and verifies a pre-canary backup, imports the same selection twice, and
+checks stable source/version/observation/projection counts, stable IDs, retained
+provenance, local citation retrieval, unchanged source files, projection policy,
+and SQLite integrity. A failed gate restores the verified backup automatically
+and retains a local archive of the failed canary state for diagnosis.
+
 The YouTube connector keeps provider boundaries additive: official OAuth owns
 channel identity and subscription snapshots, Google Takeout owns historical
 activity events, and transcript/live-search tools own content evidence. All
@@ -219,8 +233,10 @@ Initial additive endpoints:
 - `GET /api/knowledge/core/ingestion-jobs`
 - `GET /api/knowledge/core/sync-cursors`
 - `GET /api/knowledge/core/annotations`
+- `GET /api/knowledge/core/projections`
 - `POST /api/knowledge/core/context-packs`
 - `POST /api/knowledge/core/bootstrap`
+- `POST /api/knowledge/core/materialization-canary`
 
 The existing wiki endpoints remain stable throughout migration.
 
@@ -257,6 +273,15 @@ Applying the existing-data bootstrap requires the literal confirmation token:
 
 ```powershell
 .venv\Scripts\python.exe scripts\knowledge_core.py bootstrap --apply --confirm APPLY_KNOWLEDGE_BOOTSTRAP
+```
+
+Run the bounded Phase 3 proof in preview mode first. Apply is CLI-only and
+requires Vellum to be stopped. It runs the same selection twice and rolls back
+automatically if reconciliation fails:
+
+```powershell
+.venv\Scripts\python.exe scripts\knowledge_core.py materialize-canary
+.venv\Scripts\python.exe scripts\knowledge_core.py materialize-canary --apply --confirm APPLY_KNOWLEDGE_CANARY
 ```
 
 Backups use SQLite's online backup API, include content-addressed blobs and a
