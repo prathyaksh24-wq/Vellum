@@ -53,7 +53,12 @@ def test_x_service_default_search_backend_passes_window_to_script(monkeypatch):
 
     monkeypatch.setattr(x_service, "_load_script", lambda name: SimpleNamespace(search_x=fake_search_x))
 
-    result = XCapabilityService(search_posts_backend=None, allow_posts=False, agent_reach_provider=AgentReachUnavailable()).search_posts(
+    result = XCapabilityService(
+        search_posts_backend=None,
+        allow_posts=False,
+        allow_xai_fallback=True,
+        agent_reach_provider=AgentReachUnavailable(),
+    ).search_posts(
         {"query": "Arsenal", "max_results": 5}
     )
 
@@ -132,6 +137,32 @@ def test_x_service_falls_back_to_xai_search_when_agent_reach_command_fails():
 
     assert result["provider"] == "xai"
     assert "twitter-cli failed" in result["fallback_reason"]
+
+
+def test_x_service_can_disable_xai_fallback_without_masking_agent_reach_failure():
+    fallback_calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def search(self, query, max_results):
+            raise AgentReachCommandError("twitter-cli search returned HTTP 404")
+
+    service = XCapabilityService(
+        search_posts_backend=lambda query, max_results: fallback_calls.append((query, max_results)),
+        agent_reach_provider=FakeAgentReach(),
+        allow_xai_fallback=False,
+    )
+
+    try:
+        service.search_posts({"query": "latest x posts", "max_results": 2})
+    except AgentReachCommandError as exc:
+        assert "HTTP 404" in str(exc)
+    else:
+        raise AssertionError("disabled xAI fallback must preserve the Agent-Reach failure")
+
+    assert fallback_calls == []
 
 
 def test_x_service_prefers_agent_reach_for_text_post_when_ready_and_confirmed():

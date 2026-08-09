@@ -124,11 +124,41 @@ def test_agent_reach_provider_read_private_and_timeline_commands():
 
     assert provider.bookmarks(max_results=4)[0]["text"] == "saved"
     assert provider.timeline(max_results=3)[0]["text"] == "saved"
-    assert provider.likes("me", max_results=2)[0]["text"] == "saved"
+    assert provider.likes("vellum-user", max_results=2)[0]["text"] == "saved"
 
     assert calls[0] == ["twitter", "bookmarks", "--max", "4", "--json"]
     assert calls[1] == ["twitter", "feed", "--max", "3", "--json"]
-    assert calls[2] == ["twitter", "likes", "me", "--max", "2", "--json"]
+    assert calls[2] == ["twitter", "likes", "vellum-user", "--max", "2", "--json"]
+
+
+def test_agent_reach_provider_resolves_self_before_reading_likes():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        if args[1] == "status":
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"ok":true,"data":{"authenticated":true,"user":{"username":"vellum-user"}}}',
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout='{"ok":true,"data":[{"id":"1","text":"saved","author":{"screenName":"me"}}]}',
+            stderr="",
+        )
+
+    provider = AgentReachXProvider(runner=fake_runner)
+
+    result = provider.likes("me", max_results=2)
+
+    assert result[0]["text"] == "saved"
+    assert calls == [
+        ["twitter", "status", "--json"],
+        ["twitter", "likes", "vellum-user", "--max", "2", "--json"],
+    ]
 
 
 def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_flags():

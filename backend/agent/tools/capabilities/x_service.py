@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import REPO_ROOT, get_settings
-from agent.tools.capabilities.agent_reach_x_provider import AgentReachError, AgentReachXProvider
+from agent.tools.capabilities.agent_reach_x_provider import (
+    AgentReachError,
+    AgentReachUnavailableError,
+    AgentReachXProvider,
+)
 from agent.tools.registry import (
     CapabilityAccess,
     CapabilityRecord,
@@ -47,6 +51,7 @@ class XCapabilityService:
         media_upload_backend: MediaUploadBackend | None = None,
         agent_reach_provider: Any | None = None,
         allow_private_reads: bool | None = None,
+        allow_xai_fallback: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
         self._custom_search_backend = search_posts_backend is not None
@@ -65,6 +70,12 @@ class XCapabilityService:
             bool(getattr(settings, "x_tool_allow_private_reads", False))
             if allow_private_reads is None
             else allow_private_reads
+        )
+        self.allow_xai_fallback = (
+            bool(getattr(settings, "x_tool_allow_xai_fallback", False))
+            or self._custom_search_backend
+            if allow_xai_fallback is None
+            else allow_xai_fallback
         )
         self.allow_posts = (
             bool(getattr(settings, "x_tool_allow_posts", False)) if allow_posts is None else allow_posts
@@ -195,6 +206,12 @@ class XCapabilityService:
                 return {"action": "x.search_posts", "items": items, "provider": "agent-reach"}
             except AgentReachError as exc:
                 fallback_reason = self._safe_reason(exc)
+                if not self.allow_xai_fallback:
+                    raise
+        if not self.allow_xai_fallback:
+            raise AgentReachUnavailableError(
+                "Agent-Reach X search is unavailable and the xAI fallback is disabled."
+            )
         items = [self._normalize_post(item) for item in self.search_posts_backend(query, max_results)]
         result = {"action": "x.search_posts", "items": items, "provider": "xai"}
         if fallback_reason:

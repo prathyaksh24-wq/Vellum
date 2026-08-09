@@ -1023,6 +1023,9 @@ def test_x_agent_reports_needs_fetch_when_service_has_no_posts(tmp_path):
 
     assert agent.name == "XAgent"
     assert agent.can_handle("latest-50 tweets from AlexHormozi")
+    assert agent.can_handle("Show my X likes")
+    assert agent.can_handle("Which posts have I liked on X?")
+    assert not agent.can_handle("I like this interface")
     assert response.status == "needs_fetch"
     assert response.summary == "XAgent did not find matching X posts."
 
