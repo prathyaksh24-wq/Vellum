@@ -15,7 +15,14 @@ AGENT_REACH_CAPABILITIES = [
     "x.post",
     "x.reply",
     "x.like",
+    "x.unlike",
     "x.repost",
+    "x.unrepost",
+    "x.bookmark",
+    "x.unbookmark",
+    "x.quote",
+    "x.follow",
+    "x.unfollow",
     "x.delete",
 ]
 

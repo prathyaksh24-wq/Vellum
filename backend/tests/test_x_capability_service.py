@@ -428,8 +428,95 @@ def test_x_service_registers_capabilities_with_tool_registry():
     assert "x.like" in registry.names()
     assert "x.repost" in registry.names()
     assert "x.delete" in registry.names()
+    assert "x.bookmark" in registry.names()
+    assert "x.unbookmark" in registry.names()
+    assert "x.unlike" in registry.names()
+    assert "x.unrepost" in registry.names()
+    assert "x.quote" in registry.names()
+    assert "x.follow" in registry.names()
+    assert "x.unfollow" in registry.names()
     assert "x.publish_post" in registry.names()
     assert "x.publish_post_with_media" in registry.names()
     assert "x.account" in registry.names()
     assert "x.bookmarks" in registry.names()
+    assert "x.status" in registry.names()
     assert registry.get("x.search_posts").stream_label == "Searched X"
+
+
+def test_x_service_routes_extended_confirmed_actions_to_agent_reach():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def bookmark(self, target): calls.append(("bookmark", target)); return {"ok": True}
+        def unbookmark(self, target): calls.append(("unbookmark", target)); return {"ok": True}
+        def unlike(self, target): calls.append(("unlike", target)); return {"ok": True}
+        def unrepost(self, target): calls.append(("unrepost", target)); return {"ok": True}
+        def quote(self, target, text): calls.append(("quote", target, text)); return {"ok": True}
+        def follow(self, handle): calls.append(("follow", handle)); return {"ok": True}
+        def unfollow(self, handle): calls.append(("unfollow", handle)); return {"ok": True}
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach(), allow_posts=True)
+    confirmed = {"tweet_id": "123", "confirm": True}
+    service.bookmark(confirmed)
+    service.unbookmark(confirmed)
+    service.unlike(confirmed)
+    service.unrepost(confirmed)
+    service.quote({**confirmed, "text": "comment"})
+    service.follow({"handle": "@openai", "confirm": True})
+    service.unfollow({"handle": "openai", "confirm": True})
+
+    assert calls == [
+        ("bookmark", "123"),
+        ("unbookmark", "123"),
+        ("unlike", "123"),
+        ("unrepost", "123"),
+        ("quote", "123", "comment"),
+        ("follow", "openai"),
+        ("unfollow", "openai"),
+    ]
+
+
+def test_x_service_status_exposes_provider_health_and_policy():
+    class FakeAgentReach:
+        def health(self, *, probe_search=False):
+            return {"status": "ready", "probe_search": probe_search}
+
+    service = XCapabilityService(
+        agent_reach_provider=FakeAgentReach(),
+        allow_private_reads=True,
+        allow_posts=False,
+        allow_xai_fallback=False,
+    )
+
+    result = service.status({"probe_search": True})
+
+    assert result["connector"]["status"] == "ready"
+    assert result["connector"]["probe_search"] is True
+    assert result["policy"] == {"private_reads": True, "external_writes": False, "xai_fallback": False}
+
+
+def test_x_service_does_not_fallback_after_ambiguous_agent_reach_post_failure():
+    fallback_calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def post_tweet(self, _text):
+            raise AgentReachCommandError("connection reset after request")
+
+    service = XCapabilityService(
+        post_backend=lambda text: fallback_calls.append(text) or {"id": "duplicate"},
+        agent_reach_provider=FakeAgentReach(),
+        allow_posts=True,
+    )
+
+    try:
+        service.publish_post({"text": "one post", "confirm": True})
+    except AgentReachCommandError:
+        pass
+    else:
+        raise AssertionError("ambiguous Agent-Reach write failures must propagate")

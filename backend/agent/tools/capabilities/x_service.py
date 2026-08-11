@@ -85,6 +85,16 @@ class XCapabilityService:
         registry = ToolRegistry()
         registry.register(
             CapabilityRecord(
+                name="x.status",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Checked X connector",
+                adapter=self.status,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
                 name="x.search_posts",
                 namespace="x",
                 access=CapabilityAccess.READ,
@@ -180,7 +190,14 @@ class XCapabilityService:
         for name, label, adapter in (
             ("x.reply", "Replied on X", self.reply),
             ("x.like", "Liked on X", self.like),
+            ("x.unlike", "Removed X like", self.unlike),
             ("x.repost", "Reposted on X", self.repost),
+            ("x.unrepost", "Removed X repost", self.unrepost),
+            ("x.bookmark", "Bookmarked X post", self.bookmark),
+            ("x.unbookmark", "Removed X bookmark", self.unbookmark),
+            ("x.quote", "Quoted X post", self.quote),
+            ("x.follow", "Followed X account", self.follow),
+            ("x.unfollow", "Unfollowed X account", self.unfollow),
             ("x.delete", "Deleted X post", self.delete),
         ):
             registry.register(
@@ -195,6 +212,18 @@ class XCapabilityService:
                 )
             )
         return registry
+
+    def status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        probe_search = payload.get("probe_search") is True
+        return {
+            "action": "x.status",
+            "connector": self.agent_reach_provider.health(probe_search=probe_search),
+            "policy": {
+                "private_reads": self.allow_private_reads,
+                "external_writes": self.allow_posts,
+                "xai_fallback": self.allow_xai_fallback,
+            },
+        }
 
     def search_posts(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query", "")).strip()
@@ -279,14 +308,11 @@ class XCapabilityService:
             raise ToolPermissionError("Posting to X requires confirm=True.")
         text = str(payload.get("text", ""))
         if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_post_backend):
-            try:
-                return {
-                    "action": "x.publish_post",
-                    "tweet": self.agent_reach_provider.post_tweet(text),
-                    "provider": "agent-reach",
-                }
-            except AgentReachError:
-                pass
+            return {
+                "action": "x.publish_post",
+                "tweet": self.agent_reach_provider.post_tweet(text),
+                "provider": "agent-reach",
+            }
         return {"action": "x.publish_post", "tweet": self.post_backend(text)}
 
     def publish_post_with_media(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -355,6 +381,93 @@ class XCapabilityService:
             "result": self.agent_reach_provider.delete(self._tweet_id(payload)),
             "provider": "agent-reach",
         }
+
+    def bookmark(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_tweet_mutation(
+            payload,
+            action="x.bookmark",
+            prefix="Bookmarking an X post requires",
+            adapter=self.agent_reach_provider.bookmark,
+        )
+
+    def unbookmark(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_tweet_mutation(
+            payload,
+            action="x.unbookmark",
+            prefix="Removing an X bookmark requires",
+            adapter=self.agent_reach_provider.unbookmark,
+        )
+
+    def unlike(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_tweet_mutation(
+            payload,
+            action="x.unlike",
+            prefix="Removing an X like requires",
+            adapter=self.agent_reach_provider.unlike,
+        )
+
+    def unrepost(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_tweet_mutation(
+            payload,
+            action="x.unrepost",
+            prefix="Removing an X repost requires",
+            adapter=self.agent_reach_provider.unrepost,
+        )
+
+    def quote(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_confirmed_write(payload, "Quoting on X requires")
+        text = str(payload.get("text") or "").strip()
+        if not text:
+            raise ToolPermissionError("X quote requires text.")
+        self._require_agent_reach()
+        return {
+            "action": "x.quote",
+            "result": self.agent_reach_provider.quote(self._tweet_id(payload), text),
+            "provider": "agent-reach",
+        }
+
+    def follow(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_handle_mutation(
+            payload,
+            action="x.follow",
+            prefix="Following an X account requires",
+            adapter=self.agent_reach_provider.follow,
+        )
+
+    def unfollow(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._confirmed_handle_mutation(
+            payload,
+            action="x.unfollow",
+            prefix="Unfollowing an X account requires",
+            adapter=self.agent_reach_provider.unfollow,
+        )
+
+    def _confirmed_tweet_mutation(
+        self,
+        payload: dict[str, Any],
+        *,
+        action: str,
+        prefix: str,
+        adapter: Callable[[str], dict[str, Any]],
+    ) -> dict[str, Any]:
+        self._require_confirmed_write(payload, prefix)
+        self._require_agent_reach()
+        return {"action": action, "result": adapter(self._tweet_id(payload)), "provider": "agent-reach"}
+
+    def _confirmed_handle_mutation(
+        self,
+        payload: dict[str, Any],
+        *,
+        action: str,
+        prefix: str,
+        adapter: Callable[[str], dict[str, Any]],
+    ) -> dict[str, Any]:
+        self._require_confirmed_write(payload, prefix)
+        handle = str(payload.get("handle") or payload.get("username") or "").strip().lstrip("@")
+        if not handle:
+            raise ToolPermissionError("X follow actions require a handle.")
+        self._require_agent_reach()
+        return {"action": action, "result": adapter(handle), "provider": "agent-reach"}
 
     @staticmethod
     def _normalize_max_results(value: Any) -> int:

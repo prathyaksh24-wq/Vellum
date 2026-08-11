@@ -1,4 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 import subprocess
+import threading
+import time
 
 import pytest
 
@@ -7,6 +10,7 @@ from agent.tools.capabilities.agent_reach_x_provider import (
     AgentReachTimeoutError,
     AgentReachXProvider,
 )
+from agent.plugins.models import PluginStatus
 
 
 def test_agent_reach_provider_search_command_success_normalizes_results():
@@ -195,3 +199,147 @@ def test_agent_reach_provider_normalizes_status_urls_for_write_commands():
 
     assert calls[0] == ["twitter", "retweet", "1234567890123456789", "--json"]
     assert calls[1] == ["twitter", "delete", "1234567890123456789", "--yes", "--json"]
+
+
+def test_agent_reach_provider_retries_retryable_reads_once():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        if len(calls) == 1:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="HTTP 404 not_found")
+        return subprocess.CompletedProcess(args, 0, stdout='{"data":[{"id":"1","text":"found"}]}', stderr="")
+
+    provider = AgentReachXProvider(runner=fake_runner, retry_delay_seconds=0)
+
+    result = provider.search("vellum", max_results=1)
+
+    assert result[0]["text"] == "found"
+    assert len(calls) == 2
+
+
+def test_agent_reach_provider_never_retries_mutations():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="HTTP 429 rate limited")
+
+    provider = AgentReachXProvider(runner=fake_runner, retry_delay_seconds=0)
+
+    with pytest.raises(AgentReachCommandError, match="429"):
+        provider.post_tweet("one post only")
+
+    assert len(calls) == 1
+
+
+def test_agent_reach_provider_serializes_cli_processes_across_instances():
+    active = 0
+    max_active = 0
+    guard = threading.Lock()
+
+    def fake_runner(args, **_kwargs):
+        nonlocal active, max_active
+        with guard:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.02)
+        with guard:
+            active -= 1
+        return subprocess.CompletedProcess(args, 0, stdout='{"data":[]}', stderr="")
+
+    first = AgentReachXProvider(runner=fake_runner)
+    second = AgentReachXProvider(runner=fake_runner)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(lambda provider: provider.timeline(1), (first, second)))
+
+    assert max_active == 1
+
+
+def test_agent_reach_provider_reports_capability_health_without_claiming_edit_support(monkeypatch):
+    provider = AgentReachXProvider(runner=lambda *_args, **_kwargs: None, retry_delay_seconds=0)
+    monkeypatch.setattr(
+        provider,
+        "status",
+        lambda: PluginStatus(
+            id="agent-reach",
+            name="Agent-Reach",
+            type="connector",
+            category="Connectors",
+            configured=True,
+            status="ready",
+        ),
+    )
+    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.6")
+    monkeypatch.setattr(
+        provider,
+        "search",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AgentReachCommandError("HTTP 404")),
+    )
+
+    health = provider.health(probe_search=True)
+
+    assert health["status"] == "degraded"
+    assert health["twitter_cli"]["version"] == "0.8.6"
+    assert health["capabilities"]["search"]["status"] == "degraded"
+    assert health["capabilities"]["edit"]["status"] == "unsupported"
+    assert health["capabilities"]["post"]["automatic_retries"] == 0
+
+
+def test_agent_reach_provider_exposes_supported_confirmation_safe_commands():
+    calls = []
+
+    def fake_runner(args, **_kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true}', stderr="")
+
+    provider = AgentReachXProvider(runner=fake_runner)
+    provider.bookmark("123")
+    provider.unbookmark("123")
+    provider.unlike("123")
+    provider.unrepost("123")
+    provider.quote("123", "comment")
+    provider.follow("@openai")
+    provider.unfollow("openai")
+
+    assert calls == [
+        ["twitter", "bookmark", "123", "--json"],
+        ["twitter", "unbookmark", "123", "--json"],
+        ["twitter", "unlike", "123", "--json"],
+        ["twitter", "unretweet", "123", "--json"],
+        ["twitter", "quote", "123", "comment", "--json"],
+        ["twitter", "follow", "openai", "--json"],
+        ["twitter", "unfollow", "openai", "--json"],
+    ]
+
+
+def test_agent_reach_provider_marks_outdated_twitter_cli_search_degraded(monkeypatch):
+    provider = AgentReachXProvider(runner=lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        provider,
+        "status",
+        lambda: PluginStatus(
+            id="agent-reach",
+            name="Agent-Reach",
+            type="connector",
+            category="Connectors",
+            configured=True,
+            status="ready",
+        ),
+    )
+    monkeypatch.setattr(provider, "_twitter_version", lambda: "0.8.5")
+
+    def fail_if_searched(*_args, **_kwargs):
+        raise AssertionError("outdated twitter-cli should fail health before live search")
+
+    monkeypatch.setattr(provider, "search", fail_if_searched)
+
+    health = provider.health(probe_search=True)
+
+    assert health["status"] == "degraded"
+    assert health["twitter_cli"] == {
+        "version": "0.8.5",
+        "minimum_version": "0.8.6",
+        "version_supported": False,
+    }
+    assert health["capabilities"]["search"]["status"] == "degraded"

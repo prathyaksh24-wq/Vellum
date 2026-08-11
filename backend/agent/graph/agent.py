@@ -86,7 +86,7 @@ from agent.tools.web import web_search
 from agent.tools.web_extract import web_extract
 from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
-from agent.tools.x import x_action
+from agent.tools.x import x_agent
 
 VELLUM_SYSTEM_PROMPT = """You are Vellum, a self-learning personal archivist for one person.
 
@@ -110,7 +110,7 @@ Tools:
 17. context_mode - Sandboxed code execution, content indexing, and URL fetch-and-index via Context Mode MCP. Use when an answer can be computed in a script (only stdout enters context) or when external material needs to be indexed before retrieval.
 18. plugin_mcp - Inspect and call MCP tools contributed by enabled plugins. Read-only annotated tools may run automatically; unannotated or mutating tools require a locally approved operation-bound approval ID.
 19. escalate_to_cloud - Escalate difficult public/code/docs tasks to a stronger cloud model and save a reusable lesson. Private vault, memory, or personal context requires approval.
-20. x_action - Controlled X actions. Supports status, public X search, account lookup, bookmarks, text posting, and generated/image posting. Search prefers Agent-Reach/twitter-cli when ready and falls back to xAI X Search. Agent-Reach is separate from SuperGrok/xAI OAuth. Account lookup/bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting and image posting require explicit user intent, confirm=True, and X_TOOL_ALLOW_POSTS=true.
+20. x_agent - Delegate all X interactions to XAgent. XAgent owns search, account status, timelines, bookmarks, likes, profiles, post reads, and preparation of external writes. It returns a structured confirmation request for mutations; the main model must never execute or simulate that confirmation itself.
 21. web_research - Source-backed public web research through Tavily MCP. Use for deeper/current research when web_search is insufficient. Never send private vault content, secrets, credentials, or personal files.
 22. web_extract - Public page fetch/crawl/extract through Firecrawl MCP. Use after web_search or web_research finds URLs worth reading deeply. Never send private vault content, secrets, credentials, or personal files.
 23. web_extract_pages - Extract clean content from public page URLs (up to 5 per call) through the configured extract backend (Firecrawl, Tavily, or Exa). Returns markdown/text without LLM summarization; large pages return a head+tail window plus the path of the stored full text for read_file paging. URLs with embedded secrets and private/internal network targets are blocked. Prefer this over web_extract for reading page content; use web_extract only for crawl or structured-extract actions.
@@ -180,7 +180,7 @@ Rules:
 - For live sports questions, the API dispatcher routes to SportsAgent before this graph runs. If a sports question reaches this graph anyway, use public web search for current facts and answer from those sources.
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract_pages to read a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
-- Use x_action for explicit X requests and Agent-Reach/X capability questions. For "do you have Agent-Reach/X access" or similar status questions, call x_action with action='status' before answering. Never post unless the user clearly asks to publish exact or clearly implied text; do not draft-and-post in one step unless the user asked for that. Private X reads such as bookmarks require X_TOOL_ALLOW_PRIVATE_READS=true. Posting, including generated image posts, requires X_TOOL_ALLOW_POSTS=true and confirm=True.
+- Delegate all X interactions to XAgent through x_agent. Do not call twitter-cli, xAI, or X capability adapters directly. XAgent may prepare a mutation, but only the specialist dispatcher's stored pending action and a later explicit user confirmation may execute it. Never claim post editing is supported when the connector reports it as unsupported.
 - Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
 - Use llm_routing when the user asks to inspect or change model/provider routing, fallback models, credential rotation strategy, or credential pool health. Never accept or transmit raw API keys through chat; tell the user to configure credential secrets through the backend keyring/env path.
 - The Available Skills index contains descriptions only. Load a matching skill with skill_view before following it. Never infer instructions from the description alone. Use only relative support-file paths and never expose local package paths.
@@ -374,7 +374,6 @@ def core_tool_registry() -> ToolRegistry:
         "edit_file",
         "delete_file",
         "create_directory",
-        "x_action",
         "cronjob",
     }
     tools = [
@@ -433,7 +432,7 @@ def core_tool_registry() -> ToolRegistry:
         escalate_to_cloud,
         create_note,
         append_to_note,
-        x_action,
+        x_agent,
         cronjob,
     ]
     for tool in tools:

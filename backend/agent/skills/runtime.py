@@ -54,7 +54,7 @@ CORE_TOOL_NAMES = {
     "web_extract_pages",
     "web_research",
     "web_search",
-    "x_action",
+    "x_agent",
 }
 CORE_TOOLSETS = {"browser", "filesystem", "github", "memory", "skills", "terminal", "web"}
 _WORD = re.compile(r"[a-z0-9]+")

@@ -2792,7 +2792,7 @@ _ACTIVITY_LABELS = {
     "delete_file": "Deleted a file",
     "create_directory": "Created a folder",
     "context_mode": "Fetched a page",
-    "x_action": "Searched X",
+    "x_agent": "Called X Agent",
     "search_amazon": "Checked Amazon",
     "computer_use": "Used the desktop",
     "knowledge_wiki": "Maintained your knowledge wiki",
@@ -2975,7 +2975,7 @@ def _memory_confidence(tool_names: list[Any] | tuple[Any, ...] | None, source_re
     has_sources = bool(_memory_source_urls(source_records))
     if has_sources and names:
         return 0.92
-    if has_sources or names.intersection({"web_search", "search_my_notes", "memory_orchestrator", "x_action"}):
+    if has_sources or names.intersection({"web_search", "search_my_notes", "memory_orchestrator", "x_agent"}):
         return 0.88
     return 0.7
 

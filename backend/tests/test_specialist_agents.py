@@ -908,6 +908,7 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
         agent_reach_provider=AgentReachUnavailable(),
     )
     agent = XAgent(vault_root=tmp_path, x_service=service)
+    assert agent.can_handle("Search X for Vellum") is True
 
     response = agent.answer("What did Naval post on X?")
 
@@ -915,6 +916,33 @@ def test_x_agent_searches_posts_through_capability_service(tmp_path):
     assert "Naval posted about leverage" in response.summary
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://x.com/naval/status/1"
+
+
+def test_x_agent_honors_requested_search_result_limit(tmp_path):
+    calls = []
+
+    class FakeXService:
+        def search_posts(self, payload):
+            calls.append(payload)
+            return {
+                "provider": "agent-reach",
+                "items": [
+                    {
+                        "text": f"result {index}",
+                        "handle": "vellum",
+                        "url": f"https://x.com/vellum/status/{index}",
+                    }
+                    for index in range(5)
+                ],
+            }
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    response = agent.answer("Search X for Vellum and show 2 results")
+
+    assert calls == [{"query": "Search X for Vellum and show 2 results", "max_results": 2}]
+    assert len(response.sources) == 2
+    assert "result 2" not in response.summary
 
 
 def test_x_agent_search_with_agent_reach_emits_visible_activity(tmp_path):
@@ -1111,6 +1139,56 @@ def test_x_agent_confirmed_repost_uses_normalized_numeric_tweet_id(tmp_path):
 
     assert response.status == "answered"
     assert calls == [{"tweet_id": "1234567890123456789", "confirm": True}]
+
+
+def test_x_agent_prepares_extended_actions_for_confirmation(tmp_path):
+    service = XCapabilityService(agent_reach_provider=AgentReachUnavailable(), allow_posts=True)
+    agent = XAgent(vault_root=tmp_path, x_service=service)
+
+    cases = (
+        ("bookmark this X post https://x.com/a/status/12345678", "x.bookmark"),
+        ("unlike this X post https://x.com/a/status/12345678", "x.unlike"),
+        ("undo my retweet of https://x.com/a/status/12345678", "x.unrepost"),
+        ('quote this X post https://x.com/a/status/12345678 with "comment"', "x.quote"),
+        ("follow @openai on X", "x.follow"),
+        ("unfollow @openai on X", "x.unfollow"),
+    )
+
+    for query, expected_action in cases:
+        response = agent.answer(query)
+        assert response.status == "blocked"
+        assert response.action_request["action"] == expected_action
+
+
+def test_x_agent_reports_edit_as_unsupported_instead_of_delete_and_repost(tmp_path):
+    agent = XAgent(vault_root=tmp_path, x_service=XCapabilityService())
+
+    response = agent.answer('edit X post https://x.com/me/status/12345678 to "new text"')
+
+    assert response.status == "blocked"
+    assert response.action_request == {}
+    assert "does not support editing" in response.summary
+    assert "delete" not in response.analysis.casefold()
+
+
+def test_x_agent_status_reports_connector_capabilities(tmp_path):
+    class FakeXService:
+        def status(self, payload):
+            assert payload == {"probe_search": True}
+            return {
+                "connector": {
+                    "status": "ready",
+                    "capabilities": {"search": {"status": "ready"}, "edit": {"status": "unsupported"}},
+                }
+            }
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    response = agent.answer("check X agent status")
+
+    assert response.status == "answered"
+    assert "ready" in response.summary
+    assert "edit: unsupported" in response.summary
 
 
 def test_x_agent_empty_likes_preserves_agent_reach_activity(tmp_path):
@@ -1593,3 +1671,35 @@ memory:
     assert result.agent_name == "ResearchAgent"
     assert result.answer == "Independent research result"
     assert result.route_source == "skill"
+
+
+def test_x_agent_image_post_waits_for_confirmation_before_publishing(tmp_path):
+    calls = []
+
+    class FakeXService:
+        def publish_post_with_media(self, payload):
+            calls.append(payload)
+            return {"tweet": {"id": "image-post-1"}}
+
+    agent = XAgent(vault_root=tmp_path, x_service=FakeXService())
+
+    preview = agent.answer('Generate an image of a moon and post it to X with "hello"')
+
+    assert calls == []
+    assert preview.status == "blocked"
+    assert preview.action_request == {
+        "action": "x.publish_post_with_media",
+        "payload": {"text": "hello", "image_prompt": "a moon"},
+        "preview": "hello",
+    }
+
+    confirmed = agent.execute_action_request(preview.action_request)
+
+    assert confirmed.status == "answered"
+    assert calls == [
+        {
+            "text": "hello",
+            "image_prompt": "a moon",
+            "confirm": True,
+        }
+    ]
