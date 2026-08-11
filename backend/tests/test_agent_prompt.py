@@ -64,9 +64,10 @@ def test_vellum_prompt_reports_request_scoped_runtime_model(tmp_path: Path, monk
     assert "Runtime selected model: openai/gpt-5.6-sol" in messages[0].content
 
 
-def test_vellum_prompt_documents_x_action_safety_rules():
-    assert "x_action" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "X_TOOL_ALLOW_POSTS=true" in agent_graph.VELLUM_SYSTEM_PROMPT
+def test_vellum_prompt_delegates_x_work_to_x_agent():
+    assert "x_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Delegate all X interactions to XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "x_action" not in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
 def test_agent_prompt_documents_workspace_mode():
@@ -105,7 +106,7 @@ def test_agent_prompt_checks_permissions_before_asking_again():
     assert "Do not ask again for a permission that is already true" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
-def test_agent_tool_list_includes_x_action(monkeypatch):
+def test_agent_tool_list_includes_x_agent(monkeypatch):
     captured = {}
 
     def fake_build_agent_runtime(**kwargs):
@@ -120,7 +121,8 @@ def test_agent_tool_list_includes_x_action(monkeypatch):
 
     agent_graph.build_agent()
 
-    assert any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "x_agent" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])

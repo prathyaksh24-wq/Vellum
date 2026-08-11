@@ -5,6 +5,8 @@
 Vellum has one runtime path for X capabilities:
 
 ```text
+VellumAgent
+  -> x_agent tool
 XAgent
   -> ToolRegistry
   -> XCapabilityService
@@ -29,6 +31,23 @@ The portable Agent-Reach plugin exposes this adapter. It is not a second runtime
 Agent-Reach is the primary local connector. The xAI search fallback is disabled by default because it is a paid external dependency and may not be available for the active account. Enable it explicitly with `X_TOOL_ALLOW_XAI_FALLBACK=true` only when working xAI credentials and billing are present.
 
 An Agent-Reach search error must not be hidden by an unrelated xAI billing error. Timeline, bookmarks, likes, profiles, individual post reads, and confirmed writes continue to use Agent-Reach independently of search availability.
+
+The main model never calls `twitter-cli`, xAI, or X capability adapters directly.
+It delegates X intent to `x_agent`, which invokes the canonical `XAgent` from the
+shared specialist registry. The specialist prepares mutations and the dispatcher
+executes only a stored pending action after a later explicit confirmation.
+
+## Reliability Contract
+
+- `twitter-cli` 0.8.6 or newer is required; the connector health response reports
+  the detected and minimum versions.
+- CLI processes are serialized across provider instances.
+- Read operations retry once for transient failures. Search may use xAI only when
+  the fallback is explicitly enabled.
+- Write operations never retry automatically and never switch providers after an
+  attempted write. This prevents duplicate posts or account actions after an
+  ambiguous timeout or connection failure.
+- Post editing is unsupported. Vellum does not emulate it with delete and repost.
 
 ## Canonical Data Rules
 

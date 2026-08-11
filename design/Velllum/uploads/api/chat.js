@@ -81,7 +81,6 @@
       if (name === "read_file") return "Reading a note";
       if (name === "list_files") return "Browsing your vault";
       if (name === "obsidian_api" || name === "obsidian_search") return "Reading Obsidian";
-      if (name === "x_action") return "Using X Agent";
       if (name === "youtube_search") return "Searching YouTube";
       return "Using " + humanToolName(name || "tool");
     }
