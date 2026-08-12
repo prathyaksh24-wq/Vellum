@@ -58,3 +58,47 @@ Codex-matching semantics: the Scheduled view shows **recent runs** (bounded — 
 
 ### Unattended permissions
 Automation runs fire with no human watching. Each Automation carries a permission profile chosen at creation: **full access opt-in** (user explicitly grants unrestricted execution) is the supported mode; the UI surfaces this clearly at creation time.
+
+## Books Intelligence
+
+### Books Intelligence
+The Vellum domain that turns books and reading activity into inspectable book knowledge and personalized relevance.
+It excludes general-purpose memory and knowledge from other source domains.
+
+### BooksAgent
+The specialist agent that owns book understanding, retrieval, and recommendations.
+The main Vellum agent delegates book work to BooksAgent instead of consuming book skills directly.
+
+### Library
+A user's collected books and the authoritative evidence derived from copies available to that user.
+A discovered book is not part of the Library until it is acquired or explicitly saved.
+
+### Discovery
+Books, authors, ideas, and relationships proposed for exploration but not yet accepted into the Library.
+
+### Wisdom
+Private, personalized interpretations that connect book evidence to a user's current context, changing interests, and expressed needs.
+Wisdom is not part of the reusable book reference corpus.
+
+### Book work
+The primary Library identity for a book, independent of a particular publication, translation, revision, or file format.
+One Book work appears once on the user's shelf.
+
+### Book edition
+Internal provenance for a materially distinct publication, translation, revision, abridgement, or annotated version of a Book work.
+Vellum derives it from imported source metadata and content; it stays hidden unless the distinction affects reading or answers.
+
+### Book asset
+An exact imported or ingested file associated with a Book edition and identified by its file hash.
+EPUB is preferred; multiple Book assets do not create duplicate Book works or duplicate knowledge.
+
+### Book skill
+A stable, versioned, navigable representation of book knowledge compiled from the preferred Book asset for a materially distinct Book edition.
+BooksAgent consumes Book skills; rebuilding one does not create another Library entry or a general main-agent skill.
+
+### User book state
+The private relationship between one user and a Book work. Collection status, interest, and overall opinion belong to the work; progress belongs to the internal edition; exact highlights and annotations retain asset locations plus normalized anchors.
+
+### Wisdom intervention
+A proactive, evidence-backed message that BooksAgent surfaces because book knowledge is relevant to the user's current context.
+It remains distinguishable from the book's claims and from the user's own beliefs.

@@ -668,3 +668,19 @@ It returns the model string to use for the current query.
 
 Failure messages are always one word where possible. They are never apologetic.
 They are never explained at length. The user can ask why if they want to know.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specifications are tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the default Matt Pocock triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Use the single-context glossary and ADR layout. See `docs/agents/domain.md`.
