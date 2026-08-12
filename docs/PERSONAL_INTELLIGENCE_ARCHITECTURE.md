@@ -167,11 +167,27 @@ the tool result, and this path never writes `user_signals` directly.
 
 ## Books
 
-Raw book pages are `private_local_only` and `deny_raw`. They may be parsed,
-indexed, and analyzed locally. External context packages can contain only
-approved, privacy-safe derivatives and citations; raw pages are withheld.
-Page, chapter, edition, OCR confidence, and interpretation classification must
-remain attached to every derived claim.
+Book assets and extracted text retain source provenance and default to local
+processing. BooksAgent may send structured source content, including complete
+extracted text, to an approved external model only when the user has enabled
+external book processing and the Book does not have a `Local only` override.
+Routine questions still use bounded retrieval for cost, latency, and answer
+quality rather than as a privacy substitute.
+
+Private User book state does not inherit permission granted to Book source
+content. External personalization receives only privacy-brokered, task-specific
+context, except when the user explicitly selects an annotation or other private
+item for the request. Shared Book skills are limited to public-domain or openly
+licensed sources with redistribution-compatible provenance and contain no User
+book state.
+
+Every external model and tool loop uses deny-by-default field allowlists, opaque
+identifiers, secret and local-path blocking, local result classification, and
+metadata-only disclosure receipts. Subagents, retries, and scheduled runs inherit
+the same policy. Policy failure blocks the operation; it never triggers an
+unsanitized or weaker-provider fallback. OpenRouter calls retain
+`data_collection: deny`. Page, chapter, edition, OCR confidence, and
+interpretation classification remain attached to every derived claim.
 
 ## Temporal Preferences
 
@@ -246,7 +262,8 @@ Canonical ownership moves only after all gates pass:
 
 1. Repeated imports create no duplicate sources or versions.
 2. Conversation, source, and projection counts reconcile.
-3. Private book and feedback content cannot enter external context packs.
+3. External Book processing honors profile consent and per-book `Local only`
+   overrides; private User book state cannot bypass its disclosure contract.
 4. Projection exports cannot be reingested.
 5. OAuth revocation and source deletion propagate through derived records.
 6. Backup and restore are verified.

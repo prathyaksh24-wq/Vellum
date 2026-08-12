@@ -97,6 +97,34 @@ EPUB is preferred; multiple Book assets do not create duplicate Book works or du
 A stable, versioned, navigable representation of book knowledge compiled from the preferred Book asset for a materially distinct Book edition.
 BooksAgent consumes Book skills; rebuilding one does not create another Library entry or a general main-agent skill.
 
+### Shared Book skill
+A Book skill that may be reused across installations because its source is public-domain or openly licensed and its provenance permits redistribution.
+It contains no User book state, Wisdom, annotations, reading behavior, or cross-user presence signals.
+
+### Execution destination
+The verified environment that performs a Books operation: local, external, or mixed.
+A destination is local only when inference, embedding, reranking, moderation, telemetry, and fallback remain on the user's device; unknown or mixed paths are treated as external.
+
+### External book processing
+A profile-level consent that permits approved external models to process Book source content, including complete extracted text.
+It is off until each user chooses it and remains subordinate to a per-book `Local only` override.
+
+### Local-only override
+A Book-level control that blocks future external model and tool disclosure for that Book source content.
+It does not retract processing that occurred before the control was enabled.
+
+### Privacy-brokered user context
+A minimal, task-specific representation of private User book state that may support an approved external Books operation.
+It removes identifiers, separates explicit statements from inferences, and carries confidence and recency without exposing the complete private record.
+
+### Tool disclosure contract
+The deny-by-default field allowlist that governs Book data entering or leaving an external model, tool, subagent, retry, or scheduled run.
+Unknown fields, secrets, local paths, and unsanitized fallback paths are blocked.
+
+### External operation receipt
+A metadata-only record of an external Books operation: destination, provider, model, policy version, Book edition identifier, disclosed data categories, token counts, and time.
+It stores no raw Book content or private User book state.
+
 ### User book state
 The private relationship between one user and a Book work. Collection status, interest, and overall opinion belong to the work; progress belongs to the internal edition; exact highlights and annotations retain asset locations plus normalized anchors.
 
