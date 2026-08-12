@@ -189,6 +189,46 @@ unsanitized or weaker-provider fallback. OpenRouter calls retain
 `data_collection: deny`. Page, chapter, edition, OCR confidence, and
 interpretation classification remain attached to every derived claim.
 
+BooksAgent returns a schema-versioned response envelope containing a natural
+answer, typed claims, evidence anchors, reasoned judgment, personalization basis,
+user-learning events, uncertainty, and a `complete`, `partial`, `abstained`, or
+`failed` status. Each substantive answer statement maps to claim identifiers.
+Claims independently classify origin, form, speaker, epistemic status, evidence,
+confidence, freshness, sensitivity, and personalization so quotation, author
+stance, interpretation, external context, and user inference cannot collapse
+into one another.
+
+Evidence follows the Book work, edition, asset, chapter or section, and exact
+source-span chain. Direct quotations require a validated span. Broad statements
+about an author's position require representative support and a search for
+material qualifications or contradictions. Evidence status is `verified`,
+`supported`, `interpretive`, `speculative`, or `insufficient`; BooksAgent
+abstains rather than converting missing evidence into model recollection. OCR
+provider selection is deferred, and OCR-derived evidence remains provisional
+until Vellum validates it.
+
+Reasoned synthesis first understands the strongest credible positions, then
+examines evidence, context, incentives, causes, consequences, and uncertainty.
+It neither forces false equivalence nor avoids a conclusion when evidence is
+asymmetric. Time-sensitive Book claims retain edition context and require
+separately versioned current evidence when the user asks whether they remain
+true. Sensitive material remains faithful to the source without implying user
+or agent endorsement.
+
+BooksAgent emits meaningful user-learning candidates with provenance,
+explicit-versus-inferred status, confidence, sensitivity, time, recency, and
+evidence references. It never writes permanent global beliefs directly.
+Knowledge Core validates, deduplicates, reconciles contradictions, and preserves
+change before relevant user context reaches the main Vellum agent or an
+authorized specialist. Raw history is not injected wholesale and this process
+does not update model weights.
+
+The main agent may shorten or restyle a valid BooksAgent answer but cannot alter
+quotation, attribution, confidence, freshness, sensitivity, uncertainty, or
+citation meaning. Book content is untrusted evidence rather than executable
+instructions. A malformed or failed envelope cannot be replaced with an answer
+that implies BooksAgent or the Book supplied evidence.
+
 ## Temporal Preferences
 
 Preferences are evidence-backed state, not timeless labels. Each signal has a

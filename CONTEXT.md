@@ -69,6 +69,30 @@ It excludes general-purpose memory and knowledge from other source domains.
 The specialist agent that owns book understanding, retrieval, and recommendations.
 The main Vellum agent delegates book work to BooksAgent instead of consuming book skills directly.
 
+### BooksAgent response envelope
+The schema-versioned result BooksAgent returns to the main Vellum agent: a natural answer, typed claims, evidence, judgment, personalization basis, user-learning events, uncertainty, and response status.
+The main agent may adapt presentation but cannot strengthen or detach the underlying evidence.
+
+### Book claim
+A substantive statement in a BooksAgent response with independently typed origin, form, speaker, epistemic status, confidence, freshness, sensitivity, and personalization.
+Conversational transitions do not require claim records.
+
+### Evidence anchor
+A provenance chain from Book work through edition and asset to an exact chapter, section, and source span.
+Its location representation follows the asset format and never invents printed page numbers for an EPUB.
+
+### Evidence status
+A BooksAgent assessment of a claim as verified, supported, interpretive, speculative, or insufficient.
+Evidence confidence and interpretation confidence remain separate.
+
+### Reasoned synthesis
+BooksAgent's labeled judgment after considering the source position, strongest evidence, credible counterarguments, underlying causes or incentives, uncertainty, and relevant current knowledge.
+It seeks understanding without treating empathy as endorsement or balance as equal credibility.
+
+### User-learning event
+A provenance-bearing candidate about a user's belief, struggle, reaction, changing interest, or experience with a Book.
+Knowledge Core validates and reconciles the event before it can affect the canonical user model used by Vellum or authorized specialist agents.
+
 ### Library
 A user's collected Book works for which Vellum has an installed Book asset or a usable Book skill.
 Discovery recommendations never appear in the Library until one of those conditions is met.
