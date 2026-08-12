@@ -81,21 +81,23 @@ Private, personalized interpretations that connect book evidence to a user's cur
 Wisdom is not part of the reusable book reference corpus.
 
 ### Book work
-The abstract intellectual work independent of a particular publication, translation, revision, or file format.
+The primary Library identity for a book, independent of a particular publication, translation, revision, or file format.
+One Book work appears once on the user's shelf.
 
 ### Book edition
-A particular publication, translation, or revision of a Book work.
+Internal provenance for a materially distinct publication, translation, revision, abridgement, or annotated version of a Book work.
+Vellum derives it from imported source metadata and content; it stays hidden unless the distinction affects reading or answers.
 
 ### Book asset
-A file or accessible copy associated with a Book edition, such as an EPUB or PDF.
-Multiple Book assets do not create duplicate Book works.
+An exact imported or ingested file associated with a Book edition and identified by its file hash.
+EPUB is preferred; multiple Book assets do not create duplicate Book works or duplicate knowledge.
 
 ### Book skill
-A compiled, navigable representation of book knowledge derived from one or more Book assets.
-BooksAgent consumes Book skills; they are not general main-agent skills.
+A stable, versioned, navigable representation of book knowledge compiled from the preferred Book asset for a materially distinct Book edition.
+BooksAgent consumes Book skills; rebuilding one does not create another Library entry or a general main-agent skill.
 
 ### User book state
-The private relationship between one user and a Book work, including reading progress, annotations, questions, reactions, and changing interest.
+The private relationship between one user and a Book work. Collection status, interest, and overall opinion belong to the work; progress belongs to the internal edition; exact highlights and annotations retain asset locations plus normalized anchors.
 
 ### Wisdom intervention
 A proactive, evidence-backed message that BooksAgent surfaces because book knowledge is relevant to the user's current context.
