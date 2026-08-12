@@ -70,11 +70,12 @@ The specialist agent that owns book understanding, retrieval, and recommendation
 The main Vellum agent delegates book work to BooksAgent instead of consuming book skills directly.
 
 ### Library
-A user's collected books and the authoritative evidence derived from copies available to that user.
-A discovered book is not part of the Library until it is acquired or explicitly saved.
+A user's collected Book works for which Vellum has an installed Book asset or a usable Book skill.
+Discovery recommendations never appear in the Library until one of those conditions is met.
 
 ### Discovery
-Books, authors, ideas, and relationships proposed for exploration but not yet accepted into the Library.
+Books, authors, ideas, and relationships proposed for exploration but not installed in the Library.
+Discovery metadata and covers do not imply ownership, full-text access, or user endorsement.
 
 ### Wisdom
 Private, personalized interpretations that connect book evidence to a user's current context, changing interests, and expressed needs.
@@ -102,3 +103,22 @@ The private relationship between one user and a Book work. Collection status, in
 ### Wisdom intervention
 A proactive, evidence-backed message that BooksAgent surfaces because book knowledge is relevant to the user's current context.
 It remains distinguishable from the book's claims and from the user's own beliefs.
+
+### Source class
+The permission assigned to a Books provider action: metadata discovery, preview access, rights-cleared ingestion, user import, or prohibited automation.
+A provider may support more than one class, but each operation receives exactly one class.
+
+### Rights-cleared ingestion
+Automatic installation of full text whose provider supplies an applicable public-domain, open-license, or user-authorized rights basis.
+Unknown, conflicting, or region-inapplicable rights metadata never qualifies.
+
+### User import
+An explicit local EPUB selection made under the user's accepted rights attestation.
+Vellum records import provenance but does not investigate the file's origin.
+
+### Rights receipt
+The immutable acquisition evidence for an automatically installed Book asset: provider, source, rights basis, license, region, policy version, retrieval time, metadata snapshot, and file hash.
+
+### Library availability
+The user's current access state for a Library entry: Ready, Reading available, Knowledge available, or Processing.
+It determines whether Vellum can read the asset, answer through a Book skill, or is still compiling one.
