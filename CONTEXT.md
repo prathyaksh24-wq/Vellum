@@ -69,12 +69,37 @@ It excludes general-purpose memory and knowledge from other source domains.
 The specialist agent that owns book understanding, retrieval, and recommendations.
 The main Vellum agent delegates book work to BooksAgent instead of consuming book skills directly.
 
+### BooksAgent response envelope
+The schema-versioned result BooksAgent returns to the main Vellum agent: a natural answer, typed claims, evidence, judgment, personalization basis, user-learning events, uncertainty, and response status.
+The main agent may adapt presentation but cannot strengthen or detach the underlying evidence.
+
+### Book claim
+A substantive statement in a BooksAgent response with independently typed origin, form, speaker, epistemic status, confidence, freshness, sensitivity, and personalization.
+Conversational transitions do not require claim records.
+
+### Evidence anchor
+A provenance chain from Book work through edition and asset to an exact chapter, section, and source span.
+Its location representation follows the asset format and never invents printed page numbers for an EPUB.
+
+### Evidence status
+A BooksAgent assessment of a claim as verified, supported, interpretive, speculative, or insufficient.
+Evidence confidence and interpretation confidence remain separate.
+
+### Reasoned synthesis
+BooksAgent's labeled judgment after considering the source position, strongest evidence, credible counterarguments, underlying causes or incentives, uncertainty, and relevant current knowledge.
+It seeks understanding without treating empathy as endorsement or balance as equal credibility.
+
+### User-learning event
+A provenance-bearing candidate about a user's belief, struggle, reaction, changing interest, or experience with a Book.
+Knowledge Core validates and reconciles the event before it can affect the canonical user model used by Vellum or authorized specialist agents.
+
 ### Library
-A user's collected books and the authoritative evidence derived from copies available to that user.
-A discovered book is not part of the Library until it is acquired or explicitly saved.
+A user's collected Book works for which Vellum has an installed Book asset or a usable Book skill.
+Discovery recommendations never appear in the Library until one of those conditions is met.
 
 ### Discovery
-Books, authors, ideas, and relationships proposed for exploration but not yet accepted into the Library.
+Books, authors, ideas, and relationships proposed for exploration but not installed in the Library.
+Discovery metadata and covers do not imply ownership, full-text access, or user endorsement.
 
 ### Wisdom
 Private, personalized interpretations that connect book evidence to a user's current context, changing interests, and expressed needs.
@@ -96,9 +121,56 @@ EPUB is preferred; multiple Book assets do not create duplicate Book works or du
 A stable, versioned, navigable representation of book knowledge compiled from the preferred Book asset for a materially distinct Book edition.
 BooksAgent consumes Book skills; rebuilding one does not create another Library entry or a general main-agent skill.
 
+### Shared Book skill
+A Book skill that may be reused across installations because its source is public-domain or openly licensed and its provenance permits redistribution.
+It contains no User book state, Wisdom, annotations, reading behavior, or cross-user presence signals.
+
+### Execution destination
+The verified environment that performs a Books operation: local, external, or mixed.
+A destination is local only when inference, embedding, reranking, moderation, telemetry, and fallback remain on the user's device; unknown or mixed paths are treated as external.
+
+### External book processing
+A profile-level consent that permits approved external models to process Book source content, including complete extracted text.
+It is off until each user chooses it and remains subordinate to a per-book `Local only` override.
+
+### Local-only override
+A Book-level control that blocks future external model and tool disclosure for that Book source content.
+It does not retract processing that occurred before the control was enabled.
+
+### Privacy-brokered user context
+A minimal, task-specific representation of private User book state that may support an approved external Books operation.
+It removes identifiers, separates explicit statements from inferences, and carries confidence and recency without exposing the complete private record.
+
+### Tool disclosure contract
+The deny-by-default field allowlist that governs Book data entering or leaving an external model, tool, subagent, retry, or scheduled run.
+Unknown fields, secrets, local paths, and unsanitized fallback paths are blocked.
+
+### External operation receipt
+A metadata-only record of an external Books operation: destination, provider, model, policy version, Book edition identifier, disclosed data categories, token counts, and time.
+It stores no raw Book content or private User book state.
+
 ### User book state
 The private relationship between one user and a Book work. Collection status, interest, and overall opinion belong to the work; progress belongs to the internal edition; exact highlights and annotations retain asset locations plus normalized anchors.
 
 ### Wisdom intervention
 A proactive, evidence-backed message that BooksAgent surfaces because book knowledge is relevant to the user's current context.
 It remains distinguishable from the book's claims and from the user's own beliefs.
+
+### Source class
+The permission assigned to a Books provider action: metadata discovery, preview access, rights-cleared ingestion, user import, or prohibited automation.
+A provider may support more than one class, but each operation receives exactly one class.
+
+### Rights-cleared ingestion
+Automatic installation of full text whose provider supplies an applicable public-domain, open-license, or user-authorized rights basis.
+Unknown, conflicting, or region-inapplicable rights metadata never qualifies.
+
+### User import
+An explicit local EPUB selection made under the user's accepted rights attestation.
+Vellum records import provenance but does not investigate the file's origin.
+
+### Rights receipt
+The immutable acquisition evidence for an automatically installed Book asset: provider, source, rights basis, license, region, policy version, retrieval time, metadata snapshot, and file hash.
+
+### Library availability
+The user's current access state for a Library entry: Ready, Reading available, Knowledge available, or Processing.
+It determines whether Vellum can read the asset, answer through a Book skill, or is still compiling one.

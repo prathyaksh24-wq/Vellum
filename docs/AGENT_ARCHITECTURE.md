@@ -54,7 +54,7 @@
 │   Obsidian Vault (source of truth — all Markdown, your machine)      │
 │   ├── X/            (public — indexed + sent to LLM + tools)        │
 │   ├── Youtube/      (public — indexed + sent to LLM + tools)        │
-│   ├── Books/        (private — indexed only)                        │
+│   ├── Books/        (conditional — Books egress policy)             │
 │   ├── feedback/     (private — indexed only)                        │
 │   ├── Sports/       (accessible — indexed + sent to LLM)            │
 │   └── Agent/        (agent writes — indexed + sent to LLM)          │

@@ -82,14 +82,15 @@ Before including any Obsidian chunk in the LLM prompt, check its folder against
 Folders and their permissions:
 - `X/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
 - `Youtube/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
-- `Books/` — INDEXED locally, NEVER sent to LLM raw
+- `Books/` — INDEXED locally, CONDITIONALLY SENT under the Books egress policy, TOOL ACCESSIBLE
 - `feedback/` — INDEXED locally, NEVER sent to LLM raw
 - `Sports/` — INDEXED locally, SENT to LLM
 - `Agent/` — INDEXED locally, SENT to LLM
 
-Private folder chunks (Books, feedback, and any default private folders) contribute
-to retrieval scoring but their content is NEVER injected into the LLM prompt.
-Public folders like X, Youtube, Sports, and Agent can be used as LLM context.
+Book source content follows explicit profile consent and per-book `Local only`
+overrides. Private User book state remains separate and may enter external context
+only through the privacy-brokered context policy or when the user explicitly
+selects an item. Raw feedback and other default-private folders remain withheld.
 
 ### What the External API Never Sees
 
@@ -98,7 +99,9 @@ The following must never appear in any payload sent to OpenRouter:
 - Email addresses
 - Physical addresses or precise locations
 - Financial account numbers or passwords
-- Raw content from private folders (Books, feedback, and default private folders)
+- Raw feedback or content from other default-private folders
+- Book source content without profile consent or when the book is `Local only`
+- Raw private User book state outside its approved disclosure boundary
 - File paths from the user's machine
 - The user's real handle or username from any platform
 
