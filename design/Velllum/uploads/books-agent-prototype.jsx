@@ -165,10 +165,13 @@ var BOOKS_PROTOTYPE_DISCOVERY = [
   },
 ];
 
-var BOOKS_PROTOTYPE_VARIANTS = {
-  A: 'Press shelf',
-  B: 'Reading desk',
-  C: 'Collection index',
+var BOOKS_PROTOTYPE_COLORS = ['#b8c777', '#eb5149', '#537da8', '#d69b3c', '#9b6a88', '#5b9a86', '#d8d0bd', '#7468b0'];
+
+var booksPrototypePalette = function booksPrototypePalette(book) {
+  const index = Math.max(0, BOOKS_PROTOTYPE_BOOKS.findIndex(item => item.id === book.id));
+  const accent = BOOKS_PROTOTYPE_COLORS[index % BOOKS_PROTOTYPE_COLORS.length];
+  const backgrounds = ['#1b1715', '#202d46', '#132c2a', '#312417', '#27202d', '#172926', '#2b2925', '#201d35'];
+  return {accent, background: backgrounds[index % backgrounds.length]};
 };
 
 var BooksPrototypeCover = function BooksPrototypeCover({book, size='md'}) {
@@ -176,7 +179,7 @@ var BooksPrototypeCover = function BooksPrototypeCover({book, size='md'}) {
   const initials = book.title.split(/\s+/).filter(Boolean).slice(0, 3).map(part => part[0]).join('');
   return (
     <div className={'blp-cover ' + size} data-failed={failed ? 'true' : 'false'}>
-      {!failed && <img src={book.cover} alt={`Cover of ${book.title}`} loading="lazy" onError={() => setFailed(true)}/>}
+      {!failed && <img src={book.cover} alt={`Cover of ${book.title}`} loading="eager" onError={() => setFailed(true)}/>}
       {failed && <span aria-hidden="true">{initials}</span>}
     </div>
   );
@@ -194,9 +197,8 @@ var BooksPrototypeHeader = function BooksPrototypeHeader({surface, setSurface, q
         <h1>Books Agent</h1>
         <p>Read, question, and connect the books that shape your thinking.</p>
       </div>
-      {(surface === 'library' || surface === 'discovery') && <div className="blp-header-actions">
+      {surface === 'library' && <div className="blp-header-actions">
         <label className="blp-search">
-          <IcSearch size={15}/>
           <span className="sr-only">Search books</span>
           <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search title, author, idea"/>
         </label>
@@ -222,40 +224,11 @@ var BooksPrototypeActions = function BooksPrototypeActions({book, attached, skil
   );
 };
 
-var BooksPrototypeInspector = function BooksPrototypeInspector({book, attached, skillState, onRead, onAttach, onSkill, compact=false}) {
-  return (
-    <aside className={'blp-inspector' + (compact ? ' compact' : '')} aria-label={`Book details for ${book.title}`}>
-      <div className="blp-inspector-top">
-        <BooksPrototypeCover book={book} size={compact ? 'md' : 'lg'}/>
-        <div>
-          <span className="blp-overline">{book.collection} / {book.year}</span>
-          <h2>{book.title}</h2>
-          <p>{book.author}</p>
-        </div>
-      </div>
-      <BooksPrototypeActions book={book} attached={attached} skillState={skillState} onRead={onRead} onAttach={onAttach} onSkill={onSkill}/>
-      <dl className="blp-facts">
-        <div><dt>Available</dt><dd>{book.availability}</dd></div>
-        <div><dt>Book skill</dt><dd>{skillState}</dd></div>
-        <div><dt>Progress</dt><dd>{book.progress ? `${book.progress}%` : 'Not started'}</dd></div>
-      </dl>
-      <section className="blp-inspector-section">
-        <span className="blp-overline">Why it is here</span>
-        <p>{book.relevance}</p>
-      </section>
-      <section className="blp-inspector-section">
-        <span className="blp-overline">Ideas</span>
-        <div className="blp-tags">{book.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
-      </section>
-    </aside>
-  );
-};
-
 var BooksPrototypeDiscovery = function BooksPrototypeDiscovery() {
   return (
-    <div className="blp-discovery">
+    <main className="blp-discovery">
       <div className="blp-section-head">
-        <div><span className="blp-overline">Discovery</span><h2>Books worth your attention</h2></div>
+        <div><h2>Books worth your attention</h2></div>
         <p>Suggested from authors, ideas, and gaps in your Library. A suggestion is not evidence of your preference.</p>
       </div>
       <div className="blp-discovery-list">
@@ -272,7 +245,7 @@ var BooksPrototypeDiscovery = function BooksPrototypeDiscovery() {
             </article>
         ))}
       </div>
-    </div>
+    </main>
   );
 };
 
@@ -281,21 +254,18 @@ var BooksPrototypeWisdom = function BooksPrototypeWisdom({onOpenChat}) {
     {
       title: 'Agency matters more than approval',
       state: 'Supported pattern',
-      evidence: '4 books / 9 conversations',
       body: 'You repeatedly return to the distinction between owning your choices and managing other people\'s reactions.',
       sources: ['The Courage to Be Disliked', 'Meditations'],
     },
     {
       title: 'Meaning works better as a practice',
       state: 'Tentative',
-      evidence: '2 books / 3 conversations',
       body: 'You respond more strongly to concrete responsibility than to abstract motivation. This remains a working interpretation.',
       sources: ["Man's Search for Meaning", 'The Almanack of Naval Ravikant'],
     },
     {
       title: 'Understanding is not absolution',
       state: 'Tension to revisit',
-      evidence: '3 books / 5 conversations',
       body: 'Your questions often seek the root of harmful behavior while preserving accountability for its consequences.',
       sources: ['The Brothers Karamazov', 'The Stranger'],
     },
@@ -303,23 +273,24 @@ var BooksPrototypeWisdom = function BooksPrototypeWisdom({onOpenChat}) {
   return (
     <main className="blp-wisdom">
       <div className="blp-section-head">
-        <div><span className="blp-overline">Wisdom</span><h2>What your reading may be teaching Vellum about you</h2></div>
+        <div><h2>What your reading may be teaching Vellum about you</h2></div>
         <p>Interpretations stay qualified, source-linked, and revisable. A book idea is never treated as your belief without supporting behavior or confirmation.</p>
       </div>
       <div className="blp-wisdom-grid">
         {observations.map(item => <article key={item.title} className="blp-wisdom-card">
-          <div className="blp-wisdom-meta"><span>{item.state}</span><small>{item.evidence}</small></div>
+          <div className="blp-wisdom-meta"><span>{item.state}</span></div>
           <h3>{item.title}</h3>
           <p>{item.body}</p>
-          <div className="blp-wisdom-sources">{item.sources.map(source => <span key={source}><IcBook size={12}/>{source}</span>)}</div>
+          <div className="blp-wisdom-sources">{item.sources.map(source => {
+            const book = BOOKS_PROTOTYPE_BOOKS.find(candidate => candidate.title === source);
+            return <span key={source}>{book && <BooksPrototypeCover book={book} size="micro"/>}<strong>{source}</strong></span>;
+          })}</div>
           <button type="button" className="blp-button secondary" onClick={onOpenChat}><IcChat size={14}/>Discuss with Books Agent</button>
         </article>)}
       </div>
     </main>
   );
 };
-
-var BOOKS_PROTOTYPE_COLORS = ['#7c2f2c', '#1f4b43', '#c36e2d', '#243d68', '#8a6a36', '#75455f', '#2d665d', '#6f382b'];
 
 var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, onSelect, onOpen}) {
   const mountRef = React.useRef(null);
@@ -340,10 +311,10 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
     import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js').then(THREE => {
       if (disposed) return;
       const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0xe4e5e2);
-      scene.fog = new THREE.Fog(0xe4e5e2, 10, 22);
-      const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
-      camera.position.set(0, 0.25, 7.4);
+      scene.background = new THREE.Color(0x1b1715);
+      scene.fog = new THREE.Fog(0x1b1715, 10, 24);
+      const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+      camera.position.set(0, 0.05, 9.2);
       const renderer = new THREE.WebGLRenderer({antialias: true, alpha: false, powerPreference: 'high-performance'});
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
       renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -353,95 +324,66 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
       renderer.domElement.setAttribute('aria-hidden', 'true');
       host.appendChild(renderer.domElement);
 
-      const ambient = new THREE.HemisphereLight(0xfffbef, 0x59483b, 2.4);
+      const ambient = new THREE.HemisphereLight(0xfff5df, 0x251914, 2.1);
       scene.add(ambient);
-      const key = new THREE.DirectionalLight(0xfff2da, 4.4);
-      key.position.set(-3, 6, 7);
+      const key = new THREE.DirectionalLight(0xffe7c1, 4.8);
+      key.position.set(-4, 5, 8);
       key.castShadow = true;
       scene.add(key);
-      const rim = new THREE.DirectionalLight(0xb8d1dc, 2.1);
+      const rim = new THREE.DirectionalLight(0x9cbfd0, 1.7);
       rim.position.set(7, 2, 1);
       scene.add(rim);
 
       const shelf = new THREE.Group();
       scene.add(shelf);
       const bookMeshes = [];
-      const textureLoader = new THREE.TextureLoader();
-      textureLoader.setCrossOrigin('anonymous');
-      const bookSpacing = 1.32;
-      const baseX = -1.45;
+      const bookSpacing = 0.78;
 
       const makeLabelTexture = (book, color) => {
         const canvas = document.createElement('canvas');
-        canvas.width = 512;
-        canvas.height = 768;
+        canvas.width = 1200;
+        canvas.height = 180;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = color;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = 'rgba(255,255,255,.5)';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(32, 32, canvas.width - 64, canvas.height - 64);
+        ctx.fillStyle = 'rgba(255,255,255,.16)';
+        ctx.fillRect(0, 0, 10, canvas.height);
         ctx.fillStyle = '#fffaf0';
-        ctx.textAlign = 'center';
-        ctx.font = '600 42px Georgia';
-        const words = book.title.split(' ');
-        let line = '';
-        let y = 270;
-        words.forEach(word => {
-          const next = `${line} ${word}`.trim();
-          if (ctx.measureText(next).width > 390 && line) {
-            ctx.fillText(line, 256, y);
-            line = word;
-            y += 54;
-          } else line = next;
-        });
-        ctx.fillText(line, 256, y);
-        ctx.font = '22px Arial';
-        ctx.fillText(book.author.toUpperCase(), 256, 650);
+        ctx.textBaseline = 'middle';
+        ctx.font = book.author.length > 22 ? '500 20px Arial' : '500 25px Arial';
+        ctx.fillText(book.author.toUpperCase(), 44, 90);
+        ctx.font = book.title.length > 26 ? '600 30px Georgia' : '600 36px Georgia';
+        ctx.fillText(book.title, 420, 90);
+        ctx.textAlign = 'right';
+        ctx.font = '500 25px Arial';
+        ctx.fillText(book.year, 1150, 90);
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
         return texture;
       };
 
-      const coverGeometry = new THREE.BoxGeometry(1.02, 1.58, 0.2, 2, 3, 1);
       books.forEach((book, index) => {
         const color = BOOKS_PROTOTYPE_COLORS[index % BOOKS_PROTOTYPE_COLORS.length];
-        const fallbackTexture = makeLabelTexture(book, color);
-        const edge = new THREE.MeshStandardMaterial({color: 0xe8dcc6, roughness: 0.82});
-        const cloth = new THREE.MeshPhysicalMaterial({color, roughness: 0.72, clearcoat: 0.08});
-        const front = new THREE.MeshPhysicalMaterial({map: fallbackTexture, roughness: 0.62, clearcoat: 0.12});
-        const mesh = new THREE.Mesh(coverGeometry, [cloth, cloth, edge, edge, front, cloth]);
-        mesh.position.set(baseX + index * bookSpacing, -0.05 + (index % 3) * 0.018, 0);
-        mesh.rotation.y = (index % 2 ? -1 : 1) * 0.035;
+        const spineTexture = makeLabelTexture(book, color);
+        const edge = new THREE.MeshStandardMaterial({color: 0xe6dfd1, roughness: 0.82});
+        const cloth = new THREE.MeshPhysicalMaterial({color, roughness: 0.68, clearcoat: 0.12});
+        const spine = new THREE.MeshPhysicalMaterial({map: spineTexture, roughness: 0.58, clearcoat: 0.16});
+        const width = 5.1 + (index % 3) * 0.42;
+        const geometry = new THREE.BoxGeometry(width, 0.54, 1.24, 5, 1, 2);
+        const mesh = new THREE.Mesh(geometry, [cloth, cloth, edge, edge, spine, cloth]);
+        mesh.position.set((index % 2 ? -1 : 1) * 0.18, -index * bookSpacing, 0);
+        mesh.rotation.z = (index % 2 ? -1 : 1) * 0.012;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        mesh.userData = {bookId: book.id, index, baseY: mesh.position.y, baseRotation: mesh.rotation.y, material: front};
+        mesh.userData = {bookId: book.id, index, baseX: mesh.position.x, baseZ: mesh.position.z, baseRotation: mesh.rotation.z};
         shelf.add(mesh);
         bookMeshes.push(mesh);
-        if (book.cover) {
-          textureLoader.load(book.cover, texture => {
-            if (disposed) { texture.dispose(); return; }
-            texture.colorSpace = THREE.SRGBColorSpace;
-            texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-            front.map = texture;
-            front.needsUpdate = true;
-            fallbackTexture.dispose();
-          }, undefined, () => {});
-        }
       });
-
-      const board = new THREE.Mesh(
-        new THREE.BoxGeometry(Math.max(11, books.length * bookSpacing + 2.8), 0.24, 2.15),
-        new THREE.MeshStandardMaterial({color: 0x5b3825, roughness: 0.7})
-      );
-      board.position.set(baseX + ((books.length - 1) * bookSpacing) / 2, -1.03, -0.08);
-      board.receiveShadow = true;
-      shelf.add(board);
       const backdrop = new THREE.Mesh(
         new THREE.PlaneGeometry(28, 11),
-        new THREE.MeshStandardMaterial({color: 0xe4e5e2, roughness: 1})
+        new THREE.MeshStandardMaterial({color: 0x1b1715, roughness: 1})
       );
-      backdrop.position.set(2, 0, -2.1);
+      backdrop.position.set(0, 0, -2.4);
       scene.add(backdrop);
 
       const raycaster = new THREE.Raycaster();
@@ -482,16 +424,16 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
       };
       const onMove = event => {
         if (pointerDown) {
-          const dx = event.clientX - pointerDown.x;
-          pointerDown.moved = Math.max(pointerDown.moved, Math.abs(dx));
-          targetOffset = Math.max(0, Math.min(maxIndex * bookSpacing, pointerDown.offset - dx * 0.012));
+          const dy = event.clientY - pointerDown.y;
+          pointerDown.moved = Math.max(pointerDown.moved, Math.abs(dy));
+          targetOffset = Math.max(0, Math.min(maxIndex * bookSpacing, pointerDown.offset - dy * 0.012));
           return;
         }
         hovered = pick(event);
         renderer.domElement.style.cursor = hovered >= 0 ? 'pointer' : 'grab';
       };
       const onDown = event => {
-        pointerDown = {x: event.clientX, offset: targetOffset, moved: 0};
+        pointerDown = {y: event.clientY, offset: targetOffset, moved: 0};
         renderer.domElement.setPointerCapture?.(event.pointerId);
         renderer.domElement.style.cursor = 'grabbing';
       };
@@ -527,12 +469,13 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
         if (disposed) return;
         const delta = Math.min(clock.getDelta(), 0.05);
         offset = THREE.MathUtils.damp(offset, targetOffset, 5.5, delta);
-        shelf.position.x = -offset;
+        shelf.position.y = offset;
         bookMeshes.forEach((mesh, index) => {
-          const raised = index === hovered ? 0.24 : index === current ? 0.1 : 0;
-          mesh.position.y = THREE.MathUtils.damp(mesh.position.y, mesh.userData.baseY + raised, 8, delta);
-          mesh.position.z = THREE.MathUtils.damp(mesh.position.z, index === hovered ? 0.35 : index === current ? 0.14 : 0, 8, delta);
-          mesh.rotation.y = THREE.MathUtils.damp(mesh.rotation.y, mesh.userData.baseRotation + (index === hovered ? -0.16 : 0), 8, delta);
+          const active = index === hovered || index === current;
+          mesh.position.x = THREE.MathUtils.damp(mesh.position.x, mesh.userData.baseX + (active ? 0.34 : 0), 8, delta);
+          mesh.position.z = THREE.MathUtils.damp(mesh.position.z, mesh.userData.baseZ + (index === hovered ? 0.52 : index === current ? 0.18 : 0), 8, delta);
+          mesh.rotation.z = THREE.MathUtils.damp(mesh.rotation.z, mesh.userData.baseRotation + (index === hovered ? -0.025 : 0), 8, delta);
+          mesh.rotation.y = THREE.MathUtils.damp(mesh.rotation.y, index === hovered ? -0.08 : 0, 8, delta);
         });
         camera.position.x = THREE.MathUtils.damp(camera.position.x, 0, 5, delta);
         renderer.render(scene, camera);
@@ -552,8 +495,8 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
           mesh.geometry.dispose();
           mesh.material.forEach(material => { material.map?.dispose(); material.dispose(); });
         });
-        board.geometry.dispose();
-        board.material.dispose();
+        backdrop.geometry.dispose();
+        backdrop.material.dispose();
         renderer.dispose();
         renderer.domElement.remove();
       };
@@ -565,15 +508,140 @@ var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, o
   return (
     <div className="bar-shelf-stage" ref={mountRef} data-render-state={loadState}>
       <div className="bar-shelf-wash" aria-hidden="true"/>
-      <div className={'bar-shelf-fallback ' + (loadState === 'ready' ? 'webgl-ready' : '')}>{books.map((book, index) => <button type="button" key={book.id} aria-label={`Open ${book.title}`} onClick={() => {moveRef.current?.(index); onOpen(book.id);}}><BooksPrototypeCover book={book} size="lg"/></button>)}</div>
+      <div className={'bar-shelf-fallback ' + (loadState === 'ready' ? 'webgl-ready' : '')}>{books.map((book, index) => <button type="button" key={book.id} style={{'--spine': BOOKS_PROTOTYPE_COLORS[index % BOOKS_PROTOTYPE_COLORS.length]}} aria-label={`Open ${book.title}`} onClick={() => {moveRef.current?.(index); onOpen(book.id);}}><span>{book.author}</span><strong>{book.title}</strong><small>{book.year}</small></button>)}</div>
       <div className="bar-shelf-controls">
         <BooksPrototypeIconButton label="Previous book" onClick={() => move(-1)}><span aria-hidden="true">&larr;</span></BooksPrototypeIconButton>
         <span><strong>{String(activeIndex + 1).padStart(2, '0')}</strong> / {String(books.length).padStart(2, '0')}</span>
         <BooksPrototypeIconButton label="Next book" onClick={() => move(1)}><span aria-hidden="true">&rarr;</span></BooksPrototypeIconButton>
       </div>
-      <div className="bar-shelf-access" aria-label="Books on shelf">{books.map((book, index) => <button type="button" key={book.id} className={index === activeIndex ? 'active' : ''} onFocus={() => moveRef.current?.(index)} onClick={() => onOpen(book.id)}>{book.title}</button>)}</div>
+      <div className="bar-shelf-access" aria-label="Books on shelf">{books.map((book, index) => <button type="button" key={book.id} className={index === activeIndex ? 'active' : ''} onFocus={() => moveRef.current?.(index)} onClick={() => onOpen(book.id)}><span>{String(index + 1).padStart(2, '0')}</span><strong>{book.title}</strong></button>)}</div>
     </div>
   );
+};
+
+var BooksPrototypeBookModel3D = function BooksPrototypeBookModel3D({book}) {
+  const hostRef = React.useRef(null);
+  const [state, setState] = React.useState('loading');
+  React.useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return undefined;
+    let disposed = false;
+    let cleanup = () => {};
+    import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js').then(THREE => {
+      if (disposed) return;
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+      camera.position.set(0, 0.05, 7.2);
+      const renderer = new THREE.WebGLRenderer({antialias: true, alpha: true, powerPreference: 'high-performance'});
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.shadowMap.enabled = true;
+      renderer.domElement.className = 'bpd-book-canvas';
+      renderer.domElement.setAttribute('aria-hidden', 'true');
+      host.appendChild(renderer.domElement);
+      scene.add(new THREE.HemisphereLight(0xfff5e6, 0x1d1720, 3));
+      const key = new THREE.DirectionalLight(0xffffff, 4.2);
+      key.position.set(-3, 5, 6);
+      key.castShadow = true;
+      scene.add(key);
+      const group = new THREE.Group();
+      scene.add(group);
+      const edge = new THREE.MeshStandardMaterial({color: 0xf2eadc, roughness: 0.76});
+      const palette = booksPrototypePalette(book);
+      const cloth = new THREE.MeshPhysicalMaterial({color: palette.accent, roughness: 0.62, clearcoat: 0.16});
+      const coverCanvas = document.createElement('canvas');
+      coverCanvas.width = 768;
+      coverCanvas.height = 1152;
+      const ctx = coverCanvas.getContext('2d');
+      ctx.fillStyle = palette.accent;
+      ctx.fillRect(0, 0, 768, 1152);
+      ctx.strokeStyle = 'rgba(255,255,255,.42)';
+      ctx.lineWidth = 5;
+      ctx.strokeRect(48, 48, 672, 1056);
+      ctx.fillStyle = '#fff9ec';
+      ctx.textAlign = 'center';
+      ctx.font = '600 58px Georgia';
+      const words = book.title.split(' ');
+      let line = '';
+      let y = 430;
+      words.forEach(word => {
+        const next = `${line} ${word}`.trim();
+        if (ctx.measureText(next).width > 600 && line) { ctx.fillText(line, 384, y); line = word; y += 72; } else line = next;
+      });
+      ctx.fillText(line, 384, y);
+      ctx.font = '28px Arial';
+      ctx.fillText(book.author.toUpperCase(), 384, 930);
+      const fallback = new THREE.CanvasTexture(coverCanvas);
+      fallback.colorSpace = THREE.SRGBColorSpace;
+      const front = new THREE.MeshBasicMaterial({map: fallback});
+      const geometry = new THREE.BoxGeometry(2.5, 3.8, 0.34, 2, 3, 1);
+      const model = new THREE.Mesh(geometry, [cloth, cloth, edge, edge, front, cloth]);
+      model.castShadow = true;
+      model.rotation.set(-0.1, -0.9, -0.06);
+      group.add(model);
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.setCrossOrigin('anonymous');
+      if (book.cover) textureLoader.load(book.cover, texture => {
+        if (disposed) { texture.dispose(); return; }
+        texture.colorSpace = THREE.SRGBColorSpace;
+        front.map = texture;
+        front.needsUpdate = true;
+        fallback.dispose();
+        setState('ready');
+      }, undefined, () => { if (!disposed) setState('ready'); });
+      else setState('ready');
+      let targetX = -0.1;
+      let targetY = 0.12;
+      let dragging = null;
+      const down = event => { dragging = {x: event.clientX, y: event.clientY, rx: targetX, ry: targetY}; renderer.domElement.setPointerCapture?.(event.pointerId); };
+      const move = event => {
+        if (!dragging) return;
+        targetY = dragging.ry + (event.clientX - dragging.x) * 0.012;
+        targetX = Math.max(-0.55, Math.min(0.45, dragging.rx + (event.clientY - dragging.y) * 0.008));
+      };
+      const up = event => { dragging = null; renderer.domElement.releasePointerCapture?.(event.pointerId); };
+      renderer.domElement.addEventListener('pointerdown', down);
+      renderer.domElement.addEventListener('pointermove', move);
+      renderer.domElement.addEventListener('pointerup', up);
+      renderer.domElement.addEventListener('pointercancel', up);
+      const resize = () => {
+        const width = Math.max(1, host.clientWidth);
+        const height = Math.max(1, host.clientHeight);
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      };
+      const observer = new ResizeObserver(resize);
+      observer.observe(host);
+      resize();
+      const clock = new THREE.Clock();
+      let frame = 0;
+      const animate = () => {
+        if (disposed) return;
+        const delta = Math.min(clock.getDelta(), 0.05);
+        model.rotation.x = THREE.MathUtils.damp(model.rotation.x, targetX, 4.5, delta);
+        model.rotation.y = THREE.MathUtils.damp(model.rotation.y, targetY, 4.5, delta);
+        model.position.y = Math.sin(clock.elapsedTime * 0.8) * 0.055;
+        renderer.render(scene, camera);
+        frame = requestAnimationFrame(animate);
+      };
+      animate();
+      cleanup = () => {
+        cancelAnimationFrame(frame);
+        observer.disconnect();
+        renderer.domElement.removeEventListener('pointerdown', down);
+        renderer.domElement.removeEventListener('pointermove', move);
+        renderer.domElement.removeEventListener('pointerup', up);
+        renderer.domElement.removeEventListener('pointercancel', up);
+        geometry.dispose();
+        [cloth, edge, front].forEach(material => { material.map?.dispose(); material.dispose(); });
+        renderer.dispose();
+        renderer.domElement.remove();
+      };
+    }).catch(() => { if (!disposed) setState('fallback'); });
+    return () => { disposed = true; cleanup(); };
+  }, [book.id]);
+  return <div className="bpd-book-model" ref={hostRef} data-render-state={state}><div className="bpd-book-fallback"><BooksPrototypeCover book={book} size="xl"/></div><span>Drag to rotate</span></div>;
 };
 
 var BooksPrototypePage = function BooksPrototypePage({page, side}) {
@@ -608,8 +676,6 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
   const [spreadIndex, setSpreadIndex] = React.useState(0);
   const [turn, setTurn] = React.useState({dir: 'next', progress: 0, active: false});
   const [zoom, setZoom] = React.useState(1);
-  const [loupeOn, setLoupeOn] = React.useState(true);
-  const [loupe, setLoupe] = React.useState({x: 0, y: 0, placed: false});
   const [size, setSize] = React.useState({width: 1, height: 1});
   const maxIndex = Math.max(0, pages.length - 2);
   const canPrev = spreadIndex > 0;
@@ -622,7 +688,6 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
       const rect = stage.getBoundingClientRect();
       const next = {width: rect.width, height: rect.height};
       setSize(next);
-      setLoupe(current => current.placed ? current : {x: rect.width * 0.69, y: rect.height * 0.5, placed: true});
     };
     const observer = new ResizeObserver(update);
     observer.observe(stage);
@@ -652,7 +717,6 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
     const shouldCommit = drag.moved < 6 || turn.progress > 0.22;
     if (!shouldCommit) { setTurn({dir: drag.dir, progress: 0, active: false}); return; }
     setTurn({dir: drag.dir, progress: 1, active: true});
-    setLoupe(current => ({...current, x: drag.dir === 'next' ? size.width * 0.28 : size.width * 0.72}));
     window.setTimeout(() => {
       setSpreadIndex(index => Math.max(0, Math.min(maxIndex, index + (drag.dir === 'next' ? 2 : -2))));
       setTurn({dir: drag.dir, progress: 0, active: false});
@@ -668,14 +732,6 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
       dragRef.current = null;
     }, 310);
   };
-  const moveLoupe = event => {
-    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
-    const rect = stageRef.current.getBoundingClientRect();
-    setLoupe({x: Math.max(74, Math.min(rect.width - 74, event.clientX - rect.left)), y: Math.max(74, Math.min(rect.height - 74, event.clientY - rect.top)), placed: true});
-  };
-  const lensRadius = 86;
-  const lensMagnification = 1.9;
-
   return (
     <section className="bar-reader" aria-label={`Reading ${book.title}`}>
       <div className="bar-reader-top">
@@ -685,7 +741,6 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
           <BooksPrototypeIconButton label="Zoom out" onClick={() => setZoom(value => Math.max(.88, +(value - .1).toFixed(2)))}><span aria-hidden="true">-</span></BooksPrototypeIconButton>
           <span>{Math.round(zoom * 100)}%</span>
           <BooksPrototypeIconButton label="Zoom in" onClick={() => setZoom(value => Math.min(1.28, +(value + .1).toFixed(2)))}><span aria-hidden="true">+</span></BooksPrototypeIconButton>
-          <BooksPrototypeIconButton label="Toggle magnifier" pressed={loupeOn} onClick={() => setLoupeOn(value => !value)}><IcSearch size={15}/></BooksPrototypeIconButton>
         </div>
       </div>
       <div className="bar-reader-stage" ref={stageRef}>
@@ -701,19 +756,11 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
           <button type="button" className="bar-page-hit prev" aria-label="Drag or tap for previous pages" disabled={!canPrev} onPointerDown={event => beginTurn(event, 'prev')} onPointerMove={moveTurn} onPointerUp={finishTurn} onPointerCancel={finishTurn}/>
           <button type="button" className="bar-page-hit next" aria-label="Drag or tap for next pages" disabled={!canNext} onPointerDown={event => beginTurn(event, 'next')} onPointerMove={moveTurn} onPointerUp={finishTurn} onPointerCancel={finishTurn}/>
         </div>
-        {loupeOn && <div className="bar-loupe" style={{left: loupe.x - lensRadius, top: loupe.y - lensRadius}} onPointerDown={event => {event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId);}} onPointerMove={moveLoupe} onPointerUp={event => event.currentTarget.releasePointerCapture?.(event.pointerId)}>
-          <div className="bar-lens">
-            <div className="bar-lens-scene" style={{width: size.width, height: size.height, transform: `translate(${lensRadius - loupe.x * lensMagnification}px,${lensRadius - loupe.y * lensMagnification}px) scale(${lensMagnification})`}}>
-              <div className="bar-book-zoom lens-copy" style={{transform: `translate(-50%,-50%) scale(${zoom})`}}><BooksPrototypeReaderSpread pages={pages} index={spreadIndex}/></div>
-            </div>
-          </div>
-          <span className="bar-loupe-handle" aria-hidden="true"/>
-        </div>}
         <button type="button" className="bar-reader-arrow prev" aria-label="Previous pages" disabled={!canPrev} onClick={() => turnWithButton('prev')}>&larr;</button>
         <button type="button" className="bar-reader-arrow next" aria-label="Next pages" disabled={!canNext} onClick={() => turnWithButton('next')}>&rarr;</button>
       </div>
       <div className="bar-reader-bottom">
-        <span>Drag a page edge to turn / drag the glass to inspect</span>
+        <span>Drag a page edge to turn</span>
         <strong>Pages {spreadIndex + 1}-{Math.min(spreadIndex + 2, pages.length)} of {pages.length}</strong>
         <div className="bar-reader-actions"><button type="button" onClick={onAttach}>{attached ? 'Added to chat' : 'Add to chat'}</button><button type="button" onClick={onSkill}>{skillState === 'Ready' ? 'Open skill' : 'Create skill'}</button></div>
       </div>
@@ -721,166 +768,87 @@ var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose,
   );
 };
 
-var BooksPrototypeVariantA = function BooksPrototypeVariantA(props) {
+var BooksPrototypeDetail = function BooksPrototypeDetail({book, books, selectBook, onBack, onRead, onAttach, onSkill, attached, skillState}) {
+  const palette = booksPrototypePalette(book);
+  const detailRef = React.useRef(null);
+  const chooseBook = id => {
+    selectBook(id);
+    detailRef.current?.scrollTo({top: 0, behavior: 'smooth'});
+  };
+  return (
+    <main className="bpd-detail" ref={detailRef} style={{'--book-accent': palette.accent, '--book-bg': palette.background}}>
+      <button type="button" className="bpd-back" onClick={onBack}><span aria-hidden="true">&larr;</span>Return to shelf</button>
+      <aside className="bpd-rail" aria-label="Books in your collection">
+        {books.map((candidate, index) => <button type="button" key={candidate.id} className={candidate.id === book.id ? 'active' : ''} onClick={() => chooseBook(candidate.id)} aria-label={`View ${candidate.title}`}><span>{String(index + 1).padStart(2, '0')}</span><i style={{background: booksPrototypePalette(candidate).accent}}/><strong>{candidate.title}</strong></button>)}
+      </aside>
+      <section className="bpd-hero">
+        <BooksPrototypeBookModel3D book={book}/>
+        <div className="bpd-intro">
+          <span>{book.collection} / {book.year}</span>
+          <h2>{book.title}</h2>
+          <p className="bpd-author">{book.author}</p>
+          <p>{book.excerpt}</p>
+          <BooksPrototypeActions book={book} attached={attached} skillState={skillState} onRead={onRead} onAttach={onAttach} onSkill={onSkill}/>
+        </div>
+        <div className="bpd-scroll-cue"><span>Scroll to explore</span><i/></div>
+      </section>
+      <section className="bpd-story">
+        <div><span>Published</span><strong>{book.year}</strong></div>
+        <article><span>About the author</span><h3>{book.author}</h3><p>{book.author} approaches {book.tags.slice(0, 2).join(' and ')} through a voice shaped by the book's time, form, and central argument. Books Agent keeps that authorial perspective separate from your own beliefs.</p></article>
+        <article><span>Why it is here</span><h3>A thread in your reading</h3><p>{book.relevance}</p></article>
+      </section>
+      <section className="bpd-summary">
+        <div><span>About the book</span><h3>{book.location}</h3></div>
+        <p>{book.excerpt} This edition is indexed by chapter and location so answers can return to bounded evidence instead of relying on an untraceable summary.</p>
+      </section>
+      <section className="bpd-quotes">
+        <span>Ideas to revisit</span>
+        <div>{book.tags.map((tag, index) => <blockquote key={tag}><strong>&ldquo;</strong><p>{index === 0 ? book.relevance : `How does ${tag} change when it moves from an idea into a daily practice?`}</p><cite>{book.title}</cite></blockquote>)}</div>
+      </section>
+      <section className="bpd-next">
+        <span>Continue through your collection</span>
+        <div>{books.filter(candidate => candidate.id !== book.id).slice(0, 5).map(candidate => <button type="button" key={candidate.id} onClick={() => chooseBook(candidate.id)}><BooksPrototypeCover book={candidate} size="md"/><strong>{candidate.title}</strong><small>{candidate.author}</small></button>)}</div>
+      </section>
+    </main>
+  );
+};
+
+var BooksPrototypeLibrary = function BooksPrototypeLibrary(props) {
   const {books, selected, selectBook, query, collection, setCollection} = props;
-  const [openId, setOpenId] = React.useState(null);
+  const [mode, setMode] = React.useState('shelf');
   const filtered = books.filter(book => {
     if (collection === 'Reading') return book.progress > 0 && book.progress < 100;
     if (collection === 'Skills ready') return book.skill === 'Ready';
     if (!['All books', 'Reading', 'Skills ready'].includes(collection)) return book.collection === collection;
     return true;
   });
-  const opened = books.find(book => book.id === openId) || selected;
-  if (openId) {
-    return <BooksPrototypeOpenReader book={opened} onClose={() => setOpenId(null)} onAttach={props.onAttach} onSkill={props.onSkill} attached={props.attached} skillState={props.skillState}/>;
-  }
+  const visibleBooks = filtered.length ? filtered : books;
+  React.useEffect(() => {
+    if (visibleBooks.length && !visibleBooks.some(book => book.id === selected.id)) selectBook(visibleBooks[0].id);
+  }, [query, collection, visibleBooks.map(book => book.id).join('|')]);
+  if (mode === 'reader') return <BooksPrototypeOpenReader book={selected} onClose={() => setMode('detail')} onAttach={props.onAttach} onSkill={props.onSkill} attached={props.attached} skillState={props.skillState}/>;
+  if (mode === 'detail') return <BooksPrototypeDetail {...props} books={visibleBooks} book={selected} onBack={() => setMode('shelf')} onRead={() => setMode('reader')}/>;
   return (
     <main className="bar-library">
       <div className="bar-library-copy">
-        <span className="blp-overline">Your collection</span>
-        <h2>A shelf that remembers why each book matters.</h2>
-        <p>{query ? `${filtered.length} books match your search.` : 'Scroll horizontally, drag the shelf, or select a cover. Open any volume to read and turn its pages.'}</p>
+        <h2>Your books, in motion.</h2>
+        <p>{query ? `${filtered.length} books match your search.` : 'Move vertically through the shelf. Hover to bring a spine forward, then open it.'}</p>
       </div>
       <div className="bar-collections" role="toolbar" aria-label="Filter book collection">{['All books', 'Reading', 'Skills ready', 'Philosophy', 'Fiction', 'Psychology'].map(name => <button type="button" key={name} className={collection === name ? 'active' : ''} onClick={() => setCollection(name)}>{name}</button>)}</div>
-      <BooksPrototypeShelf3D books={filtered.length ? filtered : books} selectedId={selected.id} onSelect={selectBook} onOpen={id => {selectBook(id); setOpenId(id);}}/>
+      <BooksPrototypeShelf3D books={visibleBooks} selectedId={selected.id} onSelect={selectBook} onOpen={id => {selectBook(id); setMode('detail');}}/>
       <div className="bar-selected">
-        <div><span>{selected.collection} / {selected.progress ? `${selected.progress}% read` : selected.skill}</span><h3>{selected.title}</h3><p>{selected.author}</p></div>
+        <div><span>{selected.collection} / {selected.progress ? `${selected.progress}% read` : props.skillState}</span><h3>{selected.title}</h3><p>{selected.author}</p></div>
         <p>{selected.relevance}</p>
-        <button type="button" onClick={() => setOpenId(selected.id)}>Open book<IcChevR size={15}/></button>
+        <button type="button" onClick={() => setMode('detail')}>Explore book<IcChevR size={15}/></button>
       </div>
     </main>
   );
 };
 
-var BooksPrototypeVariantB = function BooksPrototypeVariantB(props) {
-  const {books, selected, selectBook, reading, setReading, ask, setAsk, answer, onAsk} = props;
-  return (
-    <div className="blp-b">
-      <aside className="blp-spine-rail" aria-label="Books">
-        <div className="blp-spine-title"><span className="blp-overline">On your desk</span><strong>{books.length} books</strong></div>
-        <div className="blp-spines">
-          {books.map(book => (
-            <button type="button" key={book.id} className={selected.id === book.id ? 'active' : ''} aria-label={`Open ${book.title}`} onClick={() => {selectBook(book.id); setReading(false);}}>
-              <BooksPrototypeCover book={book} size="xs"/>
-              <span><strong>{book.title}</strong><small>{book.author}</small></span>
-              {book.progress > 0 && <i>{book.progress}%</i>}
-            </button>
-          ))}
-        </div>
-      </aside>
-      <main className="blp-reader">
-        <div className="blp-reader-head">
-          <div><span className="blp-overline">{reading ? selected.location : selected.collection}</span><h2>{selected.title}</h2><p>{selected.author}</p></div>
-          <div className="blp-reader-mode" role="group" aria-label="Book mode">
-            <button type="button" className={!reading ? 'active' : ''} onClick={() => setReading(false)}>Inspect</button>
-            <button type="button" className={reading ? 'active' : ''} onClick={() => setReading(true)}>Read</button>
-          </div>
-        </div>
-        {reading ? (
-          <article className="blp-page-preview">
-            <span className="blp-overline">{selected.location}</span>
-            <p>{selected.excerpt}</p>
-            <p className="blp-reading-copy">The reading surface keeps the edition and source location visible while leaving enough room for uninterrupted text. Selecting a passage would make it available to BooksAgent without leaving the page.</p>
-            <footer><span>{selected.progress || 1}%</span><div className="blp-page-progress"><i style={{width: `${Math.max(selected.progress, 3)}%`}}/></div></footer>
-          </article>
-        ) : (
-          <div className="blp-desk-overview">
-            <BooksPrototypeCover book={selected} size="xl"/>
-            <div className="blp-desk-copy">
-              <span className="blp-overline">Current thread</span>
-              <p className="blp-desk-lead">{selected.relevance}</p>
-              <div className="blp-desk-note"><strong>{selected.location}</strong><p>{selected.excerpt}</p></div>
-              <BooksPrototypeActions {...props} book={selected}/>
-            </div>
-          </div>
-        )}
-      </main>
-      <aside className="blp-margin" aria-label="BooksAgent context">
-        <div className="blp-margin-head"><IcBook size={16}/><div><strong>BooksAgent</strong><span>Grounded in this edition</span></div></div>
-        <div className="blp-context-block"><span className="blp-overline">Relevant to you</span><p>{selected.relevance}</p></div>
-        <form className="blp-ask" onSubmit={event => {event.preventDefault(); onAsk();}}>
-          <label htmlFor="blp-ask-input">Ask about this book</label>
-          <textarea id="blp-ask-input" value={ask} onChange={event => setAsk(event.target.value)} placeholder="What is the core argument here?"/>
-          <button type="submit" className="blp-button primary" disabled={!ask.trim()}><IcArrowUp size={14}/>Ask</button>
-        </form>
-        {answer && <div className="blp-answer" aria-live="polite"><span className="blp-overline">Supported synthesis</span><p>{answer}</p><button type="button">{selected.location}<IcChevR size={12}/></button></div>}
-      </aside>
-    </div>
-  );
-};
-
-var BooksPrototypeVariantC = function BooksPrototypeVariantC(props) {
-  const {books, selected, selectBook, scale} = props;
-  const rows = React.useMemo(() => {
-    if (scale !== 'large') return books;
-    return Array.from({length: 1024}, (_, index) => {
-      const base = books[index % books.length];
-      return index < books.length ? base : {...base, id: `${base.id}-${index}`, title: `${base.title} ${String(index + 1).padStart(4, '0')}`, progress: index % 7 === 0 ? (index * 13) % 100 : 0};
-    });
-  }, [books, scale]);
-  const visible = rows.slice(0, scale === 'large' ? 80 : rows.length);
-  return (
-    <div className="blp-c">
-      <div className="blp-index-toolbar">
-        <div><span className="blp-overline">Collection index</span><strong>{rows.length.toLocaleString()} books</strong></div>
-        <div className="blp-index-stats"><span>{rows.filter(book => book.skill === 'Ready').length} skills ready</span><span>{rows.filter(book => book.progress > 0 && book.progress < 100).length} reading</span><span>4 collections</span></div>
-      </div>
-      <div className="blp-index-layout">
-        <section className="blp-index-table" aria-label="Book index">
-          <div className="blp-index-head"><span>Book</span><span>Collection</span><span>Knowledge</span><span>Progress</span></div>
-          <div className="blp-index-scroll">
-            {visible.map(book => (
-              <button type="button" className={'blp-index-row' + (selected.id === book.id ? ' active' : '')} key={book.id} onClick={() => selectBook(book.id)}>
-                <span className="blp-index-book"><BooksPrototypeCover book={book} size="micro"/><span><strong>{book.title}</strong><small>{book.author}</small></span></span>
-                <span>{book.collection}</span>
-                <span className={'blp-state ' + book.skill.toLowerCase().replace(' ', '-')}>{book.skill}</span>
-                <span>{book.progress ? `${book.progress}%` : '-'}</span>
-              </button>
-            ))}
-            {rows.length > visible.length && <div className="blp-index-more">Showing {visible.length} of {rows.length.toLocaleString()} indexed books</div>}
-          </div>
-        </section>
-        <BooksPrototypeInspector {...props} compact book={selected}/>
-      </div>
-    </div>
-  );
-};
-
-var BooksPrototypeSwitcher = function BooksPrototypeSwitcher({variant, setVariant, scale, setScale, state}) {
-  const keys = Object.keys(BOOKS_PROTOTYPE_VARIANTS);
-  const cycle = direction => {
-    const index = keys.indexOf(variant);
-    setVariant(keys[(index + direction + keys.length) % keys.length]);
-  };
-  React.useEffect(() => {
-    const onKey = event => {
-      const target = event.target;
-      if (target && (target.matches('input, textarea, [contenteditable="true"]'))) return;
-      if (event.key === 'ArrowLeft') cycle(-1);
-      if (event.key === 'ArrowRight') cycle(1);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [variant]);
-  return (
-    <div className="blp-switcher" role="toolbar" aria-label="Books agent prototype variants">
-      <BooksPrototypeIconButton label="Previous variant" onClick={() => cycle(-1)}><span aria-hidden="true">&larr;</span></BooksPrototypeIconButton>
-      <div className="blp-switch-label"><strong>{variant}</strong><span>{BOOKS_PROTOTYPE_VARIANTS[variant]}</span><small>{state}</small></div>
-      <BooksPrototypeIconButton label="Next variant" onClick={() => cycle(1)}><span aria-hidden="true">&rarr;</span></BooksPrototypeIconButton>
-      <div className="blp-switch-rule"/>
-      <button type="button" className={scale === 'small' ? 'active' : ''} onClick={() => setScale('small')}>8</button>
-      <button type="button" className={scale === 'large' ? 'active' : ''} onClick={() => setScale('large')}>1,024</button>
-    </div>
-  );
-};
-
 var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentView}) {
   const params = new URLSearchParams(window.location.search);
-  const initialVariant = BOOKS_PROTOTYPE_VARIANTS[params.get('variant')] ? params.get('variant') : 'A';
   const requestedSurface = params.get('section');
   const initialSurface = ['chat', 'library', 'discovery', 'wisdom'].includes(requestedSurface) ? requestedSurface : 'library';
-  const [variant, setVariantState] = React.useState(initialVariant);
-  const [scale, setScaleState] = React.useState(params.get('scale') === 'large' ? 'large' : 'small');
   const [surface, setSurfaceState] = React.useState(initialSurface);
   const [query, setQuery] = React.useState('');
   const [collection, setCollection] = React.useState('All books');
@@ -888,9 +856,6 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
   const [addedBooks, setAddedBooks] = React.useState([]);
   const [attached, setAttached] = React.useState([]);
   const [skillStates, setSkillStates] = React.useState(() => Object.fromEntries(BOOKS_PROTOTYPE_BOOKS.map(book => [book.id, book.skill])));
-  const [reading, setReading] = React.useState(false);
-  const [ask, setAsk] = React.useState('');
-  const [answer, setAnswer] = React.useState('');
   const [announcement, setAnnouncement] = React.useState('Prototype ready');
   const fileRef = React.useRef(null);
 
@@ -903,20 +868,18 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
   const selected = allBooks.find(book => book.id === selectedId) || books[0] || BOOKS_PROTOTYPE_BOOKS[0];
   const selectedSkill = skillStates[selected.id] || selected.skill || 'Not created';
 
-  const updateUrl = (nextVariant, nextScale, nextSurface=surface) => {
+  const updateUrl = nextSurface => {
     const next = new URL(window.location.href);
     next.searchParams.set('view', 'agent');
     next.searchParams.set('agent', 'books');
     next.searchParams.set('booksPrototype', '1');
-    next.searchParams.set('variant', nextVariant);
-    next.searchParams.set('scale', nextScale);
     next.searchParams.set('section', nextSurface);
+    next.searchParams.delete('variant');
+    next.searchParams.delete('scale');
     window.history.replaceState({}, '', next);
   };
-  const setVariant = value => { setVariantState(value); updateUrl(value, scale); setAnnouncement(`Variant ${value}: ${BOOKS_PROTOTYPE_VARIANTS[value]}`); };
-  const setScale = value => { setScaleState(value); updateUrl(variant, value); setAnnouncement(value === 'large' ? 'Large collection state loaded' : 'Personal collection state loaded'); };
-  const setSurface = value => { setSurfaceState(value); updateUrl(variant, scale, value); setAnnouncement(`${value} section opened`); };
-  const selectBook = id => { setSelectedId(id); setAnswer(''); setAnnouncement(`${allBooks.find(book => book.id === id)?.title || 'Book'} selected`); };
+  const setSurface = value => { setSurfaceState(value); updateUrl(value); setAnnouncement(`${value} section opened`); };
+  const selectBook = id => { setSelectedId(id); setAnnouncement(`${allBooks.find(book => book.id === id)?.title || 'Book'} selected`); };
   const attach = () => { setAttached(items => items.includes(selected.id) ? items : [...items, selected.id]); setAnnouncement(`${selected.title} added to the next chat`); };
   const createSkill = () => {
     if (selectedSkill === 'Ready') { setAnnouncement(`${selected.title} skill opened`); return; }
@@ -924,7 +887,6 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
     setAnnouncement(`Creating a Book skill for ${selected.title}`);
     window.setTimeout(() => { setSkillStates(states => ({...states, [selected.id]: 'Ready'})); setAnnouncement(`${selected.title} skill is ready`); }, 1400);
   };
-  const read = () => { setReading(true); if (variant !== 'B') setVariant('B'); setAnnouncement(`Reading ${selected.title}`); };
   const importEpub = file => {
     if (!file) return;
     const title = file.name.replace(/\.epub$/i, '').replace(/[-_]+/g, ' ');
@@ -935,11 +897,6 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
     setSurface('library');
     setAnnouncement(`${title} imported for processing`);
   };
-  const onAsk = () => {
-    setAnswer(`${selected.title} frames this as a problem of ${selected.tags.slice(0, 2).join(' and ')}. The selected section supports that reading, but it should remain an interpretation rather than an attributed quotation.`);
-    setAnnouncement('BooksAgent returned a supported synthesis');
-  };
-
   const shared = {
     books,
     selected,
@@ -948,16 +905,9 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
     setCollection,
     attached: attached.includes(selected.id),
     skillState: selectedSkill,
-    onRead: read,
+    onRead: () => setAnnouncement(`Reading ${selected.title}`),
     onAttach: attach,
     onSkill: createSkill,
-    reading,
-    setReading,
-    ask,
-    setAsk,
-    answer,
-    onAsk,
-    scale,
   };
 
   return (
@@ -969,13 +919,8 @@ var BooksPrototypeView = function BooksPrototypeView({agentProps, DefaultAgentVi
         {surface === 'chat' && <div className="blp-agent-chat"><DefaultAgentView {...agentProps}/></div>}
         {surface === 'discovery' && <BooksPrototypeDiscovery/>}
         {surface === 'wisdom' && <BooksPrototypeWisdom onOpenChat={() => setSurface('chat')}/>}
-        {surface === 'library' && (variant === 'A'
-          ? <BooksPrototypeVariantA {...shared} query={query}/>
-          : variant === 'B'
-            ? <BooksPrototypeVariantB {...shared}/>
-            : <BooksPrototypeVariantC {...shared}/>)}
+        {surface === 'library' && <BooksPrototypeLibrary {...shared} query={query}/>}
       </div>
-      <BooksPrototypeSwitcher variant={variant} setVariant={setVariant} scale={scale} setScale={setScale} state={`${surface} / ${selected.title}`}/>
     </div>
   );
 };
