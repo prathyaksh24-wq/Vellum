@@ -166,7 +166,7 @@ var BOOKS_PROTOTYPE_DISCOVERY = [
 ];
 
 var BOOKS_PROTOTYPE_VARIANTS = {
-  A: 'Personal shelf',
+  A: 'Press shelf',
   B: 'Reading desk',
   C: 'Collection index',
 };
@@ -319,55 +319,436 @@ var BooksPrototypeWisdom = function BooksPrototypeWisdom({onOpenChat}) {
   );
 };
 
+var BOOKS_PROTOTYPE_COLORS = ['#7c2f2c', '#1f4b43', '#c36e2d', '#243d68', '#8a6a36', '#75455f', '#2d665d', '#6f382b'];
+
+var BooksPrototypeShelf3D = function BooksPrototypeShelf3D({books, selectedId, onSelect, onOpen}) {
+  const mountRef = React.useRef(null);
+  const moveRef = React.useRef(null);
+  const callbacksRef = React.useRef({onSelect, onOpen});
+  const selectedRef = React.useRef(selectedId);
+  const [loadState, setLoadState] = React.useState('loading');
+  const [activeIndex, setActiveIndex] = React.useState(Math.max(0, books.findIndex(book => book.id === selectedId)));
+  callbacksRef.current = {onSelect, onOpen};
+  selectedRef.current = selectedId;
+
+  React.useEffect(() => {
+    const host = mountRef.current;
+    if (!host || !books.length) return undefined;
+    let disposed = false;
+    let cleanup = () => {};
+    setLoadState('loading');
+    import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.min.js').then(THREE => {
+      if (disposed) return;
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0xe4e5e2);
+      scene.fog = new THREE.Fog(0xe4e5e2, 10, 22);
+      const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+      camera.position.set(0, 0.25, 7.4);
+      const renderer = new THREE.WebGLRenderer({antialias: true, alpha: false, powerPreference: 'high-performance'});
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.domElement.className = 'bar-webgl';
+      renderer.domElement.setAttribute('aria-hidden', 'true');
+      host.appendChild(renderer.domElement);
+
+      const ambient = new THREE.HemisphereLight(0xfffbef, 0x59483b, 2.4);
+      scene.add(ambient);
+      const key = new THREE.DirectionalLight(0xfff2da, 4.4);
+      key.position.set(-3, 6, 7);
+      key.castShadow = true;
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0xb8d1dc, 2.1);
+      rim.position.set(7, 2, 1);
+      scene.add(rim);
+
+      const shelf = new THREE.Group();
+      scene.add(shelf);
+      const bookMeshes = [];
+      const textureLoader = new THREE.TextureLoader();
+      textureLoader.setCrossOrigin('anonymous');
+      const bookSpacing = 1.32;
+      const baseX = -1.45;
+
+      const makeLabelTexture = (book, color) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 768;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = color;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = 'rgba(255,255,255,.5)';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(32, 32, canvas.width - 64, canvas.height - 64);
+        ctx.fillStyle = '#fffaf0';
+        ctx.textAlign = 'center';
+        ctx.font = '600 42px Georgia';
+        const words = book.title.split(' ');
+        let line = '';
+        let y = 270;
+        words.forEach(word => {
+          const next = `${line} ${word}`.trim();
+          if (ctx.measureText(next).width > 390 && line) {
+            ctx.fillText(line, 256, y);
+            line = word;
+            y += 54;
+          } else line = next;
+        });
+        ctx.fillText(line, 256, y);
+        ctx.font = '22px Arial';
+        ctx.fillText(book.author.toUpperCase(), 256, 650);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        return texture;
+      };
+
+      const coverGeometry = new THREE.BoxGeometry(1.02, 1.58, 0.2, 2, 3, 1);
+      books.forEach((book, index) => {
+        const color = BOOKS_PROTOTYPE_COLORS[index % BOOKS_PROTOTYPE_COLORS.length];
+        const fallbackTexture = makeLabelTexture(book, color);
+        const edge = new THREE.MeshStandardMaterial({color: 0xe8dcc6, roughness: 0.82});
+        const cloth = new THREE.MeshPhysicalMaterial({color, roughness: 0.72, clearcoat: 0.08});
+        const front = new THREE.MeshPhysicalMaterial({map: fallbackTexture, roughness: 0.62, clearcoat: 0.12});
+        const mesh = new THREE.Mesh(coverGeometry, [cloth, cloth, edge, edge, front, cloth]);
+        mesh.position.set(baseX + index * bookSpacing, -0.05 + (index % 3) * 0.018, 0);
+        mesh.rotation.y = (index % 2 ? -1 : 1) * 0.035;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = {bookId: book.id, index, baseY: mesh.position.y, baseRotation: mesh.rotation.y, material: front};
+        shelf.add(mesh);
+        bookMeshes.push(mesh);
+        if (book.cover) {
+          textureLoader.load(book.cover, texture => {
+            if (disposed) { texture.dispose(); return; }
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+            front.map = texture;
+            front.needsUpdate = true;
+            fallbackTexture.dispose();
+          }, undefined, () => {});
+        }
+      });
+
+      const board = new THREE.Mesh(
+        new THREE.BoxGeometry(Math.max(11, books.length * bookSpacing + 2.8), 0.24, 2.15),
+        new THREE.MeshStandardMaterial({color: 0x5b3825, roughness: 0.7})
+      );
+      board.position.set(baseX + ((books.length - 1) * bookSpacing) / 2, -1.03, -0.08);
+      board.receiveShadow = true;
+      shelf.add(board);
+      const backdrop = new THREE.Mesh(
+        new THREE.PlaneGeometry(28, 11),
+        new THREE.MeshStandardMaterial({color: 0xe4e5e2, roughness: 1})
+      );
+      backdrop.position.set(2, 0, -2.1);
+      scene.add(backdrop);
+
+      const raycaster = new THREE.Raycaster();
+      const pointer = new THREE.Vector2(3, 3);
+      const maxIndex = Math.max(0, books.length - 1);
+      let current = Math.max(0, books.findIndex(book => book.id === selectedRef.current));
+      let targetOffset = current * bookSpacing;
+      let offset = targetOffset;
+      let hovered = -1;
+      let pointerDown = null;
+      let frame = 0;
+
+      const moveTo = value => {
+        current = Math.max(0, Math.min(maxIndex, value));
+        targetOffset = current * bookSpacing;
+        setActiveIndex(current);
+        callbacksRef.current.onSelect(books[current].id);
+      };
+      moveRef.current = moveTo;
+
+      const resize = () => {
+        const width = Math.max(1, host.clientWidth);
+        const height = Math.max(1, host.clientHeight);
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+      };
+      const updatePointer = event => {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      };
+      const pick = event => {
+        updatePointer(event);
+        raycaster.setFromCamera(pointer, camera);
+        const hit = raycaster.intersectObjects(bookMeshes, false)[0];
+        return hit ? hit.object.userData.index : -1;
+      };
+      const onMove = event => {
+        if (pointerDown) {
+          const dx = event.clientX - pointerDown.x;
+          pointerDown.moved = Math.max(pointerDown.moved, Math.abs(dx));
+          targetOffset = Math.max(0, Math.min(maxIndex * bookSpacing, pointerDown.offset - dx * 0.012));
+          return;
+        }
+        hovered = pick(event);
+        renderer.domElement.style.cursor = hovered >= 0 ? 'pointer' : 'grab';
+      };
+      const onDown = event => {
+        pointerDown = {x: event.clientX, offset: targetOffset, moved: 0};
+        renderer.domElement.setPointerCapture?.(event.pointerId);
+        renderer.domElement.style.cursor = 'grabbing';
+      };
+      const onUp = event => {
+        if (!pointerDown) return;
+        const drag = pointerDown;
+        pointerDown = null;
+        const picked = pick(event);
+        if (drag.moved < 6 && picked >= 0) {
+          moveTo(picked);
+          callbacksRef.current.onOpen(books[picked].id);
+        } else moveTo(Math.round(targetOffset / bookSpacing));
+      };
+      const onWheel = event => {
+        event.preventDefault();
+        const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        targetOffset = Math.max(0, Math.min(maxIndex * bookSpacing, targetOffset + delta * 0.005));
+        current = Math.round(targetOffset / bookSpacing);
+        setActiveIndex(current);
+        callbacksRef.current.onSelect(books[current].id);
+      };
+      renderer.domElement.addEventListener('pointermove', onMove);
+      renderer.domElement.addEventListener('pointerdown', onDown);
+      renderer.domElement.addEventListener('pointerup', onUp);
+      renderer.domElement.addEventListener('pointercancel', onUp);
+      renderer.domElement.addEventListener('wheel', onWheel, {passive: false});
+      const observer = new ResizeObserver(resize);
+      observer.observe(host);
+      resize();
+
+      const clock = new THREE.Clock();
+      const animate = () => {
+        if (disposed) return;
+        const delta = Math.min(clock.getDelta(), 0.05);
+        offset = THREE.MathUtils.damp(offset, targetOffset, 5.5, delta);
+        shelf.position.x = -offset;
+        bookMeshes.forEach((mesh, index) => {
+          const raised = index === hovered ? 0.24 : index === current ? 0.1 : 0;
+          mesh.position.y = THREE.MathUtils.damp(mesh.position.y, mesh.userData.baseY + raised, 8, delta);
+          mesh.position.z = THREE.MathUtils.damp(mesh.position.z, index === hovered ? 0.35 : index === current ? 0.14 : 0, 8, delta);
+          mesh.rotation.y = THREE.MathUtils.damp(mesh.rotation.y, mesh.userData.baseRotation + (index === hovered ? -0.16 : 0), 8, delta);
+        });
+        camera.position.x = THREE.MathUtils.damp(camera.position.x, 0, 5, delta);
+        renderer.render(scene, camera);
+        frame = requestAnimationFrame(animate);
+      };
+      animate();
+      setLoadState('ready');
+      cleanup = () => {
+        cancelAnimationFrame(frame);
+        observer.disconnect();
+        renderer.domElement.removeEventListener('pointermove', onMove);
+        renderer.domElement.removeEventListener('pointerdown', onDown);
+        renderer.domElement.removeEventListener('pointerup', onUp);
+        renderer.domElement.removeEventListener('pointercancel', onUp);
+        renderer.domElement.removeEventListener('wheel', onWheel);
+        bookMeshes.forEach(mesh => {
+          mesh.geometry.dispose();
+          mesh.material.forEach(material => { material.map?.dispose(); material.dispose(); });
+        });
+        board.geometry.dispose();
+        board.material.dispose();
+        renderer.dispose();
+        renderer.domElement.remove();
+      };
+    }).catch(() => { if (!disposed) setLoadState('fallback'); });
+    return () => { disposed = true; cleanup(); };
+  }, [books.map(book => book.id).join('|')]);
+
+  const move = direction => moveRef.current?.(activeIndex + direction);
+  return (
+    <div className="bar-shelf-stage" ref={mountRef} data-render-state={loadState}>
+      <div className="bar-shelf-wash" aria-hidden="true"/>
+      <div className={'bar-shelf-fallback ' + (loadState === 'ready' ? 'webgl-ready' : '')}>{books.map((book, index) => <button type="button" key={book.id} aria-label={`Open ${book.title}`} onClick={() => {moveRef.current?.(index); onOpen(book.id);}}><BooksPrototypeCover book={book} size="lg"/></button>)}</div>
+      <div className="bar-shelf-controls">
+        <BooksPrototypeIconButton label="Previous book" onClick={() => move(-1)}><span aria-hidden="true">&larr;</span></BooksPrototypeIconButton>
+        <span><strong>{String(activeIndex + 1).padStart(2, '0')}</strong> / {String(books.length).padStart(2, '0')}</span>
+        <BooksPrototypeIconButton label="Next book" onClick={() => move(1)}><span aria-hidden="true">&rarr;</span></BooksPrototypeIconButton>
+      </div>
+      <div className="bar-shelf-access" aria-label="Books on shelf">{books.map((book, index) => <button type="button" key={book.id} className={index === activeIndex ? 'active' : ''} onFocus={() => moveRef.current?.(index)} onClick={() => onOpen(book.id)}>{book.title}</button>)}</div>
+    </div>
+  );
+};
+
+var BooksPrototypePage = function BooksPrototypePage({page, side}) {
+  return (
+    <article className={'bar-page ' + side}>
+      <span className="bar-page-kicker">{page.kicker}</span>
+      <h3>{page.title}</h3>
+      <p>{page.body}</p>
+      {page.note && <blockquote>{page.note}</blockquote>}
+      <footer><span>Vellum Books Agent</span><strong>{page.number}</strong></footer>
+    </article>
+  );
+};
+
+var BooksPrototypeReaderSpread = function BooksPrototypeReaderSpread({pages, index}) {
+  const left = pages[index] || pages[0];
+  const right = pages[index + 1] || pages[index] || pages[0];
+  return <div className="bar-spread"><BooksPrototypePage page={left} side="left"/><BooksPrototypePage page={right} side="right"/></div>;
+};
+
+var BooksPrototypeOpenReader = function BooksPrototypeOpenReader({book, onClose, onAttach, onSkill, attached, skillState}) {
+  const pages = React.useMemo(() => [
+    {number: 1, kicker: book.collection, title: book.title, body: book.excerpt, note: `${book.author} / ${book.location}`},
+    {number: 2, kicker: 'Idea map', title: book.tags.join(', '), body: `Books Agent indexes this section around ${book.tags.join(', ')}. These labels support retrieval; they are not treated as a complete interpretation of the author.`},
+    {number: 3, kicker: 'Personal thread', title: 'Why this returned now', body: book.relevance, note: 'This connection remains revisable and separate from a confirmed user belief.'},
+    {number: 4, kicker: 'Evidence boundary', title: book.location, body: 'The production reader will preserve EPUB locations, chapter structure, and bounded evidence so a Books Agent answer can point back to the exact passage it used.'},
+    {number: 5, kicker: 'Books Agent', title: 'A question to carry forward', body: `Where does ${book.tags[0]} help you act more clearly, and where could it become an excuse to stop examining the situation?`},
+    {number: 6, kicker: 'Reading record', title: book.progress ? `${book.progress}% complete` : 'Not started', body: 'Progress, annotations, and your response to the book remain private user intelligence. The text itself stays separate from what Vellum learns about you.'},
+  ], [book.id]);
+  const stageRef = React.useRef(null);
+  const dragRef = React.useRef(null);
+  const [spreadIndex, setSpreadIndex] = React.useState(0);
+  const [turn, setTurn] = React.useState({dir: 'next', progress: 0, active: false});
+  const [zoom, setZoom] = React.useState(1);
+  const [loupeOn, setLoupeOn] = React.useState(true);
+  const [loupe, setLoupe] = React.useState({x: 0, y: 0, placed: false});
+  const [size, setSize] = React.useState({width: 1, height: 1});
+  const maxIndex = Math.max(0, pages.length - 2);
+  const canPrev = spreadIndex > 0;
+  const canNext = spreadIndex < maxIndex;
+
+  React.useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return undefined;
+    const update = () => {
+      const rect = stage.getBoundingClientRect();
+      const next = {width: rect.width, height: rect.height};
+      setSize(next);
+      setLoupe(current => current.placed ? current : {x: rect.width * 0.69, y: rect.height * 0.5, placed: true});
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    update();
+    return () => observer.disconnect();
+  }, []);
+
+  const beginTurn = (event, dir) => {
+    if ((dir === 'next' && !canNext) || (dir === 'prev' && !canPrev)) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = {x: event.clientX, dir, width: Math.max(260, stageRef.current?.clientWidth || 600), moved: 0};
+    setTurn({dir, progress: 0.01, active: true});
+  };
+  const moveTurn = event => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = event.clientX - drag.x;
+    drag.moved = Math.max(drag.moved, Math.abs(dx));
+    const raw = drag.dir === 'next' ? -dx : dx;
+    setTurn({dir: drag.dir, progress: Math.max(0.01, Math.min(1, raw / (drag.width * 0.42))), active: true});
+  };
+  const finishTurn = () => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    dragRef.current = null;
+    const shouldCommit = drag.moved < 6 || turn.progress > 0.22;
+    if (!shouldCommit) { setTurn({dir: drag.dir, progress: 0, active: false}); return; }
+    setTurn({dir: drag.dir, progress: 1, active: true});
+    setLoupe(current => ({...current, x: drag.dir === 'next' ? size.width * 0.28 : size.width * 0.72}));
+    window.setTimeout(() => {
+      setSpreadIndex(index => Math.max(0, Math.min(maxIndex, index + (drag.dir === 'next' ? 2 : -2))));
+      setTurn({dir: drag.dir, progress: 0, active: false});
+    }, 310);
+  };
+  const turnWithButton = dir => {
+    if ((dir === 'next' && !canNext) || (dir === 'prev' && !canPrev)) return;
+    dragRef.current = {dir, moved: 0, width: size.width, x: 0};
+    setTurn({dir, progress: 1, active: true});
+    window.setTimeout(() => {
+      setSpreadIndex(index => Math.max(0, Math.min(maxIndex, index + (dir === 'next' ? 2 : -2))));
+      setTurn({dir, progress: 0, active: false});
+      dragRef.current = null;
+    }, 310);
+  };
+  const moveLoupe = event => {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    const rect = stageRef.current.getBoundingClientRect();
+    setLoupe({x: Math.max(74, Math.min(rect.width - 74, event.clientX - rect.left)), y: Math.max(74, Math.min(rect.height - 74, event.clientY - rect.top)), placed: true});
+  };
+  const lensRadius = 86;
+  const lensMagnification = 1.9;
+
+  return (
+    <section className="bar-reader" aria-label={`Reading ${book.title}`}>
+      <div className="bar-reader-top">
+        <button type="button" className="bar-back" onClick={onClose}><span aria-hidden="true">&larr;</span>Back to shelf</button>
+        <div className="bar-reader-title"><span>{book.author}</span><strong>{book.title}</strong></div>
+        <div className="bar-reader-tools" role="toolbar" aria-label="Reader tools">
+          <BooksPrototypeIconButton label="Zoom out" onClick={() => setZoom(value => Math.max(.88, +(value - .1).toFixed(2)))}><span aria-hidden="true">-</span></BooksPrototypeIconButton>
+          <span>{Math.round(zoom * 100)}%</span>
+          <BooksPrototypeIconButton label="Zoom in" onClick={() => setZoom(value => Math.min(1.28, +(value + .1).toFixed(2)))}><span aria-hidden="true">+</span></BooksPrototypeIconButton>
+          <BooksPrototypeIconButton label="Toggle magnifier" pressed={loupeOn} onClick={() => setLoupeOn(value => !value)}><IcSearch size={15}/></BooksPrototypeIconButton>
+        </div>
+      </div>
+      <div className="bar-reader-stage" ref={stageRef}>
+        <div className="bar-book-shadow" aria-hidden="true"/>
+        <div className="bar-book-zoom" style={{transform: `translate(-50%,-50%) scale(${zoom})`}}>
+          <BooksPrototypeReaderSpread pages={pages} index={spreadIndex}/>
+          {turn.active && <div className={'bar-turning-sheet ' + turn.dir} aria-hidden="true">{Array.from({length: 14}, (_, strip) => {
+            const local = Math.max(0, Math.min(1, turn.progress * 1.16 - strip * .012));
+            const angle = (turn.dir === 'next' ? -1 : 1) * local * 180;
+            const lift = Math.sin(local * Math.PI) * 22;
+            return <i key={strip} style={{'--strip': strip, transform: `rotateY(${angle}deg) translateZ(${lift}px)`}}/>;
+          })}</div>}
+          <button type="button" className="bar-page-hit prev" aria-label="Drag or tap for previous pages" disabled={!canPrev} onPointerDown={event => beginTurn(event, 'prev')} onPointerMove={moveTurn} onPointerUp={finishTurn} onPointerCancel={finishTurn}/>
+          <button type="button" className="bar-page-hit next" aria-label="Drag or tap for next pages" disabled={!canNext} onPointerDown={event => beginTurn(event, 'next')} onPointerMove={moveTurn} onPointerUp={finishTurn} onPointerCancel={finishTurn}/>
+        </div>
+        {loupeOn && <div className="bar-loupe" style={{left: loupe.x - lensRadius, top: loupe.y - lensRadius}} onPointerDown={event => {event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture?.(event.pointerId);}} onPointerMove={moveLoupe} onPointerUp={event => event.currentTarget.releasePointerCapture?.(event.pointerId)}>
+          <div className="bar-lens">
+            <div className="bar-lens-scene" style={{width: size.width, height: size.height, transform: `translate(${lensRadius - loupe.x * lensMagnification}px,${lensRadius - loupe.y * lensMagnification}px) scale(${lensMagnification})`}}>
+              <div className="bar-book-zoom lens-copy" style={{transform: `translate(-50%,-50%) scale(${zoom})`}}><BooksPrototypeReaderSpread pages={pages} index={spreadIndex}/></div>
+            </div>
+          </div>
+          <span className="bar-loupe-handle" aria-hidden="true"/>
+        </div>}
+        <button type="button" className="bar-reader-arrow prev" aria-label="Previous pages" disabled={!canPrev} onClick={() => turnWithButton('prev')}>&larr;</button>
+        <button type="button" className="bar-reader-arrow next" aria-label="Next pages" disabled={!canNext} onClick={() => turnWithButton('next')}>&rarr;</button>
+      </div>
+      <div className="bar-reader-bottom">
+        <span>Drag a page edge to turn / drag the glass to inspect</span>
+        <strong>Pages {spreadIndex + 1}-{Math.min(spreadIndex + 2, pages.length)} of {pages.length}</strong>
+        <div className="bar-reader-actions"><button type="button" onClick={onAttach}>{attached ? 'Added to chat' : 'Add to chat'}</button><button type="button" onClick={onSkill}>{skillState === 'Ready' ? 'Open skill' : 'Create skill'}</button></div>
+      </div>
+    </section>
+  );
+};
+
 var BooksPrototypeVariantA = function BooksPrototypeVariantA(props) {
   const {books, selected, selectBook, query, collection, setCollection} = props;
-  const groups = [
-    {name: 'Recently added', items: books.filter(book => book.imported)},
-    {name: 'Continue reading', items: books.filter(book => book.progress > 0 && book.progress < 100)},
-    {name: 'Knowledge ready', items: books.filter(book => book.skill === 'Ready')},
-    {name: 'Fiction', items: books.filter(book => book.collection === 'Fiction')},
-  ];
+  const [openId, setOpenId] = React.useState(null);
+  const filtered = books.filter(book => {
+    if (collection === 'Reading') return book.progress > 0 && book.progress < 100;
+    if (collection === 'Skills ready') return book.skill === 'Ready';
+    if (!['All books', 'Reading', 'Skills ready'].includes(collection)) return book.collection === collection;
+    return true;
+  });
+  const opened = books.find(book => book.id === openId) || selected;
+  if (openId) {
+    return <BooksPrototypeOpenReader book={opened} onClose={() => setOpenId(null)} onAttach={props.onAttach} onSkill={props.onSkill} attached={props.attached} skillState={props.skillState}/>;
+  }
   return (
-    <div className="blp-a">
-      <aside className="blp-collections" aria-label="Library collections">
-        <span className="blp-overline">Collections</span>
-        {['All books', 'Reading', 'Skills ready', 'Philosophy', 'Fiction', 'Psychology'].map(name => (
-          <button type="button" key={name} className={collection === name ? 'active' : ''} onClick={() => setCollection(name)}>
-            <span>{name}</span><strong>{name === 'All books' ? books.length : name === 'Reading' ? books.filter(book => book.progress > 0 && book.progress < 100).length : name === 'Skills ready' ? books.filter(book => book.skill === 'Ready').length : books.filter(book => book.collection === name).length}</strong>
-          </button>
-        ))}
-        <div className="blp-collection-rule"/>
-        <span className="blp-overline">Library state</span>
-        <p>{books.filter(book => book.skill === 'Ready').length} skills ready</p>
-        <p>{books.filter(book => book.progress > 0 && book.progress < 100).length} in progress</p>
-      </aside>
-      <main className="blp-shelves">
-        {query && <div className="blp-result-line">{books.length} results for <strong>{query}</strong></div>}
-        {groups.map(group => {
-          let items = group.items;
-          if (collection === 'Reading') items = items.filter(book => book.progress > 0 && book.progress < 100);
-          if (collection === 'Skills ready') items = items.filter(book => book.skill === 'Ready');
-          if (!['All books', 'Reading', 'Skills ready'].includes(collection)) items = items.filter(book => book.collection === collection);
-          if (!items.length) return null;
-          return (
-            <section className="blp-shelf" key={group.name}>
-              <div className="blp-shelf-head"><h2>{group.name}</h2><span>{items.length}</span></div>
-              <div className="blp-book-row">
-                {items.map(book => (
-                  <button type="button" key={book.id} className={'blp-book-tile' + (selected.id === book.id ? ' selected' : '')} onClick={() => selectBook(book.id)}>
-                    <BooksPrototypeCover book={book}/>
-                    <span className="blp-book-title">{book.title}</span>
-                    <span className="blp-book-author">{book.author}</span>
-                    {book.progress > 0 && book.progress < 100 && <span className="blp-progress"><i style={{width: `${book.progress}%`}}/></span>}
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        })}
-      </main>
-      <BooksPrototypeInspector {...props} book={selected}/>
-    </div>
+    <main className="bar-library">
+      <div className="bar-library-copy">
+        <span className="blp-overline">Your collection</span>
+        <h2>A shelf that remembers why each book matters.</h2>
+        <p>{query ? `${filtered.length} books match your search.` : 'Scroll horizontally, drag the shelf, or select a cover. Open any volume to read and turn its pages.'}</p>
+      </div>
+      <div className="bar-collections" role="toolbar" aria-label="Filter book collection">{['All books', 'Reading', 'Skills ready', 'Philosophy', 'Fiction', 'Psychology'].map(name => <button type="button" key={name} className={collection === name ? 'active' : ''} onClick={() => setCollection(name)}>{name}</button>)}</div>
+      <BooksPrototypeShelf3D books={filtered.length ? filtered : books} selectedId={selected.id} onSelect={selectBook} onOpen={id => {selectBook(id); setOpenId(id);}}/>
+      <div className="bar-selected">
+        <div><span>{selected.collection} / {selected.progress ? `${selected.progress}% read` : selected.skill}</span><h3>{selected.title}</h3><p>{selected.author}</p></div>
+        <p>{selected.relevance}</p>
+        <button type="button" onClick={() => setOpenId(selected.id)}>Open book<IcChevR size={15}/></button>
+      </div>
+    </main>
   );
 };
 

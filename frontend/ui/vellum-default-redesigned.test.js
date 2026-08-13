@@ -48,6 +48,12 @@ describe("Vellum default redesigned frontend", () => {
     expect(booksPrototype).toContain(">Wisdom</button>");
     expect(booksPrototype).toContain(">View source<IcChevR");
     expect(booksPrototype).not.toContain("Add to Library");
+    expect(booksPrototype).toContain("three@0.180.0/build/three.module.min.js");
+    expect(booksPrototype).toContain("BooksPrototypeShelf3D");
+    expect(booksPrototype).toContain("BooksPrototypeOpenReader");
+    expect(booksPrototype).toContain("bar-turning-sheet");
+    expect(booksPrototype).toContain("bar-loupe");
+    expect(booksPrototype).toContain("Drag a page edge to turn");
     expect(booksPrototype).toContain("searchParams.set('view', 'agent')");
     expect(booksPrototype).not.toContain("libraryPrototype");
   });
