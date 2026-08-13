@@ -9,6 +9,10 @@ const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
   "utf8",
 );
+const booksPrototype = readFileSync(
+  resolve(here, "../../design/Velllum/uploads/books-agent-prototype.jsx"),
+  "utf8",
+);
 
 describe("Vellum default redesigned frontend", () => {
   test("loads the modular frontend API bridge used by backend integrations", () => {
@@ -29,6 +33,23 @@ describe("Vellum default redesigned frontend", () => {
     expect(selectComponent).toContain('role="combobox"');
     expect(selectComponent).toContain('role="listbox"');
     expect(selectComponent).toContain('event.key === "ArrowDown"');
+  });
+
+  test("keeps uploaded files in Library and scopes the book collection to Books Agent", () => {
+    expect(html).toContain("const LibraryView = ({library, setLibrary}) =>");
+    expect(html).toContain("view === 'library' && <LibraryView");
+    expect(html).toContain('src="books-agent-prototype.jsx"');
+    expect(html).toContain("props.agent?.id === 'books'");
+    expect(html).toContain("get('booksPrototype') === '1'");
+    expect(booksPrototype).toContain("<h1>Books Agent</h1>");
+    expect(booksPrototype).toContain(">Chat</button>");
+    expect(booksPrototype).toContain(">Library</button>");
+    expect(booksPrototype).toContain(">Discovery</button>");
+    expect(booksPrototype).toContain(">Wisdom</button>");
+    expect(booksPrototype).toContain(">View source<IcChevR");
+    expect(booksPrototype).not.toContain("Add to Library");
+    expect(booksPrototype).toContain("searchParams.set('view', 'agent')");
+    expect(booksPrototype).not.toContain("libraryPrototype");
   });
 
   test("keeps the approved web UI shell instead of the old desktop chrome", () => {

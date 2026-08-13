@@ -1790,9 +1790,11 @@ body{font-size:14px}
 .px-preview-copy{min-width:0}.px-preview-name{font-family:var(--font-d);font-size:14px;color:var(--txt2)}.px-preview-sub{font-size:10.5px;color:var(--dim2);margin-top:2px}
 @media(max-width:720px){.px-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}}
 </style>
+<link rel="stylesheet" href="books-agent-prototype.css"/>
 </head>
 <body>
 <div id="root"></div>
+<script type="text/babel" data-presets="react" src="books-agent-prototype.jsx"></script>
 <script type="text/babel" data-presets="react">
 const {useState, useRef, useEffect} = React;
 const API = window.VellumApi;
@@ -4420,7 +4422,7 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onStop, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onStop, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const Icon = agent.icon;
@@ -4534,6 +4536,17 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
       <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
     </div>{activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}</div>
   );
+};
+
+const AgentView = props => {
+  let prototypeEnabled = false;
+  try {
+    prototypeEnabled = new URLSearchParams(window.location.search).get('booksPrototype') === '1';
+  } catch {}
+  if (props.agent?.id === 'books' && prototypeEnabled && typeof BooksPrototypeView === 'function') {
+    return <BooksPrototypeView agentProps={props} DefaultAgentView={DefaultAgentView}/>;
+  }
+  return <DefaultAgentView {...props}/>;
 };
 
 const AgentSettingsModal = ({agent, cfg, onSave, onClose}) => {
@@ -8110,7 +8123,14 @@ const App = () => {
 
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [activeAgentId, setActiveAgentId] = useState(null);
+  const [activeAgentId, setActiveAgentId] = useState(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get('agent');
+      return AGENTS.some(agent => agent.id === requested) ? requested : null;
+    } catch {
+      return null;
+    }
+  });
   const [agentConvos, setAgentConvos] = useState({});
   const [activeConvo, setActiveConvo] = useState({});
   const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
