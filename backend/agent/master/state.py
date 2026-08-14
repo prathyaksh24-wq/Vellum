@@ -129,6 +129,32 @@ class MasterThreadStateStore:
             return None
         return loaded if isinstance(loaded, dict) else None
 
+    def claim_pending_action(self, thread_id: str, *, agent_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT action_json FROM master_pending_actions WHERE thread_id = ?",
+                (thread_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                loaded = json.loads(row["action_json"])
+            except json.JSONDecodeError:
+                conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+                return None
+            if not isinstance(loaded, dict):
+                return None
+            if str(loaded.get("agent") or "") != agent_id:
+                return None
+            deleted = conn.execute(
+                "DELETE FROM master_pending_actions WHERE thread_id = ?",
+                (thread_id,),
+            )
+            if deleted.rowcount != 1:
+                return None
+        return loaded
+
     def clear_pending_action(self, thread_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))

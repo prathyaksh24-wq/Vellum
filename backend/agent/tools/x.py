@@ -6,16 +6,22 @@ from langchain_core.runnables import RunnableConfig
 
 from agent.agents.base import SpecialistResponse
 from agent.config import get_settings
+from agent.master.live_runtime import get_delegation_runtime
+from agent.master.runtime import DelegationRequest
 from agent.master.state import MasterThreadStateStore
-from agent.master.registry import PupilRegistry
 
 
 _pending_action_store = MasterThreadStateStore()
 
 
-def _build_x_agent():
-    settings = get_settings()
-    return PupilRegistry.default(vault_root=settings.obsidian_vault_path).get("XAgent")
+def _get_x_runtime():
+    return get_delegation_runtime()
+
+
+def _thread_id(config: RunnableConfig | None) -> str:
+    configurable = config.get("configurable", {}) if config else {}
+    thread_id = str(configurable.get("thread_id") or "").strip() if isinstance(configurable, dict) else ""
+    return thread_id or get_settings().thread_id
 
 
 def _response_json(response: SpecialistResponse) -> str:
@@ -56,7 +62,13 @@ def x_agent(query: str, config: RunnableConfig | None = None) -> str:
             )
         )
     try:
-        response = _build_x_agent().answer(clean_query)
+        response = _get_x_runtime().delegate(
+            DelegationRequest(
+                agent_id="XAgent",
+                task=clean_query,
+                parent_thread_id=_thread_id(config),
+            )
+        ).response
         _persist_pending_action(response, config)
         return _response_json(response)
     except Exception:

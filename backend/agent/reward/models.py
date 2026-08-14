@@ -6,7 +6,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class RewardSignal:
     task_id: str
-    pupil: str
+    agent_id: str
     user_reward: float = 0.0
     master_reward: float = 0.0
     self_reward: float = 0.0

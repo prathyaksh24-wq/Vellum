@@ -195,18 +195,46 @@ They do not persist across turns unless triggered again.
 
 ### Profile-Based Specialist Delegation
 
-Runtime specialist configuration is split into persistent profiles and ephemeral runs.
+Every specialist is a first-class agent with a persistent profile and ephemeral
+delegation runs. A profile owns the agent's instructions, allowed tools,
+Hermes-compatible skills, private memory scope, shared-memory policy, cache policy,
+delegation policy, model or deterministic executor, and response schema.
 
-`agent/profiles/` owns the strict profile schema, safe built-in defaults, YAML loading, diagnostics, instruction-path containment, and context-local tool policy. Profile YAML is loaded from `data/agent_profiles/`. Existing deterministic agents remain registered through `PupilRegistry`; a newly discovered `executor: llm` profile can be selected directly by an active routing skill without a Python pupil class.
+`AgentCatalog` is the single owner of profiles and runtime executors. It loads
+strict version-2 profiles from `data/agent_profiles/`, applies safe built-in
+fallbacks, contains instruction paths, exposes redacted diagnostics, and binds
+the current deterministic X, YouTube, Memory, and Sports executors to their
+profiles. There is no parallel pupil or delegation registry.
 
-`agent/master/runtime.py` creates a fresh `DelegationRunResult` for every specialist task. Deterministic profiles receive only the current goal through their existing `answer(query)` contract. LLM profiles receive a new two-message invocation containing their profile system instructions and a human task packet with the goal, explicit context, and profile-approved memory. Parent chat history and LangGraph checkpoints are not inherited.
+The process-wide accessor in `agent/master/live_runtime.py` supplies the same
+catalog and runtime to the API and main-model agent tools. Test-local dispatchers
+may create an uncached runtime, but they still enter through `DelegationRequest`.
 
-Routing order is:
+`agent/master/runtime.py` accepts only a typed `DelegationRequest` and creates a
+fresh `DelegationRunResult` for every task. It resolves the complete profile and
+executor from `AgentCatalog`, enforces delegation admission and depth, and applies
+the profile tool policy for the run. Deterministic profiles receive only the
+current goal through `answer(query)`. LLM profiles receive profile instructions
+plus a bounded task packet containing the goal, explicit context, and
+profile-approved memory. Parent chat history and LangGraph checkpoints are not
+inherited.
 
-1. Pending confirmed action, which never enters cache.
-2. Active routing skill targeting a registered pupil or profile-only LLM agent.
-3. Deterministic `PupilRegistry.match()` fallback.
-4. Return control to Vellum.
+Deterministic agents invoke external capabilities through the shared
+`ToolRegistry`, where profile allowlists and confirmation narrowing are enforced.
+LLM profiles with nonempty tool allowlists are rejected until the allowlisted LLM
+tool loop is implemented; policy metadata is not presented as executable support.
+
+Private agent memory remains in `agent:<AgentId>`. Agents may read validated
+shared Knowledge Core context when their profile allows it. Shared writes are
+proposal-only: agents cannot directly mutate canonical shared knowledge. Book
+skills and all other procedural knowledge remain Hermes packages selected by the
+owning agent, not invoked directly by the main model.
+
+`LiveAgentDispatcher` currently preserves existing connector behavior while the
+main-agent delegation tool is introduced. Its compatibility routing order is a
+pending confirmed action, an active routing skill targeting a catalog agent,
+deterministic `AgentCatalog.match()`, then return to Vellum. It uses the same
+catalog and runtime; it is not a second profile or delegation owner.
 
 Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
 
