@@ -393,8 +393,9 @@ When new content enters the vault, this is the sequence:
 
 ```
 1. SELECTION
-   User adds a book (via import_book.py), a Twitter archive
-   (via import_twitter_via_apify.py), or any note manually.
+   User adds a Twitter archive (via import_twitter_via_apify.py)
+   or a note manually. Book ingestion is owned by Knowledge Core and
+   BooksAgent under docs/adr/0001 through 0007.
 
 2. CLEANING
    Importers strip metadata, scrub PII for private folders,
@@ -582,7 +583,6 @@ Response displayed to user
 | `agent/scheduler/reflection.py` | Weekly/monthly reflection jobs |
 | `agent/scheduler/skill_detector.py` | Skill signal detection job |
 | `agent/cli.py` | Fallback CLI |
-| `scripts/import_book.py` | EPUB book importer |
 | `scripts/import_twitter_archive.py` | Twitter archive importer |
 | `scripts/import_twitter_via_apify.py` | Twitter Apify importer |
 | `scripts/ledger.py` | Standalone ledger CLI |
