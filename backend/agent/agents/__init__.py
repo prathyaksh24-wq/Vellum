@@ -5,8 +5,6 @@ from agent.agents.base import (
     SpecialistSource,
 )
 from agent.agents.memory_agent import MemoryAgent
-from agent.agents.orchestrator import SpecialistOrchestrator
-from agent.agents.router import RouteDecision, SpecialistRouter
 from agent.agents.sports import SportsAgent
 from agent.agents.x_agent import XAgent
 from agent.agents.youtube import YoutubeAgent
@@ -14,12 +12,9 @@ from agent.agents.youtube import YoutubeAgent
 __all__ = [
     "MemoryAgent",
     "MemoryProposal",
-    "RouteDecision",
     "SportsAgent",
     "SpecialistAgent",
-    "SpecialistOrchestrator",
     "SpecialistResponse",
-    "SpecialistRouter",
     "SpecialistSource",
     "XAgent",
     "YoutubeAgent",

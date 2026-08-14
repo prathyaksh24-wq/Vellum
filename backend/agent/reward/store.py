@@ -23,7 +23,7 @@ class RewardStore:
                 """
                 CREATE TABLE IF NOT EXISTS reward_records (
                     task_id TEXT PRIMARY KEY,
-                    pupil TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
                     user_reward REAL NOT NULL,
                     master_reward REAL NOT NULL,
                     self_reward REAL NOT NULL,
@@ -32,6 +32,49 @@ class RewardStore:
                 )
                 """
             )
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(reward_records)")}
+            if "pupil" in columns:
+                agent_expression = "COALESCE(NULLIF(agent_id, ''), pupil)" if "agent_id" in columns else "pupil"
+                conn.execute("DROP TABLE IF EXISTS reward_records_agent_id_migration")
+                conn.execute(
+                    """
+                    CREATE TABLE reward_records_agent_id_migration (
+                        task_id TEXT PRIMARY KEY,
+                        agent_id TEXT NOT NULL,
+                        user_reward REAL NOT NULL,
+                        master_reward REAL NOT NULL,
+                        self_reward REAL NOT NULL,
+                        final_score REAL NOT NULL,
+                        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                conn.execute(
+                    f"""
+                    INSERT INTO reward_records_agent_id_migration (
+                        task_id,
+                        agent_id,
+                        user_reward,
+                        master_reward,
+                        self_reward,
+                        final_score,
+                        created_at
+                    )
+                    SELECT
+                        task_id,
+                        {agent_expression},
+                        user_reward,
+                        master_reward,
+                        self_reward,
+                        final_score,
+                        created_at
+                    FROM reward_records
+                    """
+                )
+                conn.execute("DROP TABLE reward_records")
+                conn.execute("ALTER TABLE reward_records_agent_id_migration RENAME TO reward_records")
+            elif "agent_id" not in columns:
+                raise RuntimeError("reward_records is missing an agent identity column")
 
     def record(self, reward: RewardRecord) -> None:
         with self._connect() as conn:
@@ -39,7 +82,7 @@ class RewardStore:
                 """
                 INSERT INTO reward_records (
                     task_id,
-                    pupil,
+                    agent_id,
                     user_reward,
                     master_reward,
                     self_reward,
@@ -47,7 +90,7 @@ class RewardStore:
                 )
                 VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(task_id) DO UPDATE SET
-                    pupil = excluded.pupil,
+                    agent_id = excluded.agent_id,
                     user_reward = excluded.user_reward,
                     master_reward = excluded.master_reward,
                     self_reward = excluded.self_reward,
@@ -55,7 +98,7 @@ class RewardStore:
                 """,
                 (
                     reward.task_id,
-                    reward.pupil,
+                    reward.agent_id,
                     reward.user_reward,
                     reward.master_reward,
                     reward.self_reward,
@@ -63,21 +106,21 @@ class RewardStore:
                 ),
             )
 
-    def list_for_pupil(self, pupil: str) -> list[RewardRecord]:
+    def list_for_agent(self, agent_id: str) -> list[RewardRecord]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT task_id, pupil, user_reward, master_reward, self_reward, final_score
+                SELECT task_id, agent_id, user_reward, master_reward, self_reward, final_score
                 FROM reward_records
-                WHERE pupil = ?
+                WHERE agent_id = ?
                 ORDER BY created_at DESC
                 """,
-                (pupil,),
+                (agent_id,),
             ).fetchall()
         return [
             RewardRecord(
                 task_id=row["task_id"],
-                pupil=row["pupil"],
+                agent_id=row["agent_id"],
                 user_reward=float(row["user_reward"]),
                 master_reward=float(row["master_reward"]),
                 self_reward=float(row["self_reward"]),

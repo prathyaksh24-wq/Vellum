@@ -62,8 +62,7 @@ from agent.memory.honcho_client import HonchoMemory
 from agent.memory.runtime import get_memory_orchestrator
 from agent.memory.project_context import ProjectContext
 from agent.memory.sessions import SessionsReader
-from agent.master.runtime import DelegationRuntime
-from agent.profiles import ProfileRegistry
+from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
@@ -190,13 +189,11 @@ class _ThreadTurnCoordinator:
 
 
 _agent_turns = _ThreadTurnCoordinator()
-_profile_registry = ProfileRegistry()
-_delegation_runtime = DelegationRuntime(
-    profile_registry=_profile_registry,
-    memory_orchestrator=_memory_orchestrator,
-)
+_agent_catalog = get_agent_catalog()
+_delegation_runtime = get_delegation_runtime()
 _live_dispatcher = LiveAgentDispatcher(
     vault_root=get_settings().obsidian_vault_path,
+    agent_catalog=_agent_catalog,
     delegation_runtime=_delegation_runtime,
 )
 _oauth_flows: dict[str, dict[str, Any]] = {}
@@ -2385,9 +2382,6 @@ async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
 
 @router.get("/subagents")
 async def list_subagents() -> dict[str, Any]:
-    from agent.master.registry import PupilRegistry
-
-    registry = PupilRegistry.default(get_settings().obsidian_vault_path)
     descriptions = {
         "SportsAgent": "Scores, schedules, standings, injuries, and sports analysis.",
         "XAgent": "X search, account reads, bookmarks, and confirmed posting workflows.",
@@ -2403,7 +2397,7 @@ async def list_subagents() -> dict[str, Any]:
                 "status": "available",
                 "description": descriptions.get(name, "Specialized Vellum sub-agent."),
             }
-            for name in registry.names()
+            for name in _agent_catalog.names()
         ]
     }
 
@@ -2411,8 +2405,8 @@ async def list_subagents() -> dict[str, Any]:
 @router.get("/agent-profiles")
 async def list_agent_profiles() -> dict[str, Any]:
     return {
-        "profiles": _profile_registry.public_summaries(),
-        "diagnostics": _profile_registry.public_diagnostics(),
+        "profiles": _agent_catalog.public_summaries(),
+        "diagnostics": _agent_catalog.public_diagnostics(),
     }
 
 

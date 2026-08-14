@@ -150,6 +150,9 @@ class ToolRegistry:
             raise ToolPermissionError(
                 f"{record.name} is not allowed by active profile policy {policy.profile_id}"
             )
-        requires_confirmation = record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE
+        profile_requires_confirmation = policy is not None and record.name in policy.require_confirmation
+        requires_confirmation = (
+            record.requires_confirmation or record.access == CapabilityAccess.EXTERNAL_WRITE or profile_requires_confirmation
+        )
         if requires_confirmation and payload.get("confirm") is not True:
             raise ToolPermissionError(f"{record.name} requires explicit confirmation")

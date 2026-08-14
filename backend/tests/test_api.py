@@ -662,9 +662,9 @@ def test_background_learn_scopes_specialist_candidates_to_specialist(monkeypatch
 
 
 def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, tmp_path):
-    from agent.profiles import ProfileRegistry
+    from agent.profiles import AgentCatalog
 
-    monkeypatch.setattr(api, "_profile_registry", ProfileRegistry(profile_dir=tmp_path / "profiles"))
+    monkeypatch.setattr(api, "_agent_catalog", AgentCatalog(profile_dir=tmp_path / "profiles"))
 
     with TestClient(api.app) as client:
         response = client.get("/api/agent-profiles")

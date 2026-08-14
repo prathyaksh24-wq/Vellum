@@ -12,7 +12,7 @@ class RewardScorer:
         )
         return RewardRecord(
             task_id=signal.task_id,
-            pupil=signal.pupil,
+            agent_id=signal.agent_id,
             user_reward=signal.user_reward,
             master_reward=signal.master_reward,
             self_reward=signal.self_reward,

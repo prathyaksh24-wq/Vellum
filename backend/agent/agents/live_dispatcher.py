@@ -5,13 +5,12 @@ import logging
 from pathlib import Path
 import re
 
-from agent.agents.base import SpecialistAgent, SpecialistResponse
+from agent.agents.base import SpecialistResponse
 from agent.agents.skill_router import SkillRouteResolver
-from agent.agents.sports import SportsAgent
-from agent.master.registry import PupilRegistry
-from agent.master.runtime import DelegationRunResult, DelegationRuntime
+from agent.master.live_runtime import get_delegation_runtime
+from agent.master.runtime import DelegationRequest, DelegationRunResult, DelegationRuntime
 from agent.master.state import MasterThreadStateStore
-from agent.profiles import ProfileRegistry
+from agent.profiles import AgentCatalog
 
 
 logger = logging.getLogger(__name__)
@@ -34,42 +33,40 @@ class LiveAgentResult:
 
 
 class LiveAgentDispatcher:
-    """Parent-owned live delegation layer.
-
-    This is the first concrete Master/Pupil runtime slice: Vellum owns routing
-    and final response shape; SportsAgent is a specialist that returns a
-    structured response.
-    """
+    """Compatibility adapter for deterministic routing into DelegationRuntime."""
 
     def __init__(
         self,
         vault_root: Path,
-        sports_agent: SportsAgent | None = None,
-        registry: PupilRegistry | None = None,
+        agent_catalog: AgentCatalog | None = None,
         state_store: MasterThreadStateStore | None = None,
         skill_route_resolver: SkillRouteResolver | None = None,
         delegation_runtime: DelegationRuntime | None = None,
-        profile_registry: ProfileRegistry | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
-        if registry is not None:
-            self.registry = registry
-        elif sports_agent is not None:
-            default_registry = PupilRegistry.default(vault_root=self.vault_root)
-            self.registry = PupilRegistry(
-                {
-                    "XAgent": default_registry.get("XAgent"),
-                    "YoutubeAgent": default_registry.get("YoutubeAgent"),
-                    "MemoryAgent": default_registry.get("MemoryAgent"),
-                    sports_agent.name: sports_agent,
-                }
-            )
-        else:
-            self.registry = PupilRegistry.default(vault_root=self.vault_root)
+        runtime_catalog = getattr(delegation_runtime, "agent_catalog", None)
+        if agent_catalog is not None and runtime_catalog is not None and agent_catalog is not runtime_catalog:
+            raise ValueError("agent_catalog and delegation_runtime must use the same AgentCatalog")
+        if delegation_runtime is None and agent_catalog is None:
+            delegation_runtime = get_delegation_runtime()
+            runtime_catalog = delegation_runtime.agent_catalog
+        self.agent_catalog = agent_catalog or runtime_catalog or AgentCatalog.default(vault_root=self.vault_root)
         self.state_store = state_store or MasterThreadStateStore()
+        if hasattr(delegation_runtime, "pending_action_store"):
+            runtime_state_store = delegation_runtime.pending_action_store
+            if runtime_state_store is None:
+                delegation_runtime.pending_action_store = self.state_store
+            elif runtime_state_store.sessions_db.resolve() != self.state_store.sessions_db.resolve():
+                raise ValueError(
+                    "delegation_runtime and dispatcher must use the same pending-action store"
+                )
         self.skill_route_resolver = skill_route_resolver or SkillRouteResolver()
-        self.delegation_runtime = delegation_runtime
-        self.profile_registry = profile_registry or getattr(delegation_runtime, "profile_registry", ProfileRegistry())
+        self.delegation_runtime = delegation_runtime or DelegationRuntime(
+            agent_catalog=self.agent_catalog,
+            memory_orchestrator=None,
+            audit_path=self.state_store.sessions_db.parent / "delegation-runs.jsonl",
+            pending_action_store=self.state_store,
+        )
 
     def maybe_handle(self, message: str, thread_id: str) -> LiveAgentResult | None:
         message = self._clean_surface_prefix(message)
@@ -80,14 +77,21 @@ class LiveAgentDispatcher:
             if self._is_confirmation(message):
                 agent_name = str(pending_action.get("agent") or "XAgent")
                 try:
-                    agent = self.registry.get(agent_name)
-                    execute = getattr(agent, "execute_action_request")
-                    response = execute(pending_action)
-                    self.state_store.clear_pending_action(thread_id)
-                    return self._result_from_response(response, route_source="pending_action")
+                    run = self.delegation_runtime.delegate(
+                        DelegationRequest(
+                            agent_id=agent_name,
+                            task="Execute the confirmed pending action.",
+                            parent_thread_id=thread_id,
+                            confirm_pending_action=True,
+                        )
+                    )
+                    return self._result_from_response(
+                        run.response,
+                        run=run,
+                        route_source="pending_action",
+                    )
                 except Exception:
                     logger.exception("Pending action for %s failed.", agent_name)
-                    self.state_store.clear_pending_action(thread_id)
                     return LiveAgentResult(
                         handled=True,
                         agent_name=agent_name,
@@ -104,54 +108,67 @@ class LiveAgentDispatcher:
                     answer="Canceled the pending X action.",
                     tools=["x_agent"],
                 )
-        matched_pupil = None
+        matched_binding = None
         profile_only_id = ""
         route_source = "deterministic"
         try:
-            skill_route = self.skill_route_resolver.resolve(message)
+            resolve_all = getattr(self.skill_route_resolver, "resolve_all", None)
+            if callable(resolve_all):
+                skill_routes = resolve_all(message)
+            else:
+                skill_route = self.skill_route_resolver.resolve(message)
+                skill_routes = [skill_route] if skill_route is not None else []
         except Exception:
             logger.exception("Skill route resolution failed.")
-            skill_route = None
-        if skill_route is not None:
-            matched_pupil = self.registry.try_get(skill_route.agent_name)
-            if matched_pupil is not None:
+            skill_routes = []
+        for skill_route in skill_routes:
+            binding = self.agent_catalog.try_resolve(skill_route.agent_name)
+            if binding is not None and skill_route.skill_id not in binding.profile.skills.allow:
+                logger.warning(
+                    "Ignoring skill route %s because it is not allowed by %s.",
+                    skill_route.skill_id,
+                    binding.profile.id,
+                )
+                continue
+            if binding is not None and binding.executor is not None:
+                matched_binding = binding
                 route_source = "skill"
+                break
             else:
-                profile = self.profile_registry.try_get(skill_route.agent_name)
+                profile = binding.profile if binding is not None else None
                 if profile is not None and profile.executor == "llm" and self.delegation_runtime is not None:
                     profile_only_id = profile.id
                     route_source = "skill"
+                    break
                 else:
-                    logger.warning("Ignoring skill route %s to unknown pupil %s.", skill_route.skill_id, skill_route.agent_name)
-        if matched_pupil is None and not profile_only_id:
-            matched_pupil = self.registry.match(message)
+                    logger.warning("Ignoring skill route %s to unknown agent %s.", skill_route.skill_id, skill_route.agent_name)
+        if matched_binding is None and not profile_only_id:
+            matched_binding = self.agent_catalog.match(message)
 
-        if matched_pupil is not None or profile_only_id:
-            agent_name = matched_pupil.name if matched_pupil is not None else profile_only_id
+        if matched_binding is not None or profile_only_id:
+            agent_name = matched_binding.profile.id if matched_binding is not None else profile_only_id
             if active_agent != agent_name:
                 self.state_store.set_active_agent(thread_id, agent_name)
                 self.state_store.clear_pending_reroute(thread_id)
             try:
-                run = None
-                if self.delegation_runtime is None:
-                    if matched_pupil is None:
-                        raise RuntimeError(f"{agent_name} requires the delegation runtime")
-                    response = matched_pupil.answer(message)
-                else:
-                    run = self.delegation_runtime.delegate(
-                        profile_id=agent_name,
-                        pupil=matched_pupil,
-                        goal=message,
+                run = self.delegation_runtime.delegate(
+                    DelegationRequest(
+                        agent_id=agent_name,
+                        task=message,
                         parent_thread_id=thread_id,
                     )
-                    response = run.response
+                )
+                response = run.response
                 result = self._result_from_response(response, run=run, route_source=route_source)
+                if response.status == "error":
+                    self.state_store.set_active_agent(thread_id, "VellumAgent")
+                    self.state_store.clear_pending_reroute(thread_id)
                 response_action = response.action_request
                 if response_action:
                     self.state_store.set_pending_action(thread_id, {"agent": agent_name, **response_action})
                 return result
             except Exception:
-                logger.exception("Pupil %s failed while answering.", agent_name)
+                logger.exception("Agent %s failed while answering.", agent_name)
                 self.state_store.set_active_agent(thread_id, "VellumAgent")
                 self.state_store.clear_pending_reroute(thread_id)
                 return LiveAgentResult(

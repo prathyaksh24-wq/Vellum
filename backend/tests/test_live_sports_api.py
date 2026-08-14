@@ -17,7 +17,7 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
             return LiveAgentResult(
                 handled=True,
                 agent_name="SportsAgent",
-                answer="Sports Pupil answer",
+                answer="Sports agent answer",
                 tools=["sports_agent", "web_search"],
                 sources=[
                     {
@@ -44,7 +44,7 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
     assert response.thread_id == "thread-1"
     assert response.tools == ["sports_agent", "web_search"]
     assert response.sources[0].url == "https://www.nba.com/news/finals"
-    assert "Sports Pupil answer" in calls[0][0]["messages"][0]["content"]
+    assert "Sports agent answer" in calls[0][0]["messages"][0]["content"]
 
 
 def test_run_agent_includes_specialist_snippets_and_fact_priority(monkeypatch):

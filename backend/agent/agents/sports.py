@@ -6,9 +6,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from agent.agents.base import MemoryProposal, SpecialistResponse, SpecialistSource
+from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.config import get_settings
 from agent.tools.serpapi import SerpApiClient
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 from agent.tools.web import extract_web_sources, web_search
 
 
@@ -101,9 +102,26 @@ class SportsAgent:
         ("NFL", ("nfl", "super bowl", "american football")),
     )
 
-    def __init__(self, vault_root: Path, web_searcher: WebSearcher | None = None) -> None:
+    def __init__(
+        self,
+        vault_root: Path,
+        web_searcher: WebSearcher | None = None,
+        tool_registry: ToolRegistry | None = None,
+    ) -> None:
         self.vault_root = Path(vault_root)
         self.web_searcher = web_searcher or self._default_web_searcher
+        self.tool_registry = tool_registry or ToolRegistry()
+        if "sports.web_search" not in self.tool_registry.names():
+            self.tool_registry.register(
+                CapabilityRecord(
+                    name="sports.web_search",
+                    namespace="sports",
+                    access=CapabilityAccess.READ,
+                    allowed_agents=frozenset({self.name}),
+                    stream_label="Searching sports",
+                    adapter=lambda payload: self.web_searcher(str(payload.get("query") or "")),
+                )
+            )
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
@@ -125,7 +143,11 @@ class SportsAgent:
 
         league = self.resolve_league(query)
         source_budget = self._source_budget(query)
-        search_result = self.web_searcher(self._search_query(query, league, source_budget))
+        search_result = self.tool_registry.invoke(
+            "sports.web_search",
+            {"query": self._search_query(query, league, source_budget)},
+            agent_name=self.name,
+        )
         provider = str(search_result.get("provider") or "") if isinstance(search_result, dict) else ""
         search_output, sources = self._normalize_search_result(search_result)
         if not sources:
@@ -140,8 +162,6 @@ class SportsAgent:
         now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         selected = self._rank_sources(query, sources)[:source_budget]
         summary = self._compose_answer(query, selected, search_output)
-        saved_path = self._save_response(query=query, answer=summary, league=league, sources=selected, created_at=now)
-        relative_path = saved_path.relative_to(self.vault_root).as_posix()
 
         return SpecialistResponse(
             agent=self.name,
@@ -150,7 +170,7 @@ class SportsAgent:
             analysis=(
                 "Used on-demand public web research"
                 + (" via SerpAPI" if provider.casefold() == "serpapi" else "")
-                + f" and saved the sports response to {relative_path}."
+                + "."
             ),
             sources=[
                 SpecialistSource(
@@ -163,14 +183,6 @@ class SportsAgent:
                 for source in selected
             ],
             confidence=0.78,
-            memory_proposals=[
-                MemoryProposal(
-                    scope="sports",
-                    claim=f"User asked SportsAgent for {league} coverage.",
-                    evidence=relative_path,
-                    confidence=0.6,
-                )
-            ],
         )
 
     def resolve_league(self, query: str) -> str:
@@ -507,43 +519,5 @@ class SportsAgent:
             table_lines.append(f"| {rank_text} | {player} | {country} | {goals} |")
         return "\n".join(table_lines)
 
-    def _save_response(self, *, query: str, answer: str, league: str, sources: list[dict], created_at: str) -> Path:
-        folder = self.vault_root / "Library" / "Sports" / league
-        folder.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        path = folder / f"{timestamp}-sports-response.md"
-        source_lines = "\n".join(
-            f"  - title: {self._yaml_quote(str(source.get('title') or 'Sports source'))}\n"
-            f"    url: {self._yaml_quote(str(source.get('url') or ''))}\n"
-            f"    domain: {self._yaml_quote(str(source.get('domain') or ''))}"
-            for source in sources
-        )
-        body_sources = "\n".join(
-            f"{index}. [{source.get('title') or source.get('domain')}]({source.get('url')})"
-            for index, source in enumerate(sources, start=1)
-        )
-        content = (
-            "---\n"
-            "type: sports-response\n"
-            f"created: {self._yaml_quote(created_at)}\n"
-            f"league: {self._yaml_quote(league)}\n"
-            "agent_version: sports-agent-web-v1\n"
-            "private: false\n"
-            "sources:\n"
-            f"{source_lines}\n"
-            "---\n\n"
-            "## Question\n"
-            f"{query}\n\n"
-            "## Answer\n"
-            f"{answer}\n\n"
-            "## Sources\n"
-            f"{body_sources}\n"
-        )
-        path.write_text(content, encoding="utf-8", newline="\n")
-        return path
-
     def _has_phrase(self, lowered_query: str, phrase: str) -> bool:
         return re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", lowered_query) is not None
-
-    def _yaml_quote(self, value: str) -> str:
-        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'

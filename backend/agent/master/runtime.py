@@ -12,15 +12,37 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agent.agents.base import SpecialistAgent, SpecialistResponse
+from agent.agents.base import SpecialistResponse
 from agent.llm.routing.runtime import get_routed_chat_model
+from agent.master.state import MasterThreadStateStore
 from agent.memory.orchestrator import MemoryOrchestrator
 from agent.memory.specialist_cache import CacheDecision
-from agent.profiles import AgentProfile, ProfileRegistry, profile_policy
+from agent.profiles import AgentCatalog, AgentProfile, profile_policy
 
 
 logger = logging.getLogger(__name__)
 _AUDIT_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class DelegationRequest:
+    agent_id: str
+    task: str
+    parent_thread_id: str
+    context: str = ""
+    task_id: str | None = None
+    depth: int = 0
+    confirm_pending_action: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.agent_id.strip():
+            raise ValueError("agent_id is required")
+        if not self.task.strip():
+            raise ValueError("task is required")
+        if not self.parent_thread_id.strip():
+            raise ValueError("parent_thread_id is required")
+        if self.depth < 0:
+            raise ValueError("depth must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -42,33 +64,85 @@ class DelegationRuntime:
     def __init__(
         self,
         *,
-        profile_registry: ProfileRegistry,
-        memory_orchestrator: MemoryOrchestrator,
+        agent_catalog: AgentCatalog,
+        memory_orchestrator: MemoryOrchestrator | None,
         llm_factory: Callable[[str | None], Any] = get_routed_chat_model,
         now: Callable[[], datetime] | None = None,
         audit_path: str | Path = Path("data/memory/delegation-runs.jsonl"),
         reasoning_mode: Any = None,
+        pending_action_store: MasterThreadStateStore | None = None,
     ) -> None:
-        self.profile_registry = profile_registry
+        self.agent_catalog = agent_catalog
         self.memory_orchestrator = memory_orchestrator
         self.llm_factory = llm_factory
         self.reasoning_mode = reasoning_mode
+        self.pending_action_store = pending_action_store
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
 
     def delegate(
         self,
-        *,
-        profile_id: str,
-        pupil: SpecialistAgent | None,
-        goal: str,
-        parent_thread_id: str,
-        context: str = "",
-        task_id: str | None = None,
+        request: DelegationRequest,
     ) -> DelegationRunResult:
         started = self._utc_now()
-        profile = self.profile_registry.get(profile_id)
-        decision = self._lookup(profile, goal)
+        binding = self.agent_catalog.resolve(request.agent_id)
+        profile = binding.profile
+        executor = binding.executor
+        goal = request.task
+        parent_thread_id = request.parent_thread_id
+        context = request.context
+        task_id = request.task_id
+        action_request = None
+        if request.confirm_pending_action:
+            action_request = self._resolve_pending_action(
+                agent_id=profile.id,
+                parent_thread_id=parent_thread_id,
+            )
+            if action_request is None:
+                response = SpecialistResponse(
+                    agent=profile.id,
+                    status="blocked",
+                    summary="No matching pending action is available for confirmation.",
+                    analysis="confirmation_authority",
+                    confidence=0.0,
+                )
+                return self._complete(
+                    profile=profile,
+                    response=response,
+                    parent_thread_id=parent_thread_id,
+                    task_id=task_id,
+                    started=started,
+                    cache_status="bypass",
+                    cache_reason="confirmation_authority",
+                    goal=goal,
+                    context=context,
+                )
+        if not profile.delegation.can_receive or request.depth > profile.delegation.max_depth:
+            response = SpecialistResponse(
+                agent=profile.id,
+                status="blocked",
+                summary=f"{profile.id} cannot receive this delegated task.",
+                analysis="delegation_policy",
+                confidence=0.0,
+            )
+            return self._complete(
+                profile=profile,
+                response=response,
+                parent_thread_id=parent_thread_id,
+                task_id=task_id,
+                started=started,
+                cache_status="bypass",
+                cache_reason="delegation_policy",
+                goal=goal,
+                context=context,
+            )
+        decision = (
+            CacheDecision(status="bypass", reason="confirmed_action")
+            if action_request is not None
+            else CacheDecision(status="bypass", reason="explicit_context")
+            if context.strip()
+            else self._lookup(profile, goal)
+        )
         if decision.status == "hit" and decision.response is not None:
             return self._complete(
                 profile=profile,
@@ -83,7 +157,16 @@ class DelegationRuntime:
             )
 
         try:
-            response = self._execute(profile=profile, pupil=pupil, goal=goal, context=context, parent_thread_id=parent_thread_id)
+            response = self._execute(
+                profile=profile,
+                executor=executor,
+                goal=goal,
+                context=context,
+                parent_thread_id=parent_thread_id,
+                action_request=action_request,
+            )
+            if response.agent != profile.id:
+                raise ValueError("delegated response agent does not match the selected profile")
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
             if decision.status == "stale" and decision.response is not None:
@@ -125,7 +208,8 @@ class DelegationRuntime:
         else:
             cache_status = decision.status
             try:
-                self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
+                if self.memory_orchestrator is not None and action_request is None and not context.strip():
+                    self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
             except Exception:
                 logger.exception("Could not store specialist response for %s.", profile.id)
 
@@ -141,11 +225,32 @@ class DelegationRuntime:
             context=context,
         )
 
+    def _resolve_pending_action(self, *, agent_id: str, parent_thread_id: str) -> dict[str, Any] | None:
+        if self.pending_action_store is None:
+            return None
+        pending = self.pending_action_store.claim_pending_action(
+            parent_thread_id,
+            agent_id=agent_id,
+        )
+        if pending is None or str(pending.get("agent") or "") != agent_id:
+            return None
+        return pending
+
     def _lookup(self, profile: AgentProfile, goal: str) -> CacheDecision:
+        if self.memory_orchestrator is None:
+            return CacheDecision(status="bypass", reason="memory_orchestrator_unavailable")
         if not profile.memory.cache_first:
             return CacheDecision(status="bypass", reason="profile_cache_disabled")
         try:
-            return self.memory_orchestrator.lookup_specialist_response(profile=profile, query=goal)
+            decision = self.memory_orchestrator.lookup_specialist_response(profile=profile, query=goal)
+            if decision.response is not None and decision.response.agent != profile.id:
+                logger.warning(
+                    "Ignored cached response for %s with agent identity %s.",
+                    profile.id,
+                    decision.response.agent,
+                )
+                return CacheDecision(status="miss", reason="cached_agent_mismatch")
+            return decision
         except Exception as exc:
             logger.exception("Specialist cache lookup failed for %s.", profile.id)
             return CacheDecision(status="miss", reason=f"cache_error:{exc.__class__.__name__}")
@@ -154,16 +259,26 @@ class DelegationRuntime:
         self,
         *,
         profile: AgentProfile,
-        pupil: SpecialistAgent | None,
+        executor: Any | None,
         goal: str,
         context: str,
         parent_thread_id: str,
+        action_request: dict[str, Any] | None,
     ) -> SpecialistResponse:
-        with profile_policy(profile_id=profile.id, allowed_tools=frozenset(profile.tools.allow)):
+        with profile_policy(
+            profile_id=profile.id,
+            allowed_tools=frozenset(profile.tools.allow),
+            require_confirmation=frozenset(profile.tools.require_confirmation),
+        ):
             if profile.executor == "deterministic":
-                if pupil is None:
-                    raise ValueError(f"{profile.id} requires a deterministic pupil")
-                return pupil.answer(goal)
+                if executor is None:
+                    raise ValueError(f"{profile.id} requires a deterministic executor")
+                if action_request is not None:
+                    execute = getattr(executor, "execute_action_request")
+                    return execute(action_request)
+                return executor.answer(goal)
+            if action_request is not None:
+                raise ValueError("LLM profiles cannot execute confirmed actions")
             return self._execute_llm(
                 profile=profile,
                 goal=goal,
@@ -184,19 +299,24 @@ class DelegationRuntime:
         context: str,
         parent_thread_id: str,
     ) -> SpecialistResponse:
+        if self.memory_orchestrator is None:
+            raise RuntimeError("LLM profiles require a memory orchestrator")
         packet = self.memory_orchestrator.build_memory_packet(
             thread_id=parent_thread_id,
             query=goal,
             agent_name=profile.id,
             read_scopes=profile.memory.read_scopes,
         )
-        instructions = self.profile_registry.instructions_for(profile)
+        instructions = self.agent_catalog.instructions_for(profile)
         messages = [
             SystemMessage(content=instructions or f"You are {profile.id}. Return a focused specialist result."),
             HumanMessage(content=_llm_task_packet(goal=goal, context=context, memory_packet=packet)),
         ]
         model = self._llm_for(profile.model)
-        output = model.invoke(messages)
+        output = model.invoke(
+            messages,
+            config={"configurable": {"thread_id": parent_thread_id}},
+        )
         content = getattr(output, "content", output)
         if isinstance(content, list):
             content = "\n".join(str(item.get("text") or "") if isinstance(item, dict) else str(item) for item in content)

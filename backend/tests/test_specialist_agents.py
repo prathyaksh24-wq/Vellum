@@ -5,11 +5,10 @@ import pytest
 from pydantic import ValidationError
 
 from agent.agents.live_dispatcher import LiveAgentDispatcher
-from agent.master.registry import PupilRegistry
-from agent.master.runtime import DelegationRunResult
+from agent.master.runtime import DelegationRequest, DelegationRunResult, DelegationRuntime
 from agent.master.state import MasterThreadStateStore
 from agent.agents.skill_router import SkillRoute
-from agent.profiles import ProfileRegistry
+from agent.profiles import AgentCatalog, AgentProfile, builtin_profiles
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
@@ -19,7 +18,6 @@ from agent.agents import (
     MemoryProposal,
     SpecialistResponse,
     SpecialistSource,
-    SpecialistRouter,
     SportsAgent,
     XAgent,
     YoutubeAgent,
@@ -38,29 +36,44 @@ class AgentReachUnavailable:
 
 
 class FixedSkillResolver:
-    def __init__(self, agent_name: str | None):
+    def __init__(self, agent_name: str | None, skill_id: str = "route-test"):
         self.agent_name = agent_name
+        self.skill_id = skill_id
 
     def resolve(self, query: str):
         if self.agent_name is None:
             return None
-        return SkillRoute(agent_name=self.agent_name, skill_id="route-test")
+        return SkillRoute(agent_name=self.agent_name, skill_id=self.skill_id)
+
+
+def catalog_for(executors, profiles=None):
+    configured_profiles = builtin_profiles()
+    configured_profiles.update(profiles or {})
+    for agent_name in executors:
+        configured_profiles.setdefault(agent_name, AgentProfile(id=agent_name))
+    return AgentCatalog(
+        profile_dir=Path("__test_agent_profiles_do_not_create__"),
+        builtins=configured_profiles,
+        executors=executors,
+    )
 
 
 class RecordingRuntime:
-    def __init__(self):
+    def __init__(self, agent_catalog):
+        self.agent_catalog = agent_catalog
         self.calls = []
 
-    def delegate(self, **kwargs):
-        self.calls.append(kwargs)
+    def delegate(self, request):
+        self.calls.append(request)
         cache_status = "hit" if len(self.calls) > 1 else "miss"
-        response = kwargs["pupil"].answer(kwargs["goal"])
+        binding = self.agent_catalog.resolve(request.agent_id)
+        response = binding.executor.answer(request.task)
         return DelegationRunResult(
             run_id=f"run-{len(self.calls)}",
             task_id=f"task-{len(self.calls)}",
-            parent_thread_id=kwargs["parent_thread_id"],
-            profile_id=kwargs["profile_id"],
-            profile_version=1,
+            parent_thread_id=request.parent_thread_id,
+            profile_id=request.agent_id,
+            profile_version=2,
             executor="deterministic",
             cache_status=cache_status,
             cache_reason="exact_query" if cache_status == "hit" else "not_found",
@@ -150,7 +163,7 @@ def test_sports_agent_detects_enabled_and_disabled_sports_queries(tmp_path):
     assert not agent.can_handle("What is on my calendar tomorrow?")
 
 
-def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_path):
+def test_sports_agent_answers_combat_sports_without_persisting_legacy_note(tmp_path):
     vault_root = tmp_path / "Vault"
     search_output = (
         "**UFC 302 results and bonuses**\n"
@@ -169,8 +182,7 @@ def test_sports_agent_answers_combat_sports_with_web_sources_and_saves_note(tmp_
     assert response.sources[0].kind == "web"
     assert response.sources[0].path_or_url == "https://www.espn.com/mma/story/ufc-302-results"
     saved = list((vault_root / "Library" / "Sports" / "UFC").glob("*.md"))
-    assert saved
-    assert "UFC 302 results and bonuses" in saved[0].read_text(encoding="utf-8")
+    assert saved == []
 
 
 def test_sports_agent_routes_public_athlete_performance_questions(tmp_path):
@@ -488,7 +500,8 @@ def test_sports_agent_prefers_web_over_stale_latest_sports_note(tmp_path):
     assert "injury report" in response.summary
     assert "Knicks" not in response.summary
     assert response.sources[0].path_or_url == "https://www.nba.com/news/finals-injury-report"
-    assert response.memory_proposals[0].scope == "sports"
+    assert response.memory_proposals == []
+    assert list((vault_root / "Library" / "Sports").rglob("*-sports-response.md")) == []
 
 
 def test_sports_agent_default_searcher_prefers_serpapi_when_configured(monkeypatch, tmp_path):
@@ -534,7 +547,7 @@ def test_live_dispatcher_routes_sports_without_writing_legacy_query_projection(t
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -544,10 +557,11 @@ def test_live_dispatcher_routes_sports_without_writing_legacy_query_projection(t
     assert result.agent_name == "SportsAgent"
     assert result.handled is True
     assert result.sources[0]["url"] == "https://www.formula1.com/en/latest/article/race-report"
+    assert result.run_id
     assert not (tmp_path / "Vault" / "Agent" / "Queries").exists()
 
 
-def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_prompt(tmp_path):
+def test_live_dispatcher_returns_to_vellum_for_non_agent_turn_without_handoff_prompt(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -555,7 +569,7 @@ def test_live_dispatcher_returns_to_vellum_for_non_pupil_turn_without_handoff_pr
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
     assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
@@ -574,7 +588,7 @@ def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        sports_agent=SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output),
+        agent_catalog=catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: search_output)}),
         state_store=state_store,
     )
     assert dispatcher.maybe_handle("NBA update", thread_id="t1") is not None
@@ -585,7 +599,7 @@ def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
     assert state_store.get("t1").active_agent == "VellumAgent"
 
 
-def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
+def test_live_dispatcher_routes_x_youtube_and_memory_agents(tmp_path):
     x_service = XCapabilityService(
         search_posts_backend=lambda query, max_results: [
             {
@@ -608,7 +622,7 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
             }
         ],
     )
-    registry = PupilRegistry(
+    registry = catalog_for(
         {
             "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
             "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
@@ -618,7 +632,7 @@ def test_live_dispatcher_routes_x_youtube_and_memory_pupils(tmp_path):
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=registry,
+        agent_catalog=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -656,14 +670,14 @@ def test_live_dispatcher_exposes_serpapi_tool_for_youtube_provider(tmp_path):
             }
         ],
     )
-    registry = PupilRegistry(
+    registry = catalog_for(
         {
             "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
         }
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=registry,
+        agent_catalog=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -675,7 +689,7 @@ def test_live_dispatcher_exposes_serpapi_tool_for_youtube_provider(tmp_path):
 
 
 def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path):
-    class SerpPupil:
+    class SerpAgent:
         name = "ResearchAgent"
 
         def can_handle(self, query):
@@ -698,7 +712,7 @@ def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path)
 
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"ResearchAgent": SerpPupil()}),
+        agent_catalog=catalog_for({"ResearchAgent": SerpAgent()}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -708,7 +722,7 @@ def test_live_dispatcher_exposes_serpapi_tool_from_specialist_analysis(tmp_path)
     assert result.tools == ["research_agent", "web_search", "serpapi"]
 
 
-def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_path):
+def test_live_dispatcher_switches_between_agents_and_keeps_main_fallback(tmp_path):
     search_output = (
         "**NBA update**\n"
         "A short live sports result.\n"
@@ -716,7 +730,7 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
     )
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     x_service = XCapabilityService(search_posts_backend=lambda query, max_results: [], agent_reach_provider=AgentReachUnavailable())
-    registry = PupilRegistry(
+    registry = catalog_for(
         {
             "XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=x_service),
             "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault"),
@@ -726,7 +740,7 @@ def test_live_dispatcher_switches_between_pupils_and_keeps_main_fallback(tmp_pat
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=registry,
+        agent_catalog=registry,
         state_store=state_store,
     )
 
@@ -750,14 +764,14 @@ def test_live_dispatcher_forwards_memory_sources_for_workspace_ui(tmp_path):
         "User prefers concise answers with direct next steps.",
         encoding="utf-8",
     )
-    registry = PupilRegistry(
+    registry = catalog_for(
         {
             "MemoryAgent": MemoryAgent(vault_root=vault),
         }
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=vault,
-        registry=registry,
+        agent_catalog=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -769,7 +783,7 @@ def test_live_dispatcher_forwards_memory_sources_for_workspace_ui(tmp_path):
     assert result.sources[0]["url"] == "Agent/Memories/Shared/answer-style.md"
 
 
-def test_pupil_registry_skips_pupil_when_can_handle_fails(tmp_path):
+def test_agent_catalog_skips_executor_when_can_handle_fails(tmp_path):
     class BrokenMatcher:
         name = "BrokenAgent"
 
@@ -793,13 +807,13 @@ def test_pupil_registry_skips_pupil_when_can_handle_fails(tmp_path):
                 confidence=0.9,
             )
 
-    registry = PupilRegistry({"BrokenAgent": BrokenMatcher(), "HealthyAgent": HealthyMatcher()})
+    registry = catalog_for({"BrokenAgent": BrokenMatcher(), "HealthyAgent": HealthyMatcher()})
 
-    assert registry.match("route this") is registry.get("HealthyAgent")
+    assert registry.match("route this").executor is registry.resolve("HealthyAgent").executor
 
 
-def test_live_dispatcher_contains_pupil_answer_failures_and_returns_to_vellum(tmp_path):
-    class FailingPupil:
+def test_live_dispatcher_contains_agent_answer_failures_and_returns_to_vellum(tmp_path):
+    class FailingAgent:
         name = "FailingAgent"
 
         def can_handle(self, query):
@@ -811,7 +825,7 @@ def test_live_dispatcher_contains_pupil_answer_failures_and_returns_to_vellum(tm
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"FailingAgent": FailingPupil()}),
+        agent_catalog=catalog_for({"FailingAgent": FailingAgent()}),
         state_store=state_store,
     )
 
@@ -824,75 +838,6 @@ def test_live_dispatcher_contains_pupil_answer_failures_and_returns_to_vellum(tm
     assert "could not complete" in result.answer
     assert result.tools == ["failing_agent"]
     assert state_store.get("thread-1").active_agent == "VellumAgent"
-
-
-def test_specialist_router_delegates_sports_queries(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    decision = router.route("Give me NBA updates")
-
-    assert decision.agent_name == "SportsAgent"
-    assert decision.should_delegate is True
-
-
-def test_specialist_router_keeps_general_queries_with_vellum(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    decision = router.route("Draft a polite email")
-
-    assert decision.agent_name == "VellumAgent"
-    assert decision.should_delegate is False
-
-
-def test_specialist_router_delegates_x_and_youtube_queries(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    x_decision = router.route("What did AlexHormozi post on X?")
-    youtube_decision = router.route("Summarize the latest YouTube videos")
-
-    assert x_decision.agent_name == "XAgent"
-    assert x_decision.should_delegate is True
-    assert youtube_decision.agent_name == "YoutubeAgent"
-    assert youtube_decision.should_delegate is True
-
-
-def test_specialist_router_does_not_route_bare_math_or_chart_x(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    equation_decision = router.route("Solve for x in this equation")
-    axis_decision = router.route("How do I label the x-axis in matplotlib?")
-
-    assert equation_decision.agent_name == "VellumAgent"
-    assert equation_decision.should_delegate is False
-    assert axis_decision.agent_name == "VellumAgent"
-    assert axis_decision.should_delegate is False
-
-
-def test_specialist_router_does_not_route_generic_video_queries(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    file_decision = router.route("Can you summarize this video file?")
-    driver_decision = router.route("Fix my video driver issue on Windows")
-
-    assert file_decision.agent_name == "VellumAgent"
-    assert file_decision.should_delegate is False
-    assert driver_decision.agent_name == "VellumAgent"
-    assert driver_decision.should_delegate is False
-
-
-def test_specialist_router_prioritizes_explicit_source_intent_over_sports(tmp_path):
-    router = SpecialistRouter(vault_root=tmp_path)
-
-    x_decision = router.route("What did the NBA post on X?")
-    arsenal_youtube_decision = router.route("Summarize Arsenal highlights on YouTube")
-    nba_youtube_decision = router.route("Give me NBA YouTube videos")
-
-    assert x_decision.agent_name == "XAgent"
-    assert x_decision.should_delegate is True
-    assert arsenal_youtube_decision.agent_name == "YoutubeAgent"
-    assert arsenal_youtube_decision.should_delegate is True
-    assert nba_youtube_decision.agent_name == "YoutubeAgent"
-    assert nba_youtube_decision.should_delegate is True
 
 
 def test_x_agent_searches_posts_through_capability_service(tmp_path):
@@ -990,7 +935,7 @@ def test_live_dispatcher_does_not_label_agent_reach_x_sources_as_web_search(tmp_
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)}),
+        agent_catalog=catalog_for({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -1218,9 +1163,9 @@ def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_pat
         agent_reach_provider=NoAgentReach(),
         allow_posts=True,
     )
-    registry = PupilRegistry({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)})
+    registry = catalog_for({"XAgent": XAgent(vault_root=tmp_path / "Vault", x_service=service)})
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
-    dispatcher = LiveAgentDispatcher(vault_root=tmp_path / "Vault", registry=registry, state_store=state_store)
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path / "Vault", agent_catalog=registry, state_store=state_store)
 
     preview = dispatcher.maybe_handle('Post this to X: "Hello from Vellum."', thread_id="thread-x")
     confirmed = dispatcher.maybe_handle("yes, post it", thread_id="thread-x")
@@ -1391,14 +1336,14 @@ def test_live_dispatcher_keeps_youtube_feedback_with_vellum(tmp_path):
             }
         ],
     )
-    registry = PupilRegistry(
+    registry = catalog_for(
         {
             "YoutubeAgent": YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service),
         }
     )
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=registry,
+        agent_catalog=registry,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
@@ -1535,7 +1480,7 @@ def test_memory_agent_review_proposals_filters_low_confidence(tmp_path):
 
 
 def test_live_dispatcher_prefers_valid_skill_route_over_match_order(tmp_path):
-    class Pupil:
+    class Agent:
         def __init__(self, name, matches):
             self.name = name
             self.matches = matches
@@ -1546,10 +1491,19 @@ def test_live_dispatcher_prefers_valid_skill_route_over_match_order(tmp_path):
         def answer(self, query):
             return SpecialistResponse(agent=self.name, status="answered", summary=f"{self.name}: {query}")
 
-    runtime = RecordingRuntime()
+    catalog = catalog_for(
+        {"SportsAgent": Agent("SportsAgent", True), "ResearchAgent": Agent("ResearchAgent", False)},
+        profiles={
+            "ResearchAgent": AgentProfile(
+                id="ResearchAgent",
+                skills={"allow": ["route-test"]},
+            )
+        },
+    )
+    runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"SportsAgent": Pupil("SportsAgent", True), "ResearchAgent": Pupil("ResearchAgent", False)}),
+        agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("ResearchAgent"),
         delegation_runtime=runtime,
@@ -1559,11 +1513,62 @@ def test_live_dispatcher_prefers_valid_skill_route_over_match_order(tmp_path):
 
     assert result.agent_name == "ResearchAgent"
     assert result.route_source == "skill"
-    assert runtime.calls[0]["profile_id"] == "ResearchAgent"
+    assert runtime.calls[0].agent_id == "ResearchAgent"
+
+
+def test_live_dispatcher_ignores_skill_not_allowed_by_target_profile(tmp_path):
+    class Agent:
+        def __init__(self, name, matches):
+            self.name = name
+            self.matches = matches
+
+        def can_handle(self, query):
+            return self.matches
+
+        def answer(self, query):
+            return SpecialistResponse(agent=self.name, status="answered", summary=f"{self.name}: {query}")
+
+    catalog = catalog_for(
+        {"SportsAgent": Agent("SportsAgent", True), "ResearchAgent": Agent("ResearchAgent", False)},
+        profiles={
+            "ResearchAgent": AgentProfile(
+                id="ResearchAgent",
+                skills={"allow": []},
+            )
+        },
+    )
+    runtime = RecordingRuntime(catalog)
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        agent_catalog=catalog,
+        state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        skill_route_resolver=FixedSkillResolver("ResearchAgent", skill_id="unapproved-route"),
+        delegation_runtime=runtime,
+    )
+
+    result = dispatcher.maybe_handle("NBA analysis", "thread-1")
+
+    assert result.agent_name == "SportsAgent"
+    assert result.route_source == "deterministic"
+    assert runtime.calls[0].agent_id == "SportsAgent"
+
+
+def test_live_dispatcher_rejects_catalog_runtime_ownership_split(tmp_path):
+    first_catalog = catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "first")})
+    second_catalog = catalog_for({"SportsAgent": SportsAgent(vault_root=tmp_path / "second")})
+    runtime = RecordingRuntime(second_catalog)
+
+    with pytest.raises(ValueError, match="same AgentCatalog"):
+        LiveAgentDispatcher(
+            vault_root=tmp_path / "Vault",
+            agent_catalog=first_catalog,
+            delegation_runtime=runtime,
+            state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
+        )
 
 
 def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
-    class SportsPupil:
+    class SportsExecutor:
         name = "SportsAgent"
 
         def can_handle(self, query):
@@ -1572,10 +1577,11 @@ def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
         def answer(self, query):
             return SpecialistResponse(agent=self.name, status="answered", summary="NBA answer")
 
-    runtime = RecordingRuntime()
+    catalog = catalog_for({"SportsAgent": SportsExecutor()})
+    runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("MissingAgent"),
         delegation_runtime=runtime,
@@ -1588,7 +1594,7 @@ def test_live_dispatcher_ignores_unknown_skill_route_and_uses_matcher(tmp_path):
 
 
 def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
-    class SportsPupil:
+    class SportsExecutor:
         name = "SportsAgent"
 
         def can_handle(self, query):
@@ -1597,10 +1603,11 @@ def test_live_dispatcher_propagates_delegation_cache_metadata(tmp_path):
         def answer(self, query):
             return SpecialistResponse(agent=self.name, status="answered", summary="Historical answer", confidence=0.9)
 
-    runtime = RecordingRuntime()
+    catalog = catalog_for({"SportsAgent": SportsExecutor()})
+    runtime = RecordingRuntime(catalog)
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({"SportsAgent": SportsPupil()}),
+        agent_catalog=catalog,
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver(None),
         delegation_runtime=runtime,
@@ -1619,7 +1626,7 @@ def test_live_dispatcher_routes_skill_to_profile_only_llm_agent(tmp_path):
     profile_dir = tmp_path / "profiles"
     profile_dir.mkdir()
     (profile_dir / "ResearchAgent.yaml").write_text(
-        """version: 1
+        """version: 2
 id: ResearchAgent
 description: Research specialist
 executor: llm
@@ -1628,22 +1635,24 @@ tools:
 memory:
   read_scopes: [user_profile, shared, 'agent:ResearchAgent']
   write_scope: 'agent:ResearchAgent'
+skills:
+  allow: [route-test]
 """,
         encoding="utf-8",
     )
-    profiles = ProfileRegistry(profile_dir=profile_dir)
+    profiles = AgentCatalog(profile_dir=profile_dir)
 
     class ProfileRuntime:
-        profile_registry = profiles
+        agent_catalog = profiles
 
-        def delegate(self, **kwargs):
-            assert kwargs["pupil"] is None
+        def delegate(self, request):
+            assert request.agent_id == "ResearchAgent"
             return DelegationRunResult(
                 run_id="profile-run",
                 task_id="profile-task",
-                parent_thread_id=kwargs["parent_thread_id"],
-                profile_id=kwargs["profile_id"],
-                profile_version=1,
+                parent_thread_id=request.parent_thread_id,
+                profile_id=request.agent_id,
+                profile_version=2,
                 executor="llm",
                 cache_status="miss",
                 cache_reason="not_found",
@@ -1659,11 +1668,10 @@ memory:
 
     dispatcher = LiveAgentDispatcher(
         vault_root=tmp_path / "Vault",
-        registry=PupilRegistry({}),
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
         skill_route_resolver=FixedSkillResolver("ResearchAgent"),
         delegation_runtime=ProfileRuntime(),
-        profile_registry=profiles,
+        agent_catalog=profiles,
     )
 
     result = dispatcher.maybe_handle("research storage engines", "thread-1")
@@ -1671,6 +1679,38 @@ memory:
     assert result.agent_name == "ResearchAgent"
     assert result.answer == "Independent research result"
     assert result.route_source == "skill"
+
+
+def test_sports_search_is_blocked_by_profile_tool_policy(tmp_path):
+    calls = []
+    tool_registry = ToolRegistry()
+    agent = SportsAgent(
+        vault_root=tmp_path / "Vault",
+        web_searcher=lambda query: calls.append(query) or "unused",
+        tool_registry=tool_registry,
+    )
+    profile = AgentProfile(
+        id="SportsAgent",
+        tools={"allow": []},
+        memory={"write_scope": "agent:SportsAgent"},
+    )
+    catalog = catalog_for({"SportsAgent": agent}, profiles={"SportsAgent": profile})
+    runtime = DelegationRuntime(
+        agent_catalog=catalog,
+        memory_orchestrator=None,
+        audit_path=tmp_path / "delegation-runs.jsonl",
+    )
+
+    result = runtime.delegate(
+        DelegationRequest(
+            agent_id="SportsAgent",
+            task="NBA update",
+            parent_thread_id="thread-1",
+        )
+    )
+
+    assert result.response.status == "error"
+    assert calls == []
 
 
 def test_x_agent_image_post_waits_for_confirmation_before_publishing(tmp_path):

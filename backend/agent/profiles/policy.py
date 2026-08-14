@@ -10,6 +10,7 @@ from typing import Iterator
 class ActiveProfilePolicy:
     profile_id: str
     allowed_tools: frozenset[str]
+    require_confirmation: frozenset[str]
 
 
 _ACTIVE_PROFILE_POLICY: ContextVar[ActiveProfilePolicy | None] = ContextVar(
@@ -19,8 +20,17 @@ _ACTIVE_PROFILE_POLICY: ContextVar[ActiveProfilePolicy | None] = ContextVar(
 
 
 @contextmanager
-def profile_policy(*, profile_id: str, allowed_tools: frozenset[str]) -> Iterator[ActiveProfilePolicy]:
-    policy = ActiveProfilePolicy(profile_id=profile_id, allowed_tools=allowed_tools)
+def profile_policy(
+    *,
+    profile_id: str,
+    allowed_tools: frozenset[str],
+    require_confirmation: frozenset[str] = frozenset(),
+) -> Iterator[ActiveProfilePolicy]:
+    policy = ActiveProfilePolicy(
+        profile_id=profile_id,
+        allowed_tools=allowed_tools,
+        require_confirmation=require_confirmation,
+    )
     token = _ACTIVE_PROFILE_POLICY.set(policy)
     try:
         yield policy
