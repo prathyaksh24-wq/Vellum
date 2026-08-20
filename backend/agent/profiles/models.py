@@ -145,6 +145,33 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                 ]
             ),
         ),
+        "BooksAgent": AgentProfile(
+            id="BooksAgent",
+            description="Evidence-backed reasoning over installed Books and routed Hermes Book skills.",
+            instructions=InstructionPolicy(
+                inline=(
+                    "Use Knowledge Core and profile-approved Hermes Book skills. Separate author, user, "
+                    "and BooksAgent perspectives. Never treat import, ownership, opening, or source "
+                    "availability as evidence that the user read, completed, understood, or endorsed a Book. "
+                    "Abstain when exact evidence cannot support the requested claim."
+                )
+            ),
+            tools=ToolPolicy(allow=["books.knowledge_query", "books.skill_lookup"]),
+            skills=SkillPolicy(allow=["book-to-skill"]),
+            memory=MemoryPolicy(
+                read_scopes=["user_profile", "shared", "agent:BooksAgent"],
+                write_scope="agent:BooksAgent",
+                shared_writes="propose_only",
+                cache_first=False,
+            ),
+            cache=CachePolicy(bypass_terms=["book", "quote", "chapter", "author"]),
+            delegation=DelegationPolicy(
+                can_receive=True,
+                can_delegate=False,
+                max_depth=1,
+            ),
+            response_schema="books-agent-response-v1",
+        ),
         "YoutubeAgent": _profile(
             "YoutubeAgent",
             "YouTube account, subscriptions, search, metadata, transcripts, and summaries.",

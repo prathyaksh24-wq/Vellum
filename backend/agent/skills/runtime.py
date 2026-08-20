@@ -32,6 +32,7 @@ CORE_TOOL_NAMES = {
     "browser_type",
     "browser_vision",
     "browser_wait",
+    "books_agent",
     "computer_use",
     "computer_use_route",
     "context_mode",

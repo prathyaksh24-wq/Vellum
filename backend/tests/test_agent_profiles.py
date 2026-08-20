@@ -12,7 +12,8 @@ class FakeBooksExecutor:
     name = "BooksAgent"
 
     def can_handle(self, query: str) -> bool:
-        return "book" in query.casefold()
+        _ = query
+        return False
 
     def answer(self, query: str):
         raise AssertionError("catalog resolution must not execute the agent")
@@ -247,3 +248,25 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
     assert x_binding.executor.tool_registry is youtube_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is memory_binding.executor.tool_registry
     assert "youtube.search_videos" in x_binding.executor.tool_registry.names()
+
+
+def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_path: Path) -> None:
+    profile = AgentCatalog(profile_dir=tmp_path).get("BooksAgent")
+
+    assert profile.response_schema == "books-agent-response-v1"
+    assert profile.tools.allow == ["books.knowledge_query", "books.skill_lookup"]
+    assert profile.skills.allow == ["book-to-skill"]
+    assert profile.memory.write_scope == "agent:BooksAgent"
+    assert profile.memory.shared_writes == "propose_only"
+
+
+def test_agent_catalog_does_not_auto_route_explicit_only_books_profile(tmp_path: Path) -> None:
+    executor = FakeBooksExecutor()
+    profile = AgentCatalog(profile_dir=tmp_path).get("BooksAgent")
+    catalog = AgentCatalog(
+        profile_dir=tmp_path,
+        builtins={"BooksAgent": profile},
+        executors={"BooksAgent": executor},
+    )
+
+    assert catalog.match("Tell me about this book") is None
