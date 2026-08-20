@@ -506,7 +506,11 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
 
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
-    assert migrated.status()["schema_version"] == 5
+    status = migrated.status()
+    assert status["schema_version"] == 6
+    assert status["counts"]["book_assets"] == 0
+    assert status["counts"]["book_ingestion_runs"] == 0
+    assert status["counts"]["book_stage_receipts"] == 0
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}

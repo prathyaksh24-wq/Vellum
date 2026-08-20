@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
+    BookImportRequest,
+    BookImportStatus,
     BootstrapRequest,
     ContextPackRequest,
     MaterializationCanaryRequest,
@@ -147,6 +149,61 @@ async def core_register_projection(request: ProjectionInput) -> dict[str, Any]:
 @router.post("/context-packs")
 async def core_context_pack(request: ContextPackRequest) -> dict[str, Any]:
     return await asyncio.to_thread(get_knowledge_core().create_context_pack, request)
+
+
+@router.post("/books/epub", response_model=BookImportStatus)
+async def core_import_book_epub(
+    file: Annotated[UploadFile, File(...)],
+    user_id: Annotated[str, Form(min_length=1, max_length=160)],
+    rights_attestation_version: Annotated[str, Form(min_length=1, max_length=120)],
+    scan_approved: Annotated[bool, Form()],
+    pipeline_version: Annotated[
+        str,
+        Form(min_length=1, max_length=120),
+    ] = "book-epub-intake-v1",
+    requested_by: Annotated[str, Form(min_length=1, max_length=120)] = "user",
+) -> BookImportStatus:
+    if scan_approved is not True:
+        raise HTTPException(status_code=409, detail="Local malware scan approval is required.")
+    core = get_knowledge_core()
+    max_bytes = core.book_ingestion.policy.max_asset_bytes
+    try:
+        if file.size == 0:
+            raise HTTPException(status_code=422, detail="EPUB upload is empty.")
+        if file.size is not None and file.size > max_bytes:
+            raise HTTPException(status_code=413, detail="EPUB upload exceeds the configured limit.")
+        content = await file.read(max_bytes + 1)
+    finally:
+        await file.close()
+    if not content:
+        raise HTTPException(status_code=422, detail="EPUB upload is empty.")
+    if len(content) > max_bytes:
+        raise HTTPException(status_code=413, detail="EPUB upload exceeds the configured limit.")
+    request = BookImportRequest(
+        user_id=user_id,
+        rights_attestation_version=rights_attestation_version,
+        scan_approved=scan_approved,
+        pipeline_version=pipeline_version,
+        requested_by=requested_by,
+    )
+    return await asyncio.to_thread(core.import_book_epub, request, content)
+
+
+@router.get("/books/imports/{import_id}", response_model=BookImportStatus)
+async def core_book_import_status(
+    import_id: str,
+    user_id: str = Query(min_length=1, max_length=160),
+    run_id: str = Query(default="", max_length=160),
+) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().get_book_ingestion_status,
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Book import not found.") from exc
 
 
 @router.post("/bootstrap")

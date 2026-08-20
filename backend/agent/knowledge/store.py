@@ -17,6 +17,7 @@ import tempfile
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import re
 from typing import Any, Iterable
 
 from agent.knowledge.models import (
@@ -34,7 +35,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 _SENSITIVE_LABELS = {
@@ -84,6 +85,48 @@ def _parse_datetime(value: Any) -> datetime | None:
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
+    allowed = {"byte_size", "policy_version", "limits", "scanner", "scanner_version", "scan_outcome"}
+    if set(value) - allowed:
+        raise ValueError("Unsupported Book receipt metadata.")
+    clean: dict[str, Any] = {}
+    if "byte_size" in value:
+        clean["byte_size"] = max(0, int(value["byte_size"]))
+    if "policy_version" in value:
+        policy_version = str(value["policy_version"] or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9._-]{1,120}", policy_version):
+            raise ValueError("Invalid Book policy version.")
+        clean["policy_version"] = policy_version
+    if "limits" in value:
+        limits = dict(value["limits"] or {})
+        expected = {
+            "max_asset_bytes",
+            "max_entries",
+            "max_expanded_bytes",
+            "max_compression_ratio",
+        }
+        if set(limits) != expected:
+            raise ValueError("Invalid Book receipt limits.")
+        clean["limits"] = {
+            "max_asset_bytes": max(0, int(limits["max_asset_bytes"])),
+            "max_entries": max(0, int(limits["max_entries"])),
+            "max_expanded_bytes": max(0, int(limits["max_expanded_bytes"])),
+            "max_compression_ratio": max(0.0, float(limits["max_compression_ratio"])),
+        }
+    for key in ("scanner", "scanner_version"):
+        if key in value:
+            label = str(value[key] or "").strip()
+            if len(label) > 120 or not all(character.isalnum() or character in "._ -" for character in label):
+                raise ValueError("Invalid Book scanner metadata.")
+            clean[key] = label
+    if "scan_outcome" in value:
+        outcome = str(value["scan_outcome"] or "")
+        if outcome not in {"clean", "detected", "unavailable", "error"}:
+            raise ValueError("Invalid Book scan outcome.")
+        clean["scan_outcome"] = outcome
+    return clean
 
 
 def _stable_id(prefix: str, *parts: str) -> str:
@@ -239,6 +282,32 @@ class BlobStore:
         with gzip.open(target, "rt", encoding="utf-8") as handle:
             return handle.read()
 
+    def put_book_asset(self, content: bytes, *, tenant_scope: str) -> tuple[str, str, int]:
+        if not re.fullmatch(r"[a-z0-9_]{8,80}", tenant_scope):
+            raise ValueError("Invalid tenant blob scope.")
+        digest = _content_hash(content)
+        relative = Path("books") / "quarantine" / tenant_scope / digest[:2] / f"{digest}.epub"
+        target = self.root / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            handle, temp_name = tempfile.mkstemp(prefix=f".{digest}.", suffix=".tmp", dir=target.parent)
+            try:
+                with os.fdopen(handle, "wb") as output:
+                    output.write(content)
+                    output.flush()
+                    os.fsync(output.fileno())
+                os.replace(temp_name, target)
+            finally:
+                if os.path.exists(temp_name):
+                    os.unlink(temp_name)
+        return digest, relative.as_posix(), len(content)
+
+    def resolve(self, relative_path: str) -> Path:
+        target = (self.root / relative_path).resolve()
+        if not target.is_relative_to(self.root.resolve()):
+            raise ValueError("Blob path escapes the knowledge store.")
+        return target
+
 
 class KnowledgeStore:
     """Canonical source, evidence, observation, and projection repository."""
@@ -284,6 +353,10 @@ class KnowledgeStore:
             if version < 5:
                 self._migrate_v5(connection)
                 connection.execute("PRAGMA user_version = 5")
+                version = 5
+            if version < 6:
+                self._migrate_v6(connection)
+                connection.execute("PRAGMA user_version = 6")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -589,6 +662,286 @@ class KnowledgeStore:
             "ON observations(origin, action)"
         )
 
+    @staticmethod
+    def _migrate_v6(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS book_assets (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                sha256 TEXT NOT NULL,
+                byte_size INTEGER NOT NULL,
+                media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+                blob_path TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, sha256)
+            );
+            CREATE TABLE IF NOT EXISTS user_book_imports (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                asset_id TEXT NOT NULL REFERENCES book_assets(id) ON DELETE RESTRICT,
+                rights_attestation_version TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(user_id, asset_id)
+            );
+            CREATE TABLE IF NOT EXISTS book_ingestion_runs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                asset_id TEXT NOT NULL REFERENCES book_assets(id) ON DELETE RESTRICT,
+                pipeline_version TEXT NOT NULL,
+                policy_snapshot_hash TEXT NOT NULL,
+                status TEXT NOT NULL,
+                current_stage TEXT NOT NULL,
+                error_code TEXT NOT NULL DEFAULT '',
+                attempt_count INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, asset_id, pipeline_version, policy_snapshot_hash)
+            );
+            CREATE TABLE IF NOT EXISTS book_stage_receipts (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL REFERENCES book_ingestion_runs(id) ON DELETE CASCADE,
+                stage TEXT NOT NULL,
+                stage_version TEXT NOT NULL,
+                input_digest TEXT NOT NULL,
+                output_digest TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                attempt INTEGER NOT NULL,
+                reason_code TEXT NOT NULL DEFAULT '',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                UNIQUE(run_id, stage, stage_version, input_digest, attempt)
+            );
+            CREATE INDEX IF NOT EXISTS book_imports_user_time
+            ON user_book_imports(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS book_runs_asset_time
+            ON book_ingestion_runs(asset_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS book_receipts_run_time
+            ON book_stage_receipts(run_id, created_at ASC);
+            """
+        )
+
+    @staticmethod
+    def book_import_ids(
+        *,
+        user_id: str,
+        asset_sha256: str,
+        pipeline_version: str,
+        policy_snapshot_hash: str,
+    ) -> dict[str, str]:
+        asset_id = _stable_id("bka", user_id, asset_sha256)
+        return {
+            "asset_id": asset_id,
+            "import_id": _stable_id("bki", user_id, asset_id),
+            "run_id": _stable_id(
+                "bkr",
+                user_id,
+                asset_id,
+                pipeline_version,
+                policy_snapshot_hash,
+            ),
+        }
+
+    def begin_book_import(
+        self,
+        *,
+        user_id: str,
+        asset_sha256: str,
+        byte_size: int,
+        rights_attestation_version: str,
+        pipeline_version: str,
+        policy_snapshot_hash: str,
+    ) -> dict[str, Any]:
+        identity = self.book_import_ids(
+            user_id=user_id,
+            asset_sha256=asset_sha256,
+            pipeline_version=pipeline_version,
+            policy_snapshot_hash=policy_snapshot_hash,
+        )
+        asset_id = identity["asset_id"]
+        import_id = identity["import_id"]
+        run_id = identity["run_id"]
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO book_assets (id, user_id, sha256, byte_size, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'received', ?, ?)",
+                (asset_id, user_id, asset_sha256, byte_size, now, now),
+            )
+            connection.execute(
+                "INSERT OR IGNORE INTO user_book_imports (id, user_id, asset_id, rights_attestation_version, created_at) VALUES (?, ?, ?, ?, ?)",
+                (import_id, user_id, asset_id, rights_attestation_version, now),
+            )
+            existing = connection.execute("SELECT status, attempt_count FROM book_ingestion_runs WHERE id = ?", (run_id,)).fetchone()
+            connection.execute(
+                "INSERT OR IGNORE INTO book_ingestion_runs (id, user_id, asset_id, pipeline_version, policy_snapshot_hash, status, current_stage, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'received', 'received', ?, ?)",
+                (run_id, user_id, asset_id, pipeline_version, policy_snapshot_hash, now, now),
+            )
+            if existing is not None and str(existing["status"]) == "failed_retryable":
+                connection.execute(
+                    "UPDATE book_ingestion_runs SET attempt_count = attempt_count + 1, status = 'received', current_stage = 'received', error_code = '', updated_at = ? WHERE id = ?",
+                    (now, run_id),
+                )
+            attempt = int(connection.execute("SELECT attempt_count FROM book_ingestion_runs WHERE id = ?", (run_id,)).fetchone()[0])
+            self._record_book_receipt(
+                connection,
+                run_id=run_id,
+                stage="received",
+                stage_version="received-v1",
+                input_digest=asset_sha256,
+                output_digest=asset_sha256,
+                status="succeeded",
+                attempt=attempt,
+                reason_code="RECEIVED",
+                metadata={"byte_size": byte_size},
+            )
+        return self.get_book_import_status(
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+        )
+
+    def publish_book_stage(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        stage: str,
+        stage_version: str,
+        input_digest: str,
+        output_digest: str,
+        status: str,
+        reason_code: str,
+        metadata: dict[str, Any] | None = None,
+        blob_path: str = "",
+        media_type: str = "",
+    ) -> dict[str, Any]:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT r.id, r.asset_id, r.attempt_count FROM book_ingestion_runs r JOIN user_book_imports i ON i.asset_id = r.asset_id WHERE i.id = ? AND i.user_id = ? AND r.id = ? LIMIT 1",
+                (import_id, user_id, run_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown Book import.")
+            run_id = str(row["id"])
+            attempt = int(row["attempt_count"])
+            self._record_book_receipt(
+                connection,
+                run_id=run_id,
+                stage=stage,
+                stage_version=stage_version,
+                input_digest=input_digest,
+                output_digest=output_digest,
+                status=status,
+                attempt=attempt,
+                reason_code=reason_code,
+                metadata=metadata or {},
+            )
+            domain_status = stage if status == "succeeded" else status
+            connection.execute(
+                "UPDATE book_ingestion_runs SET status = ?, current_stage = ?, error_code = ?, updated_at = ? WHERE id = ?",
+                (domain_status, stage, "" if status == "succeeded" else reason_code, now, run_id),
+            )
+            if blob_path or media_type:
+                connection.execute(
+                    "UPDATE book_assets SET blob_path = CASE WHEN ? <> '' THEN ? ELSE blob_path END, media_type = CASE WHEN ? <> '' THEN ? ELSE media_type END, status = ?, updated_at = ? WHERE id = ?",
+                    (blob_path, blob_path, media_type, media_type, domain_status, now, str(row["asset_id"])),
+                )
+            else:
+                connection.execute(
+                    "UPDATE book_assets SET status = ?, updated_at = ? WHERE id = ?",
+                    (domain_status, now, str(row["asset_id"])),
+                )
+        return self.get_book_import_status(
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+        )
+
+    @staticmethod
+    def _record_book_receipt(
+        connection: sqlite3.Connection,
+        *,
+        run_id: str,
+        stage: str,
+        stage_version: str,
+        input_digest: str,
+        output_digest: str,
+        status: str,
+        attempt: int,
+        reason_code: str,
+        metadata: dict[str, Any],
+    ) -> None:
+        receipt_id = _stable_id("bks", run_id, stage, stage_version, input_digest, str(attempt))
+        connection.execute(
+            "INSERT OR IGNORE INTO book_stage_receipts (id, run_id, stage, stage_version, input_digest, output_digest, status, attempt, reason_code, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                receipt_id,
+                run_id,
+                stage,
+                stage_version,
+                input_digest,
+                output_digest,
+                status,
+                attempt,
+                reason_code,
+                _json(_book_receipt_metadata(metadata)),
+                _now(),
+            ),
+        )
+
+    def get_book_import_status(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str = "",
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            if run_id:
+                row = connection.execute(
+                    "SELECT i.id AS import_id, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? AND r.id = ? LIMIT 1",
+                    (import_id, user_id, run_id),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    "SELECT i.id AS import_id, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
+                    (import_id, user_id),
+                ).fetchone()
+            if row is None:
+                raise KeyError("Unknown Book import.")
+            receipts = connection.execute(
+                """
+                SELECT id, stage, status, attempt, reason_code, created_at
+                FROM book_stage_receipts
+                WHERE run_id = ?
+                ORDER BY attempt ASC,
+                    CASE stage
+                        WHEN 'received' THEN 1
+                        WHEN 'quarantined' THEN 2
+                        WHEN 'validated' THEN 3
+                        ELSE 4
+                    END ASC,
+                    created_at ASC,
+                    id ASC
+                """,
+                (str(row["run_id"]),),
+            ).fetchall()
+        return {
+            "import_id": str(row["import_id"]),
+            "asset_id": str(row["asset_id"]),
+            "run_id": str(row["run_id"]),
+            "asset_sha256": str(row["sha256"]),
+            "byte_size": int(row["byte_size"]),
+            "media_type": str(row["media_type"]),
+            "status": str(row["status"]),
+            "current_stage": str(row["current_stage"]),
+            "error_code": str(row["error_code"] or ""),
+            "receipts": [dict(receipt) for receipt in receipts],
+        }
     def record_entity_identities(
         self,
         items: Iterable[EntityIdentityInput],
@@ -2255,6 +2608,10 @@ class KnowledgeStore:
             "ingestion_jobs",
             "context_packs",
             "content_annotations",
+            "book_assets",
+            "user_book_imports",
+            "book_ingestion_runs",
+            "book_stage_receipts",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
