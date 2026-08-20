@@ -86,6 +86,7 @@ from agent.tools.web import web_search
 from agent.tools.web_extract import web_extract
 from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
+from agent.tools.books import books_agent
 from agent.tools.x import x_agent
 
 VELLUM_SYSTEM_PROMPT = """You are Vellum, a self-learning personal archivist for one person.
@@ -127,6 +128,7 @@ Tools:
 34. skill_curator - Inspect and operate recoverable skill telemetry, pruning, backups, rollback, pinning, and archival.
 35. cronjob - Create, list, update, pause/resume, run-now, or remove automations (scheduled reasoning tasks) from this chat.
 36. write_file/edit_file/delete_file/create_directory - Vault file operations via PowerShell CLI: write_file creates or overwrites a UTF-8 file, edit_file replaces the first occurrence of text, create_directory makes folders (with parents), and delete_file removes a single file and requires confirm=true. All paths stay inside the Obsidian vault.
+37. books_agent - Delegate Book questions, author ideas, chapters, quotations, comparisons, and vague imported-Book references to BooksAgent. BooksAgent owns Hermes Book skills and returns a typed evidence envelope or abstains.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -135,6 +137,7 @@ Specialist routing:
 - XAgent handles X search through the shared X capability service when configured.
 - YoutubeAgent handles read-only YouTube search, metadata, and transcript-backed summaries through the shared YouTube capability service.
 - MemoryAgent handles durable memory lookup and reviewed memory proposals through the shared Memory capability service.
+- BooksAgent handles installed Book evidence and routed Hermes Book skills through Knowledge Core; it is not an ebook-reading tracker.
 
 Rules:
 - Always search the vault first.
@@ -181,6 +184,7 @@ Rules:
 - Do not tell the user you lack live information access when a relevant tool exists. For current schedules, scores, standings, injuries, news, or dates, use web_search instead of answering from model memory or refusing. Do not add an Evidence, Sources, References, or URL-list section unless the user explicitly asks; the UI exposes sources separately.
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract_pages to read a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Delegate all X interactions to XAgent through x_agent. Do not call twitter-cli, xAI, or X capability adapters directly. XAgent may prepare a mutation, but only the specialist dispatcher's stored pending action and a later explicit user confirmation may execute it. Never claim post editing is supported when the connector reports it as unsupported.
+- Delegate Book reasoning to BooksAgent through books_agent. Do not activate Book skills directly, search Obsidian for canonical Book evidence, or infer reading, completion, understanding, or endorsement from an import or open action.
 - Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
 - Use llm_routing when the user asks to inspect or change model/provider routing, fallback models, credential rotation strategy, or credential pool health. Never accept or transmit raw API keys through chat; tell the user to configure credential secrets through the backend keyring/env path.
 - The Available Skills index contains descriptions only. Load a matching skill with skill_view before following it. Never infer instructions from the description alone. Use only relative support-file paths and never expose local package paths.
@@ -432,6 +436,7 @@ def core_tool_registry() -> ToolRegistry:
         escalate_to_cloud,
         create_note,
         append_to_note,
+        books_agent,
         x_agent,
         cronjob,
     ]

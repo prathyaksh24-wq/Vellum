@@ -336,3 +336,46 @@ def test_delegation_audit_is_redacted_and_records_cache_status(tmp_path: Path) -
     assert records[0]["context_hash"]
     assert records[0]["source_count"] == 0
     assert "PRIVATE BENCHMARK NOTES" not in audit_path.read_text(encoding="utf-8")
+
+
+def test_delegation_runtime_rejects_malformed_books_envelope(tmp_path: Path) -> None:
+    class InvalidBooksAgent:
+        name = "BooksAgent"
+
+        def answer(self, query: str) -> SpecialistResponse:
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="Unsupported Book claim",
+                confidence=0.9,
+            )
+
+    profile = AgentProfile(
+        id="BooksAgent",
+        tools={"allow": []},
+        skills={"allow": ["book-to-skill"]},
+        memory=MemoryPolicy(
+            read_scopes=["user_profile", "shared", "agent:BooksAgent"],
+            write_scope="agent:BooksAgent",
+            cache_first=False,
+        ),
+        response_schema="books-agent-response-v1",
+    )
+    runtime = DelegationRuntime(
+        agent_catalog=AgentCatalog(
+            profile_dir=tmp_path / "profiles",
+            builtins={"BooksAgent": profile},
+            executors={"BooksAgent": InvalidBooksAgent()},
+        ),
+        memory_orchestrator=None,
+        audit_path=tmp_path / "delegation-runs.jsonl",
+    )
+
+    result = runtime.delegate(
+        DelegationRequest(agent_id="BooksAgent", task="Question", parent_thread_id="thread-1")
+    )
+
+    assert result.response.status == "error"
+    assert result.response.summary == "BooksAgent could not complete this delegated task."
+    assert result.response.analysis == "ValidationError"
+    assert result.response.structured_payload["books_agent"]["status"] == "failed"

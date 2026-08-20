@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
 
 SpecialistStatus = Literal["answered", "needs_fetch", "stale", "blocked", "error"]
-SourceKind = Literal["vault", "web", "api", "memory"]
+SourceKind = Literal["vault", "web", "api", "memory", "book"]
 Freshness = Literal["live", "recent", "stale", "historical"]
 MemoryScope = Literal["sports", "x", "youtube", "memory", "mcp", "shared"]
 
@@ -37,6 +37,7 @@ class SpecialistResponse(BaseModel):
     memory_proposals: list[MemoryProposal] = Field(default_factory=list)
     action_request: dict = Field(default_factory=dict)
     activity_events: list[dict] = Field(default_factory=list)
+    structured_payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class SpecialistAgent(Protocol):

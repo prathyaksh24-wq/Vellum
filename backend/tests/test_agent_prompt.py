@@ -70,6 +70,12 @@ def test_vellum_prompt_delegates_x_work_to_x_agent():
     assert "x_action" not in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
+def test_vellum_prompt_delegates_book_reasoning_to_books_agent():
+    assert "books_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Delegate Book reasoning to BooksAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Do not activate Book skills directly" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
 def test_agent_prompt_documents_workspace_mode():
     assert "mode='workspace'" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
