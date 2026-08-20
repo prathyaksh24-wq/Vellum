@@ -168,6 +168,51 @@ class IngestionJobInput(BaseModel):
     lease_seconds: int = Field(default=900, ge=30, le=86400)
 
 
+class BookImportRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=160)
+    rights_attestation_version: str = Field(min_length=1, max_length=120)
+    scan_approved: Literal[True]
+    pipeline_version: str = Field(default="book-epub-intake-v1", min_length=1, max_length=120)
+    requested_by: str = Field(default="user", min_length=1, max_length=120)
+
+    @field_validator("user_id", "rights_attestation_version", "pipeline_version", "requested_by")
+    @classmethod
+    def clean_book_import_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("book import identity fields cannot be blank")
+        return clean
+
+
+class BookStageReceipt(BaseModel):
+    id: str
+    stage: Literal["received", "quarantined", "validated"]
+    status: Literal["succeeded", "rejected", "failed_retryable", "failed_permanent"]
+    attempt: int = Field(ge=1)
+    reason_code: str = ""
+    created_at: str
+
+
+class BookImportStatus(BaseModel):
+    import_id: str
+    asset_id: str
+    run_id: str
+    asset_sha256: str
+    byte_size: int = Field(ge=0)
+    media_type: str
+    status: Literal[
+        "received",
+        "quarantined",
+        "validated",
+        "rejected",
+        "failed_retryable",
+        "failed_permanent",
+    ]
+    current_stage: Literal["received", "quarantined", "validated"]
+    error_code: str = ""
+    receipts: list[BookStageReceipt] = Field(default_factory=list)
+
+
 class SyncCursorInput(BaseModel):
     connector: str = Field(min_length=1, max_length=120)
     account_id: str = Field(min_length=1, max_length=500)

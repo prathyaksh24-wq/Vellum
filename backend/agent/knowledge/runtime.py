@@ -5,6 +5,7 @@ from __future__ import annotations
 from threading import Lock
 
 from agent.config import REPO_ROOT, get_settings
+from agent.knowledge.book_ingestion import WindowsDefenderScanner
 from agent.knowledge.service import KnowledgeCore
 from agent.knowledge.store import KnowledgeStore
 
@@ -23,6 +24,7 @@ def build_knowledge_core() -> KnowledgeCore:
         shadow_write=settings.knowledge_shadow_write,
         read_enabled=settings.knowledge_read_enabled,
         tool_learning_enabled=settings.knowledge_tool_observation_learning,
+        book_malware_scanner=WindowsDefenderScanner(),
     )
 
 

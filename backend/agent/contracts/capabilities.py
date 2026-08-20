@@ -144,6 +144,8 @@ def build_capability_contract() -> CapabilityContract:
                     "sync_cursors": "/api/knowledge/core/sync-cursors",
                     "annotations": "/api/knowledge/core/annotations",
                     "context_packs": "/api/knowledge/core/context-packs",
+                    "books_import": "/api/knowledge/core/books/epub",
+                    "books_status": "/api/knowledge/core/books/imports/{import_id}",
                     "bootstrap": "/api/knowledge/core/bootstrap",
                 },
                 notes="Cerebras-style canonical evidence layer operating in additive shadow mode.",

@@ -132,6 +132,11 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert features["hermes_skills"]["plugin_owned"] is True
     assert features["openrouter"]["endpoints"]["models"] == "/api/models"
     assert features["conversation_library"]["endpoints"]["search"] == "/api/conversations/search"
+    assert features["personal_intelligence"]["endpoints"]["books_import"] == "/api/knowledge/core/books/epub"
+    assert (
+        features["personal_intelligence"]["endpoints"]["books_status"]
+        == "/api/knowledge/core/books/imports/{import_id}"
+    )
 
     chat_events = body["stream_events"]["chat"]
     assert "response.output_text.delta" in chat_events

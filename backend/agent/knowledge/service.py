@@ -6,9 +6,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
+    BookImportRequest,
+    BookImportStatus,
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
@@ -36,6 +39,7 @@ class KnowledgeCore:
         shadow_write: bool = True,
         read_enabled: bool = False,
         tool_learning_enabled: bool = False,
+        book_malware_scanner: MalwareScanner | None = None,
     ) -> None:
         self.store = store
         self.conversations_path = Path(conversations_path)
@@ -51,6 +55,10 @@ class KnowledgeCore:
         self.shadow_write = bool(shadow_write)
         self.read_enabled = bool(read_enabled)
         self.tool_learning_enabled = bool(tool_learning_enabled)
+        self.book_ingestion = BookIngestionPipeline(
+            store,
+            scanner=book_malware_scanner,
+        )
 
     def status(self) -> dict[str, Any]:
         return {
@@ -237,6 +245,24 @@ class KnowledgeCore:
 
     def create_context_pack(self, request: ContextPackRequest) -> dict[str, Any]:
         return self.store.create_context_pack(request)
+
+    def import_book_epub(self, request: BookImportRequest, content: bytes) -> BookImportStatus:
+        return self.book_ingestion.import_epub(request, content)
+
+    def get_book_ingestion_status(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str = "",
+    ) -> BookImportStatus:
+        return BookImportStatus.model_validate(
+            self.store.get_book_import_status(
+                user_id=user_id,
+                import_id=import_id,
+                run_id=run_id,
+            )
+        )
 
     @staticmethod
     def _digest(payload: dict[str, Any]) -> str:
