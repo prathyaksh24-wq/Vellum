@@ -10,6 +10,7 @@ from typing import Iterator
 class ActiveProfilePolicy:
     profile_id: str
     allowed_tools: frozenset[str]
+    allowed_skills: frozenset[str]
     require_confirmation: frozenset[str]
 
 
@@ -24,11 +25,13 @@ def profile_policy(
     *,
     profile_id: str,
     allowed_tools: frozenset[str],
+    allowed_skills: frozenset[str] = frozenset(),
     require_confirmation: frozenset[str] = frozenset(),
 ) -> Iterator[ActiveProfilePolicy]:
     policy = ActiveProfilePolicy(
         profile_id=profile_id,
         allowed_tools=allowed_tools,
+        allowed_skills=allowed_skills,
         require_confirmation=require_confirmation,
     )
     token = _ACTIVE_PROFILE_POLICY.set(policy)

@@ -99,12 +99,11 @@ class DelegationRuntime:
                 parent_thread_id=parent_thread_id,
             )
             if action_request is None:
-                response = SpecialistResponse(
-                    agent=profile.id,
+                response = _runtime_response(
+                    profile=profile,
                     status="blocked",
                     summary="No matching pending action is available for confirmation.",
                     analysis="confirmation_authority",
-                    confidence=0.0,
                 )
                 return self._complete(
                     profile=profile,
@@ -118,12 +117,11 @@ class DelegationRuntime:
                     context=context,
                 )
         if not profile.delegation.can_receive or request.depth > profile.delegation.max_depth:
-            response = SpecialistResponse(
-                agent=profile.id,
+            response = _runtime_response(
+                profile=profile,
                 status="blocked",
                 summary=f"{profile.id} cannot receive this delegated task.",
                 analysis="delegation_policy",
-                confidence=0.0,
             )
             return self._complete(
                 profile=profile,
@@ -165,6 +163,7 @@ class DelegationRuntime:
                 parent_thread_id=parent_thread_id,
                 action_request=action_request,
             )
+            _validate_response_schema(profile, response)
             if response.agent != profile.id:
                 raise ValueError("delegated response agent does not match the selected profile")
         except Exception as exc:
@@ -188,12 +187,11 @@ class DelegationRuntime:
                     goal=goal,
                     context=context,
                 )
-            response = SpecialistResponse(
-                agent=profile.id,
+            response = _runtime_response(
+                profile=profile,
                 status="error",
                 summary=f"{profile.id} could not complete this delegated task.",
                 analysis=exc.__class__.__name__,
-                confidence=0.0,
             )
 
         if response.status == "error" and decision.status == "stale" and decision.response is not None:
@@ -268,6 +266,7 @@ class DelegationRuntime:
         with profile_policy(
             profile_id=profile.id,
             allowed_tools=frozenset(profile.tools.allow),
+            allowed_skills=frozenset(profile.skills.allow),
             require_confirmation=frozenset(profile.tools.require_confirmation),
         ):
             if profile.executor == "deterministic":
@@ -400,6 +399,43 @@ def _llm_task_packet(*, goal: str, context: str, memory_packet: dict[str, Any]) 
 
 def _append_analysis(existing: str, note: str) -> str:
     return f"{existing}\n{note}".strip()
+
+
+def _runtime_response(
+    *,
+    profile: AgentProfile,
+    status: str,
+    summary: str,
+    analysis: str,
+) -> SpecialistResponse:
+    structured_payload: dict[str, Any] = {}
+    if profile.response_schema == "books-agent-response-v1":
+        from agent.contracts.books import books_envelope_payload
+
+        structured_payload = books_envelope_payload(
+            answer=summary,
+            status="failed",
+            uncertainty=["The BooksAgent runtime did not return a valid answer."],
+        )
+    return SpecialistResponse(
+        agent=profile.id,
+        status=status,
+        summary=summary,
+        analysis=analysis,
+        confidence=0.0,
+        structured_payload=structured_payload,
+    )
+
+
+def _validate_response_schema(profile: AgentProfile, response: SpecialistResponse) -> None:
+    if profile.response_schema != "books-agent-response-v1":
+        return
+    from agent.contracts.books import BooksAgentEnvelope
+
+    payload = response.structured_payload.get("books_agent")
+    envelope = BooksAgentEnvelope.model_validate(payload)
+    if envelope.answer != response.summary:
+        raise ValueError("BooksAgent envelope answer must match the specialist summary")
 
 
 def _text_hash(text: str) -> str:

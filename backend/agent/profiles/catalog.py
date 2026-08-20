@@ -41,6 +41,7 @@ class AgentCatalog:
         vault_root: Path,
         profile_dir: Path | str = Path("data/agent_profiles"),
     ) -> "AgentCatalog":
+        from agent.agents.books import BooksAgent
         from agent.agents.memory_agent import MemoryAgent
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
@@ -54,6 +55,7 @@ class AgentCatalog:
             YoutubeAgent(vault_root=root, tool_registry=tools),
             MemoryAgent(vault_root=root, tool_registry=tools),
             SportsAgent(vault_root=root, tool_registry=tools),
+            BooksAgent(tool_registry=tools),
         ]
         return cls(profile_dir=profile_dir, executors={agent.name: agent for agent in agents})
 

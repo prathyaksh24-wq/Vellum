@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agent.tools.capabilities.books_service import BooksCapabilityService
 from agent.tools.capabilities.mcp_service import McpCapabilityService
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
@@ -16,6 +17,7 @@ def build_shared_tool_registry(
     x_service: XCapabilityService | None = None,
     youtube_service: YoutubeCapabilityService | None = None,
     memory_service: MemoryCapabilityService | None = None,
+    books_service: BooksCapabilityService | None = None,
     mcp_service: McpCapabilityService | None = None,
     tool_observer: ToolInvocationObserver | None = None,
 ) -> ToolRegistry:
@@ -26,6 +28,7 @@ def build_shared_tool_registry(
         youtube_service or YoutubeCapabilityService(vault_root=root),
         memory_service or MemoryCapabilityService(vault_root=root, sessions_db=memory_sessions_db),
         mcp_service or McpCapabilityService(),
+        books_service or BooksCapabilityService(),
     )
     if tool_observer is None:
         tool_observer = _default_tool_observer()
