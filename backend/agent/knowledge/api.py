@@ -9,6 +9,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
+    BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
     BootstrapRequest,
@@ -204,6 +205,27 @@ async def core_book_import_status(
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Book import not found.") from exc
+
+
+@router.post("/books/documents", response_model=BookImportStatus)
+async def core_construct_book_document(request: BookDocumentRequest) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(get_knowledge_core().construct_book_document, request)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_IMPORT_NOT_FOUND"},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_NOT_VALIDATED",
+            "BOOK_DOCUMENT_NOT_ELIGIBLE",
+            "BOOK_DOCUMENT_NONDETERMINISTIC",
+            "BOOK_DOCUMENT_RUN_VERSION_MISMATCH",
+        }:
+            code = "BOOK_DOCUMENT_PUBLICATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
 
 
 @router.post("/bootstrap")

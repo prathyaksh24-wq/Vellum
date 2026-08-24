@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Sensitivity(str, Enum):
@@ -184,9 +184,32 @@ class BookImportRequest(BaseModel):
         return clean
 
 
+class BookDocumentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=160)
+    import_id: str = Field(min_length=1, max_length=160)
+    run_id: str = Field(min_length=1, max_length=160)
+
+    @field_validator("user_id", "import_id", "run_id")
+    @classmethod
+    def clean_book_document_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("book document identity fields cannot be blank")
+        return clean
+
+
 class BookStageReceipt(BaseModel):
     id: str
-    stage: Literal["received", "quarantined", "validated"]
+    stage: Literal[
+        "received",
+        "quarantined",
+        "validated",
+        "extracted",
+        "identified",
+        "structured",
+    ]
     status: Literal["succeeded", "rejected", "failed_retryable", "failed_permanent"]
     attempt: int = Field(ge=1)
     reason_code: str = ""
@@ -204,12 +227,25 @@ class BookImportStatus(BaseModel):
         "received",
         "quarantined",
         "validated",
+        "extracted",
+        "identified",
+        "structured",
         "rejected",
         "failed_retryable",
         "failed_permanent",
     ]
-    current_stage: Literal["received", "quarantined", "validated"]
+    current_stage: Literal[
+        "received",
+        "quarantined",
+        "validated",
+        "extracted",
+        "identified",
+        "structured",
+    ]
     error_code: str = ""
+    document_id: str = ""
+    quality_outcome: str = ""
+    quality_evaluated: bool = False
     receipts: list[BookStageReceipt] = Field(default_factory=list)
 
 
