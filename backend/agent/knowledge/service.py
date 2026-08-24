@@ -8,12 +8,17 @@ from typing import Any
 
 from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
 from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
+from agent.knowledge.book_quality import (
+    BookQualityAssessment,
+    BookQualityPipeline,
+)
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
+    BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
@@ -62,6 +67,7 @@ class KnowledgeCore:
             scanner=book_malware_scanner,
         )
         self.book_documents = BookDocumentPipeline(store)
+        self.book_quality = BookQualityPipeline(store, self.book_documents)
 
     def status(self) -> dict[str, Any]:
         return {
@@ -257,6 +263,31 @@ class KnowledgeCore:
 
     def get_book_document(self, *, user_id: str, document_id: str) -> BookDocument:
         return self.book_documents.load(user_id=user_id, document_id=document_id)
+
+    def evaluate_book_document_quality(self, request: BookQualityRequest) -> BookImportStatus:
+        return self.book_quality.evaluate(request)
+
+    def get_book_document_for_materialization(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+    ) -> BookDocument:
+        return self.book_quality.load_for_materialization(
+            user_id=user_id,
+            document_id=document_id,
+        )
+
+    def get_book_quality_assessment(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+    ) -> BookQualityAssessment:
+        return self.book_quality.load_assessment(
+            user_id=user_id,
+            document_id=document_id,
+        )
 
     def get_book_ingestion_status(
         self,

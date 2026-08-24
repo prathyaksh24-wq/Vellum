@@ -200,6 +200,18 @@ class BookDocumentRequest(BaseModel):
         return clean
 
 
+class BookQualityRequest(BookDocumentRequest):
+    document_id: str = Field(min_length=1, max_length=160)
+
+    @field_validator("document_id")
+    @classmethod
+    def clean_book_quality_document_id(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("book quality document id cannot be blank")
+        return clean
+
+
 class BookStageReceipt(BaseModel):
     id: str
     stage: Literal[

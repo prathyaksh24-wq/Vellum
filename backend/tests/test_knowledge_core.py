@@ -507,16 +507,26 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
     status = migrated.status()
-    assert status["schema_version"] == 7
+    assert status["schema_version"] == 8
     assert status["counts"]["book_assets"] == 0
     assert status["counts"]["book_ingestion_runs"] == 0
     assert status["counts"]["book_stage_receipts"] == 0
     assert status["counts"]["book_documents"] == 0
     assert status["counts"]["book_document_resources"] == 0
+    assert status["counts"]["book_quality_assessments"] == 0
     assert migrated.list_sources()[0]["id"] == "src_v1"
     with sqlite3.connect(db_path) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(user_signals)")}
+        book_document_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(book_documents)")
+        }
     assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
+    assert {
+        "quality_assessment_id",
+        "quality_policy_version",
+        "quality_policy_snapshot_hash",
+    } <= book_document_columns
 
 
 def test_sensitive_annotation_requires_trusted_review_for_learning(tmp_path: Path) -> None:

@@ -36,7 +36,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 _SENSITIVE_LABELS = {
@@ -211,6 +211,21 @@ class BookDocumentPublication:
     receipt_metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class BookQualityAssessmentPublication:
+    assessment_id: str
+    user_id: str
+    import_id: str
+    run_id: str
+    document_id: str
+    document_digest: str
+    policy_version: str
+    policy_snapshot_hash: str
+    outcome: str
+    report_digest: str
+    report_blob_path: str
+
+
 def _build_preference_state(
     subject_key: str,
     rows: Iterable[sqlite3.Row],
@@ -373,7 +388,7 @@ class BlobStore:
     ) -> tuple[str, str, int]:
         if not re.fullmatch(r"[a-z0-9_]{8,80}", tenant_scope):
             raise ValueError("Invalid tenant blob scope.")
-        if category not in {"resources", "documents"} or suffix not in {"json"}:
+        if category not in {"resources", "documents", "quality"} or suffix not in {"json"}:
             raise ValueError("Invalid Book artifact path.")
         raw = bytes(content)
         digest = _content_hash(raw)
@@ -466,6 +481,10 @@ class KnowledgeStore:
             if version < 7:
                 self._migrate_v7(connection)
                 connection.execute("PRAGMA user_version = 7")
+                version = 7
+            if version < 8:
+                self._migrate_v8(connection)
+                connection.execute("PRAGMA user_version = 8")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -888,6 +907,44 @@ class KnowledgeStore:
         )
 
     @staticmethod
+    def _migrate_v8(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(book_documents)")
+        }
+        additions = {
+            "quality_assessment_id": "TEXT NOT NULL DEFAULT ''",
+            "quality_policy_version": "TEXT NOT NULL DEFAULT ''",
+            "quality_policy_snapshot_hash": "TEXT NOT NULL DEFAULT ''",
+        }
+        for column, definition in additions.items():
+            if column not in columns:
+                connection.execute(
+                    f"ALTER TABLE book_documents ADD COLUMN {column} {definition}"
+                )
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS book_quality_assessments (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                document_digest TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                policy_snapshot_hash TEXT NOT NULL,
+                outcome TEXT NOT NULL,
+                report_digest TEXT NOT NULL,
+                blob_path TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(document_id, document_digest, policy_version, policy_snapshot_hash),
+                CHECK(outcome IN ('PASS', 'DEGRADED', 'OCR_REQUIRED', 'FAILED_RETRYABLE', 'FAILED_PERMANENT')),
+                FOREIGN KEY(document_id, user_id) REFERENCES book_documents(id, user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS book_quality_assessments_document_time
+            ON book_quality_assessments(document_id, created_at DESC);
+            """
+        )
+
+    @staticmethod
     def book_import_ids(
         *,
         user_id: str,
@@ -915,6 +972,22 @@ class KnowledgeStore:
     @staticmethod
     def book_document_id(*, run_id: str, parser_version: str, schema_version: str) -> str:
         return _stable_id("bkd", run_id, parser_version, schema_version)
+
+    @staticmethod
+    def book_quality_assessment_id(
+        *,
+        document_id: str,
+        document_digest: str,
+        policy_version: str,
+        policy_snapshot_hash: str,
+    ) -> str:
+        return _stable_id(
+            "bkq",
+            document_id,
+            document_digest,
+            policy_version,
+            policy_snapshot_hash,
+        )
 
     def begin_book_import(
         self,
@@ -1311,6 +1384,248 @@ class KnowledgeStore:
             ).fetchone()
         if row is None:
             raise KeyError("Unknown BookDocument.")
+        return dict(row)
+
+    def begin_book_quality_assessment(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        document_id: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT d.id, d.digest, d.blob_path, d.schema_version, d.parser_version "
+                "FROM book_documents d "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id "
+                "WHERE d.id = ? AND d.user_id = ? AND d.run_id = ? AND i.id = ? "
+                "AND r.status = 'structured' LIMIT 1",
+                (document_id, user_id, run_id, import_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown structured BookDocument.")
+        return dict(row)
+
+    def select_book_quality_assessment_status(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        assessment_id: str,
+    ) -> dict[str, Any] | None:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT q.id FROM book_quality_assessments q "
+                "JOIN book_documents d ON d.id = q.document_id AND d.user_id = q.user_id "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id "
+                "WHERE q.id = ? AND q.user_id = ? AND r.id = ? AND i.id = ? LIMIT 1",
+                (assessment_id, user_id, run_id, import_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return self.activate_book_quality_assessment(
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+            assessment_id=assessment_id,
+        )
+
+    def activate_book_quality_assessment(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        assessment_id: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            assessment = connection.execute(
+                "SELECT q.document_id, q.outcome, q.policy_version, q.policy_snapshot_hash "
+                "FROM book_quality_assessments q "
+                "JOIN book_documents d ON d.id = q.document_id AND d.user_id = q.user_id "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id "
+                "WHERE q.id = ? AND q.user_id = ? AND r.id = ? AND i.id = ? LIMIT 1",
+                (assessment_id, user_id, run_id, import_id),
+            ).fetchone()
+            if assessment is None:
+                raise KeyError("Unknown Book quality assessment.")
+            connection.execute(
+                "UPDATE book_documents SET quality_outcome = ?, quality_evaluated = 1, "
+                "quality_assessment_id = ?, quality_policy_version = ?, "
+                "quality_policy_snapshot_hash = ? WHERE id = ? AND user_id = ?",
+                (
+                    str(assessment["outcome"]),
+                    assessment_id,
+                    str(assessment["policy_version"]),
+                    str(assessment["policy_snapshot_hash"]),
+                    str(assessment["document_id"]),
+                    user_id,
+                ),
+            )
+        return self.get_book_import_status(
+            user_id=user_id,
+            import_id=import_id,
+            run_id=run_id,
+        )
+
+    def publish_book_quality_assessment(
+        self,
+        publication: BookQualityAssessmentPublication,
+    ) -> dict[str, Any]:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            document = connection.execute(
+                "SELECT d.digest FROM book_documents d "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id "
+                "WHERE d.id = ? AND d.user_id = ? AND r.id = ? AND i.id = ? "
+                "AND r.status = 'structured' LIMIT 1",
+                (
+                    publication.document_id,
+                    publication.user_id,
+                    publication.run_id,
+                    publication.import_id,
+                ),
+            ).fetchone()
+            if document is None:
+                raise KeyError("Unknown structured BookDocument.")
+            if str(document["digest"]) != publication.document_digest:
+                raise ValueError("BOOK_DOCUMENT_DIGEST_MISMATCH")
+            existing = connection.execute(
+                "SELECT user_id, document_id, document_digest, policy_version, policy_snapshot_hash, "
+                "outcome, report_digest, blob_path FROM book_quality_assessments WHERE id = ?",
+                (publication.assessment_id,),
+            ).fetchone()
+            if existing is not None:
+                expected = (
+                    publication.user_id,
+                    publication.document_id,
+                    publication.document_digest,
+                    publication.policy_version,
+                    publication.policy_snapshot_hash,
+                    publication.outcome,
+                    publication.report_digest,
+                    publication.report_blob_path,
+                )
+                actual = tuple(str(existing[key]) for key in existing.keys())
+                if actual != expected:
+                    raise ValueError("BOOK_QUALITY_ASSESSMENT_NONDETERMINISTIC")
+            connection.execute(
+                "INSERT OR IGNORE INTO book_quality_assessments "
+                "(id, user_id, document_id, document_digest, policy_version, policy_snapshot_hash, "
+                "outcome, report_digest, blob_path, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    publication.assessment_id,
+                    publication.user_id,
+                    publication.document_id,
+                    publication.document_digest,
+                    publication.policy_version,
+                    publication.policy_snapshot_hash,
+                    publication.outcome,
+                    publication.report_digest,
+                    publication.report_blob_path,
+                    now,
+                ),
+            )
+            stored = connection.execute(
+                "SELECT id, user_id, outcome, report_digest, blob_path "
+                "FROM book_quality_assessments WHERE document_id = ? AND document_digest = ? "
+                "AND policy_version = ? AND policy_snapshot_hash = ? LIMIT 1",
+                (
+                    publication.document_id,
+                    publication.document_digest,
+                    publication.policy_version,
+                    publication.policy_snapshot_hash,
+                ),
+            ).fetchone()
+            expected_stored = (
+                publication.assessment_id,
+                publication.user_id,
+                publication.outcome,
+                publication.report_digest,
+                publication.report_blob_path,
+            )
+            if stored is None or tuple(str(stored[key]) for key in stored.keys()) != expected_stored:
+                raise ValueError("BOOK_QUALITY_ASSESSMENT_NONDETERMINISTIC")
+            connection.execute(
+                "UPDATE book_documents SET quality_outcome = ?, quality_evaluated = 1, "
+                "quality_assessment_id = ?, quality_policy_version = ?, "
+                "quality_policy_snapshot_hash = ? "
+                "WHERE id = ? AND user_id = ?",
+                (
+                    publication.outcome,
+                    publication.assessment_id,
+                    publication.policy_version,
+                    publication.policy_snapshot_hash,
+                    publication.document_id,
+                    publication.user_id,
+                ),
+            )
+        return self.get_book_import_status(
+            user_id=publication.user_id,
+            import_id=publication.import_id,
+            run_id=publication.run_id,
+        )
+
+    def require_passed_book_document(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+        policy_version: str,
+        policy_snapshot_hash: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            document = connection.execute(
+                "SELECT id, digest, blob_path, quality_outcome FROM book_documents "
+                "WHERE id = ? AND user_id = ? LIMIT 1",
+                (document_id, user_id),
+            ).fetchone()
+            if document is None:
+                raise KeyError("Unknown BookDocument.")
+            assessment = connection.execute(
+                "SELECT outcome FROM book_quality_assessments "
+                "WHERE document_id = ? AND user_id = ? AND document_digest = ? "
+                "AND policy_version = ? AND policy_snapshot_hash = ? LIMIT 1",
+                (
+                    document_id,
+                    user_id,
+                    str(document["digest"]),
+                    policy_version,
+                    policy_snapshot_hash,
+                ),
+            ).fetchone()
+        if assessment is None or str(assessment["outcome"]) != "PASS":
+            raise ValueError("BOOK_QUALITY_NOT_PASSED")
+        return dict(document)
+
+    def get_book_quality_assessment_record(
+        self,
+        *,
+        user_id: str,
+        document_id: str,
+        policy_version: str,
+        policy_snapshot_hash: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT q.id, q.document_id, q.document_digest, q.policy_version, "
+                "q.policy_snapshot_hash, q.outcome, q.report_digest, q.blob_path "
+                "FROM book_quality_assessments q "
+                "JOIN book_documents d ON d.id = q.document_id AND d.user_id = q.user_id "
+                "WHERE q.document_id = ? AND q.user_id = ? AND q.document_digest = d.digest "
+                "AND q.policy_version = ? AND q.policy_snapshot_hash = ? LIMIT 1",
+                (document_id, user_id, policy_version, policy_snapshot_hash),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown Book quality assessment.")
         return dict(row)
 
     def record_entity_identities(
@@ -2985,6 +3300,7 @@ class KnowledgeStore:
             "book_stage_receipts",
             "book_documents",
             "book_document_resources",
+            "book_quality_assessments",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
