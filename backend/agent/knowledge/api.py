@@ -5,13 +5,15 @@ from __future__ import annotations
 import asyncio
 from typing import Annotated, Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile
 
+from agent.knowledge.book_documents import BookDocumentError
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
+    BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
     MaterializationCanaryRequest,
@@ -225,6 +227,45 @@ async def core_construct_book_document(request: BookDocumentRequest) -> BookImpo
             "BOOK_DOCUMENT_RUN_VERSION_MISMATCH",
         }:
             code = "BOOK_DOCUMENT_PUBLICATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
+
+
+@router.post(
+    "/books/documents/{document_id}/quality",
+    response_model=BookImportStatus,
+)
+async def core_evaluate_book_document_quality(
+    document_id: Annotated[str, Path(min_length=1, max_length=160)],
+    request: BookDocumentRequest,
+) -> BookImportStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().evaluate_book_document_quality,
+            BookQualityRequest(
+                user_id=request.user_id,
+                import_id=request.import_id,
+                run_id=request.run_id,
+                document_id=document_id,
+            ),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_DOCUMENT_NOT_FOUND"},
+        ) from exc
+    except BookDocumentError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": exc.reason_code},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_DOCUMENT_DIGEST_MISMATCH",
+            "BOOK_QUALITY_ASSESSMENT_INVALID",
+            "BOOK_QUALITY_ASSESSMENT_NONDETERMINISTIC",
+        }:
+            code = "BOOK_QUALITY_EVALUATION_FAILED"
         raise HTTPException(status_code=409, detail={"code": code}) from exc
 
 

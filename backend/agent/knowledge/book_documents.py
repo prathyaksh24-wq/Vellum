@@ -437,8 +437,6 @@ def parse_epub_document(
                 spine_position=item.position,
                 source_text=source_text,
             )
-            if not section.blocks:
-                raise BookDocumentError("EPUB_BODY_EMPTY", stage="structured")
             sections.append(section)
             resource_fragments[item.resource_path] = _element_ids(root)
             if item.idref not in extracted:

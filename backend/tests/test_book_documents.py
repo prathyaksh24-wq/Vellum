@@ -4,13 +4,26 @@ from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import json
 from pathlib import Path
+import sqlite3
 import zipfile
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from agent.knowledge.book_ingestion import MalwareScanResult
-from agent.knowledge.models import BookDocumentRequest, BookImportRequest, ContextPackRequest
+from agent.knowledge.api import router as knowledge_core_router
+from agent.knowledge.book_documents import BookDocumentError
+from agent.knowledge.book_quality import BookQualityPipeline, EpubParseQualityPolicy
+from agent.knowledge.models import (
+    BookDocumentRequest,
+    BookImportRequest,
+    BookImportStatus,
+    BookQualityRequest,
+    ContextPackRequest,
+)
 from agent.knowledge.service import KnowledgeCore
+from agent.knowledge.runtime import set_knowledge_core
 from agent.knowledge.store import KnowledgeStore
 
 
@@ -131,6 +144,31 @@ def rewrite_zip_entries(
     return output.getvalue()
 
 
+def import_and_construct(
+    core: KnowledgeCore,
+    content: bytes,
+    *,
+    user_id: str = "user-1",
+) -> tuple[BookImportStatus, BookImportStatus]:
+    imported = core.import_book_epub(
+        BookImportRequest(
+            user_id=user_id,
+            rights_attestation_version="local-epub-v1",
+            scan_approved=True,
+        ),
+        content,
+    )
+    structured = core.construct_book_document(
+        BookDocumentRequest(
+            user_id=user_id,
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+        )
+    )
+    assert structured.document_id, structured.model_dump(mode="json")
+    return imported, structured
+
+
 def test_validated_epub_builds_canonical_source_anchored_document(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     imported = core.import_book_epub(
@@ -228,6 +266,486 @@ def test_validated_epub_builds_canonical_source_anchored_document(tmp_path: Path
     assert pack["evidence"] == []
 
 
+def test_structured_epub_passes_the_current_quality_policy(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    approved = core.get_book_document_for_materialization(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+    pack = core.create_context_pack(
+        ContextPackRequest(
+            query="Truth needs evidence",
+            purpose="specialist",
+            destination="external",
+            token_budget=512,
+            source_kinds=["book", "book_document", "book_page", "book_skill"],
+        )
+    )
+
+    assert assessed.status == "structured"
+    assert assessed.quality_evaluated is True
+    assert assessed.quality_outcome == "PASS"
+    assert approved.document_id == structured.document_id
+    assert approved.metadata.title == "Structured Fixture"
+    assert quality.policy.version == "epub-parse-quality-v1"
+    assert quality.policy.native_parser_version == "epub-native-v1"
+    assert quality.policy.approved_alternate_parser_versions == ()
+    assert quality.policy.ocr_trigger == "empty_native_spine_text"
+    assert quality.policy.allowed_exclusion_codes == ("NOT_EXTRACTED_TEXT_RESOURCE",)
+    assert quality.policy_snapshot_hash == quality.policy.snapshot_hash
+    assert quality.parser_version == "epub-native-v1"
+    assert quality.document_schema_version == "book-document-v1"
+    safe_metadata = json.dumps(
+        {
+            "status": assessed.model_dump(mode="json"),
+            "quality": quality.model_dump(mode="json"),
+        },
+        sort_keys=True,
+    )
+    assert "Structured Fixture" not in safe_metadata
+    assert "Truth needs evidence" not in safe_metadata
+    assert str(tmp_path) not in safe_metadata
+    assert pack["evidence"] == []
+
+
+def test_empty_native_spine_content_requires_ocr_without_fabricating_text(tmp_path: Path) -> None:
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-two.xhtml": """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body id="second"><img src="lamp.jpg" alt=""/></body></html>""",
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    document = core.get_book_document(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert structured.status == "structured"
+    assert assessed.quality_evaluated is True
+    assert assessed.quality_outcome == "OCR_REQUIRED"
+    assert document.sections[1].blocks == []
+    assert all("fabricated" not in block.text.casefold() for section in document.sections for block in section.blocks)
+    with pytest.raises(ValueError, match="BOOK_QUALITY_NOT_PASSED"):
+        core.get_book_document_for_materialization(
+            user_id="user-1",
+            document_id=structured.document_id,
+        )
+
+
+def test_duplicate_spine_content_is_degraded_and_not_eligible_for_materialization(
+    tmp_path: Path,
+) -> None:
+    chapter = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body>
+  <h1 id="{fragment}">Repeated chapter</h1>
+  <p>The same chapter body appears twice.</p>
+</body></html>"""
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": chapter.format(fragment="first"),
+            "OPS/chapter-two.xhtml": chapter.format(fragment="second"),
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "DEGRADED"
+    assert quality.finding_codes == ["EPUB_QUALITY_DUPLICATE_SPINE_CONTENT"]
+    assert quality.metrics["duplicate_spine_items"] == 1
+    with pytest.raises(ValueError, match="BOOK_QUALITY_NOT_PASSED"):
+        core.get_book_document_for_materialization(
+            user_id="user-1",
+            document_id=structured.document_id,
+        )
+
+
+def test_missing_non_spine_resource_is_degraded(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(
+        core,
+        without_zip_entry(structured_epub_bytes(), "OPS/lamp.jpg"),
+    )
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "DEGRADED"
+    assert quality.finding_codes == ["EPUB_QUALITY_RESOURCE_MISSING"]
+    assert quality.metrics["missing_resources"] == 1
+
+
+def test_repeated_long_boilerplate_across_spine_items_is_degraded(tmp_path: Path) -> None:
+    boilerplate = (
+        "This publication notice is repeated across every chapter and contains enough text "
+        "to distinguish substantial boilerplate from a short running label or heading."
+    )
+    chapter = """<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<section id="{fragment}"><h1>{title}</h1><p>{boilerplate}</p></section>
+</body></html>"""
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": chapter.format(
+                fragment="first",
+                title="First unique chapter",
+                boilerplate=boilerplate,
+            ),
+            "OPS/chapter-two.xhtml": chapter.format(
+                fragment="second",
+                title="Second unique chapter",
+                boilerplate=boilerplate,
+            ),
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "DEGRADED"
+    assert quality.finding_codes == ["EPUB_QUALITY_REPEATED_BOILERPLATE"]
+    assert quality.metrics["repeated_boilerplate_blocks"] == 1
+
+
+def test_quality_gate_is_exposed_through_the_existing_knowledge_core_api(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    app = FastAPI()
+    app.include_router(knowledge_core_router, prefix="/api/knowledge")
+    set_knowledge_core(core)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/knowledge/core/books/documents/{structured.document_id}/quality",
+                json={
+                    "user_id": "user-1",
+                    "import_id": imported.import_id,
+                    "run_id": imported.run_id,
+                },
+            )
+            unauthorized = client.post(
+                f"/api/knowledge/core/books/documents/{structured.document_id}/quality",
+                json={
+                    "user_id": "user-2",
+                    "import_id": imported.import_id,
+                    "run_id": imported.run_id,
+                },
+            )
+    finally:
+        set_knowledge_core(None)
+
+    assert response.status_code == 200
+    assert response.json()["quality_evaluated"] is True
+    assert response.json()["quality_outcome"] == "PASS"
+    assert unauthorized.status_code == 404
+    assert unauthorized.json() == {"detail": {"code": "BOOK_DOCUMENT_NOT_FOUND"}}
+
+
+def test_quality_evaluation_is_idempotent_under_concurrent_execution(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    request = BookQualityRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = list(executor.map(core.evaluate_book_document_quality, [request, request]))
+
+    assert [status.quality_outcome for status in statuses] == ["PASS", "PASS"]
+    assert core.store.status()["counts"]["book_quality_assessments"] == 1
+
+
+def test_quality_gate_binds_tenant_import_run_and_document(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+
+    with pytest.raises(ValueError, match="BOOK_QUALITY_NOT_PASSED"):
+        core.get_book_document_for_materialization(
+            user_id="user-1",
+            document_id=structured.document_id,
+        )
+    with pytest.raises(KeyError, match="Unknown structured BookDocument"):
+        core.evaluate_book_document_quality(
+            BookQualityRequest(
+                user_id="user-2",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+    with pytest.raises(KeyError, match="Unknown structured BookDocument"):
+        core.evaluate_book_document_quality(
+            BookQualityRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id="wrong-run",
+                document_id=structured.document_id,
+            )
+        )
+    with pytest.raises(KeyError, match="Unknown BookDocument"):
+        core.get_book_document_for_materialization(
+            user_id="user-2",
+            document_id=structured.document_id,
+        )
+
+
+def test_quality_policy_upgrade_retains_the_prior_assessment(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(
+        core,
+        without_zip_entry(structured_epub_bytes(), "OPS/lamp.jpg"),
+    )
+    request = BookQualityRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+    first_status = core.evaluate_book_document_quality(request)
+    first = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+    upgraded = BookQualityPipeline(
+        core.store,
+        core.book_documents,
+        policy=EpubParseQualityPolicy(
+            version="epub-parse-quality-v2",
+            require_declared_resources=False,
+        ),
+    )
+
+    second_status = upgraded.evaluate(request)
+    second = upgraded.load_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    restored_status = core.evaluate_book_document_quality(request)
+
+    assert first_status.quality_outcome == "DEGRADED"
+    assert second_status.quality_outcome == "PASS"
+    assert restored_status.quality_outcome == "DEGRADED"
+    assert first.policy_version == "epub-parse-quality-v1"
+    assert second.policy_version == "epub-parse-quality-v2"
+    assert first.assessment_id != second.assessment_id
+    assert core.store.status()["counts"]["book_quality_assessments"] == 2
+
+
+def test_quality_evaluation_rejects_a_document_digest_mismatch(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    with sqlite3.connect(core.store.db_path) as connection:
+        connection.execute(
+            "UPDATE book_documents SET digest = ? WHERE id = ?",
+            ("0" * 64, structured.document_id),
+        )
+
+    with pytest.raises(BookDocumentError, match="BOOK_DOCUMENT_DIGEST_MISMATCH"):
+        core.evaluate_book_document_quality(
+            BookQualityRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+
+def test_quality_gate_fails_impossible_spine_accounting_and_invalid_offsets(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    document = core.get_book_document(user_id="user-1", document_id=structured.document_id)
+    first_section = document.sections[0]
+    first_block = first_section.blocks[0]
+    invalid_anchor = first_block.anchor.model_copy(
+        update={
+            "block_fingerprint": "0" * 64,
+            "normalized_end": first_block.anchor.normalized_start,
+        },
+    )
+    invalid_block = first_block.model_copy(update={"anchor": invalid_anchor})
+    invalid_section = first_section.model_copy(
+        update={"blocks": [invalid_block, *first_section.blocks[1:]]},
+    )
+    invalid_quality = document.quality_report.model_copy(
+        update={
+            "navigation_targets_total": document.quality_report.navigation_targets_total - 1,
+            "spine_items_accounted": document.quality_report.spine_items_total - 1,
+            "text_characters": document.quality_report.text_characters - 1,
+        },
+    )
+    invalid_document = document.model_copy(
+        update={
+            "sections": [invalid_section, *document.sections[1:]],
+            "quality_report": invalid_quality,
+        },
+    )
+    payload = json.dumps(
+        invalid_document.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    digest, blob_path, _ = core.store.blobs.put_book_artifact(
+        payload,
+        tenant_scope=core.store.book_tenant_scope("user-1"),
+        category="documents",
+        suffix="json",
+    )
+    with sqlite3.connect(core.store.db_path) as connection:
+        connection.execute(
+            "UPDATE book_documents SET digest = ?, blob_path = ? WHERE id = ?",
+            (digest, blob_path, structured.document_id),
+        )
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "FAILED_PERMANENT"
+    assert quality.finding_codes == [
+        "EPUB_QUALITY_ANCHOR_INVALID",
+        "EPUB_QUALITY_NAVIGATION_INVALID",
+        "EPUB_QUALITY_SPINE_INCOMPLETE",
+        "EPUB_QUALITY_TEXT_ACCOUNTING_INVALID",
+    ]
+
+
+def test_encoding_replacement_characters_are_degraded(tmp_path: Path) -> None:
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": """<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<section id="first"><h1>Opening</h1><p>Damaged text &#xfffd; &#xfffd; remains attributable.</p></section>
+</body></html>""",
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "DEGRADED"
+    assert quality.finding_codes == ["EPUB_QUALITY_ENCODING_CORRUPTION"]
+    assert quality.metrics["encoding_replacement_characters"] == 2
+
+
+def test_orphan_caption_fails_typed_structure_validation(tmp_path: Path) -> None:
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": """<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<section id="first"><h1>Opening</h1><figcaption>Orphan caption</figcaption>
+<p>Body text remains available.</p></section></body></html>""",
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "FAILED_PERMANENT"
+    assert quality.finding_codes == ["EPUB_QUALITY_CAPTION_RELATION_INVALID"]
+
+
 def test_book_document_construction_is_idempotent_and_tenant_scoped(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     imported = core.import_book_epub(
@@ -247,7 +765,10 @@ def test_book_document_construction_is_idempotent_and_tenant_scoped(tmp_path: Pa
     with ThreadPoolExecutor(max_workers=2) as executor:
         statuses = list(executor.map(core.construct_book_document, [request, request]))
 
-    assert statuses[0].document_id == statuses[1].document_id
+    assert statuses[0].document_id == statuses[1].document_id, [
+        status.model_dump(mode="json")
+        for status in statuses
+    ]
     assert [receipt.stage for receipt in statuses[0].receipts] == [
         "received",
         "quarantined",
