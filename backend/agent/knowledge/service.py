@@ -7,9 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
+from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
+    BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
     BootstrapRequest,
@@ -59,6 +61,7 @@ class KnowledgeCore:
             store,
             scanner=book_malware_scanner,
         )
+        self.book_documents = BookDocumentPipeline(store)
 
     def status(self) -> dict[str, Any]:
         return {
@@ -248,6 +251,12 @@ class KnowledgeCore:
 
     def import_book_epub(self, request: BookImportRequest, content: bytes) -> BookImportStatus:
         return self.book_ingestion.import_epub(request, content)
+
+    def construct_book_document(self, request: BookDocumentRequest) -> BookImportStatus:
+        return self.book_documents.construct(request)
+
+    def get_book_document(self, *, user_id: str, document_id: str) -> BookDocument:
+        return self.book_documents.load(user_id=user_id, document_id=document_id)
 
     def get_book_ingestion_status(
         self,

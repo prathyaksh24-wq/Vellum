@@ -15,6 +15,7 @@ import os
 import sqlite3
 import tempfile
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import re
@@ -35,7 +36,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 _SENSITIVE_LABELS = {
@@ -88,7 +89,22 @@ def _json(value: Any) -> str:
 
 
 def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
-    allowed = {"byte_size", "policy_version", "limits", "scanner", "scanner_version", "scan_outcome"}
+    allowed = {
+        "byte_size",
+        "policy_version",
+        "limits",
+        "scanner",
+        "scanner_version",
+        "scan_outcome",
+        "parser_version",
+        "schema_version",
+        "resource_count",
+        "spine_item_count",
+        "block_count",
+        "navigation_item_count",
+        "quality_outcome",
+        "quality_evaluated",
+    }
     if set(value) - allowed:
         raise ValueError("Unsupported Book receipt metadata.")
     clean: dict[str, Any] = {}
@@ -126,6 +142,28 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
         if outcome not in {"clean", "detected", "unavailable", "error"}:
             raise ValueError("Invalid Book scan outcome.")
         clean["scan_outcome"] = outcome
+    for key in ("parser_version", "schema_version"):
+        if key in value:
+            label = str(value[key] or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9._:-]{1,120}", label):
+                raise ValueError("Invalid Book processing version.")
+            clean[key] = label
+    for key in ("resource_count", "spine_item_count", "block_count", "navigation_item_count"):
+        if key in value:
+            clean[key] = max(0, int(value[key]))
+    if "quality_outcome" in value:
+        outcome = str(value["quality_outcome"] or "")
+        if outcome not in {
+            "PASS",
+            "DEGRADED",
+            "OCR_REQUIRED",
+            "FAILED_RETRYABLE",
+            "FAILED_PERMANENT",
+        }:
+            raise ValueError("Invalid Book quality outcome.")
+        clean["quality_outcome"] = outcome
+    if "quality_evaluated" in value:
+        clean["quality_evaluated"] = bool(value["quality_evaluated"])
     return clean
 
 
@@ -136,6 +174,41 @@ def _stable_id(prefix: str, *parts: str) -> str:
 
 def _content_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+@dataclass(frozen=True)
+class BookDocumentResourcePublication:
+    id: str
+    manifest_id: str
+    resource_path: str
+    media_type: str
+    source_digest: str
+    extracted_digest: str
+    artifact_digest: str
+    blob_path: str
+    byte_size: int
+    artifact_byte_size: int
+    spine_position: int | None
+    disposition: str
+    reason_code: str
+
+
+@dataclass(frozen=True)
+class BookDocumentPublication:
+    user_id: str
+    import_id: str
+    run_id: str
+    document_id: str
+    asset_id: str
+    input_digest: str
+    document_digest: str
+    document_blob_path: str
+    parser_version: str
+    schema_version: str
+    quality_outcome: str
+    quality_evaluated: bool
+    resources: tuple[BookDocumentResourcePublication, ...]
+    receipt_metadata: dict[str, Any]
 
 
 def _build_preference_state(
@@ -287,6 +360,35 @@ class BlobStore:
             raise ValueError("Invalid tenant blob scope.")
         digest = _content_hash(content)
         relative = Path("books") / "quarantine" / tenant_scope / digest[:2] / f"{digest}.epub"
+        self._put_raw(content, relative=relative, digest=digest)
+        return digest, relative.as_posix(), len(content)
+
+    def put_book_artifact(
+        self,
+        content: bytes,
+        *,
+        tenant_scope: str,
+        category: str,
+        suffix: str,
+    ) -> tuple[str, str, int]:
+        if not re.fullmatch(r"[a-z0-9_]{8,80}", tenant_scope):
+            raise ValueError("Invalid tenant blob scope.")
+        if category not in {"resources", "documents"} or suffix not in {"json"}:
+            raise ValueError("Invalid Book artifact path.")
+        raw = bytes(content)
+        digest = _content_hash(raw)
+        relative = (
+            Path("books")
+            / "artifacts"
+            / tenant_scope
+            / category
+            / digest[:2]
+            / f"{digest}.{suffix}"
+        )
+        self._put_raw(raw, relative=relative, digest=digest)
+        return digest, relative.as_posix(), len(raw)
+
+    def _put_raw(self, content: bytes, *, relative: Path, digest: str) -> None:
         target = self.root / relative
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -300,7 +402,10 @@ class BlobStore:
             finally:
                 if os.path.exists(temp_name):
                     os.unlink(temp_name)
-        return digest, relative.as_posix(), len(content)
+
+    def read_book_artifact(self, relative_path: str) -> bytes:
+        target = self.resolve(relative_path)
+        return target.read_bytes()
 
     def resolve(self, relative_path: str) -> Path:
         target = (self.root / relative_path).resolve()
@@ -357,6 +462,10 @@ class KnowledgeStore:
             if version < 6:
                 self._migrate_v6(connection)
                 connection.execute("PRAGMA user_version = 6")
+                version = 6
+            if version < 7:
+                self._migrate_v7(connection)
+                connection.execute("PRAGMA user_version = 7")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -724,6 +833,61 @@ class KnowledgeStore:
         )
 
     @staticmethod
+    def _migrate_v7(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS book_documents (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                run_id TEXT NOT NULL REFERENCES book_ingestion_runs(id) ON DELETE CASCADE,
+                asset_id TEXT NOT NULL REFERENCES book_assets(id) ON DELETE RESTRICT,
+                schema_version TEXT NOT NULL,
+                parser_version TEXT NOT NULL,
+                input_digest TEXT NOT NULL,
+                digest TEXT NOT NULL,
+                blob_path TEXT NOT NULL,
+                quality_outcome TEXT NOT NULL,
+                quality_evaluated INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                UNIQUE(id, user_id),
+                UNIQUE(user_id, run_id)
+            );
+            CREATE TABLE IF NOT EXISTS book_document_resources (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                manifest_id TEXT NOT NULL,
+                resource_path TEXT NOT NULL,
+                media_type TEXT NOT NULL,
+                source_digest TEXT NOT NULL,
+                extracted_digest TEXT NOT NULL,
+                artifact_digest TEXT NOT NULL,
+                blob_path TEXT NOT NULL,
+                byte_size INTEGER NOT NULL,
+                artifact_byte_size INTEGER NOT NULL,
+                spine_position INTEGER,
+                disposition TEXT NOT NULL,
+                reason_code TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE(document_id, manifest_id),
+                CHECK(disposition IN ('included', 'excluded')),
+                CHECK(
+                    (disposition = 'included' AND artifact_digest <> '' AND blob_path <> '')
+                    OR (disposition = 'excluded' AND artifact_digest = '' AND blob_path = '')
+                ),
+                FOREIGN KEY(document_id, user_id) REFERENCES book_documents(id, user_id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS book_documents_run_time
+            ON book_documents(run_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS book_document_resources_document_position
+            ON book_document_resources(document_id, spine_position ASC, resource_path ASC);
+            CREATE UNIQUE INDEX IF NOT EXISTS book_document_successful_stage_key
+            ON book_stage_receipts(run_id, stage, stage_version, input_digest)
+            WHERE status = 'succeeded' AND stage IN ('extracted', 'identified', 'structured');
+            """
+        )
+
+    @staticmethod
     def book_import_ids(
         *,
         user_id: str,
@@ -743,6 +907,14 @@ class KnowledgeStore:
                 policy_snapshot_hash,
             ),
         }
+
+    @staticmethod
+    def book_tenant_scope(user_id: str) -> str:
+        return "usr_" + hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:32]
+
+    @staticmethod
+    def book_document_id(*, run_id: str, parser_version: str, schema_version: str) -> str:
+        return _stable_id("bkd", run_id, parser_version, schema_version)
 
     def begin_book_import(
         self,
@@ -923,13 +1095,20 @@ class KnowledgeStore:
                         WHEN 'received' THEN 1
                         WHEN 'quarantined' THEN 2
                         WHEN 'validated' THEN 3
-                        ELSE 4
+                        WHEN 'extracted' THEN 4
+                        WHEN 'identified' THEN 5
+                        WHEN 'structured' THEN 6
+                        ELSE 7
                     END ASC,
                     created_at ASC,
                     id ASC
                 """,
                 (str(row["run_id"]),),
             ).fetchall()
+            document = connection.execute(
+                "SELECT id, quality_outcome, quality_evaluated FROM book_documents WHERE run_id = ? ORDER BY created_at DESC, id DESC LIMIT 1",
+                (str(row["run_id"]),),
+            ).fetchone()
         return {
             "import_id": str(row["import_id"]),
             "asset_id": str(row["asset_id"]),
@@ -940,8 +1119,200 @@ class KnowledgeStore:
             "status": str(row["status"]),
             "current_stage": str(row["current_stage"]),
             "error_code": str(row["error_code"] or ""),
+            "document_id": str(document["id"]) if document is not None else "",
+            "quality_outcome": str(document["quality_outcome"]) if document is not None else "",
+            "quality_evaluated": bool(document["quality_evaluated"]) if document is not None else False,
             "receipts": [dict(receipt) for receipt in receipts],
         }
+
+    def find_book_document_status(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        document_id: str,
+    ) -> dict[str, Any] | None:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT d.id FROM book_documents d JOIN book_ingestion_runs r ON r.id = d.run_id JOIN user_book_imports i ON i.asset_id = r.asset_id WHERE d.id = ? AND d.run_id = ? AND i.id = ? AND i.user_id = ? LIMIT 1",
+                (document_id, run_id, import_id, user_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return self.get_book_import_status(user_id=user_id, import_id=import_id, run_id=run_id)
+
+    def begin_book_document(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        parser_version: str,
+        schema_version: str,
+    ) -> dict[str, Any]:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT a.id AS asset_id, a.sha256 AS asset_sha256, a.byte_size, a.blob_path, r.status, r.attempt_count, d.parser_version AS document_parser_version, d.schema_version AS document_schema_version, EXISTS(SELECT 1 FROM book_stage_receipts s WHERE s.run_id = r.id AND s.stage = 'validated' AND s.status = 'succeeded') AS validated FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id LEFT JOIN book_documents d ON d.run_id = r.id AND d.user_id = i.user_id WHERE i.id = ? AND i.user_id = ? AND r.id = ? LIMIT 1",
+                (import_id, user_id, run_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown Book import.")
+            if not bool(row["validated"]) or not str(row["blob_path"]):
+                raise ValueError("BOOK_NOT_VALIDATED")
+            if str(row["status"]) in {"rejected", "failed_permanent"}:
+                raise ValueError("BOOK_DOCUMENT_NOT_ELIGIBLE")
+            if row["document_parser_version"] is not None and (
+                str(row["document_parser_version"]) != parser_version
+                or str(row["document_schema_version"]) != schema_version
+            ):
+                raise ValueError("BOOK_DOCUMENT_RUN_VERSION_MISMATCH")
+            if str(row["status"]) == "failed_retryable":
+                connection.execute(
+                    "UPDATE book_ingestion_runs SET attempt_count = attempt_count + 1, status = 'validated', current_stage = 'validated', error_code = '', updated_at = ? WHERE id = ?",
+                    (now, run_id),
+                )
+                attempt = int(row["attempt_count"]) + 1
+            else:
+                attempt = int(row["attempt_count"])
+        return {
+            "asset_id": str(row["asset_id"]),
+            "asset_sha256": str(row["asset_sha256"]),
+            "byte_size": int(row["byte_size"]),
+            "blob_path": str(row["blob_path"]),
+            "attempt": attempt,
+        }
+
+    def publish_book_document(self, publication: BookDocumentPublication) -> dict[str, Any]:
+        user_id = publication.user_id
+        import_id = publication.import_id
+        run_id = publication.run_id
+        document_id = publication.document_id
+        asset_id = publication.asset_id
+        input_digest = publication.input_digest
+        document_digest = publication.document_digest
+        parser_version = publication.parser_version
+        schema_version = publication.schema_version
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT r.attempt_count, a.sha256 AS asset_sha256 FROM book_ingestion_runs r JOIN book_assets a ON a.id = r.asset_id JOIN user_book_imports i ON i.asset_id = r.asset_id WHERE r.id = ? AND r.asset_id = ? AND i.id = ? AND i.user_id = ? AND EXISTS(SELECT 1 FROM book_stage_receipts s WHERE s.run_id = r.id AND s.stage = 'validated' AND s.status = 'succeeded') LIMIT 1",
+                (run_id, asset_id, import_id, user_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError("Unknown or unvalidated Book import.")
+            if str(row["asset_sha256"]) != input_digest:
+                raise ValueError("BOOK_ASSET_DIGEST_MISMATCH")
+            existing = connection.execute(
+                "SELECT digest, user_id, run_id, asset_id, schema_version, parser_version, input_digest FROM book_documents WHERE id = ?",
+                (document_id,),
+            ).fetchone()
+            if existing is not None:
+                expected = (
+                    user_id,
+                    run_id,
+                    asset_id,
+                    schema_version,
+                    parser_version,
+                    input_digest,
+                    document_digest,
+                )
+                actual = (
+                    str(existing["user_id"]),
+                    str(existing["run_id"]),
+                    str(existing["asset_id"]),
+                    str(existing["schema_version"]),
+                    str(existing["parser_version"]),
+                    str(existing["input_digest"]),
+                    str(existing["digest"]),
+                )
+                if actual != expected:
+                    raise ValueError("BOOK_DOCUMENT_NONDETERMINISTIC")
+            connection.execute(
+                "INSERT OR IGNORE INTO book_documents (id, user_id, run_id, asset_id, schema_version, parser_version, input_digest, digest, blob_path, quality_outcome, quality_evaluated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    document_id,
+                    user_id,
+                    run_id,
+                    asset_id,
+                    schema_version,
+                    parser_version,
+                    input_digest,
+                    document_digest,
+                    publication.document_blob_path,
+                    publication.quality_outcome,
+                    int(publication.quality_evaluated),
+                    now,
+                ),
+            )
+            for resource in publication.resources:
+                connection.execute(
+                    "INSERT OR IGNORE INTO book_document_resources (id, user_id, document_id, manifest_id, resource_path, media_type, source_digest, extracted_digest, artifact_digest, blob_path, byte_size, artifact_byte_size, spine_position, disposition, reason_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        resource.id,
+                        user_id,
+                        document_id,
+                        resource.manifest_id,
+                        resource.resource_path,
+                        resource.media_type,
+                        resource.source_digest,
+                        resource.extracted_digest,
+                        resource.artifact_digest,
+                        resource.blob_path,
+                        max(0, int(resource.byte_size)),
+                        max(0, int(resource.artifact_byte_size)),
+                        resource.spine_position,
+                        resource.disposition,
+                        resource.reason_code,
+                        now,
+                    ),
+                )
+            attempt = int(row["attempt_count"])
+            extracted_digest = _content_hash(
+                "\x1f".join(
+                    sorted(resource.artifact_digest for resource in publication.resources if resource.artifact_digest)
+                ).encode("utf-8")
+            )
+            stages = (
+                ("extracted", "book-extraction-v1", input_digest, extracted_digest, "EXTRACTED"),
+                ("identified", "book-identification-v1", extracted_digest, document_digest, "IDENTIFIED"),
+                ("structured", f"{parser_version}:{schema_version}", document_digest, document_digest, "STRUCTURED"),
+            )
+            for stage, stage_version, stage_input, stage_output, reason_code in stages:
+                self._record_book_receipt(
+                    connection,
+                    run_id=run_id,
+                    stage=stage,
+                    stage_version=stage_version,
+                    input_digest=stage_input,
+                    output_digest=stage_output,
+                    status="succeeded",
+                    attempt=attempt,
+                    reason_code=reason_code,
+                    metadata=publication.receipt_metadata,
+                )
+            connection.execute(
+                "UPDATE book_ingestion_runs SET status = 'structured', current_stage = 'structured', error_code = '', updated_at = ? WHERE id = ?",
+                (now, run_id),
+            )
+            connection.execute(
+                "UPDATE book_assets SET status = 'structured', updated_at = ? WHERE id = ?",
+                (now, asset_id),
+            )
+        return self.get_book_import_status(user_id=user_id, import_id=import_id, run_id=run_id)
+
+    def get_book_document_record(self, *, user_id: str, document_id: str) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT d.id, d.digest, d.blob_path, d.quality_outcome FROM book_documents d WHERE d.id = ? AND d.user_id = ? LIMIT 1",
+                (document_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown BookDocument.")
+        return dict(row)
+
     def record_entity_identities(
         self,
         items: Iterable[EntityIdentityInput],
@@ -2612,6 +2983,8 @@ class KnowledgeStore:
             "user_book_imports",
             "book_ingestion_runs",
             "book_stage_receipts",
+            "book_documents",
+            "book_document_resources",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}

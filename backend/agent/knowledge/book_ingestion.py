@@ -244,7 +244,7 @@ class BookIngestionPipeline:
                 metadata=self._policy_metadata(),
             )
 
-        tenant_scope = _tenant_scope(request.user_id)
+        tenant_scope = self.store.book_tenant_scope(request.user_id)
         try:
             digest, blob_path, _size = self.store.blobs.put_book_asset(
                 raw,
@@ -529,7 +529,3 @@ def _reject_active_xml(raw: bytes) -> None:
     upper = raw.upper()
     if b"<!DOCTYPE" in upper or b"<!ENTITY" in upper:
         raise EpubValidationError("UNSAFE_XML_DECLARATION")
-
-
-def _tenant_scope(user_id: str) -> str:
-    return "usr_" + hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:32]
