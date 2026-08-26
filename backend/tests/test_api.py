@@ -141,6 +141,10 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
         features["personal_intelligence"]["endpoints"]["books_quality"]
         == "/api/knowledge/core/books/documents/{document_id}/quality"
     )
+    assert (
+        features["personal_intelligence"]["endpoints"]["books_materialization"]
+        == "/api/knowledge/core/books/documents/{document_id}/materializations"
+    )
 
     chat_events = body["stream_events"]["chat"]
     assert "response.output_text.delta" in chat_events
