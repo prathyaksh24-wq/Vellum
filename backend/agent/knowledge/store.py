@@ -36,7 +36,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 _SENSITIVE_LABELS = {
@@ -104,6 +104,16 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
         "navigation_item_count",
         "quality_outcome",
         "quality_evaluated",
+        "compiler_version",
+        "model_version",
+        "prompt_version",
+        "embedding_model",
+        "embedding_model_revision",
+        "index_collection",
+        "index_count",
+        "chunk_count",
+        "citation_count",
+        "embedding_count",
     }
     if set(value) - allowed:
         raise ValueError("Unsupported Book receipt metadata.")
@@ -142,13 +152,37 @@ def _book_receipt_metadata(value: dict[str, Any]) -> dict[str, Any]:
         if outcome not in {"clean", "detected", "unavailable", "error"}:
             raise ValueError("Invalid Book scan outcome.")
         clean["scan_outcome"] = outcome
-    for key in ("parser_version", "schema_version"):
+    for key in (
+        "parser_version",
+        "schema_version",
+        "compiler_version",
+        "model_version",
+        "prompt_version",
+        "embedding_model",
+        "embedding_model_revision",
+        "index_collection",
+    ):
         if key in value:
             label = str(value[key] or "").strip()
-            if not re.fullmatch(r"[A-Za-z0-9._:-]{1,120}", label):
+            if (
+                not re.fullmatch(r"[A-Za-z0-9._:/-]{1,200}", label)
+                or label.startswith("/")
+                or ".." in label
+                or "//" in label
+                or re.match(r"^[A-Za-z]:/", label)
+            ):
                 raise ValueError("Invalid Book processing version.")
             clean[key] = label
-    for key in ("resource_count", "spine_item_count", "block_count", "navigation_item_count"):
+    for key in (
+        "resource_count",
+        "spine_item_count",
+        "block_count",
+        "navigation_item_count",
+        "index_count",
+        "chunk_count",
+        "citation_count",
+        "embedding_count",
+    ):
         if key in value:
             clean[key] = max(0, int(value[key]))
     if "quality_outcome" in value:
@@ -224,6 +258,35 @@ class BookQualityAssessmentPublication:
     outcome: str
     report_digest: str
     report_blob_path: str
+
+
+@dataclass(frozen=True)
+class BookMaterializationPublication:
+    materialization_id: str
+    user_id: str
+    import_id: str
+    run_id: str
+    edition_id: str
+    document_id: str
+    document_digest: str
+    quality_assessment_id: str
+    schema_version: str
+    compiler_version: str
+    model_version: str
+    prompt_version: str
+    embedding_model: str
+    embedding_model_revision: str
+    policy_snapshot_hash: str
+    bundle_digest: str
+    bundle_blob_path: str
+    skill_id: str
+    skill_version: str
+    index_collection: str
+    index_count: int
+    artifact_paths: tuple[str, ...]
+    chunk_count: int
+    citation_count: int
+    embedding_count: int
 
 
 def _build_preference_state(
@@ -388,7 +451,11 @@ class BlobStore:
     ) -> tuple[str, str, int]:
         if not re.fullmatch(r"[a-z0-9_]{8,80}", tenant_scope):
             raise ValueError("Invalid tenant blob scope.")
-        if category not in {"resources", "documents", "quality"} or suffix not in {"json"}:
+        if category not in {"resources", "documents", "quality", "materialization"} or suffix not in {
+            "json",
+            "md",
+            "txt",
+        }:
             raise ValueError("Invalid Book artifact path.")
         raw = bytes(content)
         digest = _content_hash(raw)
@@ -485,6 +552,10 @@ class KnowledgeStore:
             if version < 8:
                 self._migrate_v8(connection)
                 connection.execute("PRAGMA user_version = 8")
+                version = 8
+            if version < 9:
+                self._migrate_v9(connection)
+                connection.execute("PRAGMA user_version = 9")
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -945,6 +1016,64 @@ class KnowledgeStore:
         )
 
     @staticmethod
+    def _migrate_v9(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS book_materializations (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                edition_id TEXT NOT NULL,
+                document_id TEXT NOT NULL,
+                document_digest TEXT NOT NULL,
+                quality_assessment_id TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                compiler_version TEXT NOT NULL,
+                model_version TEXT NOT NULL,
+                prompt_version TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                embedding_model_revision TEXT NOT NULL DEFAULT 'default',
+                policy_snapshot_hash TEXT NOT NULL,
+                bundle_digest TEXT NOT NULL,
+                blob_path TEXT NOT NULL,
+                skill_id TEXT NOT NULL,
+                skill_version TEXT NOT NULL,
+                index_collection TEXT NOT NULL DEFAULT 'books',
+                index_count INTEGER NOT NULL DEFAULT 0,
+                artifact_paths_json TEXT NOT NULL DEFAULT '[]',
+                chunk_count INTEGER NOT NULL,
+                citation_count INTEGER NOT NULL,
+                embedding_count INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(id, user_id, edition_id),
+                FOREIGN KEY(document_id, user_id) REFERENCES book_documents(id, user_id) ON DELETE CASCADE,
+                FOREIGN KEY(quality_assessment_id) REFERENCES book_quality_assessments(id) ON DELETE RESTRICT
+            );
+            CREATE TABLE IF NOT EXISTS active_book_materializations (
+                user_id TEXT NOT NULL,
+                edition_id TEXT NOT NULL,
+                materialization_id TEXT NOT NULL REFERENCES book_materializations(id) ON DELETE RESTRICT,
+                activated_at TEXT NOT NULL,
+                PRIMARY KEY(user_id, edition_id),
+                FOREIGN KEY(materialization_id, user_id, edition_id)
+                    REFERENCES book_materializations(id, user_id, edition_id) ON DELETE RESTRICT
+            );
+            CREATE TABLE IF NOT EXISTS book_materialization_candidates (
+                materialization_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                artifact_paths_json TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS book_materializations_document_time
+            ON book_materializations(document_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS book_materializations_edition_time
+            ON book_materializations(user_id, edition_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS book_materialization_candidates_time
+            ON book_materialization_candidates(updated_at ASC);
+            """
+        )
+
+    @staticmethod
     def book_import_ids(
         *,
         user_id: str,
@@ -986,6 +1115,34 @@ class KnowledgeStore:
             document_id,
             document_digest,
             policy_version,
+            policy_snapshot_hash,
+        )
+
+    @staticmethod
+    def book_materialization_id(
+        *,
+        user_id: str,
+        edition_id: str,
+        document_digest: str,
+        schema_version: str,
+        compiler_version: str,
+        model_version: str,
+        prompt_version: str,
+        embedding_model: str,
+        embedding_model_revision: str,
+        policy_snapshot_hash: str,
+    ) -> str:
+        return _stable_id(
+            "bkm",
+            user_id,
+            edition_id,
+            document_digest,
+            schema_version,
+            compiler_version,
+            model_version,
+            prompt_version,
+            embedding_model,
+            embedding_model_revision,
             policy_snapshot_hash,
         )
 
@@ -1171,7 +1328,10 @@ class KnowledgeStore:
                         WHEN 'extracted' THEN 4
                         WHEN 'identified' THEN 5
                         WHEN 'structured' THEN 6
-                        ELSE 7
+                        WHEN 'skill_compiled' THEN 7
+                        WHEN 'indexed' THEN 8
+                        WHEN 'ready' THEN 9
+                        ELSE 10
                     END ASC,
                     created_at ASC,
                     id ASC
@@ -1627,6 +1787,484 @@ class KnowledgeStore:
         if row is None:
             raise KeyError("Unknown Book quality assessment.")
         return dict(row)
+
+    def begin_book_materialization(
+        self,
+        *,
+        user_id: str,
+        import_id: str,
+        run_id: str,
+        document_id: str,
+        policy_version: str,
+        policy_snapshot_hash: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT d.id AS document_id, d.digest AS document_digest, "
+                "q.id AS quality_assessment_id, q.policy_version, q.policy_snapshot_hash, "
+                "q.report_digest AS quality_report_digest "
+                "FROM book_documents d "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id AND r.user_id = d.user_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id AND i.user_id = d.user_id "
+                "JOIN book_quality_assessments q ON q.id = d.quality_assessment_id "
+                "AND q.document_id = d.id AND q.user_id = d.user_id "
+                "WHERE d.id = ? AND d.user_id = ? AND r.id = ? AND i.id = ? "
+                "AND q.document_digest = d.digest AND q.outcome = 'PASS' "
+                "AND q.policy_version = ? AND q.policy_snapshot_hash = ? LIMIT 1",
+                (
+                    document_id,
+                    user_id,
+                    run_id,
+                    import_id,
+                    policy_version,
+                    policy_snapshot_hash,
+                ),
+            ).fetchone()
+        if row is None:
+            raise ValueError("BOOK_MATERIALIZATION_NOT_ELIGIBLE")
+        return dict(row)
+
+    def find_book_materialization_status(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> dict[str, Any] | None:
+        with closing(self._connect()) as connection, connection:
+            row = self._book_materialization_status_row(
+                connection,
+                user_id=user_id,
+                materialization_id=materialization_id,
+            )
+        return self._book_materialization_status(row) if row is not None else None
+
+    def begin_book_materialization_candidate(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> None:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO book_materialization_candidates "
+                "(materialization_id, user_id, artifact_paths_json, created_at, updated_at) "
+                "VALUES (?, ?, '[]', ?, ?)",
+                (materialization_id, user_id, now, now),
+            )
+
+    def record_book_materialization_candidate_artifact(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+        blob_path: str,
+    ) -> None:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT artifact_paths_json FROM book_materialization_candidates "
+                "WHERE materialization_id = ? AND user_id = ? LIMIT 1",
+                (materialization_id, user_id),
+            ).fetchone()
+            if row is None:
+                # A concurrent publisher may have completed and removed the candidate.
+                return
+            try:
+                paths = json.loads(str(row["artifact_paths_json"] or "[]"))
+            except json.JSONDecodeError:
+                paths = []
+            if not isinstance(paths, list):
+                paths = []
+            if blob_path not in paths:
+                paths.append(blob_path)
+            connection.execute(
+                "UPDATE book_materialization_candidates SET artifact_paths_json = ?, "
+                "updated_at = ? WHERE materialization_id = ? AND user_id = ?",
+                (_json(paths), now, materialization_id, user_id),
+            )
+
+    def abandon_book_materialization_candidate(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+        artifact_paths: Iterable[str] = (),
+    ) -> int:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT artifact_paths_json FROM book_materialization_candidates "
+                "WHERE materialization_id = ? AND user_id = ? LIMIT 1",
+                (materialization_id, user_id),
+            ).fetchone()
+            if row is not None:
+                try:
+                    recorded = json.loads(str(row["artifact_paths_json"] or "[]"))
+                except json.JSONDecodeError:
+                    recorded = []
+                if not isinstance(recorded, list):
+                    recorded = []
+                paths = [str(path) for path in recorded if isinstance(path, str)]
+                paths.extend(str(path) for path in artifact_paths)
+                connection.execute(
+                    "DELETE FROM book_materialization_candidates "
+                    "WHERE materialization_id = ? AND user_id = ?",
+                    (materialization_id, user_id),
+                )
+            else:
+                paths = [str(path) for path in artifact_paths]
+            referenced = self._book_artifact_references(connection)
+        return self._remove_unreferenced_book_artifacts(paths, referenced=referenced)
+
+    def find_stale_book_materialization_candidates(
+        self,
+        *,
+        older_than: timedelta = timedelta(hours=24),
+    ) -> list[tuple[str, str]]:
+        cutoff = (datetime.now(UTC) - older_than).isoformat()
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT materialization_id, user_id "
+                "FROM book_materialization_candidates WHERE updated_at < ?",
+                (cutoff,),
+            ).fetchall()
+        return [
+            (str(row["user_id"]), str(row["materialization_id"]))
+            for row in rows
+        ]
+
+    @staticmethod
+    def _book_artifact_references(connection: sqlite3.Connection) -> set[str]:
+        references = {
+            str(row[0])
+            for row in connection.execute(
+                "SELECT blob_path FROM book_assets WHERE blob_path <> '' "
+                "UNION ALL SELECT blob_path FROM book_documents WHERE blob_path <> '' "
+                "UNION ALL SELECT blob_path FROM book_document_resources WHERE blob_path <> '' "
+                "UNION ALL SELECT blob_path FROM book_quality_assessments WHERE blob_path <> ''"
+            ).fetchall()
+        }
+        for row in connection.execute(
+            "SELECT blob_path, artifact_paths_json FROM book_materializations"
+        ).fetchall():
+            if str(row["blob_path"] or ""):
+                references.add(str(row["blob_path"]))
+            try:
+                paths = json.loads(str(row["artifact_paths_json"] or "[]"))
+            except json.JSONDecodeError:
+                paths = []
+            if isinstance(paths, list):
+                references.update(str(path) for path in paths if isinstance(path, str))
+        for row in connection.execute(
+            "SELECT artifact_paths_json FROM book_materialization_candidates"
+        ).fetchall():
+            try:
+                paths = json.loads(str(row["artifact_paths_json"] or "[]"))
+            except json.JSONDecodeError:
+                paths = []
+            if isinstance(paths, list):
+                references.update(str(path) for path in paths if isinstance(path, str))
+        return references
+
+    def _remove_unreferenced_book_artifacts(
+        self,
+        paths: Iterable[str],
+        *,
+        referenced: set[str],
+    ) -> int:
+        removed = 0
+        for relative_path in set(paths):
+            if not relative_path or relative_path in referenced:
+                continue
+            try:
+                target = self.blobs.resolve(relative_path)
+                if target.exists():
+                    target.unlink()
+                    removed += 1
+            except (OSError, ValueError):
+                continue
+        return removed
+
+    def publish_book_materialization(
+        self,
+        publication: BookMaterializationPublication,
+    ) -> dict[str, Any]:
+        now = _now()
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            source = connection.execute(
+                "SELECT r.attempt_count, d.digest, q.id AS quality_assessment_id, "
+                "q.policy_snapshot_hash, q.outcome "
+                "FROM book_documents d "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id AND r.user_id = d.user_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id AND i.user_id = d.user_id "
+                "JOIN book_quality_assessments q ON q.id = d.quality_assessment_id "
+                "AND q.document_id = d.id AND q.user_id = d.user_id "
+                "WHERE d.id = ? AND d.user_id = ? AND r.id = ? AND i.id = ? LIMIT 1",
+                (
+                    publication.document_id,
+                    publication.user_id,
+                    publication.run_id,
+                    publication.import_id,
+                ),
+            ).fetchone()
+            if source is None:
+                raise ValueError("BOOK_MATERIALIZATION_NOT_ELIGIBLE")
+            if (
+                str(source["digest"]) != publication.document_digest
+                or str(source["quality_assessment_id"]) != publication.quality_assessment_id
+                or str(source["policy_snapshot_hash"]) != publication.policy_snapshot_hash
+                or str(source["outcome"]) != "PASS"
+            ):
+                raise ValueError("BOOK_MATERIALIZATION_NOT_ELIGIBLE")
+            existing = connection.execute(
+                "SELECT user_id, edition_id, document_id, document_digest, quality_assessment_id, "
+                "schema_version, compiler_version, model_version, prompt_version, embedding_model, "
+                "embedding_model_revision, "
+                "policy_snapshot_hash, bundle_digest, blob_path, skill_id, skill_version, "
+                "index_collection, index_count, artifact_paths_json, "
+                "chunk_count, citation_count, embedding_count "
+                "FROM book_materializations WHERE id = ?",
+                (publication.materialization_id,),
+            ).fetchone()
+            expected = (
+                publication.user_id,
+                publication.edition_id,
+                publication.document_id,
+                publication.document_digest,
+                publication.quality_assessment_id,
+                publication.schema_version,
+                publication.compiler_version,
+                publication.model_version,
+                publication.prompt_version,
+                publication.embedding_model,
+                publication.embedding_model_revision,
+                publication.policy_snapshot_hash,
+                publication.bundle_digest,
+                publication.bundle_blob_path,
+                publication.skill_id,
+                publication.skill_version,
+                publication.index_collection,
+                publication.index_count,
+                _json(list(publication.artifact_paths)),
+                publication.chunk_count,
+                publication.citation_count,
+                publication.embedding_count,
+            )
+            if existing is not None and tuple(existing) != expected:
+                raise ValueError("BOOK_MATERIALIZATION_NONDETERMINISTIC")
+            connection.execute(
+                "INSERT OR IGNORE INTO book_materializations "
+                "(id, user_id, edition_id, document_id, document_digest, quality_assessment_id, "
+                "schema_version, compiler_version, model_version, prompt_version, embedding_model, "
+                "embedding_model_revision, "
+                "policy_snapshot_hash, bundle_digest, blob_path, skill_id, skill_version, "
+                "index_collection, index_count, artifact_paths_json, "
+                "chunk_count, citation_count, embedding_count, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (publication.materialization_id, *expected, now),
+            )
+            attempt = int(source["attempt_count"])
+            receipt_metadata = {
+                "schema_version": publication.schema_version,
+                "compiler_version": publication.compiler_version,
+                "model_version": publication.model_version,
+                "prompt_version": publication.prompt_version,
+                "embedding_model": publication.embedding_model,
+                "embedding_model_revision": publication.embedding_model_revision,
+                "index_collection": publication.index_collection,
+                "index_count": publication.index_count,
+                "chunk_count": publication.chunk_count,
+                "citation_count": publication.citation_count,
+                "embedding_count": publication.embedding_count,
+            }
+            stages = (
+                (
+                    "skill_compiled",
+                    f"{publication.compiler_version}:{publication.model_version}:{publication.prompt_version}",
+                    publication.document_digest,
+                    publication.bundle_digest,
+                    "BOOK_SKILL_COMPILED",
+                ),
+                (
+                    "indexed",
+                    publication.embedding_model,
+                    publication.bundle_digest,
+                    publication.bundle_digest,
+                    "BOOK_INDEXED",
+                ),
+                (
+                    "ready",
+                    publication.schema_version,
+                    publication.bundle_digest,
+                    publication.materialization_id,
+                    "BOOK_READY",
+                ),
+            )
+            for stage, stage_version, input_digest, output_digest, reason_code in stages:
+                self._record_book_receipt(
+                    connection,
+                    run_id=publication.run_id,
+                    stage=stage,
+                    stage_version=stage_version,
+                    input_digest=input_digest,
+                    output_digest=output_digest,
+                    status="succeeded",
+                    attempt=attempt,
+                    reason_code=reason_code,
+                    metadata=receipt_metadata,
+                )
+            connection.execute(
+                "INSERT INTO active_book_materializations "
+                "(user_id, edition_id, materialization_id, activated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, edition_id) DO UPDATE SET "
+                "materialization_id = excluded.materialization_id, activated_at = excluded.activated_at",
+                (
+                    publication.user_id,
+                    publication.edition_id,
+                    publication.materialization_id,
+                    now,
+                ),
+            )
+            connection.execute(
+                "UPDATE book_ingestion_runs SET status = 'ready', current_stage = 'ready', "
+                "error_code = '', updated_at = ? WHERE id = ? AND user_id = ?",
+                (now, publication.run_id, publication.user_id),
+            )
+            connection.execute(
+                "UPDATE book_assets SET status = 'ready', updated_at = ? "
+                "WHERE id = (SELECT asset_id FROM book_ingestion_runs WHERE id = ? AND user_id = ?)",
+                (now, publication.run_id, publication.user_id),
+            )
+            connection.execute(
+                "DELETE FROM book_materialization_candidates WHERE materialization_id = ? "
+                "AND user_id = ?",
+                (publication.materialization_id, publication.user_id),
+            )
+            row = self._book_materialization_status_row(
+                connection,
+                user_id=publication.user_id,
+                materialization_id=publication.materialization_id,
+            )
+            if row is None:
+                raise ValueError("BOOK_MATERIALIZATION_PUBLICATION_FAILED")
+        return self._book_materialization_status(row)
+
+    def get_book_materialization_record(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT id, user_id, edition_id, document_id, document_digest, "
+                "quality_assessment_id, schema_version, compiler_version, model_version, "
+                "prompt_version, embedding_model, embedding_model_revision, "
+                "policy_snapshot_hash, bundle_digest, blob_path, skill_id, skill_version, "
+                "index_collection, index_count, artifact_paths_json, chunk_count, "
+                "citation_count, embedding_count FROM book_materializations "
+                "WHERE id = ? AND user_id = ? LIMIT 1",
+                (materialization_id, user_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown Book materialization.")
+        return dict(row)
+
+    def get_active_book_materialization_record(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT m.id, m.user_id, m.edition_id, m.document_id, m.document_digest, "
+                "m.quality_assessment_id, m.schema_version, m.compiler_version, "
+                "m.model_version, m.prompt_version, m.embedding_model, "
+                "m.embedding_model_revision, m.policy_snapshot_hash, m.bundle_digest, "
+                "m.blob_path, m.skill_id, m.skill_version, m.index_collection, "
+                "m.index_count, m.artifact_paths_json, m.chunk_count, m.citation_count, "
+                "m.embedding_count FROM book_materializations m "
+                "JOIN active_book_materializations a ON a.materialization_id = m.id "
+                "AND a.user_id = m.user_id AND a.edition_id = m.edition_id "
+                "WHERE a.user_id = ? AND a.edition_id = ? LIMIT 1",
+                (user_id, edition_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown active Book materialization.")
+        return dict(row)
+
+    def get_active_book_materialization_status(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> dict[str, Any]:
+        with closing(self._connect()) as connection, connection:
+            active = connection.execute(
+                "SELECT materialization_id FROM active_book_materializations "
+                "WHERE user_id = ? AND edition_id = ? LIMIT 1",
+                (user_id, edition_id),
+            ).fetchone()
+            row = (
+                self._book_materialization_status_row(
+                    connection,
+                    user_id=user_id,
+                    materialization_id=str(active["materialization_id"]),
+                )
+                if active is not None
+                else None
+            )
+        if row is None:
+            raise KeyError("Unknown active Book materialization.")
+        return self._book_materialization_status(row)
+
+    @staticmethod
+    def _book_materialization_status_row(
+        connection: sqlite3.Connection,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            "SELECT m.id AS materialization_id, m.edition_id, m.document_id, "
+            "m.document_digest, m.quality_assessment_id, m.skill_id, m.skill_version, "
+            "m.compiler_version, m.model_version, m.prompt_version, m.embedding_model, "
+            "m.embedding_model_revision, m.policy_snapshot_hash, m.index_collection, "
+            "m.index_count, m.chunk_count, m.citation_count, m.embedding_count, "
+            "CASE WHEN a.materialization_id = m.id THEN 1 ELSE 0 END AS active "
+            "FROM book_materializations m "
+            "LEFT JOIN active_book_materializations a ON a.user_id = m.user_id "
+            "AND a.edition_id = m.edition_id "
+            "WHERE m.id = ? AND m.user_id = ? LIMIT 1",
+            (materialization_id, user_id),
+        ).fetchone()
+
+    @staticmethod
+    def _book_materialization_status(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "materialization_id": str(row["materialization_id"]),
+            "edition_id": str(row["edition_id"]),
+            "document_id": str(row["document_id"]),
+            "document_digest": str(row["document_digest"]),
+            "quality_assessment_id": str(row["quality_assessment_id"]),
+            "state": "ready",
+            "active": bool(row["active"]),
+            "skill_id": str(row["skill_id"]),
+            "skill_version": str(row["skill_version"]),
+            "compiler_version": str(row["compiler_version"]),
+            "model_version": str(row["model_version"]),
+            "prompt_version": str(row["prompt_version"]),
+            "embedding_model": str(row["embedding_model"]),
+            "embedding_model_revision": str(row["embedding_model_revision"]),
+            "policy_snapshot_hash": str(row["policy_snapshot_hash"]),
+            "index_collection": str(row["index_collection"]),
+            "index_count": int(row["index_count"]),
+            "chunk_count": int(row["chunk_count"]),
+            "citation_count": int(row["citation_count"]),
+            "embedding_count": int(row["embedding_count"]),
+        }
 
     def record_entity_identities(
         self,
@@ -3301,6 +3939,9 @@ class KnowledgeStore:
             "book_documents",
             "book_document_resources",
             "book_quality_assessments",
+            "book_materializations",
+            "active_book_materializations",
+            "book_materialization_candidates",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}

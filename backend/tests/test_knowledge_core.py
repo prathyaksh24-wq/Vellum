@@ -507,7 +507,7 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
     status = migrated.status()
-    assert status["schema_version"] == 8
+    assert status["schema_version"] == 9
     assert status["counts"]["book_assets"] == 0
     assert status["counts"]["book_ingestion_runs"] == 0
     assert status["counts"]["book_stage_receipts"] == 0

@@ -13,6 +13,8 @@ from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
+    BookMaterializationRequest,
+    BookMaterializationStatus,
     BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
@@ -266,6 +268,47 @@ async def core_evaluate_book_document_quality(
             "BOOK_QUALITY_ASSESSMENT_NONDETERMINISTIC",
         }:
             code = "BOOK_QUALITY_EVALUATION_FAILED"
+        raise HTTPException(status_code=409, detail={"code": code}) from exc
+
+
+@router.post(
+    "/books/documents/{document_id}/materializations",
+    response_model=BookMaterializationStatus,
+)
+async def core_materialize_book_document(
+    document_id: Annotated[str, Path(min_length=1, max_length=160)],
+    request: BookDocumentRequest,
+) -> BookMaterializationStatus:
+    try:
+        return await asyncio.to_thread(
+            get_knowledge_core().materialize_book_document,
+            BookMaterializationRequest(
+                user_id=request.user_id,
+                import_id=request.import_id,
+                run_id=request.run_id,
+                document_id=document_id,
+            ),
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "BOOK_MATERIALIZATION_NOT_FOUND"},
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code not in {
+            "BOOK_MATERIALIZATION_NOT_ELIGIBLE",
+            "BOOK_MATERIALIZATION_COVERAGE_INVALID",
+            "BOOK_MATERIALIZATION_CITATIONS_INVALID",
+            "BOOK_MATERIALIZATION_EMBEDDINGS_INVALID",
+            "BOOK_MATERIALIZATION_ID_MISMATCH",
+            "BOOK_MATERIALIZATION_NONDETERMINISTIC",
+            "BOOK_MATERIALIZATION_QUALITY_RECEIPT_INVALID",
+            "BOOK_MATERIALIZATION_UNSUPPORTED_CLAIMS",
+            "BOOK_SKILL_PACKAGE_INVALID",
+            "BOOK_SKILL_SOURCE_ISOLATION_INVALID",
+        }:
+            code = "BOOK_MATERIALIZATION_FAILED"
         raise HTTPException(status_code=409, detail={"code": code}) from exc
 
 

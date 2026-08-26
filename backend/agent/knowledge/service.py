@@ -12,12 +12,20 @@ from agent.knowledge.book_quality import (
     BookQualityAssessment,
     BookQualityPipeline,
 )
+from agent.knowledge.book_materialization import (
+    BookEmbeddingProvider,
+    BookMaterialization,
+    BookMaterializationPipeline,
+    BookRetrievalIndex,
+)
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
+    BookMaterializationRequest,
+    BookMaterializationStatus,
     BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
@@ -47,6 +55,10 @@ class KnowledgeCore:
         read_enabled: bool = False,
         tool_learning_enabled: bool = False,
         book_malware_scanner: MalwareScanner | None = None,
+        book_embedding_provider: BookEmbeddingProvider | None = None,
+        book_materialization_compiler_version: str = "book-materializer-v1",
+        book_embedding_model_revision: str = "default",
+        book_retrieval_index: BookRetrievalIndex | None = None,
     ) -> None:
         self.store = store
         self.conversations_path = Path(conversations_path)
@@ -68,6 +80,18 @@ class KnowledgeCore:
         )
         self.book_documents = BookDocumentPipeline(store)
         self.book_quality = BookQualityPipeline(store, self.book_documents)
+        if book_embedding_provider is None:
+            from agent.rag.embedder import get_embedder
+
+            book_embedding_provider = get_embedder()
+        self.book_materializations = BookMaterializationPipeline(
+            store,
+            self.book_quality,
+            embedding_provider=book_embedding_provider,
+            compiler_version=book_materialization_compiler_version,
+            embedding_model_revision=book_embedding_model_revision,
+            retrieval_index=book_retrieval_index,
+        )
 
     def status(self) -> dict[str, Any]:
         return {
@@ -287,6 +311,47 @@ class KnowledgeCore:
         return self.book_quality.load_assessment(
             user_id=user_id,
             document_id=document_id,
+        )
+
+    def materialize_book_document(
+        self,
+        request: BookMaterializationRequest,
+    ) -> BookMaterializationStatus:
+        return self.book_materializations.materialize(request)
+
+    def get_book_materialization(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+    ) -> BookMaterialization:
+        return self.book_materializations.load(
+            user_id=user_id,
+            materialization_id=materialization_id,
+        )
+
+    def get_active_book_materialization(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> BookMaterializationStatus:
+        return BookMaterializationStatus.model_validate(
+            self.store.get_active_book_materialization_status(
+                user_id=user_id,
+                edition_id=edition_id,
+            )
+        )
+
+    def get_active_book_materialization_bundle(
+        self,
+        *,
+        user_id: str,
+        edition_id: str,
+    ) -> BookMaterialization:
+        return self.book_materializations.load_active(
+            user_id=user_id,
+            edition_id=edition_id,
         )
 
     def get_book_ingestion_status(

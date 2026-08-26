@@ -212,6 +212,35 @@ class BookQualityRequest(BookDocumentRequest):
         return clean
 
 
+class BookMaterializationRequest(BookQualityRequest):
+    pass
+
+
+class BookMaterializationStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    materialization_id: str
+    edition_id: str
+    document_id: str
+    document_digest: str
+    quality_assessment_id: str
+    state: Literal["ready"] = "ready"
+    active: bool = True
+    skill_id: str
+    skill_version: str
+    compiler_version: str
+    model_version: str
+    prompt_version: str
+    embedding_model: str
+    embedding_model_revision: str = "default"
+    policy_snapshot_hash: str
+    index_collection: str
+    index_count: int = Field(ge=0)
+    chunk_count: int = Field(ge=0)
+    citation_count: int = Field(ge=0)
+    embedding_count: int = Field(ge=0)
+
+
 class BookStageReceipt(BaseModel):
     id: str
     stage: Literal[
@@ -221,6 +250,9 @@ class BookStageReceipt(BaseModel):
         "extracted",
         "identified",
         "structured",
+        "skill_compiled",
+        "indexed",
+        "ready",
     ]
     status: Literal["succeeded", "rejected", "failed_retryable", "failed_permanent"]
     attempt: int = Field(ge=1)
@@ -242,6 +274,9 @@ class BookImportStatus(BaseModel):
         "extracted",
         "identified",
         "structured",
+        "skill_compiled",
+        "indexed",
+        "ready",
         "rejected",
         "failed_retryable",
         "failed_permanent",
@@ -253,6 +288,9 @@ class BookImportStatus(BaseModel):
         "extracted",
         "identified",
         "structured",
+        "skill_compiled",
+        "indexed",
+        "ready",
     ]
     error_code: str = ""
     document_id: str = ""

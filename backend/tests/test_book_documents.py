@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from hashlib import sha256
 from io import BytesIO
 import json
 from pathlib import Path
@@ -19,6 +20,7 @@ from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
+    BookMaterializationRequest,
     BookQualityRequest,
     ContextPackRequest,
 )
@@ -38,7 +40,78 @@ class CleanScanner:
         )
 
 
-def build_core(tmp_path: Path) -> KnowledgeCore:
+class FixedBookEmbedder:
+    model_name = "test-book-embedding-v1"
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        return [[float(index + 1), float(len(text))] for index, text in enumerate(texts)]
+
+
+class InvalidBookEmbedder:
+    model_name = "test-book-embedding-v2"
+
+    def embed_batch(self, texts: list[str]) -> list[list[float]]:
+        _ = texts
+        return []
+
+
+class ProductionNamedBookEmbedder(FixedBookEmbedder):
+    model_name = "BAAI/bge-m3"
+
+
+class RecordingBookIndex:
+    collection_name = "test-books"
+
+    def __init__(self) -> None:
+        self.points: dict[tuple[str, str], dict[str, object]] = {}
+
+    def upsert(
+        self,
+        *,
+        user_id: str,
+        materialization_id: str,
+        edition_id: str,
+        document_id: str,
+        chunk_id: str,
+        text: str,
+        embedding: list[float],
+    ) -> str:
+        point_id = f"point-{materialization_id}-{chunk_id}"
+        self.points[(materialization_id, chunk_id)] = {
+            "user_id": user_id,
+            "edition_id": edition_id,
+            "document_id": document_id,
+            "text": text,
+            "embedding": embedding,
+            "point_id": point_id,
+        }
+        return point_id
+
+    def delete_materialization(self, *, user_id: str, materialization_id: str) -> None:
+        _ = user_id
+        for key in list(self.points):
+            if key[0] == materialization_id:
+                del self.points[key]
+
+
+class FailingBookIndex(RecordingBookIndex):
+    def upsert(self, **kwargs) -> str:
+        if self.points:
+            raise RuntimeError("injected index failure")
+        return super().upsert(**kwargs)
+
+
+class FailingCleanupBookIndex(FailingBookIndex):
+    def delete_materialization(self, *, user_id: str, materialization_id: str) -> None:
+        raise RuntimeError("injected index cleanup failure")
+
+
+def build_core(
+    tmp_path: Path,
+    *,
+    book_embedding_provider: FixedBookEmbedder | None = None,
+    book_retrieval_index: RecordingBookIndex | None = None,
+) -> KnowledgeCore:
     conversations = tmp_path / "data" / "ui" / "conversations.json"
     conversations.parent.mkdir(parents=True)
     conversations.write_text("[]", encoding="utf-8")
@@ -49,6 +122,8 @@ def build_core(tmp_path: Path) -> KnowledgeCore:
         conversations_path=conversations,
         vault_root=vault,
         book_malware_scanner=CleanScanner(),
+        book_embedding_provider=book_embedding_provider or FixedBookEmbedder(),
+        book_retrieval_index=book_retrieval_index or RecordingBookIndex(),
     )
 
 
@@ -320,6 +395,714 @@ def test_structured_epub_passes_the_current_quality_policy(tmp_path: Path) -> No
     assert "Truth needs evidence" not in safe_metadata
     assert str(tmp_path) not in safe_metadata
     assert pack["evidence"] == []
+
+
+def test_passed_document_compiles_one_compatible_active_materialization(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    bundle = core.get_book_materialization(
+        user_id="user-1",
+        materialization_id=status.materialization_id,
+    )
+    source_document = core.get_book_document(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+    active = core.get_active_book_materialization(
+        user_id="user-1",
+        edition_id=status.edition_id,
+    )
+
+    assert status.state == "ready"
+    assert status.active is True
+    assert status.chunk_count == 2
+    assert status.citation_count == 7
+    assert status.embedding_count == 2
+    assert status.embedding_model == "test-book-embedding-v1"
+    assert status.embedding_model_revision == "default"
+    assert status.index_collection == "test-books"
+    assert status.index_count == 2
+    assert active.materialization_id == status.materialization_id
+    assert bundle.materialization_id == status.materialization_id
+    assert bundle.document_id == structured.document_id
+    assert bundle.document_digest == status.document_digest
+    assert bundle.quality_assessment_id
+    assert bundle.quality_receipt.assessment_id == bundle.quality_assessment_id
+    assert bundle.quality_receipt.outcome == "PASS"
+    assert bundle.quality_receipt.report_digest
+    assert bundle.skill.materialization_id == status.materialization_id
+    assert bundle.exact_text.materialization_id == status.materialization_id
+    assert bundle.embeddings.materialization_id == status.materialization_id
+    assert bundle.index.materialization_id == status.materialization_id
+    assert bundle.citations.materialization_id == status.materialization_id
+    assert [point.chunk_id for point in bundle.index.points] == [
+        chunk.chunk_id for chunk in bundle.exact_text.chunks
+    ]
+    index = core.book_materializations.retrieval_index
+    assert isinstance(index, RecordingBookIndex)
+    assert len(index.points) == 2
+    assert all(key[0] == status.materialization_id for key in index.points)
+    assert set(bundle.skill.files) == {
+        "SKILL.md",
+        "references/book.json",
+        "references/source-map.json",
+    }
+    skill_text = core.store.blobs.read_book_artifact(
+        bundle.skill.files["SKILL.md"].blob_path
+    ).decode("utf-8")
+    source_map = core.store.blobs.read_book_artifact(
+        bundle.skill.files["references/source-map.json"].blob_path
+    ).decode("utf-8")
+    first_chunk = core.store.blobs.read_book_artifact(
+        bundle.exact_text.chunks[0].blob_path
+    ).decode("utf-8")
+    assert "route_to_agent: BooksAgent" in skill_text
+    assert "Truth needs evidence" not in skill_text
+    assert "Truth needs evidence" in first_chunk
+    assert "blob_path" not in source_map
+    assert bundle.exact_text.chunks[0].block_spans[0].chunk_start == 0
+    assert bundle.exact_text.chunks[0].block_spans[-1].chunk_end == len(first_chunk)
+    assert bundle.citations.citations[0].asset_id == source_document.asset_id
+    assert bundle.citations.citations[0].offset_map
+    safe_status = json.dumps(status.model_dump(mode="json"), sort_keys=True)
+    assert "Structured Fixture" not in safe_status
+    assert "Truth needs evidence" not in safe_status
+    assert str(tmp_path) not in safe_status
+    with pytest.raises(KeyError, match="Unknown Book materialization"):
+        core.get_book_materialization(
+            user_id="user-2",
+            materialization_id=status.materialization_id,
+        )
+    with pytest.raises(KeyError, match="Unknown active Book materialization"):
+        core.get_active_book_materialization(
+            user_id="user-2",
+            edition_id=status.edition_id,
+        )
+
+
+def test_materialization_rejects_non_passed_and_cross_tenant_documents(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(
+        core,
+        without_zip_entry(structured_epub_bytes(), "OPS/lamp.jpg"),
+    )
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    assert assessed.quality_outcome == "DEGRADED"
+
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_NOT_ELIGIBLE"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_NOT_ELIGIBLE"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-2",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 0
+    assert counts["active_book_materializations"] == 0
+
+
+def test_materialization_is_idempotent_under_concurrent_execution(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    request = BookMaterializationRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        statuses = list(executor.map(core.materialize_book_document, [request, request]))
+
+    assert statuses[0].materialization_id == statuses[1].materialization_id
+    assert statuses[0].active is True
+    assert statuses[1].active is True
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 1
+    assert counts["active_book_materializations"] == 1
+    ingestion = core.get_book_ingestion_status(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+    )
+    assert ingestion.status == "ready"
+    assert ingestion.current_stage == "ready"
+    assert [receipt.stage for receipt in ingestion.receipts][-3:] == [
+        "skill_compiled",
+        "indexed",
+        "ready",
+    ]
+
+
+def test_materialization_accepts_the_configured_local_embedding_model_name(
+    tmp_path: Path,
+) -> None:
+    core = build_core(
+        tmp_path,
+        book_embedding_provider=ProductionNamedBookEmbedder(),
+    )
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    assert status.state == "ready"
+    assert status.embedding_model == "BAAI/bge-m3"
+
+
+def test_embedding_model_revision_changes_materialization_identity(tmp_path: Path) -> None:
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    request = BookMaterializationRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+    first = core.materialize_book_document(request)
+    revised = KnowledgeCore(
+        core.store,
+        conversations_path=core.conversations_path,
+        vault_root=core.vault_root,
+        book_embedding_provider=FixedBookEmbedder(),
+        book_embedding_model_revision="weights-r2",
+        book_retrieval_index=index,
+    )
+
+    second = revised.materialize_book_document(request)
+
+    assert second.edition_id == first.edition_id
+    assert second.materialization_id != first.materialization_id
+    assert second.embedding_model_revision == "weights-r2"
+
+
+def test_identical_text_from_a_distinct_asset_is_not_silently_merged_as_one_edition(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    first_import, first_document = import_and_construct(core, structured_epub_bytes())
+    second_asset = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={"META-INF/import-marker.txt": "a distinct owned EPUB asset"},
+    )
+    second_import, second_document = import_and_construct(core, second_asset)
+    for imported, structured in (
+        (first_import, first_document),
+        (second_import, second_document),
+    ):
+        core.evaluate_book_document_quality(
+            BookQualityRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    first = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=first_import.import_id,
+            run_id=first_import.run_id,
+            document_id=first_document.document_id,
+        )
+    )
+    second = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=second_import.import_id,
+            run_id=second_import.run_id,
+            document_id=second_document.document_id,
+        )
+    )
+
+    assert first.document_digest != second.document_digest
+    assert first.edition_id != second.edition_id
+
+
+def test_failed_candidate_cannot_replace_the_active_materialization(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    request = BookMaterializationRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+    first = core.materialize_book_document(request)
+    failing_core = KnowledgeCore(
+        core.store,
+        conversations_path=core.conversations_path,
+        vault_root=core.vault_root,
+        book_embedding_provider=InvalidBookEmbedder(),
+        book_materialization_compiler_version="book-materializer-v2",
+        book_retrieval_index=core.book_materializations.retrieval_index,
+    )
+
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_EMBEDDINGS_INVALID"):
+        failing_core.materialize_book_document(request)
+
+    active = core.get_active_book_materialization(
+        user_id="user-1",
+        edition_id=first.edition_id,
+    )
+    assert active.materialization_id == first.materialization_id
+    assert core.store.status()["counts"]["book_materializations"] == 1
+
+
+def test_partial_index_failure_is_not_published_or_retained(tmp_path: Path) -> None:
+    index = FailingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="injected index failure"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 0
+    assert counts["active_book_materializations"] == 0
+    assert counts["book_materialization_candidates"] == 0
+    assert index.points == {}
+
+
+def test_failed_index_cleanup_retains_candidate_for_retry(tmp_path: Path) -> None:
+    index = FailingCleanupBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="injected index failure"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 0
+    assert counts["active_book_materializations"] == 0
+    assert counts["book_materialization_candidates"] == 1
+    assert index.points
+
+
+def test_compatible_rebuild_promotes_atomically_and_retains_the_previous_bundle(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    request = BookMaterializationRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+    first = core.materialize_book_document(request)
+    upgraded = KnowledgeCore(
+        core.store,
+        conversations_path=core.conversations_path,
+        vault_root=core.vault_root,
+        book_embedding_provider=FixedBookEmbedder(),
+        book_materialization_compiler_version="book-materializer-v2",
+        book_retrieval_index=core.book_materializations.retrieval_index,
+    )
+
+    second = upgraded.materialize_book_document(request)
+    active = upgraded.get_active_book_materialization(
+        user_id="user-1",
+        edition_id=first.edition_id,
+    )
+
+    assert second.edition_id == first.edition_id
+    assert second.materialization_id != first.materialization_id
+    assert active.materialization_id == second.materialization_id
+    first_bundle = upgraded.get_book_materialization(
+        user_id="user-1",
+        materialization_id=first.materialization_id,
+    )
+    second_bundle = upgraded.get_book_materialization(
+        user_id="user-1",
+        materialization_id=second.materialization_id,
+    )
+    assert first_bundle.materialization_id == first.materialization_id
+    assert [chunk.chunk_id for chunk in first_bundle.exact_text.chunks] == [
+        chunk.chunk_id for chunk in second_bundle.exact_text.chunks
+    ]
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 2
+    assert counts["active_book_materializations"] == 1
+    active_bundle = upgraded.get_active_book_materialization_bundle(
+        user_id="user-1",
+        edition_id=first.edition_id,
+    )
+    assert active_bundle.materialization_id == second.materialization_id
+
+
+def test_materialization_is_exposed_through_the_existing_knowledge_core_api(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    app = FastAPI()
+    app.include_router(knowledge_core_router, prefix="/api/knowledge")
+    set_knowledge_core(core)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/api/knowledge/core/books/documents/{structured.document_id}/materializations",
+                json={
+                    "user_id": "user-1",
+                    "import_id": imported.import_id,
+                    "run_id": imported.run_id,
+                },
+            )
+            unauthorized = client.post(
+                f"/api/knowledge/core/books/documents/{structured.document_id}/materializations",
+                json={
+                    "user_id": "user-2",
+                    "import_id": imported.import_id,
+                    "run_id": imported.run_id,
+                },
+            )
+    finally:
+        set_knowledge_core(None)
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "ready"
+    assert response.json()["active"] is True
+    assert response.json()["chunk_count"] == 2
+    serialized = json.dumps(response.json(), sort_keys=True)
+    assert "Structured Fixture" not in serialized
+    assert "Truth needs evidence" not in serialized
+    assert str(tmp_path) not in serialized
+    assert unauthorized.status_code == 409
+    assert unauthorized.json() == {
+        "detail": {"code": "BOOK_MATERIALIZATION_NOT_ELIGIBLE"}
+    }
+
+
+def test_materialization_rejects_a_stale_quality_assessment(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    with sqlite3.connect(core.store.db_path) as connection:
+        connection.execute(
+            "UPDATE book_documents SET digest = ? WHERE id = ?",
+            ("0" * 64, structured.document_id),
+        )
+
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_NOT_ELIGIBLE"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    assert core.store.status()["counts"]["book_materializations"] == 0
+
+
+def test_materialization_publication_rolls_back_all_visible_state(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    def fail_receipt(*_args, **_kwargs) -> None:
+        raise RuntimeError("injected materialization publication failure")
+
+    monkeypatch.setattr(core.store, "_record_book_receipt", fail_receipt)
+    with pytest.raises(RuntimeError, match="injected materialization publication failure"):
+        core.materialize_book_document(
+            BookMaterializationRequest(
+                user_id="user-1",
+                import_id=imported.import_id,
+                run_id=imported.run_id,
+                document_id=structured.document_id,
+            )
+        )
+
+    counts = core.store.status()["counts"]
+    assert counts["book_materializations"] == 0
+    assert counts["active_book_materializations"] == 0
+    ingestion = core.get_book_ingestion_status(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+    )
+    assert ingestion.status == "structured"
+    assert ingestion.current_stage == "structured"
+    assert ingestion.receipts[-1].stage == "structured"
+    materialization_root = (
+        tmp_path
+        / "blobs"
+        / "books"
+        / "artifacts"
+        / core.store.book_tenant_scope("user-1")
+        / "materialization"
+    )
+    assert not materialization_root.exists() or not any(
+        path.is_file() for path in materialization_root.rglob("*")
+    )
+    index = core.book_materializations.retrieval_index
+    assert isinstance(index, RecordingBookIndex)
+    assert index.points == {}
+    with sqlite3.connect(core.store.db_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM book_materialization_candidates"
+        ).fetchone()[0] == 0
+
+
+def test_materialization_load_rejects_tampered_bundle_bytes(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    record = core.store.get_book_materialization_record(
+        user_id="user-1",
+        materialization_id=status.materialization_id,
+    )
+    core.store.blobs.resolve(str(record["blob_path"])).write_bytes(b"{}")
+
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_DIGEST_MISMATCH"):
+        core.get_book_materialization(
+            user_id="user-1",
+            materialization_id=status.materialization_id,
+        )
+
+
+def test_materialization_load_rejects_a_tampered_nested_artifact(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    bundle = core.get_book_materialization(
+        user_id="user-1",
+        materialization_id=status.materialization_id,
+    )
+    core.store.blobs.resolve(bundle.exact_text.chunks[0].blob_path).write_bytes(
+        b"tampered"
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="BOOK_MATERIALIZATION_ARTIFACT_DIGEST_MISMATCH",
+    ):
+        core.get_book_materialization(
+            user_id="user-1",
+            materialization_id=status.materialization_id,
+        )
+
+
+def test_materialization_load_rejects_cross_manifest_index_drift(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    record = core.store.get_book_materialization_record(
+        user_id="user-1",
+        materialization_id=status.materialization_id,
+    )
+    bundle_path = core.store.blobs.resolve(str(record["blob_path"]))
+    payload = json.loads(bundle_path.read_bytes())
+    payload["index"]["points"][0]["chunk_id"] = "bkc_wrong"
+    tampered = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    bundle_path.write_bytes(tampered)
+    with sqlite3.connect(core.store.db_path) as connection:
+        connection.execute(
+            "UPDATE book_materializations SET bundle_digest = ? WHERE id = ?",
+            (sha256(tampered).hexdigest(), status.materialization_id),
+        )
+
+    with pytest.raises(ValueError, match="BOOK_MATERIALIZATION_INDEX_INVALID"):
+        core.get_book_materialization(
+            user_id="user-1",
+            materialization_id=status.materialization_id,
+        )
 
 
 def test_empty_native_spine_content_requires_ocr_without_fabricating_text(tmp_path: Path) -> None:
