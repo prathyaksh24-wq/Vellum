@@ -205,6 +205,7 @@ def _validated_synthesis(
         "claims",
         "judgment",
         "user_learning_events",
+        "wisdom_proposals",
         "uncertainty",
         "status",
     }

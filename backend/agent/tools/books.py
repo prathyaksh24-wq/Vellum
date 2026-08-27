@@ -1,6 +1,8 @@
 """Main-model delegation tool for BooksAgent."""
 from __future__ import annotations
 
+import json
+
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
@@ -28,7 +30,13 @@ def _user_id(config: RunnableConfig | None) -> str:
 
 
 def _response_json(response: SpecialistResponse) -> str:
-    return response.model_dump_json(indent=2)
+    payload = response.model_dump(mode="json")
+    structured = payload.get("structured_payload")
+    envelope = structured.get("books_agent") if isinstance(structured, dict) else None
+    if isinstance(envelope, dict):
+        envelope["user_learning_events"] = []
+        envelope["wisdom_proposals"] = []
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 @tool

@@ -66,6 +66,58 @@ def test_books_agent_tool_delegates_with_thread_context(monkeypatch) -> None:
     assert runtime.requests[0].user_id == "user-books"
 
 
+def test_books_agent_tool_withholds_private_learning_and_wisdom_from_main_model(
+    monkeypatch,
+) -> None:
+    private_learning = "The user may be struggling with a private situation."
+    private_wisdom = "A private connection between the Book and the user's situation."
+    runtime = FakeRuntime(
+        SpecialistResponse(
+            agent="BooksAgent",
+            status="answered",
+            summary="The grounded Book answer.",
+            structured_payload={
+                "books_agent": {
+                    "schema_version": "books-agent-response-v1",
+                    "answer": "The grounded Book answer.",
+                    "answer_claim_ids": [],
+                    "claims": [],
+                    "evidence": [],
+                    "judgment": None,
+                    "user_learning_events": [
+                        {
+                            "id": "learning-1",
+                            "kind": "struggle",
+                            "statement": private_learning,
+                        }
+                    ],
+                    "wisdom_proposals": [
+                        {
+                            "id": "wisdom-1",
+                            "content": private_wisdom,
+                        }
+                    ],
+                    "uncertainty": [],
+                    "status": "complete",
+                }
+            },
+        )
+    )
+    monkeypatch.setattr(books_tool, "_get_books_runtime", lambda: runtime)
+
+    raw = books_tool.books_agent.func(
+        query="What does the Book say?",
+        config={"configurable": {"thread_id": "thread-books", "user_id": "user-books"}},
+    )
+    result = json.loads(raw)
+
+    envelope = result["structured_payload"]["books_agent"]
+    assert envelope["user_learning_events"] == []
+    assert envelope["wisdom_proposals"] == []
+    assert private_learning not in raw
+    assert private_wisdom not in raw
+
+
 def test_books_agent_tool_rejects_empty_query_without_building_runtime(monkeypatch) -> None:
     monkeypatch.setattr(
         books_tool,
