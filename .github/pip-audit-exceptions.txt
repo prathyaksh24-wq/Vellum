@@ -1,0 +1,13 @@
+# owner=Vellum maintainers
+# issue=https://github.com/prathyaksh24-wq/Vellum/issues/143
+# expires=2026-09-10
+#
+# ChromaDB 1.5.9 is the latest release and no patched version exists for these
+# advisories as of 2026-08-27. Vellum uses only embedded PersistentClient and
+# EphemeralClient instances; it does not expose Chroma's authenticated HTTP,
+# tenant-authorization, remote-model, or trust_remote_code paths. Do not add a
+# Chroma server or remote client while these exceptions remain active.
+PYSEC-2026-311
+CVE-2026-45830
+CVE-2026-45831
+CVE-2026-45833
