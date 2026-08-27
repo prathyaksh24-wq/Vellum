@@ -55,7 +55,7 @@ def test_books_agent_tool_delegates_with_thread_context(monkeypatch) -> None:
     result = json.loads(
         books_tool.books_agent.func(
             query="What did the 45th law mean?",
-            config={"configurable": {"thread_id": "thread-books"}},
+            config={"configurable": {"thread_id": "thread-books", "user_id": "user-books"}},
         )
     )
 
@@ -63,6 +63,7 @@ def test_books_agent_tool_delegates_with_thread_context(monkeypatch) -> None:
     assert result["structured_payload"]["books_agent"]["status"] == "abstained"
     assert runtime.requests[0].agent_id == "BooksAgent"
     assert runtime.requests[0].parent_thread_id == "thread-books"
+    assert runtime.requests[0].user_id == "user-books"
 
 
 def test_books_agent_tool_rejects_empty_query_without_building_runtime(monkeypatch) -> None:

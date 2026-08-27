@@ -15,7 +15,11 @@ import yaml
 
 from agent.knowledge.book_documents import BookBlock, BookDocument
 from agent.knowledge.book_quality import BookQualityPipeline
-from agent.knowledge.models import BookMaterializationRequest, BookMaterializationStatus
+from agent.knowledge.models import (
+    BookMaterializationRequest,
+    BookMaterializationStatus,
+    BookRetrievalRequest,
+)
 from agent.knowledge.store import BookMaterializationPublication, KnowledgeStore
 from agent.skills.models import SkillMetadata
 
@@ -81,6 +85,14 @@ class BookRetrievalIndex(Protocol):
 
     def delete_materialization(self, *, user_id: str, materialization_id: str) -> None: ...
 
+    def search(
+        self,
+        *,
+        embedding: list[float],
+        top_k: int,
+        filters: dict[str, Any],
+    ) -> list[dict[str, Any]]: ...
+
 
 class VectorStoreBookRetrievalIndex:
     """Adapt the existing process-wide VectorStore to Book materializations."""
@@ -122,6 +134,20 @@ class VectorStoreBookRetrievalIndex:
             self.collection_name,
             "materialization_id",
             materialization_id,
+        )
+
+    def search(
+        self,
+        *,
+        embedding: list[float],
+        top_k: int,
+        filters: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        return self.vector_store.search(
+            self.collection_name,
+            embedding,
+            top_k=top_k,
+            filters=filters,
         )
 
 
@@ -562,6 +588,126 @@ class BookMaterializationPipeline:
             user_id=user_id,
             materialization_id=str(record["id"]),
         )
+
+    def search_active(self, request: BookRetrievalRequest) -> dict[str, Any]:
+        records = self.store.list_active_book_materialization_records(
+            user_id=request.user_id,
+        )
+        compatible = [
+            record
+            for record in records
+            if str(record["embedding_model"]) == self.embedding_provider.model_name
+            and str(record["embedding_model_revision"]) == self.embedding_model_revision
+            and not (request.destination == "external" and bool(record["local_only"]))
+        ]
+        policy = {
+            "active_materializations_only": True,
+            "tenant_scoped": True,
+            "source_content": "untrusted_evidence",
+            "whole_chunks_only": True,
+            "destination": request.destination,
+            "local_only_excluded": request.destination == "external",
+        }
+        if not compatible:
+            policy["receipt_id"] = self.store.record_book_retrieval_receipt(
+                user_id=request.user_id,
+                query=request.query,
+                destination=request.destination,
+                active_count=len(records),
+                candidate_count=0,
+                evidence_count=0,
+                token_budget=request.token_budget,
+                tokens_used=0,
+            )
+            return {"evidence": [], "policy": policy}
+
+        bundles = {
+            str(record["id"]): self.load(
+                user_id=request.user_id,
+                materialization_id=str(record["id"]),
+            )
+            for record in compatible
+        }
+        query_vectors = _normalize_vectors(
+            self.embedding_provider.embed_batch([request.query])
+        )
+        _validate_vectors(query_vectors, expected_count=1)
+        hits = self._get_retrieval_index().search(
+            embedding=query_vectors[0],
+            top_k=min(request.max_chunks * 2, 24),
+            filters={
+                "user_id": request.user_id,
+                "materialization_id": {"$in": list(bundles)},
+            },
+        )
+
+        evidence: list[dict[str, Any]] = []
+        tokens_used = 0
+        for hit in hits:
+            metadata = dict(hit.get("metadata") or {})
+            materialization_id = str(metadata.get("materialization_id") or "")
+            bundle = bundles.get(materialization_id)
+            if bundle is None or str(metadata.get("user_id") or "") != request.user_id:
+                continue
+            if (
+                str(metadata.get("edition_id") or "") != bundle.edition_id
+                or str(metadata.get("document_id") or "") != bundle.document_id
+            ):
+                continue
+            chunk_id = str(metadata.get("chunk_id") or "")
+            chunk = next(
+                (candidate for candidate in bundle.exact_text.chunks if candidate.chunk_id == chunk_id),
+                None,
+            )
+            if chunk is None or chunk_id not in {point.chunk_id for point in bundle.index.points}:
+                continue
+            payload = self.store.blobs.read_book_artifact(chunk.blob_path)
+            if len(payload) != chunk.byte_size or sha256(payload).hexdigest() != chunk.digest:
+                continue
+            try:
+                text = payload.decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            if text != str(hit.get("text") or ""):
+                continue
+            estimated_tokens = max(1, math.ceil(len(text) / 4))
+            if tokens_used + estimated_tokens > request.token_budget:
+                continue
+            citations = [
+                citation.model_dump(mode="json")
+                for citation in bundle.citations.citations
+                if citation.chunk_id == chunk_id
+            ]
+            if not citations:
+                continue
+            evidence.append(
+                {
+                    "evidence_id": _stable_id("bke", materialization_id, chunk_id),
+                    "materialization_id": materialization_id,
+                    "edition_id": bundle.edition_id,
+                    "document_id": bundle.document_id,
+                    "chunk_id": chunk_id,
+                    "section_id": chunk.section_id,
+                    "text": text,
+                    "text_hash": chunk.digest,
+                    "score": max(0.0, min(float(hit.get("score") or 0.0), 1.0)),
+                    "citations": citations,
+                }
+            )
+            tokens_used += estimated_tokens
+            if len(evidence) >= request.max_chunks:
+                break
+        policy["receipt_id"] = self.store.record_book_retrieval_receipt(
+            user_id=request.user_id,
+            query=request.query,
+            destination=request.destination,
+            active_count=len(records),
+            candidate_count=len(hits),
+            evidence_count=len(evidence),
+            token_budget=request.token_budget,
+            tokens_used=tokens_used,
+        )
+        return {"evidence": evidence, "policy": policy}
 
     def _validate_artifacts(
         self,

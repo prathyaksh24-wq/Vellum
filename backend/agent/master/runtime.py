@@ -29,6 +29,7 @@ class DelegationRequest:
     agent_id: str
     task: str
     parent_thread_id: str
+    user_id: str = "default"
     context: str = ""
     task_id: str | None = None
     depth: int = 0
@@ -41,6 +42,8 @@ class DelegationRequest:
             raise ValueError("task is required")
         if not self.parent_thread_id.strip():
             raise ValueError("parent_thread_id is required")
+        if not self.user_id.strip():
+            raise ValueError("user_id is required")
         if self.depth < 0:
             raise ValueError("depth must be non-negative")
 
@@ -161,6 +164,7 @@ class DelegationRuntime:
                 goal=goal,
                 context=context,
                 parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
                 action_request=action_request,
             )
             _validate_response_schema(profile, response)
@@ -261,10 +265,13 @@ class DelegationRuntime:
         goal: str,
         context: str,
         parent_thread_id: str,
+        user_id: str,
         action_request: dict[str, Any] | None,
     ) -> SpecialistResponse:
         with profile_policy(
             profile_id=profile.id,
+            user_id=user_id,
+            source_egress=profile.source_egress,
             allowed_tools=frozenset(profile.tools.allow),
             allowed_skills=frozenset(profile.skills.allow),
             require_confirmation=frozenset(profile.tools.require_confirmation),

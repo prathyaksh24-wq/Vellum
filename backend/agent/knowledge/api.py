@@ -167,6 +167,7 @@ async def core_import_book_epub(
         Form(min_length=1, max_length=120),
     ] = "book-epub-intake-v1",
     requested_by: Annotated[str, Form(min_length=1, max_length=120)] = "user",
+    local_only: Annotated[bool, Form()] = False,
 ) -> BookImportStatus:
     if scan_approved is not True:
         raise HTTPException(status_code=409, detail="Local malware scan approval is required.")
@@ -190,6 +191,7 @@ async def core_import_book_epub(
         scan_approved=scan_approved,
         pipeline_version=pipeline_version,
         requested_by=requested_by,
+        local_only=local_only,
     )
     return await asyncio.to_thread(core.import_book_epub, request, content)
 

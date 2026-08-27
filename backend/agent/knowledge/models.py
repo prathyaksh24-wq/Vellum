@@ -174,6 +174,7 @@ class BookImportRequest(BaseModel):
     scan_approved: Literal[True]
     pipeline_version: str = Field(default="book-epub-intake-v1", min_length=1, max_length=120)
     requested_by: str = Field(default="user", min_length=1, max_length=120)
+    local_only: bool = False
 
     @field_validator("user_id", "rights_attestation_version", "pipeline_version", "requested_by")
     @classmethod
@@ -214,6 +215,24 @@ class BookQualityRequest(BookDocumentRequest):
 
 class BookMaterializationRequest(BookQualityRequest):
     pass
+
+
+class BookRetrievalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=160)
+    query: str = Field(min_length=1, max_length=8000)
+    destination: Literal["local", "external"] = "local"
+    max_chunks: int = Field(default=6, ge=1, le=12)
+    token_budget: int = Field(default=2400, ge=256, le=8000)
+
+    @field_validator("user_id", "query")
+    @classmethod
+    def clean_book_retrieval_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("book retrieval fields cannot be blank")
+        return clean
 
 
 class BookMaterializationStatus(BaseModel):
@@ -267,6 +286,7 @@ class BookImportStatus(BaseModel):
     asset_sha256: str
     byte_size: int = Field(ge=0)
     media_type: str
+    local_only: bool = False
     status: Literal[
         "received",
         "quarantined",

@@ -42,6 +42,7 @@ class AgentCatalog:
         profile_dir: Path | str = Path("data/agent_profiles"),
     ) -> "AgentCatalog":
         from agent.agents.books import BooksAgent
+        from agent.agents.books_synthesis import RoutedBooksSynthesizer
         from agent.agents.memory_agent import MemoryAgent
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
@@ -50,14 +51,24 @@ class AgentCatalog:
 
         root = Path(vault_root)
         tools = build_shared_tool_registry(vault_root=root)
+        catalog = cls(profile_dir=profile_dir)
+        books_profile = catalog.get("BooksAgent")
         agents = [
             XAgent(vault_root=root, tool_registry=tools),
             YoutubeAgent(vault_root=root, tool_registry=tools),
             MemoryAgent(vault_root=root, tool_registry=tools),
             SportsAgent(vault_root=root, tool_registry=tools),
-            BooksAgent(tool_registry=tools),
+            BooksAgent(
+                tool_registry=tools,
+                synthesizer=RoutedBooksSynthesizer(
+                    model_id=books_profile.model or "openai/gpt-5.6-luna",
+                    reasoning_mode=books_profile.reasoning_mode or "max",
+                ),
+            ),
         ]
-        return cls(profile_dir=profile_dir, executors={agent.name: agent for agent in agents})
+        for agent in agents:
+            catalog.register_executor(agent.name, agent)
+        return catalog
 
     def get(self, profile_id: str) -> AgentProfile:
         builtin = self._builtins.get(profile_id)
@@ -162,6 +173,8 @@ class AgentCatalog:
                 "description": profile.description,
                 "executor": profile.executor,
                 "model": profile.model,
+                "reasoning_mode": profile.reasoning_mode,
+                "source_egress": profile.source_egress,
                 "tools": profile.tools.model_dump(mode="json"),
                 "skills": profile.skills.model_dump(mode="json"),
                 "memory": profile.memory.model_dump(mode="json"),

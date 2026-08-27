@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
-from agent.contracts.books import books_envelope_payload
+from agent.contracts.books import BookEvidenceAnchor, BooksAgentEnvelope, books_envelope_payload
 from agent.tools.registry import ToolRegistry
 
 
 class BooksAgent:
     name = "BooksAgent"
 
-    def __init__(self, *, tool_registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        *,
+        tool_registry: ToolRegistry,
+        synthesizer: Callable[[str, list[dict[str, Any]]], dict[str, Any]] | None = None,
+    ) -> None:
         self.tool_registry = tool_registry
+        self.synthesizer = synthesizer
 
     def can_handle(self, query: str) -> bool:
         _ = query
@@ -29,6 +36,7 @@ class BooksAgent:
 
         activity: list[dict[str, Any]] = []
         errors: list[str] = []
+        knowledge_policy: dict[str, Any] = {}
         try:
             knowledge = self.tool_registry.invoke(
                 "books.knowledge_query",
@@ -36,6 +44,7 @@ class BooksAgent:
                 agent_name=self.name,
             )
             evidence = list(knowledge.get("evidence") or [])
+            knowledge_policy = dict(knowledge.get("policy") or {})
             activity.append(
                 {"name": "books.knowledge_query", "status": "completed", "count": len(evidence)}
             )
@@ -68,6 +77,44 @@ class BooksAgent:
                 uncertainty=["One or more required Book capabilities were unavailable."],
                 activity=activity,
             )
+        policy_valid = (
+            knowledge_policy.get("active_materializations_only") is True
+            and knowledge_policy.get("tenant_scoped") is True
+            and knowledge_policy.get("source_content") == "untrusted_evidence"
+        )
+        if evidence and self.synthesizer is not None and policy_valid:
+            try:
+                envelope = _validated_synthesis(
+                    self.synthesizer(clean_query, evidence),
+                    evidence,
+                    knowledge_policy,
+                )
+                activity.append(
+                    {"name": "books.synthesize", "status": "completed", "count": len(envelope.claims)}
+                )
+                confidence = (
+                    sum(claim.evidence_confidence for claim in envelope.claims)
+                    / len(envelope.claims)
+                    if envelope.claims
+                    else 0.0
+                )
+                return SpecialistResponse(
+                    agent=self.name,
+                    status="answered" if envelope.status in {"complete", "partial"} else "needs_fetch",
+                    summary=envelope.answer,
+                    analysis=(
+                        "Synthesized from tenant-scoped active Book materializations; Book text was "
+                        "treated as untrusted evidence and could not invoke tools."
+                    ),
+                    sources=sources,
+                    confidence=confidence,
+                    activity_events=activity,
+                    structured_payload={"books_agent": envelope.model_dump(mode="json")},
+                )
+            except Exception:
+                errors.append("books.synthesize")
+                activity.append({"name": "books.synthesize", "status": "error"})
+
         if sources:
             summary = (
                 "BooksAgent found matching installed Book records or Hermes Book skills, "
@@ -121,15 +168,15 @@ class BooksAgent:
 def _safe_sources(evidence: list[dict[str, Any]], skills: list[dict[str, Any]]) -> list[SpecialistSource]:
     sources: list[SpecialistSource] = []
     for item in evidence[:8]:
-        source_id = str(item.get("source_id") or "").strip()
-        if not source_id:
+        materialization_id = str(item.get("materialization_id") or "").strip()
+        chunk_id = str(item.get("chunk_id") or "").strip()
+        if not materialization_id or not chunk_id:
             continue
         sources.append(
             SpecialistSource(
                 kind="book",
-                title=str(item.get("title") or "Installed Book"),
-                path_or_url=f"knowledge://sources/{source_id}",
-                captured_at=str(item.get("observed_at") or ""),
+                title=str(item.get("title") or item.get("document_id") or "Installed Book"),
+                path_or_url=f"knowledge://books/{materialization_id}#{chunk_id}",
                 freshness="historical",
             )
         )
@@ -145,3 +192,66 @@ def _safe_sources(evidence: list[dict[str, Any]], skills: list[dict[str, Any]]) 
                 )
             )
     return sources
+
+
+def _validated_synthesis(
+    draft: dict[str, Any],
+    evidence: list[dict[str, Any]],
+    retrieval_policy: dict[str, Any],
+) -> BooksAgentEnvelope:
+    allowed = {
+        "answer",
+        "answer_claim_ids",
+        "claims",
+        "judgment",
+        "uncertainty",
+        "status",
+    }
+    payload = {key: value for key, value in dict(draft).items() if key in allowed}
+    payload["evidence"] = [anchor.model_dump(mode="json") for anchor in _evidence_anchors(evidence)]
+    payload["retrieval_policy"] = retrieval_policy
+    payload["user_learning_events"] = []
+    envelope = BooksAgentEnvelope.model_validate(payload)
+    if not envelope.answer_claim_ids:
+        raise ValueError("Books synthesis must ground the answer in at least one claim")
+    return envelope
+
+
+def _evidence_anchors(evidence: list[dict[str, Any]]) -> list[BookEvidenceAnchor]:
+    anchors: list[BookEvidenceAnchor] = []
+    for item in evidence:
+        evidence_id = str(item.get("evidence_id") or "").strip()
+        materialization_id = str(item.get("materialization_id") or "").strip()
+        document_id = str(item.get("document_id") or "").strip()
+        text = str(item.get("text") or "")
+        text_hash = str(item.get("text_hash") or "").strip()
+        citations = list(item.get("citations") or [])
+        citation = dict(citations[0]) if citations else {}
+        epub_cfi = str(citation.get("epub_cfi") or "").strip()
+        if not evidence_id or not materialization_id or not document_id or not text or not text_hash:
+            continue
+        if epub_cfi:
+            locator_type = "epub_cfi"
+            locator = epub_cfi
+        else:
+            locator_type = "normalized_offset"
+            locator = (
+                f"{int(citation.get('normalized_start') or 0)}:"
+                f"{int(citation.get('normalized_end') or len(text))}"
+            )
+        anchors.append(
+            BookEvidenceAnchor(
+                id=evidence_id,
+                source_id=materialization_id,
+                work_id=document_id,
+                edition_id=str(item.get("edition_id") or ""),
+                asset_id=str(citation.get("asset_id") or ""),
+                section=str(item.get("section_id") or ""),
+                locator_type=locator_type,
+                locator=locator,
+                text_hash=text_hash,
+                quote=text,
+                validated=True,
+            )
+        )
+    return anchors

@@ -194,6 +194,7 @@ class BookIngestionPipeline:
                 asset_sha256=asset_sha256,
                 byte_size=len(raw),
                 rights_attestation_version=request.rights_attestation_version,
+                local_only=request.local_only,
                 pipeline_version=request.pipeline_version,
                 policy_snapshot_hash=policy_hash,
             )

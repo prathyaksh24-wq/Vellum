@@ -21,6 +21,12 @@ def _thread_id(config: RunnableConfig | None) -> str:
     return thread_id or get_settings().thread_id
 
 
+def _user_id(config: RunnableConfig | None) -> str:
+    configurable = config.get("configurable", {}) if config else {}
+    user_id = str(configurable.get("user_id") or "").strip() if isinstance(configurable, dict) else ""
+    return user_id or "default"
+
+
 def _response_json(response: SpecialistResponse) -> str:
     return response.model_dump_json(indent=2)
 
@@ -43,6 +49,7 @@ def books_agent(query: str, config: RunnableConfig | None = None) -> str:
                 agent_id="BooksAgent",
                 task=clean_query,
                 parent_thread_id=_thread_id(config),
+                user_id=_user_id(config),
             )
         ).response
         return _response_json(response)
