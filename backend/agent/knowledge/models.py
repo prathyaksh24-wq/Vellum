@@ -388,6 +388,107 @@ class BookUserLearningRequest(BaseModel):
     candidates: list[BookUserLearningCandidateInput] = Field(default_factory=list, max_length=20)
 
 
+class BookWisdomEvidenceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["book", "book_anchor", "user_learning_candidate", "conversation"]
+    reference_id: str = Field(min_length=1, max_length=500)
+    stance: Literal["supports", "conflicts"] = "supports"
+
+    @field_validator("reference_id")
+    @classmethod
+    def clean_wisdom_reference(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("Wisdom evidence reference cannot be blank")
+        return clean
+
+
+class BookWisdomRecordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=160)
+    wisdom_type: Literal[
+        "useful_principle",
+        "recurring_tension",
+        "situational_connection",
+        "counterargument",
+        "cross_book_pattern",
+        "unresolved_question",
+    ]
+    title: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=12000)
+    author_perspective: str = Field(min_length=1, max_length=12000)
+    user_perspective: str = Field(min_length=1, max_length=12000)
+    vellum_perspective: str = Field(min_length=1, max_length=12000)
+    explanation: str = Field(min_length=1, max_length=12000)
+    evidence: list[BookWisdomEvidenceReference] = Field(min_length=2, max_length=300)
+    confidence: float = Field(ge=0.0, le=1.0)
+    uncertainty: list[str] = Field(default_factory=list, max_length=50)
+    sensitivity: UserLearningSensitivity = UserLearningSensitivity.PRIVATE
+    permitted_uses: list[Literal["context", "discussion", "exploration"]] = Field(
+        default_factory=lambda: ["context"],
+        min_length=1,
+        max_length=3,
+    )
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    expires_at: datetime | None = None
+    derivation: str = Field(min_length=1, max_length=160)
+    source_agent: str = Field(default="BooksAgent", min_length=1, max_length=160)
+    model_version: str = Field(default="", max_length=160)
+    prompt_version: str = Field(min_length=1, max_length=160)
+    policy_version: str = Field(min_length=1, max_length=160)
+    schema_version: Literal["book-wisdom-v1"] = "book-wisdom-v1"
+
+    @field_validator(
+        "user_id",
+        "title",
+        "content",
+        "author_perspective",
+        "user_perspective",
+        "vellum_perspective",
+        "explanation",
+        "derivation",
+        "source_agent",
+        "prompt_version",
+        "policy_version",
+    )
+    @classmethod
+    def clean_wisdom_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("Book Wisdom fields cannot be blank")
+        return clean
+
+    @field_validator("uncertainty")
+    @classmethod
+    def clean_wisdom_uncertainty(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+    @field_validator("permitted_uses")
+    @classmethod
+    def clean_wisdom_uses(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(values))
+
+    @model_validator(mode="after")
+    def enforce_wisdom_evidence(self) -> "BookWisdomRecordInput":
+        supporting_kinds = {
+            item.kind
+            for item in self.evidence
+            if item.stance == "supports"
+        }
+        if "book_anchor" not in supporting_kinds:
+            raise ValueError("Book Wisdom requires supporting Book anchor evidence")
+        if "user_learning_candidate" not in supporting_kinds:
+            raise ValueError("Book Wisdom requires supporting user-learning evidence")
+        if self.wisdom_type == "situational_connection" and not (
+            self.valid_to or self.expires_at
+        ):
+            raise ValueError("Situational Wisdom requires a time bound")
+        return self
+
+
 class BookMaterializationStatus(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

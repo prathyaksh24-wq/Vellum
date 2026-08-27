@@ -2,6 +2,7 @@
 
 from agent.knowledge.models import (
     BookUserLearningRequest,
+    BookWisdomRecordInput,
     ContextPackRequest,
     MaterializationCanaryRequest,
     ObservationInput,
@@ -13,6 +14,7 @@ from agent.knowledge.store import KnowledgeStore
 
 __all__ = [
     "BookUserLearningRequest",
+    "BookWisdomRecordInput",
     "ContextPackRequest",
     "KnowledgeCore",
     "KnowledgeStore",
