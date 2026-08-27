@@ -16,6 +16,10 @@ function copyStaticUiAssets() {
       cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
       cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'components'), resolve(here, 'ui-dist/components'), { recursive: true });
+      const booksPrototype = resolve(designUploadsRoot, 'books-agent-prototype.jsx');
+      if (existsSync(booksPrototype)) {
+        cpSync(booksPrototype, resolve(here, 'ui-dist/books-agent-prototype.jsx'));
+      }
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
