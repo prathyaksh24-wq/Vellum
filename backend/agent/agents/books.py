@@ -204,13 +204,13 @@ def _validated_synthesis(
         "answer_claim_ids",
         "claims",
         "judgment",
+        "user_learning_events",
         "uncertainty",
         "status",
     }
     payload = {key: value for key, value in dict(draft).items() if key in allowed}
     payload["evidence"] = [anchor.model_dump(mode="json") for anchor in _evidence_anchors(evidence)]
     payload["retrieval_policy"] = retrieval_policy
-    payload["user_learning_events"] = []
     envelope = BooksAgentEnvelope.model_validate(payload)
     if not envelope.answer_claim_ids:
         raise ValueError("Books synthesis must ground the answer in at least one claim")

@@ -8,6 +8,7 @@ from agent.config import get_settings
 from agent.master.runtime import DelegationRuntime
 from agent.master.state import MasterThreadStateStore
 from agent.memory.runtime import get_memory_orchestrator
+from agent.knowledge.runtime import get_knowledge_core
 from agent.profiles import AgentCatalog
 
 
@@ -26,6 +27,7 @@ def get_delegation_runtime() -> DelegationRuntime:
                 agent_catalog=catalog,
                 memory_orchestrator=get_memory_orchestrator(),
                 pending_action_store=MasterThreadStateStore(),
+                user_learning_sink=get_knowledge_core().record_book_user_learning,
             )
     return _RUNTIME
 
