@@ -4,7 +4,7 @@ from collections.abc import Callable
 import re
 from typing import Any
 
-from agent.knowledge.models import ContextPackRequest
+from agent.knowledge.models import BookRetrievalRequest
 from agent.profiles import get_active_profile_policy
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 
@@ -48,23 +48,23 @@ class BooksCapabilityService:
         query = str(payload.get("query") or "").strip()
         if not query:
             return {"action": "books.knowledge_query", "evidence": [], "policy": {}}
+        policy = get_active_profile_policy()
+        user_id = policy.user_id if policy is not None else "default"
+        max_chunks = max(1, min(int(payload.get("max_chunks") or 6), 12))
         token_budget = max(256, min(int(payload.get("token_budget") or 2400), 8000))
-        pack = self._knowledge_core_provider().create_context_pack(
-            ContextPackRequest(
+        result = self._knowledge_core_provider().search_active_book_materializations(
+            BookRetrievalRequest(
+                user_id=user_id,
                 query=query,
-                purpose="specialist",
-                destination="external",
+                destination=policy.source_egress if policy is not None else "local",
+                max_chunks=max_chunks,
                 token_budget=token_budget,
-                source_kinds=["book", "book_document", "book_page", "book_skill"],
-                include_raw_content=False,
-                citations_required=True,
             )
         )
         return {
             "action": "books.knowledge_query",
-            "context_pack_id": str(pack.get("id") or ""),
-            "evidence": list(pack.get("evidence") or []),
-            "policy": dict(pack.get("policy") or {}),
+            "evidence": list(result.get("evidence") or []),
+            "policy": dict(result.get("policy") or {}),
         }
 
     def lookup_skills(self, payload: dict[str, Any]) -> dict[str, Any]:

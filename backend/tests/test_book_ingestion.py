@@ -187,6 +187,28 @@ def test_same_user_epub_import_is_idempotent_and_path_free(tmp_path: Path) -> No
     assert pack["evidence"] == []
 
 
+def test_local_only_book_import_cannot_be_cleared_by_an_idempotent_reimport(
+    tmp_path: Path,
+) -> None:
+    core = build_core(tmp_path)
+    protected = BookImportRequest(
+        user_id="user-1",
+        rights_attestation_version="local-epub-v1",
+        scan_approved=True,
+        local_only=True,
+    )
+    content = valid_epub_bytes()
+
+    first = core.import_book_epub(protected, content)
+    duplicate = core.import_book_epub(
+        protected.model_copy(update={"local_only": False}),
+        content,
+    )
+
+    assert first.local_only is True
+    assert duplicate.local_only is True
+
+
 def test_pipeline_versions_return_their_exact_run(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     content = valid_epub_bytes()

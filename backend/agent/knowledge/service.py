@@ -26,6 +26,7 @@ from agent.knowledge.models import (
     BookImportStatus,
     BookMaterializationRequest,
     BookMaterializationStatus,
+    BookRetrievalRequest,
     BookQualityRequest,
     BootstrapRequest,
     ContextPackRequest,
@@ -353,6 +354,12 @@ class KnowledgeCore:
             user_id=user_id,
             edition_id=edition_id,
         )
+
+    def search_active_book_materializations(
+        self,
+        request: BookRetrievalRequest,
+    ) -> dict[str, Any]:
+        return self.book_materializations.search_active(request)
 
     def get_book_ingestion_status(
         self,

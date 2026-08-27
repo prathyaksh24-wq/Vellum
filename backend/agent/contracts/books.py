@@ -82,11 +82,23 @@ class BookClaim(BooksContractModel):
 
 class BookJudgment(BooksContractModel):
     author_position: str = ""
+    user_position: str = "unknown"
+    vellum_position: str = ""
     strongest_evidence: str = ""
     strongest_counterargument: str = ""
     underlying_factors: list[str] = Field(default_factory=list)
     unresolved_uncertainty: list[str] = Field(default_factory=list)
     conclusion: str = ""
+
+
+class BookRetrievalPolicy(BooksContractModel):
+    receipt_id: str = ""
+    destination: Literal["local", "external"]
+    active_materializations_only: bool
+    tenant_scoped: bool
+    source_content: Literal["untrusted_evidence"]
+    whole_chunks_only: bool
+    local_only_excluded: bool
 
 
 class UserLearningEvent(BooksContractModel):
@@ -115,6 +127,7 @@ class BooksAgentEnvelope(BooksContractModel):
     claims: list[BookClaim] = Field(default_factory=list)
     evidence: list[BookEvidenceAnchor] = Field(default_factory=list)
     judgment: BookJudgment | None = None
+    retrieval_policy: BookRetrievalPolicy | None = None
     user_learning_events: list[UserLearningEvent] = Field(default_factory=list)
     uncertainty: list[str] = Field(default_factory=list)
     status: Literal["complete", "partial", "abstained", "failed"]

@@ -51,6 +51,8 @@ class AgentProfile(ProfileModel):
     description: str = ""
     executor: Literal["deterministic", "llm"] = "deterministic"
     model: str | None = None
+    reasoning_mode: Literal["light", "medium", "high", "extra high", "max", "ultra"] | None = None
+    source_egress: Literal["local", "external"] = "local"
     instructions: InstructionPolicy = Field(default_factory=InstructionPolicy)
     tools: ToolPolicy = Field(default_factory=ToolPolicy)
     skills: SkillPolicy = Field(default_factory=SkillPolicy)
@@ -148,6 +150,9 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "BooksAgent": AgentProfile(
             id="BooksAgent",
             description="Evidence-backed reasoning over installed Books and routed Hermes Book skills.",
+            model="openai/gpt-5.6-luna",
+            reasoning_mode="max",
+            source_egress="external",
             instructions=InstructionPolicy(
                 inline=(
                     "Use Knowledge Core and profile-approved Hermes Book skills. Separate author, user, "

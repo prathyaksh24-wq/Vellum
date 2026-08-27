@@ -36,7 +36,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 _SENSITIVE_LABELS = {
@@ -556,6 +556,11 @@ class KnowledgeStore:
             if version < 9:
                 self._migrate_v9(connection)
                 connection.execute("PRAGMA user_version = 9")
+                version = 9
+            if version < 10:
+                self._migrate_v10(connection)
+                connection.execute("PRAGMA user_version = 10")
+                version = 10
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -978,6 +983,35 @@ class KnowledgeStore:
         )
 
     @staticmethod
+    def _migrate_v10(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(user_book_imports)").fetchall()
+        }
+        if "local_only" not in columns:
+            connection.execute(
+                "ALTER TABLE user_book_imports ADD COLUMN local_only INTEGER NOT NULL DEFAULT 0"
+            )
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS book_retrieval_receipts (
+                id TEXT PRIMARY KEY,
+                tenant_scope TEXT NOT NULL,
+                query_hash TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                active_count INTEGER NOT NULL,
+                candidate_count INTEGER NOT NULL,
+                evidence_count INTEGER NOT NULL,
+                token_budget INTEGER NOT NULL,
+                tokens_used INTEGER NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS book_retrieval_receipts_tenant_time
+            ON book_retrieval_receipts(tenant_scope, created_at DESC);
+            """
+        )
+
+    @staticmethod
     def _migrate_v8(connection: sqlite3.Connection) -> None:
         columns = {
             str(row[1])
@@ -1153,6 +1187,7 @@ class KnowledgeStore:
         asset_sha256: str,
         byte_size: int,
         rights_attestation_version: str,
+        local_only: bool,
         pipeline_version: str,
         policy_snapshot_hash: str,
     ) -> dict[str, Any]:
@@ -1172,8 +1207,16 @@ class KnowledgeStore:
                 (asset_id, user_id, asset_sha256, byte_size, now, now),
             )
             connection.execute(
-                "INSERT OR IGNORE INTO user_book_imports (id, user_id, asset_id, rights_attestation_version, created_at) VALUES (?, ?, ?, ?, ?)",
-                (import_id, user_id, asset_id, rights_attestation_version, now),
+                "INSERT OR IGNORE INTO user_book_imports "
+                "(id, user_id, asset_id, rights_attestation_version, local_only, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (import_id, user_id, asset_id, rights_attestation_version, int(local_only), now),
+            )
+            connection.execute(
+                "UPDATE user_book_imports SET local_only = "
+                "CASE WHEN local_only = 1 OR ? = 1 THEN 1 ELSE 0 END "
+                "WHERE id = ? AND user_id = ?",
+                (int(local_only), import_id, user_id),
             )
             existing = connection.execute("SELECT status, attempt_count FROM book_ingestion_runs WHERE id = ?", (run_id,)).fetchone()
             connection.execute(
@@ -1305,12 +1348,12 @@ class KnowledgeStore:
         with closing(self._connect()) as connection, connection:
             if run_id:
                 row = connection.execute(
-                    "SELECT i.id AS import_id, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? AND r.id = ? LIMIT 1",
+                    "SELECT i.id AS import_id, i.local_only, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? AND r.id = ? LIMIT 1",
                     (import_id, user_id, run_id),
                 ).fetchone()
             else:
                 row = connection.execute(
-                    "SELECT i.id AS import_id, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
+                    "SELECT i.id AS import_id, i.local_only, a.id AS asset_id, a.sha256, a.byte_size, a.media_type, r.id AS run_id, r.status, r.current_stage, r.error_code FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id JOIN book_ingestion_runs r ON r.asset_id = a.id WHERE i.id = ? AND i.user_id = ? ORDER BY r.created_at DESC, r.id DESC LIMIT 1",
                     (import_id, user_id),
                 ).fetchone()
             if row is None:
@@ -1349,6 +1392,7 @@ class KnowledgeStore:
             "asset_sha256": str(row["sha256"]),
             "byte_size": int(row["byte_size"]),
             "media_type": str(row["media_type"]),
+            "local_only": bool(row["local_only"]),
             "status": str(row["status"]),
             "current_stage": str(row["current_stage"]),
             "error_code": str(row["error_code"] or ""),
@@ -2194,6 +2238,73 @@ class KnowledgeStore:
         if row is None:
             raise KeyError("Unknown active Book materialization.")
         return dict(row)
+
+    def list_active_book_materialization_records(
+        self,
+        *,
+        user_id: str,
+    ) -> list[dict[str, Any]]:
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                "SELECT m.id, m.user_id, m.edition_id, m.document_id, m.document_digest, "
+                "m.quality_assessment_id, m.schema_version, m.compiler_version, "
+                "m.model_version, m.prompt_version, m.embedding_model, "
+                "m.embedding_model_revision, m.policy_snapshot_hash, m.bundle_digest, "
+                "m.blob_path, m.skill_id, m.skill_version, m.index_collection, "
+                "m.index_count, m.artifact_paths_json, m.chunk_count, m.citation_count, "
+                "m.embedding_count, i.local_only FROM book_materializations m "
+                "JOIN active_book_materializations a ON a.materialization_id = m.id "
+                "AND a.user_id = m.user_id AND a.edition_id = m.edition_id "
+                "JOIN book_documents d ON d.id = m.document_id AND d.user_id = m.user_id "
+                "JOIN book_ingestion_runs r ON r.id = d.run_id AND r.user_id = m.user_id "
+                "JOIN user_book_imports i ON i.asset_id = r.asset_id AND i.user_id = m.user_id "
+                "WHERE a.user_id = ? ORDER BY a.activated_at DESC, m.id ASC",
+                (user_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def record_book_retrieval_receipt(
+        self,
+        *,
+        user_id: str,
+        query: str,
+        destination: str,
+        active_count: int,
+        candidate_count: int,
+        evidence_count: int,
+        token_budget: int,
+        tokens_used: int,
+    ) -> str:
+        tenant_scope = self.book_tenant_scope(user_id)
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        created_at = _now()
+        receipt_id = _stable_id(
+            "brr",
+            tenant_scope,
+            query_hash,
+            destination,
+            created_at,
+        )
+        with closing(self._connect()) as connection, connection:
+            connection.execute(
+                "INSERT INTO book_retrieval_receipts "
+                "(id, tenant_scope, query_hash, destination, active_count, candidate_count, "
+                "evidence_count, token_budget, tokens_used, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    receipt_id,
+                    tenant_scope,
+                    query_hash,
+                    destination,
+                    max(0, int(active_count)),
+                    max(0, int(candidate_count)),
+                    max(0, int(evidence_count)),
+                    max(0, int(token_budget)),
+                    max(0, int(tokens_used)),
+                    created_at,
+                ),
+            )
+        return receipt_id
 
     def get_active_book_materialization_status(
         self,

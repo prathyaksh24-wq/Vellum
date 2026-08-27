@@ -21,6 +21,7 @@ from agent.knowledge.models import (
     BookImportRequest,
     BookImportStatus,
     BookMaterializationRequest,
+    BookRetrievalRequest,
     BookQualityRequest,
     ContextPackRequest,
 )
@@ -64,6 +65,7 @@ class RecordingBookIndex:
 
     def __init__(self) -> None:
         self.points: dict[tuple[str, str], dict[str, object]] = {}
+        self.searches: list[dict[str, object]] = []
 
     def upsert(
         self,
@@ -92,6 +94,36 @@ class RecordingBookIndex:
         for key in list(self.points):
             if key[0] == materialization_id:
                 del self.points[key]
+
+    def search(
+        self,
+        *,
+        embedding: list[float],
+        top_k: int,
+        filters: dict[str, object],
+    ) -> list[dict[str, object]]:
+        self.searches.append(
+            {"embedding": embedding, "top_k": top_k, "filters": dict(filters)}
+        )
+        allowed = set(filters["materialization_id"]["$in"])
+        matches: list[dict[str, object]] = []
+        for (materialization_id, chunk_id), point in self.points.items():
+            if point["user_id"] != filters["user_id"] or materialization_id not in allowed:
+                continue
+            matches.append(
+                {
+                    "text": point["text"],
+                    "score": 0.9,
+                    "metadata": {
+                        "user_id": point["user_id"],
+                        "materialization_id": materialization_id,
+                        "edition_id": point["edition_id"],
+                        "document_id": point["document_id"],
+                        "chunk_id": chunk_id,
+                    },
+                }
+            )
+        return matches[:top_k]
 
 
 class FailingBookIndex(RecordingBookIndex):
@@ -224,12 +256,14 @@ def import_and_construct(
     content: bytes,
     *,
     user_id: str = "user-1",
+    local_only: bool = False,
 ) -> tuple[BookImportStatus, BookImportStatus]:
     imported = core.import_book_epub(
         BookImportRequest(
             user_id=user_id,
             rights_attestation_version="local-epub-v1",
             scan_approved=True,
+            local_only=local_only,
         ),
         content,
     )
@@ -497,6 +531,226 @@ def test_passed_document_compiles_one_compatible_active_materialization(
             user_id="user-2",
             edition_id=status.edition_id,
         )
+
+
+def test_book_retrieval_returns_verified_evidence_from_active_materializations(
+    tmp_path: Path,
+) -> None:
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    status = core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    result = core.search_active_book_materializations(
+        BookRetrievalRequest(
+            user_id="user-1",
+            query="What does the book say about evidence?",
+            max_chunks=1,
+            token_budget=800,
+        )
+    )
+
+    assert index.searches == [
+        {
+            "embedding": [1.0, 38.0],
+            "top_k": 2,
+            "filters": {
+                "user_id": "user-1",
+                "materialization_id": {"$in": [status.materialization_id]},
+            },
+        }
+    ]
+    assert result["policy"] | {"receipt_id": ""} == {
+        "active_materializations_only": True,
+        "tenant_scoped": True,
+        "source_content": "untrusted_evidence",
+        "whole_chunks_only": True,
+        "destination": "local",
+        "local_only_excluded": False,
+        "receipt_id": "",
+    }
+    assert result["policy"]["receipt_id"].startswith("brr_")
+    assert len(result["evidence"]) == 1
+    evidence = result["evidence"][0]
+    assert evidence["materialization_id"] == status.materialization_id
+    assert evidence["document_id"] == structured.document_id
+    assert evidence["text_hash"] == sha256(evidence["text"].encode("utf-8")).hexdigest()
+    assert evidence["citations"]
+    assert evidence["citations"][0]["epub_cfi"].startswith("epubcfi(")
+    with sqlite3.connect(core.store.db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        receipt = connection.execute(
+            "SELECT * FROM book_retrieval_receipts WHERE id = ?",
+            (result["policy"]["receipt_id"],),
+        ).fetchone()
+    assert receipt is not None
+    assert receipt["tenant_scope"] != "user-1"
+    assert receipt["query_hash"] != "What does the book say about evidence?"
+    assert receipt["evidence_count"] == 1
+    assert "Truth needs evidence" not in json.dumps(dict(receipt), sort_keys=True)
+
+
+def test_book_retrieval_excludes_superseded_materializations(tmp_path: Path) -> None:
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, structured_epub_bytes())
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    request = BookMaterializationRequest(
+        user_id="user-1",
+        import_id=imported.import_id,
+        run_id=imported.run_id,
+        document_id=structured.document_id,
+    )
+    first = core.materialize_book_document(request)
+    revised = KnowledgeCore(
+        core.store,
+        conversations_path=core.conversations_path,
+        vault_root=core.vault_root,
+        book_embedding_provider=FixedBookEmbedder(),
+        book_materialization_compiler_version="book-materializer-v2",
+        book_retrieval_index=index,
+    )
+    second = revised.materialize_book_document(request)
+
+    result = revised.search_active_book_materializations(
+        BookRetrievalRequest(
+            user_id="user-1",
+            query="What does the book say?",
+            max_chunks=2,
+        )
+    )
+
+    assert first.materialization_id != second.materialization_id
+    assert index.searches[-1]["filters"]["materialization_id"] == {
+        "$in": [second.materialization_id]
+    }
+    assert result["evidence"]
+    assert {item["materialization_id"] for item in result["evidence"]} == {
+        second.materialization_id
+    }
+
+
+def test_book_retrieval_applies_local_only_before_external_model_context(
+    tmp_path: Path,
+) -> None:
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(
+        core,
+        structured_epub_bytes(),
+        local_only=True,
+    )
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    external = core.search_active_book_materializations(
+        BookRetrievalRequest(
+            user_id="user-1",
+            query="What does the book say?",
+            destination="external",
+        )
+    )
+    local = core.search_active_book_materializations(
+        BookRetrievalRequest(
+            user_id="user-1",
+            query="What does the book say?",
+            destination="local",
+        )
+    )
+
+    assert imported.local_only is True
+    assert external["evidence"] == []
+    assert external["policy"]["local_only_excluded"] is True
+    assert len(index.searches) == 1
+    assert local["evidence"]
+
+
+def test_book_retrieval_skips_whole_chunks_that_exceed_the_token_budget(
+    tmp_path: Path,
+) -> None:
+    long_text = "evidence " * 220
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": (
+                '<html xmlns="http://www.w3.org/1999/xhtml"><body>'
+                '<section id="first"><h1>Opening</h1><p>'
+                + long_text
+                + '</p><figure><img src="lamp.jpg" alt="A lamp"/>'
+                '<figcaption>Light</figcaption></figure></section></body></html>'
+            )
+        },
+    )
+    index = RecordingBookIndex()
+    core = build_core(tmp_path, book_retrieval_index=index)
+    imported, structured = import_and_construct(core, content)
+    core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    core.materialize_book_document(
+        BookMaterializationRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+
+    result = core.search_active_book_materializations(
+        BookRetrievalRequest(
+            user_id="user-1",
+            query="Find the relevant evidence.",
+            max_chunks=2,
+            token_budget=256,
+        )
+    )
+
+    assert len(result["evidence"]) == 1
+    assert long_text.strip() not in result["evidence"][0]["text"]
+    assert result["evidence"][0]["text_hash"] == sha256(
+        result["evidence"][0]["text"].encode("utf-8")
+    ).hexdigest()
 
 
 def test_materialization_rejects_non_passed_and_cross_tenant_documents(
