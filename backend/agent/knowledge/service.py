@@ -29,6 +29,7 @@ from agent.knowledge.models import (
     BookRetrievalRequest,
     BookQualityRequest,
     BookUserLearningRequest,
+    BookWisdomRecordInput,
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
@@ -125,6 +126,11 @@ class KnowledgeCore:
             "user_learning_candidates": {
                 "current": "Knowledge Core",
                 "future": "Knowledge Core",
+                "migration": "canonical",
+            },
+            "book_wisdom": {
+                "current": "Knowledge Core derived insights",
+                "future": "Knowledge Core derived insights",
                 "migration": "canonical",
             },
             "knowledge_wiki": {
@@ -237,6 +243,9 @@ class KnowledgeCore:
             for candidate in request.candidates
         ]
         return {"relationship": observation, "candidates": candidates}
+
+    def propose_book_wisdom(self, request: BookWisdomRecordInput) -> dict[str, Any]:
+        return self.store.propose_book_wisdom(request)
 
     @staticmethod
     def _validate_book_user_learning(request: BookUserLearningRequest) -> None:
