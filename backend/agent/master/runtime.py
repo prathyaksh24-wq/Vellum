@@ -13,6 +13,13 @@ from uuid import uuid4
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.agents.base import SpecialistResponse
+from agent.knowledge.models import (
+    BookRelationshipEventInput,
+    BookUserLearningCandidateInput,
+    BookUserLearningEvidenceReference,
+    BookUserLearningRequest,
+    ObservationActor,
+)
 from agent.llm.routing.runtime import get_routed_chat_model
 from agent.master.state import MasterThreadStateStore
 from agent.memory.orchestrator import MemoryOrchestrator
@@ -74,12 +81,14 @@ class DelegationRuntime:
         audit_path: str | Path = Path("data/memory/delegation-runs.jsonl"),
         reasoning_mode: Any = None,
         pending_action_store: MasterThreadStateStore | None = None,
+        user_learning_sink: Callable[[BookUserLearningRequest], dict[str, Any]] | None = None,
     ) -> None:
         self.agent_catalog = agent_catalog
         self.memory_orchestrator = memory_orchestrator
         self.llm_factory = llm_factory
         self.reasoning_mode = reasoning_mode
         self.pending_action_store = pending_action_store
+        self.user_learning_sink = user_learning_sink
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
 
@@ -94,7 +103,7 @@ class DelegationRuntime:
         goal = request.task
         parent_thread_id = request.parent_thread_id
         context = request.context
-        task_id = request.task_id
+        task_id = request.task_id or str(uuid4())
         action_request = None
         if request.confirm_pending_action:
             action_request = self._resolve_pending_action(
@@ -170,6 +179,13 @@ class DelegationRuntime:
             _validate_response_schema(profile, response)
             if response.agent != profile.id:
                 raise ValueError("delegated response agent does not match the selected profile")
+            response = self._submit_user_learning(
+                profile=profile,
+                response=response,
+                user_id=request.user_id,
+                parent_thread_id=parent_thread_id,
+                task_id=task_id,
+            )
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
             if decision.status == "stale" and decision.response is not None:
@@ -210,7 +226,12 @@ class DelegationRuntime:
         else:
             cache_status = decision.status
             try:
-                if self.memory_orchestrator is not None and action_request is None and not context.strip():
+                if (
+                    self.memory_orchestrator is not None
+                    and action_request is None
+                    and not context.strip()
+                    and not _has_user_learning_events(response)
+                ):
                     self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
             except Exception:
                 logger.exception("Could not store specialist response for %s.", profile.id)
@@ -226,6 +247,108 @@ class DelegationRuntime:
             goal=goal,
             context=context,
         )
+
+    def _submit_user_learning(
+        self,
+        *,
+        profile: AgentProfile,
+        response: SpecialistResponse,
+        user_id: str,
+        parent_thread_id: str,
+        task_id: str,
+    ) -> SpecialistResponse:
+        if self.user_learning_sink is None or profile.response_schema != "books-agent-response-v1":
+            return response
+
+        from agent.contracts.books import BooksAgentEnvelope
+
+        envelope = BooksAgentEnvelope.model_validate(response.structured_payload.get("books_agent"))
+        if not envelope.user_learning_events:
+            return response
+        anchors = {anchor.id: anchor for anchor in envelope.evidence}
+        submitted = 0
+        failed = 0
+        for event in envelope.user_learning_events:
+            try:
+                event_anchors = [anchors[evidence_id] for evidence_id in event.evidence_ids]
+                evidence = [
+                    BookUserLearningEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=anchor.id,
+                        stance="supports",
+                    )
+                    for anchor in event_anchors
+                ]
+                evidence.append(
+                    BookUserLearningEvidenceReference(
+                        kind="conversation",
+                        reference_id=parent_thread_id,
+                        stance="supports",
+                    )
+                )
+                actor = ObservationActor(event.actor)
+                request = BookUserLearningRequest(
+                    relationship=BookRelationshipEventInput(
+                        user_id=user_id,
+                        event_key=f"{task_id}:{event.id}",
+                        action="user.statement_recorded" if event.basis == "explicit" else "idea.discussed",
+                        actor=actor,
+                        evidence_basis=(
+                            "connector"
+                            if actor == ObservationActor.CONNECTOR
+                            else "explicit"
+                            if event.basis == "explicit"
+                            else "interaction"
+                        ),
+                        trigger="delegated_books_agent",
+                        book_ids=list(dict.fromkeys(anchor.work_id for anchor in event_anchors)),
+                        source_anchor_ids=list(dict.fromkeys(event.evidence_ids)),
+                        conversation_ids=[parent_thread_id],
+                        confidence=event.confidence,
+                    ),
+                    candidates=[
+                        BookUserLearningCandidateInput(
+                            user_id=user_id,
+                            proposition_type=event.kind,
+                            proposition=event.statement,
+                            basis=event.basis,
+                            actor=actor,
+                            evidence=evidence,
+                            confidence=event.confidence,
+                            sensitivity=event.sensitivity,
+                            scope=event.scope,
+                            permitted_uses=event.permitted_uses,
+                            valid_from=event.valid_from or None,
+                            valid_to=event.valid_to or None,
+                            expires_at=event.expires_at or None,
+                            derivation="books_agent.user_learning_event",
+                            model_version=profile.model or "",
+                            prompt_version="books-user-learning-envelope-v1",
+                            policy_version="books-user-learning-policy-v1",
+                            source_agent=profile.id,
+                        )
+                    ],
+                )
+                self.user_learning_sink(request)
+                submitted += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "Could not submit BooksAgent learning event %s (%s).",
+                    event.id,
+                    exc.__class__.__name__,
+                )
+
+        status = "completed" if failed == 0 else "error" if submitted == 0 else "partial"
+        activity = [
+            *response.activity_events,
+            {
+                "name": "user_learning.submit",
+                "status": status,
+                "count": submitted,
+            },
+        ]
+        return response.model_copy(update={"activity_events": activity})
 
     def _resolve_pending_action(self, *, agent_id: str, parent_thread_id: str) -> dict[str, Any] | None:
         if self.pending_action_store is None:
@@ -443,6 +566,14 @@ def _validate_response_schema(profile: AgentProfile, response: SpecialistRespons
     envelope = BooksAgentEnvelope.model_validate(payload)
     if envelope.answer != response.summary:
         raise ValueError("BooksAgent envelope answer must match the specialist summary")
+
+
+def _has_user_learning_events(response: SpecialistResponse) -> bool:
+    payload = response.structured_payload.get("books_agent")
+    if not isinstance(payload, dict):
+        return False
+    events = payload.get("user_learning_events")
+    return isinstance(events, list) and bool(events)
 
 
 def _text_hash(text: str) -> str:

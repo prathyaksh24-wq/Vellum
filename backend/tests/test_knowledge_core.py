@@ -507,7 +507,7 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
     migrated = KnowledgeStore(db_path, tmp_path / "data" / "knowledge" / "blobs")
 
     status = migrated.status()
-    assert status["schema_version"] == 10
+    assert status["schema_version"] == 11
     assert status["counts"]["book_assets"] == 0
     assert status["counts"]["book_ingestion_runs"] == 0
     assert status["counts"]["book_stage_receipts"] == 0
@@ -529,6 +529,10 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
             "SELECT name FROM sqlite_master WHERE type = 'table' "
             "AND name = 'book_retrieval_receipts'"
         ).fetchone()
+        user_learning_table = connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name = 'user_learning_candidates'"
+        ).fetchone()
     assert {"subject_key", "category", "evidence_class", "eligible", "event_key", "sensitivity"} <= columns
     assert {
         "quality_assessment_id",
@@ -537,6 +541,7 @@ def test_schema_v1_database_migrates_without_data_loss(tmp_path: Path) -> None:
     } <= book_document_columns
     assert "local_only" in book_import_columns
     assert retrieval_receipt_table is not None
+    assert user_learning_table is not None
 
 
 def test_sensitive_annotation_requires_trusted_review_for_learning(tmp_path: Path) -> None:

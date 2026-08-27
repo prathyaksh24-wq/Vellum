@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
+from agent.agents.base import SpecialistResponse
 from agent.agents.books import BooksAgent
 from agent.agents.books_synthesis import RoutedBooksSynthesizer
 from agent.contracts.books import BookClaim, BookEvidenceAnchor, BooksAgentEnvelope
@@ -237,6 +238,74 @@ def test_books_agent_synthesizes_only_claims_linked_to_verified_book_evidence() 
     assert envelope.user_learning_events == []
 
 
+def test_books_agent_preserves_proposal_only_user_learning_events() -> None:
+    def synthesize(_query, _evidence):
+        return {
+            "answer": "The passage distinguishes control from external events.",
+            "answer_claim_ids": ["claim-1"],
+            "claims": [
+                {
+                    "id": "claim-1",
+                    "text": "The passage distinguishes control from external events.",
+                    "origin": "book",
+                    "form": "paraphrase",
+                    "speaker": "author",
+                    "epistemic_status": "asserted",
+                    "evidence_ids": ["evidence-1"],
+                    "evidence_confidence": 0.9,
+                    "interpretation_confidence": 0.8,
+                    "freshness": "timeless",
+                    "evidence_status": "supported",
+                }
+            ],
+            "user_learning_events": [
+                {
+                    "id": "learning-1",
+                    "kind": "practical_need",
+                    "statement": "The user may currently value ways to separate controllable from uncontrollable events.",
+                    "basis": "inferred",
+                    "actor": "user",
+                    "evidence_ids": ["evidence-1"],
+                    "confidence": 0.58,
+                    "sensitivity": "private",
+                    "scope": "books",
+                    "permitted_uses": ["context", "wisdom"],
+                }
+            ],
+            "uncertainty": [],
+            "status": "complete",
+        }
+
+    core = FakeKnowledgeCore(
+        [
+            {
+                "evidence_id": "evidence-1",
+                "materialization_id": "bkm-meditations",
+                "edition_id": "bed-meditations",
+                "document_id": "bkd-meditations",
+                "chunk_id": "bkc-control",
+                "section_id": "section-4",
+                "text": "You have power over your mind, not outside events.",
+                "text_hash": "a" * 64,
+                "score": 0.91,
+                "citations": [{"epub_cfi": "epubcfi(/6/8)"}],
+            }
+        ]
+    )
+
+    response = build_agent(core, synthesizer=synthesize).answer(
+        "This distinction feels useful for what I am dealing with right now."
+    )
+    envelope = BooksAgentEnvelope.model_validate(response.structured_payload["books_agent"])
+
+    assert response.status == "answered"
+    assert len(envelope.user_learning_events) == 1
+    assert envelope.user_learning_events[0].lifecycle == "proposed"
+    assert envelope.user_learning_events[0].basis == "inferred"
+    assert envelope.user_learning_events[0].evidence_ids == ["evidence-1"]
+    assert response.memory_proposals == []
+
+
 def test_routed_books_synthesizer_frames_book_text_as_untrusted_and_uses_luna_max() -> None:
     calls = []
 
@@ -466,3 +535,125 @@ def test_delegation_runtime_executes_books_agent_under_profile_tool_policy(tmp_p
     assert result.cache_reason == "memory_orchestrator_unavailable"
     assert core.requests[0].user_id == "user-books"
     assert core.requests[0].destination == "external"
+
+
+def test_delegation_runtime_submits_books_learning_to_governed_sink(tmp_path) -> None:
+    class LearningBooksExecutor:
+        name = "BooksAgent"
+
+        def answer(self, _query):
+            envelope = BooksAgentEnvelope(
+                answer="The passage distinguishes control from external events.",
+                answer_claim_ids=["claim-1"],
+                claims=[
+                    BookClaim(
+                        id="claim-1",
+                        text="The passage distinguishes control from external events.",
+                        origin="book",
+                        form="paraphrase",
+                        speaker="author",
+                        epistemic_status="asserted",
+                        evidence_ids=["evidence-1"],
+                        evidence_confidence=0.9,
+                        interpretation_confidence=0.8,
+                        evidence_status="supported",
+                    )
+                ],
+                evidence=[
+                    BookEvidenceAnchor(
+                        id="evidence-1",
+                        source_id="bkm-meditations",
+                        work_id="work-meditations",
+                        locator_type="epub_cfi",
+                        locator="epubcfi(/6/8)",
+                    )
+                ],
+                user_learning_events=[
+                    {
+                        "id": "learning-1",
+                        "kind": "practical_need",
+                        "statement": "The user may currently value ways to separate controllable from uncontrollable events.",
+                        "basis": "inferred",
+                        "actor": "user",
+                        "evidence_ids": ["evidence-1"],
+                        "confidence": 0.58,
+                        "permitted_uses": ["context", "wisdom"],
+                    }
+                ],
+                status="complete",
+            )
+            return SpecialistResponse(
+                agent="BooksAgent",
+                status="answered",
+                summary=envelope.answer,
+                structured_payload={"books_agent": envelope.model_dump(mode="json")},
+            )
+
+    submitted = []
+    catalog = AgentCatalog(profile_dir=tmp_path / "profiles")
+    profile = catalog.get("BooksAgent")
+    runtime = DelegationRuntime(
+        agent_catalog=AgentCatalog(
+            profile_dir=tmp_path / "profiles",
+            builtins={"BooksAgent": profile},
+            executors={"BooksAgent": LearningBooksExecutor()},
+        ),
+        memory_orchestrator=None,
+        user_learning_sink=lambda request: submitted.append(request) or {"stored": True},
+        audit_path=tmp_path / "delegation-runs.jsonl",
+    )
+
+    result = runtime.delegate(
+        DelegationRequest(
+            agent_id="BooksAgent",
+            task="This idea feels useful for what I am dealing with right now.",
+            parent_thread_id="thread-books",
+            user_id="user-books",
+            task_id="turn-books-18",
+        )
+    )
+
+    assert result.response.status == "answered"
+    assert len(submitted) == 1
+    assert submitted[0].relationship.user_id == "user-books"
+    assert submitted[0].relationship.event_key == "turn-books-18:learning-1"
+    assert submitted[0].relationship.book_ids == ["work-meditations"]
+    assert submitted[0].relationship.conversation_ids == ["thread-books"]
+    assert submitted[0].candidates[0].proposition_type == "practical_need"
+    assert submitted[0].candidates[0].basis == "inferred"
+    assert result.response.activity_events[-1] == {
+        "name": "user_learning.submit",
+        "status": "completed",
+        "count": 1,
+    }
+
+    def fail_sink(_request):
+        raise RuntimeError("database unavailable")
+
+    failing_runtime = DelegationRuntime(
+        agent_catalog=AgentCatalog(
+            profile_dir=tmp_path / "failing-profiles",
+            builtins={"BooksAgent": profile},
+            executors={"BooksAgent": LearningBooksExecutor()},
+        ),
+        memory_orchestrator=None,
+        user_learning_sink=fail_sink,
+        audit_path=tmp_path / "failing-delegation-runs.jsonl",
+    )
+    failed_submission = failing_runtime.delegate(
+        DelegationRequest(
+            agent_id="BooksAgent",
+            task="This idea still feels relevant.",
+            parent_thread_id="thread-books",
+            user_id="user-books",
+            task_id="turn-books-19",
+        )
+    )
+
+    assert failed_submission.response.status == "answered"
+    assert failed_submission.response.summary == result.response.summary
+    assert failed_submission.response.activity_events[-1] == {
+        "name": "user_learning.submit",
+        "status": "error",
+        "count": 0,
+    }

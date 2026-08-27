@@ -111,13 +111,43 @@ class UserLearningEvent(BooksContractModel):
         "book_impact",
         "changing_interest",
         "contradiction",
+        "taste",
+        "preference",
+        "principle",
+        "emotional_state",
+        "current_situation",
+        "practical_need",
     ]
-    statement: str = Field(min_length=1)
-    basis: Literal["explicit", "observed", "inferred"]
+    statement: str = Field(min_length=1, max_length=8000)
+    basis: Literal["explicit", "inferred"]
+    actor: Literal["user", "connector"] = "user"
     evidence_ids: list[str] = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
     sensitivity: Literal["private", "sensitive"] = "private"
+    lifecycle: Literal["proposed"] = "proposed"
+    scope: str = Field(default="books", min_length=1, max_length=120)
+    permitted_uses: list[Literal["context", "personalization", "wisdom"]] = Field(
+        default_factory=lambda: ["context"],
+        min_length=1,
+        max_length=3,
+    )
+    source_agent: Literal["BooksAgent"] = "BooksAgent"
     observed_at: str = ""
+    valid_from: str = ""
+    valid_to: str = ""
+    expires_at: str = ""
+
+    @model_validator(mode="after")
+    def enforce_proposal_boundary(self) -> Self:
+        if self.sensitivity == "sensitive" and (
+            self.basis != "explicit" or self.actor != "user"
+        ):
+            raise ValueError("sensitive Book learning requires explicit user evidence")
+        if self.kind in {"emotional_state", "current_situation"} and not (
+            self.valid_to or self.expires_at
+        ):
+            raise ValueError("temporary Book learning requires a time bound")
+        return self
 
 
 class BooksAgentEnvelope(BooksContractModel):
@@ -136,6 +166,7 @@ class BooksAgentEnvelope(BooksContractModel):
     def validate_evidence_graph(self) -> Self:
         claim_by_id = _unique_by_id(self.claims, "claim")
         evidence_by_id = _unique_by_id(self.evidence, "evidence")
+        _unique_by_id(self.user_learning_events, "user learning event")
         if len(set(self.answer_claim_ids)) != len(self.answer_claim_ids):
             raise ValueError("answer_claim_ids must be unique")
         if self.status == "complete" and not self.answer_claim_ids:

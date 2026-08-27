@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class Sensitivity(str, Enum):
@@ -41,6 +41,11 @@ class EvidenceClass(str, Enum):
     ENGAGEMENT = "engagement"
     PASSIVE = "passive"
     IMPORTED = "imported"
+
+
+class UserLearningSensitivity(str, Enum):
+    PRIVATE = "private"
+    SENSITIVE = "sensitive"
 
 
 class IngestionJobStatus(str, Enum):
@@ -233,6 +238,154 @@ class BookRetrievalRequest(BaseModel):
         if not clean:
             raise ValueError("book retrieval fields cannot be blank")
         return clean
+
+
+class BookRelationshipEventInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=160)
+    event_key: str = Field(min_length=1, max_length=500)
+    action: Literal[
+        "book.imported",
+        "book.discovered",
+        "book.processed",
+        "book.summarized",
+        "book.questioned",
+        "book.returned",
+        "citation.inspected",
+        "idea.discussed",
+        "idea.compared",
+        "idea.challenged",
+        "idea.applied",
+        "idea.connected",
+        "interface.page_flipped",
+        "user.statement_recorded",
+        "reading_status.stated",
+        "reading_status.connector_observed",
+    ]
+    actor: ObservationActor
+    evidence_basis: Literal["explicit", "interaction", "imported", "agent_activity", "connector"]
+    trigger: str = Field(default="books_agent", max_length=160)
+    book_ids: list[str] = Field(default_factory=list, max_length=50)
+    source_anchor_ids: list[str] = Field(default_factory=list, max_length=100)
+    conversation_ids: list[str] = Field(default_factory=list, max_length=100)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    observed_at: datetime | None = None
+    sensitivity: Sensitivity = Sensitivity.PRIVATE_LOCAL_ONLY
+
+    @field_validator("user_id", "event_key")
+    @classmethod
+    def clean_relationship_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("Book relationship identity fields cannot be blank")
+        return clean
+
+    @field_validator("book_ids", "source_anchor_ids", "conversation_ids")
+    @classmethod
+    def clean_relationship_references(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(value.strip() for value in values if value.strip()))
+
+
+class BookUserLearningEvidenceReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["observation", "book", "book_anchor", "conversation"]
+    reference_id: str = Field(min_length=1, max_length=500)
+    stance: Literal["supports", "conflicts"] = "supports"
+
+    @field_validator("reference_id")
+    @classmethod
+    def clean_learning_reference(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("User-learning evidence reference cannot be blank")
+        return clean
+
+
+class BookUserLearningCandidateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=160)
+    proposition_type: Literal[
+        "taste",
+        "preference",
+        "principle",
+        "belief",
+        "struggle",
+        "goal",
+        "emotional_state",
+        "current_situation",
+        "practical_need",
+        "reading_status",
+        "reaction",
+        "book_impact",
+        "changing_interest",
+        "contradiction",
+    ]
+    proposition: str = Field(min_length=1, max_length=8000)
+    basis: Literal["explicit", "inferred"]
+    actor: ObservationActor
+    evidence: list[BookUserLearningEvidenceReference] = Field(min_length=1, max_length=200)
+    confidence: float = Field(ge=0.0, le=1.0)
+    sensitivity: UserLearningSensitivity = UserLearningSensitivity.PRIVATE
+    scope: str = Field(default="books", min_length=1, max_length=120)
+    permitted_uses: list[Literal["context", "personalization", "wisdom"]] = Field(
+        default_factory=lambda: ["context"],
+        min_length=1,
+        max_length=3,
+    )
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    expires_at: datetime | None = None
+    derivation: str = Field(min_length=1, max_length=160)
+    model_version: str = Field(default="", max_length=160)
+    prompt_version: str = Field(min_length=1, max_length=160)
+    policy_version: str = Field(min_length=1, max_length=160)
+    schema_version: Literal["book-user-learning-v1"] = "book-user-learning-v1"
+    source_agent: str = Field(default="BooksAgent", min_length=1, max_length=160)
+
+    @field_validator(
+        "user_id",
+        "proposition",
+        "scope",
+        "derivation",
+        "prompt_version",
+        "policy_version",
+        "source_agent",
+    )
+    @classmethod
+    def clean_learning_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean:
+            raise ValueError("User-learning fields cannot be blank")
+        return clean
+
+    @field_validator("permitted_uses")
+    @classmethod
+    def clean_permitted_uses(cls, values: list[str]) -> list[str]:
+        return list(dict.fromkeys(values))
+
+    @model_validator(mode="after")
+    def enforce_sensitive_learning_boundary(self) -> "BookUserLearningCandidateInput":
+        if self.sensitivity == UserLearningSensitivity.SENSITIVE and (
+            self.basis != "explicit" or self.actor != ObservationActor.USER
+        ):
+            raise ValueError("Sensitive learning requires explicit user evidence")
+        if not any(item.stance == "supports" for item in self.evidence):
+            raise ValueError("User-learning candidates require supporting evidence")
+        if self.proposition_type in {"emotional_state", "current_situation"} and not (
+            self.valid_to or self.expires_at
+        ):
+            raise ValueError("Temporary user learning requires a time bound")
+        return self
+
+
+class BookUserLearningRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relationship: BookRelationshipEventInput
+    candidates: list[BookUserLearningCandidateInput] = Field(default_factory=list, max_length=20)
 
 
 class BookMaterializationStatus(BaseModel):

@@ -28,12 +28,14 @@ from agent.knowledge.models import (
     BookMaterializationStatus,
     BookRetrievalRequest,
     BookQualityRequest,
+    BookUserLearningRequest,
     BootstrapRequest,
     ContextPackRequest,
     ExternalPolicy,
     MaterializationCanaryRequest,
     ObservationActor,
     ObservationInput,
+    PromotionStatus,
     Sensitivity,
     SourceItemInput,
 )
@@ -120,6 +122,11 @@ class KnowledgeCore:
                 "migration": "preserve",
             },
             "user_model": {"current": "Honcho", "future": "Honcho", "migration": "preserve"},
+            "user_learning_candidates": {
+                "current": "Knowledge Core",
+                "future": "Knowledge Core",
+                "migration": "canonical",
+            },
             "knowledge_wiki": {
                 "current": "Vault/Knowledge",
                 "future": "Obsidian projection of Knowledge Core insights",
@@ -193,6 +200,80 @@ class KnowledgeCore:
             )
         )
         return {"stored": True, **result, **observation}
+
+    def record_book_user_learning(self, request: BookUserLearningRequest) -> dict[str, Any]:
+        request = BookUserLearningRequest.model_validate(request.model_dump(mode="python"))
+        relationship = request.relationship
+        self._validate_book_user_learning(request)
+        tenant_scope = self.store.book_tenant_scope(relationship.user_id)
+        observation = self.store.record_observation(
+            ObservationInput(
+                origin="books.user_learning",
+                actor=relationship.actor,
+                trigger=relationship.trigger,
+                action=relationship.action,
+                event_key=(
+                    f"books:relationship:{tenant_scope}:"
+                    f"{self._digest({'event_key': relationship.event_key})}"
+                ),
+                payload={
+                    "tenant_scope": tenant_scope,
+                    "evidence_basis": relationship.evidence_basis,
+                    "book_ids": relationship.book_ids,
+                    "source_anchor_ids": relationship.source_anchor_ids,
+                    "conversation_ids": relationship.conversation_ids,
+                },
+                sensitivity=relationship.sensitivity,
+                confidence=relationship.confidence,
+                observed_at=relationship.observed_at,
+                promotion_status=PromotionStatus.DURABLE,
+            )
+        )
+        candidates = [
+            self.store.propose_user_learning_candidate(
+                candidate,
+                observation_id=observation["observation_id"],
+            )
+            for candidate in request.candidates
+        ]
+        return {"relationship": observation, "candidates": candidates}
+
+    @staticmethod
+    def _validate_book_user_learning(request: BookUserLearningRequest) -> None:
+        relationship = request.relationship
+        if any(candidate.user_id != relationship.user_id for candidate in request.candidates):
+            raise ValueError("Book relationship and candidate user identities must match")
+        if request.candidates and (
+            relationship.actor in {ObservationActor.AGENT, ObservationActor.SCHEDULED}
+            or relationship.evidence_basis == "agent_activity"
+        ):
+            raise ValueError("Agent Book activity cannot create user-learning candidates")
+
+        for candidate in request.candidates:
+            if candidate.actor != relationship.actor:
+                raise ValueError("Book relationship and candidate actors must match")
+            if candidate.proposition_type == "reading_status":
+                allowed_reading_evidence = (
+                    candidate.basis == "explicit"
+                    and (
+                        (
+                            relationship.action == "reading_status.stated"
+                            and relationship.actor == ObservationActor.USER
+                        )
+                        or (
+                            relationship.action == "reading_status.connector_observed"
+                            and relationship.actor == ObservationActor.CONNECTOR
+                        )
+                    )
+                )
+                if not allowed_reading_evidence:
+                    raise ValueError("Reading status requires explicit user or connector evidence")
+            if (
+                relationship.action == "book.imported"
+                and candidate.basis == "inferred"
+                and candidate.confidence > 0.25
+            ):
+                raise ValueError("Book import is only weak evidence of possible interest")
 
     def record_tool_result(
         self,

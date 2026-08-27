@@ -22,6 +22,8 @@ import re
 from typing import Any, Iterable
 
 from agent.knowledge.models import (
+    BookUserLearningCandidateInput,
+    BookUserLearningEvidenceReference,
     ContentAnnotationInput,
     ContextPackRequest,
     EntityIdentityInput,
@@ -36,7 +38,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 _SENSITIVE_LABELS = {
@@ -208,6 +210,10 @@ def _stable_id(prefix: str, *parts: str) -> str:
 
 def _content_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
+
+
+def _normalized_proposition(value: str) -> str:
+    return " ".join(value.casefold().split())
 
 
 @dataclass(frozen=True)
@@ -561,6 +567,10 @@ class KnowledgeStore:
                 self._migrate_v10(connection)
                 connection.execute("PRAGMA user_version = 10")
                 version = 10
+            if version < 11:
+                self._migrate_v11(connection)
+                connection.execute("PRAGMA user_version = 11")
+                version = 11
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -1008,6 +1018,58 @@ class KnowledgeStore:
             );
             CREATE INDEX IF NOT EXISTS book_retrieval_receipts_tenant_time
             ON book_retrieval_receipts(tenant_scope, created_at DESC);
+            """
+        )
+
+    @staticmethod
+    def _migrate_v11(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS user_learning_candidates (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                dedupe_key TEXT NOT NULL,
+                proposition_type TEXT NOT NULL,
+                proposition TEXT NOT NULL,
+                basis TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                sensitivity TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                permitted_uses_json TEXT NOT NULL DEFAULT '[]',
+                lifecycle TEXT NOT NULL,
+                valid_from TEXT NOT NULL DEFAULT '',
+                valid_to TEXT NOT NULL DEFAULT '',
+                expires_at TEXT NOT NULL DEFAULT '',
+                derivation TEXT NOT NULL,
+                source_agent TEXT NOT NULL,
+                model_version TEXT NOT NULL DEFAULT '',
+                prompt_version TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                schema_version TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                reviewed_at TEXT NOT NULL DEFAULT '',
+                confirmed_at TEXT NOT NULL DEFAULT '',
+                superseded_at TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                UNIQUE(user_id, dedupe_key),
+                CHECK(lifecycle IN ('proposed', 'corroborated', 'confirmed', 'disputed', 'superseded', 'rejected', 'expired'))
+            );
+            CREATE TABLE IF NOT EXISTS user_learning_candidate_evidence (
+                id TEXT PRIMARY KEY,
+                candidate_id TEXT NOT NULL REFERENCES user_learning_candidates(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                reference_id TEXT NOT NULL,
+                stance TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(candidate_id, kind, reference_id, stance),
+                CHECK(kind IN ('observation', 'book', 'book_anchor', 'conversation')),
+                CHECK(stance IN ('supports', 'conflicts'))
+            );
+            CREATE INDEX IF NOT EXISTS user_learning_candidates_user_state_time
+            ON user_learning_candidates(user_id, lifecycle, updated_at DESC);
+            CREATE INDEX IF NOT EXISTS user_learning_candidate_evidence_candidate
+            ON user_learning_candidate_evidence(candidate_id, stance, kind);
             """
         )
 
@@ -2872,6 +2934,145 @@ class KnowledgeStore:
         with closing(self._connect()) as connection:
             return int(connection.execute(f"SELECT COUNT(*) FROM observations {where}", params).fetchone()[0])
 
+    def propose_user_learning_candidate(
+        self,
+        item: BookUserLearningCandidateInput,
+        *,
+        observation_id: str,
+    ) -> dict[str, Any]:
+        dedupe_key = _stable_id(
+            "ulk",
+            item.user_id,
+            item.proposition_type,
+            _normalized_proposition(item.proposition),
+            item.scope,
+        )
+        candidate_id = _stable_id("ulc", item.user_id, dedupe_key)
+        now = _now()
+        references = [
+            *item.evidence,
+            BookUserLearningEvidenceReference(
+                kind="observation",
+                reference_id=observation_id,
+                stance="supports",
+            ),
+        ]
+        unique_references = {
+            (reference.kind, reference.reference_id, reference.stance): reference
+            for reference in references
+        }
+        with closing(self._connect()) as connection, connection:
+            existing = connection.execute(
+                "SELECT id, lifecycle FROM user_learning_candidates WHERE user_id = ? AND dedupe_key = ?",
+                (item.user_id, dedupe_key),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO user_learning_candidates (
+                        id, user_id, dedupe_key, proposition_type, proposition, basis,
+                        actor, confidence, sensitivity, scope, permitted_uses_json,
+                        lifecycle, valid_from, valid_to, expires_at, derivation,
+                        source_agent, model_version, prompt_version, policy_version,
+                        schema_version, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        candidate_id,
+                        item.user_id,
+                        dedupe_key,
+                        item.proposition_type,
+                        item.proposition,
+                        item.basis,
+                        item.actor.value,
+                        float(item.confidence),
+                        item.sensitivity.value,
+                        item.scope,
+                        _json(item.permitted_uses),
+                        _iso(item.valid_from),
+                        _iso(item.valid_to),
+                        _iso(item.expires_at),
+                        item.derivation,
+                        item.source_agent,
+                        item.model_version,
+                        item.prompt_version,
+                        item.policy_version,
+                        item.schema_version,
+                        now,
+                        now,
+                    ),
+                )
+                lifecycle = "proposed"
+            else:
+                candidate_id = str(existing["id"])
+                lifecycle = str(existing["lifecycle"])
+
+            evidence_added = 0
+            for reference in unique_references.values():
+                evidence_id = _stable_id(
+                    "ule",
+                    candidate_id,
+                    reference.kind,
+                    reference.reference_id,
+                    reference.stance,
+                )
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO user_learning_candidate_evidence (
+                        id, candidate_id, kind, reference_id, stance, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        evidence_id,
+                        candidate_id,
+                        reference.kind,
+                        reference.reference_id,
+                        reference.stance,
+                        now,
+                    ),
+                )
+                evidence_added += int(cursor.rowcount) > 0
+            evidence_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM user_learning_candidate_evidence WHERE candidate_id = ?",
+                    (candidate_id,),
+                ).fetchone()[0]
+            )
+        return {
+            "candidate_id": candidate_id,
+            "created": existing is None,
+            "lifecycle": lifecycle,
+            "evidence_added": evidence_added,
+            "evidence_count": evidence_count,
+        }
+
+    def get_user_learning_candidate(
+        self,
+        *,
+        user_id: str,
+        candidate_id: str,
+    ) -> dict[str, Any] | None:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT * FROM user_learning_candidates WHERE id = ? AND user_id = ?",
+                (candidate_id, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            evidence = connection.execute(
+                """
+                SELECT kind, reference_id, stance
+                FROM user_learning_candidate_evidence
+                WHERE candidate_id = ?
+                ORDER BY stance, kind, reference_id
+                """,
+                (candidate_id,),
+            ).fetchall()
+        result = dict(row)
+        result["permitted_uses"] = json.loads(str(result.pop("permitted_uses_json") or "[]"))
+        result["evidence"] = [dict(item) for item in evidence]
+        return result
+
     def list_observation_details(
         self,
         *,
@@ -4053,6 +4254,8 @@ class KnowledgeStore:
             "book_materializations",
             "active_book_materializations",
             "book_materialization_candidates",
+            "user_learning_candidates",
+            "user_learning_candidate_evidence",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
