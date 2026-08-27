@@ -24,6 +24,8 @@ from typing import Any, Iterable
 from agent.knowledge.models import (
     BookUserLearningCandidateInput,
     BookUserLearningEvidenceReference,
+    BookWisdomEvidenceReference,
+    BookWisdomRecordInput,
     ContentAnnotationInput,
     ContextPackRequest,
     EntityIdentityInput,
@@ -38,7 +40,7 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 _SENSITIVE_LABELS = {
@@ -571,6 +573,10 @@ class KnowledgeStore:
                 self._migrate_v11(connection)
                 connection.execute("PRAGMA user_version = 11")
                 version = 11
+            if version < 12:
+                self._migrate_v12(connection)
+                connection.execute("PRAGMA user_version = 12")
+                version = 12
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -1070,6 +1076,55 @@ class KnowledgeStore:
             ON user_learning_candidates(user_id, lifecycle, updated_at DESC);
             CREATE INDEX IF NOT EXISTS user_learning_candidate_evidence_candidate
             ON user_learning_candidate_evidence(candidate_id, stance, kind);
+            """
+        )
+
+    @staticmethod
+    def _migrate_v12(connection: sqlite3.Connection) -> None:
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(derived_insights)").fetchall()
+        }
+        additions = {
+            "user_id": "TEXT NOT NULL DEFAULT ''",
+            "record_key": "TEXT NOT NULL DEFAULT ''",
+            "author_perspective": "TEXT NOT NULL DEFAULT ''",
+            "user_perspective": "TEXT NOT NULL DEFAULT ''",
+            "vellum_perspective": "TEXT NOT NULL DEFAULT ''",
+            "explanation": "TEXT NOT NULL DEFAULT ''",
+            "uncertainty_json": "TEXT NOT NULL DEFAULT '[]'",
+            "permitted_uses_json": "TEXT NOT NULL DEFAULT '[]'",
+            "valid_from": "TEXT NOT NULL DEFAULT ''",
+            "valid_to": "TEXT NOT NULL DEFAULT ''",
+            "expires_at": "TEXT NOT NULL DEFAULT ''",
+            "derivation": "TEXT NOT NULL DEFAULT ''",
+            "source_agent": "TEXT NOT NULL DEFAULT ''",
+            "model_version": "TEXT NOT NULL DEFAULT ''",
+            "prompt_version": "TEXT NOT NULL DEFAULT ''",
+            "policy_version": "TEXT NOT NULL DEFAULT ''",
+            "schema_version": "TEXT NOT NULL DEFAULT ''",
+        }
+        for name, definition in additions.items():
+            if name not in columns:
+                connection.execute(f"ALTER TABLE derived_insights ADD COLUMN {name} {definition}")
+        connection.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS derived_insights_book_wisdom_key
+            ON derived_insights(user_id, record_key)
+            WHERE insight_type = 'book_wisdom' AND record_key <> '';
+            CREATE TABLE IF NOT EXISTS derived_insight_evidence (
+                id TEXT PRIMARY KEY,
+                insight_id TEXT NOT NULL REFERENCES derived_insights(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                reference_id TEXT NOT NULL,
+                stance TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(insight_id, kind, reference_id, stance),
+                CHECK(kind IN ('book', 'book_anchor', 'user_learning_candidate', 'conversation')),
+                CHECK(stance IN ('supports', 'conflicts'))
+            );
+            CREATE INDEX IF NOT EXISTS derived_insight_evidence_insight
+            ON derived_insight_evidence(insight_id, stance, kind);
             """
         )
 
@@ -3073,6 +3128,183 @@ class KnowledgeStore:
         result["evidence"] = [dict(item) for item in evidence]
         return result
 
+    def propose_book_wisdom(self, item: BookWisdomRecordInput) -> dict[str, Any]:
+        item = BookWisdomRecordInput.model_validate(item.model_dump(mode="python"))
+        candidate_ids = list(
+            dict.fromkeys(
+                reference.reference_id
+                for reference in item.evidence
+                if reference.kind == "user_learning_candidate"
+            )
+        )
+        placeholders = ", ".join("?" for _ in candidate_ids)
+        with closing(self._connect()) as connection:
+            candidates = connection.execute(
+                f"""
+                SELECT id, user_id, lifecycle, sensitivity, permitted_uses_json
+                FROM user_learning_candidates
+                WHERE id IN ({placeholders})
+                """,
+                candidate_ids,
+            ).fetchall()
+        candidate_by_id = {str(row["id"]): row for row in candidates}
+        if set(candidate_ids) != set(candidate_by_id) or any(
+            str(row["user_id"]) != item.user_id for row in candidates
+        ):
+            raise ValueError("Book Wisdom requires a same-user learning candidate")
+        for candidate in candidates:
+            if "wisdom" not in json.loads(str(candidate["permitted_uses_json"] or "[]")):
+                raise ValueError("User-learning candidate is not permitted for Wisdom")
+            if str(candidate["lifecycle"]) in {"rejected", "superseded", "expired"}:
+                raise ValueError("Inactive user-learning candidate cannot support Wisdom")
+            if (
+                str(candidate["sensitivity"]) == "sensitive"
+                and item.sensitivity.value != "sensitive"
+            ):
+                raise ValueError("Book Wisdom cannot reduce user-evidence sensitivity")
+
+        record_key = _stable_id(
+            "wkey",
+            item.user_id,
+            item.wisdom_type,
+            _normalized_proposition(item.content),
+        )
+        wisdom_id = _stable_id("wis", item.user_id, record_key)
+        now = _now()
+        unique_evidence = {
+            (reference.kind, reference.reference_id, reference.stance): reference
+            for reference in item.evidence
+        }
+        with closing(self._connect()) as connection, connection:
+            existing = connection.execute(
+                """
+                SELECT id, status
+                FROM derived_insights
+                WHERE insight_type = 'book_wisdom' AND user_id = ? AND record_key = ?
+                """,
+                (item.user_id, record_key),
+            ).fetchone()
+            if existing is None:
+                connection.execute(
+                    """
+                    INSERT INTO derived_insights (
+                        id, insight_type, title, content, classification, sensitivity,
+                        external_allowed, confidence, lineage_json, status, created_at,
+                        updated_at, user_id, record_key, author_perspective,
+                        user_perspective, vellum_perspective, explanation,
+                        uncertainty_json, permitted_uses_json, valid_from, valid_to,
+                        expires_at, derivation, source_agent, model_version,
+                        prompt_version, policy_version, schema_version
+                    ) VALUES (
+                        ?, 'book_wisdom', ?, ?, ?, ?, 0, ?, '[]', 'proposed', ?, ?,
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    )
+                    """,
+                    (
+                        wisdom_id,
+                        item.title,
+                        item.content,
+                        item.wisdom_type,
+                        item.sensitivity.value,
+                        float(item.confidence),
+                        now,
+                        now,
+                        item.user_id,
+                        record_key,
+                        item.author_perspective,
+                        item.user_perspective,
+                        item.vellum_perspective,
+                        item.explanation,
+                        _json(item.uncertainty),
+                        _json(item.permitted_uses),
+                        _iso(item.valid_from),
+                        _iso(item.valid_to),
+                        _iso(item.expires_at),
+                        item.derivation,
+                        item.source_agent,
+                        item.model_version,
+                        item.prompt_version,
+                        item.policy_version,
+                        item.schema_version,
+                    ),
+                )
+                lifecycle = "proposed"
+            else:
+                wisdom_id = str(existing["id"])
+                lifecycle = str(existing["status"])
+
+            evidence_added = 0
+            for reference in unique_evidence.values():
+                evidence_id = _stable_id(
+                    "wie",
+                    wisdom_id,
+                    reference.kind,
+                    reference.reference_id,
+                    reference.stance,
+                )
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO derived_insight_evidence (
+                        id, insight_id, kind, reference_id, stance, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        evidence_id,
+                        wisdom_id,
+                        reference.kind,
+                        reference.reference_id,
+                        reference.stance,
+                        now,
+                    ),
+                )
+                evidence_added += int(cursor.rowcount) > 0
+            evidence_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM derived_insight_evidence WHERE insight_id = ?",
+                    (wisdom_id,),
+                ).fetchone()[0]
+            )
+        return {
+            "wisdom_id": wisdom_id,
+            "created": existing is None,
+            "lifecycle": lifecycle,
+            "evidence_added": evidence_added,
+            "evidence_count": evidence_count,
+        }
+
+    def get_book_wisdom_record(
+        self,
+        *,
+        user_id: str,
+        wisdom_id: str,
+    ) -> dict[str, Any] | None:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM derived_insights
+                WHERE id = ? AND user_id = ? AND insight_type = 'book_wisdom'
+                """,
+                (wisdom_id, user_id),
+            ).fetchone()
+            if row is None:
+                return None
+            evidence = connection.execute(
+                """
+                SELECT kind, reference_id, stance
+                FROM derived_insight_evidence
+                WHERE insight_id = ?
+                ORDER BY stance, kind, reference_id
+                """,
+                (wisdom_id,),
+            ).fetchall()
+        result = dict(row)
+        result["external_allowed"] = bool(result["external_allowed"])
+        result["lineage"] = json.loads(str(result.pop("lineage_json") or "[]"))
+        result["uncertainty"] = json.loads(str(result.pop("uncertainty_json") or "[]"))
+        result["permitted_uses"] = json.loads(str(result.pop("permitted_uses_json") or "[]"))
+        result["evidence"] = [dict(item) for item in evidence]
+        return result
+
     def list_observation_details(
         self,
         *,
@@ -4239,6 +4471,7 @@ class KnowledgeStore:
             "user_signals",
             "preference_states",
             "derived_insights",
+            "derived_insight_evidence",
             "projections",
             "sync_cursors",
             "ingestion_jobs",
