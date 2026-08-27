@@ -79,7 +79,27 @@ jobs:
       - name: Install backend + pip-audit
         run: pip install -e "backend[dev]" pip-audit
       - name: Audit installed Python packages
-        run: pip-audit --progress-spinner off --ignore-vuln PYSEC-2026-311
+        shell: bash
+        run: |
+          exception_file=".github/pip-audit-exceptions.txt"
+          expiry="$(sed -n 's/^# expires=//p' "$exception_file")"
+          today="$(date -u +%F)"
+          if [[ -z "$expiry" || "$today" > "$expiry" ]]; then
+            echo "Python dependency audit exceptions expired or have no expiry: $expiry" >&2
+            exit 1
+          fi
+
+          audit_args=()
+          while IFS= read -r entry; do
+            [[ -z "$entry" || "$entry" == \#* ]] && continue
+            if [[ ! "$entry" =~ ^(CVE|PYSEC)-[0-9]{4}-[0-9]+$ ]]; then
+              echo "Invalid pip-audit exception: $entry" >&2
+              exit 1
+            fi
+            audit_args+=(--ignore-vuln "$entry")
+          done < "$exception_file"
+
+          pip-audit --progress-spinner off "${audit_args[@]}"
 
   npm-audit:
     name: Frontend dependency audit
