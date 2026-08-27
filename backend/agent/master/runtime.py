@@ -18,6 +18,8 @@ from agent.knowledge.models import (
     BookUserLearningCandidateInput,
     BookUserLearningEvidenceReference,
     BookUserLearningRequest,
+    BookWisdomEvidenceReference,
+    BookWisdomRecordInput,
     ObservationActor,
 )
 from agent.llm.routing.runtime import get_routed_chat_model
@@ -82,6 +84,7 @@ class DelegationRuntime:
         reasoning_mode: Any = None,
         pending_action_store: MasterThreadStateStore | None = None,
         user_learning_sink: Callable[[BookUserLearningRequest], dict[str, Any]] | None = None,
+        wisdom_sink: Callable[[BookWisdomRecordInput], dict[str, Any]] | None = None,
     ) -> None:
         self.agent_catalog = agent_catalog
         self.memory_orchestrator = memory_orchestrator
@@ -89,6 +92,7 @@ class DelegationRuntime:
         self.reasoning_mode = reasoning_mode
         self.pending_action_store = pending_action_store
         self.user_learning_sink = user_learning_sink
+        self.wisdom_sink = wisdom_sink
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
 
@@ -179,12 +183,19 @@ class DelegationRuntime:
             _validate_response_schema(profile, response)
             if response.agent != profile.id:
                 raise ValueError("delegated response agent does not match the selected profile")
-            response = self._submit_user_learning(
+            response, learning_candidate_ids = self._submit_user_learning(
                 profile=profile,
                 response=response,
                 user_id=request.user_id,
                 parent_thread_id=parent_thread_id,
                 task_id=task_id,
+            )
+            response = self._submit_book_wisdom(
+                profile=profile,
+                response=response,
+                user_id=request.user_id,
+                parent_thread_id=parent_thread_id,
+                learning_candidate_ids=learning_candidate_ids,
             )
         except Exception as exc:
             logger.exception("Delegated profile %s failed.", profile.id)
@@ -230,7 +241,7 @@ class DelegationRuntime:
                     self.memory_orchestrator is not None
                     and action_request is None
                     and not context.strip()
-                    and not _has_user_learning_events(response)
+                    and not _has_private_books_state(response)
                 ):
                     self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
             except Exception:
@@ -256,18 +267,19 @@ class DelegationRuntime:
         user_id: str,
         parent_thread_id: str,
         task_id: str,
-    ) -> SpecialistResponse:
+    ) -> tuple[SpecialistResponse, dict[str, str]]:
         if self.user_learning_sink is None or profile.response_schema != "books-agent-response-v1":
-            return response
+            return response, {}
 
         from agent.contracts.books import BooksAgentEnvelope
 
         envelope = BooksAgentEnvelope.model_validate(response.structured_payload.get("books_agent"))
         if not envelope.user_learning_events:
-            return response
+            return response, {}
         anchors = {anchor.id: anchor for anchor in envelope.evidence}
         submitted = 0
         failed = 0
+        candidate_ids: dict[str, str] = {}
         for event in envelope.user_learning_events:
             try:
                 event_anchors = [anchors[evidence_id] for evidence_id in event.evidence_ids]
@@ -329,7 +341,12 @@ class DelegationRuntime:
                         )
                     ],
                 )
-                self.user_learning_sink(request)
+                receipt = self.user_learning_sink(request)
+                candidates = list(receipt.get("candidates") or [])
+                if candidates:
+                    candidate_id = str(candidates[0].get("candidate_id") or "").strip()
+                    if candidate_id:
+                        candidate_ids[event.id] = candidate_id
                 submitted += 1
             except Exception as exc:
                 failed += 1
@@ -348,7 +365,115 @@ class DelegationRuntime:
                 "count": submitted,
             },
         ]
-        return response.model_copy(update={"activity_events": activity})
+        return response.model_copy(update={"activity_events": activity}), candidate_ids
+
+    def _submit_book_wisdom(
+        self,
+        *,
+        profile: AgentProfile,
+        response: SpecialistResponse,
+        user_id: str,
+        parent_thread_id: str,
+        learning_candidate_ids: dict[str, str],
+    ) -> SpecialistResponse:
+        if profile.response_schema != "books-agent-response-v1":
+            return response
+
+        from agent.contracts.books import BooksAgentEnvelope
+
+        envelope = BooksAgentEnvelope.model_validate(response.structured_payload.get("books_agent"))
+        if not envelope.wisdom_proposals:
+            return response
+        if self.wisdom_sink is None:
+            return response.model_copy(
+                update={
+                    "activity_events": [
+                        *response.activity_events,
+                        {"name": "book_wisdom.submit", "status": "error", "count": 0},
+                    ]
+                }
+            )
+
+        submitted = 0
+        failed = 0
+        for proposal in envelope.wisdom_proposals:
+            try:
+                candidate_id = learning_candidate_ids.get(proposal.user_learning_event_id, "")
+                if not candidate_id:
+                    raise ValueError("Wisdom requires a stored user-learning candidate")
+                evidence = [
+                    BookWisdomEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=evidence_id,
+                        stance="supports",
+                    )
+                    for evidence_id in proposal.evidence_ids
+                ]
+                evidence.extend(
+                    BookWisdomEvidenceReference(
+                        kind="book_anchor",
+                        reference_id=evidence_id,
+                        stance="conflicts",
+                    )
+                    for evidence_id in proposal.conflicting_evidence_ids
+                )
+                evidence.extend(
+                    [
+                        BookWisdomEvidenceReference(
+                            kind="user_learning_candidate",
+                            reference_id=candidate_id,
+                            stance="supports",
+                        ),
+                        BookWisdomEvidenceReference(
+                            kind="conversation",
+                            reference_id=parent_thread_id,
+                            stance="supports",
+                        ),
+                    ]
+                )
+                self.wisdom_sink(
+                    BookWisdomRecordInput(
+                        user_id=user_id,
+                        wisdom_type=proposal.wisdom_type,
+                        title=proposal.title,
+                        content=proposal.content,
+                        author_perspective=proposal.author_perspective,
+                        user_perspective=proposal.user_perspective,
+                        vellum_perspective=proposal.vellum_perspective,
+                        explanation=proposal.explanation,
+                        evidence=evidence,
+                        confidence=proposal.confidence,
+                        uncertainty=proposal.uncertainty,
+                        sensitivity=proposal.sensitivity,
+                        permitted_uses=proposal.permitted_uses,
+                        valid_from=proposal.valid_from or None,
+                        valid_to=proposal.valid_to or None,
+                        expires_at=proposal.expires_at or None,
+                        derivation="books_agent.wisdom_proposal",
+                        source_agent=profile.id,
+                        model_version=profile.model or "",
+                        prompt_version="books-wisdom-envelope-v1",
+                        policy_version="books-wisdom-policy-v1",
+                    )
+                )
+                submitted += 1
+            except Exception as exc:
+                failed += 1
+                logger.warning(
+                    "Could not submit BooksAgent Wisdom proposal %s (%s).",
+                    proposal.id,
+                    exc.__class__.__name__,
+                )
+
+        status = "completed" if failed == 0 else "error" if submitted == 0 else "partial"
+        return response.model_copy(
+            update={
+                "activity_events": [
+                    *response.activity_events,
+                    {"name": "book_wisdom.submit", "status": status, "count": submitted},
+                ]
+            }
+        )
 
     def _resolve_pending_action(self, *, agent_id: str, parent_thread_id: str) -> dict[str, Any] | None:
         if self.pending_action_store is None:
@@ -568,12 +693,15 @@ def _validate_response_schema(profile: AgentProfile, response: SpecialistRespons
         raise ValueError("BooksAgent envelope answer must match the specialist summary")
 
 
-def _has_user_learning_events(response: SpecialistResponse) -> bool:
+def _has_private_books_state(response: SpecialistResponse) -> bool:
     payload = response.structured_payload.get("books_agent")
     if not isinstance(payload, dict):
         return False
     events = payload.get("user_learning_events")
-    return isinstance(events, list) and bool(events)
+    proposals = payload.get("wisdom_proposals")
+    return (isinstance(events, list) and bool(events)) or (
+        isinstance(proposals, list) and bool(proposals)
+    )
 
 
 def _text_hash(text: str) -> str:

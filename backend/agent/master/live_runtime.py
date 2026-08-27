@@ -28,6 +28,7 @@ def get_delegation_runtime() -> DelegationRuntime:
                 memory_orchestrator=get_memory_orchestrator(),
                 pending_action_store=MasterThreadStateStore(),
                 user_learning_sink=get_knowledge_core().record_book_user_learning,
+                wisdom_sink=get_knowledge_core().propose_book_wisdom,
             )
     return _RUNTIME
 

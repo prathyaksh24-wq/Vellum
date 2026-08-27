@@ -150,6 +150,47 @@ class UserLearningEvent(BooksContractModel):
         return self
 
 
+class BookWisdomProposal(BooksContractModel):
+    id: str = Field(min_length=1)
+    wisdom_type: Literal[
+        "useful_principle",
+        "recurring_tension",
+        "situational_connection",
+        "counterargument",
+        "cross_book_pattern",
+        "unresolved_question",
+    ]
+    title: str = Field(min_length=1, max_length=500)
+    content: str = Field(min_length=1, max_length=12000)
+    author_perspective: str = Field(min_length=1, max_length=12000)
+    user_perspective: str = Field(min_length=1, max_length=12000)
+    vellum_perspective: str = Field(min_length=1, max_length=12000)
+    explanation: str = Field(min_length=1, max_length=12000)
+    user_learning_event_id: str = Field(min_length=1)
+    evidence_ids: list[str] = Field(min_length=1, max_length=100)
+    conflicting_evidence_ids: list[str] = Field(default_factory=list, max_length=100)
+    confidence: float = Field(ge=0.0, le=1.0)
+    uncertainty: list[str] = Field(default_factory=list, max_length=50)
+    sensitivity: Literal["private"] = "private"
+    permitted_uses: list[Literal["context", "discussion", "exploration"]] = Field(
+        default_factory=lambda: ["context"],
+        min_length=1,
+        max_length=3,
+    )
+    valid_from: str = ""
+    valid_to: str = ""
+    expires_at: str = ""
+    source_agent: Literal["BooksAgent"] = "BooksAgent"
+
+    @model_validator(mode="after")
+    def enforce_proposal_boundary(self) -> Self:
+        if self.wisdom_type == "situational_connection" and not (
+            self.valid_to or self.expires_at
+        ):
+            raise ValueError("situational Book Wisdom requires a time bound")
+        return self
+
+
 class BooksAgentEnvelope(BooksContractModel):
     schema_version: Literal["books-agent-response-v1"] = "books-agent-response-v1"
     answer: str = Field(min_length=1)
@@ -159,6 +200,7 @@ class BooksAgentEnvelope(BooksContractModel):
     judgment: BookJudgment | None = None
     retrieval_policy: BookRetrievalPolicy | None = None
     user_learning_events: list[UserLearningEvent] = Field(default_factory=list)
+    wisdom_proposals: list[BookWisdomProposal] = Field(default_factory=list, max_length=1)
     uncertainty: list[str] = Field(default_factory=list)
     status: Literal["complete", "partial", "abstained", "failed"]
 
@@ -166,7 +208,8 @@ class BooksAgentEnvelope(BooksContractModel):
     def validate_evidence_graph(self) -> Self:
         claim_by_id = _unique_by_id(self.claims, "claim")
         evidence_by_id = _unique_by_id(self.evidence, "evidence")
-        _unique_by_id(self.user_learning_events, "user learning event")
+        learning_by_id = _unique_by_id(self.user_learning_events, "user learning event")
+        _unique_by_id(self.wisdom_proposals, "Wisdom proposal")
         if len(set(self.answer_claim_ids)) != len(self.answer_claim_ids):
             raise ValueError("answer_claim_ids must be unique")
         if self.status == "complete" and not self.answer_claim_ids:
@@ -185,6 +228,21 @@ class BooksAgentEnvelope(BooksContractModel):
         for event in self.user_learning_events:
             if set(event.evidence_ids) - set(evidence_by_id):
                 raise ValueError("user learning evidence_ids must reference evidence in this envelope")
+        for proposal in self.wisdom_proposals:
+            event = learning_by_id.get(proposal.user_learning_event_id)
+            if event is None:
+                raise ValueError(
+                    "Wisdom user_learning_event_id must reference an event in this envelope"
+                )
+            if "wisdom" not in event.permitted_uses:
+                raise ValueError("Wisdom user-learning event must permit wisdom use")
+            referenced = set(proposal.evidence_ids) | set(proposal.conflicting_evidence_ids)
+            if referenced - set(evidence_by_id):
+                raise ValueError("Wisdom evidence_ids must reference evidence in this envelope")
+            if any(not evidence_by_id[evidence_id].validated for evidence_id in referenced):
+                raise ValueError("Wisdom evidence_ids must reference validated Book evidence")
+            if not set(proposal.evidence_ids).intersection(event.evidence_ids):
+                raise ValueError("Wisdom must share supporting evidence with its user-learning event")
         return self
 
 
