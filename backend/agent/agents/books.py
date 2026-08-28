@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
-from agent.contracts.books import BookEvidenceAnchor, BooksAgentEnvelope, books_envelope_payload
+from agent.contracts.books import BookEvidenceAnchor, BooksAgentEnvelope, BooksDiscoveryTask, books_envelope_payload
 from agent.tools.registry import ToolRegistry
 
 
@@ -23,6 +23,30 @@ class BooksAgent:
     def can_handle(self, query: str) -> bool:
         _ = query
         return False
+
+    def execute_action_request(self, action_request: dict[str, Any]) -> SpecialistResponse:
+        task = BooksDiscoveryTask.model_validate(action_request.get("payload"))
+        if action_request.get("action") != task.capability:
+            raise ValueError("Book Discovery action mismatch")
+        result = self.tool_registry.invoke(
+            task.capability, {**task.model_dump(), "confirm": True}, agent_name=self.name,
+        )
+        completed = result.get("status") == "completed" and result.get("mode") == "shadow"
+        status = "completed" if completed else "blocked" if result.get("status") == "blocked" else "failed"
+        summary = (
+            "Book Discovery shadow evaluation completed. Recommendations remain disabled."
+            if completed else "Book Discovery could not complete the shadow evaluation."
+        )
+        response = self._response(
+            status="answered" if completed else "blocked", envelope_status="abstained",
+            summary=summary, uncertainty=["Catalog candidates cannot support Book-content claims."],
+            activity=[{"name": task.capability, "status": status}],
+        )
+        response.structured_payload["books_discovery"] = {
+            "mode": "shadow", "operation": task.operation, "status": status,
+            "candidate_count": min(len(result.get("candidates") or []), 20),
+        }
+        return response
 
     def answer(self, query: str) -> SpecialistResponse:
         clean_query = str(query or "").strip()

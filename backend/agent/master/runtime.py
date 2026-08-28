@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 from pathlib import Path
@@ -13,6 +13,7 @@ from uuid import uuid4
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent.agents.base import SpecialistResponse
+from agent.contracts.books import BooksDiscoveryTask
 from agent.knowledge.models import (
     BookRelationshipEventInput,
     BookUserLearningCandidateInput,
@@ -43,6 +44,7 @@ class DelegationRequest:
     task_id: str | None = None
     depth: int = 0
     confirm_pending_action: bool = False
+    book_discovery: BooksDiscoveryTask | None = None
 
     def __post_init__(self) -> None:
         if not self.agent_id.strip():
@@ -55,6 +57,13 @@ class DelegationRequest:
             raise ValueError("user_id is required")
         if self.depth < 0:
             raise ValueError("depth must be non-negative")
+        if self.book_discovery is not None:
+            if self.agent_id != "BooksAgent" or self.confirm_pending_action:
+                raise ValueError("Book Discovery intent cannot override an agent or pending confirmation")
+            task = self.book_discovery
+            object.__setattr__(self, "book_discovery", BooksDiscoveryTask.model_validate(
+                task.model_dump() if isinstance(task, BooksDiscoveryTask) else task,
+            ))
 
 
 @dataclass(frozen=True)
@@ -113,6 +122,7 @@ class DelegationRuntime:
             action_request = self._resolve_pending_action(
                 agent_id=profile.id,
                 parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
             )
             if action_request is None:
                 response = _runtime_response(
@@ -151,7 +161,9 @@ class DelegationRuntime:
                 context=context,
             )
         decision = (
-            CacheDecision(status="bypass", reason="confirmed_action")
+            CacheDecision(status="bypass", reason="book_discovery")
+            if request.book_discovery is not None
+            else CacheDecision(status="bypass", reason="confirmed_action")
             if action_request is not None
             else CacheDecision(status="bypass", reason="explicit_context")
             if context.strip()
@@ -179,10 +191,19 @@ class DelegationRuntime:
                 parent_thread_id=parent_thread_id,
                 user_id=request.user_id,
                 action_request=action_request,
+                book_discovery=request.book_discovery,
             )
             _validate_response_schema(profile, response)
             if response.agent != profile.id:
                 raise ValueError("delegated response agent does not match the selected profile")
+            if request.book_discovery is not None and response.action_request:
+                if self.pending_action_store is None or not self.pending_action_store.set_pending_action(
+                    parent_thread_id, response.action_request, replace=False,
+                ):
+                    response = _runtime_response(
+                        profile=profile, status="blocked", summary="Resolve the existing pending action first.",
+                        analysis="confirmation_authority",
+                    )
             response, learning_candidate_ids = self._submit_user_learning(
                 profile=profile,
                 response=response,
@@ -240,6 +261,7 @@ class DelegationRuntime:
                 if (
                     self.memory_orchestrator is not None
                     and action_request is None
+                    and request.book_discovery is None
                     and not context.strip()
                     and not _has_private_books_state(response)
                 ):
@@ -475,12 +497,15 @@ class DelegationRuntime:
             }
         )
 
-    def _resolve_pending_action(self, *, agent_id: str, parent_thread_id: str) -> dict[str, Any] | None:
+    def _resolve_pending_action(
+        self, *, agent_id: str, parent_thread_id: str, user_id: str,
+    ) -> dict[str, Any] | None:
         if self.pending_action_store is None:
             return None
         pending = self.pending_action_store.claim_pending_action(
             parent_thread_id,
             agent_id=agent_id,
+            **({"user_id": user_id} if agent_id == "BooksAgent" else {}),
         )
         if pending is None or str(pending.get("agent") or "") != agent_id:
             return None
@@ -515,7 +540,33 @@ class DelegationRuntime:
         parent_thread_id: str,
         user_id: str,
         action_request: dict[str, Any] | None,
+        book_discovery: BooksDiscoveryTask | None = None,
     ) -> SpecialistResponse:
+        approval = ""
+        approval_key = ""
+        if action_request is not None and profile.id == "BooksAgent":
+            try:
+                approved = BooksDiscoveryTask.model_validate(action_request.get("payload"))
+                expiry = datetime.fromisoformat(str(action_request.get("expires_at") or ""))
+            except (TypeError, ValueError):
+                return _runtime_response(
+                    profile=profile, status="blocked", summary="This Book Discovery approval is no longer valid.",
+                    analysis="confirmation_authority",
+                )
+            if (
+                action_request.get("user_id") != user_id
+                or action_request.get("thread_id") != parent_thread_id
+                or action_request.get("action") != approved.capability
+                or action_request.get("profile_fingerprint") != self._profile_fingerprint(profile)
+                or expiry.tzinfo is None or expiry <= self._utc_now()
+                or not str(action_request.get("approval_id") or "").strip()
+            ):
+                return _runtime_response(
+                    profile=profile, status="blocked", summary="This Book Discovery approval is no longer valid.",
+                    analysis="confirmation_authority",
+                )
+            approval = approved.fingerprint()
+            approval_key = str(action_request["approval_id"])
         with profile_policy(
             profile_id=profile.id,
             user_id=user_id,
@@ -523,7 +574,14 @@ class DelegationRuntime:
             allowed_tools=frozenset(profile.tools.allow),
             allowed_skills=frozenset(profile.skills.allow),
             require_confirmation=frozenset(profile.tools.require_confirmation),
+            book_discovery_network=profile.book_discovery_network,
+            book_discovery_approval=approval,
+            book_discovery_request_key=approval_key,
         ):
+            if book_discovery is not None:
+                return self._prepare_book_discovery(
+                    profile=profile, task=book_discovery, user_id=user_id, thread_id=parent_thread_id,
+                )
             if profile.executor == "deterministic":
                 if executor is None:
                     raise ValueError(f"{profile.id} requires a deterministic executor")
@@ -539,6 +597,36 @@ class DelegationRuntime:
                 context=context,
                 parent_thread_id=parent_thread_id,
             )
+
+    @staticmethod
+    def _profile_fingerprint(profile: AgentProfile) -> str:
+        return _text_hash(json.dumps(profile.model_dump(), sort_keys=True))
+
+    def _prepare_book_discovery(
+        self, *, profile: AgentProfile, task: BooksDiscoveryTask, user_id: str, thread_id: str,
+    ) -> SpecialistResponse:
+        if (
+            profile.executor != "deterministic" or not profile.book_discovery_network
+            or profile.source_egress != "external" or task.capability not in profile.tools.allow
+            or self.pending_action_store is None
+        ):
+            return _runtime_response(
+                profile=profile, status="blocked", summary="Book Discovery network access is disabled by this profile.",
+                analysis="discovery_profile_policy",
+            )
+        target = f'public topic "{task.query}"' if task.operation == "discover" else f"candidate {task.candidate_id}"
+        response = _runtime_response(
+            profile=profile, status="blocked",
+            summary=f"Confirm a shadow Open Library {task.operation} operation for {target}. No Book will be downloaded.",
+            analysis="confirmation_required",
+        )
+        response.action_request = {
+            "agent": profile.id, "action": task.capability, "payload": task.model_dump(),
+            "user_id": user_id, "thread_id": thread_id, "approval_id": str(uuid4()),
+            "profile_fingerprint": self._profile_fingerprint(profile),
+            "expires_at": (self._utc_now() + timedelta(minutes=5)).isoformat(),
+        }
+        return response
 
     def _llm_for(self, model_id: str | None) -> Any:
         if self.reasoning_mode is not None and self.llm_factory is get_routed_chat_model:

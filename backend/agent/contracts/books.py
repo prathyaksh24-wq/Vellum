@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from hashlib import sha256
+import json
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -7,6 +9,32 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class BooksContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class BooksDiscoveryTask(BooksContractModel):
+    """Typed host request; it carries intent, never permission or user identity."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
+    operation: Literal["discover", "verify"]
+    query: str = Field(default="", max_length=300)
+    objective: Literal["user_discovery", "vellum_exploration"] = "user_discovery"
+    candidate_id: str = Field(default="", max_length=160)
+    max_candidates: int = Field(default=6, ge=1, le=20)
+
+    @model_validator(mode="after")
+    def validate_operation(self) -> Self:
+        if self.operation == "discover" and (not self.query or self.candidate_id):
+            raise ValueError("Discovery requires a query and no candidate ID")
+        if self.operation == "verify" and (self.query or not self.candidate_id):
+            raise ValueError("Verification requires a candidate ID and no query")
+        return self
+
+    @property
+    def capability(self) -> str:
+        return "books.discover" if self.operation == "discover" else "books.verify_candidate"
+
+    def fingerprint(self) -> str:
+        return sha256(json.dumps(self.model_dump(), sort_keys=True).encode()).hexdigest()
 
 
 class BookEvidenceAnchor(BooksContractModel):

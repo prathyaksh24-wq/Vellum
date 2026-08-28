@@ -53,6 +53,7 @@ class AgentProfile(ProfileModel):
     model: str | None = None
     reasoning_mode: Literal["light", "medium", "high", "extra high", "max", "ultra"] | None = None
     source_egress: Literal["local", "external"] = "local"
+    book_discovery_network: bool = False
     instructions: InstructionPolicy = Field(default_factory=InstructionPolicy)
     tools: ToolPolicy = Field(default_factory=ToolPolicy)
     skills: SkillPolicy = Field(default_factory=SkillPolicy)
@@ -161,7 +162,10 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                     "Abstain when exact evidence cannot support the requested claim."
                 )
             ),
-            tools=ToolPolicy(allow=["books.knowledge_query", "books.skill_lookup"]),
+            tools=ToolPolicy(
+                allow=["books.knowledge_query", "books.skill_lookup", "books.discover", "books.verify_candidate"],
+                require_confirmation=["books.discover", "books.verify_candidate"],
+            ),
             skills=SkillPolicy(allow=["book-to-skill"]),
             memory=MemoryPolicy(
                 read_scopes=["user_profile", "shared", "agent:BooksAgent"],

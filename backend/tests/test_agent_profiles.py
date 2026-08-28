@@ -254,7 +254,11 @@ def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_p
     profile = AgentCatalog(profile_dir=tmp_path).get("BooksAgent")
 
     assert profile.response_schema == "books-agent-response-v1"
-    assert profile.tools.allow == ["books.knowledge_query", "books.skill_lookup"]
+    assert profile.tools.allow == [
+        "books.knowledge_query", "books.skill_lookup", "books.discover", "books.verify_candidate",
+    ]
+    assert profile.tools.require_confirmation == ["books.discover", "books.verify_candidate"]
+    assert profile.book_discovery_network is False
     assert profile.skills.allow == ["book-to-skill"]
     assert profile.memory.write_scope == "agent:BooksAgent"
     assert profile.memory.shared_writes == "propose_only"

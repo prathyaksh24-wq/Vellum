@@ -4,9 +4,10 @@ from collections.abc import Callable
 import re
 from typing import Any
 
+from agent.contracts.books import BooksDiscoveryTask
 from agent.knowledge.models import BookRetrievalRequest
 from agent.profiles import get_active_profile_policy
-from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
+from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
 class BooksCapabilityService:
@@ -22,6 +23,12 @@ class BooksCapabilityService:
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
         allowed_agents = frozenset({"BooksAgent"})
+        for name, adapter in (("books.discover", self.discover), ("books.verify_candidate", self.verify_candidate)):
+            registry.register(CapabilityRecord(
+                name=name, namespace="books", access=CapabilityAccess.READ,
+                allowed_agents=allowed_agents, stream_label="Evaluated shadow Book Discovery",
+                adapter=adapter, requires_confirmation=True,
+            ))
         registry.register(
             CapabilityRecord(
                 name="books.knowledge_query",
@@ -43,6 +50,44 @@ class BooksCapabilityService:
             )
         )
         return registry
+
+    def discover(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from agent.knowledge.models import BookDiscoveryPolicy, BookDiscoveryRequest
+
+        task, active = self._discovery_authority(payload, operation="discover")
+        return self._knowledge_core_provider().discover_books(
+            BookDiscoveryRequest(
+                user_id=active.user_id, query=task.query, objective=task.objective,
+                max_candidates=task.max_candidates, request_key=active.book_discovery_request_key,
+            ),
+            policy=BookDiscoveryPolicy(network_allowed=True, public_query_approved=True),
+        )
+
+    def verify_candidate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from agent.knowledge.models import BookDiscoveryPolicy, BookDiscoveryVerificationRequest
+
+        task, active = self._discovery_authority(payload, operation="verify")
+        return self._knowledge_core_provider().verify_book_discovery_candidate(
+            BookDiscoveryVerificationRequest(
+                user_id=active.user_id, candidate_id=task.candidate_id,
+                request_key=active.book_discovery_request_key,
+            ),
+            policy=BookDiscoveryPolicy(network_allowed=True, public_query_approved=True, deadline_seconds=30.0),
+        )
+
+    @staticmethod
+    def _discovery_authority(payload: dict[str, Any], *, operation: str):
+        task = BooksDiscoveryTask.model_validate({key: value for key, value in payload.items() if key != "confirm"})
+        active = get_active_profile_policy()
+        if (
+            active is None or active.profile_id != "BooksAgent"
+            or not active.book_discovery_network or active.source_egress != "external"
+            or task.operation != operation or task.capability not in active.allowed_tools
+            or not active.book_discovery_request_key
+            or active.book_discovery_approval != task.fingerprint()
+        ):
+            raise ToolPermissionError("Book Discovery requires profile-bound confirmation")
+        return task, active
 
     def query_knowledge(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or "").strip()

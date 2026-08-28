@@ -183,6 +183,26 @@ class BookDiscoveryRequest(BaseModel):
     max_candidates: int = Field(default=6, ge=1, le=20)
 
 
+class BookDiscoveryVerificationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, frozen=True)
+
+    user_id: str = Field(min_length=1, max_length=160)
+    candidate_id: str = Field(
+        min_length=47,
+        max_length=47,
+        pattern=r"^book-discovery_[0-9a-f]{32}$",
+    )
+    request_key: str = Field(min_length=1, max_length=160)
+
+    @field_validator("user_id", "request_key")
+    @classmethod
+    def clean_verification_identity(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean or any(ord(character) < 32 for character in clean):
+            raise ValueError("verification identity fields cannot be blank or contain controls")
+        return clean
+
+
 class BookDiscoveryPolicy(BaseModel):
     """Host-supplied authority, never populated from model/tool arguments."""
 

@@ -374,7 +374,7 @@ def test_v12_upgrade_preserves_existing_knowledge(tmp_path):
         connection.execute("DROP TABLE book_discovery_candidates")
         connection.execute("PRAGMA user_version = 12")
     upgraded = KnowledgeStore(store.db_path, tmp_path / "blobs")
-    assert upgraded.status()["schema_version"] == 13
+    assert upgraded.status()["schema_version"] == 14
     assert upgraded.status()["counts"]["sources"] == 1
     assert upgraded.status()["counts"]["book_discovery_candidates"] == 0
     assert upgraded.integrity_check()["ok"]
@@ -432,7 +432,7 @@ def test_v13_migration_recovers_if_ddl_exists_before_version_marker(tmp_path):
     with sqlite3.connect(store.db_path) as connection:
         connection.execute("PRAGMA user_version = 12")
     resumed = KnowledgeStore(store.db_path, tmp_path / "blobs")
-    assert resumed.status()["schema_version"] == 13
+    assert resumed.status()["schema_version"] == 14
     assert resumed.integrity_check()["ok"]
 
 
