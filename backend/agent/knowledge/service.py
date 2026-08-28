@@ -25,6 +25,7 @@ from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
     BookDiscoveryPolicy,
     BookDiscoveryRequest,
+    BookDiscoveryVerificationRequest,
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
@@ -170,6 +171,22 @@ class KnowledgeCore:
         if not self.shadow_write:
             return {"status": "blocked", "mode": "shadow", "candidates": [], "error_code": "DISCOVERY_DISABLED"}
         return self.book_discovery.discover(request, policy=policy)
+
+    def verify_book_discovery_candidate(
+        self,
+        request: BookDiscoveryVerificationRequest,
+        *,
+        policy: BookDiscoveryPolicy,
+    ) -> dict[str, Any]:
+        if not self.shadow_write:
+            return {
+                "status": "blocked",
+                "mode": "shadow",
+                "candidates": [],
+                "metadata": {"reason_code": "DISCOVERY_DISABLED"},
+                "error_code": "DISCOVERY_DISABLED",
+            }
+        return self.book_discovery.verify(request, policy=policy)
 
     def list_book_discovery_candidates(self, *, user_id: str, objective: str, limit: int = 20) -> list[dict[str, Any]]:
         return self.book_discovery.list_candidates(user_id=user_id, objective=objective, limit=limit)

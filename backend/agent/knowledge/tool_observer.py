@@ -30,6 +30,9 @@ class KnowledgeToolObserver:
     def __call__(self, invocation: ToolInvocation) -> None:
         if invocation.access != CapabilityAccess.READ:
             return
+        if invocation.name in {"books.discover", "books.verify_candidate"}:
+            # Discovery has canonical job receipts; catalog candidates are not learned sources.
+            return
         source_ids: list[str] = []
         if invocation.namespace == "x":
             source_ids = self._record_x(invocation)

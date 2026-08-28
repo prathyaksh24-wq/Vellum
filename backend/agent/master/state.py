@@ -101,18 +101,21 @@ class MasterThreadStateStore:
     def clear_pending_reroute(self, thread_id: str) -> None:
         self.set_pending_reroute(thread_id, "", "")
 
-    def set_pending_action(self, thread_id: str, action: dict[str, Any]) -> None:
+    def set_pending_action(self, thread_id: str, action: dict[str, Any], *, replace: bool = True) -> bool:
+        conflict = (
+            "DO UPDATE SET action_json = excluded.action_json, updated_at = excluded.updated_at"
+            if replace else "DO NOTHING"
+        )
         with self._connect() as conn:
-            conn.execute(
-                """
+            result = conn.execute(
+                f"""
                 INSERT INTO master_pending_actions (thread_id, action_json, updated_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(thread_id) DO UPDATE SET
-                    action_json = excluded.action_json,
-                    updated_at = excluded.updated_at
+                ON CONFLICT(thread_id) {conflict}
                 """,
                 (thread_id, json.dumps(action, ensure_ascii=False)),
             )
+        return result.rowcount == 1
 
     def get_pending_action(self, thread_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
@@ -129,7 +132,9 @@ class MasterThreadStateStore:
             return None
         return loaded if isinstance(loaded, dict) else None
 
-    def claim_pending_action(self, thread_id: str, *, agent_id: str) -> dict[str, Any] | None:
+    def claim_pending_action(
+        self, thread_id: str, *, agent_id: str, user_id: str | None = None,
+    ) -> dict[str, Any] | None:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
@@ -146,6 +151,8 @@ class MasterThreadStateStore:
             if not isinstance(loaded, dict):
                 return None
             if str(loaded.get("agent") or "") != agent_id:
+                return None
+            if user_id is not None and loaded.get("user_id") != user_id:
                 return None
             deleted = conn.execute(
                 "DELETE FROM master_pending_actions WHERE thread_id = ?",

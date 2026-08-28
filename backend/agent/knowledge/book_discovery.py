@@ -5,6 +5,7 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 import re
+from datetime import UTC, datetime
 from time import monotonic
 from typing import Any
 
@@ -13,8 +14,13 @@ from agent.knowledge.book_catalog import (
     normalize_catalog_record, normalized_book_identity,
 )
 from agent.knowledge.book_documents import BookDocumentPipeline
-from agent.knowledge.models import BookDiscoveryPolicy, BookDiscoveryRequest, IngestionJobInput
-from agent.knowledge.store import IngestionJobLeaseLost, KnowledgeStore
+from agent.knowledge.models import (
+    BookDiscoveryPolicy,
+    BookDiscoveryRequest,
+    BookDiscoveryVerificationRequest,
+    IngestionJobInput,
+)
+from agent.knowledge.store import BookDiscoveryCandidateChanged, IngestionJobLeaseLost, KnowledgeStore
 from agent.privacy.classifier import DataClass, classify
 
 
@@ -23,7 +29,16 @@ _ERROR_CODES = frozenset({
     "CATALOG_RATE_LIMITED", "CATALOG_UNAVAILABLE", "CATALOG_ENCODING_UNSUPPORTED",
     "CATALOG_INVALID_RESPONSE", "CATALOG_RESPONSE_BUDGET", "DISCOVERY_DEADLINE",
     "DISCOVERY_RETRY_BUDGET", "DISCOVERY_LIBRARY_BUDGET",
+    "DISCOVERY_VERIFICATION_DEADLINE", "DISCOVERY_VERIFICATION_REQUEST_BUDGET",
+    "DISCOVERY_VERIFICATION_RESPONSE_BUDGET", "DISCOVERY_VERIFICATION_REDIRECT",
+    "DISCOVERY_VERIFICATION_ENCODING_UNSUPPORTED", "DISCOVERY_VERIFICATION_INVALID_RESPONSE",
+    "DISCOVERY_VERIFICATION_UNAVAILABLE", "DISCOVERY_VERIFICATION_RATE_LIMITED",
+    "DISCOVERY_VERIFICATION_MISMATCH", "DISCOVERY_VERIFICATION_MISSING_DATA",
+    "DISCOVERY_VERIFICATION_INVALID_CANDIDATE", "DISCOVERY_VERIFICATION_INVALID_EVIDENCE",
+    "DISCOVERY_VERIFICATION_AUTHOR_LIMIT", "DISCOVERY_CANDIDATE_NOT_FOUND",
+    "DISCOVERY_CANDIDATE_INELIGIBLE", "DISCOVERY_CANDIDATE_CHANGED", "DISCOVERY_CANDIDATE_EXPIRED",
 })
+_VERIFICATION_VERSION = "books-discovery-verification-v1"
 
 
 class BookDiscoveryRuntime:
@@ -98,6 +113,283 @@ class BookDiscoveryRuntime:
         except IngestionJobLeaseLost:
             return self._result("superseded", job_id=job_id, error_code="DISCOVERY_LEASE_LOST")
         return self._result("failed", job_id=job_id, error_code=code)
+
+    def verify(
+        self,
+        request: BookDiscoveryVerificationRequest,
+        *,
+        policy: BookDiscoveryPolicy,
+    ) -> dict[str, Any]:
+        request = BookDiscoveryVerificationRequest.model_validate(request.model_dump())
+        policy = BookDiscoveryPolicy.model_validate(policy.model_dump())
+        if policy.local_only or not policy.network_allowed or not policy.public_query_approved:
+            return self._verification_result("blocked", reason_code="DISCOVERY_NETWORK_NOT_APPROVED")
+
+        candidate = self.store.get_book_discovery_candidate(
+            user_id=request.user_id,
+            candidate_id=request.candidate_id,
+            include_internal=True,
+        )
+        if candidate is None:
+            return self._verification_result("unverified", reason_code="DISCOVERY_CANDIDATE_NOT_FOUND")
+        if candidate["state"] not in {"discovered", "verified"}:
+            return self._verification_result("unverified", reason_code="DISCOVERY_CANDIDATE_INELIGIBLE")
+        if self._expired(candidate["expires_at"]):
+            return self._verification_result("unverified", reason_code="DISCOVERY_CANDIDATE_EXPIRED")
+        if candidate["state"] == "verified":
+            metadata = candidate.get("verification_metadata")
+            return self._verification_result(
+                "completed",
+                candidates=[self._public_candidate(candidate)],
+                metadata=self._safe_metadata(metadata, reason_code=""),
+                replayed=True,
+            )
+        objective = str(candidate["objective"])
+        identity = {
+            "candidate_id": request.candidate_id,
+            "objective": objective,
+            "request_key": request.request_key,
+            "policy": policy.model_dump(),
+            "version": _VERIFICATION_VERSION,
+            "catalog_digest": candidate.get("catalog_record_digest"),
+            "expires_at": candidate["expires_at"],
+        }
+        key = sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()
+        job = self.store.start_ingestion_job(IngestionJobInput(
+            connector="books.discovery",
+            account_id=self.store.book_tenant_scope(request.user_id),
+            job_type="metadata_verification",
+            idempotency_key=key,
+            requested_by="books.discovery",
+            lease_seconds=90,
+        ))
+        job_id = job["id"]
+        if not job["should_run"]:
+            current = self.store.get_book_discovery_candidate(
+                user_id=request.user_id, candidate_id=request.candidate_id,
+            )
+            stats = job.get("stats") or {}
+            if (job["status"] == "completed" and stats.get("verification") == "verified"
+                    and current and current["state"] == "verified" and not self._expired(current["expires_at"])):
+                return self._verification_result(
+                    "completed",
+                    job_id=job_id,
+                    candidates=[self._public_candidate(current)],
+                    metadata=self._safe_metadata(current.get("verification_metadata"), reason_code=""),
+                    replayed=True,
+                )
+            if job["status"] == "completed" and stats.get("verification") == "unverified":
+                return self._verification_result(
+                    "unverified",
+                    job_id=job_id,
+                    metadata=self._safe_metadata(stats, reason_code=str(stats.get("reason_code", ""))),
+                    replayed=True,
+                )
+            return self._verification_result(
+                str(job["status"]), job_id=job_id, replayed=True,
+                reason_code="DISCOVERY_VERIFICATION_IN_PROGRESS" if job["status"] == "running" else "DISCOVERY_FAILED",
+            )
+
+        current = self.store.get_book_discovery_candidate(
+            user_id=request.user_id, candidate_id=request.candidate_id, include_internal=True,
+        )
+        if current is None or current.get("state") != "discovered":
+            return self._finish_verification_change(
+                job_id, job["attempt_count"], reason_code="DISCOVERY_CANDIDATE_CHANGED"
+            )
+        if current.get("_candidate_revision") != candidate.get("_candidate_revision"):
+            return self._finish_verification_change(
+                job_id, job["attempt_count"], reason_code="DISCOVERY_CANDIDATE_CHANGED"
+            )
+
+        started = monotonic()
+        deadline = started + policy.deadline_seconds
+        safe_candidate = {key: value for key, value in current.items() if not key.startswith("_")}
+        try:
+            if job["attempt_count"] > 3:
+                raise BookDiscoveryError("DISCOVERY_RETRY_BUDGET")
+            if monotonic() >= deadline:
+                raise BookDiscoveryError("DISCOVERY_VERIFICATION_DEADLINE")
+            evidence = self.catalog.verify(safe_candidate, max_bytes=policy.max_response_bytes, deadline=deadline)
+            if monotonic() >= deadline:
+                raise BookDiscoveryError("DISCOVERY_VERIFICATION_DEADLINE")
+            if not isinstance(evidence, dict):
+                raise BookDiscoveryError("DISCOVERY_VERIFICATION_INVALID_EVIDENCE")
+            reason_code = str(evidence.get("reason_code", ""))
+            metadata = self._safe_metadata(evidence.get("metadata"), reason_code=reason_code)
+            if evidence.get("verified") is not True:
+                self.store.publish_book_discovery_verification(
+                    user_id=request.user_id, candidate_id=request.candidate_id,
+                    expected_revision=str(current["_candidate_revision"]),
+                    job_id=job_id, verified=False, verification_metadata=metadata,
+                    stats=self._verification_stats(
+                        metadata, outcome="unverified", reason_code=reason_code or "DISCOVERY_VERIFICATION_MISMATCH",
+                        started=started,
+                    ),
+                    expected_attempt=job["attempt_count"],
+                )
+                return self._verification_result(
+                    "unverified", job_id=job_id,
+                    metadata=self._safe_metadata(metadata, reason_code=reason_code or "DISCOVERY_VERIFICATION_MISMATCH"),
+                )
+            if not metadata.get("edition_id") or metadata.get("provider") != "openlibrary":
+                raise BookDiscoveryError("DISCOVERY_VERIFICATION_INVALID_EVIDENCE")
+            published = self.store.publish_book_discovery_verification(
+                user_id=request.user_id,
+                candidate_id=request.candidate_id,
+                expected_revision=str(current["_candidate_revision"]),
+                job_id=job_id,
+                expected_attempt=job["attempt_count"],
+                verification_metadata=metadata,
+                stats=self._verification_stats(metadata, outcome="verified", reason_code="", started=started),
+            )
+            return self._verification_result(
+                "completed", job_id=job_id, candidates=[published], metadata=metadata,
+            )
+        except BookDiscoveryCandidateChanged as exc:
+            return self._finish_verification_change(
+                job_id, job["attempt_count"], reason_code=str(exc) or "DISCOVERY_CANDIDATE_CHANGED"
+            )
+        except IngestionJobLeaseLost:
+            return self._verification_result(
+                "superseded", job_id=job_id, reason_code="DISCOVERY_LEASE_LOST"
+            )
+        except BookDiscoveryError as exc:
+            code = str(exc) if str(exc) in _ERROR_CODES else "DISCOVERY_VERIFICATION_FAILED"
+            try:
+                self.store.fail_ingestion_job(job_id, error_code=code, expected_attempt=job["attempt_count"])
+            except IngestionJobLeaseLost:
+                return self._verification_result(
+                    "superseded", job_id=job_id, reason_code="DISCOVERY_LEASE_LOST"
+                )
+            return self._verification_result(
+                "failed", job_id=job_id,
+                metadata=self._safe_metadata(getattr(exc, "metadata", None), reason_code=code),
+                reason_code=code,
+            )
+        except Exception:
+            try:
+                self.store.fail_ingestion_job(
+                    job_id, error_code="DISCOVERY_VERIFICATION_FAILED", expected_attempt=job["attempt_count"]
+                )
+            except IngestionJobLeaseLost:
+                return self._verification_result(
+                    "superseded", job_id=job_id, reason_code="DISCOVERY_LEASE_LOST"
+                )
+            return self._verification_result(
+                "failed", job_id=job_id, reason_code="DISCOVERY_VERIFICATION_FAILED"
+            )
+
+    def _finish_verification_change(self, job_id: str, attempt: int, *, reason_code: str) -> dict[str, Any]:
+        try:
+            self.store.fail_ingestion_job(job_id, error_code=reason_code, expected_attempt=attempt)
+        except IngestionJobLeaseLost:
+            return self._verification_result("superseded", job_id=job_id, reason_code="DISCOVERY_LEASE_LOST")
+        return self._verification_result("superseded", job_id=job_id, reason_code=reason_code)
+
+    @staticmethod
+    def _expired(value: str) -> bool:
+        try:
+            timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            return timestamp <= datetime.now(UTC)
+        except ValueError:
+            return True
+
+    @staticmethod
+    def _public_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+        return {key: value for key, value in candidate.items() if not key.startswith("_")}
+
+    @staticmethod
+    def _safe_metadata(value: Any, *, reason_code: str) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            value = {}
+        metadata: dict[str, Any] = {
+            "provider": "openlibrary",
+            "verification_version": _VERIFICATION_VERSION,
+        }
+        for key in ("request_count", "response_bytes", "author_count", "identifier_count"):
+            number = value.get(key)
+            if type(number) is int and 0 <= number <= 1048576:
+                metadata[key] = number
+        if isinstance(value.get("work_id"), str) and re.fullmatch(r"OL[1-9][0-9]*W", value["work_id"]):
+            metadata["work_id"] = value["work_id"]
+        if isinstance(value.get("edition_id"), str) and re.fullmatch(r"OL[1-9][0-9]*M", value["edition_id"]):
+            metadata["edition_id"] = value["edition_id"]
+        languages = value.get("language_codes")
+        if isinstance(languages, list) and len(languages) <= 30 and all(
+            isinstance(language, str) and re.fullmatch(r"[a-z]{3}", language) for language in languages
+        ):
+            metadata["language_codes"] = sorted(set(languages))
+        if value.get("cover_status") in {"available", "unavailable"}:
+            metadata["cover_status"] = value["cover_status"]
+        if type(value.get("cover_id")) is int and 0 < value["cover_id"] < 10**12:
+            metadata["cover_id"] = value["cover_id"]
+        if type(value.get("cover_checked")) is bool:
+            metadata["cover_checked"] = value["cover_checked"]
+        if value.get("cover_verification") == "availability_only":
+            metadata["cover_verification"] = "availability_only"
+        provenance = value.get("provenance")
+        if isinstance(provenance, dict):
+            allowed_provenance: dict[str, Any] = {}
+            work_url = provenance.get("work_url")
+            edition_url = provenance.get("edition_url")
+            author_urls = provenance.get("author_urls")
+            cover_url = provenance.get("cover_url")
+            if isinstance(work_url, str) and re.fullmatch(r"https://openlibrary\.org/works/OL[1-9][0-9]*W", work_url):
+                allowed_provenance["work_url"] = work_url
+            if isinstance(edition_url, str) and re.fullmatch(r"https://openlibrary\.org/books/OL[1-9][0-9]*M", edition_url):
+                allowed_provenance["edition_url"] = edition_url
+            if isinstance(author_urls, list) and len(author_urls) <= 3 and all(
+                isinstance(url, str) and re.fullmatch(r"https://openlibrary\.org/authors/OL[1-9][0-9]*A", url)
+                for url in author_urls
+            ):
+                allowed_provenance["author_urls"] = author_urls
+            if isinstance(cover_url, str) and (
+                not cover_url or re.fullmatch(
+                    r"https://covers\.openlibrary\.org/b/id/[1-9][0-9]*-M\.jpg\?default=false", cover_url
+                )
+            ):
+                allowed_provenance["cover_url"] = cover_url
+            if allowed_provenance:
+                metadata["provenance"] = allowed_provenance
+        if reason_code:
+            metadata["reason_code"] = reason_code if reason_code in _ERROR_CODES else "DISCOVERY_VERIFICATION_FAILED"
+        return metadata
+
+    @staticmethod
+    def _verification_stats(
+        metadata: dict[str, Any], *, outcome: str, reason_code: str, started: float,
+    ) -> dict[str, Any]:
+        stats = {
+            "mode": "shadow",
+            "provider": "openlibrary",
+            "version": _VERIFICATION_VERSION,
+            "verification": outcome,
+            "request_count": metadata.get("request_count", 0),
+            "response_bytes": metadata.get("response_bytes", 0),
+            "duration_ms": max(0, int((monotonic() - started) * 1000)),
+        }
+        if reason_code:
+            stats["reason_code"] = reason_code
+        return stats
+
+    @staticmethod
+    def _verification_result(status: str, **fields: Any) -> dict[str, Any]:
+        result = {
+            "status": status,
+            "mode": "shadow",
+            "candidates": [],
+            "metadata": {},
+            "replayed": False,
+        }
+        reason_code = fields.pop("reason_code", "")
+        if reason_code:
+            result["error_code"] = reason_code
+            result["metadata"] = {"reason_code": reason_code}
+        result.update(fields)
+        return result
 
     def list_candidates(
         self, *, user_id: str, objective: str, job_id: str = "", limit: int = 20,

@@ -40,11 +40,15 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 class IngestionJobLeaseLost(RuntimeError):
     """The caller no longer owns this ingestion attempt."""
+
+
+class BookDiscoveryCandidateChanged(RuntimeError):
+    """The candidate changed while a verification attempt was in flight."""
 
 
 _SENSITIVE_LABELS = {
@@ -583,6 +587,9 @@ class KnowledgeStore:
                 version = 12
             if version < 13:
                 self._migrate_v13(connection)
+                version = 13
+            if version < 14:
+                self._migrate_v14(connection)
 
     @staticmethod
     def _migrate_v13(connection: sqlite3.Connection) -> None:
@@ -611,6 +618,96 @@ class KnowledgeStore:
             COMMIT;
             """
         )
+
+    @staticmethod
+    def _migrate_v14(connection: sqlite3.Connection) -> None:
+        table = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'book_discovery_candidates'"
+        ).fetchone()
+        if table is not None and "verified" in str(table[0] or "").casefold():
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS book_discovery_scope_state "
+                "ON book_discovery_candidates(tenant_scope, state, objective)"
+            )
+            connection.execute("PRAGMA user_version = 14")
+            return
+        if table is None:
+            connection.execute(
+                """
+                CREATE TABLE book_discovery_candidates (
+                    id TEXT PRIMARY KEY,
+                    tenant_scope TEXT NOT NULL,
+                    objective TEXT NOT NULL CHECK(objective IN ('user_discovery', 'vellum_exploration')),
+                    work_id TEXT NOT NULL,
+                    identity_hash TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK(state IN ('discovered', 'verified', 'dismissed', 'expired')),
+                    metadata_json TEXT NOT NULL,
+                    relevance_score REAL NOT NULL,
+                    job_id TEXT NOT NULL REFERENCES ingestion_jobs(id),
+                    discovered_at TEXT NOT NULL,
+                    checked_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    UNIQUE(tenant_scope, objective, work_id),
+                    UNIQUE(tenant_scope, objective, identity_hash)
+                )
+                """
+            )
+            connection.execute(
+                "CREATE INDEX book_discovery_scope_state "
+                "ON book_discovery_candidates(tenant_scope, state, objective)"
+            )
+            connection.execute("PRAGMA user_version = 14")
+            return
+
+        # SQLite cannot alter a CHECK constraint. Keep the copy and rename in
+        # one transaction so an interrupted migration leaves the v13 table.
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            connection.execute("DROP TABLE IF EXISTS book_discovery_candidates_v14")
+            connection.execute(
+                """
+                CREATE TABLE book_discovery_candidates_v14 (
+                    id TEXT PRIMARY KEY,
+                    tenant_scope TEXT NOT NULL,
+                    objective TEXT NOT NULL CHECK(objective IN ('user_discovery', 'vellum_exploration')),
+                    work_id TEXT NOT NULL,
+                    identity_hash TEXT NOT NULL,
+                    state TEXT NOT NULL CHECK(state IN ('discovered', 'verified', 'dismissed', 'expired')),
+                    metadata_json TEXT NOT NULL,
+                    relevance_score REAL NOT NULL,
+                    job_id TEXT NOT NULL REFERENCES ingestion_jobs(id),
+                    discovered_at TEXT NOT NULL,
+                    checked_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    UNIQUE(tenant_scope, objective, work_id),
+                    UNIQUE(tenant_scope, objective, identity_hash)
+                )
+                """
+            )
+            connection.execute(
+                """
+                INSERT INTO book_discovery_candidates_v14 (
+                    id, tenant_scope, objective, work_id, identity_hash, state,
+                    metadata_json, relevance_score, job_id, discovered_at, checked_at, expires_at
+                )
+                SELECT id, tenant_scope, objective, work_id, identity_hash, state,
+                       metadata_json, relevance_score, job_id, discovered_at, checked_at, expires_at
+                FROM book_discovery_candidates
+                """
+            )
+            connection.execute("DROP TABLE book_discovery_candidates")
+            connection.execute(
+                "ALTER TABLE book_discovery_candidates_v14 RENAME TO book_discovery_candidates"
+            )
+            connection.execute(
+                "CREATE INDEX book_discovery_scope_state "
+                "ON book_discovery_candidates(tenant_scope, state, objective)"
+            )
+            connection.execute("PRAGMA user_version = 14")
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -4157,10 +4254,17 @@ class KnowledgeStore:
         *,
         stats: dict[str, Any] | None = None,
         cursor: SyncCursorInput | None = None,
+        expected_attempt: int | None = None,
     ) -> dict[str, Any]:
         with closing(self._connect()) as connection, connection:
             connection.execute("BEGIN IMMEDIATE")
-            return self._complete_ingestion_job(connection, job_id, stats=stats, cursor=cursor)
+            return self._complete_ingestion_job(
+                connection,
+                job_id,
+                stats=stats,
+                cursor=cursor,
+                expected_attempt=expected_attempt,
+            )
 
     def _complete_ingestion_job(
         self, connection: sqlite3.Connection, job_id: str, *,
@@ -4557,7 +4661,7 @@ class KnowledgeStore:
                 if blocked:
                     continue
                 matches = connection.execute(
-                    """SELECT id FROM book_discovery_candidates
+                    """SELECT id, state, expires_at FROM book_discovery_candidates
                        WHERE tenant_scope = ? AND objective = ?
                          AND (work_id = ? OR identity_hash = ?)""",
                     (tenant, objective, item["work_id"], item["identity_hash"]),
@@ -4567,6 +4671,8 @@ class KnowledgeStore:
                     continue
                 if matches:
                     existing = matches[0]
+                    if existing["state"] == "verified" and existing["expires_at"] > now:
+                        continue
                     # Preserve the candidate ID and first-discovery time across refreshes.
                     connection.execute(
                         """UPDATE book_discovery_candidates
@@ -4600,6 +4706,135 @@ class KnowledgeStore:
             )
         return self.list_book_discovery_candidates(user_id=user_id, objective=objective, job_id=job_id)
 
+    @staticmethod
+    def _book_discovery_candidate_revision(row: sqlite3.Row) -> str:
+        material = [
+            str(row["id"]),
+            str(row["state"]),
+            str(row["work_id"]),
+            str(row["identity_hash"]),
+            str(row["metadata_json"]),
+            str(row["job_id"]),
+            str(row["checked_at"]),
+            str(row["expires_at"]),
+        ]
+        return hashlib.sha256(_json(material).encode("utf-8")).hexdigest()
+
+    @classmethod
+    def _book_discovery_candidate_row(
+        cls, row: sqlite3.Row, *, include_internal: bool = False,
+    ) -> dict[str, Any] | None:
+        try:
+            metadata = json.loads(str(row["metadata_json"] or "{}"))
+        except (TypeError, ValueError, RecursionError):
+            return None
+        if not isinstance(metadata, dict):
+            return None
+        item = {
+            **metadata,
+            "candidate_id": str(row["id"]),
+            "objective": str(row["objective"]),
+            "state": str(row["state"]),
+            "mode": "shadow",
+            "checked_at": str(row["checked_at"]),
+            "expires_at": str(row["expires_at"]),
+        }
+        if include_internal:
+            item["_candidate_revision"] = cls._book_discovery_candidate_revision(row)
+        return item
+
+    def get_book_discovery_candidate(
+        self, *, user_id: str, candidate_id: str, include_internal: bool = False,
+    ) -> dict[str, Any] | None:
+        if not re.fullmatch(r"book-discovery_[0-9a-f]{32}", candidate_id or ""):
+            return None
+        with closing(self._connect()) as connection, connection:
+            row = connection.execute(
+                "SELECT * FROM book_discovery_candidates WHERE id = ? AND tenant_scope = ?",
+                (candidate_id, self.book_tenant_scope(user_id)),
+            ).fetchone()
+        return self._book_discovery_candidate_row(row, include_internal=include_internal) if row else None
+
+    def publish_book_discovery_verification(
+        self,
+        *,
+        user_id: str,
+        candidate_id: str,
+        expected_revision: str,
+        job_id: str,
+        expected_attempt: int,
+        verification_metadata: dict[str, Any],
+        stats: dict[str, Any],
+        verified: bool = True,
+    ) -> dict[str, Any]:
+        tenant = self.book_tenant_scope(user_id)
+        if not re.fullmatch(r"book-discovery_[0-9a-f]{32}", candidate_id or ""):
+            raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED")
+        if not isinstance(verification_metadata, dict):
+            raise ValueError("Invalid Discovery verification metadata")
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            if (job is None or job["connector"] != "books.discovery" or job["account_id"] != tenant
+                    or job["job_type"] != "metadata_verification"):
+                raise ValueError("Discovery verification job scope mismatch")
+            self._assert_ingestion_job_claim(job, expected_attempt)
+            row = connection.execute(
+                "SELECT * FROM book_discovery_candidates WHERE id = ? AND tenant_scope = ?",
+                (candidate_id, tenant),
+            ).fetchone()
+            if row is None or row["state"] != "discovered":
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED")
+            if self._book_discovery_candidate_revision(row) != expected_revision:
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED")
+            now = _now()
+            reference = _parse_datetime(now) or datetime.now(UTC)
+            if self._timestamp_expired(str(row["expires_at"]), reference):
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_EXPIRED")
+            try:
+                existing_metadata = json.loads(str(row["metadata_json"] or "{}"))
+            except (TypeError, ValueError, RecursionError):
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED") from None
+            if not isinstance(existing_metadata, dict):
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED")
+            merged = {
+                **existing_metadata,
+                "verification": "verified" if verified else "unverified",
+                "verification_metadata": verification_metadata,
+                "metadata_trust": "catalog_records_cross_checked" if verified else "catalog_record",
+                "content_available": False,
+            }
+            if verified:
+                merged["cover_url"] = verification_metadata.get("provenance", {}).get("cover_url", "")
+                merged["cover_id"] = verification_metadata.get("cover_id")
+                merged["cover_status"] = verification_metadata.get("cover_status", "unavailable")
+            payload = _json(merged)
+            if len(payload.encode("utf-8")) > 16384:
+                raise ValueError("Discovery metadata budget exceeded")
+            connection.execute(
+                """
+                UPDATE book_discovery_candidates
+                SET state = ?, metadata_json = ?, checked_at = ?
+                WHERE id = ? AND tenant_scope = ? AND state = 'discovered'
+                """,
+                ("verified" if verified else "discovered", payload, now, candidate_id, tenant),
+            )
+            if connection.execute("SELECT changes()").fetchone()[0] != 1:
+                raise BookDiscoveryCandidateChanged("DISCOVERY_CANDIDATE_CHANGED")
+            self._complete_ingestion_job(
+                connection,
+                job_id,
+                stats={**stats, "verification": "verified" if verified else "unverified"},
+                expected_attempt=expected_attempt,
+            )
+            verified = connection.execute(
+                "SELECT * FROM book_discovery_candidates WHERE id = ?", (candidate_id,)
+            ).fetchone()
+        result = self._book_discovery_candidate_row(verified)
+        if result is None:
+            raise ValueError("Invalid Discovery candidate metadata")
+        return result
+
     def list_book_discovery_candidates(
         self, *, user_id: str, objective: str, job_id: str = "", limit: int = 20,
     ) -> list[dict[str, Any]]:
@@ -4608,7 +4843,7 @@ class KnowledgeStore:
         with closing(self._connect()) as connection, connection:
             rows = connection.execute(
                 """SELECT * FROM book_discovery_candidates
-                   WHERE tenant_scope = ? AND objective = ? AND state = 'discovered'
+                   WHERE tenant_scope = ? AND objective = ? AND state IN ('discovered', 'verified')
                      AND expires_at > ? AND (? = '' OR job_id = ?)
                    ORDER BY relevance_score DESC, work_id ASC LIMIT ?""",
                 (self.book_tenant_scope(user_id), objective, _now(), job_id, job_id, min(max(limit, 1), 100)),

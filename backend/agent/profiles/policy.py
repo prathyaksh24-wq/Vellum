@@ -14,6 +14,9 @@ class ActiveProfilePolicy:
     allowed_tools: frozenset[str]
     allowed_skills: frozenset[str]
     require_confirmation: frozenset[str]
+    book_discovery_network: bool = False
+    book_discovery_approval: str = ""
+    book_discovery_request_key: str = ""
 
 
 _ACTIVE_PROFILE_POLICY: ContextVar[ActiveProfilePolicy | None] = ContextVar(
@@ -31,6 +34,9 @@ def profile_policy(
     allowed_tools: frozenset[str],
     allowed_skills: frozenset[str] = frozenset(),
     require_confirmation: frozenset[str] = frozenset(),
+    book_discovery_network: bool = False,
+    book_discovery_approval: str = "",
+    book_discovery_request_key: str = "",
 ) -> Iterator[ActiveProfilePolicy]:
     clean_user_id = user_id.strip()
     if not clean_user_id:
@@ -44,6 +50,9 @@ def profile_policy(
         allowed_tools=allowed_tools,
         allowed_skills=allowed_skills,
         require_confirmation=require_confirmation,
+        book_discovery_network=book_discovery_network,
+        book_discovery_approval=book_discovery_approval,
+        book_discovery_request_key=book_discovery_request_key,
     )
     token = _ACTIVE_PROFILE_POLICY.set(policy)
     try:

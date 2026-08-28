@@ -31,6 +31,9 @@ def _user_id(config: RunnableConfig | None) -> str:
 
 def _response_json(response: SpecialistResponse) -> str:
     payload = response.model_dump(mode="json")
+    action = payload.get("action_request")
+    if isinstance(action, dict) and action.get("action") in {"books.discover", "books.verify_candidate"}:
+        payload["action_request"] = {"action": action["action"], "requires_confirmation": True}
     structured = payload.get("structured_payload")
     envelope = structured.get("books_agent") if isinstance(structured, dict) else None
     if isinstance(envelope, dict):
