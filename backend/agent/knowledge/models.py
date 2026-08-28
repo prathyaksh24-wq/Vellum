@@ -173,6 +173,30 @@ class IngestionJobInput(BaseModel):
     lease_seconds: int = Field(default=900, ge=30, le=86400)
 
 
+class BookDiscoveryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, frozen=True)
+
+    user_id: str = Field(min_length=1, max_length=160)
+    objective: Literal["user_discovery", "vellum_exploration"]
+    query: str = Field(min_length=1, max_length=300)
+    request_key: str = Field(min_length=1, max_length=160)
+    max_candidates: int = Field(default=6, ge=1, le=20)
+
+
+class BookDiscoveryPolicy(BaseModel):
+    """Host-supplied authority, never populated from model/tool arguments."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    network_allowed: bool = False
+    public_query_approved: bool = False
+    local_only: bool = False
+    max_response_bytes: int = Field(default=262144, ge=1024, le=1048576)
+    max_retained_candidates: int = Field(default=200, ge=1, le=1000)
+    deadline_seconds: float = Field(default=10.0, ge=1.0, le=30.0)
+    candidate_ttl_days: int = Field(default=30, ge=1, le=90)
+
+
 class BookImportRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=160)
     rights_attestation_version: str = Field(min_length=1, max_length=120)
