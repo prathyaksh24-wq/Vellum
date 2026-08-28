@@ -11,6 +11,16 @@ const selectComponent = readFileSync(
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
+    expect(html).toContain('<script src="api/books.js"></script>');
+    expect(html).toContain('<script src="components/books-state.js"></script>');
+    expect(html).toContain('src="components/books-view.jsx"');
+    expect(html).toContain('src="/books-entry.js"');
+    expect(html).toContain("DefaultAgentView={DefaultAgentView}");
+    expect(html).toContain("bookDraft.text");
+    expect(html).not.toContain("IcArrowLeft");
+  });
+
   test("loads the modular frontend API bridge used by backend integrations", () => {
     expect(html).toMatch(/<script src="api\/client\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/chat.js"></script>');

@@ -7,6 +7,7 @@ from hashlib import sha256
 from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
+from pathlib import Path
 import json
 import posixpath
 import re
@@ -534,6 +535,38 @@ def _canonical_json(value: Any) -> bytes:
         sort_keys=True,
         separators=(",", ":"),
     ).encode("utf-8")
+
+
+def read_epub_presentation(path: Path, *, include_cover: bool = False) -> tuple[BookDocumentMetadata, bytes, str]:
+    """Read bounded display metadata from an already validated local EPUB."""
+    def read(archive: ZipFile, name: str, limit: int) -> bytes:
+        info = archive.getinfo(name)
+        if info.file_size > limit or info.flag_bits & 1:
+            raise BookDocumentError("BOOK_DISPLAY_RESOURCE_UNAVAILABLE")
+        content = archive.read(info)
+        if len(content) > limit:
+            raise BookDocumentError("BOOK_DISPLAY_RESOURCE_UNAVAILABLE")
+        return content
+
+    def xml(content: bytes) -> ET.Element:
+        if b"<!DOCTYPE" in content.upper() or b"<!ENTITY" in content.upper():
+            raise BookDocumentError("UNSAFE_XML_DECLARATION")
+        return _parse_xml(content, reason_code="BOOK_DISPLAY_METADATA_INVALID", stage="identified")
+
+    with ZipFile(path) as archive:
+        package_path = _container_package_path(xml(read(archive, "META-INF/container.xml", 65536)))
+        package = xml(read(archive, package_path, 2 * 1024 * 1024))
+        metadata = _metadata(package)
+        manifest = _manifest(package, package_path)
+        legacy_cover = next((element.attrib.get("content", "") for element in package.iter()
+                             if _local_name(element.tag) == "meta" and element.attrib.get("name") == "cover"), "")
+        cover = next((item for item in manifest.values()
+                      if "cover-image" in item["properties"].split() or item["id"] == legacy_cover), None)
+        if not cover or cover["media_type"] not in {"image/png", "image/jpeg", "image/webp"}:
+            return metadata, b"", ""
+        if not include_cover:
+            return metadata, b"", cover["media_type"]
+        return metadata, read(archive, cover["path"], 8 * 1024 * 1024), cover["media_type"]
 
 
 def _parse_xml(raw: bytes, *, reason_code: str, stage: str) -> ET.Element:

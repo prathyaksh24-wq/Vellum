@@ -57,6 +57,7 @@ ui-dist/
 .skills/.hub/lock.json
 .skills/pending/receipts/
 node_modules/
+frontend/.vite/
 desktop/dist/
 desktop/src-tauri/.cargo/config.toml
 desktop/src-tauri/target/
