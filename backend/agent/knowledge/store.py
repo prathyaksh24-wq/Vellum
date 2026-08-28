@@ -496,7 +496,12 @@ class BlobStore:
                     output.write(content)
                     output.flush()
                     os.fsync(output.fileno())
-                os.replace(temp_name, target)
+                try:
+                    os.replace(temp_name, target)
+                except PermissionError:
+                    # Windows can deny replacement while a concurrent publisher reads the same blob.
+                    if not target.is_file() or target.read_bytes() != content:
+                        raise
             finally:
                 if os.path.exists(temp_name):
                     os.unlink(temp_name)
@@ -1585,6 +1590,37 @@ class KnowledgeStore:
                 _now(),
             ),
         )
+
+    def list_book_library_imports(self, *, user_id: str, limit: int, offset: int) -> tuple[list[str], int]:
+        with closing(self._connect()) as connection:
+            total = connection.execute(
+                "SELECT COUNT(*) FROM user_book_imports WHERE user_id = ?", (user_id,),
+            ).fetchone()[0]
+            rows = connection.execute(
+                "SELECT id FROM user_book_imports WHERE user_id = ? "
+                "ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?",
+                (user_id, limit, offset),
+            ).fetchall()
+        return [str(row["id"]) for row in rows], int(total)
+
+    def get_book_library_asset(self, *, user_id: str, import_id: str, run_id: str) -> dict[str, Any]:
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT a.blob_path, a.byte_size, a.sha256, "
+                "EXISTS(SELECT 1 FROM book_stage_receipts s WHERE s.run_id = r.id "
+                "AND s.stage = 'validated' AND s.status = 'succeeded') AS validated, "
+                "EXISTS(SELECT 1 FROM book_documents d JOIN book_materializations m "
+                "ON m.document_id = d.id AND m.user_id = d.user_id "
+                "JOIN active_book_materializations active ON active.materialization_id = m.id "
+                "AND active.user_id = m.user_id WHERE d.run_id = r.id AND d.user_id = i.user_id) AS compiled "
+                "FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id "
+                "JOIN book_ingestion_runs r ON r.asset_id = a.id AND r.user_id = i.user_id "
+                "WHERE i.id = ? AND i.user_id = ? AND r.id = ?",
+                (import_id, user_id, run_id),
+            ).fetchone()
+        if row is None:
+            raise KeyError("Unknown Book import.")
+        return dict(row)
 
     def get_book_import_status(
         self,

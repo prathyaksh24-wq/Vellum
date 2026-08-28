@@ -71,6 +71,8 @@ function serveDesignUploads() {
 }
 
 export default defineConfig({
+  cacheDir: resolve(here, '.vite'),
+  resolve: {alias: {three: resolve(here, 'node_modules/three/build/three.module.js')}},
   plugins: [react(), serveDesignUploads(), copyStaticUiAssets()],
   root: designUploadsRoot,
   publicDir: false,

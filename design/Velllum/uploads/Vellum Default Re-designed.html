@@ -16,6 +16,11 @@
 <script src="api/automations.js"></script>
 <script src="api/settings.js?v=20260710-backend-routing"></script>
 <script src="api/knowledge.js?v=20260710-wiki"></script>
+<script src="api/books.js"></script>
+<script src="components/books-state.js"></script>
+<script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
+<script type="module" src="/books-entry.js"></script>
+<link rel="stylesheet" href="components/books-view.css"/>
 <script src="api/runtimes.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -3364,6 +3369,7 @@ const REPLY_BUCKETS = [
   ]},
 ];
 const AGENTS = [
+  { id:'books', name:'Books Agent', icon:IcBook, tag:'Book knowledge & ideas', blurb:'Questions and conversations grounded in your installed books.' },
   { id:'x',        name:'X Agent',        icon: IcX,       tag:'Posts, threads & trends',    blurb:'I live on X ? drafting posts, distilling threads, and tracking what\u2019s breaking.' },
   { id:'youtube',  name:'YouTube Agent',  icon: IcYoutube, tag:'Videos, scripts & channels', blurb:'I work YouTube end to end \u2014 pulling transcripts, drafting scripts, and watching channels.' },
   { id:'memory',   name:'Memory Agent',   icon: IcBrain,   tag:'Recall & personal context',  blurb:'I keep the long thread \u2014 recalling what you\u2019ve told me and holding context steady.' },
@@ -4419,8 +4425,13 @@ const TypingGreet = () => {
   );
 };
 
-const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onStop, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, model, setModel, models = MODELS, onSend, onStop, onRegen, onViewImage, onSettings, onNewConvo, onOpenConvo, composerExtras, xConnected, xHandle, onConnectX, onDisconnectX, ytConnected, ytHandle, onConnectYT, onDisconnectYT, onAnswerNow, onOpenActivity, activity, onCloseActivity, bookDraft, onBookDraftConsumed}) => {
   const [text, setText] = useState('');
+  useEffect(() => {
+    if (!bookDraft) return;
+    setText(current => current ? current + '\n\n' + bookDraft.text : bookDraft.text);
+    onBookDraftConsumed?.();
+  }, [bookDraft]);
   const endRef = useRef(null);
   const Icon = agent.icon;
   const needsX = agent.id === 'x' && !xConnected;
@@ -4533,6 +4544,14 @@ const AgentView = ({agent, convos, activeConvoId, enabled, onToggleEnabled, mode
       <div className="composer-dock"><Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} ph={'Message ' + agent.name + '\u2026'} onViewImage={onViewImage} {...composerExtras}/></div>
     </div>{activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}</div>
   );
+};
+
+const AgentView = props => {
+  const BooksView = window.VellumUI.BooksView;
+  if (props.agent?.id === 'books' && BooksView) {
+    return <BooksView agentProps={props} DefaultAgentView={DefaultAgentView} icons={{Book:IcBook, Chat:IcChat, Upload:IcUpload, Refresh:IcRefresh, Search:IcSearch, Settings:IcSettings, Close:IcX, Back:p=><span style={{display:'inline-flex',transform:'rotate(180deg)'}}><IcChevR {...p}/></span>, Next:IcChevR}}/>;
+  }
+  return <DefaultAgentView {...props}/>;
 };
 
 const AgentSettingsModal = ({agent, cfg, onSave, onClose}) => {
@@ -8109,7 +8128,10 @@ const App = () => {
 
   const [activeChatId, setActiveChatId] = useState(null);
   const [activeProjectId, setActiveProjectId] = useState(null);
-  const [activeAgentId, setActiveAgentId] = useState(null);
+  const [activeAgentId, setActiveAgentId] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get('agent');
+    return AGENTS.some(agent => agent.id === requested) ? requested : null;
+  });
   const [agentConvos, setAgentConvos] = useState({});
   const [activeConvo, setActiveConvo] = useState({});
   const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);

@@ -6,7 +6,11 @@ import asyncio
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Path, Query, UploadFile
+from fastapi.responses import Response
+from pydantic import BaseModel, ConfigDict, StrictBool
 
+from agent.config import get_settings
+from agent.knowledge.book_library import BookLibrary, RIGHTS_ATTESTATION_VERSION
 from agent.knowledge.book_documents import BookDocumentError
 from agent.knowledge.materialization import MaterializationCanaryError
 from agent.knowledge.models import (
@@ -29,6 +33,81 @@ from agent.knowledge.runtime import get_knowledge_core
 
 
 router = APIRouter(prefix="/core", tags=["personal-intelligence"])
+
+
+def _book_library() -> BookLibrary:
+    return BookLibrary(get_knowledge_core(), get_settings().honcho_user_id)
+
+
+class BookLibraryAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: StrictBool
+
+
+@router.get("/books/library")
+async def book_library_list(
+    limit: int = Query(default=40, ge=1, le=40), offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    return await asyncio.to_thread(_book_library().list, limit=limit, offset=offset)
+
+
+@router.post("/books/library/import")
+async def book_library_import(
+    file: Annotated[UploadFile, File(...)],
+    rights_attestation_version: Annotated[str, Form(max_length=120)],
+    scan_approved: Annotated[bool, Form()],
+    local_only: Annotated[bool, Form()] = True,
+) -> dict[str, Any]:
+    if rights_attestation_version != RIGHTS_ATTESTATION_VERSION:
+        await file.close()
+        raise HTTPException(status_code=409, detail={"code": "BOOK_RIGHTS_ATTESTATION_REQUIRED"})
+    if not str(file.filename or "").lower().endswith(".epub"):
+        await file.close()
+        raise HTTPException(status_code=422, detail={"code": "BOOK_EPUB_REQUIRED"})
+    if not scan_approved:
+        await file.close()
+        raise HTTPException(status_code=409, detail={"code": "BOOK_SCAN_APPROVAL_REQUIRED"})
+    library = _book_library()
+    result = await core_import_book_epub(
+        file=file, user_id=library.user_id, rights_attestation_version=rights_attestation_version,
+        scan_approved=scan_approved, local_only=local_only,
+    )
+    return {**await asyncio.to_thread(library.detail, result.import_id),
+            "status": result.status, "error_code": result.error_code}
+
+
+@router.get("/books/library/{import_id}")
+async def book_library_detail(import_id: str) -> dict[str, Any]:
+    try:
+        return await asyncio.to_thread(_book_library().detail, import_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+
+
+@router.get("/books/library/{import_id}/cover")
+async def book_library_cover(import_id: str) -> Response:
+    try:
+        content, media_type = await asyncio.to_thread(_book_library().cover, import_id)
+        return Response(content, media_type=media_type, headers={
+            "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+        })
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_COVER_UNAVAILABLE"}) from exc
+
+
+@router.post("/books/library/{import_id}/{action}")
+async def book_library_action(import_id: str, action: str, request: BookLibraryAction) -> dict[str, Any]:
+    if action not in {"process", "compile"}:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_ACTION_NOT_FOUND"})
+    if request.confirm is not True:
+        raise HTTPException(status_code=409, detail={"code": "BOOK_CONFIRMATION_REQUIRED"})
+    try:
+        return await asyncio.to_thread(_book_library().action, import_id, action)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail={"code": "BOOK_NOT_FOUND"}) from exc
 
 
 @router.get("/status")
