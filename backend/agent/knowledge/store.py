@@ -40,7 +40,11 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
+
+
+class IngestionJobLeaseLost(RuntimeError):
+    """The caller no longer owns this ingestion attempt."""
 
 
 _SENSITIVE_LABELS = {
@@ -577,6 +581,36 @@ class KnowledgeStore:
                 self._migrate_v12(connection)
                 connection.execute("PRAGMA user_version = 12")
                 version = 12
+            if version < 13:
+                self._migrate_v13(connection)
+
+    @staticmethod
+    def _migrate_v13(connection: sqlite3.Connection) -> None:
+        connection.executescript(
+            """
+            BEGIN IMMEDIATE;
+            CREATE TABLE IF NOT EXISTS book_discovery_candidates (
+                id TEXT PRIMARY KEY,
+                tenant_scope TEXT NOT NULL,
+                objective TEXT NOT NULL CHECK(objective IN ('user_discovery', 'vellum_exploration')),
+                work_id TEXT NOT NULL,
+                identity_hash TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('discovered', 'dismissed', 'expired')),
+                metadata_json TEXT NOT NULL,
+                relevance_score REAL NOT NULL,
+                job_id TEXT NOT NULL REFERENCES ingestion_jobs(id),
+                discovered_at TEXT NOT NULL,
+                checked_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                UNIQUE(tenant_scope, objective, work_id),
+                UNIQUE(tenant_scope, objective, identity_hash)
+            );
+            CREATE INDEX IF NOT EXISTS book_discovery_scope_state
+                ON book_discovery_candidates(tenant_scope, state, objective);
+            PRAGMA user_version = 13;
+            COMMIT;
+            """
+        )
 
     @staticmethod
     def _create_schema(connection: sqlite3.Connection) -> None:
@@ -4054,6 +4088,7 @@ class KnowledgeStore:
         now = _now()
         lease_expires_at = (datetime.now(UTC) + timedelta(seconds=item.lease_seconds)).isoformat()
         with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 "SELECT * FROM ingestion_jobs WHERE idempotency_key = ?",
                 (scoped_key,),
@@ -4123,37 +4158,61 @@ class KnowledgeStore:
         stats: dict[str, Any] | None = None,
         cursor: SyncCursorInput | None = None,
     ) -> dict[str, Any]:
-        now = _now()
         with closing(self._connect()) as connection, connection:
-            row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
-            if row is None:
-                raise KeyError(f"Unknown ingestion job: {job_id}")
-            if str(row["status"]) == "completed":
-                return self._job_row(row)
-            if str(row["status"]) != "running":
-                raise ValueError(f"Cannot complete ingestion job in {row['status']} state.")
-            if cursor is not None:
-                self._upsert_sync_cursor(connection, cursor, succeeded_at=now)
-            connection.execute(
-                """
-                UPDATE ingestion_jobs
-                SET status = 'completed', stats_json = ?, error_code = '',
-                    completed_at = ?, lease_expires_at = ''
-                WHERE id = ?
-                """,
-                (_json(stats or {}), now, job_id),
-            )
-            completed = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            connection.execute("BEGIN IMMEDIATE")
+            return self._complete_ingestion_job(connection, job_id, stats=stats, cursor=cursor)
+
+    def _complete_ingestion_job(
+        self, connection: sqlite3.Connection, job_id: str, *,
+        stats: dict[str, Any] | None = None, cursor: SyncCursorInput | None = None,
+        expected_attempt: int | None = None,
+    ) -> dict[str, Any]:
+        now = _now()
+        row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"Unknown ingestion job: {job_id}")
+        if expected_attempt is not None:
+            self._assert_ingestion_job_claim(row, expected_attempt)
+        if str(row["status"]) == "completed":
+            return self._job_row(row)
+        if str(row["status"]) != "running":
+            raise ValueError(f"Cannot complete ingestion job in {row['status']} state.")
+        if cursor is not None:
+            self._upsert_sync_cursor(connection, cursor, succeeded_at=now)
+        connection.execute(
+            """
+            UPDATE ingestion_jobs
+            SET status = 'completed', stats_json = ?, error_code = '',
+                completed_at = ?, lease_expires_at = ''
+            WHERE id = ?
+            """,
+            (_json(stats or {}), now, job_id),
+        )
+        completed = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
         return self._job_row(completed)
 
-    def fail_ingestion_job(self, job_id: str, *, error_code: str) -> dict[str, Any]:
+    @staticmethod
+    def _assert_ingestion_job_claim(row: sqlite3.Row, expected_attempt: int) -> None:
+        if (
+            row["status"] != "running"
+            or int(row["attempt_count"]) != expected_attempt
+            or KnowledgeStore._timestamp_expired(str(row["lease_expires_at"]), datetime.now(UTC))
+        ):
+            raise IngestionJobLeaseLost("INGESTION_LEASE_LOST")
+
+    def fail_ingestion_job(
+        self, job_id: str, *, error_code: str, expected_attempt: int | None = None,
+    ) -> dict[str, Any]:
         safe_code = "".join(character for character in error_code.upper() if character.isalnum() or character == "_")[:80]
         safe_code = safe_code or "INGESTION_FAILED"
         now = _now()
         with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
             if row is None:
                 raise KeyError(f"Unknown ingestion job: {job_id}")
+            if expected_attempt is not None:
+                self._assert_ingestion_job_claim(row, expected_attempt)
             if str(row["status"]) == "completed":
                 raise ValueError("Completed ingestion jobs cannot be failed.")
             self._record_cursor_failure(
@@ -4460,6 +4519,125 @@ class KnowledgeStore:
             "policy": policy,
         }
 
+    def publish_book_discovery_candidates(
+        self, *, user_id: str, objective: str, job_id: str,
+        candidates: list[dict[str, Any]], ttl_days: int, capacity: int, stats: dict[str, Any],
+        expected_attempt: int,
+    ) -> list[dict[str, Any]]:
+        tenant = self.book_tenant_scope(user_id)
+        if objective not in {"user_discovery", "vellum_exploration"}:
+            raise ValueError("Invalid Discovery objective")
+        if not 1 <= ttl_days <= 90 or not 1 <= capacity <= 1000 or len(candidates) > 20:
+            raise ValueError("Invalid Discovery budget")
+        now = _now()
+        expires = (datetime.fromisoformat(now) + timedelta(days=ttl_days)).isoformat()
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            job = connection.execute(
+                "SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,),
+            ).fetchone()
+            if job is None or job["connector"] != "books.discovery" or job["account_id"] != tenant:
+                raise ValueError("Discovery job scope mismatch")
+            self._assert_ingestion_job_claim(job, expected_attempt)
+            # Expired catalog hints are disposable; dismissal fingerprints are not.
+            connection.execute(
+                "DELETE FROM book_discovery_candidates WHERE tenant_scope = ? AND state != 'dismissed' AND expires_at <= ?",
+                (tenant, now),
+            )
+            for item in candidates:
+                payload = _json(item)
+                if len(payload.encode("utf-8")) > 16384:
+                    raise ValueError("Discovery metadata budget exceeded")
+                blocked = connection.execute(
+                    """SELECT 1 FROM book_discovery_candidates
+                       WHERE tenant_scope = ? AND state = 'dismissed'
+                         AND (work_id = ? OR identity_hash = ?)""",
+                    (tenant, item["work_id"], item["identity_hash"]),
+                ).fetchone()
+                if blocked:
+                    continue
+                matches = connection.execute(
+                    """SELECT id FROM book_discovery_candidates
+                       WHERE tenant_scope = ? AND objective = ?
+                         AND (work_id = ? OR identity_hash = ?)""",
+                    (tenant, objective, item["work_id"], item["identity_hash"]),
+                ).fetchall()
+                if len(matches) > 1:
+                    # Conflicting catalog identities need later verification, not a silent merge.
+                    continue
+                if matches:
+                    existing = matches[0]
+                    # Preserve the candidate ID and first-discovery time across refreshes.
+                    connection.execute(
+                        """UPDATE book_discovery_candidates
+                           SET metadata_json = ?, relevance_score = ?, job_id = ?, work_id = ?, identity_hash = ?,
+                               checked_at = ?, expires_at = ?, state = 'discovered'
+                           WHERE id = ?""",
+                        (payload, item["relevance_score"], job_id, item["work_id"], item["identity_hash"],
+                         now, expires, existing["id"]),
+                    )
+                    continue
+                count = connection.execute(
+                    "SELECT COUNT(*) FROM book_discovery_candidates WHERE tenant_scope = ?", (tenant,),
+                ).fetchone()[0]
+                if count >= capacity:
+                    continue
+                candidate_id = _stable_id("book-discovery", tenant, objective, item["identity_hash"], job_id)
+                connection.execute(
+                    """INSERT INTO book_discovery_candidates
+                       (id, tenant_scope, objective, work_id, identity_hash, state,
+                        metadata_json, relevance_score, job_id, discovered_at, checked_at, expires_at)
+                       VALUES (?, ?, ?, ?, ?, 'discovered', ?, ?, ?, ?, ?, ?)""",
+                    (candidate_id, tenant, objective, item["work_id"], item["identity_hash"],
+                     payload, item["relevance_score"], job_id, now, now, expires),
+                )
+            count = connection.execute(
+                "SELECT COUNT(*) FROM book_discovery_candidates WHERE job_id = ? AND state = 'discovered'",
+                (job_id,),
+            ).fetchone()[0]
+            self._complete_ingestion_job(
+                connection, job_id, stats={**stats, "candidate_count": count}, expected_attempt=expected_attempt,
+            )
+        return self.list_book_discovery_candidates(user_id=user_id, objective=objective, job_id=job_id)
+
+    def list_book_discovery_candidates(
+        self, *, user_id: str, objective: str, job_id: str = "", limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        if objective not in {"user_discovery", "vellum_exploration"}:
+            raise ValueError("Invalid Discovery objective")
+        with closing(self._connect()) as connection, connection:
+            rows = connection.execute(
+                """SELECT * FROM book_discovery_candidates
+                   WHERE tenant_scope = ? AND objective = ? AND state = 'discovered'
+                     AND expires_at > ? AND (? = '' OR job_id = ?)
+                   ORDER BY relevance_score DESC, work_id ASC LIMIT ?""",
+                (self.book_tenant_scope(user_id), objective, _now(), job_id, job_id, min(max(limit, 1), 100)),
+            ).fetchall()
+        return [
+            {**json.loads(row["metadata_json"]), "candidate_id": row["id"],
+             "objective": row["objective"], "state": row["state"], "mode": "shadow",
+             "checked_at": row["checked_at"], "expires_at": row["expires_at"]}
+            for row in rows
+        ]
+
+    def dismiss_book_discovery_candidate(self, *, user_id: str, candidate_id: str) -> bool:
+        tenant = self.book_tenant_scope(user_id)
+        with closing(self._connect()) as connection, connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT work_id, identity_hash FROM book_discovery_candidates WHERE id = ? AND tenant_scope = ?",
+                (candidate_id, tenant),
+            ).fetchone()
+            if row is None:
+                return False
+            connection.execute(
+                """UPDATE book_discovery_candidates SET state = 'dismissed', metadata_json = '{}',
+                       relevance_score = 0
+                   WHERE tenant_scope = ? AND (work_id = ? OR identity_hash = ?)""",
+                (tenant, row["work_id"], row["identity_hash"]),
+            )
+        return True
+
     def status(self) -> dict[str, Any]:
         tables = (
             "sources",
@@ -4489,6 +4667,7 @@ class KnowledgeStore:
             "book_materialization_candidates",
             "user_learning_candidates",
             "user_learning_candidate_evidence",
+            "book_discovery_candidates",
         )
         with closing(self._connect()) as connection, connection:
             counts = {table: int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}

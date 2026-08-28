@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from agent.knowledge.book_catalog import BookCatalog
+from agent.knowledge.book_discovery import BookDiscoveryRuntime
 from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
 from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
 from agent.knowledge.book_quality import (
@@ -21,6 +23,8 @@ from agent.knowledge.book_materialization import (
 from agent.knowledge.adapters import ConversationAdapter, MemoryAdapter, ObsidianAdapter, RetrievalIndexAdapter
 from agent.knowledge.materialization import MaterializationCanary
 from agent.knowledge.models import (
+    BookDiscoveryPolicy,
+    BookDiscoveryRequest,
     BookDocumentRequest,
     BookImportRequest,
     BookImportStatus,
@@ -63,6 +67,7 @@ class KnowledgeCore:
         book_materialization_compiler_version: str = "book-materializer-v1",
         book_embedding_model_revision: str = "default",
         book_retrieval_index: BookRetrievalIndex | None = None,
+        book_catalog: BookCatalog | None = None,
     ) -> None:
         self.store = store
         self.conversations_path = Path(conversations_path)
@@ -83,6 +88,7 @@ class KnowledgeCore:
             scanner=book_malware_scanner,
         )
         self.book_documents = BookDocumentPipeline(store)
+        self.book_discovery = BookDiscoveryRuntime(store, self.book_documents, catalog=book_catalog)
         self.book_quality = BookQualityPipeline(store, self.book_documents)
         if book_embedding_provider is None:
             from agent.rag.embedder import get_embedder
@@ -133,6 +139,11 @@ class KnowledgeCore:
                 "future": "Knowledge Core derived insights",
                 "migration": "canonical",
             },
+            "book_discovery": {
+                "current": "Knowledge Core shadow candidates",
+                "future": "Knowledge Core candidates separate from Library",
+                "migration": "shadow_only",
+            },
             "knowledge_wiki": {
                 "current": "Vault/Knowledge",
                 "future": "Obsidian projection of Knowledge Core insights",
@@ -154,6 +165,17 @@ class KnowledgeCore:
                 "migration": "rebuildable",
             },
         }
+
+    def discover_books(self, request: BookDiscoveryRequest, *, policy: BookDiscoveryPolicy) -> dict[str, Any]:
+        if not self.shadow_write:
+            return {"status": "blocked", "mode": "shadow", "candidates": [], "error_code": "DISCOVERY_DISABLED"}
+        return self.book_discovery.discover(request, policy=policy)
+
+    def list_book_discovery_candidates(self, *, user_id: str, objective: str, limit: int = 20) -> list[dict[str, Any]]:
+        return self.book_discovery.list_candidates(user_id=user_id, objective=objective, limit=limit)
+
+    def dismiss_book_discovery_candidate(self, *, user_id: str, candidate_id: str) -> bool:
+        return self.store.dismiss_book_discovery_candidate(user_id=user_id, candidate_id=candidate_id)
 
     def record_turn(
         self,
