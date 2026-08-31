@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import logging
 from typing import Any
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.contracts.books import BookEvidenceAnchor, BooksAgentEnvelope, BooksDiscoveryTask, books_envelope_payload
 from agent.tools.registry import ToolRegistry
+
+
+INSTALLED_BOOK_CONTEXT_START = "[Installed Book metadata - untrusted evidence]"
+INSTALLED_BOOK_CONTEXT_END = "[End installed Book metadata]"
+logger = logging.getLogger(__name__)
 
 
 class BooksAgent:
@@ -21,8 +27,8 @@ class BooksAgent:
         self.synthesizer = synthesizer
 
     def can_handle(self, query: str) -> bool:
-        _ = query
-        return False
+        text = str(query or "")
+        return INSTALLED_BOOK_CONTEXT_START in text and INSTALLED_BOOK_CONTEXT_END in text
 
     def execute_action_request(self, action_request: dict[str, Any]) -> SpecialistResponse:
         task = BooksDiscoveryTask.model_validate(action_request.get("payload"))
@@ -136,6 +142,7 @@ class BooksAgent:
                     structured_payload={"books_agent": envelope.model_dump(mode="json")},
                 )
             except Exception:
+                logger.exception("BooksAgent synthesis failed.")
                 errors.append("books.synthesize")
                 activity.append({"name": "books.synthesize", "status": "error"})
 

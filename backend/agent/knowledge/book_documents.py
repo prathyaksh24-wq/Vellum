@@ -604,7 +604,7 @@ def _clean_text(element: ET.Element) -> str:
                 parts.append(child.tail)
 
     collect(element)
-    return unicodedata.normalize("NFC", " ".join(" ".join(parts).split()))
+    return unicodedata.normalize("NFC", " ".join("".join(parts).split()))
 
 
 def _container_package_path(container: ET.Element) -> str:
@@ -902,6 +902,8 @@ def _section_from_resource(
 
     def emit(element: ET.Element, block_type: str, text: str, level: int | None = None) -> None:
         nonlocal cursor
+        if not text:
+            return
         tag = _local_name(element.tag)
         lexical_index = lexical_occurrences.get(tag, 0)
         candidates = lexical_spans.get(tag, [])
@@ -909,8 +911,6 @@ def _section_from_resource(
         lexical_occurrences[tag] = lexical_index + 1
         if lexical is None or lexical.text != text:
             raise BookDocumentError("EPUB_SOURCE_ANCHOR_INVALID", stage="structured")
-        if not text:
-            return
         if extracted_parts:
             cursor += 1
         start = cursor

@@ -40,14 +40,16 @@ class BookLibrary:
     def book(self, import_id: str, *, detail: bool = False) -> dict[str, Any]:
         status, asset = self._source(import_id)
         usable = bool(asset["validated"]) and status.status not in {"rejected", "failed_permanent"}
+        expected_compiler = str(self.core.book_materializations.compiler_version)
+        compiled_current = bool(asset["compiled"]) and str(asset["active_compiler_version"]) == expected_compiler
         book = {
             "id": import_id, "title": "Untitled book", "authors": [], "published_at": "",
             "document_id": status.document_id, "run_id": status.run_id, "state": status.status,
             "error_code": status.error_code, "local_only": status.local_only, "cover_url": "",
             "can_process": usable and not status.quality_evaluated,
-            "can_compile": usable and status.quality_outcome == "PASS" and not asset["compiled"]
+            "can_compile": usable and status.quality_outcome == "PASS" and not compiled_current
             and callable(self.core.materialize_book_document),
-            "skill_status": "compiled" if asset["compiled"] else "not_compiled",
+            "skill_status": "compiled" if compiled_current else "not_compiled",
         }
         if usable:
             try:
@@ -73,6 +75,25 @@ class BookLibrary:
 
     def detail(self, import_id: str) -> dict[str, Any]:
         return {"schema_version": SCHEMA_VERSION, "book": self.book(import_id, detail=True)}
+
+    def materialize(self, import_id: str) -> dict[str, Any]:
+        """Advance one validated EPUB through the canonical Book-to-Skill pipeline."""
+        book = self.book(import_id)
+        status = "ready"
+        error = ""
+        if book["can_process"]:
+            processed = self.action(import_id, "process")
+            status = str(processed.get("status") or status)
+            error = str(processed.get("error_code") or "")
+            book = processed["book"]
+        if not error and book["can_compile"]:
+            compiled = self.action(import_id, "compile")
+            status = str(compiled.get("status") or status)
+            error = str(compiled.get("error_code") or "")
+            book = compiled["book"]
+        if not error and book.get("skill_status") != "compiled":
+            status, error = "blocked", "BOOK_COMPILE_NOT_ELIGIBLE"
+        return {**self.detail(import_id), "status": status, "error_code": error}
 
     def cover(self, import_id: str) -> tuple[bytes, str]:
         status, asset = self._source(import_id)

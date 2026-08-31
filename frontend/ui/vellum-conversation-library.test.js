@@ -63,4 +63,11 @@ describe("conversation library frontend", () => {
     expect(html).toContain("assignment: 'manual'");
     expect(html).toContain("assignment: 'automatic'");
   });
+
+  test("does not replace optimistic chats when initial backend hydration finishes late", () => {
+    expect(html).toContain("const mergeConversationRecords = (current, serverConversations) =>");
+    expect(html).toContain("const localOnly = current.filter(chat => !serverIds.has(chat.id));");
+    expect(html).toContain("setChats(current => mergeConversationRecords(current, conversationData.conversations));");
+    expect(html).not.toContain("setChats(conversationData.conversations);");
+  });
 });

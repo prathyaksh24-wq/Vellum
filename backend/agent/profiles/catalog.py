@@ -61,8 +61,8 @@ class AgentCatalog:
             BooksAgent(
                 tool_registry=tools,
                 synthesizer=RoutedBooksSynthesizer(
-                    model_id=books_profile.model or "openai/gpt-5.6-luna",
-                    reasoning_mode=books_profile.reasoning_mode or "max",
+                    model_id=books_profile.model,
+                    reasoning_mode=books_profile.reasoning_mode,
                 ),
             ),
         ]

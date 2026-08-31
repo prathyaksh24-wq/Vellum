@@ -231,7 +231,16 @@ def assess_epub_document(
     if policy.require_caption_figure_relationship and invalid_caption_relations:
         finding_codes.append("EPUB_QUALITY_CAPTION_RELATION_INVALID")
     empty_spine_items = sum(1 for section in document.sections if not section.blocks)
-    if policy.require_native_text_per_spine_item and empty_spine_items:
+    first_text_position = next(
+        (index for index, section in enumerate(document.sections) if section.blocks),
+        len(document.sections),
+    )
+    empty_content_spine_items = sum(
+        1 for section in document.sections[first_text_position:] if not section.blocks
+    )
+    if policy.require_native_text_per_spine_item and (
+        first_text_position == len(document.sections) or empty_content_spine_items
+    ):
         finding_codes.append("EPUB_QUALITY_NATIVE_TEXT_MISSING")
     duplicate_spine_items = _duplicate_spine_items(document)
     if policy.reject_duplicate_spine_content and duplicate_spine_items:
@@ -308,6 +317,8 @@ def assess_epub_document(
             "anchor_count": quality.anchor_count,
             "block_count": quality.block_count,
             "empty_spine_items": empty_spine_items,
+            "empty_content_spine_items": empty_content_spine_items,
+            "leading_empty_spine_items": first_text_position,
             "duplicate_spine_items": duplicate_spine_items,
             "encoding_replacement_characters": encoding_replacement_characters,
             "invalid_caption_relations": invalid_caption_relations,

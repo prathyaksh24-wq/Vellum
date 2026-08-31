@@ -30,8 +30,8 @@ class PIIDetection:
 _LABEL_PRIORITY = {
     "SECRET": 100,
     "CRYPTO_KEY": 95,
+    "CREDIT_CARD": 92,
     "GOVERNMENT_ID": 90,
-    "CREDIT_CARD": 85,
     "ADDRESS": 75,
     "EMAIL": 70,
     "PHONE": 65,
@@ -101,7 +101,7 @@ class PrivacyScrubber:
         ("SECRET", re.compile(r"\b(?:api[_ -]?key|secret|password|token)\b\s*[:=]\s*\S+", re.I), 1.0),
         ("CRYPTO_KEY", re.compile(r"\b(?:seed phrase|private key)\b\s*[:=]?\s*(?:\S+\s*){3,24}", re.I), 1.0),
         ("EMAIL", re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I), 0.95),
-        ("CREDIT_CARD", re.compile(r"\b(?:\d[ -]*?){13,19}\b"), 0.85),
+        ("CREDIT_CARD", re.compile(r"\b(?:\d[ -]*){13,19}\b"), 0.85),
         ("PHONE", re.compile(r"(?<!\w)(?:\+?\d[\d .()-]{8,}\d)\b"), 0.85),
         ("GOVERNMENT_ID", re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), 0.95),
         ("GOVERNMENT_ID", re.compile(r"\b\d{4}\s?\d{4}\s?\d{4}\b"), 0.9),
@@ -173,6 +173,8 @@ class PrivacyScrubber:
         for label, pattern, score in self.regex_patterns:
             for match in pattern.finditer(text):
                 value = match.group(0).strip()
+                if label == "CREDIT_CARD" and not _looks_like_credit_card(text, match):
+                    continue
                 if not value or (label == "PERSON" and _looks_like_false_name(value)):
                     continue
                 detections.append(
@@ -185,7 +187,6 @@ class PrivacyScrubber:
                     )
                 )
         return detections
-
     def _presidio_detections(self, text: str) -> list[PIIDetection]:
         analyzer = _get_presidio_analyzer()
         if analyzer is None:
@@ -215,6 +216,25 @@ class PrivacyScrubber:
                 )
             )
         return detections
+
+
+def _looks_like_credit_card(text: str, match: re.Match[str]) -> bool:
+    prefix = text[max(0, match.start() - 16):match.start()]
+    if re.search(r"\bisbn(?:-1[03])?\s*:?\s*$", prefix, re.I):
+        return False
+    digits = re.sub(r"\D", "", match.group(0))
+    if not 13 <= len(digits) <= 19 or len(set(digits)) == 1:
+        return False
+    checksum = 0
+    parity = len(digits) % 2
+    for index, character in enumerate(digits):
+        value = int(character)
+        if index % 2 == parity:
+            value *= 2
+            if value > 9:
+                value -= 9
+        checksum += value
+    return checksum % 10 == 0
 
 
 def _apply_detections(clean: str, detections: list[PIIDetection]) -> tuple[str, list[Replacement]]:

@@ -44,8 +44,8 @@
     </div>;
   }
 
-  function ImportDialog({version, busy, onImport, onClose, icons}) {
-    const [file, setFile] = useState(null), [rights, setRights] = useState(false), [scan, setScan] = useState(false), [localOnly, setLocalOnly] = useState(true);
+  function ImportDialog({version, busy, error='', onImport, onClose, icons, initialFile=null}) {
+    const [file, setFile] = useState(initialFile), [rights, setRights] = useState(false), [scan, setScan] = useState(false), [localOnly, setLocalOnly] = useState(false);
     const dialog = useRef(null);
     useEffect(() => { dialog.current.showModal(); return () => dialog.current?.close(); }, []);
     const submit = async event => {
@@ -55,7 +55,10 @@
     return <dialog ref={dialog} className="bk-dialog" aria-labelledby="bk-import-title" onCancel={event => {if (busy) event.preventDefault(); else onClose();}}>
       <form onSubmit={submit}>
         <header><h2 id="bk-import-title">Import EPUB</h2><button type="button" className="bk-icon" title="Close import" aria-label="Close import" onClick={onClose} disabled={!!busy}><icons.Close size={18}/></button></header>
-        <label className="bk-file">Book file<input type="file" accept=".epub,application/epub+zip" onChange={event => setFile(event.target.files[0] || null)} disabled={!!busy}/></label>
+        {initialFile
+          ? <div className="bk-file">Book file<strong>{initialFile.name}</strong></div>
+          : <label className="bk-file">Book file<input type="file" accept=".epub,application/epub+zip" onChange={event => setFile(event.target.files[0] || null)} disabled={!!busy}/></label>}
+        {error && <div className="bk-error" role="alert">{error}</div>}
         <label><input type="checkbox" checked={rights} onChange={event => setRights(event.target.checked)} disabled={!!busy}/>I have permission to import and process this book.</label>
         <label><input type="checkbox" checked={scan} onChange={event => setScan(event.target.checked)} disabled={!!busy}/>Allow Vellum to run the local malware scan.</label>
         <label><input type="checkbox" checked={localOnly} onChange={event => setLocalOnly(event.target.checked)} disabled={!!busy}/>Local only</label>
@@ -136,5 +139,5 @@
       {confirmation && <Confirmation title={confirmation.title} onCancel={() => setConfirmation(null)} onConfirm={act}/>}
     </section>;
   }
-  window.VellumUI = {...window.VellumUI, BooksView};
+  window.VellumUI = {...window.VellumUI, BooksView, BooksImportDialog:ImportDialog};
 })();

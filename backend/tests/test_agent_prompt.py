@@ -376,3 +376,31 @@ def test_lazy_agent_caches_separately_per_reasoning_mode(monkeypatch):
         ("model-a", "high"),
         ("model-a", "ultra"),
     ]
+
+
+def test_lazy_agent_prepare_builds_the_cached_runtime(monkeypatch):
+    builds = []
+
+    class FakeRuntime:
+        async def ainvoke(self, *_args, **_kwargs):
+            return "ready"
+
+    async def fake_build(model=None, reasoning_mode=None):
+        builds.append((model, reasoning_mode.value if reasoning_mode is not None else None))
+        return FakeRuntime()
+
+    monkeypatch.setattr(agent_graph, "build_async_agent", fake_build)
+    lazy = agent_graph.LazyAgent()
+
+    async def run_case():
+        from agent.llm.reasoning import ReasoningMode
+
+        prepared = await lazy.prepare("model-a", ReasoningMode.high)
+        invoked = await lazy.ainvoke({}, model="model-a", reasoning_mode=ReasoningMode.high)
+        return prepared, invoked
+
+    prepared, invoked = asyncio.run(run_case())
+
+    assert isinstance(prepared, FakeRuntime)
+    assert invoked == "ready"
+    assert builds == [("model-a", "high")]

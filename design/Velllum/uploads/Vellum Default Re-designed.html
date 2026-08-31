@@ -1942,6 +1942,7 @@ const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
 );
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const VSelect = window.VellumUI.VSelect;
+const BooksImportDialog = window.VellumUI.BooksImportDialog;
 
 const SHARED_LAYOUT_TARGETS = '.v-select-option,.sb-row,.chat-row,.project-row,.plus-item,.recent-row,.drop-item,.pdrop-item,.set-item,.ltr,.ltile,.tab,.ctx-item,.app-row,.pop-row';
 const SharedLayoutBg = ({selector=SHARED_LAYOUT_TARGETS, inset=0, className='', pillClassName=''}) => {
@@ -3745,6 +3746,9 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
 
 const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills}) => {
   const [attach, setAttach] = useState([]);
+  const [epubImport, setEpubImport] = useState(null);
+  const [epubImportBusy, setEpubImportBusy] = useState('');
+  const [epubImportError, setEpubImportError] = useState('');
   const [modelOpen, setModelOpen] = useState(false);
   const [mic, setMic] = useState(false);
   const [voiceState, setVoiceState] = useState('idle'); // idle | connecting | listening
@@ -3924,7 +3928,11 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             onChange={async e => {
               const files = [...(e.target.files || [])];
               if (files.length) {
-                const items = await Promise.all(files.map(f => new Promise(resolve => {
+                const isEpubFile = file => /\.epub$/i.test(file.name) || file.type === 'application/epub+zip';
+                const epubFiles = files.filter(isEpubFile);
+                const epub = epubFiles[0];
+                const regularFiles = files.filter(file => !isEpubFile(file));
+                const items = await Promise.all(regularFiles.map(f => new Promise(resolve => {
                   const base = {
                     name: f.name,
                     size: fmtSize(f.size),
@@ -3940,6 +3948,16 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
                   reader.readAsDataURL(f);
                 })));
                 setAttach(at => [...at, ...items]);
+                if (epub) {
+                  setEpubImportError(epubFiles.length > 1 ? 'Import one EPUB at a time. The first book is ready.' : '');
+                  try {
+                    const catalog = await API.books.list({limit:1, offset:0});
+                    setEpubImport({file:epub, version:catalog.rights_attestation_version});
+                  } catch (error) {
+                    setEpubImportError(error.message || 'Books are unavailable.');
+                    setEpubImport({file:epub, version:''});
+                  }
+                }
               }
               e.target.value = '';
             }}/>
@@ -4026,6 +4044,39 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
       {libOpen && <LibPickModal library={library || []}
         onPick={it => { setLibOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
         onClose={() => setLibOpen(false)}/>}
+      {epubImport && BooksImportDialog && <BooksImportDialog
+        version={epubImport.version}
+        busy={epubImportBusy}
+        error={epubImportError}
+        initialFile={epubImport.file}
+        icons={{Close:IcX, Upload:IcUpload}}
+        onClose={() => { if (!epubImportBusy) { setEpubImport(null); setEpubImportError(''); } }}
+        onImport={async (file, consent) => {
+          setEpubImportBusy('Importing and building Book knowledge');
+          setEpubImportError('');
+          try {
+            const result = await API.books.importEpub(file, consent);
+            if (result.error_code || result.book?.skill_status !== 'compiled') {
+              throw new Error(result.error_code || 'Book knowledge could not be built.');
+            }
+            setAttach(current => [...current, {
+              name:file.name,
+              size:fmtSize(file.size),
+              kind:'book',
+              mime_type:'application/epub+zip',
+              book_import_id:result.book.id,
+              fresh:true,
+              url:null,
+            }]);
+            return true;
+          } catch (error) {
+            setEpubImportError(error.message || 'Book import failed.');
+            return false;
+          } finally {
+            setEpubImportBusy('');
+          }
+        }}
+      />}
     </div>
   );
 };
@@ -8073,6 +8124,25 @@ const NotFoundView = ({onBack}) => {
 const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
 const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
 
+const mergeConversationRecords = (current, serverConversations) => {
+  const localById = new Map(current.map(chat => [chat.id, chat]));
+  const serverIds = new Set(serverConversations.map(chat => chat.id));
+  const localOnly = current.filter(chat => !serverIds.has(chat.id));
+  const merged = serverConversations.map(serverChat => {
+    const localChat = localById.get(serverChat.id);
+    if (!localChat) return serverChat;
+    return {
+      ...localChat,
+      title: serverChat.title,
+      pinned: serverChat.pinned,
+      archived: serverChat.archived,
+      updated_at: serverChat.updated_at,
+      organization: serverChat.organization,
+    };
+  });
+  return [...localOnly, ...merged];
+};
+
 const App = () => {
   const [theme, setTheme] = useState(() => {
     try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
@@ -8403,7 +8473,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         const conversationData = organized && Array.isArray(organized.conversations) ? organized : conv;
         if (organized && Array.isArray(organized.conversations)) setConversationLibrary(organized);
         if (conversationData && Array.isArray(conversationData.conversations)) {
-          setChats(conversationData.conversations);
+          setChats(current => mergeConversationRecords(current, conversationData.conversations));
           conversationData.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
           try {
             const lastChatId = localStorage.getItem('vellum-active-chat-id');
@@ -8443,23 +8513,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       const next = await API.conversations.library();
       if (next && Array.isArray(next.conversations)) {
         setConversationLibrary(next);
-        setChats(current => {
-          const localById = new Map(current.map(chat => [chat.id, chat]));
-          const serverIds = new Set(next.conversations.map(chat => chat.id));
-          const merged = next.conversations.map(serverChat => {
-            const localChat = localById.get(serverChat.id);
-            if (!localChat) return serverChat;
-            return {
-              ...localChat,
-              title: serverChat.title,
-              pinned: serverChat.pinned,
-              archived: serverChat.archived,
-              updated_at: serverChat.updated_at,
-              organization: serverChat.organization,
-            };
-          });
-          return merged.concat(current.filter(chat => !serverIds.has(chat.id)));
-        });
+        setChats(current => mergeConversationRecords(current, next.conversations));
       }
       return next;
     } catch (err) {

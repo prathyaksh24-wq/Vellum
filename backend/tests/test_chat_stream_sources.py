@@ -234,6 +234,31 @@ def test_stream_agent_turn_emits_chat_model_end_answer(monkeypatch):
     assert final["answer"] == "OK"
 
 
+def test_stream_agent_turn_prepares_runtime_before_event_watchdog(monkeypatch):
+    calls = []
+
+    class PreparingAgent:
+        async def prepare(self, model=None, reasoning_mode=None):
+            calls.append(("prepare", model, reasoning_mode))
+
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            calls.append(("stream", model, reasoning_mode))
+            assert calls[0][0] == "prepare"
+            yield {
+                "event": "on_chat_model_end",
+                "name": "RoutedChatModel",
+                "data": {"output": SimpleNamespace(content="Prepared")},
+            }
+
+    chunks = _run_stream(monkeypatch, PreparingAgent())
+    events = _parse_sse(chunks)
+
+    assert [name for name, *_ in calls] == ["prepare", "stream"]
+    assert not [data for name, data in events if name == "error"]
+    final = json.loads(next(data for name, data in events if name == "final"))
+    assert final["answer"] == "Prepared"
+
+
 def test_stream_agent_turn_emits_source_activity_contract(monkeypatch):
     chunks = _run_stream(monkeypatch)
     events = _parse_sse(chunks)
