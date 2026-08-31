@@ -219,8 +219,8 @@ class PrivacyScrubber:
 
 
 def _looks_like_credit_card(text: str, match: re.Match[str]) -> bool:
-    prefix = text[max(0, match.start() - 16):match.start()]
-    if re.search(r"\bisbn(?:-1[03])?\s*:?\s*$", prefix, re.I):
+    prefix = text[max(0, match.start() - 64):match.start()]
+    if _ends_with_isbn_label(prefix):
         return False
     digits = re.sub(r"\D", "", match.group(0))
     if not 13 <= len(digits) <= 19 or len(set(digits)) == 1:
@@ -235,6 +235,19 @@ def _looks_like_credit_card(text: str, match: re.Match[str]) -> bool:
                 value -= 9
         checksum += value
     return checksum % 10 == 0
+
+
+def _ends_with_isbn_label(value: str) -> bool:
+    candidate = value.rstrip()
+    if candidate.endswith(":"):
+        candidate = candidate[:-1].rstrip()
+    folded = candidate.casefold()
+    for label in ("isbn", "isbn-10", "isbn-13"):
+        if not folded.endswith(label):
+            continue
+        start = len(folded) - len(label)
+        return start == 0 or not (folded[start - 1].isalnum() or folded[start - 1] == "_")
+    return False
 
 
 def _apply_detections(clean: str, detections: list[PIIDetection]) -> tuple[str, list[Replacement]]:

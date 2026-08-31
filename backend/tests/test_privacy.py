@@ -62,8 +62,10 @@ def test_government_id_pattern_does_not_block_prompt_phrases():
 def test_credit_card_detection_uses_checksum_and_does_not_block_isbns():
     scrubber = PrivacyScrubber()
 
-    isbn = scrubber.analyze("ISBN: 978-0-316-20438-5")
+    isbn = scrubber.analyze(f"ISBN-13{' ' * 32}: 978-0-316-20438-5")
     card = scrubber.analyze("Card: 4111 1111 1111 1111")
+    false_label = scrubber.analyze("notisbn: 4111 1111 1111 1111")
 
     assert not any(item.label == "CREDIT_CARD" for item in isbn)
     assert any(item.label == "CREDIT_CARD" for item in card)
+    assert any(item.label == "CREDIT_CARD" for item in false_label)
