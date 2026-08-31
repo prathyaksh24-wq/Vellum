@@ -375,6 +375,55 @@ def test_validated_epub_builds_canonical_source_anchored_document(tmp_path: Path
     assert pack["evidence"] == []
 
 
+def test_inline_markup_does_not_change_source_anchored_text(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": """<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<section id="first"><h1>Opening</h1>
+<p>Evidence<em>based</em>1st principles remain attached.</p>
+</section></body></html>""",
+        },
+    )
+
+    _imported, structured = import_and_construct(core, content)
+    document = core.get_book_document(user_id="user-1", document_id=structured.document_id)
+    paragraph = next(
+        block
+        for section in document.sections
+        for block in section.blocks
+        if block.type == "paragraph"
+    )
+
+    assert paragraph.text == "Evidencebased1st principles remain attached."
+    assert paragraph.anchor.offset_map
+
+
+def test_empty_blocks_do_not_shift_following_source_anchors(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": """<html xmlns="http://www.w3.org/1999/xhtml"><body>
+<section id="first"><h1>Opening</h1><p>   </p><p>Anchored after an empty block.</p>
+</section></body></html>""",
+        },
+    )
+
+    _imported, structured = import_and_construct(core, content)
+    document = core.get_book_document(user_id="user-1", document_id=structured.document_id)
+    paragraphs = [
+        block
+        for section in document.sections
+        for block in section.blocks
+        if block.type == "paragraph"
+    ]
+
+    assert [paragraph.text for paragraph in paragraphs] == ["Anchored after an empty block."]
+    assert paragraphs[0].anchor.offset_map
+
+
 def test_structured_epub_passes_the_current_quality_policy(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     imported, structured = import_and_construct(core, structured_epub_bytes())
@@ -497,6 +546,7 @@ def test_passed_document_compiles_one_compatible_active_materialization(
     assert all(key[0] == status.materialization_id for key in index.points)
     assert set(bundle.skill.files) == {
         "SKILL.md",
+        "chapters/index.json",
         "references/book.json",
         "references/source-map.json",
     }
@@ -506,10 +556,36 @@ def test_passed_document_compiles_one_compatible_active_materialization(
     source_map = core.store.blobs.read_book_artifact(
         bundle.skill.files["references/source-map.json"].blob_path
     ).decode("utf-8")
+    chapter_index = json.loads(
+        core.store.blobs.read_book_artifact(
+            bundle.skill.files["chapters/index.json"].blob_path
+        )
+    )
     first_chunk = core.store.blobs.read_book_artifact(
         bundle.exact_text.chunks[0].blob_path
     ).decode("utf-8")
     assert "route_to_agent: BooksAgent" in skill_text
+    assert "Book-to-Skill 1.3.0" in skill_text
+    assert chapter_index["compiler"] == {
+        "name": "book-to-skill",
+        "version": "1.3.0",
+    }
+    assert [chapter["title"] for chapter in chapter_index["chapters"]] == [
+        "Opening",
+        "Second",
+    ]
+    assert core.list_active_book_skills(user_id="user-1") == [
+        {
+            "name": bundle.skill.skill_id,
+            "description": "Installed Book-to-Skill knowledge",
+            "version": bundle.skill.version,
+            "category": "books",
+            "tags": ["book", "installed", "book-to-skill"],
+            "materialization_id": bundle.materialization_id,
+            "edition_id": bundle.edition_id,
+            "compiler": "book-to-skill-v1.3.0-vellum.1",
+        }
+    ]
     assert "Truth needs evidence" not in skill_text
     assert "Truth needs evidence" in first_chunk
     assert "blob_path" not in source_map
@@ -568,7 +644,7 @@ def test_book_retrieval_returns_verified_evidence_from_active_materializations(
     assert index.searches == [
         {
             "embedding": [1.0, 38.0],
-            "top_k": 2,
+            "top_k": 4,
             "filters": {
                 "user_id": "user-1",
                 "materialization_id": {"$in": [status.materialization_id]},
@@ -1393,6 +1469,35 @@ def test_empty_native_spine_content_requires_ocr_without_fabricating_text(tmp_pa
             user_id="user-1",
             document_id=structured.document_id,
         )
+
+
+def test_leading_image_frontmatter_does_not_require_ocr(tmp_path: Path) -> None:
+    content = rewrite_zip_entries(
+        structured_epub_bytes(),
+        replacements={
+            "OPS/chapter-one.xhtml": """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><body><div id="first"><img src="lamp.jpg" alt=""/></div></body></html>""",
+        },
+    )
+    core = build_core(tmp_path)
+    imported, structured = import_and_construct(core, content)
+
+    assessed = core.evaluate_book_document_quality(
+        BookQualityRequest(
+            user_id="user-1",
+            import_id=imported.import_id,
+            run_id=imported.run_id,
+            document_id=structured.document_id,
+        )
+    )
+    quality = core.get_book_quality_assessment(
+        user_id="user-1",
+        document_id=structured.document_id,
+    )
+
+    assert assessed.quality_outcome == "PASS"
+    assert quality.metrics["leading_empty_spine_items"] == 1
+    assert quality.metrics["empty_content_spine_items"] == 0
 
 
 def test_duplicate_spine_content_is_degraded_and_not_eligible_for_materialization(

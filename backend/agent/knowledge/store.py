@@ -1612,7 +1612,12 @@ class KnowledgeStore:
                 "EXISTS(SELECT 1 FROM book_documents d JOIN book_materializations m "
                 "ON m.document_id = d.id AND m.user_id = d.user_id "
                 "JOIN active_book_materializations active ON active.materialization_id = m.id "
-                "AND active.user_id = m.user_id WHERE d.run_id = r.id AND d.user_id = i.user_id) AS compiled "
+                "AND active.user_id = m.user_id WHERE d.run_id = r.id AND d.user_id = i.user_id) AS compiled, "
+                "COALESCE((SELECT m.compiler_version FROM book_documents d "
+                "JOIN book_materializations m ON m.document_id = d.id AND m.user_id = d.user_id "
+                "JOIN active_book_materializations active ON active.materialization_id = m.id "
+                "AND active.user_id = m.user_id WHERE d.run_id = r.id AND d.user_id = i.user_id "
+                "LIMIT 1), '') AS active_compiler_version "
                 "FROM user_book_imports i JOIN book_assets a ON a.id = i.asset_id "
                 "JOIN book_ingestion_runs r ON r.asset_id = a.id AND r.user_id = i.user_id "
                 "WHERE i.id = ? AND i.user_id = ? AND r.id = ?",

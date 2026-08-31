@@ -117,6 +117,15 @@ class BooksCapabilityService:
         policy = get_active_profile_policy()
         allowed_skills = policy.allowed_skills if policy is not None else frozenset()
         matches: list[dict[str, Any]] = []
+        core = self._knowledge_core_provider()
+        list_active = getattr(core, "list_active_book_skills", None)
+        if "book-to-skill" in allowed_skills and callable(list_active):
+            matches.extend(
+                list_active(
+                    user_id=policy.user_id if policy is not None else "default",
+                    limit=8,
+                )
+            )
         for package in self._skill_registry_provider().list_packages():
             metadata = package.metadata
             extensions = metadata.metadata
@@ -138,7 +147,11 @@ class BooksCapabilityService:
                     "tags": list(extensions.hermes.tags),
                 }
             )
-        return {"action": "books.skill_lookup", "skills": matches[:8]}
+        deduplicated = {str(item.get("name") or ""): item for item in matches}
+        return {
+            "action": "books.skill_lookup",
+            "skills": list(deduplicated.values())[:8],
+        }
 
 
 def _terms(value: str) -> set[str]:

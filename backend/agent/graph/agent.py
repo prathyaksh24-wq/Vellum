@@ -636,6 +636,10 @@ class LazyAgent:
                 self._async_agents[key] = target
         return target
 
+    async def prepare(self, model: str | None = None, reasoning_mode: Any = None):
+        """Build and cache the request-scoped async runtime before model-event timing begins."""
+        return await self._aget(model, reasoning_mode)
+
     async def ainvoke(self, *args, model: str | None = None, reasoning_mode: Any = None, **kwargs):
         return await (await self._aget(model, reasoning_mode)).ainvoke(*args, **kwargs)
 

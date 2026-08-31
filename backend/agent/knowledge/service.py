@@ -15,6 +15,7 @@ from agent.knowledge.book_quality import (
     BookQualityPipeline,
 )
 from agent.knowledge.book_materialization import (
+    BOOK_MATERIALIZATION_COMPILER_VERSION,
     BookEmbeddingProvider,
     BookMaterialization,
     BookMaterializationPipeline,
@@ -65,7 +66,7 @@ class KnowledgeCore:
         tool_learning_enabled: bool = False,
         book_malware_scanner: MalwareScanner | None = None,
         book_embedding_provider: BookEmbeddingProvider | None = None,
-        book_materialization_compiler_version: str = "book-materializer-v1",
+        book_materialization_compiler_version: str = BOOK_MATERIALIZATION_COMPILER_VERSION,
         book_embedding_model_revision: str = "default",
         book_retrieval_index: BookRetrievalIndex | None = None,
         book_catalog: BookCatalog | None = None,
@@ -482,6 +483,17 @@ class KnowledgeCore:
         return self.book_materializations.load_active(
             user_id=user_id,
             edition_id=edition_id,
+        )
+
+    def list_active_book_skills(
+        self,
+        *,
+        user_id: str,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        return self.book_materializations.list_active_skills(
+            user_id=user_id,
+            limit=limit,
         )
 
     def search_active_book_materializations(

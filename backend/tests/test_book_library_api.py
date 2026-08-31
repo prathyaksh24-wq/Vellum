@@ -147,17 +147,12 @@ def test_library_import_process_detail_and_cover_are_metadata_only(library_clien
     client, _core, tmp_path = library_client
     imported = _import(client)
     book_id = imported["book"]["id"]
-    assert imported["book"]["state"] == "validated"
+    assert imported["book"]["state"] == "ready"
     assert imported["book"]["local_only"] is True
-    assert imported["book"]["can_process"] is True
+    assert imported["book"]["can_process"] is False
     assert imported["book"]["can_compile"] is False
+    assert imported["book"]["skill_status"] == "compiled"
     assert imported["book"]["cover_url"].endswith(f"/{book_id}/cover")
-
-    processed = client.post(f"/api/knowledge/core/books/library/{book_id}/process", json={"confirm": True})
-    assert processed.status_code == 200, processed.text
-    assert processed.json()["book"]["title"] == "Library Fixture"
-    assert processed.json()["book"]["authors"] == ["Example Author"]
-    assert processed.json()["book"]["can_compile"] is True
 
     detail = client.get(f"/api/knowledge/core/books/library/{book_id}")
     assert detail.status_code == 200
@@ -199,9 +194,44 @@ def test_library_tenant_isolation_and_duplicate_assets(library_client) -> None:
     assert [item["id"] for item in listed["items"]] == [first["book"]["id"]]
 
 
+def test_duplicate_import_recompiles_an_outdated_active_book_skill(library_client) -> None:
+    client, core, _tmp_path = library_client
+    content = _epub_bytes(cover=_cover_png())
+    first = _import(client, content)
+    before = core.store.list_active_book_materialization_records(user_id="tenant-a")
+
+    upgraded = KnowledgeCore(
+        core.store,
+        conversations_path=core.conversations_path,
+        vault_root=core.vault_root,
+        book_malware_scanner=CleanScanner(),
+        book_embedding_provider=FixedBookEmbedder(),
+        book_materialization_compiler_version="book-to-skill-v1.3.0-vellum.2",
+        book_retrieval_index=core.book_materializations.retrieval_index,
+    )
+    set_knowledge_core(upgraded)
+
+    second = _import(client, content)
+    after = upgraded.store.list_active_book_materialization_records(user_id="tenant-a")
+
+    assert second["book"]["id"] == first["book"]["id"]
+    assert before[0]["compiler_version"] != after[0]["compiler_version"]
+    assert after[0]["compiler_version"] == "book-to-skill-v1.3.0-vellum.2"
+    assert upgraded.store.status()["counts"]["book_materializations"] == 2
+    assert upgraded.store.status()["counts"]["active_book_materializations"] == 1
+
+
 def test_library_actions_enforce_quality_and_real_compile_capability(library_client) -> None:
     client, core, _tmp_path = library_client
-    book_id = _import(client)["book"]["id"]
+    imported = core.import_book_epub(
+        BookImportRequest(
+            user_id="tenant-a",
+            rights_attestation_version="local-epub-v1",
+            scan_approved=True,
+        ),
+        _epub_bytes(),
+    )
+    book_id = imported.import_id
 
     early_compile = client.post(f"/api/knowledge/core/books/library/{book_id}/compile", json={"confirm": True})
     assert early_compile.status_code == 200
@@ -278,7 +308,15 @@ def test_cover_rejects_non_image_content_and_unscanned_assets(library_client) ->
 
 def test_compile_failure_does_not_leak_exception_or_claim_a_skill(library_client) -> None:
     client, core, tmp_path = library_client
-    book_id = _import(client)["book"]["id"]
+    imported = core.import_book_epub(
+        BookImportRequest(
+            user_id="tenant-a",
+            rights_attestation_version="local-epub-v1",
+            scan_approved=True,
+        ),
+        _epub_bytes(),
+    )
+    book_id = imported.import_id
     client.post(f"/api/knowledge/core/books/library/{book_id}/process", json={"confirm": True})
 
     def fail(_request):

@@ -151,8 +151,8 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "BooksAgent": AgentProfile(
             id="BooksAgent",
             description="Evidence-backed reasoning over installed Books and routed Hermes Book skills.",
-            model="openai/gpt-5.6-luna",
-            reasoning_mode="max",
+            model=None,
+            reasoning_mode=None,
             source_egress="external",
             instructions=InstructionPolicy(
                 inline=(

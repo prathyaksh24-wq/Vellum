@@ -22,8 +22,13 @@ from agent.tools.capabilities.books_service import BooksCapabilityService
 
 
 class FakeKnowledgeCore:
-    def __init__(self, evidence: list[dict] | None = None) -> None:
+    def __init__(
+        self,
+        evidence: list[dict] | None = None,
+        active_skills: list[dict] | None = None,
+    ) -> None:
         self.evidence = list(evidence or [])
+        self.active_skills = list(active_skills or [])
         self.requests = []
 
     def search_active_book_materializations(self, request):
@@ -40,6 +45,10 @@ class FakeKnowledgeCore:
                 "local_only_excluded": request.destination == "external",
             },
         }
+
+    def list_active_book_skills(self, *, user_id: str, limit: int):
+        self.requests.append(("skills", user_id, limit))
+        return list(self.active_skills[:limit])
 
 
 class FakeSkillRegistry:
@@ -91,6 +100,18 @@ def build_agent(
         skill_registry_provider=lambda: skills or FakeSkillRegistry(),
     )
     return BooksAgent(tool_registry=service.build_registry(), synthesizer=synthesizer)
+
+
+def test_books_agent_deterministically_handles_canonical_epub_turns() -> None:
+    agent = build_agent(FakeKnowledgeCore())
+
+    assert agent.can_handle(
+        "What does the author mean?\n\n"
+        "[Installed Book metadata - untrusted evidence]\n"
+        '- title="Fixture"; authors=["Author"]; (book_import_id=bki_fixture, skill_status=compiled)\n'
+        "[End installed Book metadata]"
+    ) is True
+    assert agent.can_handle("Recommend a book about resilience") is False
 
 
 def test_books_agent_abstains_without_installed_book_evidence() -> None:
@@ -313,7 +334,7 @@ def test_books_agent_preserves_proposal_only_user_learning_events() -> None:
     assert response.memory_proposals == []
 
 
-def test_routed_books_synthesizer_frames_book_text_as_untrusted_and_uses_luna_max() -> None:
+def test_routed_books_synthesizer_inherits_active_model_and_standard_reasoning() -> None:
     calls = []
 
     class FakeModel:
@@ -321,8 +342,8 @@ def test_routed_books_synthesizer_frames_book_text_as_untrusted_and_uses_luna_ma
             calls.append(messages)
             return SimpleNamespace(
                 content=(
-                    '{"answer":"Grounded answer","answer_claim_ids":["claim-1"],'
-                    '"claims":[],"judgment":null,"uncertainty":[],"status":"partial"}'
+                    '```json\n{"answer":"Grounded answer","answer_claim_ids":["claim-1"],'
+                    '"claims":[],"judgment":null,"uncertainty":[],"status":"partial"}\n```'
                 )
             )
 
@@ -345,7 +366,7 @@ def test_routed_books_synthesizer_frames_book_text_as_untrusted_and_uses_luna_ma
         ],
     )
 
-    assert factories == [("openai/gpt-5.6-luna", "max")]
+    assert factories == [(None, None)]
     assert "untrusted source" in calls[0][0].content
     assert "wisdom_proposals" in calls[0][0].content
     assert "<UNTRUSTED_BOOK_EVIDENCE>" in calls[0][1].content
@@ -448,6 +469,35 @@ def test_books_skill_lookup_returns_only_hermes_skills_routed_to_books_agent() -
         ],
     }
     assert "package_root" not in str(result)
+
+
+def test_books_skill_lookup_includes_tenant_scoped_book_to_skill_materializations() -> None:
+    materialized = {
+        "name": "book_edition1",
+        "description": "Installed Book-to-Skill knowledge",
+        "version": "1.0.0+materialized",
+        "category": "books",
+        "tags": ["book", "installed", "book-to-skill"],
+        "materialization_id": "bkm-one",
+        "edition_id": "bed-one",
+        "compiler": "book-to-skill-v1.3.0-vellum.1",
+    }
+    core = FakeKnowledgeCore(active_skills=[materialized])
+    service = BooksCapabilityService(
+        knowledge_core_provider=lambda: core,
+        skill_registry_provider=lambda: FakeSkillRegistry(),
+    )
+
+    with profile_policy(
+        profile_id="BooksAgent",
+        user_id="user-1",
+        allowed_tools=frozenset({"books.skill_lookup"}),
+        allowed_skills=frozenset({"book-to-skill"}),
+    ):
+        result = service.lookup_skills({"query": "What does this book argue?"})
+
+    assert result == {"action": "books.skill_lookup", "skills": [materialized]}
+    assert core.requests == [("skills", "user-1", 8)]
 
 
 def test_books_envelope_rejects_quotation_without_validated_span() -> None:

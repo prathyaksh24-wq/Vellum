@@ -72,8 +72,10 @@ async def book_library_import(
         file=file, user_id=library.user_id, rights_attestation_version=rights_attestation_version,
         scan_approved=scan_approved, local_only=local_only,
     )
-    return {**await asyncio.to_thread(library.detail, result.import_id),
-            "status": result.status, "error_code": result.error_code}
+    if result.error_code:
+        return {**await asyncio.to_thread(library.detail, result.import_id),
+                "status": result.status, "error_code": result.error_code}
+    return await asyncio.to_thread(library.materialize, result.import_id)
 
 
 @router.get("/books/library/{import_id}")

@@ -45,8 +45,8 @@ class RoutedBooksSynthesizer:
     def __init__(
         self,
         *,
-        model_id: str = "openai/gpt-5.6-luna",
-        reasoning_mode: str = "max",
+        model_id: str | None = None,
+        reasoning_mode: str | None = None,
         model_factory=None,
     ) -> None:
         self.model_id = model_id
@@ -90,7 +90,17 @@ class RoutedBooksSynthesizer:
                 str(item.get("text") or "") if isinstance(item, dict) else str(item)
                 for item in content
             )
-        parsed = json.loads(str(content or ""))
+        parsed = json.loads(_json_object_text(str(content or "")))
         if not isinstance(parsed, dict):
             raise ValueError("Books synthesis must return a JSON object")
         return parsed
+
+
+def _json_object_text(content: str) -> str:
+    text = content.strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if len(lines) < 3 or lines[-1].strip() != "```":
+        raise ValueError("Books synthesis returned an incomplete JSON fence")
+    return "\n".join(lines[1:-1]).strip()

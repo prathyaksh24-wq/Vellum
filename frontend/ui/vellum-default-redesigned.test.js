@@ -9,6 +9,10 @@ const selectComponent = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/v-select.jsx"),
   "utf8",
 );
+const booksView = readFileSync(
+  resolve(here, "../../design/Velllum/uploads/components/books-view.jsx"),
+  "utf8",
+);
 
 describe("Vellum default redesigned frontend", () => {
   test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
@@ -19,6 +23,15 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("DefaultAgentView={DefaultAgentView}");
     expect(html).toContain("bookDraft.text");
     expect(html).not.toContain("IcArrowLeft");
+  });
+
+  test("routes composer EPUBs through the canonical Book-to-Skill import", () => {
+    expect(booksView).toContain("BooksImportDialog:ImportDialog");
+    expect(html).toContain("API.books.importEpub(file, consent)");
+    expect(html).toContain("book_import_id:result.book.id");
+    expect(html).toContain("result.book?.skill_status !== 'compiled'");
+    expect(html).toContain("const regularFiles = files.filter(file => !isEpubFile(file))");
+    expect(html).not.toContain("reader.readAsDataURL(epub)");
   });
 
   test("loads the modular frontend API bridge used by backend integrations", () => {
