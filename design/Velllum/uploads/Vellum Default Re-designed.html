@@ -11,6 +11,7 @@
 <script type="text/babel" data-presets="react" src="components/v-select.jsx"></script>
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/chat.js"></script>
+<script src="api/app-actions.js"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="api/automations.js"></script>
@@ -18,6 +19,7 @@
 <script src="api/knowledge.js?v=20260710-wiki"></script>
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
+<script src="components/app-action-runtime.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
@@ -1387,7 +1389,8 @@ body{font-size:14px}
 .dev-badge{font-family:var(--font-m);font-size:9.5px;letter-spacing:.12em;color:var(--ember);border:1px solid color-mix(in srgb,var(--ember) 45%,var(--line2));border-radius:5px;padding:1px 6px;align-self:center;margin-right:4px}
 .cbtn.mic-on{color:var(--ember);background:var(--active)}
 .cbtn.mic-on svg{animation:icPulse 1.2s ease-in-out infinite}
-.toast{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:300;background:var(--modal);border:1px solid var(--line2);color:var(--txt2);font-size:12.5px;padding:9px 16px;border-radius:11px;box-shadow:0 16px 50px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);animation:toastIn .25s cubic-bezier(.2,.7,.2,1)}
+.toast{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:300;display:flex;align-items:center;gap:12px;background:var(--modal);border:1px solid var(--line2);color:var(--txt2);font-size:12.5px;padding:9px 12px 9px 16px;border-radius:11px;box-shadow:0 16px 50px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.06);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);animation:toastIn .25s cubic-bezier(.2,.7,.2,1)}
+.toast-action{border:0;background:color-mix(in srgb,var(--ember) 15%,transparent);color:var(--ember);font:inherit;font-weight:650;padding:5px 9px;border-radius:7px;cursor:pointer}.toast-action:hover{background:color-mix(in srgb,var(--ember) 24%,transparent)}
 @keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
 .sc-modal{width:466px;max-height:80vh;overflow-y:auto}
 .sc-group{margin-bottom:18px}
@@ -8171,12 +8174,17 @@ const App = () => {
   }, [backgroundId, theme]);
   useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
 
-  const [sidebarPinned, setSidebarPinned] = useState(() => { try { const v = localStorage.getItem('vellum-sb-open'); return v === null ? true : v === '1'; } catch { return true; } });
+  const workspaceActionRuntimeRef = useRef(null);
+  if (!workspaceActionRuntimeRef.current) {
+    workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({client: API.appActions});
+  }
+  const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
+  const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
   const [sidebarHover, setSidebarHover] = useState(false);
-  useEffect(() => { try { localStorage.setItem('vellum-sb-open', sidebarPinned ? '1' : '0'); } catch {} }, [sidebarPinned]);
+  useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
   useEffect(() => {
     const narrow = window.matchMedia('(max-width: 720px)');
-    const collapse = event => { if (event.matches) setSidebarPinned(false); };
+    const collapse = event => { if (event.matches) dispatchSidebarVisibility(false, {notify:false}); };
     collapse(narrow);
     narrow.addEventListener('change', collapse);
     return () => narrow.removeEventListener('change', collapse);
@@ -8562,7 +8570,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     setView('chat'); setActiveChatId(id); setSelModel((chat && chat.model) || readDefaultModel());
     try { localStorage.setItem('vellum-active-chat-id', id); } catch {}
     setMenu(null); setActivityMsg(null);
-    if (window.matchMedia('(max-width: 720px)').matches) setSidebarPinned(false);
+    if (window.matchMedia('(max-width: 720px)').matches) dispatchSidebarVisibility(false, {notify:false});
     if (messageId) setTimeout(() => document.getElementById('m-' + messageId)?.scrollIntoView({behavior: 'smooth', block: 'center'}), 80);
   };
   const openSearch = (preset = null) => { setSearchPreset(preset); setSearchOpen(true); };
@@ -8756,7 +8764,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     if (action === 'rename') {
       const chat = chats.find(c => c.id === id);
-      setSidebarPinned(true);
+      dispatchSidebarVisibility(true, {notify:false});
       setSecOpen(s => ({...s, projects: true, recents: true}));
       if (chat && chat.projectId) setExpandedProj(e => ({...e, [chat.projectId]: true}));
       setRenamingId(id);
@@ -8826,7 +8834,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const projectMenuAction = (id, action) => {
     setMenu(null);
     if (action === 'share') return;
-    if (action === 'rename') { setProjRenamingId(id); setSidebarPinned(true); return; }
+    if (action === 'rename') { setProjRenamingId(id); dispatchSidebarVisibility(true, {notify:false}); return; }
     if (action === 'delete') {
       setProjects(ps => ps.filter(p => p.id !== id));
       setChats(cs => cs.map(c => c.projectId === id ? {...c, projectId: null} : c));
@@ -9109,7 +9117,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const completedSpotifyTools = new Set();
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch},
+        {message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
@@ -9153,6 +9161,13 @@ const [slashSkills, setSlashSkills] = useState([]);
               phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
               refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, 1),
               streaming: true,
+            }));
+          },
+          actionReceipt: receipt => {
+            applyAppActionReceipt(receipt, {notify:true});
+            updateTurn(chatId, assistantId, m => ({
+              ...m,
+              actionReceipts: [...(m.actionReceipts || []), receipt],
             }));
           },
           sources: sources => {
@@ -9289,7 +9304,50 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
 
-  const pushToast = msg => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2200); };
+  const pushToast = value => {
+    const next = typeof value === 'string' ? {message:value} : value;
+    setToast(next);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), next && next.duration || 2200);
+  };
+  const showAppActionReceipt = (receipt, options = {}) => {
+    if (!receipt) return;
+    const notify = options.notify !== false;
+    if (!notify) return;
+    pushToast({
+      message: receipt.message || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'),
+      undoReceipt: receipt.undo ? receipt : null,
+      duration: receipt.undo ? 6500 : 2800,
+    });
+  };
+  const applyAppActionReceipt = (receipt, options = {}) => {
+    try {
+      workspaceActionRuntimeRef.current.applyReceipt(receipt);
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('Sidebar changed before this action could be applied.');
+      return null;
+    }
+  };
+  const dispatchSidebarVisibility = async (visible, options = {}) => {
+    try {
+      const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId});
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('App actions are unreachable.');
+      return null;
+    }
+  };
+  const undoAppAction = async receipt => {
+    try {
+      const undone = await workspaceActionRuntimeRef.current.undo(receipt, {conversationId:activeChatId});
+      showAppActionReceipt(undone);
+    } catch (_) {
+      pushToast('Undo is unavailable.');
+    }
+  };
   const selectModel = id => {
     setSelModel(id);
     if (view === 'chat' && activeChatId) {
@@ -9336,7 +9394,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (e.shiftKey) {
       if (c === 'KeyO') { e.preventDefault(); newChat(); }
       else if (c === 'KeyH') { e.preventDefault(); newChat(); }
-      else if (c === 'KeyS') { e.preventDefault(); setSidebarPinned(p => !p); }
+      else if (c === 'KeyS') { e.preventDefault(); dispatchSidebarVisibility(!sidebarPinned); }
       else if (c === 'KeyI') { e.preventDefault(); setCustomInstrOpen(true); }
       else if (c === 'KeyL') { e.preventDefault(); nav('library'); }
       else if (c === 'KeyG') { e.preventDefault(); nav('ledger'); }
@@ -9398,7 +9456,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
-                onTogglePin={() => setSidebarPinned(p => !p)} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
+                onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned)} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
                 onSmartView={openSearch}
                 onNav={nav} onOpenChat={openChat} onOpenAgent={openAgent} activeAgentId={activeAgentId}
                 onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
@@ -9408,7 +9466,7 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectRename={renameProject} onOpenProject={openProject}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
-            onExpand={() => setSidebarPinned(true)} onNewChat={newChat} onSearch={() => openSearch()}
+            onExpand={() => dispatchSidebarVisibility(true)} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={nav} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
@@ -9495,7 +9553,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>}
-        {toast && <div className="toast">{toast}</div>}
+        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>

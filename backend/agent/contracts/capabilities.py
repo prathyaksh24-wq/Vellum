@@ -52,6 +52,16 @@ def build_capability_contract() -> CapabilityContract:
                     "models": "/api/models",
                 },
             ),
+            "app_actions": FeatureContract(
+                enabled=True,
+                source="backend.agent.app_actions",
+                endpoints={
+                    "catalog": "/api/app-actions/catalog",
+                    "dispatch": "/api/app-actions/dispatch",
+                    "undo": "/api/app-actions/undo",
+                },
+                notes="Semantic Vellum controls shared by NLP and visible-control adapters.",
+            ),
             "conversation_library": FeatureContract(
                 enabled=True,
                 source="backend.agent.conversations",
@@ -188,6 +198,8 @@ def build_capability_contract() -> CapabilityContract:
                 "response.function_call_arguments.delta",
                 "response.function_call_arguments.done",
                 "agent.activity",
+                "app.action.requested",
+                "app.action.receipt",
                 "response.completed",
                 "response.failed",
                 "error",

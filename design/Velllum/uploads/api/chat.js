@@ -189,6 +189,14 @@
         if (!parsed) continue;
         var ev = parsed.event;
         var data = parsed.data;
+        if (ev === "app.action.requested") {
+          if (handlers.actionRequested) handlers.actionRequested(data.request || data);
+          continue;
+        }
+        if (ev === "app.action.receipt") {
+          if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data);
+          continue;
+        }
         if (ev === "agent.activity") {
           semanticSeen = true;
           var agentAct = normalizeAgentActivity(data.activity || data);

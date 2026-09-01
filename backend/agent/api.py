@@ -41,6 +41,9 @@ from agent.cli.project_commands import (
     InvalidCommand,
     handle_project_command,
 )
+from agent.app_actions.api import router as app_actions_router
+from agent.app_actions.models import AppActionContext
+from agent.app_actions.runtime import get_app_action_runtime
 from agent.coding.api import create_coding_router
 from agent.coding.service import CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
@@ -119,6 +122,7 @@ from agent.voice.tts import get_tts_engine
 _api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
 _observability = ObservabilityService(REPO_ROOT / "data" / "memory" / "observability.db")
 _memory_orchestrator = get_memory_orchestrator()
+_app_action_runtime = get_app_action_runtime()
 _conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
@@ -264,6 +268,7 @@ class ChatRequest(BaseModel):
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
     force_web_search: bool = False
     attachments: list["ChatAttachment"] = Field(default_factory=list)
+    action_context: AppActionContext | None = None
 
 
 class ChatAttachment(BaseModel):
@@ -4178,6 +4183,50 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         saved=request.store,
     )
 
+    submitted_action = _app_action_runtime.match_submission(clean_message)
+    if submitted_action is not None:
+        action_context = request.action_context or AppActionContext(
+            source="nlp",
+            invocation_conversation_id=active_thread_id,
+        )
+        action_context = action_context.model_copy(update={
+            "source": "nlp",
+            "invocation_conversation_id": active_thread_id,
+        })
+        receipt = _app_action_runtime.dispatch(submitted_action, action_context)
+        response_text = receipt.message or "App action completed."
+
+        async def app_action_events():
+            response_id = _stream_id("resp")
+            item_id = _stream_id("msg")
+            yield _response_created(response_id=response_id, thread_id=active_thread_id)
+            yield _sse("app.action.requested", {
+                "request": submitted_action.model_dump(mode="json"),
+                "thread_id": active_thread_id,
+            })
+            yield _sse("app.action.receipt", {
+                "receipt": receipt.model_dump(mode="json"),
+                "thread_id": active_thread_id,
+            })
+            yield _response_output_text_delta(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                item_id=item_id,
+                delta=response_text,
+            )
+            yield _response_completed(
+                response_id=response_id,
+                thread_id=active_thread_id,
+                answer=response_text,
+                tools=[],
+                sources=[],
+            )
+
+        return StreamingResponse(
+            _audited_turn_stream(app_action_events(), turn_audit),
+            media_type="text/event-stream",
+        )
+
     skill_command = _skill_surface().slash(clean_message)
     if skill_command["handled"]:
         msg = str(skill_command.get("answer") or "")
@@ -5020,6 +5069,7 @@ router.include_router(
         project_roots_provider=lambda: _coding_project_roots(),
     )
 )
+router.include_router(app_actions_router)
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)
