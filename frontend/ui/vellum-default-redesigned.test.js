@@ -37,11 +37,23 @@ describe("Vellum default redesigned frontend", () => {
   test("loads the modular frontend API bridge used by backend integrations", () => {
     expect(html).toMatch(/<script src="api\/client\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/chat.js"></script>');
+    expect(html).toContain('<script src="api/app-actions.js"></script>');
+    expect(html).toContain('<script src="components/app-action-runtime.js"></script>');
     expect(html).toContain('<script src="api/conversations.js"></script>');
     expect(html).toContain('<script src="api/plugins.js"></script>');
     expect(html).toMatch(/<script src="api\/settings\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toMatch(/<script src="api\/knowledge\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/runtimes.js"></script>');
+  });
+
+  test("routes submitted NLP and sidebar controls through App Action receipts", () => {
+    expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
+    expect(html).toContain("actionReceipt: receipt =>");
+    expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
+    expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned)}");
+    expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true)}");
+    expect(html).toContain("className=\"toast-action\"");
+    expect(html).not.toContain("setSidebarPinned");
   });
 
   test("loads the shared select component outside the application shell", () => {

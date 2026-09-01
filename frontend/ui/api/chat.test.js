@@ -197,4 +197,43 @@ describe("Vellum default chat stream trace", () => {
     expect(controllers[0]).toBeInstanceOf(AbortController);
     expect(fetchImpl.mock.calls[0][1].signal).toBe(controllers[0].signal);
   });
+
+  test("delivers App Action receipts without changing response text handling", async () => {
+    const receipt = {
+      receipt_id: "receipt-1",
+      request_id: "request-1",
+      action_id: "ui.sidebar.set",
+      action_version: "1",
+      source: "nlp",
+      status: "applied",
+      result: { workspace_layout_patch: { version: 1, base_revision: 0, revision: 1, surfaces: { sidebar: { visible: false } } } },
+    };
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: response.created\ndata: {"thread_id":"t1"}\n\n',
+        'event: app.action.requested\ndata: {"request":{"action_id":"ui.sidebar.set"}}\n\n',
+        'event: app.action.receipt\ndata: {"receipt":' + JSON.stringify(receipt) + '}\n\n',
+        'event: response.output_text.delta\ndata: {"delta":"Sidebar hidden."}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Sidebar hidden.","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const requested = [];
+    const receipts = [];
+    const deltas = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "hide the sidebar", thread_id: "t1" },
+      {
+        actionRequested: (request) => requested.push(request),
+        actionReceipt: (value) => receipts.push(value),
+        delta: (text) => deltas.push(text),
+      },
+    );
+
+    expect(requested).toEqual([{ action_id: "ui.sidebar.set" }]);
+    expect(receipts).toEqual([receipt]);
+    expect(deltas).toEqual(["Sidebar hidden."]);
+  });
 });
