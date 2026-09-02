@@ -155,6 +155,10 @@ def test_submission_matcher_handles_complete_presentation_instructions() -> None
         "reference": "composer.send",
         "properties": {"label": "Run"},
     }
+    assert subject.match_submission('Please rename my SEND BUTTON label TO "Go to Chat"').arguments == {
+        "reference": "composer.send",
+        "properties": {"label": "Go to Chat"},
+    }
     assert subject.match_submission("reset my interface").action_id == WORKSPACE_RESET_ACTION_ID
     assert subject.match_submission("hide the sidebar and tell me the news") is None
     assert subject.match_submission("tell me how to hide a sidebar") is None

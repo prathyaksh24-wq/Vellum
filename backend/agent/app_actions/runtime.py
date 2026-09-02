@@ -221,14 +221,14 @@ class AppActionRuntime:
             polite
             + r"(?:change|set|rename)\s+(?:the\s+|my\s+)?(send button|this button)"
             + r"(?:\s+(?:text|label))?\s+to\s+(.+)",
-            normalized,
+            submitted,
+            flags=re.IGNORECASE,
         )
         if relabel:
-            display_label = re.search(r"\s+to\s+(.+)$", submitted, flags=re.IGNORECASE)
-            label = (display_label.group(1) if display_label else relabel.group(2)).strip().strip("\"'").strip()
+            label = relabel.group(2).strip().strip("\"'").strip()
             if not label:
                 return None
-            reference = "composer.send" if relabel.group(1) == "send button" else "this button"
+            reference = "composer.send" if relabel.group(1).casefold() == "send button" else "this button"
             return self._surface_request(
                 reference,
                 properties={"label": label},
