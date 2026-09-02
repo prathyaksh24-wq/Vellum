@@ -400,6 +400,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .set-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt)}
 .set-row .sr-sub{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
 .set-row .sr-end{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.layout-action-settings{margin-top:12px;border-top:1px solid var(--line)}.layout-label-row input{width:132px;background:var(--input);border:1px solid var(--line2);border-radius:8px;color:var(--txt2);font:inherit;padding:7px 9px;outline:none}.layout-label-row input:focus{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 12%,transparent)}
 .set-note{font-size:11.5px;color:var(--dim2);font-style:italic;margin-top:14px}
 .ap-seg{display:inline-flex;padding:3px;border:1px solid var(--line2);border-radius:10px;background:var(--input)}
 .ap-seg-b{display:flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;font-size:11.5px;cursor:pointer;transition:background .16s,color .16s,box-shadow .16s}
@@ -726,6 +727,8 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .chip .sb-ic{color:var(--dim);display:flex}
 /* composer */
 .composer-wrap{width:100%;max-width:680px;flex-shrink:0;position:relative;z-index:5}
+.composer-wrap.composer-size-compact{max-width:560px}.composer-wrap.composer-size-large{max-width:840px}
+.composer-wrap.composer-size-large .cpill textarea{min-height:48px}.composer-wrap.composer-size-compact .cpill{padding-top:5px;padding-bottom:5px}
 .composer-dock{padding:0 24px 18px;display:flex;justify-content:center;flex-shrink:0}
 .cpill{background:var(--glass);backdrop-filter:blur(20px) saturate(165%);-webkit-backdrop-filter:blur(20px) saturate(165%);border:1px solid var(--line2);border-radius:24px;padding:8px 10px 8px 8px;display:flex;flex-direction:column;gap:6px;box-shadow:0 10px 34px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.10)}
 .cpill:focus-within{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 14%,transparent)}
@@ -742,6 +745,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .mode-chip{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--dim);cursor:pointer;padding:5px 8px;border-radius:14px;background:none;border:none;font-family:inherit;flex-shrink:0}
 .mode-chip:hover{background:var(--hover);color:var(--txt)}
 .csend{width:34px;height:34px;border-radius:50%;border:none;background:var(--ember);color:var(--onember);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.csend.has-label{width:auto;min-width:56px;border-radius:18px;padding:0 12px;gap:7px}.csend.send-size-small{height:30px;min-width:30px}.csend.send-size-large{height:42px;min-width:42px;border-radius:22px}.csend-label{font:650 12px var(--font-d);white-space:nowrap}
 .csend:hover{filter:brightness(1.08)}
 .csend:disabled{background:var(--line2);color:var(--dim);cursor:not-allowed}
 .csend.stop-btn{background:var(--txt2);color:var(--bg);box-shadow:0 0 0 1px color-mix(in srgb,var(--txt2) 18%,transparent),0 6px 18px rgba(0,0,0,.24)}
@@ -3143,7 +3147,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
   const followUpChats = sorted.filter(chat => chat.organization && chat.organization.status === 'Follow-up');
   const chatsForSpace = spaceId => organizedChats.filter(chat => chat.organization && chat.organization.space_id === spaceId);
   return (
-    <div className="sidebar">
+    <div className="sidebar" data-ui-reference="sidebar">
       <div className="sb-head">
         <span className="wordmark" title="Home ? Ctrl+Shift+H" style={{cursor: 'pointer'}} onClick={onNewChat}><em>v</em>ellum</span>
         <button className="tbtn" title="Hide sidebar" onClick={onTogglePin}><IcPanel/></button>
@@ -3290,7 +3294,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
   const recents = visibleChats(chats).slice(0, 10);
   const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
   return (
-    <div className="rail">
+    <div className="rail" data-ui-reference="sidebar">
       <div className="rail-logo" title="Home ? Ctrl+Shift+H" onClick={onNewChat}><div className="rail-dot"/></div>
       <div className="rail-scroll">
       <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
@@ -3747,7 +3751,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, presentation = {}}) => {
   const [attach, setAttach] = useState([]);
   const [epubImport, setEpubImport] = useState(null);
   const [epubImportBusy, setEpubImportBusy] = useState('');
@@ -3883,8 +3887,12 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
     setText(''); setAttach([]);
     setSearchMode(false);
   };
+  const composerSize = ['compact','comfortable','large'].includes(presentation.size) ? presentation.size : 'comfortable';
+  const sendLabel = String(presentation.sendLabel || 'Send').trim().slice(0, 24) || 'Send';
+  const sendSize = ['small','medium','large'].includes(presentation.sendSize) ? presentation.sendSize : 'medium';
+  const showSendLabel = sendLabel !== 'Send';
   return (
-    <div className="composer-wrap">
+    <div className={'composer-wrap composer-size-' + composerSize} data-ui-reference="composer">
       {voiceState !== 'idle' && (
         <div className="voice-status">{voiceState === 'connecting' ? 'Connecting to voice' : 'Start talking'}</div>
       )}
@@ -3909,7 +3917,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           </div>
         )}
         <div className="ta-wrap">
-          <textarea ref={taRef} rows={1} value={text}
+          <textarea ref={taRef} rows={1} value={text} data-ui-reference="composer"
             onFocus={() => setGlow(true)} onBlur={() => setGlow(false)}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => {
@@ -4017,7 +4025,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           {voiceState === 'idle' && (busy
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
             : text.trim()
-              ? <button className="csend" title="Send" onClick={send}><IcSend size={15}/></button>
+              ? <button className={'csend send-size-' + sendSize + (showSendLabel ? ' has-label' : '')} title={sendLabel} aria-label={sendLabel} data-ui-reference="composer.send" onClick={send}><IcSend size={15}/>{showSendLabel && <span className="csend-label">{sendLabel}</span>}</button>
               : <button className="csend voice-btn" title="Use Voice  ?  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
           {voiceState === 'connecting' && (
             <button className="voice-pill voice-pill-cancel" onClick={endVoice} title="Cancel"><span className="voice-spin"/>Cancel</button>)}
@@ -4442,7 +4450,7 @@ const ConversationPreviewRail = ({messages}) => {
 };
 
 const FilesPanel = ({files, onViewImage, onClose}) => (
-  <div className="files-panel">
+  <div className="files-panel" data-ui-reference="right-panel">
     <div className="fp-head">
       <span>Files in chat</span>
       <button className="tbtn" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={14}/></button>
@@ -5072,7 +5080,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
 };
 
 const ActivityPanel = ({msg, onClose}) => (
-  <div className="files-panel activity-panel">
+  <div className="files-panel activity-panel" data-ui-reference="right-panel">
     <div className="fp-head act-head">
       <span>Activity</span><span className="act-dur">{(msg.duration||16)}s</span>
       <button className="tbtn" title="Close" onClick={onClose}><IcX size={15}/></button>
@@ -5115,10 +5123,14 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
 
   if (msgs.length === 0) {
     return (
-      <div className="landing">
-        <div className="land-mark"><em>v</em>ellum</div>
-        <TypingGreet/>
-        <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} drop="up" onViewImage={onViewImage} {...composerExtras}/>
+      <div className="thread-wrap">
+        <div className="landing">
+          <div className="land-mark"><em>v</em>ellum</div>
+          <TypingGreet/>
+          <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} drop="up" onViewImage={onViewImage} {...composerExtras}/>
+        </div>
+        {activity && <ActivityPanel msg={activity} onClose={onCloseActivity}/>}
+        {filesOpen && !activity && <FilesPanel files={[]} onViewImage={onViewImage} onClose={onCloseFiles}/>}
       </div>
     );
   }
@@ -7183,13 +7195,16 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
   const [accent, setAccentState] = useState(() => { try { return localStorage.getItem('vellum-accent') || 'default'; } catch { return 'default'; } });
+  const sendPresentation = workspaceLayout && workspaceLayout.surfaces && workspaceLayout.surfaces['composer.send'];
+  const [sendLabelDraft, setSendLabelDraft] = useState(() => String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send'));
+  useEffect(() => setSendLabelDraft(String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send')), [sendPresentation && sendPresentation.properties && sendPresentation.properties.label]);
   const setAccent = id => { setAccentState(id); try { localStorage.setItem('vellum-accent', id); } catch {} applyAccent(id); };
   const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
   useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
@@ -7245,7 +7260,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
   return (
     <React.Fragment>
       <div className="backdrop dim" onClick={onClose}/>
-      <div className="set-modal">
+      <div className="set-modal" role="dialog" aria-modal="true" aria-label="Settings" data-ui-reference="settings">
         <button className="set-close" title="Close (Esc)" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={16}/></button>
         <div className="set-nav">
           <div className="sn-title">Settings</div>
@@ -7261,7 +7276,7 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="set-h">General</div>
               <div className="set-row">Theme
                 <span className="sr-end">
-                  <button className="btn" onClick={onTheme}>{theme === 'dark' ? 'Switch to light' : 'Switch to dark'}</button>
+                  <button className="btn" onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? 'Switch to light' : 'Switch to dark'}</button>
                 </span>
               </div>
               <div className="set-row">Plan<span className="sr-end"><span className="cu-pill">Private</span></span></div>
@@ -7276,11 +7291,19 @@ const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, doc
               <div className="set-row">Theme
                 <span className="sr-end">
                   <div className="ap-seg">
-                    <button className={'ap-seg-b' + (theme === 'light' ? ' on' : '')} onClick={() => { if (theme !== 'light') onTheme(); }}><IcSun size={13}/>Light</button>
-                    <button className={'ap-seg-b' + (theme === 'dark' ? ' on' : '')} onClick={() => { if (theme !== 'dark') onTheme(); }}><IcMoon size={13}/>Dark</button>
+                    <button className={'ap-seg-b' + (theme === 'light' ? ' on' : '')} aria-pressed={theme === 'light'} onClick={() => { if (theme !== 'light') onTheme('light'); }}><IcSun size={13}/>Light</button>
+                    <button className={'ap-seg-b' + (theme === 'dark' ? ' on' : '')} aria-pressed={theme === 'dark'} onClick={() => { if (theme !== 'dark') onTheme('dark'); }}><IcMoon size={13}/>Dark</button>
                   </div>
                 </span>
               </div>
+              {workspaceLayout && <div className="layout-action-settings" aria-label="Workspace layout controls">
+                <div className="set-row">Sidebar<span className="sr-end"><button className="btn" aria-pressed={workspaceLayout.surfaces.sidebar.visible} onClick={() => onSurfaceChange('sidebar', {visible:!workspaceLayout.surfaces.sidebar.visible})}>{workspaceLayout.surfaces.sidebar.visible ? 'Hide' : 'Show'}</button></span></div>
+                <div className="set-row">Right panel<span className="sr-end"><button className="btn" aria-pressed={workspaceLayout.surfaces['right-panel'].visible} onClick={() => onSurfaceChange('right-panel', {visible:!workspaceLayout.surfaces['right-panel'].visible})}>{workspaceLayout.surfaces['right-panel'].visible ? 'Hide' : 'Show'}</button></span></div>
+                <div className="set-row">Settings surface<span className="sr-end"><button className="btn" aria-pressed="true" onClick={() => onSurfaceChange('settings', {visible:false})}>Hide now</button></span></div>
+                <div className="set-row">Composer size<span className="sr-end"><div className="ap-seg">{['compact','comfortable','large'].map(size => <button key={size} className={'ap-seg-b' + (workspaceLayout.surfaces.composer.properties.size === size ? ' on' : '')} aria-pressed={workspaceLayout.surfaces.composer.properties.size === size} onClick={() => onSurfaceChange('composer', {properties:{size}})}>{size === 'comfortable' ? 'Normal' : size[0].toUpperCase()+size.slice(1)}</button>)}</div></span></div>
+                <form className="set-row layout-label-row" onSubmit={event => { event.preventDefault(); onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}}); }}><label htmlFor="workspace-send-label">Send button label</label><span className="sr-end"><input id="workspace-send-label" value={sendLabelDraft} maxLength="24" onChange={event => setSendLabelDraft(event.target.value)}/><button className="btn" disabled={!sendLabelDraft.trim()}>Apply</button></span></form>
+                <div className="set-row">Registered defaults<span className="sr-end"><button className="btn" onClick={onLayoutReset}>Reset interface</button></span></div>
+              </div>}
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
@@ -8147,9 +8170,21 @@ const mergeConversationRecords = (current, serverConversations) => {
 };
 
 const App = () => {
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem('vellum-theme') || 'dark'; } catch { return 'dark'; }
-  });
+  const workspaceActionRuntimeRef = useRef(null);
+  if (!workspaceActionRuntimeRef.current) {
+    workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({client: API.appActions});
+  }
+  const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
+  useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
+  const theme = workspaceLayout.surfaces.workspace.properties.theme;
+  const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
+  const settingsOpen = workspaceLayout.surfaces.settings.visible;
+  const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
+  const composerPresentation = {
+    size: workspaceLayout.surfaces.composer.properties.size,
+    sendLabel: workspaceLayout.surfaces['composer.send'].properties.label,
+    sendSize: workspaceLayout.surfaces['composer.send'].properties.size,
+  };
   const [backgroundId, setBackgroundIdState] = useState(() => {
     try { return resolveBackground(localStorage.getItem('vellum-background') || 'galaxy').id; }
     catch { return 'galaxy'; }
@@ -8159,7 +8194,6 @@ const App = () => {
   const selectableBackgrounds = BACKGROUND_REGISTRY.filter(entry => entry.selectable !== false);
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    try { localStorage.setItem('vellum-theme', theme); } catch {}
   }, [theme]);
   useEffect(() => {
     const root = document.documentElement;
@@ -8174,14 +8208,7 @@ const App = () => {
   }, [backgroundId, theme]);
   useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
 
-  const workspaceActionRuntimeRef = useRef(null);
-  if (!workspaceActionRuntimeRef.current) {
-    workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({client: API.appActions});
-  }
-  const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
-  const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
   const [sidebarHover, setSidebarHover] = useState(false);
-  useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
   useEffect(() => {
     const narrow = window.matchMedia('(max-width: 720px)');
     const collapse = event => { if (event.matches) dispatchSidebarVisibility(false, {notify:false}); };
@@ -8278,8 +8305,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const petSetActive = slug => setPetActive(slug);
   const [subagents, setSubagents] = useState([]);
   const [draftApps, setDraftApps] = useState([]);
-  const [filesOpen, setFilesOpen] = useState(false);
   const [activityMsg, setActivityMsg] = useState(null);
+  useEffect(() => { if (!rightPanelVisible) setActivityMsg(null); }, [rightPanelVisible]);
   const [xConn, setXConn] = useState(() => { try { return JSON.parse(localStorage.getItem('vellum-xconn')) || {connected:false, handle:''}; } catch { return {connected:false, handle:''}; } });
   useEffect(() => { try { localStorage.setItem('vellum-xconn', JSON.stringify(xConn)); } catch {} }, [xConn]);
   const [xConnectOpen, setXConnectOpen] = useState(false);
@@ -8328,7 +8355,6 @@ const [slashSkills, setSlashSkills] = useState([]);
   const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));
   const toggleProj = id => setExpandedProj(e => ({...e, [id]: !e[id]}));
   const [cuEnabled, setCuEnabled] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState('General');
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
   const [renamingId, setRenamingId] = useState(null);
@@ -8537,7 +8563,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   useEffect(() => {
     const onKey = e => {
-      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setSearchPreset(null); setSpacePickerChatId(null); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); setSettingsOpen(false); setViewer(null); setFilesOpen(false); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
+      if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setSearchPreset(null); setSpacePickerChatId(null); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); dispatchSurfacePresentation('settings', {visible:false}, {notify:false}); setViewer(null); dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false}); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -8550,7 +8576,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       const data = await API.automations.createPrompt();
       if (data && data.prompt) prompt = data.prompt;
     } catch (_) {}
-    setSettingsOpen(false);
+    dispatchSurfacePresentation('settings', {visible:false}, {notify:false});
     const projectId = activeProjectId || (projects[0] && projects[0].id) || null;
     if (projectId) setActiveProjectId(projectId);
     sendMessage(prompt, [], {forceNew: true, projectId});
@@ -8624,9 +8650,10 @@ const [slashSkills, setSlashSkills] = useState([]);
       ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
       : message;
     const completedSpotifyTools = new Set();
+    let appActionRequested = false;
     try {
       await API.chat.stream(
-        {message: routedMessage, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch},
+        {message: routedMessage, action_message: opts.submittedText || message, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', convoId)},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {agentId: agent.id, convoId, timers: []};
@@ -8679,6 +8706,14 @@ const [slashSkills, setSlashSkills] = useState([]);
               streaming: true,
             }));
           },
+          actionRequested: request => {
+            if (appActionRequested) return;
+            appActionRequested = true;
+            if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
+          },
+          actionReceipt: receipt => {
+            applyAppActionReceipt(receipt, {notify:true});
+          },
           delta: text => {
             finishTurn(assistantId);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
@@ -8728,6 +8763,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const act = activitySeedForMode(text);
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     let cid = activeConvo[ag.id];
+    const createdForTurn = !cid;
     if (!cid) {
       cid = uid();
       const title = (text.trim().replace(/\s+/g, ' ').slice(0, 42)) || 'New conversation';
@@ -8737,7 +8773,19 @@ const [slashSkills, setSlashSkills] = useState([]);
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach, opts);
+      const rollbackAppActionTurn = () => {
+        finishTurn(aMsg.id);
+        setAgentConvos(ac => ({
+          ...ac,
+          [ag.id]: createdForTurn
+            ? (ac[ag.id] || []).filter(cv => cv.id !== cid)
+            : (ac[ag.id] || []).map(cv => cv.id === cid
+              ? {...cv, messages:cv.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)}
+              : cv),
+        }));
+        if (createdForTurn) setActiveConvo(current => ({...current, [ag.id]:null}));
+      };
+      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn});
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
     }
@@ -9115,9 +9163,10 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
+    let appActionRequested = false;
     try {
       await API.chat.stream(
-        {message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
+        {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
@@ -9169,6 +9218,11 @@ const [slashSkills, setSlashSkills] = useState([]);
               ...m,
               actionReceipts: [...(m.actionReceipts || []), receipt],
             }));
+          },
+          actionRequested: request => {
+            if (appActionRequested) return;
+            appActionRequested = true;
+            if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           sources: sources => {
             const liveSources = normalizeSources(sources);
@@ -9231,6 +9285,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const sendMessage = (text, attach, opts = {}) => {
     let chatId = opts.forceNew ? null : activeChatId;
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
+    const createdForTurn = !chatId;
     const turnModel = (existingChat && existingChat.model) || selModel;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
@@ -9249,21 +9304,31 @@ const [slashSkills, setSlashSkills] = useState([]);
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
       const record = {id: chatId, thread_id: chatId, model: turnModel, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
-      saveConversation(record);
       setDraftApps([]);
       setActiveChatId(chatId);
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     } else {
       setChats(cs => cs.map(c => {
         if (c.id !== chatId) return c;
-        const next = {...c, model: turnModel, messages: [...c.messages, userMsg, aMsg]};
-        setTimeout(() => saveConversation(next), 0);
-        return next;
+        return {...c, model: turnModel, messages: [...c.messages, userMsg, aMsg]};
       }));
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, opts, turnModel);
+      const rollbackAppActionTurn = () => {
+        finishTurn(aMsg.id);
+        setChats(cs => createdForTurn
+          ? cs.filter(c => c.id !== chatId)
+          : cs.map(c => c.id === chatId
+            ? {...c, messages:c.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)}
+            : c));
+        if (createdForTurn) {
+          delete threadRef.current[chatId];
+          setActiveChatId(null);
+          try { localStorage.removeItem('vellum-active-chat-id'); } catch {}
+        }
+      };
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn}, turnModel);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
@@ -9326,13 +9391,33 @@ const [slashSkills, setSlashSkills] = useState([]);
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
-      if (options.notify !== false) pushToast('Sidebar changed before this action could be applied.');
+      if (options.notify !== false) pushToast('The interface changed before this action could be applied.');
       return null;
     }
   };
   const dispatchSidebarVisibility = async (visible, options = {}) => {
     try {
-      const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId});
+      const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId, persistence:options.persistence});
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('App actions are unreachable.');
+      return null;
+    }
+  };
+  const dispatchSurfacePresentation = async (reference, presentation, options = {}) => {
+    try {
+      const receipt = await workspaceActionRuntimeRef.current.dispatchSurface(reference, presentation, {conversationId:activeChatId, persistence:options.persistence});
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('App actions are unreachable.');
+      return null;
+    }
+  };
+  const resetWorkspaceLayout = async (options = {}) => {
+    try {
+      const receipt = await workspaceActionRuntimeRef.current.reset({conversationId:activeChatId});
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
@@ -9406,7 +9491,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       else if (c === 'Backspace') { e.preventDefault(); deleteActiveChat(); }
       return;
     }
-    if (c === 'Comma') { e.preventDefault(); setSettingsOpen(true); }
+    if (c === 'Comma') { e.preventDefault(); dispatchSurfacePresentation('settings', {visible:true}); }
     else if (c === 'KeyK') { e.preventDefault(); openSearch(); }
     else if (c === 'KeyU') { e.preventDefault(); window.dispatchEvent(new CustomEvent('vellum-composer', {detail: 'addfiles'})); }
     else if (c === 'Slash') { e.preventDefault(); setShortcutsOpen(s => !s); }
@@ -9442,7 +9527,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   return (
     <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds}}>
-    <div className="stage" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
+    <div className="stage" data-ui-reference="workspace" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
       <SharedLayoutBg/>
       <div className="bg-orb orb1"></div>
       <div className="bg-orb orb2"></div>
@@ -9475,13 +9560,13 @@ const [slashSkills, setSlashSkills] = useState([]);
           <div className="main">
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
               onViewImage={setViewer}
-              filesOpen={filesOpen} onCloseFiles={() => setFilesOpen(false)}
-              onOpenActivity={setActivityMsg}
+              filesOpen={rightPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false})}
+              onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }}
               onAnswerNow={answerNow}
-              activity={activityMsg}
-              onCloseActivity={() => setActivityMsg(null)}
+              activity={rightPanelVisible ? activityMsg : null}
+              onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills')}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -9490,7 +9575,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onAddSource={f => addSource(activeProject.id, f)}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills')}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
             {view === 'ledger' && <ObservabilityView/>}
@@ -9499,12 +9584,12 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={setActivityMsg} activity={activityMsg} onCloseActivity={() => setActivityMsg(null)} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills')}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen}
           onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
-          onSettings={() => { setSettingsTab('General'); setSettingsOpen(true); }}/>
+          onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
         {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={setPetPos} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => setPetHidden(true)} installed={petInstalled} active={petActive} onSwitch={setPetActive}/>}
         </React.Fragment>}
@@ -9512,7 +9597,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {menu && menu.type === 'chathead' && activeChat && <ChatHeadMenu chat={activeChat} projects={projects} pos={menu}
           onAction={a => {
-            if (a === 'files') { setMenu(null); setFilesOpen(true); return; }
+            if (a === 'files') { setMenu(null); dispatchSurfacePresentation('right-panel', {visible:true}); return; }
             chatMenuAction(activeChat.id, a);
           }}
           onMove={projId => moveToProject(activeChat.id, projId)}
@@ -9532,18 +9617,18 @@ const [slashSkills, setSlashSkills] = useState([]);
           onClose={() => setSpacePickerChatId(null)}/>}
         {menu && menu.type === 'profile' && <ProfilePopover profile={profile} pos={menu}
           onEditProfile={() => { setMenu(null); setEditProfileOpen(true); }}
-          onSettings={() => { setMenu(null); setSettingsTab('General'); setSettingsOpen(true); }}
-          onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); setSettingsOpen(true); }}
+          onSettings={() => { setMenu(null); setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}
+          onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})} workspaceLayout={workspaceLayout} onSurfaceChange={dispatchSurfacePresentation} onLayoutReset={resetWorkspaceLayout} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
           onOpenScheduled={() => nav('scheduled')}
           petManifest={petManifest} petLoading={petLoading} petError={petError} petInstalled={petInstalled} petActive={petActive} petSize={petSize} petHidden={petHidden} onPetToggleInstall={petToggleInstall} onPetSetActive={petSetActive} onPetSize={setPetSize} onPetHidden={setPetHidden}
-          onClose={() => setSettingsOpen(false)}/>} 
+          onClose={() => dispatchSurfacePresentation('settings', {visible:false})}/>}
         {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
@@ -9625,7 +9710,8 @@ const CustomInstructionsModal = ({value, onSave, onClose}) => {
 };
 
 try {
-  const bootTheme = localStorage.getItem('vellum-theme') || 'dark';
+  const bootLayout = JSON.parse(localStorage.getItem('vellum-workspace-layout-v1') || 'null');
+  const bootTheme = bootLayout && bootLayout.surfaces && bootLayout.surfaces.workspace && bootLayout.surfaces.workspace.properties && bootLayout.surfaces.workspace.properties.theme || localStorage.getItem('vellum-theme') || 'dark';
   const bootBackground = resolveBackground(localStorage.getItem('vellum-background') || 'galaxy');
   document.documentElement.setAttribute('data-theme', bootTheme);
   document.documentElement.dataset.background = bootBackground.id;

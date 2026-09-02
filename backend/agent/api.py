@@ -261,6 +261,7 @@ def _load_script_module(name: str):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
+    action_message: str | None = None  # raw submitted text; local App Action matching only
     thread_id: str | None = None
     model: str | None = None  # OpenRouter model id for this turn
     reasoning_mode: str | None = None  # light/medium/high/extra high/max/ultra
@@ -4183,7 +4184,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         saved=request.store,
     )
 
-    submitted_action = _app_action_runtime.match_submission(clean_message)
+    submitted_text = str(request.action_message or "").strip()
+    action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
+    submitted_action = _app_action_runtime.match_submission(action_message)
     if submitted_action is not None:
         action_context = request.action_context or AppActionContext(
             source="nlp",
