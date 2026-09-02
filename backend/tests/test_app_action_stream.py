@@ -70,6 +70,35 @@ async def test_submitted_sidebar_nlp_streams_receipt_without_calling_agent(monke
     assert completed["output_text"] == "Sidebar hidden."
 
 
+@pytest.mark.asyncio
+async def test_raw_action_message_works_inside_a_specialist_chat(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime())
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("specialist context must not hide a submitted interface action")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message=(
+            "[Vellum UI context: the user is currently chatting in the Sports Agent view.]\n\n"
+            "use light mode"
+        ),
+        action_message="use light mode",
+        thread_id="sports-chat-1",
+        action_context=AppActionContext(source="ui"),
+    ))
+    body = "".join([chunk async for chunk in response.body_iterator])
+    events = parse_sse(body)
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "applied"
+    assert receipt["target"]["id"] == "workspace"
+    assert receipt["result"]["presentation"]["properties"]["theme"] == "light"
+
+
 def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
     subject = AppActionRuntime()
 

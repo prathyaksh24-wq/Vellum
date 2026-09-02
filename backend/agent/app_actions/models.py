@@ -17,15 +17,32 @@ ActionStatus = Literal[
     "failed",
     "undone",
 ]
+PersistenceMode = Literal["device", "session"]
 
 
 class SurfacePresentation(BaseModel):
     visible: bool = True
+    location: str = ""
     properties: dict[str, Any] = Field(default_factory=dict)
 
 
 def _default_surfaces() -> dict[str, SurfacePresentation]:
-    return {"sidebar": SurfacePresentation(visible=True)}
+    return {
+        "workspace": SurfacePresentation(visible=True, location="application", properties={"theme": "dark"}),
+        "sidebar": SurfacePresentation(visible=True, location="left"),
+        "settings": SurfacePresentation(visible=False, location="overlay"),
+        "right-panel": SurfacePresentation(visible=False, location="right"),
+        "composer": SurfacePresentation(
+            visible=True,
+            location="bottom",
+            properties={"size": "comfortable"},
+        ),
+        "composer.send": SurfacePresentation(
+            visible=True,
+            location="composer-action",
+            properties={"label": "Send", "size": "medium"},
+        ),
+    }
 
 
 class WorkspaceLayoutSnapshot(BaseModel):
@@ -39,6 +56,9 @@ class AppActionContext(BaseModel):
     invocation_conversation_id: str = ""
     device_id: str = "local-device"
     workspace_layout: WorkspaceLayoutSnapshot = Field(default_factory=WorkspaceLayoutSnapshot)
+    focused_ui_reference: str = ""
+    selected_ui_reference: str = ""
+    visible_ui_references: list[str] = Field(default_factory=list)
 
 
 class AppActionRequest(BaseModel):
@@ -104,9 +124,21 @@ class AppActionDefinition(BaseModel):
     audit_label: str
 
 
+class UISurfaceDefinition(BaseModel):
+    reference: str
+    owner: str
+    title: str
+    aliases: list[str] = Field(default_factory=list)
+    default_presentation: SurfacePresentation
+    supported_locations: list[str]
+    configurable_properties: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    control_kernel: bool = False
+
+
 class AppActionCatalog(BaseModel):
     version: int = 1
     actions: list[AppActionDefinition]
+    surfaces: list[UISurfaceDefinition] = Field(default_factory=list)
 
 
 class AppActionDispatchEnvelope(BaseModel):
