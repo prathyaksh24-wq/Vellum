@@ -107,11 +107,16 @@ class PluginRegistry:
         plugin_id: str,
         *,
         runtime_status: dict[str, Any] | None = None,
+        skill_roots: dict[Path, str] | None = None,
     ) -> dict[str, Any]:
         try:
             manifest = self._manifest(plugin_id)
         except KeyError:
-            return self._describe_source(self._source_record(plugin_id), runtime_status=runtime_status)
+            return self._describe_source(
+                self._source_record(plugin_id),
+                runtime_status=runtime_status,
+                skill_roots=skill_roots,
+            )
         status = dict(runtime_status or {})
         enabled = self.is_enabled(manifest.id)
         configured = bool(status.get("configured", True))
@@ -163,8 +168,13 @@ class PluginRegistry:
         }
         plugin_ids = [manifest.id for manifest in self.manifests()]
         plugin_ids.extend(record.id for record in self.source_records())
+        skill_roots = self.skill_roots()
         records = [
-            self.describe(plugin_id, runtime_status=status_by_id.get(plugin_id))
+            self.describe(
+                plugin_id,
+                runtime_status=status_by_id.get(plugin_id),
+                skill_roots=skill_roots,
+            )
             for plugin_id in dict.fromkeys(plugin_ids)
         ]
         known_ids = {record["id"] for record in records}
@@ -214,18 +224,20 @@ class PluginRegistry:
         record: PluginSourceRecord,
         *,
         runtime_status: dict[str, Any] | None,
+        skill_roots: dict[Path, str] | None = None,
     ) -> dict[str, Any]:
         status = dict(runtime_status or {})
         enabled = self.is_enabled(record.id)
         configured = bool(status.get("configured", True))
         runtime_state = str(status.get("status") or ("available" if configured else "not_configured"))
-        skill_roots = [
+        available_skill_roots = self.skill_roots() if skill_roots is None else skill_roots
+        owned_skill_roots = [
             root
-            for root, owner in self.skill_roots().items()
+            for root, owner in available_skill_roots.items()
             if owner == record.id
         ]
         skills: list[dict[str, Any]] = []
-        for root in skill_roots:
+        for root in owned_skill_roots:
             skills.extend(self._skills(root, record.id))
         return {
             "id": record.id,
