@@ -23,6 +23,8 @@ def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
         "x.publish_post",
         "youtube.search_videos",
         "youtube.fetch_transcript",
+        "discord.messages",
+        "discord.send_message",
         "memory.build_context_pack",
         "memory.review_proposals",
         "context7.resolve_library",

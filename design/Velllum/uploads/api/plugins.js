@@ -24,5 +24,11 @@
     youtubeOAuthStart: function () { return client.request("/api/plugins/youtube/oauth/start", client.jsonOptions("POST")); },
     youtubeSync: function (idempotencyKey) { return client.request("/api/plugins/youtube/sync", client.jsonOptions("POST", {idempotency_key:idempotencyKey || ""})); },
     youtubeDisconnect: function () { return client.request("/api/plugins/youtube/connection", {method:"DELETE"}); },
+    discordStatus: function () { return client.request("/api/plugins/discord/status"); },
+    discordInstall: function () { return client.request("/api/plugins/discord/install"); },
+    discordGuilds: function () { return client.request("/api/plugins/discord/guilds"); },
+    discordChannels: function (guildId) { return client.request("/api/plugins/discord/guilds/" + encodeURIComponent(guildId) + "/channels"); },
+    discordMessages: function (channelId, limit) { return client.request("/api/plugins/discord/channels/" + encodeURIComponent(channelId) + "/messages?limit=" + encodeURIComponent(limit || 20)); },
+    discordSend: function (channelId, content, confirm) { return client.request("/api/plugins/discord/channels/" + encodeURIComponent(channelId) + "/messages", client.jsonOptions("POST", {content:content, confirm:confirm === true})); },
   };
 })();

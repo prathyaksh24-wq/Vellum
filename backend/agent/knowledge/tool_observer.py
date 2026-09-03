@@ -38,6 +38,8 @@ class KnowledgeToolObserver:
             source_ids = self._record_x(invocation)
         elif invocation.namespace == "youtube":
             source_ids = self._record_youtube(invocation)
+        elif invocation.namespace == "discord":
+            source_ids = self._record_discord(invocation)
         self.core.record_tool_result(
             tool_name=invocation.name,
             payload=self._request_metadata(invocation.payload),
@@ -164,12 +166,51 @@ class KnowledgeToolObserver:
             source_ids.append(str(result["source_id"]))
         return source_ids
 
+    def _record_discord(self, invocation: ToolInvocation) -> list[str]:
+        if invocation.name != "discord.messages":
+            return []
+        items = invocation.result.get("items")
+        if not isinstance(items, list):
+            return []
+        channel_id = str(invocation.result.get("channel_id") or invocation.payload.get("channel_id") or "")
+        source_ids: list[str] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            message_id = str(item.get("id") or "").strip()
+            if not message_id:
+                continue
+            author = item.get("author") if isinstance(item.get("author"), dict) else {}
+            title = f"Discord message from {str(author.get('username') or 'unknown')}"
+            result = self.core.store.upsert_source(
+                SourceItemInput(
+                    kind="discord_message",
+                    external_id=f"discord:message:{channel_id}:{message_id}",
+                    title=title,
+                    content=json.dumps(item, ensure_ascii=False, sort_keys=True, indent=2, default=str),
+                    uri=f"discord://channels/{channel_id}/messages/{message_id}",
+                    account_id="",
+                    sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY,
+                    external_policy=ExternalPolicy.DENY_RAW,
+                    trust="official_bot_api",
+                    metadata={
+                        "connector": "discord_bot",
+                        "channel_id": channel_id,
+                        "observed_via": invocation.name,
+                        "agent_name": invocation.agent_name,
+                        "preference_evidence": False,
+                    },
+                )
+            )
+            source_ids.append(str(result["source_id"]))
+        return source_ids
+
     @staticmethod
     def _request_metadata(payload: dict[str, Any]) -> dict[str, Any]:
         return {
             key: value
             for key, value in payload.items()
-            if key in {"query", "video_id", "handle", "username", "max_results"}
+            if key in {"query", "video_id", "handle", "username", "max_results", "guild_id", "channel_id", "limit"}
         }
 
     @staticmethod

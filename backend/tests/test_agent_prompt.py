@@ -76,6 +76,12 @@ def test_vellum_prompt_delegates_book_reasoning_to_books_agent():
     assert "Do not activate Book skills directly" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
+def test_vellum_prompt_delegates_discord_work_to_discord_agent():
+    assert "discord_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Delegate all Discord interactions to DiscordAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Never use a user token" in agent_graph.VELLUM_SYSTEM_PROMPT
+
+
 def test_agent_prompt_documents_workspace_mode():
     assert "mode='workspace'" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
@@ -128,6 +134,7 @@ def test_agent_tool_list_includes_x_agent(monkeypatch):
     agent_graph.build_agent()
 
     assert any(getattr(tool, "name", "") == "x_agent" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "discord_agent" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
@@ -179,6 +186,7 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "SportsAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "YoutubeAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "DiscordAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "on-demand public sports research" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "transcript-backed summaries" in agent_graph.VELLUM_SYSTEM_PROMPT
     assert "durable memory lookup" in agent_graph.VELLUM_SYSTEM_PROMPT

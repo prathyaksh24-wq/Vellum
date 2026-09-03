@@ -198,6 +198,36 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             skills=["skill-youtube-transcript-memory-v1"],
             cache_first=False,
         ),
+        "DiscordAgent": AgentProfile(
+            id="DiscordAgent",
+            description="Scoped Discord bot reads and policy-controlled external actions.",
+            instructions=InstructionPolicy(
+                inline=(
+                    "Use only the installed Vellum bot and profile-approved Discord capabilities. "
+                    "Never impersonate the user or use user tokens. Read only allowlisted servers and "
+                    "channels. Prepare external writes for confirmation unless the host policy grants "
+                    "standing authorization to the exact target channel."
+                )
+            ),
+            tools=ToolPolicy(
+                allow=[
+                    "discord.account",
+                    "discord.guilds",
+                    "discord.channels",
+                    "discord.messages",
+                    "discord.send_message",
+                ],
+                require_confirmation=["discord.send_message"],
+            ),
+            skills=SkillPolicy(allow=[]),
+            memory=MemoryPolicy(
+                read_scopes=["user_profile", "shared", "agent:DiscordAgent"],
+                write_scope="agent:DiscordAgent",
+                shared_writes="propose_only",
+                cache_first=False,
+            ),
+            cache=CachePolicy(bypass_terms=["discord", "message", "send", "post", "reply", "latest", "recent"]),
+        ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",
             description="Durable memory lookup and reviewed memory proposals.",

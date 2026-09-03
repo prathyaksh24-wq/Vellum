@@ -43,20 +43,24 @@ class AgentCatalog:
     ) -> "AgentCatalog":
         from agent.agents.books import BooksAgent
         from agent.agents.books_synthesis import RoutedBooksSynthesizer
+        from agent.agents.discord import DiscordAgent
         from agent.agents.memory_agent import MemoryAgent
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
         from agent.agents.youtube import YoutubeAgent
         from agent.tools.capabilities.registry import build_shared_tool_registry
+        from agent.plugins.discord_runtime import discord_service
 
         root = Path(vault_root)
-        tools = build_shared_tool_registry(vault_root=root)
+        discord_runtime_service = discord_service()
+        tools = build_shared_tool_registry(vault_root=root, discord_service=discord_runtime_service)
         catalog = cls(profile_dir=profile_dir)
         books_profile = catalog.get("BooksAgent")
         agents = [
             XAgent(vault_root=root, tool_registry=tools),
             YoutubeAgent(vault_root=root, tool_registry=tools),
             MemoryAgent(vault_root=root, tool_registry=tools),
+            DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service),
             SportsAgent(vault_root=root, tool_registry=tools),
             BooksAgent(
                 tool_registry=tools,

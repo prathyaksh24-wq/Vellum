@@ -93,6 +93,8 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.plugins.discord_api import router as discord_router
+from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
@@ -1437,7 +1439,7 @@ async def _run_agent(
                         clean_message,
                         answer,
                         active_thread_id,
-                        source="x_agent",
+                        source=str(live_result.agent_name or "specialist").casefold(),
                         tools=_memory_tools_from_names(delegated_tools),
                         sources=_memory_source_urls(live_sources),
                         confidence=_memory_confidence(delegated_tools, live_sources),
@@ -3231,7 +3233,7 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
 def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool:
     if live_result is None or not live_result.handled:
         return False
-    if live_result.agent_name not in {"BooksAgent", "XAgent", "YoutubeAgent"}:
+    if live_result.agent_name not in {"BooksAgent", "DiscordAgent", "XAgent", "YoutubeAgent"}:
         return False
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
 
@@ -3515,7 +3517,7 @@ async def _stream_agent_turn(
                             clean_message,
                             answer,
                             active_thread_id,
-                            source="x_agent",
+                            source=str(live_result.agent_name or "specialist").casefold(),
                             tools=_memory_tools_from_names(delegated_tools),
                             sources=_memory_source_urls(live_sources),
                             confidence=_memory_confidence(delegated_tools, live_sources),
@@ -3523,7 +3525,10 @@ async def _stream_agent_turn(
                         )
                     )
                     if store
-                    else _audit_memory_off(active_thread_id, "x_agent")
+                    else _audit_memory_off(
+                        active_thread_id,
+                        str(live_result.agent_name or "specialist").casefold(),
+                    )
                 )
             yield _agent_activity_event(
                 response_id=response_id,
@@ -4784,6 +4789,7 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
         memory_orchestrator_plugin_status(_memory_orchestrator).model_dump(),
         agent_reach_plugin_status().model_dump(),
         portable_spotify_status(),
+        portable_discord_status(),
     ]
     plugins = _plugin_registry().catalog(
         runtime_statuses=runtime_statuses,
@@ -5074,6 +5080,7 @@ router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
+router.include_router(discord_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 

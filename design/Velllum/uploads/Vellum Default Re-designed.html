@@ -6221,6 +6221,22 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
       setBusyPlugin('');
     }
   };
+  const installDiscord = async () => {
+    if (busyPlugin) return;
+    const popup = window.open('', 'vellum-discord-install', 'width=720,height=760');
+    setBusyPlugin('discord-install');
+    setPluginError('');
+    try {
+      const result = await API.plugins.discordInstall();
+      if (popup) popup.location.href = result.authorization_url;
+      else window.open(result.authorization_url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      if (popup) popup.close();
+      setPluginError((error && error.message) || 'Discord installation could not be started.');
+    } finally {
+      setBusyPlugin('');
+    }
+  };
   const plugins = (apps || []).map(a => ({
     ...a,
     type: a.type || (a.id === 'agent-reach' ? 'connector' : 'mcp'),
@@ -6279,7 +6295,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
           <section className="plugin-detail">
             {!selected ? <div className="plugin-detail-empty">Select an item to inspect its apps, MCPs, skills, and status.</div> : <React.Fragment>
               <div className="plugin-detail-head"><span className="conn-ic"><ConnLogo c={detailPlugin || selected.item} size={22}/></span><div style={{minWidth:0}}><div className="plugin-detail-title">{rowName(selected)}</div><div className="plugin-detail-sub">{rowDescription(selected) || connectorSetupNote(detailPlugin)}</div></div>
-                <div className="plugin-detail-actions">{selected.kind === 'plugin' && selected.item.manageable && <button className="btn" disabled={selected.item.required || busyPlugin === selected.item.id} onClick={() => togglePlugin(selected.item)}>{selected.item.required ? 'Required' : selected.item.enabled === false ? 'Enable' : 'Disable'}</button>}</div>
+                <div className="plugin-detail-actions">{detailPlugin && detailPlugin.id === 'discord' && <button className="btn" disabled={!!busyPlugin} onClick={installDiscord}>Install bot</button>}{selected.kind === 'plugin' && selected.item.manageable && <button className="btn" disabled={selected.item.required || busyPlugin === selected.item.id} onClick={() => togglePlugin(selected.item)}>{selected.item.required ? 'Required' : selected.item.enabled === false ? 'Enable' : 'Disable'}</button>}</div>
               </div>
               {detailPlugin && <React.Fragment>
                 <div className="plugin-section"><div className="plugin-section-h">Apps {detailPlugin.apps.length}</div>{detailPlugin.apps.map(item => <div className="plugin-child" key={item.id||item.name}><span className="conn-ic"><IcGrid size={14}/></span><span className="plugin-child-copy"><div className="plugin-child-name">{item.name||item.id}</div><div className="plugin-child-desc">{item.description||'Included app'}</div></span></div>)}</div>

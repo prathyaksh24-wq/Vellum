@@ -1,0 +1,12 @@
+id: discord
+name: Discord
+type: connector
+category: Connectors
+version: 1.0.0
+description: Scoped Discord bot access for Vellum reads and policy-controlled messages.
+capabilities:
+  - discord.account
+  - discord.guilds
+  - discord.channels
+  - discord.messages
+  - discord.send_message

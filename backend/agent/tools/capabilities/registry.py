@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent.tools.capabilities.books_service import BooksCapabilityService
+from agent.tools.capabilities.discord_service import DiscordCapabilityService
 from agent.tools.capabilities.mcp_service import McpCapabilityService
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
@@ -18,6 +19,7 @@ def build_shared_tool_registry(
     youtube_service: YoutubeCapabilityService | None = None,
     memory_service: MemoryCapabilityService | None = None,
     books_service: BooksCapabilityService | None = None,
+    discord_service: DiscordCapabilityService | None = None,
     mcp_service: McpCapabilityService | None = None,
     tool_observer: ToolInvocationObserver | None = None,
 ) -> ToolRegistry:
@@ -29,6 +31,7 @@ def build_shared_tool_registry(
         memory_service or MemoryCapabilityService(vault_root=root, sessions_db=memory_sessions_db),
         mcp_service or McpCapabilityService(),
         books_service or BooksCapabilityService(),
+        discord_service or _default_discord_service(),
     )
     if tool_observer is None:
         tool_observer = _default_tool_observer()
@@ -52,3 +55,9 @@ def _default_tool_observer() -> ToolInvocationObserver | None:
     from agent.knowledge.tool_observer import KnowledgeToolObserver
 
     return KnowledgeToolObserver(get_knowledge_core())
+
+
+def _default_discord_service() -> DiscordCapabilityService:
+    from agent.plugins.discord_runtime import discord_service
+
+    return discord_service()

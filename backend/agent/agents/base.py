@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 SpecialistStatus = Literal["answered", "needs_fetch", "stale", "blocked", "error"]
 SourceKind = Literal["vault", "web", "api", "memory", "book"]
 Freshness = Literal["live", "recent", "stale", "historical"]
-MemoryScope = Literal["sports", "x", "youtube", "memory", "mcp", "shared"]
+MemoryScope = Literal["sports", "x", "youtube", "discord", "memory", "mcp", "shared"]
 
 
 class SpecialistSource(BaseModel):
