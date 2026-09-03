@@ -56,4 +56,26 @@ describe("Vellum plugins API adapter", () => {
       { method: "DELETE" },
     ]);
   });
+
+  test("owns scoped Discord bot reads and sends", async () => {
+    const fetchImpl = vi.fn(async (path, options) => ({ path, options }));
+    const api = await loadPluginsApi(fetchImpl);
+
+    await api.discordStatus();
+    await api.discordInstall();
+    await api.discordGuilds();
+    await api.discordChannels("guild-1");
+    await api.discordMessages("channel-1", 10);
+    await api.discordSend("channel-1", "Hello", true);
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/plugins/discord/status");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/plugins/discord/install");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/plugins/discord/guilds");
+    expect(fetchImpl.mock.calls[3][0]).toBe("/api/plugins/discord/guilds/guild-1/channels");
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/plugins/discord/channels/channel-1/messages?limit=10");
+    expect(fetchImpl.mock.calls[5]).toEqual([
+      "/api/plugins/discord/channels/channel-1/messages",
+      { method: "POST", body: { content: "Hello", confirm: true } },
+    ]);
+  });
 });

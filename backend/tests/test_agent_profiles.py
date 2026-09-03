@@ -241,13 +241,16 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
 
     x_binding = catalog.resolve("XAgent")
     youtube_binding = catalog.resolve("YoutubeAgent")
+    discord_binding = catalog.resolve("DiscordAgent")
     memory_binding = catalog.resolve("MemoryAgent")
 
     assert x_binding.profile.version == 2
     assert x_binding.profile.instructions.inline
     assert x_binding.executor.tool_registry is youtube_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is memory_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is discord_binding.executor.tool_registry
     assert "youtube.search_videos" in x_binding.executor.tool_registry.names()
+    assert "discord.messages" in x_binding.executor.tool_registry.names()
 
 
 def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_path: Path) -> None:

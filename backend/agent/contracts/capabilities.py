@@ -108,6 +108,20 @@ def build_capability_contract() -> CapabilityContract:
                     "disconnect": "/api/plugins/youtube/connection",
                 },
             ),
+            "discord": FeatureContract(
+                enabled=True,
+                source="plugins/connectors/discord",
+                plugin_owned=True,
+                endpoints={
+                    "status": "/api/plugins/discord/status",
+                    "install": "/api/plugins/discord/install",
+                    "guilds": "/api/plugins/discord/guilds",
+                    "channels": "/api/plugins/discord/guilds/{guild_id}/channels",
+                    "messages": "/api/plugins/discord/channels/{channel_id}/messages",
+                    "send_message": "/api/plugins/discord/channels/{channel_id}/messages",
+                },
+                notes="Installed bot access with server and channel allowlists.",
+            ),
             "memory_orchestrator": FeatureContract(
                 enabled=True,
                 source="plugins/memory/vellum-memory-orchestrator",

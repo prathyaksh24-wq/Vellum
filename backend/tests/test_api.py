@@ -118,6 +118,17 @@ def test_books_specialist_results_are_passed_through_without_a_second_tool_round
     assert api._should_passthrough_live_result(result) is True
 
 
+def test_discord_specialist_results_are_passed_through_without_external_rewrite():
+    result = LiveAgentResult(
+        handled=True,
+        agent_name="DiscordAgent",
+        answer="Private Discord channel data",
+        status="answered",
+    )
+
+    assert api._should_passthrough_live_result(result) is True
+
+
 def test_health_endpoint_reports_service_and_vector_store(monkeypatch):
     monkeypatch.setattr(api, "_vector_health", lambda: {"ok": True, "collections": ["obsidian_vault"]})
     monkeypatch.setattr(api, "_embedding_health", lambda: {"ok": True, "provider": "sentence-transformers"})
@@ -180,7 +191,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
 
     features = body["features"]
-    for key in ["chat", "plugins", "spotify", "youtube", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
+    for key in ["chat", "plugins", "spotify", "youtube", "discord", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
         assert key in features
         assert isinstance(features[key]["enabled"], bool)
         assert features[key]["contract"] == "v1"
@@ -188,6 +199,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
 
     assert features["spotify"]["plugin_owned"] is True
     assert features["youtube"]["plugin_owned"] is True
+    assert features["discord"]["plugin_owned"] is True
     assert features["memory_orchestrator"]["plugin_owned"] is True
     assert features["hermes_skills"]["plugin_owned"] is True
     assert features["openrouter"]["endpoints"]["models"] == "/api/models"

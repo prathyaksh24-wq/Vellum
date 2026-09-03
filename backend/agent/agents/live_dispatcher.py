@@ -105,8 +105,8 @@ class LiveAgentDispatcher:
                     handled=True,
                     agent_name=str(pending_action.get("agent") or "XAgent"),
                     status="blocked",
-                    answer="Canceled the pending X action.",
-                    tools=["x_agent"],
+                    answer=f"Canceled the pending {str(pending_action.get('agent') or 'specialist')} action.",
+                    tools=[self._tool_name(str(pending_action.get("agent") or "XAgent"))],
                 )
         matched_binding = None
         profile_only_id = ""
@@ -244,7 +244,7 @@ class LiveAgentDispatcher:
 
     def _clean_surface_prefix(self, message: str) -> str:
         return re.sub(
-            r"^\s*(?:x|youtube|sports|memory|mcp|research)\s+agent\s*:\s*",
+            r"^\s*(?:x|youtube|discord|sports|memory|mcp|research)\s+agent\s*:\s*",
             "",
             message,
             count=1,

@@ -94,6 +94,13 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("Manage videos and drafts on your behalf");
   });
 
+  test("installs Discord through the backend-owned bot authorization contract", () => {
+    expect(html).toContain("API.plugins.discordInstall()");
+    expect(html).toContain("vellum-discord-install");
+    expect(html).toContain("Install bot");
+    expect(html).not.toContain("DISCORD_BOT_TOKEN");
+  });
+
   test("keeps model selection request-scoped and persisted with conversations", () => {
     for (const id of [
       "openai/gpt-5.6-sol",
