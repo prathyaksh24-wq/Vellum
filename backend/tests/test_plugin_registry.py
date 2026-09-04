@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from agent.plugins.registry import PluginRegistry, PluginRegistryError
+from agent.plugins.sources import PluginSourceRecord
 
 
 def _write_plugin(root: Path, plugin_id: str, *, required: bool = False) -> Path:
@@ -77,3 +78,38 @@ def test_catalog_normalizes_mcp_servers_without_claiming_lifecycle_control(tmp_p
     assert records[0]["type"] == "mcp"
     assert records[0]["manageable"] is False
     assert records[0]["mcp_connectors"][0]["id"] == "context7"
+
+
+def test_catalog_snapshots_external_skill_roots_once(tmp_path: Path):
+    class CountingSource:
+        def __init__(self) -> None:
+            self.skill_root_calls = 0
+
+        def discover(self):
+            return [
+                PluginSourceRecord(
+                    id=plugin_id,
+                    name=plugin_id.title(),
+                    version="1.0.0",
+                    description="Test source",
+                    category="Test",
+                    developer="Test",
+                    source="test",
+                    root=tmp_path / plugin_id,
+                )
+                for plugin_id in ("first", "second")
+            ]
+
+        def skill_roots(self):
+            self.skill_root_calls += 1
+            return {}
+
+    source = CountingSource()
+    registry = PluginRegistry(
+        tmp_path / "plugins",
+        state_path=tmp_path / "state.json",
+        sources=[source],
+    )
+
+    assert len(registry.catalog()) == 2
+    assert source.skill_root_calls == 1

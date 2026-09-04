@@ -57,6 +57,7 @@ def test_discord_install_url_requests_only_current_bot_permissions() -> None:
 
     assert query["scope"] == ["bot"]
     assert query["permissions"] == [str((1 << 10) | (1 << 11) | (1 << 16))]
+    assert query["integration_type"] == ["0"]
 
 
 def test_discord_client_sends_bot_auth_and_bounds_message_history() -> None:
