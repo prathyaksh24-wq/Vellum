@@ -12,6 +12,7 @@ VIEW_CHANNEL = 1 << 10
 SEND_MESSAGES = 1 << 11
 READ_MESSAGE_HISTORY = 1 << 16
 DEFAULT_BOT_PERMISSIONS = VIEW_CHANNEL | SEND_MESSAGES | READ_MESSAGE_HISTORY
+GUILD_INSTALL_TYPE = 0
 
 
 def bot_install_url(*, application_id: str, permissions: int = DEFAULT_BOT_PERMISSIONS) -> str:
@@ -23,6 +24,7 @@ def bot_install_url(*, application_id: str, permissions: int = DEFAULT_BOT_PERMI
             "client_id": clean,
             "scope": "bot",
             "permissions": permissions,
+            "integration_type": GUILD_INSTALL_TYPE,
         }
     )
     return f"{AUTHORIZATION_URL}?{query}"
