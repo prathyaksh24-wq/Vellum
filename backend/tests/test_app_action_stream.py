@@ -10,6 +10,7 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.runtime import AppActionRuntime
+from agent.conversations.lifecycle import ConversationLifecycle
 import agent.skills.curator_runtime as curator_runtime
 
 
@@ -103,3 +104,46 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
     subject = AppActionRuntime()
 
     assert subject.match_submission("What are the benefits of a sidebar in a research app?") is None
+
+
+@pytest.mark.asyncio
+async def test_conversation_nlp_actions_persist_and_bypass_the_agent(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    lifecycle = ConversationLifecycle(path=tmp_path / "conversations.json")
+    lifecycle.save("chat-current", {
+        "thread_id": "thread-current",
+        "title": "Current chat",
+        "messages": [],
+    })
+    lifecycle.save("chat-old", {"title": "Release planning", "messages": []})
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(conversation_lifecycle=lifecycle))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("ordinary agent path must not run for a matched conversation action")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+
+    pin_response = await api.chat_stream(api.ChatRequest(
+        message="pin this chat",
+        thread_id="thread-current",
+    ))
+    pin_events = parse_sse("".join([chunk async for chunk in pin_response.body_iterator]))
+    archive_response = await api.chat_stream(api.ChatRequest(
+        message='archive the chat called "Release planning"',
+        thread_id="thread-current",
+    ))
+    archive_events = parse_sse("".join([chunk async for chunk in archive_response.body_iterator]))
+
+    pin_receipt = next(data["receipt"] for name, data in pin_events if name == "app.action.receipt")
+    archive_receipt = next(data["receipt"] for name, data in archive_events if name == "app.action.receipt")
+    reloaded = ConversationLifecycle(path=lifecycle.path)
+
+    assert pin_receipt["status"] == "applied"
+    assert pin_receipt["source"] == "nlp"
+    assert pin_receipt["target"]["id"] == "chat-current"
+    assert archive_receipt["target"]["id"] == "chat-old"
+    assert reloaded.get("chat-current")["pinned"] is True
+    assert reloaded.get("chat-current")["archived"] is False
+    assert reloaded.get("chat-old")["archived"] is True

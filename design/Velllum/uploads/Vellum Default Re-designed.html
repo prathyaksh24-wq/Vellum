@@ -8178,6 +8178,8 @@ const mergeConversationRecords = (current, serverConversations) => {
       title: serverChat.title,
       pinned: serverChat.pinned,
       archived: serverChat.archived,
+      revision: serverChat.revision,
+      thread_id: serverChat.thread_id,
       updated_at: serverChat.updated_at,
       organization: serverChat.organization,
     };
@@ -8186,6 +8188,17 @@ const mergeConversationRecords = (current, serverConversations) => {
 };
 
 const App = () => {
+  const conversationActionHandlersRef = useRef({});
+  const conversationActionRuntimeRef = useRef(null);
+  if (!conversationActionRuntimeRef.current) {
+    conversationActionRuntimeRef.current = window.VellumUI.AppActions.createConversationActionRuntime({
+      client: API.appActions,
+      getConversation: id => conversationActionHandlersRef.current.getConversation && conversationActionHandlersRef.current.getConversation(id),
+      upsertConversation: conversation => conversationActionHandlersRef.current.upsertConversation && conversationActionHandlersRef.current.upsertConversation(conversation),
+      removeConversation: id => conversationActionHandlersRef.current.removeConversation && conversationActionHandlersRef.current.removeConversation(id),
+      navigate: navigation => conversationActionHandlersRef.current.navigate && conversationActionHandlersRef.current.navigate(navigation),
+    });
+  }
   const workspaceActionRuntimeRef = useRef(null);
   if (!workspaceActionRuntimeRef.current) {
     workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({client: API.appActions});
@@ -8585,7 +8598,12 @@ const [slashSkills, setSlashSkills] = useState([]);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const newChat = () => { setView('chat'); setActiveChatId(null); setSelModel(readDefaultModel()); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const applyNewChatNavigation = () => { setView('chat'); setActiveChatId(null); setSelModel(readDefaultModel()); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const newChat = () => {
+    if (FEATURE_FLAGS.realConversations) return dispatchConversationAction('conversation.new');
+    applyNewChatNavigation();
+    return null;
+  };
   const startAutomationChat = async () => {
     let prompt = "I'd like to create a new automation — a scheduled reasoning task that Vellum runs on its own. Draft the instructions, propose a schedule and destination, confirm the plan with me, then create it with the cronjob tool.";
     try {
@@ -8607,13 +8625,25 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch {}
     newChat();
   };
-  const openChat = (id, messageId) => {
+  const applyOpenChatNavigation = (id, messageId) => {
     const chat = chats.find(item => item.id === id);
     setView('chat'); setActiveChatId(id); setSelModel((chat && chat.model) || readDefaultModel());
     try { localStorage.setItem('vellum-active-chat-id', id); } catch {}
     setMenu(null); setActivityMsg(null);
     if (window.matchMedia('(max-width: 720px)').matches) dispatchSidebarVisibility(false, {notify:false});
     if (messageId) setTimeout(() => document.getElementById('m-' + messageId)?.scrollIntoView({behavior: 'smooth', block: 'center'}), 80);
+  };
+  const openChat = (id, messageId) => {
+    if (!FEATURE_FLAGS.realConversations) {
+      applyOpenChatNavigation(id, messageId);
+      return null;
+    }
+    return dispatchConversationAction('conversation.open', {conversation_id:id}).then(receipt => {
+      if (receipt && receipt.status === 'applied' && messageId) {
+        setTimeout(() => document.getElementById('m-' + messageId)?.scrollIntoView({behavior: 'smooth', block:'center'}), 80);
+      }
+      return receipt;
+    });
   };
   const openSearch = (preset = null) => { setSearchPreset(preset); setSearchOpen(true); };
   const nav = v => {
@@ -8723,6 +8753,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             }));
           },
           actionRequested: request => {
+            conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
             if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
@@ -8836,30 +8867,34 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
     if (action === 'organize') { setSpacePickerChatId(id); return; }
     if (action === 'share') return;
+    if (action === 'pin') {
+      const chat = chats.find(c => c.id === id);
+      dispatchConversationAction(chat && chat.pinned ? 'conversation.unpin' : 'conversation.pin', {conversation_id:id});
+      return;
+    }
+    if (action === 'archive') {
+      dispatchConversationAction('conversation.archive', {conversation_id:id});
+      return;
+    }
+    if (action === 'delete') {
+      dispatchConversationAction('conversation.delete', {conversation_id:id});
+      return;
+    }
     setChats(cs => {
-      if (action === 'pin') return cs.map(c => c.id === id ? {...c, pinned: !c.pinned} : c);
-      if (action === 'archive') return cs.map(c => c.id === id ? {...c, archived: true} : c);
-      if (action === 'delete') return cs.filter(c => c.id !== id);
       if (action === 'removeproj') return cs.map(c => c.id === id ? {...c, projectId: null} : c);
       return cs;
     });
     if (FEATURE_FLAGS.realConversations) {
       let request = null;
-      if (action === 'delete') request = API.conversations.remove(id);
-      else if (action === 'pin') {
-        const chat = chats.find(c => c.id === id);
-        request = API.conversations.patch(id, {pinned: !(chat && chat.pinned)});
-      } else if (action === 'archive') request = API.conversations.patch(id, {archived: true});
-      else if (action === 'removeproj') request = API.conversations.patch(id, {projectId: null});
+      if (action === 'removeproj') request = API.conversations.patch(id, {projectId: null});
       if (request) request.then(scheduleConversationLibraryRefresh).catch(() => {});
     }
-    if ((action === 'archive' || action === 'delete') && activeChatId === id) setActiveChatId(null);
   };
 
   const updateConversationOrganization = async (id, patch) => {
     try {
-      const result = await API.conversations.organize(id, patch);
-      if (result && result.conversation) setChats(cs => cs.map(chat => chat.id === id ? result.conversation : chat));
+      const receipt = await dispatchConversationAction('conversation.space.set', {conversation_id:id, ...patch}, {notify:false});
+      if (!receipt || receipt.status !== 'applied') throw new Error('Space update failed');
       setSpacePickerChatId(null);
       await refreshConversationLibrary();
       pushToast(patch.assignment === 'automatic' ? 'Automatic organization restored' : 'Space updated');
@@ -8871,8 +8906,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const renameChat = (id, title) => {
     setRenamingId(null);
     if (title && title.trim()) {
-      setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
-      if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {title: title.trim()}).then(scheduleConversationLibraryRefresh).catch(() => {});
+      if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.rename', {conversation_id:id, title:title.trim()});
+      else setChats(cs => cs.map(c => c.id === id ? {...c, title: title.trim()} : c));
     }
   };
 
@@ -8907,12 +8942,12 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const forgetFact = id => setMemory(ms => ms.filter(m => m.id !== id));
   const restoreChat = id => {
-    setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
-    if (FEATURE_FLAGS.realConversations) API.conversations.patch(id, {archived: false}).then(scheduleConversationLibraryRefresh).catch(() => {});
+    if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.restore', {conversation_id:id});
+    else setChats(cs => cs.map(c => c.id === id ? {...c, archived: false} : c));
   };
   const deleteChat = id => {
-    setChats(cs => cs.filter(c => c.id !== id));
-    if (FEATURE_FLAGS.realConversations) API.conversations.remove(id).then(scheduleConversationLibraryRefresh).catch(() => {});
+    if (FEATURE_FLAGS.realConversations) dispatchConversationAction('conversation.delete', {conversation_id:id});
+    else setChats(cs => cs.filter(c => c.id !== id));
   };
 
   const addSource = (projId, file) => {
@@ -9236,6 +9271,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             }));
           },
           actionRequested: request => {
+            conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
             if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
@@ -9384,6 +9420,24 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeChat = chats.find(c => c.id === activeChatId) || null;
   const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
+  conversationActionHandlersRef.current = {
+    getConversation: id => chats.find(chat => chat.id === id) || null,
+    upsertConversation: conversation => {
+      if (conversation.id && conversation.thread_id) threadRef.current[conversation.id] = conversation.thread_id;
+      setChats(current => current.some(chat => chat.id === conversation.id)
+        ? current.map(chat => chat.id === conversation.id ? {...chat, ...conversation} : chat)
+        : [conversation, ...current]);
+      scheduleConversationLibraryRefresh();
+    },
+    removeConversation: id => {
+      setChats(current => current.filter(chat => chat.id !== id));
+      scheduleConversationLibraryRefresh();
+    },
+    navigate: navigation => {
+      if (navigation && navigation.conversation_id) applyOpenChatNavigation(navigation.conversation_id);
+      else applyNewChatNavigation();
+    },
+  };
 
   const pushToast = value => {
     const next = typeof value === 'string' ? {message:value} : value;
@@ -9398,16 +9452,42 @@ const [slashSkills, setSlashSkills] = useState([]);
     pushToast({
       message: receipt.message || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'),
       undoReceipt: receipt.undo ? receipt : null,
-      duration: receipt.undo ? 6500 : 2800,
+      confirmationReceipt: receipt.confirmation ? receipt : null,
+      duration: receipt.confirmation ? 10000 : (receipt.undo ? 6500 : 2800),
     });
   };
   const applyAppActionReceipt = (receipt, options = {}) => {
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
+      conversationActionRuntimeRef.current.applyReceipt(receipt);
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
       if (options.notify !== false) pushToast('The interface changed before this action could be applied.');
+      return null;
+    }
+  };
+  const dispatchConversationAction = async (actionId, args = {}, options = {}) => {
+    try {
+      const receipt = await conversationActionRuntimeRef.current.dispatch(
+        actionId,
+        args,
+        {conversationId: options.conversationId === undefined ? activeChatId : options.conversationId},
+      );
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('App actions are unreachable.');
+      return null;
+    }
+  };
+  const confirmAppAction = async receipt => {
+    try {
+      const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:activeChatId});
+      showAppActionReceipt(confirmed);
+      return confirmed;
+    } catch (_) {
+      pushToast('Confirmation is unavailable.');
       return null;
     }
   };
@@ -9443,7 +9523,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const undoAppAction = async receipt => {
     try {
-      const undone = await workspaceActionRuntimeRef.current.undo(receipt, {conversationId:activeChatId});
+      const runtime = String(receipt && receipt.action_id || '').startsWith('conversation.')
+        ? conversationActionRuntimeRef.current
+        : workspaceActionRuntimeRef.current;
+      const undone = await runtime.undo(receipt, {conversationId:activeChatId});
       showAppActionReceipt(undone);
     } catch (_) {
       pushToast('Undo is unavailable.');
@@ -9484,7 +9567,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } else pushToast('No code block found');
   };
   const deleteActiveChat = () => {
-    if (view === 'chat' && activeChat) { deleteChat(activeChat.id); newChat(); pushToast('Chat deleted'); }
+    if (view === 'chat' && activeChat) { deleteChat(activeChat.id); }
     else if (view === 'agent' && activeAgentId && activeConvo[activeAgentId]) { const cid = activeConvo[activeAgentId]; setAgentConvos(ac => ({...ac, [activeAgentId]: (ac[activeAgentId] || []).filter(c => c.id !== cid)})); agentNewConvo(); pushToast('Conversation deleted'); }
     else pushToast('No chat to delete');
   };
@@ -9654,7 +9737,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>}
-        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}</div>}
+        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.confirmationReceipt && <button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>Delete</button>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>

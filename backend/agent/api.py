@@ -58,7 +58,8 @@ from agent.contracts.conversations import (
     ConversationOrganizationResponse,
     ConversationSearchResponse,
 )
-from agent.conversations import build_conversation_library, organization_id, organize_conversation, search_conversations
+from agent.conversations import build_conversation_library, search_conversations
+from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.agents.books import INSTALLED_BOOK_CONTEXT_END, INSTALLED_BOOK_CONTEXT_START
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
@@ -493,20 +494,16 @@ _UI_CONVERSATIONS_PATH = REPO_ROOT / "data" / "ui" / "conversations.json"
 
 
 def _read_ui_conversations() -> list[dict[str, Any]]:
-    try:
-        payload = json.loads(_UI_CONVERSATIONS_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    conversations = payload.get("conversations") if isinstance(payload, dict) else payload
-    return conversations if isinstance(conversations, list) else []
+    return ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).list()
 
 
 def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
-    _UI_CONVERSATIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _UI_CONVERSATIONS_PATH.write_text(
-        json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).replace_all(conversations)
+
+
+def _conversation_timestamp() -> str:
+    """Keep automation delivery compatible with the conversation API adapter."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _message_text(message: Any) -> str:
@@ -757,23 +754,32 @@ def _archive_ui_conversation(conversation: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "error": "unavailable"}
 
 
-def _conversation_timestamp() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def _conversation_sessions() -> SessionsReader:
+    return SessionsReader(
+        checkpoints_db=REPO_ROOT / "data" / "memory" / "checkpoints.db",
+        sessions_db=REPO_ROOT / "data" / "memory" / "sessions.db",
+    )
 
 
-def _normalize_ui_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    record = dict(payload)
-    record["id"] = str(record.get("id") or conversation_id)
-    record["thread_id"] = str(record.get("thread_id") or record["id"])
-    record["title"] = str(record.get("title") or "New chat")
-    record["created"] = str(record.get("created") or "Today")
-    record["pinned"] = bool(record.get("pinned", False))
-    record["archived"] = bool(record.get("archived", False))
-    record["projectId"] = record.get("projectId")
-    record["messages"] = record.get("messages") if isinstance(record.get("messages"), list) else []
-    record["updated_at"] = _conversation_timestamp()
-    record["organization"] = organize_conversation(record)
-    return record
+def _conversation_lifecycle() -> ConversationLifecycle:
+    return ConversationLifecycle(
+        path=_UI_CONVERSATIONS_PATH,
+        indexer=_index_ui_conversation,
+        projector=_project_ui_conversation,
+        archiver=_archive_ui_conversation,
+        delete_fts=_fts5_memory.delete_thread,
+        clear_context=_conversation_context_store.clear,
+        delete_session=lambda thread_id: _conversation_sessions().delete(thread_id),
+        rename_session=lambda thread_id, title: _conversation_sessions().rename(thread_id, title),
+    )
+
+
+_app_action_runtime.set_conversation_lifecycle_provider(_conversation_lifecycle)
+
+
+def _conversation_http_error(exc: ConversationLifecycleError) -> HTTPException:
+    status_code = 404 if exc.code == "CONVERSATION_NOT_FOUND" else 409 if exc.code == "STALE_ACTION_TARGET" else 422
+    return HTTPException(status_code=status_code, detail={"code": exc.code, "message": str(exc)})
 
 
 @asynccontextmanager
@@ -1891,101 +1897,69 @@ async def patch_conversation_organization(
     conversation_id: str,
     payload: ConversationOrganizationPatch,
 ) -> ConversationOrganizationResponse:
-    conversations = _read_ui_conversations()
-    for index, conversation in enumerate(conversations):
-        if str(conversation.get("id")) != conversation_id:
-            continue
-        base = dict(conversation)
-        if payload.assignment == "automatic":
-            base.pop("organization", None)
-        else:
-            current = organize_conversation(base)
-            values = payload.model_dump(exclude_none=True)
-            if payload.space_label and not payload.space_id:
-                values["space_id"] = organization_id(payload.space_label)
-            elif payload.space_id and not payload.space_label:
-                values["space_label"] = payload.space_id.replace("-", " ").title()
-            if payload.topic_label and not payload.topic_id:
-                values["topic_id"] = organization_id(payload.topic_label)
-            elif payload.topic_id and not payload.topic_label:
-                values["topic_label"] = payload.topic_id.replace("-", " ").title()
-            base["organization"] = {
-                **current,
-                **values,
-                "assignment": "manual",
-                "confidence": 1.0,
-            }
-        updated = _normalize_ui_conversation(conversation_id, base)
-        conversations[index] = updated
-        await asyncio.to_thread(_write_ui_conversations, conversations)
-        indexed, projection = await asyncio.gather(
-            asyncio.to_thread(_index_ui_conversation, updated),
-            asyncio.to_thread(_project_ui_conversation, updated),
+    organization = None if payload.assignment == "automatic" else payload.model_dump(exclude_none=True)
+    try:
+        result = await asyncio.to_thread(
+            _conversation_lifecycle().set_organization,
+            conversation_id,
+            organization,
         )
-        return ConversationOrganizationResponse(
-            conversation=updated,
-            memory_index=indexed,
-            obsidian_projection=projection,
-        )
-    raise HTTPException(status_code=404, detail="Conversation not found.")
+    except ConversationLifecycleError as exc:
+        raise _conversation_http_error(exc) from exc
+    return ConversationOrganizationResponse(
+        conversation=result["conversation"],
+        memory_index=result["memory_index"],
+        obsidian_projection=result["obsidian_projection"],
+    )
 
 
 @router.put("/conversations/{conversation_id}")
 async def put_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    record = _normalize_ui_conversation(conversation_id, payload)
-    conversations = [item for item in _read_ui_conversations() if str(item.get("id")) != conversation_id]
-    conversations.insert(0, record)
-    _write_ui_conversations(conversations)
-    indexed, projection = await asyncio.gather(
-        asyncio.to_thread(_index_ui_conversation, record),
-        asyncio.to_thread(_project_ui_conversation, record),
-    )
-    return {"conversation": record, "memory_index": indexed, "obsidian_projection": projection}
+    try:
+        result = await asyncio.to_thread(_conversation_lifecycle().save, conversation_id, payload)
+    except ConversationLifecycleError as exc:
+        raise _conversation_http_error(exc) from exc
+    return {
+        "conversation": result["conversation"],
+        "memory_index": result["memory_index"],
+        "obsidian_projection": result["obsidian_projection"],
+    }
 
 
 @router.patch("/conversations/{conversation_id}")
 async def patch_conversation(conversation_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    conversations = _read_ui_conversations()
-    for index, conversation in enumerate(conversations):
-        if str(conversation.get("id")) == conversation_id:
-            updated = _normalize_ui_conversation(conversation_id, {**conversation, **payload})
-            conversations[index] = updated
-            _write_ui_conversations(conversations)
-            indexed, projection = await asyncio.gather(
-                asyncio.to_thread(_index_ui_conversation, updated),
-                asyncio.to_thread(_project_ui_conversation, updated),
-            )
-            return {"conversation": updated, "memory_index": indexed, "obsidian_projection": projection}
-    raise HTTPException(status_code=404, detail="Conversation not found.")
+    values = dict(payload)
+    expected_revision = values.pop("expected_revision", None)
+    try:
+        result = await asyncio.to_thread(
+            _conversation_lifecycle().patch,
+            conversation_id,
+            values,
+            expected_revision=expected_revision,
+        )
+    except ConversationLifecycleError as exc:
+        raise _conversation_http_error(exc) from exc
+    return {
+        "conversation": result["conversation"],
+        "memory_index": result["memory_index"],
+        "obsidian_projection": result["obsidian_projection"],
+    }
 
 
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str) -> dict[str, Any]:
-    current = _read_ui_conversations()
-    deleted = next((item for item in current if str(item.get("id")) == conversation_id), None)
-    conversations = [item for item in current if str(item.get("id")) != conversation_id]
-    _write_ui_conversations(conversations)
-    if not deleted:
+    try:
+        result = await asyncio.to_thread(_conversation_lifecycle().delete, conversation_id)
+    except ConversationLifecycleError as exc:
+        if exc.code != "CONVERSATION_NOT_FOUND":
+            raise _conversation_http_error(exc) from exc
         return {"ok": True, "found": False, "obsidian_projection": {"ok": True, "found": False}}
-    thread_id = str(deleted.get("thread_id") or deleted.get("id") or conversation_id)
-    projection, deleted_fts, deleted_context = await asyncio.gather(
-        asyncio.to_thread(_archive_ui_conversation, deleted),
-        asyncio.to_thread(_fts5_memory.delete_thread, thread_id),
-        asyncio.to_thread(_conversation_context_store.clear, thread_id),
-    )
-    await asyncio.to_thread(
-        SessionsReader(
-            checkpoints_db=REPO_ROOT / "data" / "memory" / "checkpoints.db",
-            sessions_db=REPO_ROOT / "data" / "memory" / "sessions.db",
-        ).delete,
-        thread_id,
-    )
     return {
         "ok": True,
         "found": True,
-        "deleted_fts_rows": deleted_fts,
-        "deleted_context_refs": deleted_context,
-        "obsidian_projection": projection,
+        "deleted_fts_rows": result["deleted_fts_rows"],
+        "deleted_context_refs": result["deleted_context_refs"],
+        "obsidian_projection": result["obsidian_projection"],
     }
 
 

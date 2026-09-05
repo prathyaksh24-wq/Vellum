@@ -5,6 +5,15 @@
   var SIDEBAR_ACTION_ID = "ui.sidebar.set";
   var SURFACE_ACTION_ID = "ui.surface.configure";
   var RESET_ACTION_ID = "ui.workspace.reset";
+  var CONVERSATION_NEW_ACTION_ID = "conversation.new";
+  var CONVERSATION_OPEN_ACTION_ID = "conversation.open";
+  var CONVERSATION_PIN_ACTION_ID = "conversation.pin";
+  var CONVERSATION_UNPIN_ACTION_ID = "conversation.unpin";
+  var CONVERSATION_RENAME_ACTION_ID = "conversation.rename";
+  var CONVERSATION_SPACE_ACTION_ID = "conversation.space.set";
+  var CONVERSATION_ARCHIVE_ACTION_ID = "conversation.archive";
+  var CONVERSATION_RESTORE_ACTION_ID = "conversation.restore";
+  var CONVERSATION_DELETE_ACTION_ID = "conversation.delete";
 
   var SURFACE_DEFAULTS = {
     workspace: { visible: true, location: "application", properties: { theme: "dark" } },
@@ -266,14 +275,140 @@
     };
   }
 
+  function createConversationActionRuntime(options) {
+    options = options || {};
+    var client = options.client || (window.VellumApi && window.VellumApi.appActions);
+    var getConversation = options.getConversation || function () { return null; };
+    var upsertConversation = options.upsertConversation || function () {};
+    var removeConversation = options.removeConversation || function () {};
+    var navigate = options.navigate || function () {};
+    var requestIdFactory = options.requestIdFactory || function () {
+      return "ui_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+    };
+    var pendingConfirmations = new Map();
+    var pendingRequests = new Map();
+    var revisionActions = new Set([
+      CONVERSATION_PIN_ACTION_ID,
+      CONVERSATION_UNPIN_ACTION_ID,
+      CONVERSATION_RENAME_ACTION_ID,
+      CONVERSATION_SPACE_ACTION_ID,
+      CONVERSATION_ARCHIVE_ACTION_ID,
+      CONVERSATION_RESTORE_ACTION_ID,
+      CONVERSATION_DELETE_ACTION_ID,
+    ]);
+
+    function context(source, conversationId) {
+      return {
+        source: source || "ui",
+        invocation_conversation_id: conversationId || "",
+      };
+    }
+
+    function rememberRequest(request) {
+      if (!request || !request.request_id) return request;
+      pendingRequests.set(request.request_id, request);
+      return request;
+    }
+
+    function applyReceipt(receipt) {
+      if (!receipt) return receipt;
+      if (receipt.status === "confirmation_required") {
+        var confirmation = receipt.confirmation || {};
+        var request = pendingRequests.get(receipt.request_id);
+        if (confirmation.token && request) pendingConfirmations.set(confirmation.token, request);
+        return receipt;
+      }
+      pendingRequests.delete(receipt.request_id);
+      if (["applied", "undone"].indexOf(receipt.status) < 0) return receipt;
+      var result = receipt.result || {};
+      if (result.deleted && result.conversation_id) {
+        removeConversation(result.conversation_id);
+      } else if (result.conversation && result.conversation.id) {
+        upsertConversation(result.conversation);
+      }
+      if (result.navigation) navigate(result.navigation);
+      return receipt;
+    }
+
+    async function dispatch(actionId, args, dispatchOptions) {
+      if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+      dispatchOptions = dispatchOptions || {};
+      var actionArguments = Object.assign({}, args || {});
+      if (revisionActions.has(actionId) && actionArguments.target_revision === undefined) {
+        var targetId = actionArguments.conversation_id || dispatchOptions.conversationId || "";
+        var target = targetId && getConversation(targetId);
+        if (target && Number.isInteger(target.revision)) actionArguments.target_revision = target.revision;
+      }
+      var request = {
+        request_id: requestIdFactory(),
+        action_id: actionId,
+        action_version: "1",
+        arguments: actionArguments,
+      };
+      rememberRequest(request);
+      var actionContext = context(dispatchOptions.source || "ui", dispatchOptions.conversationId || "");
+      var receipt = await client.dispatch(request, actionContext);
+      if (receipt && receipt.status === "confirmation_required" && receipt.confirmation && receipt.confirmation.token) {
+        pendingConfirmations.set(receipt.confirmation.token, request);
+      }
+      return applyReceipt(receipt);
+    }
+
+    async function confirm(receipt, confirmOptions) {
+      if (!receipt || !receipt.confirmation || !receipt.confirmation.token) throw new Error("CONFIRMATION_UNAVAILABLE");
+      if (!client || typeof client.confirm !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+      confirmOptions = confirmOptions || {};
+      var token = receipt.confirmation.token;
+      var request = pendingConfirmations.get(token);
+      if (!request) throw new Error("CONFIRMATION_UNAVAILABLE");
+      var confirmed = await client.confirm(
+        token,
+        request,
+        context(confirmOptions.source || "ui", confirmOptions.conversationId || ""),
+      );
+      if (confirmed && confirmed.status !== "confirmation_required") pendingConfirmations.delete(token);
+      return applyReceipt(confirmed);
+    }
+
+    async function undo(receipt, undoOptions) {
+      if (!receipt || !receipt.undo || !receipt.undo.token) throw new Error("UNDO_UNAVAILABLE");
+      if (!client || typeof client.undo !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+      undoOptions = undoOptions || {};
+      var undone = await client.undo(
+        receipt.undo.token,
+        context(undoOptions.source || "ui", undoOptions.conversationId || ""),
+      );
+      return applyReceipt(undone);
+    }
+
+    return {
+      context: context,
+      rememberRequest: rememberRequest,
+      applyReceipt: applyReceipt,
+      dispatch: dispatch,
+      confirm: confirm,
+      undo: undo,
+    };
+  }
+
   window.VellumUI = window.VellumUI || {};
   window.VellumUI.AppActions = {
     STORAGE_KEY: STORAGE_KEY,
     SIDEBAR_ACTION_ID: SIDEBAR_ACTION_ID,
     SURFACE_ACTION_ID: SURFACE_ACTION_ID,
     RESET_ACTION_ID: RESET_ACTION_ID,
+    CONVERSATION_NEW_ACTION_ID: CONVERSATION_NEW_ACTION_ID,
+    CONVERSATION_OPEN_ACTION_ID: CONVERSATION_OPEN_ACTION_ID,
+    CONVERSATION_PIN_ACTION_ID: CONVERSATION_PIN_ACTION_ID,
+    CONVERSATION_UNPIN_ACTION_ID: CONVERSATION_UNPIN_ACTION_ID,
+    CONVERSATION_RENAME_ACTION_ID: CONVERSATION_RENAME_ACTION_ID,
+    CONVERSATION_SPACE_ACTION_ID: CONVERSATION_SPACE_ACTION_ID,
+    CONVERSATION_ARCHIVE_ACTION_ID: CONVERSATION_ARCHIVE_ACTION_ID,
+    CONVERSATION_RESTORE_ACTION_ID: CONVERSATION_RESTORE_ACTION_ID,
+    CONVERSATION_DELETE_ACTION_ID: CONVERSATION_DELETE_ACTION_ID,
     SURFACE_DEFAULTS: clone(SURFACE_DEFAULTS),
     SURFACE_DEFINITIONS: clone(SURFACE_DEFINITIONS),
     createWorkspaceLayoutRuntime: createWorkspaceLayoutRuntime,
+    createConversationActionRuntime: createConversationActionRuntime,
   };
 })();

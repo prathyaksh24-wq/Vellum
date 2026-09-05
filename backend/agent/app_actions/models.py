@@ -89,6 +89,12 @@ class ActionUndo(BaseModel):
     target_revision: int
 
 
+class ActionConfirmation(BaseModel):
+    token: str
+    expires_at: datetime
+    target_revision: int
+
+
 class ActionReceipt(BaseModel):
     receipt_id: str
     request_id: str
@@ -100,6 +106,7 @@ class ActionReceipt(BaseModel):
     target: ActionTarget
     result: dict[str, Any] = Field(default_factory=dict)
     undo: ActionUndo | None = None
+    confirmation: ActionConfirmation | None = None
     message: str = ""
     error_code: str = ""
     audit_label: str = ""
@@ -148,4 +155,10 @@ class AppActionDispatchEnvelope(BaseModel):
 
 class AppActionUndoEnvelope(BaseModel):
     token: str = Field(min_length=1)
+    context: AppActionContext
+
+
+class AppActionConfirmEnvelope(BaseModel):
+    token: str = Field(min_length=1)
+    request: AppActionRequest
     context: AppActionContext

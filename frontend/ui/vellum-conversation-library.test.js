@@ -59,9 +59,18 @@ describe("conversation library frontend", () => {
 
   test("supports durable manual Space corrections and automatic reset", () => {
     expect(html).toContain("const SpacePickerModal");
-    expect(html).toContain("API.conversations.organize(id, patch)");
+    expect(html).toContain("dispatchConversationAction('conversation.space.set'");
     expect(html).toContain("assignment: 'manual'");
     expect(html).toContain("assignment: 'automatic'");
+  });
+
+  test("routes conversation controls and chat receipts through one App Action runtime", () => {
+    expect(html).toContain("createConversationActionRuntime");
+    expect(html).toContain("'conversation.unpin' : 'conversation.pin'");
+    expect(html).toContain("dispatchConversationAction('conversation.archive'");
+    expect(html).toContain("dispatchConversationAction('conversation.delete'");
+    expect(html).toContain("conversationActionRuntimeRef.current.applyReceipt(receipt)");
+    expect(html).toContain("conversationActionRuntimeRef.current.rememberRequest(request)");
   });
 
   test("does not replace optimistic chats when initial backend hydration finishes late", () => {
