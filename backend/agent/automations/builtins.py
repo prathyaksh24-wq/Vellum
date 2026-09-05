@@ -51,6 +51,12 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
         "schedule": "30 2 * * *",
     },
     {
+        "key": "discord_intelligence_sync",
+        "name": "Discord intelligence sync",
+        "instructions": "Index recent messages from allowlisted Discord channels into Knowledge Core.",
+        "schedule": "every 1m",
+    },
+    {
         "key": "skill_curator_tick",
         "name": "Skill curator tick",
         "instructions": "Curate skills: review candidates, prune stale proposals, refresh the index.",
@@ -148,6 +154,12 @@ async def _youtube_projection_handler() -> None:
     await asyncio.to_thread(run_projection)
 
 
+async def _discord_sync_handler() -> None:
+    from agent.scheduler.discord_intelligence import run_sync
+
+    await asyncio.to_thread(run_sync)
+
+
 async def _curator_tick_handler() -> None:
     from agent.skills.curator_runtime import get_curator_runtime
 
@@ -159,5 +171,6 @@ _HANDLERS: dict[str, Any] = {
     "nightly_digest": _nightly_digest_handler,
     "vault_retention": _vault_retention_handler,
     "youtube_intelligence_projection": _youtube_projection_handler,
+    "discord_intelligence_sync": _discord_sync_handler,
     "skill_curator_tick": _curator_tick_handler,
 }

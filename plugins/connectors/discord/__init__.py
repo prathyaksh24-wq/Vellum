@@ -14,6 +14,13 @@ CAPABILITIES = [
     "discord.channels",
     "discord.messages",
     "discord.send_message",
+    "discord.reply_message",
+    "discord.edit_own_message",
+    "discord.delete_own_message",
+    "discord.add_reaction",
+    "discord.create_thread",
+    "discord.send_thread_message",
+    "discord.send_attachment",
 ]
 
 

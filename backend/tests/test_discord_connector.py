@@ -46,6 +46,13 @@ def test_discord_manifest_registers_bot_capabilities() -> None:
         "discord.channels",
         "discord.messages",
         "discord.send_message",
+        "discord.reply_message",
+        "discord.edit_own_message",
+        "discord.delete_own_message",
+        "discord.add_reaction",
+        "discord.create_thread",
+        "discord.send_thread_message",
+        "discord.send_attachment",
     ]
     assert context.connectors["discord"]["capabilities"] == plugin.manifest.capabilities
 
@@ -56,7 +63,19 @@ def test_discord_install_url_requests_only_current_bot_permissions() -> None:
     query = parse_qs(urlparse(module.auth.bot_install_url(application_id="123456789012345678")).query)
 
     assert query["scope"] == ["bot"]
-    assert query["permissions"] == [str((1 << 10) | (1 << 11) | (1 << 16))]
+    assert query["permissions"] == [
+        str(
+            (1 << 6)
+            | (1 << 10)
+            | (1 << 11)
+            | (1 << 14)
+            | (1 << 15)
+            | (1 << 16)
+            | (1 << 18)
+            | (1 << 35)
+            | (1 << 38)
+        )
+    ]
     assert query["integration_type"] == ["0"]
 
 
@@ -68,7 +87,7 @@ def test_discord_client_sends_bot_auth_and_bounds_message_history() -> None:
         calls.append({"method": method, "url": url, **kwargs})
         return FakeResponse([
             {
-                "id": "message-1",
+                "id": "333333333333333333",
                 "channel_id": "222222222222222222",
                 "content": "Hello from Discord",
                 "timestamp": "2026-09-01T10:00:00+00:00",
@@ -94,6 +113,129 @@ def test_discord_client_sends_bot_auth_and_bounds_message_history() -> None:
     assert calls[0]["headers"]["Authorization"] == "Bot bot-secret"
 
 
+def test_discord_client_executes_scoped_rich_message_actions() -> None:
+    module = discord_module()
+    calls: list[dict] = []
+
+    def request(method: str, url: str, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        if method == "GET" and url.endswith("/users/@me"):
+            return FakeResponse({"id": "bot-1", "username": "Vellum"})
+        if method == "GET" and "/messages/" in url:
+            return FakeResponse({
+                "id": "message-1",
+                "channel_id": "222222222222222222",
+                "content": "Before",
+                "author": {"id": "bot-1", "username": "Vellum", "bot": True},
+            })
+        if method == "GET" and url.endswith("/channels/444444444444444444"):
+            return FakeResponse({"id": "444444444444444444", "parent_id": "222222222222222222", "type": 11})
+        if method == "DELETE" or method == "PUT":
+            return FakeResponse({}, status_code=204)
+        if url.endswith("/threads"):
+            return FakeResponse({"id": "444444444444444444", "name": "Project thread", "parent_id": "222222222222222222"})
+        return FakeResponse({
+            "id": "sent-1",
+            "channel_id": "222222222222222222",
+            "content": kwargs.get("json", {}).get("content", ""),
+            "author": {"id": "bot-1", "username": "Vellum", "bot": True},
+        })
+
+    client = module.client.DiscordClient(
+        bot_token="bot-secret",
+        policy=module.policy.DiscordAccessPolicy(allowed_channel_ids={"222222222222222222"}),
+        request_backend=request,
+    )
+
+    reply = client.reply_message(
+        "222222222222222222", "333333333333333333", "Reply", confirmed=True,
+    )
+    edited = client.edit_own_message(
+        "222222222222222222", "333333333333333333", "After", confirmed=True,
+    )
+    deleted = client.delete_own_message(
+        "222222222222222222", "333333333333333333", confirmed=True,
+    )
+    reacted = client.add_reaction(
+        "222222222222222222", "333333333333333333", "thumbsup:123", confirmed=True,
+    )
+    thread = client.create_thread(
+        "222222222222222222", "333333333333333333", "Project thread", confirmed=True,
+    )
+    thread_message = client.send_thread_message(
+        "222222222222222222", "444444444444444444", "Thread reply", confirmed=True,
+    )
+
+    assert reply["id"] == "sent-1"
+    assert edited["content"] == "After"
+    assert deleted == {"id": "333333333333333333", "deleted": True}
+    assert reacted == {"message_id": "333333333333333333", "emoji": "thumbsup:123", "added": True}
+    assert thread["id"] == "444444444444444444"
+    assert thread_message["id"] == "sent-1"
+    assert any(call.get("json", {}).get("message_reference") == {"message_id": "333333333333333333"} for call in calls)
+    assert any("/reactions/thumbsup%3A123/@me" in call["url"] for call in calls)
+    assert all(call.get("json", {}).get("allowed_mentions", {"parse": []}) == {"parse": []} for call in calls)
+
+
+def test_discord_client_refuses_to_edit_or_delete_another_authors_message() -> None:
+    module = discord_module()
+
+    def request(method: str, url: str, **_kwargs):
+        if url.endswith("/users/@me"):
+            return FakeResponse({"id": "bot-1", "username": "Vellum"})
+        return FakeResponse({
+            "id": "message-1",
+            "channel_id": "222222222222222222",
+            "author": {"id": "person-1", "username": "Person"},
+        })
+
+    client = module.client.DiscordClient(
+        bot_token="bot-secret",
+        policy=module.policy.DiscordAccessPolicy(allowed_channel_ids={"222222222222222222"}),
+        request_backend=request,
+    )
+
+    with pytest.raises(module.errors.DiscordPermissionError, match="own messages"):
+        client.edit_own_message("222222222222222222", "333333333333333333", "No", confirmed=True)
+    with pytest.raises(module.errors.DiscordPermissionError, match="own messages"):
+        client.delete_own_message("222222222222222222", "333333333333333333", confirmed=True)
+
+
+def test_discord_client_sends_bounded_attachment_without_a_local_path() -> None:
+    module = discord_module()
+    calls: list[dict] = []
+
+    def request(method: str, url: str, **kwargs):
+        calls.append({"method": method, "url": url, **kwargs})
+        return FakeResponse({
+            "id": "sent-file-1",
+            "channel_id": "222222222222222222",
+            "content": "Evidence",
+            "author": {"id": "bot-1", "username": "Vellum", "bot": True},
+            "attachments": [{"id": "file-1", "filename": "notes.txt", "size": 5}],
+        })
+
+    client = module.client.DiscordClient(
+        bot_token="bot-secret",
+        policy=module.policy.DiscordAccessPolicy(allowed_channel_ids={"222222222222222222"}),
+        request_backend=request,
+    )
+
+    result = client.send_attachment(
+        "222222222222222222",
+        filename="notes.txt",
+        content_type="text/plain",
+        data=b"hello",
+        content="Evidence",
+        confirmed=True,
+    )
+
+    assert result["attachments"][0]["filename"] == "notes.txt"
+    assert calls[0]["files"]["files[0]"][0] == "notes.txt"
+    assert calls[0]["files"]["files[0]"][1] == b"hello"
+    assert "path" not in repr(calls[0]).casefold()
+
+
 def test_discord_client_fails_closed_outside_channel_allowlist() -> None:
     module = discord_module()
     client = module.client.DiscordClient(
@@ -109,7 +251,7 @@ def test_discord_client_fails_closed_outside_channel_allowlist() -> None:
         client.list_messages("333333333333333333")
 
 
-def test_discord_client_sends_only_after_confirmation_or_standing_authorization() -> None:
+def test_discord_client_sends_only_after_confirmation() -> None:
     module = discord_module()
     sent: list[dict] = []
 
@@ -128,10 +270,12 @@ def test_discord_client_sends_only_after_confirmation_or_standing_authorization(
         client.send_message("222222222222222222", "Hello")
 
     confirmed = client.send_message("222222222222222222", "Hello", confirmed=True)
-    autonomous = client.send_message("333333333333333333", "Hello")
+    with pytest.raises(module.errors.DiscordPermissionError, match="confirmation"):
+        client.send_message("333333333333333333", "Hello")
+    formerly_autonomous = client.send_message("333333333333333333", "Hello", confirmed=True)
 
     assert confirmed["id"] == "sent-1"
-    assert autonomous["id"] == "sent-1"
+    assert formerly_autonomous["id"] == "sent-1"
     assert all(call["json"]["allowed_mentions"] == {"parse": []} for call in sent)
 
 
@@ -174,6 +318,36 @@ def test_discord_capabilities_keep_external_writes_confirmation_gated() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    ("capability", "payload"),
+    [
+        ("discord.reply_message", {"channel_id": "222222222222222222", "message_id": "333333333333333333", "content": "Reply"}),
+        ("discord.edit_own_message", {"channel_id": "222222222222222222", "message_id": "333333333333333333", "content": "Edit"}),
+        ("discord.delete_own_message", {"channel_id": "222222222222222222", "message_id": "333333333333333333"}),
+        ("discord.add_reaction", {"channel_id": "222222222222222222", "message_id": "333333333333333333", "emoji": "👍"}),
+        ("discord.create_thread", {"channel_id": "222222222222222222", "message_id": "333333333333333333", "name": "Thread"}),
+        ("discord.send_thread_message", {"channel_id": "222222222222222222", "thread_id": "444444444444444444", "content": "Thread reply"}),
+        ("discord.send_attachment", {"channel_id": "222222222222222222", "filename": "notes.txt", "content_type": "text/plain", "data": b"hello", "content": "Evidence"}),
+    ],
+)
+def test_discord_rich_message_capabilities_require_confirmation(capability: str, payload: dict) -> None:
+    service = DiscordCapabilityService(
+        reply_backend=lambda channel_id, message_id, content, confirmed: {"id": "reply-1"},
+        edit_backend=lambda channel_id, message_id, content, confirmed: {"id": message_id},
+        delete_backend=lambda channel_id, message_id, confirmed: {"id": message_id, "deleted": True},
+        reaction_backend=lambda channel_id, message_id, emoji, confirmed: {"message_id": message_id, "added": True},
+        thread_backend=lambda channel_id, message_id, name, confirmed: {"id": "thread-1"},
+        thread_message_backend=lambda channel_id, thread_id, content, confirmed: {"id": "thread-message-1"},
+        attachment_backend=lambda channel_id, filename, content_type, data, content, confirmed: {"id": "attachment-1"},
+        allowed_channel_ids={"222222222222222222"},
+    )
+    registry = service.build_registry()
+
+    with pytest.raises(ToolPermissionError, match="requires explicit confirmation"):
+        registry.invoke(capability, payload, agent_name="DiscordAgent")
+    assert registry.invoke(capability, {**payload, "confirm": True}, agent_name="DiscordAgent")["action"] == capability
+
+
 def test_discord_agent_prepares_write_then_executes_confirmed_action() -> None:
     service = _service()
     registry = service.build_registry()
@@ -189,15 +363,45 @@ def test_discord_agent_prepares_write_then_executes_confirmed_action() -> None:
     assert completed.structured_payload["message"]["id"] == "sent-1"
 
 
-def test_discord_agent_uses_standing_authorization_for_autonomous_channel() -> None:
+def test_discord_agent_resolves_an_allowlisted_channel_name() -> None:
+    service = _service()
+    agent = DiscordAgent(tool_registry=service.build_registry(), discord_service=service)
+
+    prepared = agent.answer('Send "Hello team" to #general on Discord')
+
+    assert prepared.status == "blocked"
+    assert prepared.action_request["payload"]["channel_id"] == "222222222222222222"
+
+
+def test_discord_agent_prepares_rich_message_actions() -> None:
+    service = DiscordCapabilityService(
+        reply_backend=lambda channel_id, message_id, content, confirmed: {"id": "reply-1", "content": content},
+        reaction_backend=lambda channel_id, message_id, emoji, confirmed: {"message_id": message_id, "emoji": emoji, "added": True},
+        allowed_channel_ids={"222222222222222222"},
+    )
+    agent = DiscordAgent(tool_registry=service.build_registry(), discord_service=service)
+
+    reply = agent.answer(
+        'Reply "Got it" to Discord message 333333333333333333 in channel 222222222222222222'
+    )
+    reaction = agent.answer(
+        'React "👍" to Discord message 333333333333333333 in channel 222222222222222222'
+    )
+
+    assert reply.action_request["action"] == "discord.reply_message"
+    assert reply.action_request["payload"]["content"] == "Got it"
+    assert reaction.action_request["action"] == "discord.add_reaction"
+    assert reaction.action_request["payload"]["emoji"] == "👍"
+
+
+def test_discord_agent_requires_confirmation_for_legacy_autonomous_channel_config() -> None:
     service = _service(autonomous=True)
     agent = DiscordAgent(tool_registry=service.build_registry(), discord_service=service)
 
     response = agent.answer('Send "Daily update" to Discord channel 222222222222222222')
 
-    assert response.status == "answered"
-    assert response.action_request == {}
-    assert response.structured_payload["message"]["content"] == "Daily update"
+    assert response.status == "blocked"
+    assert response.action_request["action"] == "discord.send_message"
 
 
 def test_discord_agent_reads_recent_channel_messages() -> None:
@@ -209,6 +413,16 @@ def test_discord_agent_reads_recent_channel_messages() -> None:
     assert response.status == "answered"
     assert "Current project status" in response.summary
     assert response.sources[0].kind == "api"
+
+
+def test_discord_agent_reads_an_allowlisted_channel_by_name() -> None:
+    service = _service()
+    agent = DiscordAgent(tool_registry=service.build_registry(), discord_service=service)
+
+    response = agent.answer("Show recent Discord messages in #general")
+
+    assert response.status == "answered"
+    assert "Current project status" in response.summary
 
 
 def test_discord_client_errors_never_include_provider_payload_or_token() -> None:
@@ -265,8 +479,24 @@ def test_discord_profile_owns_scoped_tools_and_memory() -> None:
         "discord.channels",
         "discord.messages",
         "discord.send_message",
+        "discord.reply_message",
+        "discord.edit_own_message",
+        "discord.delete_own_message",
+        "discord.add_reaction",
+        "discord.create_thread",
+        "discord.send_thread_message",
+        "discord.send_attachment",
     ]
-    assert profile.tools.require_confirmation == ["discord.send_message"]
+    assert profile.tools.require_confirmation == [
+        "discord.send_message",
+        "discord.reply_message",
+        "discord.edit_own_message",
+        "discord.delete_own_message",
+        "discord.add_reaction",
+        "discord.create_thread",
+        "discord.send_thread_message",
+        "discord.send_attachment",
+    ]
     assert profile.memory.read_scopes == ["user_profile", "shared", "agent:DiscordAgent"]
     assert profile.memory.write_scope == "agent:DiscordAgent"
 

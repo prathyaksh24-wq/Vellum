@@ -67,6 +67,14 @@ describe("Vellum plugins API adapter", () => {
     await api.discordChannels("guild-1");
     await api.discordMessages("channel-1", 10);
     await api.discordSend("channel-1", "Hello", true);
+    await api.discordReply("channel-1", "message-1", "Reply", true);
+    await api.discordEditOwn("channel-1", "message-1", "Edited", true);
+    await api.discordDeleteOwn("channel-1", "message-1", true);
+    await api.discordReact("channel-1", "message-1", "thumbsup:1", true);
+    await api.discordCreateThread("channel-1", "message-1", "Thread", true);
+    await api.discordSendThread("channel-1", "thread-1", "Thread reply", true);
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    await api.discordSendAttachment("channel-1", file, "Evidence", true);
 
     expect(fetchImpl.mock.calls[0][0]).toBe("/api/plugins/discord/status");
     expect(fetchImpl.mock.calls[1][0]).toBe("/api/plugins/discord/install");
@@ -77,5 +85,14 @@ describe("Vellum plugins API adapter", () => {
       "/api/plugins/discord/channels/channel-1/messages",
       { method: "POST", body: { content: "Hello", confirm: true } },
     ]);
+    expect(fetchImpl.mock.calls[6][0]).toBe("/api/plugins/discord/channels/channel-1/messages/message-1/reply");
+    expect(fetchImpl.mock.calls[7][0]).toBe("/api/plugins/discord/channels/channel-1/messages/message-1");
+    expect(fetchImpl.mock.calls[8][0]).toBe("/api/plugins/discord/channels/channel-1/messages/message-1/delete");
+    expect(fetchImpl.mock.calls[9][0]).toBe("/api/plugins/discord/channels/channel-1/messages/message-1/reactions");
+    expect(fetchImpl.mock.calls[10][0]).toBe("/api/plugins/discord/channels/channel-1/messages/message-1/threads");
+    expect(fetchImpl.mock.calls[11][0]).toBe("/api/plugins/discord/channels/channel-1/threads/thread-1/messages");
+    expect(fetchImpl.mock.calls[12][0]).toBe("/api/plugins/discord/channels/channel-1/attachments");
+    expect(fetchImpl.mock.calls[12][1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[12][1].body).toBeInstanceOf(FormData);
   });
 });

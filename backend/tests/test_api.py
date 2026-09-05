@@ -200,6 +200,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert features["spotify"]["plugin_owned"] is True
     assert features["youtube"]["plugin_owned"] is True
     assert features["discord"]["plugin_owned"] is True
+    assert features["discord"]["endpoints"]["send_attachment"].endswith("/{channel_id}/attachments")
     assert features["memory_orchestrator"]["plugin_owned"] is True
     assert features["hermes_skills"]["plugin_owned"] is True
     assert features["openrouter"]["endpoints"]["models"] == "/api/models"

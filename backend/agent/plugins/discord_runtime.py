@@ -29,7 +29,6 @@ def discord_policy():
     return _discord_module.policy.DiscordAccessPolicy(
         allowed_guild_ids=_csv_ids(settings.discord_allowed_guild_ids),
         allowed_channel_ids=_csv_ids(settings.discord_allowed_channel_ids),
-        autonomous_channel_ids=_csv_ids(settings.discord_autonomous_channel_ids),
     )
 
 
@@ -78,7 +77,7 @@ def discord_status(*, probe: bool = False) -> dict[str, Any]:
         "bot_username": str(account.get("global_name") or account.get("username") or ""),
         "allowed_guild_count": len(_csv_ids(settings.discord_allowed_guild_ids)),
         "allowed_channel_count": len(_csv_ids(settings.discord_allowed_channel_ids)),
-        "autonomous_channel_count": len(_csv_ids(settings.discord_autonomous_channel_ids)),
+        "autonomous_channel_count": 0,
     }
 
 

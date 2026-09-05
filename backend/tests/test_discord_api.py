@@ -10,6 +10,7 @@ from agent.tools.capabilities.discord_service import DiscordCapabilityService
 class FakeDiscordClient:
     def __init__(self) -> None:
         self.sent: list[tuple[str, str, bool]] = []
+        self.attachments: list[tuple[str, str, str, bytes, str, bool]] = []
 
     def list_guilds(self):
         return [{"id": "111111111111111111", "name": "Test Guild", "allowed": True}]
@@ -24,6 +25,10 @@ class FakeDiscordClient:
         self.sent.append((channel_id, content, confirmed))
         return {"id": "sent-1", "channel_id": channel_id, "content": content}
 
+    def send_attachment(self, channel_id, filename, content_type, data, content, *, confirmed):
+        self.attachments.append((channel_id, filename, content_type, data, content, confirmed))
+        return {"id": "sent-file-1", "channel_id": channel_id, "attachments": [{"filename": filename}]}
+
 
 def _client(monkeypatch) -> tuple[TestClient, FakeDiscordClient]:
     fake = FakeDiscordClient()
@@ -36,6 +41,9 @@ def _client(monkeypatch) -> tuple[TestClient, FakeDiscordClient]:
         ),
         send_backend=lambda channel_id, content, confirmed: fake.send_message(
             channel_id, content, confirmed=confirmed
+        ),
+        attachment_backend=lambda channel_id, filename, content_type, data, content, confirmed: fake.send_attachment(
+            channel_id, filename, content_type, data, content, confirmed=confirmed
         ),
         allowed_guild_ids={"111111111111111111"},
         allowed_channel_ids={"222222222222222222"},
@@ -99,6 +107,35 @@ def test_discord_http_send_rejects_untyped_confirmation(monkeypatch) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_discord_http_attachment_requires_confirmation_and_forwards_file_bytes(monkeypatch) -> None:
+    client, fake = _client(monkeypatch)
+
+    response = client.post(
+        "/api/plugins/discord/channels/222222222222222222/attachments",
+        data={"content": "Evidence", "confirm": "true"},
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"]["id"] == "sent-file-1"
+    assert fake.attachments == [
+        ("222222222222222222", "notes.txt", "text/plain", b"hello", "Evidence", True)
+    ]
+
+
+def test_discord_http_attachment_rejects_nonliteral_confirmation(monkeypatch) -> None:
+    client, fake = _client(monkeypatch)
+
+    response = client.post(
+        "/api/plugins/discord/channels/222222222222222222/attachments",
+        data={"content": "Evidence", "confirm": "yes"},
+        files={"file": ("notes.txt", b"hello", "text/plain")},
+    )
+
+    assert response.status_code == 403
+    assert fake.attachments == []
 
 
 def test_discord_http_reads_fail_closed_outside_channel_allowlist(monkeypatch) -> None:
