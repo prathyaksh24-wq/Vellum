@@ -501,6 +501,11 @@ def _write_ui_conversations(conversations: list[dict[str, Any]]) -> None:
     ConversationLifecycle(path=_UI_CONVERSATIONS_PATH).replace_all(conversations)
 
 
+def _conversation_timestamp() -> str:
+    """Keep automation delivery compatible with the conversation API adapter."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
 def _message_text(message: Any) -> str:
     if not isinstance(message, dict):
         return ""
