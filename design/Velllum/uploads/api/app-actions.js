@@ -19,9 +19,17 @@
     );
   }
 
+  function confirm(token, request, context) {
+    return client.request(
+      "/api/app-actions/confirm",
+      client.jsonOptions("POST", { token: token, request: request, context: context }),
+    );
+  }
+
   window.VellumApi.appActions = {
     catalog: catalog,
     dispatch: dispatch,
+    confirm: confirm,
     undo: undo,
   };
 })();
