@@ -39,7 +39,9 @@ class DiscordAgent:
         action = self._mutation_action(lowered)
         if action:
             return self._prepare_mutation(clean, action)
-        if any(term in lowered for term in ("recent", "messages", "conversation", "what did", "catch me up")):
+        if re.search(r"\bmessages?\b", lowered) or any(
+            term in lowered for term in ("recent", "conversation", "what did", "catch me up")
+        ):
             return self._answer_messages(clean)
         if "channel" in lowered:
             return self._answer_channels(clean)
