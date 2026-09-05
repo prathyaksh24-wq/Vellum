@@ -116,6 +116,7 @@ def start_scheduler(
         builtins_enabled={
             "nightly_digest": bool(getattr(settings, "enable_nightly_digest", True)),
             "vault_retention": retention_enabled,
+            "discord_intelligence_sync": bool(getattr(settings, "discord_intelligence_sync_enabled", True)),
         },
     )
     scheduler.start()

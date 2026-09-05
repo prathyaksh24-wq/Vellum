@@ -22,12 +22,9 @@ class DiscordAccessPolicy:
     ) -> None:
         guilds = _identifiers(allowed_guild_ids)
         channels = _identifiers(allowed_channel_ids)
-        autonomous = _identifiers(autonomous_channel_ids)
-        if not autonomous <= channels:
-            raise ValueError("Autonomous Discord channels must also be read-allowlisted")
         object.__setattr__(self, "allowed_guild_ids", guilds)
         object.__setattr__(self, "allowed_channel_ids", channels)
-        object.__setattr__(self, "autonomous_channel_ids", autonomous)
+        object.__setattr__(self, "autonomous_channel_ids", frozenset())
 
     def require_guild(self, guild_id: str) -> str:
         clean = _identifier(guild_id)
@@ -43,12 +40,13 @@ class DiscordAccessPolicy:
 
     def authorize_send(self, channel_id: str, *, confirmed: bool = False) -> str:
         clean = self.require_channel(channel_id)
-        if not confirmed and clean not in self.autonomous_channel_ids:
+        if not confirmed:
             raise DiscordPermissionError("Discord message requires confirmation")
         return clean
 
     def is_autonomous(self, channel_id: str) -> bool:
-        return _identifier(channel_id) in self.autonomous_channel_ids
+        self.require_channel(channel_id)
+        return False
 
 
 def _identifiers(values: set[str] | frozenset[str] | None) -> frozenset[str]:

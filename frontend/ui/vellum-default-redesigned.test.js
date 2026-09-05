@@ -101,6 +101,18 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("DISCORD_BOT_TOKEN");
   });
 
+  test("provides confirmation-gated Discord operations in the plugin detail", () => {
+    expect(html).toContain("const DiscordWorkspace");
+    expect(html).toContain("API.plugins.discordMessages");
+    expect(html).toContain("API.plugins.discordReply");
+    expect(html).toContain("API.plugins.discordEditOwn");
+    expect(html).toContain("API.plugins.discordDeleteOwn");
+    expect(html).toContain("API.plugins.discordReact");
+    expect(html).toContain("API.plugins.discordCreateThread");
+    expect(html).toContain("API.plugins.discordSendAttachment");
+    expect(html).toContain("Confirm Discord action");
+  });
+
   test("keeps model selection request-scoped and persisted with conversations", () => {
     for (const id of [
       "openai/gpt-5.6-sol",

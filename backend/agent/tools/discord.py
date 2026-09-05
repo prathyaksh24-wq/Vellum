@@ -36,9 +36,11 @@ def _external_response_json(response: SpecialistResponse) -> str:
     action_request = response.action_request if isinstance(response.action_request, dict) else {}
     structured = response.structured_payload if isinstance(response.structured_payload, dict) else {}
     sent_message = structured.get("message") if isinstance(structured.get("message"), dict) else {}
+    thread = structured.get("thread") if isinstance(structured.get("thread"), dict) else {}
+    reaction = structured.get("reaction") if isinstance(structured.get("reaction"), dict) else {}
     if action_request:
         summary = "DiscordAgent prepared a Discord action that requires local confirmation."
-    elif sent_message:
+    elif sent_message or thread or reaction:
         summary = "DiscordAgent completed a policy-controlled Discord action."
     elif response.sources:
         summary = f"DiscordAgent read {len(response.sources)} local-only Discord message(s)."
@@ -53,14 +55,13 @@ def _external_response_json(response: SpecialistResponse) -> str:
         "confidence": response.confidence,
         "memory_proposals": [],
         "activity_events": [],
-        "structured_payload": (
-            {
-                "authorization": str(structured.get("authorization") or ""),
-                "message": {"sent": bool(sent_message.get("id"))},
-            }
-            if sent_message
-            else {}
-        ),
+        "structured_payload": {
+            "authorization": str(structured.get("authorization") or ""),
+            "action": str(structured.get("action") or ""),
+            "message": {"sent": bool(sent_message)},
+            "thread": {"created": bool(thread.get("id"))},
+            "reaction": {"added": bool(reaction.get("added"))},
+        } if sent_message or thread or reaction else {},
         "action_request": (
             {
                 "action": str(action_request.get("action") or ""),
@@ -79,7 +80,8 @@ def discord_agent(query: str, config: RunnableConfig | None = None) -> str:
     """Delegate Discord reads and bot actions to DiscordAgent.
 
     DiscordAgent owns installed-bot identity, server and channel reads, recent
-    messages, and policy-controlled sends. It never uses a user account token.
+    messages, and policy-controlled message, reaction, and thread actions. It
+    never uses a user account token.
     """
     clean_query = str(query or "").strip()
     if not clean_query:

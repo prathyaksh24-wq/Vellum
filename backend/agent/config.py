@@ -181,7 +181,7 @@ class Settings(BaseSettings):
     discord_bot_token: str = Field(default="", alias="DISCORD_BOT_TOKEN")
     discord_allowed_guild_ids: str = Field(default="", alias="DISCORD_ALLOWED_GUILD_IDS")
     discord_allowed_channel_ids: str = Field(default="", alias="DISCORD_ALLOWED_CHANNEL_IDS")
-    discord_autonomous_channel_ids: str = Field(default="", alias="DISCORD_AUTONOMOUS_CHANNEL_IDS")
+    discord_intelligence_sync_enabled: bool = Field(default=True, alias="DISCORD_INTELLIGENCE_SYNC_ENABLED")
     obsidian_api_key: str = Field(default="", alias="OBSIDIAN_API_KEY")
     obsidian_mcp_url: str = Field(default="https://127.0.0.1:27124/mcp/", alias="OBSIDIAN_MCP_URL")
     obsidian_mcp_use_stream: bool = Field(default=False, alias="OBSIDIAN_MCP_USE_STREAM")
