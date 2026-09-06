@@ -4165,8 +4165,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
-    submitted_action = _app_action_runtime.match_submission(action_message)
-    if submitted_action is not None:
+    action_turn = _app_action_runtime.plan_submission(action_message)
+    submitted_actions = list(action_turn.actions)
+    action_receipts = []
+    if submitted_actions:
         action_context = request.action_context or AppActionContext(
             source="nlp",
             invocation_conversation_id=active_thread_id,
@@ -4175,21 +4177,54 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             "source": "nlp",
             "invocation_conversation_id": active_thread_id,
         })
-        receipt = _app_action_runtime.dispatch(submitted_action, action_context)
-        response_text = receipt.message or "App action completed."
+        action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
+
+    turn_kind = "mixed" if action_turn.is_mixed else "action"
+
+    async def action_events():
+        for submitted_action, receipt in zip(submitted_actions, action_receipts):
+            yield _sse("app.action.requested", {
+                "request": submitted_action.model_dump(mode="json"),
+                "thread_id": active_thread_id,
+                "turn_kind": turn_kind,
+            })
+            yield _sse("app.action.receipt", {
+                "receipt": receipt.model_dump(mode="json"),
+                "thread_id": active_thread_id,
+                "turn_kind": turn_kind,
+            })
+
+    async def with_action_events(events):
+        emitted_actions = False
+        async for event in events:
+            yield event
+            if not emitted_actions:
+                async for action_event in action_events():
+                    yield action_event
+                emitted_actions = True
+        if not emitted_actions:
+            async for action_event in action_events():
+                yield action_event
+
+    def stream_response(events) -> StreamingResponse:
+        combined = with_action_events(events) if action_turn.is_mixed else events
+        return StreamingResponse(
+            _audited_turn_stream(combined, turn_audit),
+            media_type="text/event-stream",
+        )
+
+    if submitted_actions and not action_turn.conversation_message:
+        response_text = "\n".join(
+            receipt.message or "App action completed."
+            for receipt in action_receipts
+        )
 
         async def app_action_events():
             response_id = _stream_id("resp")
             item_id = _stream_id("msg")
             yield _response_created(response_id=response_id, thread_id=active_thread_id)
-            yield _sse("app.action.requested", {
-                "request": submitted_action.model_dump(mode="json"),
-                "thread_id": active_thread_id,
-            })
-            yield _sse("app.action.receipt", {
-                "receipt": receipt.model_dump(mode="json"),
-                "thread_id": active_thread_id,
-            })
+            async for event in action_events():
+                yield event
             yield _response_output_text_delta(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -4204,10 +4239,17 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 sources=[],
             )
 
-        return StreamingResponse(
-            _audited_turn_stream(app_action_events(), turn_audit),
-            media_type="text/event-stream",
-        )
+        return stream_response(app_action_events())
+
+    if action_turn.is_mixed:
+        if action_message == clean_message:
+            clean_message = action_turn.conversation_message
+        else:
+            clean_message = clean_message.replace(
+                action_message,
+                action_turn.conversation_message,
+                1,
+            )
 
     skill_command = _skill_surface().slash(clean_message)
     if skill_command["handled"]:
@@ -4219,28 +4261,24 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
             yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return StreamingResponse(_audited_turn_stream(skill_event(), turn_audit), media_type="text/event-stream")
+        return stream_response(skill_event())
     clean_message = str(skill_command.get("expanded") or clean_message)
     skill_system_result = _skill_system_answer(clean_message)
     if skill_system_result is not None:
         answer, tools = skill_system_result
-        return StreamingResponse(
-            _audited_turn_stream(_skill_system_stream(answer, tools, active_thread_id), turn_audit),
-            media_type="text/event-stream",
-        )
+        return stream_response(_skill_system_stream(answer, tools, active_thread_id))
     if request.force_web_search:
         clean_message = _with_forced_web_search_context(clean_message)
     computer_use_intent = _computer_use_mode_intent(clean_message)
     if computer_use_intent:
-        return StreamingResponse(
-            _audited_turn_stream(_stream_computer_use_command(
+        return stream_response(
+            _stream_computer_use_command(
                 clean_message=clean_message,
                 intent=computer_use_intent,
                 active_thread_id=active_thread_id,
                 source="voice" if request.voice else "text",
                 voice=request.voice,
-            ), turn_audit),
-            media_type="text/event-stream",
+            )
         )
 
     if clean_message.startswith("/project"):
@@ -4260,24 +4298,20 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield f"event: token\ndata: {json.dumps({'text': msg})}\n\n"
             yield f"event: final\ndata: {final_response.model_dump_json()}\n\n"
 
-        return StreamingResponse(_audited_turn_stream(single_event(), turn_audit), media_type="text/event-stream")
+        return stream_response(single_event())
 
-    return StreamingResponse(
-        _audited_turn_stream(
-            _stream_agent_turn(
-                clean_message=clean_message,
-                active_thread_id=active_thread_id,
-                model=request.model,
-                source="voice" if request.voice else "agent",
-                voice=request.voice,
-                store=request.store,
-                attachments=request.attachments,
-                turn_audit=turn_audit,
-                reasoning_mode=request.reasoning_mode,
-            ),
-            turn_audit,
-        ),
-        media_type="text/event-stream",
+    return stream_response(
+        _stream_agent_turn(
+            clean_message=clean_message,
+            active_thread_id=active_thread_id,
+            model=request.model,
+            source="voice" if request.voice else "agent",
+            voice=request.voice,
+            store=request.store,
+            attachments=request.attachments,
+            turn_audit=turn_audit,
+            reasoning_mode=request.reasoning_mode,
+        )
     )
 
 

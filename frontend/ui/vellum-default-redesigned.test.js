@@ -56,6 +56,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("setSidebarPinned");
   });
 
+  test("keeps mixed App Action turns in the visible conversation", () => {
+    expect(html).toContain("turn.turn_kind !== 'mixed'");
+  });
+
   test("loads the shared select component outside the application shell", () => {
     expect(html).toContain('src="components/v-select.jsx"');
     expect(html).toContain("const VSelect = window.VellumUI.VSelect");
