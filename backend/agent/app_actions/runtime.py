@@ -22,6 +22,7 @@ from agent.app_actions.models import (
     AppActionRequest,
     SurfacePresentation,
     UISurfaceDefinition,
+    WorkspaceLayoutSnapshot,
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -73,6 +74,18 @@ class _ConfirmationRecord:
     target_reference: str
     expected_revision: int
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class AppActionTurn:
+    """The actions and conversational work found in one submitted turn."""
+
+    actions: tuple[AppActionRequest, ...] = ()
+    conversation_message: str = ""
+
+    @property
+    def is_mixed(self) -> bool:
+        return bool(self.actions and self.conversation_message)
 
 
 class SurfaceActionError(ValueError):
@@ -127,6 +140,7 @@ class AppActionRuntime:
         undo_token_factory: Callable[[], str] | None = None,
         confirmation_token_factory: Callable[[], str] | None = None,
         conversation_lifecycle: ConversationLifecycle | Callable[[], ConversationLifecycle] | None = None,
+        action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
         self._receipt_store = receipt_store or InMemoryReceiptStore()
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -134,6 +148,7 @@ class AppActionRuntime:
         self._undo_token_factory = undo_token_factory or (lambda: secrets.token_urlsafe(24))
         self._confirmation_token_factory = confirmation_token_factory or (lambda: secrets.token_urlsafe(24))
         self._conversation_lifecycle = conversation_lifecycle
+        self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._surfaces = {surface.reference: surface for surface in self._surface_definitions()}
         self._definitions = {
@@ -172,11 +187,110 @@ class AppActionRuntime:
         )
 
     def catalog(self, context: AppActionContext | None = None) -> AppActionCatalog:
-        del context
         return AppActionCatalog(
-            actions=list(self._definitions.values()),
+            actions=[
+                definition
+                for definition in self._definitions.values()
+                if self._is_available(definition, context)
+            ],
             surfaces=list(self._surfaces.values()),
         )
+
+    def plan_submission(self, message: str) -> AppActionTurn:
+        """Separate explicitly submitted App Actions from conversational work."""
+
+        submitted = " ".join(str(message or "").strip().split())
+        if not submitted:
+            return AppActionTurn()
+        exact = self.match_submission(submitted)
+        clauses = self._split_mixed_clauses(submitted)
+        if len(clauses) >= 2:
+            actions: list[AppActionRequest] = []
+            conversation_clauses: list[str] = []
+            for clause in clauses:
+                request = self.match_submission(clause)
+                if request is None:
+                    conversation_clauses.append(clause)
+                else:
+                    actions.append(request)
+            if actions and self._is_confident_mixed_submission(
+                submitted,
+                actions=actions,
+                conversation_clauses=conversation_clauses,
+                exact=exact,
+            ):
+                return AppActionTurn(
+                    actions=tuple(actions),
+                    conversation_message=" and ".join(conversation_clauses),
+                )
+        if exact is not None:
+            return AppActionTurn(actions=(exact,))
+        return AppActionTurn(conversation_message=submitted)
+
+    @classmethod
+    def _is_confident_mixed_submission(
+        cls,
+        submitted: str,
+        *,
+        actions: list[AppActionRequest],
+        conversation_clauses: list[str],
+        exact: AppActionRequest | None,
+    ) -> bool:
+        if not conversation_clauses or exact is None or len(actions) > 1:
+            return True
+        if cls._has_unquoted_explicit_separator(submitted):
+            return True
+        return all(cls._looks_like_conversation_clause(clause) for clause in conversation_clauses)
+
+    @staticmethod
+    def _looks_like_conversation_clause(clause: str) -> bool:
+        normalized = clause.strip().casefold()
+        if normalized.endswith("?"):
+            return True
+        return re.match(
+            r"(?:please\s+)?(?:"
+            r"tell|explain|summarize|describe|answer|reply|write|draft|brainstorm|compare|analyze|analyse|"
+            r"research|find|search|look|show|give|list|recommend|calculate|translate|help|"
+            r"what|what's|whats|who|whose|when|where|why|how|is|are|can|could|would|should|do|does"
+            r")\b",
+            normalized,
+        ) is not None
+
+    @staticmethod
+    def _has_unquoted_explicit_separator(submitted: str) -> bool:
+        normalized = submitted.casefold()
+        quote = ""
+        index = 0
+        while index < len(submitted):
+            character = submitted[index]
+            if character in {"'", '"'}:
+                if (
+                    character == "'"
+                    and index > 0
+                    and index + 1 < len(submitted)
+                    and submitted[index - 1].isalnum()
+                    and submitted[index + 1].isalnum()
+                ):
+                    index += 1
+                    continue
+                quote = "" if quote == character else (character if not quote else quote)
+                index += 1
+                continue
+            if not quote and (
+                character in {",", ";"}
+                or normalized.startswith(" and then ", index)
+                or normalized.startswith(" then ", index)
+            ):
+                return True
+            index += 1
+        return False
+
+    def _is_available(
+        self,
+        definition: AppActionDefinition,
+        context: AppActionContext | None,
+    ) -> bool:
+        return bool(self._action_availability(definition, context))
 
     def match_submission(self, message: str) -> AppActionRequest | None:
         """Match only complete, explicitly submitted presentation instructions."""
@@ -399,6 +513,58 @@ class AppActionRuntime:
         return " ".join(str(value or "").strip().strip("\"'").split())
 
     @staticmethod
+    def _split_mixed_clauses(submitted: str) -> list[str]:
+        separators = (
+            ", and then ",
+            " and then ",
+            ", then ",
+            " then ",
+            ", and ",
+            " and ",
+            "; ",
+            ", ",
+        )
+        normalized = submitted.casefold()
+        clauses: list[str] = []
+        start = 0
+        quote = ""
+        index = 0
+        while index < len(submitted):
+            character = submitted[index]
+            if character in {"'", '"'}:
+                if (
+                    character == "'"
+                    and index > 0
+                    and index + 1 < len(submitted)
+                    and submitted[index - 1].isalnum()
+                    and submitted[index + 1].isalnum()
+                ):
+                    index += 1
+                    continue
+                quote = "" if quote == character else (character if not quote else quote)
+                index += 1
+                continue
+            if quote:
+                index += 1
+                continue
+            separator = next(
+                (candidate for candidate in separators if normalized.startswith(candidate, index)),
+                None,
+            )
+            if separator is None:
+                index += 1
+                continue
+            clause = submitted[start:index].strip(" ,;")
+            if clause:
+                clauses.append(clause)
+            index += len(separator)
+            start = index
+        final_clause = submitted[start:].strip(" ,;")
+        if final_clause:
+            clauses.append(final_clause)
+        return clauses
+
+    @staticmethod
     def _surface_request(
         reference: str,
         *,
@@ -425,6 +591,15 @@ class AppActionRuntime:
                 access_class="unknown",
                 error_code="ACTION_UNAVAILABLE",
                 message=f"{request.action_id} is unavailable.",
+            )
+        if not self._is_available(definition, context):
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_UNAVAILABLE",
+                message=f"{definition.title} is currently unavailable.",
             )
         if request.action_version != definition.version:
             return self._error_receipt(
@@ -524,6 +699,44 @@ class AppActionRuntime:
             audit_label=definition.audit_label,
             created_at=created_at,
         )
+
+    def dispatch_many(
+        self,
+        requests: list[AppActionRequest] | tuple[AppActionRequest, ...],
+        context: AppActionContext,
+    ) -> list[ActionReceipt]:
+        """Dispatch one turn's actions in order against each preceding receipt."""
+
+        receipts: list[ActionReceipt] = []
+        current_context = context
+        for request in requests:
+            receipt = self.dispatch(request, current_context)
+            receipts.append(receipt)
+            current_context = self._context_after_receipt(current_context, receipt)
+        return receipts
+
+    @staticmethod
+    def _context_after_receipt(
+        context: AppActionContext,
+        receipt: ActionReceipt,
+    ) -> AppActionContext:
+        if receipt.status != "applied":
+            return context
+        patch = receipt.result.get("workspace_layout_patch")
+        if not isinstance(patch, dict) or not isinstance(patch.get("surfaces"), dict):
+            return context
+        surfaces = {} if patch.get("replace") else {
+            reference: presentation.model_copy(deep=True)
+            for reference, presentation in context.workspace_layout.surfaces.items()
+        }
+        for reference, presentation in patch["surfaces"].items():
+            surfaces[str(reference)] = SurfacePresentation.model_validate(presentation)
+        layout = WorkspaceLayoutSnapshot(
+            version=int(patch.get("version", context.workspace_layout.version)),
+            revision=int(patch.get("revision", context.workspace_layout.revision)),
+            surfaces=surfaces,
+        )
+        return context.model_copy(update={"workspace_layout": layout})
 
     def undo(self, token: str, context: AppActionContext) -> ActionReceipt:
         record = self._receipt_store.get(token)

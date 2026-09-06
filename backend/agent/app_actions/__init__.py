@@ -8,7 +8,7 @@ from agent.app_actions.models import (
     AppActionRequest,
     WorkspaceLayoutSnapshot,
 )
-from agent.app_actions.runtime import AppActionRuntime, get_app_action_runtime
+from agent.app_actions.runtime import AppActionRuntime, AppActionTurn, get_app_action_runtime
 
 __all__ = [
     "ActionReceipt",
@@ -17,6 +17,7 @@ __all__ = [
     "AppActionDefinition",
     "AppActionRequest",
     "AppActionRuntime",
+    "AppActionTurn",
     "WorkspaceLayoutSnapshot",
     "get_app_action_runtime",
 ]

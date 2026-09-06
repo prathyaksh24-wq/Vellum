@@ -236,4 +236,26 @@ describe("Vellum default chat stream trace", () => {
     expect(receipts).toEqual([receipt]);
     expect(deltas).toEqual(["Sidebar hidden."]);
   });
+
+  test("reports whether an App Action belongs to a mixed conversation turn", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      body: sseStream([
+        'event: app.action.requested\ndata: {"request":{"action_id":"ui.sidebar.set"},"turn_kind":"mixed"}\n\n',
+        'event: response.completed\ndata: {"response":{"thread_id":"t1","output_text":"Answer","tools":[],"sources":[]}}\n\n',
+      ]),
+    }));
+    const requested = [];
+    const api = await loadChatApi(fetchImpl);
+
+    await api.stream(
+      { message: "hide the sidebar and answer this", thread_id: "t1" },
+      { actionRequested: (request, turn) => requested.push({ request, turn }) },
+    );
+
+    expect(requested).toEqual([{
+      request: { action_id: "ui.sidebar.set" },
+      turn: { turn_kind: "mixed" },
+    }]);
+  });
 });

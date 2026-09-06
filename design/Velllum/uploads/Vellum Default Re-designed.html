@@ -8778,11 +8778,11 @@ const [slashSkills, setSlashSkills] = useState([]);
               streaming: true,
             }));
           },
-          actionRequested: request => {
+          actionRequested: (request, turn) => {
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           actionReceipt: receipt => {
             applyAppActionReceipt(receipt, {notify:true});
@@ -9296,11 +9296,11 @@ const [slashSkills, setSlashSkills] = useState([]);
               actionReceipts: [...(m.actionReceipts || []), receipt],
             }));
           },
-          actionRequested: request => {
+          actionRequested: (request, turn) => {
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           sources: sources => {
             const liveSources = normalizeSources(sources);

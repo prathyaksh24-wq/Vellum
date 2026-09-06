@@ -190,7 +190,7 @@
         var ev = parsed.event;
         var data = parsed.data;
         if (ev === "app.action.requested") {
-          if (handlers.actionRequested) handlers.actionRequested(data.request || data);
+          if (handlers.actionRequested) handlers.actionRequested(data.request || data, { turn_kind: data.turn_kind || "action" });
           continue;
         }
         if (ev === "app.action.receipt") {

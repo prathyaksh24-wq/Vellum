@@ -147,3 +147,138 @@ async def test_conversation_nlp_actions_persist_and_bypass_the_agent(monkeypatch
     assert reloaded.get("chat-current")["pinned"] is True
     assert reloaded.get("chat-current")["archived"] is False
     assert reloaded.get("chat-old")["archived"] is True
+
+
+@pytest.mark.asyncio
+async def test_pure_conversation_keeps_the_existing_agent_stream(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime())
+    streamed_messages = []
+
+    async def agent_stream(**kwargs):
+        streamed_messages.append(kwargs["clean_message"])
+        yield 'event: response.created\ndata: {"thread_id":"chat-ordinary"}\n\n'
+        yield 'event: response.completed\ndata: {"response":{"thread_id":"chat-ordinary","output_text":"Ordinary answer.","tools":[],"sources":[]}}\n\n'
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_stream)
+    response = await api.chat_stream(api.ChatRequest(
+        message="Explain why sidebars help research",
+        thread_id="chat-ordinary",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+
+    assert streamed_messages == ["Explain why sidebars help research"]
+    assert all(not name.startswith("app.action.") for name, _data in events)
+    assert next(
+        data["response"]["output_text"]
+        for name, data in events
+        if name == "response.completed"
+    ) == "Ordinary answer."
+
+
+@pytest.mark.asyncio
+async def test_mixed_safe_action_continues_the_ordinary_agent_stream(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime())
+    streamed_messages = []
+
+    async def agent_stream(**kwargs):
+        streamed_messages.append(kwargs["clean_message"])
+        yield 'event: response.created\ndata: {"thread_id":"chat-mixed"}\n\n'
+        yield 'event: response.output_text.delta\ndata: {"delta":"Bitcoin answer."}\n\n'
+        yield 'event: response.completed\ndata: {"response":{"thread_id":"chat-mixed","output_text":"Bitcoin answer.","tools":[],"sources":[]}}\n\n'
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_stream)
+    response = await api.chat_stream(api.ChatRequest(
+        message="hide the sidebar, open settings, and tell me about Bitcoin",
+        thread_id="chat-mixed",
+        action_context=AppActionContext(
+            source="ui",
+            workspace_layout=WorkspaceLayoutSnapshot(
+                revision=0,
+                surfaces={
+                    "sidebar": SurfacePresentation(visible=True),
+                    "settings": SurfacePresentation(visible=False),
+                },
+            ),
+        ),
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+
+    requested = [data for name, data in events if name == "app.action.requested"]
+    receipts = [data["receipt"] for name, data in events if name == "app.action.receipt"]
+    completed = next(data["response"] for name, data in events if name == "response.completed")
+
+    assert [event["turn_kind"] for event in requested] == ["mixed", "mixed"]
+    assert [receipt["status"] for receipt in receipts] == ["applied", "applied"]
+    assert [receipt["result"]["workspace_layout_patch"]["base_revision"] for receipt in receipts] == [0, 1]
+    assert [name for name, _data in events[:5]] == [
+        "response.created",
+        "app.action.requested",
+        "app.action.receipt",
+        "app.action.requested",
+        "app.action.receipt",
+    ]
+    assert streamed_messages == ["tell me about Bitcoin"]
+    assert completed["output_text"] == "Bitcoin answer."
+
+
+@pytest.mark.asyncio
+async def test_mixed_delete_waits_for_confirmation_without_blocking_answer(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    lifecycle = ConversationLifecycle(path=tmp_path / "conversations.json")
+    lifecycle.save("chat-current", {
+        "thread_id": "thread-current",
+        "title": "Current chat",
+        "messages": [],
+    })
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(conversation_lifecycle=lifecycle))
+    streamed_messages = []
+
+    async def agent_stream(**kwargs):
+        streamed_messages.append(kwargs["clean_message"])
+        yield 'event: response.created\ndata: {"thread_id":"thread-current"}\n\n'
+        yield 'event: response.completed\ndata: {"response":{"thread_id":"thread-current","output_text":"Summary.","tools":[],"sources":[]}}\n\n'
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_stream)
+    response = await api.chat_stream(api.ChatRequest(
+        message="delete this chat and summarize Bitcoin",
+        thread_id="thread-current",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "confirmation_required"
+    assert receipt["confirmation"]["token"]
+    assert streamed_messages == ["summarize Bitcoin"]
+    assert lifecycle.get("chat-current") is not None
+
+
+@pytest.mark.asyncio
+async def test_unavailable_action_returns_receipt_and_never_falls_back_to_agent(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    monkeypatch.setattr(
+        api,
+        "_app_action_runtime",
+        AppActionRuntime(action_availability=lambda _definition, _context: False),
+    )
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("unavailable App Actions must not become simulated conversation work")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="hide the sidebar",
+        thread_id="old-chat",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "unavailable"
+    assert receipt["error_code"] == "ACTION_UNAVAILABLE"
+    assert receipt["message"] == "Set sidebar visibility is currently unavailable."

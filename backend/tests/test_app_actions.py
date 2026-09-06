@@ -8,6 +8,7 @@ from agent.app_actions.models import (
 )
 from agent.app_actions.runtime import (
     AppActionRuntime,
+    CONVERSATION_RENAME_ACTION_ID,
     SIDEBAR_ACTION_ID,
     SURFACE_ACTION_ID,
     WORKSPACE_RESET_ACTION_ID,
@@ -163,6 +164,93 @@ def test_submission_matcher_handles_complete_presentation_instructions() -> None
     assert subject.match_submission("hide the sidebar and tell me the news") is None
     assert subject.match_submission("tell me how to hide a sidebar") is None
     assert subject.match_submission("I am typing hide the side") is None
+
+
+def test_submission_planner_separates_multiple_actions_from_conversation() -> None:
+    subject = runtime()
+
+    planned = subject.plan_submission(
+        "Hide the sidebar, open settings, and tell me today's Bitcoin news"
+    )
+
+    assert [request.action_id for request in planned.actions] == [
+        SIDEBAR_ACTION_ID,
+        SURFACE_ACTION_ID,
+    ]
+    assert planned.actions[0].arguments == {"visible": False}
+    assert planned.actions[1].arguments == {"reference": "settings", "visible": True}
+    assert planned.conversation_message == "tell me today's Bitcoin news"
+    assert planned.is_mixed is True
+
+    trailing = subject.plan_submission("What's new with Bitcoin and hide the sidebar")
+
+    assert [request.action_id for request in trailing.actions] == [SIDEBAR_ACTION_ID]
+    assert trailing.conversation_message == "What's new with Bitcoin"
+
+
+def test_submission_planner_separates_conversation_from_free_form_action_arguments() -> None:
+    subject = runtime()
+
+    renamed = subject.plan_submission("Rename this chat to Alpha and tell me about Bitcoin")
+    relabeled = subject.plan_submission(
+        'Change the send button text to "Run" and summarize today\'s news'
+    )
+
+    assert [request.action_id for request in renamed.actions] == [CONVERSATION_RENAME_ACTION_ID]
+    assert renamed.actions[0].arguments == {"title": "Alpha"}
+    assert renamed.conversation_message == "tell me about Bitcoin"
+    assert [request.action_id for request in relabeled.actions] == [SURFACE_ACTION_ID]
+    assert relabeled.actions[0].arguments["properties"] == {"label": "Run"}
+    assert relabeled.conversation_message == "summarize today's news"
+
+
+def test_submission_planner_preserves_and_inside_an_unquoted_action_argument() -> None:
+    subject = runtime()
+
+    planned = subject.plan_submission("Rename this chat to Research and Development")
+
+    assert [request.action_id for request in planned.actions] == [CONVERSATION_RENAME_ACTION_ID]
+    assert planned.actions[0].arguments == {"title": "Research and Development"}
+    assert planned.conversation_message == ""
+
+
+def test_live_catalog_and_dispatch_reflect_current_action_availability() -> None:
+    enabled = {SIDEBAR_ACTION_ID}
+    subject = AppActionRuntime(
+        action_availability=lambda definition, _context: definition.id in enabled,
+    )
+    request = subject.match_submission("hide the sidebar")
+
+    assert [definition.id for definition in subject.catalog(layout_context()).actions] == [
+        SIDEBAR_ACTION_ID,
+    ]
+
+    enabled.clear()
+    unavailable = subject.dispatch(request, layout_context())
+
+    assert subject.catalog(layout_context()).actions == []
+    assert unavailable.status == "unavailable"
+    assert unavailable.error_code == "ACTION_UNAVAILABLE"
+    assert unavailable.message == "Set sidebar visibility is currently unavailable."
+
+    enabled.add(SIDEBAR_ACTION_ID)
+    applied = subject.dispatch(request, layout_context())
+
+    assert applied.status == "applied"
+
+
+def test_multiple_layout_actions_advance_the_context_revision_in_order() -> None:
+    subject = runtime()
+    requests = subject.plan_submission("hide the sidebar and open settings").actions
+
+    receipts = subject.dispatch_many(requests, layout_context())
+
+    assert [receipt.status for receipt in receipts] == ["applied", "applied"]
+    assert [
+        receipt.result["workspace_layout_patch"]["base_revision"]
+        for receipt in receipts
+    ] == [0, 1]
+    assert receipts[1].result["workspace_layout_patch"]["surfaces"]["settings"]["visible"] is True
 
 
 def test_generic_surface_action_supports_device_and_session_patches() -> None:
