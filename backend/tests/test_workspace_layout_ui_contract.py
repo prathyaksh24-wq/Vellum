@@ -33,7 +33,7 @@ def test_visible_workspace_controls_dispatch_through_app_actions() -> None:
 def test_interface_actions_remove_the_optimistic_chat_turn() -> None:
     ui_source = UI_PATH.read_text(encoding="utf-8")
 
-    assert "actionRequested: request =>" in ui_source
+    assert "actionRequested: (request, turn) =>" in ui_source
     assert "rollbackAppActionTurn" in ui_source
     assert "messages:c.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)" in ui_source
     assert "cs.filter(c => c.id !== chatId)" in ui_source

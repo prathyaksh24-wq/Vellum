@@ -205,8 +205,9 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                 inline=(
                     "Use only the installed Vellum bot and profile-approved Discord capabilities. "
                     "Never impersonate the user or use user tokens. Read only allowlisted servers and "
-                    "channels. Prepare external writes for confirmation unless the host policy grants "
-                    "standing authorization to the exact target channel."
+                    "channels. Historical package data is local-only and represents messages authored "
+                    "by the account owner, not complete conversations. Every external write requires "
+                    "explicit confirmation."
                 )
             ),
             tools=ToolPolicy(
@@ -215,6 +216,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                     "discord.guilds",
                     "discord.channels",
                     "discord.messages",
+                    "discord.archive_history",
                     "discord.send_message",
                     "discord.reply_message",
                     "discord.edit_own_message",

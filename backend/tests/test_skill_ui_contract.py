@@ -33,3 +33,14 @@ def test_reasoning_composer_exposes_codex_style_categorized_slash_menu() -> None
     assert "[['plugins','Plugins'],['apps','Apps'],['mcps','MCPs'],['skills','Skills']]" in ui_source
     assert "Select an item to inspect its apps, MCPs, skills, and status." in ui_source
     assert "onOpenSkills={() => nav('skills')}" in ui_source
+
+
+def test_discord_plugin_exposes_local_data_package_import() -> None:
+    api_source = (ROOT / "design" / "Velllum" / "uploads" / "api" / "plugins.js").read_text(encoding="utf-8")
+    ui_source = (ROOT / "design" / "Velllum" / "uploads" / "Vellum Default Re-designed.html").read_text(encoding="utf-8")
+
+    assert 'client.request("/api/plugins/discord/archive/import"' in api_source
+    assert '"X-Vellum-Confirm":"true"' in api_source
+    assert "API.plugins.discordArchiveStatus()" in ui_source
+    assert "API.plugins.discordImportArchive(archiveFile)" in ui_source
+    assert "authored messages · local-only" in ui_source

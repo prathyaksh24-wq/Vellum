@@ -9,6 +9,12 @@ from agent.tools.registry import ToolRegistry
 
 class DiscordAgent:
     name = "DiscordAgent"
+    ARCHIVE_PATTERNS = (
+        r"\bdiscord\s+(?:archive|history|data\s+package|export)\b",
+        r"\b(?:archive|historical|old)\s+discord\b",
+        r"\bwhat\s+did\s+i\s+(?:say|write|post)\b.+\bdiscord\b",
+        r"\bdid\s+i\s+ever\s+(?:say|mention|discuss|write|post)\b.+\bdiscord\b",
+    )
     WRITE_ACTIONS = frozenset({
         "discord.send_message",
         "discord.reply_message",
@@ -39,6 +45,8 @@ class DiscordAgent:
         action = self._mutation_action(lowered)
         if action:
             return self._prepare_mutation(clean, action)
+        if self._is_archive_query(lowered):
+            return self._answer_archive_history(clean)
         if re.search(r"\bmessages?\b", lowered) or any(
             term in lowered for term in ("recent", "conversation", "what did", "catch me up")
         ):
@@ -48,6 +56,67 @@ class DiscordAgent:
         if any(term in lowered for term in ("servers", "guilds")):
             return self._answer_guilds()
         return self._answer_account()
+
+    def _answer_archive_history(self, query: str) -> SpecialistResponse:
+        year_match = re.search(r"\b(20\d{2})\b", query)
+        year = int(year_match.group(1)) if year_match else None
+        search_query = self._archive_search_query(query)
+        try:
+            result = self.tool_registry.invoke(
+                "discord.archive_history",
+                {"query": search_query, "year": year, "limit": 20},
+                agent_name=self.name,
+            )
+        except Exception as exc:
+            return self._error("DiscordAgent could not read local Discord history.", exc)
+        items = list(result.get("items") or [])
+        if not result.get("available"):
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="No imported Discord data-package history is available yet.",
+                analysis="Used discord.archive_history from the local Knowledge Core.",
+                confidence=1.0,
+            )
+        if not items:
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary="No authored messages in the imported Discord history matched that request.",
+                analysis="Used discord.archive_history from the local Knowledge Core.",
+                confidence=1.0,
+            )
+        lines: list[str] = []
+        sources: list[SpecialistSource] = []
+        for index, item in enumerate(items, start=1):
+            content = str(item.get("content") or "").strip() or "[attachment]"
+            channel = str(item.get("channel") or item.get("channel_id") or "unknown channel")
+            timestamp = str(item.get("timestamp") or "")
+            lines.append(f"[{index}] {content} ({channel}, {timestamp})")
+            sources.append(
+                SpecialistSource(
+                    kind="memory",
+                    title=f"Authored Discord message in {channel}",
+                    path_or_url=str(item.get("uri") or ""),
+                    snippet=content[:500],
+                    captured_at=timestamp,
+                    freshness="historical",
+                )
+            )
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=(
+                f"Imported Discord history contains {int(result.get('total') or 0):,} messages "
+                "authored by this account. Matching messages:\n" + "\n".join(lines)
+            ),
+            analysis=(
+                "Used discord.archive_history from the local Knowledge Core. The Discord export "
+                "contains the account owner's authored messages, not complete conversations."
+            ),
+            sources=sources,
+            confidence=1.0,
+        )
 
     def execute_action_request(self, action_request: dict) -> SpecialistResponse:
         action = str(action_request.get("action") or "")
@@ -246,6 +315,32 @@ class DiscordAgent:
         if cls._is_send_query(lowered):
             return "discord.send_message"
         return ""
+
+    @classmethod
+    def _is_archive_query(cls, lowered: str) -> bool:
+        return any(re.search(pattern, lowered) for pattern in cls.ARCHIVE_PATTERNS)
+
+    @staticmethod
+    def _archive_search_query(query: str) -> str:
+        quoted = DiscordAgent._quoted_text(query)
+        if quoted:
+            return quoted[:500]
+        about = re.search(
+            r"\babout\s+(.+?)(?:\s+(?:on|in|from)\s+(?:my\s+)?discord(?:\s+(?:archive|history|export))?|[?.!]|$)",
+            query,
+            flags=re.I,
+        )
+        if about:
+            return about.group(1).strip()[:500]
+        clean = re.sub(r"\b20\d{2}\b", " ", query)
+        clean = re.sub(
+            r"\b(?:discord|archive|history|historical|old|data package|export|messages?|show|find|search|"
+            r"what|did|i|ever|say|write|post|mention|discuss|my|for|in|on|from)\b",
+            " ",
+            clean,
+            flags=re.I,
+        )
+        return re.sub(r"\s+", " ", clean).strip(" ?.!,:;")[:500]
 
     def _mutation_payload(self, query: str, action: str) -> tuple[dict, str]:
         channel_id, channel_error = self._resolve_channel_id(query)

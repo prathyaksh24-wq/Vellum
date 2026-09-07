@@ -10,6 +10,7 @@ AccountBackend = Callable[[], dict[str, Any]]
 GuildsBackend = Callable[[], list[dict[str, Any]]]
 ChannelsBackend = Callable[[str], list[dict[str, Any]]]
 MessagesBackend = Callable[[str, int, str], list[dict[str, Any]]]
+ArchiveHistoryBackend = Callable[[str, int | None, int], dict[str, Any]]
 SendBackend = Callable[[str, str, bool], dict[str, Any]]
 ReplyBackend = Callable[[str, str, str, bool], dict[str, Any]]
 EditBackend = Callable[[str, str, str, bool], dict[str, Any]]
@@ -28,6 +29,7 @@ class DiscordCapabilityService:
         guilds_backend: GuildsBackend | None = None,
         channels_backend: ChannelsBackend | None = None,
         messages_backend: MessagesBackend | None = None,
+        archive_history_backend: ArchiveHistoryBackend | None = None,
         send_backend: SendBackend | None = None,
         reply_backend: ReplyBackend | None = None,
         edit_backend: EditBackend | None = None,
@@ -44,6 +46,7 @@ class DiscordCapabilityService:
         self.guilds_backend = guilds_backend or self._default_guilds
         self.channels_backend = channels_backend or self._default_channels
         self.messages_backend = messages_backend or self._default_messages
+        self.archive_history_backend = archive_history_backend or self._default_archive_history
         self.send_backend = send_backend or self._default_send
         self.reply_backend = reply_backend or self._default_reply
         self.edit_backend = edit_backend or self._default_edit
@@ -103,6 +106,16 @@ class DiscordCapabilityService:
         )
         registry.register(
             CapabilityRecord(
+                name="discord.archive_history",
+                namespace="discord",
+                access=CapabilityAccess.READ,
+                allowed_agents=read_agents,
+                stream_label="Read local Discord history",
+                adapter=self.archive_history,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
                 name="discord.send_message",
                 namespace="discord",
                 access=CapabilityAccess.EXTERNAL_WRITE,
@@ -155,6 +168,16 @@ class DiscordCapabilityService:
         before = str(payload.get("before") or "").strip()
         items = [dict(item) for item in self.messages_backend(channel_id, limit, before)]
         return {"action": "discord.messages", "channel_id": channel_id, "items": items[:limit]}
+
+    def archive_history(self, payload: dict[str, Any]) -> dict[str, Any]:
+        query = str(payload.get("query") or "").strip()[:500]
+        year_value = payload.get("year")
+        year = _integer(year_value, 0) if year_value not in (None, "") else None
+        if year is not None and not 2000 <= year <= 2100:
+            raise ValueError("Discord archive year is invalid")
+        limit = max(1, min(_integer(payload.get("limit"), 20), 50))
+        result = dict(self.archive_history_backend(query, year, limit))
+        return {"action": "discord.archive_history", **result}
 
     def send_message(self, payload: dict[str, Any]) -> dict[str, Any]:
         channel_id, confirmed = self._authorized_channel(payload)
@@ -327,6 +350,18 @@ class DiscordCapabilityService:
         from agent.plugins.discord_runtime import discord_client
 
         return discord_client().list_messages(channel_id, limit=limit, before=before)
+
+    @staticmethod
+    def _default_archive_history(query: str, year: int | None, limit: int) -> dict[str, Any]:
+        from agent.config import get_settings
+        from agent.knowledge.runtime import get_knowledge_core
+        from agent.plugins.discord_package import DiscordPackageImporter
+
+        settings = get_settings()
+        return DiscordPackageImporter(
+            store=get_knowledge_core().store,
+            account_id=settings.honcho_user_id,
+        ).history(query=query, year=year, limit=limit)
 
     @staticmethod
     def _default_send(channel_id: str, content: str, confirmed: bool) -> dict[str, Any]:
