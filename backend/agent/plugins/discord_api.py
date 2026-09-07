@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from agent.plugins.discord_runtime import (
@@ -15,6 +17,13 @@ from agent.plugins.discord_runtime import (
     discord_install_url,
     discord_service,
     discord_status,
+)
+from agent.config import get_settings
+from agent.knowledge.runtime import get_knowledge_core
+from agent.plugins.discord_package import (
+    MAX_ARCHIVE_BYTES,
+    DiscordPackageError,
+    DiscordPackageImporter,
 )
 from agent.tools.registry import ToolPermissionError
 
@@ -52,6 +61,68 @@ class DiscordConfirmRequest(BaseModel):
 @router.get("/status")
 async def get_discord_status() -> dict[str, Any]:
     return await asyncio.to_thread(discord_status, probe=True)
+
+
+def discord_package_importer() -> DiscordPackageImporter:
+    settings = get_settings()
+    return DiscordPackageImporter(
+        store=get_knowledge_core().store,
+        account_id=settings.honcho_user_id,
+    )
+
+
+@router.get("/archive/status")
+async def get_discord_archive_status() -> dict[str, Any]:
+    return await asyncio.to_thread(discord_package_importer().status)
+
+
+@router.get("/archive/history")
+async def get_discord_archive_history(
+    q: str = Query(default="", max_length=500),
+    year: int | None = Query(default=None, ge=2000, le=2100),
+    limit: int = Query(default=20, ge=1, le=50),
+) -> dict[str, Any]:
+    return await asyncio.to_thread(
+        discord_package_importer().history,
+        query=q,
+        year=year,
+        limit=limit,
+    )
+
+
+@router.post("/archive/import")
+async def import_discord_archive(request: Request) -> dict[str, Any]:
+    if request.headers.get("x-vellum-confirm", "").casefold() != "true":
+        raise HTTPException(status_code=409, detail="Discord archive import requires confirmation.")
+    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
+    if content_type not in {"application/zip", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Discord archive must be a ZIP file.")
+    try:
+        content_length = int(request.headers.get("content-length", "0") or 0)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid content length.") from exc
+    if content_length > MAX_ARCHIVE_BYTES:
+        raise HTTPException(status_code=413, detail="Discord archive is too large.")
+
+    settings = get_settings()
+    temp_root = Path(settings.knowledge_blob_path).parent / "tmp" / "discord-imports"
+    temp_root.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_root / f"{uuid4().hex}.zip"
+    written = 0
+    try:
+        with temp_path.open("xb") as target:
+            async for chunk in request.stream():
+                written += len(chunk)
+                if written > MAX_ARCHIVE_BYTES:
+                    raise HTTPException(status_code=413, detail="Discord archive is too large.")
+                target.write(chunk)
+        if written == 0:
+            raise HTTPException(status_code=422, detail="Discord archive is empty.")
+        return await asyncio.to_thread(discord_package_importer().run, temp_path)
+    except DiscordPackageError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 @router.get("/install")

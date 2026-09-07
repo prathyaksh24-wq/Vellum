@@ -4547,6 +4547,34 @@ class KnowledgeStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_source(self, source_id: str, *, include_content: bool = False) -> dict[str, Any] | None:
+        clean_source_id = source_id.strip()
+        if not clean_source_id:
+            return None
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                """
+                SELECT s.id, s.kind, s.external_id, s.account_id, s.title, s.uri,
+                       s.source_path, s.sensitivity, s.external_policy, s.trust,
+                       s.status, s.metadata_json, s.current_version_id,
+                       s.first_seen_at, s.last_seen_at, s.updated_at,
+                       v.content_hash, v.blob_path, v.byte_size,
+                       v.published_at, v.observed_at
+                FROM sources AS s
+                LEFT JOIN source_versions AS v ON v.id = s.current_version_id
+                WHERE s.id = ?
+                """,
+                (clean_source_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        result["metadata"] = json.loads(str(result.pop("metadata_json") or "{}"))
+        blob_path = str(result.pop("blob_path") or "")
+        if include_content and blob_path:
+            result["content"] = self.blobs.read_text(blob_path)
+        return result
+
     def set_source_status(self, source_id: str, status: str) -> bool:
         clean_source_id = source_id.strip()
         clean_status = status.strip()

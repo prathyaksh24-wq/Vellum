@@ -45,6 +45,7 @@ def test_discord_manifest_registers_bot_capabilities() -> None:
         "discord.guilds",
         "discord.channels",
         "discord.messages",
+        "discord.archive_history",
         "discord.send_message",
         "discord.reply_message",
         "discord.edit_own_message",
@@ -294,6 +295,21 @@ def _service(*, autonomous: bool = False) -> DiscordCapabilityService:
                 "author": {"id": "user-1", "username": "Example"},
             }
         ][:limit],
+        archive_history_backend=lambda query, year, limit: {
+            "available": True,
+            "total": 2,
+            "items": [
+                {
+                    "id": "archive-message-1",
+                    "channel_id": "archive-channel-1",
+                    "channel": "old-friends",
+                    "content": "Project alpha status",
+                    "timestamp": "2025-08-01T00:58:56+00:00",
+                    "uri": "discord://channels/archive-channel-1/messages/archive-message-1",
+                }
+            ][:limit] if not query or "project alpha" in query.casefold() else [],
+            "local_only": True,
+        },
         send_backend=lambda requested_channel, content, confirmed: {
             "id": "sent-1",
             "channel_id": requested_channel,
@@ -310,6 +326,11 @@ def test_discord_capabilities_keep_external_writes_confirmation_gated() -> None:
     registry = service.build_registry()
 
     assert registry.invoke("discord.messages", {"channel_id": "222222222222222222"}, agent_name="DiscordAgent")["items"]
+    assert registry.invoke(
+        "discord.archive_history",
+        {"query": "project alpha"},
+        agent_name="DiscordAgent",
+    )["items"]
     with pytest.raises(ToolPermissionError, match="requires explicit confirmation"):
         registry.invoke(
             "discord.send_message",
@@ -425,6 +446,19 @@ def test_discord_agent_reads_an_allowlisted_channel_by_name() -> None:
     assert "Current project status" in response.summary
 
 
+def test_discord_agent_reads_local_authored_message_history_without_a_channel_id() -> None:
+    service = _service()
+    agent = DiscordAgent(tool_registry=service.build_registry(), discord_service=service)
+
+    response = agent.answer("What did I say about project alpha in my Discord history?")
+
+    assert response.status == "answered"
+    assert "Project alpha status" in response.summary
+    assert "authored by this account" in response.summary
+    assert response.sources[0].kind == "memory"
+    assert response.sources[0].freshness == "historical"
+
+
 def test_discord_client_errors_never_include_provider_payload_or_token() -> None:
     module = discord_module()
     client = module.client.DiscordClient(
@@ -478,6 +512,7 @@ def test_discord_profile_owns_scoped_tools_and_memory() -> None:
         "discord.guilds",
         "discord.channels",
         "discord.messages",
+        "discord.archive_history",
         "discord.send_message",
         "discord.reply_message",
         "discord.edit_own_message",

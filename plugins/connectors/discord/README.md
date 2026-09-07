@@ -17,3 +17,18 @@ allowlisted channel once per minute. Reads flow through the shared tool
 observer into Knowledge Core as local-only evidence. It never posts, reacts,
 edits, deletes, or creates threads in the background. Attachments sent by
 Vellum are limited to 10 MiB and always require confirmation.
+
+## Historical data packages
+
+The Discord plugin can import the official Discord data-package ZIP without
+extracting it. Only authored message files and their channel metadata are read.
+Account profile fields, billing, payments, ads, support tickets, sessions, and
+activity telemetry are excluded. Attachment URLs are recorded as metadata with
+query strings removed; attachments are not downloaded.
+
+Imported messages use the same Knowledge Core source identity as live Discord
+reads, so a message is not duplicated when both paths observe it. The evidence
+is marked `private_local_only` with `deny_raw` external policy. A Discord export
+contains the account owner's authored messages, not replies from other people,
+so Vellum does not represent it as a complete conversation or infer preferences
+from import alone. Reimporting the same ZIP is idempotent.

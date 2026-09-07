@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -145,3 +148,52 @@ def test_discord_http_reads_fail_closed_outside_channel_allowlist(monkeypatch) -
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Discord channel is not allowlisted"}
+
+
+def test_discord_archive_http_contract_streams_confirmed_zip_to_local_importer(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    imported_paths: list[Path] = []
+
+    class FakeImporter:
+        def status(self):
+            return {"available": True, "messages": 77, "latest": "2025-08-01T00:58:56+00:00", "local_only": True}
+
+        def history(self, *, query: str, year: int | None, limit: int):
+            return {"available": True, "total": 77, "query": query, "year": year, "items": [], "local_only": True}
+
+        def run(self, path: Path):
+            imported_paths.append(path)
+            assert path.read_bytes() == b"PK\x03\x04test"
+            return {"status": "completed", "stats": {"messages": 77}}
+
+    monkeypatch.setattr(discord_api, "discord_package_importer", lambda: FakeImporter())
+    monkeypatch.setattr(
+        discord_api,
+        "get_settings",
+        lambda: SimpleNamespace(knowledge_blob_path=tmp_path / "blobs"),
+    )
+    app = FastAPI()
+    app.include_router(discord_api.router, prefix="/api")
+    client = TestClient(app)
+
+    status = client.get("/api/plugins/discord/archive/status")
+    history = client.get("/api/plugins/discord/archive/history?q=project&year=2025&limit=5")
+    denied = client.post(
+        "/api/plugins/discord/archive/import",
+        content=b"PK\x03\x04test",
+        headers={"content-type": "application/zip"},
+    )
+    imported = client.post(
+        "/api/plugins/discord/archive/import",
+        content=b"PK\x03\x04test",
+        headers={"content-type": "application/zip", "x-vellum-confirm": "true"},
+    )
+
+    assert status.json()["messages"] == 77
+    assert history.json()["query"] == "project"
+    assert denied.status_code == 409
+    assert imported.status_code == 200
+    assert imported.json()["stats"]["messages"] == 77
+    assert imported_paths and not imported_paths[0].exists()

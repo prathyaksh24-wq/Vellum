@@ -13,6 +13,7 @@ CAPABILITIES = [
     "discord.guilds",
     "discord.channels",
     "discord.messages",
+    "discord.archive_history",
     "discord.send_message",
     "discord.reply_message",
     "discord.edit_own_message",
