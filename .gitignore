@@ -33,6 +33,7 @@ data/plugins/state.json
 data/logs/
 data/cache/
 data/embeddings/
+data/exports/
 data/models/
 data/ui/
 data/knowledge/

@@ -149,4 +149,62 @@ describe("Conversation App Action adapter", () => {
     );
     expect(state.records.has("chat-1")).toBe(false);
   });
+
+  test("fork, native-window, and share receipts use semantic handlers", async () => {
+    const AppActions = await loadRuntime();
+    const state = handlers([{ id: "chat-1", title: "Source", revision: 0 }]);
+    const openNativeWindow = vi.fn();
+    const runtime = AppActions.createConversationActionRuntime({
+      client: {},
+      ...state,
+      openNativeWindow,
+    });
+    const fork = { id: "chat-fork", title: "Source (fork)", revision: 0 };
+
+    runtime.applyReceipt(actionReceipt({
+      actionId: "conversation.fork",
+      conversation: fork,
+      navigation: { view: "chat", conversation_id: "chat-fork" },
+    }));
+    runtime.applyReceipt({
+      ...actionReceipt({ actionId: "conversation.window.open", conversation: null }),
+      result: { changed: false, native_window: { conversation_id: "chat-1" } },
+    });
+    runtime.applyReceipt({
+      ...actionReceipt({ actionId: "conversation.share", conversation: null }),
+      result: { changed: true, share: { provider_id: "local_export", export_path: "D:\\exports\\chat-1.json", public_url: null } },
+    });
+
+    expect(state.records.get("chat-fork")).toEqual(fork);
+    expect(state.navigate).toHaveBeenCalledWith({ view: "chat", conversation_id: "chat-fork" });
+    expect(openNativeWindow).toHaveBeenCalledWith({ conversation_id: "chat-1" });
+  });
+
+  test("cancelling a pending share invalidates its client confirmation", async () => {
+    const AppActions = await loadRuntime();
+    const state = handlers([{ id: "chat-1", title: "Chat", revision: 0 }]);
+    const pending = actionReceipt({
+      actionId: "conversation.share",
+      conversation: { id: "chat-1", title: "Chat", revision: 0 },
+      status: "confirmation_required",
+      confirmation: { token: "confirm-share", target_revision: 0 },
+    });
+    const client = {
+      dispatch: vi.fn(async () => pending),
+      cancel: vi.fn(async () => ({ ...pending, status: "cancelled", confirmation: null, result: { cancelled: true } })),
+      confirm: vi.fn(),
+    };
+    const runtime = AppActions.createConversationActionRuntime({ client, ...state, requestIdFactory: () => "share-1" });
+
+    const receipt = await runtime.dispatch("conversation.share", { conversation_id: "chat-1" }, { conversationId: "chat-1" });
+    const cancelled = await runtime.cancel(receipt, { conversationId: "chat-1" });
+
+    expect(cancelled.status).toBe("cancelled");
+    expect(client.cancel).toHaveBeenCalledWith(
+      "confirm-share",
+      expect.objectContaining({ source: "ui", invocation_conversation_id: "chat-1" }),
+    );
+    await expect(runtime.confirm(receipt, { conversationId: "chat-1" })).rejects.toThrow("CONFIRMATION_UNAVAILABLE");
+    expect(client.confirm).not.toHaveBeenCalled();
+  });
 });

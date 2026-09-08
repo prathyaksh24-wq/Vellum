@@ -1857,6 +1857,8 @@ const IcPin = (p)=> <I {...p} d="M12 17v5 M9 4h6l1 7 2.5 2.5H5.5L8 11l1-7z"/>;
 const IcArchive = (p)=> <I {...p}><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9 M10 13h4"/></I>;
 const IcTrash = (p)=> <I {...p} d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6"/>;
 const IcShare = (p)=> <I {...p} d="M12 3v13 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>;
+const IcBranch = (p)=> <I {...p} d="M6 3v6a3 3 0 0 0 3 3h6 M15 6l4 4-4 4 M6 15v6"/>;
+const IcExternal = (p)=> <I {...p} d="M14 3h7v7 M21 3l-9 9 M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/>;
 const IcPlus = (p)=> <I {...p} d="M12 5v14 M5 12h14"/>;
 const IcShield = (p)=> <I {...p} d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z M9.5 12l2 2 3.5-4"/>;
 const IcKey2 = (p)=> <I {...p}><circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M16 7l3 3M13 10l2 2"/></I>;
@@ -3658,6 +3660,9 @@ const ChatHeadMenu = ({chat, projects, pos, onAction, onMove, onNewProject, onCl
       <div className="ctx-item dim" title="Not in this preview" onMouseEnter={() => setSub(false)}><span className="sb-ic"><IcUserPlus size={14}/></span>Start a group chat</div>
       <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('files')}><span className="sb-ic"><IcLibrary size={14}/></span>View files in chat</div>
       <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('organize')}><span className="sb-ic"><IcFolder size={14}/></span>Change Space</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('fork')}><span className="sb-ic"><IcBranch size={14}/></span>Fork chat</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('window')}><span className="sb-ic"><IcExternal size={14}/></span>Open in new window</div>
+      <div className="ctx-item" onMouseEnter={() => setSub(false)} onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
       <div className="ctx-item" onMouseEnter={() => setSub(true)} style={{position: 'relative'}}>
         <span className="sb-ic"><IcFolder size={14}/></span>Move to project<span className="p-arr"><IcChevR size={13}/></span>
         {sub && (
@@ -4093,7 +4098,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
   );
 };
 
-const MsgActions = ({msg, onRegen}) => {
+const MsgActions = ({msg, onRegen, onFork, onShare}) => {
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState(null);
   const copy = () => {
@@ -4106,7 +4111,8 @@ const MsgActions = ({msg, onRegen}) => {
       {copied && <span className="copied">copied</span>}
       <button className={'act-btn' + (vote === 'up' ? ' on' : '')} title="Good" onClick={() => setVote(v => v === 'up' ? null : 'up')}><IcThumbUp size={14}/></button>
       <button className={'act-btn' + (vote === 'down' ? ' on' : '')} title="Not right" onClick={() => setVote(v => v === 'down' ? null : 'down')}><IcThumbDown size={14}/></button>
-      <button className="act-btn" title="Share ? not in this preview"><IcShare size={14}/></button>
+      {onShare && <button className="act-btn" title="Share chat" onClick={onShare}><IcShare size={14}/></button>}
+      {onFork && <button className="act-btn" title="Fork chat from here" onClick={onFork}><IcBranch size={14}/></button>}
       <button className="act-btn" title="Regenerate" onClick={onRegen}><IcRefresh size={14}/></button>
     </div>
   );
@@ -5024,7 +5030,7 @@ const ActivityTimeline = ({msg}) => {
   );
 };
 
-const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
+const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity, onFork, onShare}) => {
   const [openWork, setOpenWork] = useState(false);
   const rawPhase = msg.phase || (msg.streaming ? 'answering' : 'done');
   const phase = rawPhase === 'thinking' && !msg.streaming ? 'done' : rawPhase;
@@ -5063,7 +5069,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity}) => {
       {!msg.streaming && refs[0] && <div className="ref-line under"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{refs[0]}</span></div>}
       {!msg.streaming && (
         <div className="turn-foot">
-          <MsgActions msg={msg} onRegen={onRegen}/>
+          <MsgActions msg={msg} onRegen={onRegen} onFork={onFork} onShare={onShare}/>
           {sourcesForMsg(msg).length > 0 && (
             <button className="sources-btn" onClick={() => onOpenActivity(msg)} title="View sources & activity">
               <span className="src-favs">{sourcesForMsg(msg).slice(0,3).map((sc,i) => <Favicon key={i} dom={sc.dom || sc.domain} source={sc} size={12}/>)}</span>Sources
@@ -5110,7 +5116,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -5141,7 +5147,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
       <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
       <div className="chat-head">
-        <button className="ch-share" title="Sharing is not in this preview"><IcShare size={14}/>Share</button>
+        <button className="ch-share" title="Review and share this chat" onClick={onShare}><IcShare size={14}/>Share</button>
         <button className="tbtn" title="Chat options" onClick={e => onHeadMenu(e)}><IcDots size={16}/></button>
       </div>
       <ConversationPreviewRail messages={msgs}/>
@@ -5157,10 +5163,11 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
                 </div>
               )}
               <div className="bubble">{m.text}</div>
+              <div className="act-row" style={{justifyContent:'flex-end'}}><button className="act-btn" title="Fork chat from here" onClick={() => onFork(m.id)}><IcBranch size={14}/></button></div>
             </div>
           ) : (
             <div key={m.id} id={'m-' + m.id}>
-              <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
+              <AssistantTurn msg={m} onRegen={() => onRegen(m.id)} onFork={() => onFork(m.id)} onShare={onShare} onAnswerNow={() => onAnswerNow(m.id)} onOpenActivity={onOpenActivity}/>
             </div>
           ))}
           <div ref={endRef}/>
@@ -6375,7 +6382,8 @@ const ArchiveView = ({chats, onRestore, onDelete}) => {
 const ChatMenu = ({chat, projectName, pos, onAction, onClose}) => (
   <Popover portal className="ctx-menu" style={clampMenuPosition(pos, 230, 260)} onClose={onClose}>
     <div className="ctx-item" onClick={() => onAction('share')}><span className="sb-ic"><IcShare size={14}/></span>Share</div>
-    <div className="ctx-hint">sharing is not in this preview</div>
+    <div className="ctx-item" onClick={() => onAction('fork')}><span className="sb-ic"><IcBranch size={14}/></span>Fork chat</div>
+    <div className="ctx-item" onClick={() => onAction('window')}><span className="sb-ic"><IcExternal size={14}/></span>Open in new window</div>
     <div className="ctx-item" onClick={() => onAction('rename')}><span className="sb-ic"><IcPenLine size={14}/></span>Rename</div>
     <div className="ctx-item" onClick={() => onAction('organize')}><span className="sb-ic"><IcFolder size={14}/></span>Change Space</div>
     {projectName && (
@@ -8225,6 +8233,12 @@ const App = () => {
       upsertConversation: conversation => conversationActionHandlersRef.current.upsertConversation && conversationActionHandlersRef.current.upsertConversation(conversation),
       removeConversation: id => conversationActionHandlersRef.current.removeConversation && conversationActionHandlersRef.current.removeConversation(id),
       navigate: navigation => conversationActionHandlersRef.current.navigate && conversationActionHandlersRef.current.navigate(navigation),
+      openNativeWindow: target => conversationActionHandlersRef.current.openNativeWindow && conversationActionHandlersRef.current.openNativeWindow(target),
+      sideEffectError: error => conversationActionHandlersRef.current.sideEffectError && conversationActionHandlersRef.current.sideEffectError(error),
+      contextResolver: () => {
+        const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.uiReference || '';
+        return {focused_ui_reference: focused};
+      },
     });
   }
   const workspaceActionRuntimeRef = useRef(null);
@@ -8567,8 +8581,12 @@ const [slashSkills, setSlashSkills] = useState([]);
           setChats(current => mergeConversationRecords(current, conversationData.conversations));
           conversationData.conversations.forEach(c => { if (c.id && c.thread_id) threadRef.current[c.id] = c.thread_id; });
           try {
+            const requestedChatId = new URLSearchParams(window.location.search).get('conversation_id');
             const lastChatId = localStorage.getItem('vellum-active-chat-id');
-            if (lastChatId && conversationData.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
+            if (requestedChatId && conversationData.conversations.some(c => c.id === requestedChatId)) {
+              setView('chat');
+              setActiveChatId(requestedChatId);
+            } else if (lastChatId && conversationData.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
           } catch {}
         }
         if (modelData && Array.isArray(modelData.models)) {
@@ -8894,7 +8912,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       return;
     }
     if (action === 'organize') { setSpacePickerChatId(id); return; }
-    if (action === 'share') return;
+    if (action === 'share') { dispatchConversationAction('conversation.share', {conversation_id:id}); return; }
+    if (action === 'fork') { dispatchConversationAction('conversation.fork', {conversation_id:id}); return; }
+    if (action === 'window') { dispatchConversationAction('conversation.window.open', {conversation_id:id}); return; }
     if (action === 'pin') {
       const chat = chats.find(c => c.id === id);
       dispatchConversationAction(chat && chat.pinned ? 'conversation.unpin' : 'conversation.pin', {conversation_id:id});
@@ -9448,6 +9468,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activeChat = chats.find(c => c.id === activeChatId) || null;
   const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
+  const getTauriInvoke = () => window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
   conversationActionHandlersRef.current = {
     getConversation: id => chats.find(chat => chat.id === id) || null,
     upsertConversation: conversation => {
@@ -9465,6 +9486,12 @@ const [slashSkills, setSlashSkills] = useState([]);
       if (navigation && navigation.conversation_id) applyOpenChatNavigation(navigation.conversation_id);
       else applyNewChatNavigation();
     },
+    openNativeWindow: target => {
+      const invoke = getTauriInvoke();
+      if (typeof invoke !== 'function') throw new Error('Native windows require Vellum desktop.');
+      return invoke('open_conversation_window', {conversationId:target.conversation_id});
+    },
+    sideEffectError: error => pushToast((error && error.message) || 'Native window could not be opened.'),
   };
 
   const pushToast = value => {
@@ -9477,10 +9504,17 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (!receipt) return;
     const notify = options.notify !== false;
     if (!notify) return;
+    const share = receipt.result && receipt.result.share;
+    const shareReview = receipt.result && receipt.result.share_review;
+    const nativeUnavailable = receipt.action_id === 'conversation.window.open' && typeof getTauriInvoke() !== 'function';
+    const confirmationMessage = shareReview
+      ? `${receipt.message} ${shareReview.message_count} messages, ${shareReview.attachment_count} attachments.`
+      : receipt.message;
     pushToast({
-      message: receipt.message || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'),
+      message: nativeUnavailable ? 'Native windows require Vellum desktop.' : (share && share.export_path ? `Local export ready: ${share.export_path}` : (confirmationMessage || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'))),
       undoReceipt: receipt.undo ? receipt : null,
       confirmationReceipt: receipt.confirmation ? receipt : null,
+      confirmationLabel: receipt.action_id === 'conversation.share' ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export') : 'Delete',
       duration: receipt.confirmation ? 10000 : (receipt.undo ? 6500 : 2800),
     });
   };
@@ -9516,6 +9550,16 @@ const [slashSkills, setSlashSkills] = useState([]);
       return confirmed;
     } catch (_) {
       pushToast('Confirmation is unavailable.');
+      return null;
+    }
+  };
+  const cancelAppAction = async receipt => {
+    try {
+      const cancelled = await conversationActionRuntimeRef.current.cancel(receipt, {conversationId:activeChatId});
+      showAppActionReceipt(cancelled);
+      return cancelled;
+    } catch (_) {
+      pushToast('Cancellation is unavailable.');
       return null;
     }
   };
@@ -9686,6 +9730,8 @@ const [slashSkills, setSlashSkills] = useState([]);
 
           <div className="main">
             {view === 'chat' && <ChatView chat={activeChat} project={activeChatProject} model={selModel} setModel={selectModel} models={models} onSend={sendMessage} onStop={() => stopActiveTurn(activeChatId)} onRegen={regenerate}
+              onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
+              onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
               filesOpen={rightPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false})}
               onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }}
@@ -9765,7 +9811,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>}
-        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.confirmationReceipt && <button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>Delete</button>}</div>}
+        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>

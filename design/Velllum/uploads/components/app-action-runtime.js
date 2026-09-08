@@ -14,6 +14,9 @@
   var CONVERSATION_ARCHIVE_ACTION_ID = "conversation.archive";
   var CONVERSATION_RESTORE_ACTION_ID = "conversation.restore";
   var CONVERSATION_DELETE_ACTION_ID = "conversation.delete";
+  var CONVERSATION_FORK_ACTION_ID = "conversation.fork";
+  var CONVERSATION_WINDOW_OPEN_ACTION_ID = "conversation.window.open";
+  var CONVERSATION_SHARE_ACTION_ID = "conversation.share";
 
   var SURFACE_DEFAULTS = {
     workspace: { visible: true, location: "application", properties: { theme: "dark" } },
@@ -282,6 +285,9 @@
     var upsertConversation = options.upsertConversation || function () {};
     var removeConversation = options.removeConversation || function () {};
     var navigate = options.navigate || function () {};
+    var openNativeWindow = options.openNativeWindow || function () {};
+    var sideEffectError = options.sideEffectError || function () {};
+    var contextResolver = options.contextResolver || function () { return {}; };
     var requestIdFactory = options.requestIdFactory || function () {
       return "ui_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
     };
@@ -295,13 +301,15 @@
       CONVERSATION_ARCHIVE_ACTION_ID,
       CONVERSATION_RESTORE_ACTION_ID,
       CONVERSATION_DELETE_ACTION_ID,
+      CONVERSATION_FORK_ACTION_ID,
+      CONVERSATION_SHARE_ACTION_ID,
     ]);
 
     function context(source, conversationId) {
-      return {
+      return Object.assign({
         source: source || "ui",
         invocation_conversation_id: conversationId || "",
-      };
+      }, contextResolver() || {});
     }
 
     function rememberRequest(request) {
@@ -327,6 +335,10 @@
         upsertConversation(result.conversation);
       }
       if (result.navigation) navigate(result.navigation);
+      if (result.native_window) {
+        try { Promise.resolve(openNativeWindow(result.native_window)).catch(sideEffectError); }
+        catch (error) { sideEffectError(error); }
+      }
       return receipt;
     }
 
@@ -370,6 +382,20 @@
       return applyReceipt(confirmed);
     }
 
+    async function cancel(receipt, cancelOptions) {
+      if (!receipt || !receipt.confirmation || !receipt.confirmation.token) throw new Error("CONFIRMATION_UNAVAILABLE");
+      if (!client || typeof client.cancel !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+      cancelOptions = cancelOptions || {};
+      var token = receipt.confirmation.token;
+      var cancelled = await client.cancel(
+        token,
+        context(cancelOptions.source || "ui", cancelOptions.conversationId || ""),
+      );
+      pendingConfirmations.delete(token);
+      pendingRequests.delete(receipt.request_id);
+      return applyReceipt(cancelled);
+    }
+
     async function undo(receipt, undoOptions) {
       if (!receipt || !receipt.undo || !receipt.undo.token) throw new Error("UNDO_UNAVAILABLE");
       if (!client || typeof client.undo !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
@@ -387,6 +413,7 @@
       applyReceipt: applyReceipt,
       dispatch: dispatch,
       confirm: confirm,
+      cancel: cancel,
       undo: undo,
     };
   }
@@ -406,6 +433,9 @@
     CONVERSATION_ARCHIVE_ACTION_ID: CONVERSATION_ARCHIVE_ACTION_ID,
     CONVERSATION_RESTORE_ACTION_ID: CONVERSATION_RESTORE_ACTION_ID,
     CONVERSATION_DELETE_ACTION_ID: CONVERSATION_DELETE_ACTION_ID,
+    CONVERSATION_FORK_ACTION_ID: CONVERSATION_FORK_ACTION_ID,
+    CONVERSATION_WINDOW_OPEN_ACTION_ID: CONVERSATION_WINDOW_OPEN_ACTION_ID,
+    CONVERSATION_SHARE_ACTION_ID: CONVERSATION_SHARE_ACTION_ID,
     SURFACE_DEFAULTS: clone(SURFACE_DEFAULTS),
     SURFACE_DEFINITIONS: clone(SURFACE_DEFINITIONS),
     createWorkspaceLayoutRuntime: createWorkspaceLayoutRuntime,

@@ -60,6 +60,17 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("turn.turn_kind !== 'mixed'");
   });
 
+  test("routes fork, native-window, and share controls through conversation actions", () => {
+    expect(html).toContain("dispatchConversationAction('conversation.fork'");
+    expect(html).toContain("dispatchConversationAction('conversation.window.open'");
+    expect(html).toContain("dispatchConversationAction('conversation.share'");
+    expect(html).toContain("invoke('open_conversation_window'");
+    expect(html).toContain("through_message_id:messageId");
+    expect(html).toContain("conversationActionRuntimeRef.current.cancel");
+    expect(html).toContain("Local export ready:");
+    expect(html).not.toContain('title="Sharing is not in this preview"');
+  });
+
   test("loads the shared select component outside the application shell", () => {
     expect(html).toContain('src="components/v-select.jsx"');
     expect(html).toContain("const VSelect = window.VellumUI.VSelect");

@@ -70,3 +70,26 @@ def test_sensitive_vault_note_cannot_be_attached(tmp_path: Path) -> None:
             mode="live",
             vault_root=vault,
         )
+
+
+def test_context_references_can_be_copied_to_a_fork_without_rereading_sources(tmp_path: Path) -> None:
+    vault = tmp_path / "Vault"
+    vault.mkdir()
+    note = vault / "Plan.md"
+    note.write_text("# Plan\n\nOriginal context.", encoding="utf-8")
+    store = ConversationContextStore(tmp_path / "context.db")
+    store.attach(
+        conversation_id="source-thread",
+        kind="vault_note",
+        ref="Plan.md",
+        mode="snapshot",
+        vault_root=vault,
+    )
+    note.unlink()
+
+    copied = store.copy("source-thread", "fork-thread")
+
+    assert copied == 1
+    assert store.list("source-thread")[0]["conversation_id"] == "source-thread"
+    assert store.list("fork-thread")[0]["conversation_id"] == "fork-thread"
+    assert "Original context" in store.resolve("fork-thread", vault_root=vault)["context"]

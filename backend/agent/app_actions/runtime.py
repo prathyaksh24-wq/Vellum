@@ -25,6 +25,7 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
+from agent.conversations.sharing import ConversationShareError, ConversationShareService
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
@@ -40,6 +41,9 @@ CONVERSATION_SPACE_ACTION_ID = "conversation.space.set"
 CONVERSATION_ARCHIVE_ACTION_ID = "conversation.archive"
 CONVERSATION_RESTORE_ACTION_ID = "conversation.restore"
 CONVERSATION_DELETE_ACTION_ID = "conversation.delete"
+CONVERSATION_FORK_ACTION_ID = "conversation.fork"
+CONVERSATION_WINDOW_OPEN_ACTION_ID = "conversation.window.open"
+CONVERSATION_SHARE_ACTION_ID = "conversation.share"
 _UNDO_TTL = timedelta(minutes=15)
 
 
@@ -140,6 +144,7 @@ class AppActionRuntime:
         undo_token_factory: Callable[[], str] | None = None,
         confirmation_token_factory: Callable[[], str] | None = None,
         conversation_lifecycle: ConversationLifecycle | Callable[[], ConversationLifecycle] | None = None,
+        conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
         self._receipt_store = receipt_store or InMemoryReceiptStore()
@@ -148,6 +153,7 @@ class AppActionRuntime:
         self._undo_token_factory = undo_token_factory or (lambda: secrets.token_urlsafe(24))
         self._confirmation_token_factory = confirmation_token_factory or (lambda: secrets.token_urlsafe(24))
         self._conversation_lifecycle = conversation_lifecycle
+        self._conversation_sharing = conversation_sharing
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._surfaces = {surface.reference: surface for surface in self._surface_definitions()}
@@ -377,6 +383,72 @@ class AppActionRuntime:
                 action_id=CONVERSATION_SPACE_ACTION_ID,
                 arguments={"space_label": space_label},
             ) if space_label else None
+
+        open_referenced_window = re.fullmatch(
+            polite
+            + r'''open\s+(?:the\s+)?(?:chat|conversation)\s+(?:called|named)\s+("[^"]+"|'[^']+')\s+in\s+(?:a\s+)?new\s+window''',
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if open_referenced_window:
+            return AppActionRequest(
+                action_id=CONVERSATION_WINDOW_OPEN_ACTION_ID,
+                arguments={"reference": self._spoken_value(open_referenced_window.group(1))},
+            )
+
+        fork_referenced_chat = re.fullmatch(
+            polite
+            + r'''fork\s+(?:the\s+)?(?:chat|conversation)\s+(?:called|named)\s+("[^"]+"|'[^']+')'''
+            + r"(?:\s+(?:from|through|at)\s+message\s+(.+))?",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if fork_referenced_chat:
+            arguments = {"reference": self._spoken_value(fork_referenced_chat.group(1))}
+            boundary = self._spoken_value(fork_referenced_chat.group(2) or "")
+            if boundary:
+                arguments["through_message_id"] = boundary
+            return AppActionRequest(action_id=CONVERSATION_FORK_ACTION_ID, arguments=arguments)
+
+        share_referenced_chat = re.fullmatch(
+            polite
+            + r'''share\s+(?:the\s+)?(?:chat|conversation)\s+(?:called|named)\s+("[^"]+"|'[^']+')''',
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if share_referenced_chat:
+            return AppActionRequest(
+                action_id=CONVERSATION_SHARE_ACTION_ID,
+                arguments={"reference": self._spoken_value(share_referenced_chat.group(1))},
+            )
+
+        open_window = re.fullmatch(
+            polite
+            + r"open\s+(?:(?:this|the\s+current|current)\s+)?(?:chat|conversation)\s+in\s+(?:a\s+)?new\s+window",
+            normalized,
+        )
+        if open_window:
+            return AppActionRequest(action_id=CONVERSATION_WINDOW_OPEN_ACTION_ID)
+
+        fork_chat = re.fullmatch(
+            polite
+            + r"fork\s+(?:(?:this|the\s+current|current)\s+)?(?:chat|conversation)"
+            + r"(?:\s+(?:from|through|at)\s+(?:message\s+(.+)|here))?",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if fork_chat:
+            boundary = self._spoken_value(fork_chat.group(1) or "")
+            arguments = {"through_message_id": boundary} if boundary else {}
+            if re.search(r"\s(?:from|through|at)\s+here$", normalized):
+                arguments["from_selected"] = True
+            return AppActionRequest(action_id=CONVERSATION_FORK_ACTION_ID, arguments=arguments)
+
+        if re.fullmatch(
+            polite + r"share\s+(?:(?:this|the\s+current|current)\s+)?(?:chat|conversation)",
+            normalized,
+        ):
+            return AppActionRequest(action_id=CONVERSATION_SHARE_ACTION_ID)
 
         current_chat_action = re.fullmatch(
             polite
@@ -841,7 +913,7 @@ class AppActionRuntime:
         if definition.confirmation_rule == "operation_bound" and not confirmed:
             try:
                 return self._confirmation_receipt(request, context, definition)
-            except ConversationLifecycleError as exc:
+            except (ConversationLifecycleError, ConversationShareError) as exc:
                 return self._error_receipt(
                     request=request,
                     context=context,
@@ -855,7 +927,7 @@ class AppActionRuntime:
         try:
             result = self._registry.invoke(
                 request.action_id,
-                {"arguments": dict(request.arguments), "context": context},
+                {"arguments": dict(request.arguments), "context": context, "confirm": confirmed},
                 agent_name=self._agent_name(context),
             )
         except ToolPermissionError as exc:
@@ -867,7 +939,7 @@ class AppActionRuntime:
                 error_code="ACTION_NOT_AUTHORIZED",
                 message=str(exc),
             )
-        except ConversationLifecycleError as exc:
+        except (ConversationLifecycleError, ConversationShareError) as exc:
             return self._error_receipt(
                 request=request,
                 context=context,
@@ -952,6 +1024,26 @@ class AppActionRuntime:
             )
         token = self._confirmation_token_factory()
         expires_at = self._now() + _UNDO_TTL
+        result = {
+            "conversation": {
+                "id": conversation_id,
+                "title": conversation.get("title"),
+                "revision": revision,
+            },
+        }
+        if request.action_id == CONVERSATION_SHARE_ACTION_ID:
+            review = self._sharing_service().review(
+                conversation,
+                provider_id=str(request.arguments.get("provider_id") or ""),
+            )
+            result["share_review"] = review
+            message = (
+                f"Confirm local export of {conversation.get('title') or 'this chat'}."
+                if not review["external_disclosure"]
+                else f"Confirm sharing {conversation.get('title') or 'this chat'} with {review['destination']}."
+            )
+        else:
+            message = f"Confirm deletion of {conversation.get('title') or 'this chat'}."
         self._receipt_store.put_confirmation(
             _ConfirmationRecord(
                 token=token,
@@ -977,19 +1069,13 @@ class AppActionRuntime:
                 confirmation_required=True,
             ),
             target=ActionTarget(kind="conversation", id=conversation_id, revision=revision),
-            result={
-                "conversation": {
-                    "id": conversation_id,
-                    "title": conversation.get("title"),
-                    "revision": revision,
-                },
-            },
+            result=result,
             confirmation=ActionConfirmation(
                 token=token,
                 expires_at=expires_at,
                 target_revision=revision,
             ),
-            message=f"Confirm deletion of {conversation.get('title') or 'this chat'}.",
+            message=message,
             audit_label=f"{definition.audit_label}.confirmation_requested",
             created_at=self._now(),
         )
@@ -1057,11 +1143,52 @@ class AppActionRuntime:
                 status="failed",
                 access_class=access_class,
                 error_code="STALE_ACTION_TARGET",
-                message="The conversation changed before deletion was confirmed.",
+                message="The conversation changed before this operation was confirmed.",
                 authorized=True,
             )
         self._receipt_store.remove_confirmation(token)
-        return self._dispatch_conversation(request, context, definition, confirmed=True)
+        bound_request = request.model_copy(update={
+            "arguments": {
+                **request.arguments,
+                "conversation_id": record.target_reference,
+                "target_revision": record.expected_revision,
+            },
+        })
+        return self._dispatch_conversation(bound_request, context, definition, confirmed=True)
+
+    def cancel(self, token: str, context: AppActionContext) -> ActionReceipt:
+        record = self._receipt_store.get_confirmation(token)
+        if record is None:
+            request = AppActionRequest(action_id="confirmation.cancel")
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class="unknown",
+                error_code="CONFIRMATION_UNAVAILABLE",
+                message="Confirmation is unavailable.",
+            )
+        definition = self._definitions[record.action_id]
+        request = AppActionRequest(
+            action_id=record.action_id,
+            action_version=record.action_version,
+            arguments=dict(record.arguments),
+        )
+        self._receipt_store.remove_confirmation(token)
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=record.action_id,
+            action_version=record.action_version,
+            source=context.source,
+            status="cancelled",
+            authorization=self._authorization(definition.access_class, context, allowed=True),
+            target=ActionTarget(kind="conversation", id=record.target_reference, revision=record.expected_revision),
+            result={"cancelled": True},
+            message="Operation cancelled.",
+            audit_label=f"{definition.audit_label}.cancelled",
+            created_at=self._now(),
+        )
 
     def set_conversation_lifecycle_provider(
         self,
@@ -1078,6 +1205,14 @@ class AppActionRuntime:
         self._register(CONVERSATION_SPACE_ACTION_ID, "Change conversation Space", self._set_conversation_space)
         self._register(CONVERSATION_ARCHIVE_ACTION_ID, "Archive conversation", self._archive_conversation)
         self._register(CONVERSATION_RESTORE_ACTION_ID, "Restore conversation", self._restore_conversation)
+        self._register(CONVERSATION_FORK_ACTION_ID, "Fork conversation", self._fork_conversation)
+        self._register(CONVERSATION_WINDOW_OPEN_ACTION_ID, "Open conversation window", self._open_conversation_window)
+        self._register(
+            CONVERSATION_SHARE_ACTION_ID,
+            "Share conversation",
+            self._share_conversation,
+            access=CapabilityAccess.EXTERNAL_WRITE,
+        )
         self._register(
             CONVERSATION_DELETE_ACTION_ID,
             "Delete conversation",
@@ -1086,12 +1221,27 @@ class AppActionRuntime:
         )
         self._conversation_actions_registered = True
 
+    def set_conversation_sharing_provider(
+        self,
+        provider: ConversationShareService | Callable[[], ConversationShareService],
+    ) -> None:
+        self._conversation_sharing = provider
+
     def _conversation_service(self) -> ConversationLifecycle:
         provider = self._conversation_lifecycle
         if provider is None:
             raise ConversationLifecycleError(
                 "CONVERSATION_ACTIONS_UNAVAILABLE",
                 "Conversation actions are unavailable.",
+            )
+        return provider() if callable(provider) else provider
+
+    def _sharing_service(self) -> ConversationShareService:
+        provider = self._conversation_sharing
+        if provider is None:
+            raise ConversationShareError(
+                "CONVERSATION_SHARING_UNAVAILABLE",
+                "Conversation sharing is unavailable.",
             )
         return provider() if callable(provider) else provider
 
@@ -1248,6 +1398,86 @@ class AppActionRuntime:
         if conversation_id == context.invocation_conversation_id:
             result["navigation"] = {"view": "chat", "conversation_id": None}
         return result
+
+    def _fork_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        conversation_id = self._conversation_target(arguments, context)
+        boundary = str(arguments.get("through_message_id") or "").strip()
+        if not boundary and arguments.get("from_selected"):
+            selected = str(context.selected_ui_reference or "")
+            if selected.startswith("message:"):
+                boundary = selected.partition(":")[2].strip()
+            if not boundary:
+                conversation = self._conversation_service().get(conversation_id)
+                messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+                boundary = next(
+                    (
+                        str(message.get("id") or "").strip()
+                        for message in reversed(messages)
+                        if isinstance(message, dict) and str(message.get("id") or "").strip()
+                    ),
+                    "",
+                )
+                if not boundary:
+                    raise ConversationLifecycleError(
+                        "FORK_BOUNDARY_REQUIRED",
+                        "This chat has no message to fork from.",
+                    )
+        mutation = self._conversation_service().fork(
+            conversation_id,
+            through_message_id=boundary,
+            title=str(arguments.get("title") or ""),
+            expected_revision=self._expected_target_revision(arguments),
+        )
+        conversation = mutation["conversation"]
+        return {
+            "changed": True,
+            "target_kind": "conversation",
+            "target_id": str(conversation["id"]),
+            "target_revision": int(conversation.get("revision", 0)),
+            "conversation": conversation,
+            "fork_boundary": mutation.get("fork_boundary"),
+            "copied_context_refs": mutation.get("copied_context_refs", 0),
+            "navigation": {"view": "chat", "conversation_id": conversation["id"]},
+            "message": f"Forked {conversation.get('title') or 'chat'}.",
+        }
+
+    def _open_conversation_window(self, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        conversation_id = self._conversation_target(arguments, context)
+        conversation = self._conversation_service().get(conversation_id)
+        return {
+            "changed": False,
+            "target_kind": "conversation",
+            "target_id": conversation_id,
+            "target_revision": int(conversation.get("revision", 0)),
+            "native_window": {"conversation_id": conversation_id},
+            "message": f"Opening {conversation.get('title') or 'chat'} in a new window.",
+        }
+
+    def _share_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        conversation_id = self._conversation_target(arguments, context)
+        conversation = self._conversation_service().get(conversation_id)
+        shared = self._sharing_service().share(
+            conversation,
+            provider_id=str(arguments.get("provider_id") or ""),
+        )
+        return {
+            "changed": True,
+            "target_kind": "conversation",
+            "target_id": conversation_id,
+            "target_revision": int(conversation.get("revision", 0)),
+            "share": shared,
+            "message": (
+                "Local conversation export ready."
+                if shared.get("provider_id") == "local_export"
+                else "Conversation shared."
+            ),
+        }
 
     def _rename_conversation(self, payload: dict[str, Any]) -> dict[str, Any]:
         arguments = dict(payload.get("arguments") or {})
@@ -1720,6 +1950,9 @@ class AppActionRuntime:
             (CONVERSATION_ARCHIVE_ACTION_ID, "Archive a chat", "Move a conversation to the archive.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_RESTORE_ACTION_ID, "Restore a chat", "Restore an archived conversation.", True, True, "none", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
             (CONVERSATION_DELETE_ACTION_ID, "Delete a chat", "Permanently delete a conversation and its canonical runtime state.", False, True, "operation_bound", {"conversation_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
+            (CONVERSATION_FORK_ACTION_ID, "Fork a chat", "Create a new canonical conversation through an optional message boundary.", False, False, "none", {"conversation_id": {"type": "string"}, "through_message_id": {"type": "string"}, "from_selected": {"type": "boolean"}, "title": {"type": "string", "maxLength": 160}, "target_revision": {"type": "integer"}, **reference}),
+            (CONVERSATION_WINDOW_OPEN_ACTION_ID, "Open a chat in a new window", "Open the canonical conversation in a native Vellum window.", False, True, "none", {"conversation_id": {"type": "string"}, **reference}),
+            (CONVERSATION_SHARE_ACTION_ID, "Share a chat", "Prepare a reviewable local JSON export after confirmation.", False, False, "operation_bound", {"conversation_id": {"type": "string"}, "provider_id": {"type": "string"}, "target_revision": {"type": "integer"}, **reference}),
         ]
         return [
             AppActionDefinition(
@@ -1729,9 +1962,15 @@ class AppActionRuntime:
                 title=title,
                 description=description,
                 scope="conversation",
-                access_class=(CapabilityAccess.DESTRUCTIVE.value if action_id == CONVERSATION_DELETE_ACTION_ID else CapabilityAccess.WRITE.value),
+                access_class=(
+                    CapabilityAccess.DESTRUCTIVE.value
+                    if action_id == CONVERSATION_DELETE_ACTION_ID
+                    else CapabilityAccess.EXTERNAL_WRITE.value
+                    if action_id == CONVERSATION_SHARE_ACTION_ID
+                    else CapabilityAccess.WRITE.value
+                ),
                 confirmation_rule=confirmation_rule,
-                executor_location="client" if action_id in {CONVERSATION_NEW_ACTION_ID, CONVERSATION_OPEN_ACTION_ID} else "server",
+                executor_location="client" if action_id in {CONVERSATION_NEW_ACTION_ID, CONVERSATION_OPEN_ACTION_ID, CONVERSATION_WINDOW_OPEN_ACTION_ID} else "server",
                 supports_undo=supports_undo,
                 idempotent=idempotent,
                 argument_schema={

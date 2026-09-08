@@ -26,10 +26,18 @@
     );
   }
 
+  function cancel(token, context) {
+    return client.request(
+      "/api/app-actions/cancel",
+      client.jsonOptions("POST", { token: token, context: context }),
+    );
+  }
+
   window.VellumApi.appActions = {
     catalog: catalog,
     dispatch: dispatch,
     confirm: confirm,
+    cancel: cancel,
     undo: undo,
   };
 })();

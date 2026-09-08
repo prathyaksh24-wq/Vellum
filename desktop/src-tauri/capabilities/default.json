@@ -10,6 +10,6 @@
       "http://localhost:5173/*"
     ]
   },
-  "windows": ["main", "overlay", "vellum"],
+  "windows": ["main", "overlay", "vellum", "conversation-*"],
   "permissions": ["core:default"]
 }
