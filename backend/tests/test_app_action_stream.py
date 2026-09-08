@@ -11,6 +11,7 @@ from agent.app_actions.models import (
 )
 from agent.app_actions.runtime import AppActionRuntime
 from agent.conversations.lifecycle import ConversationLifecycle
+from agent.conversations.sharing import ConversationShareService
 import agent.skills.curator_runtime as curator_runtime
 
 
@@ -107,6 +108,62 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
 
 
 @pytest.mark.asyncio
+async def test_forked_chat_seeds_model_history_and_attachment_content_once(monkeypatch, tmp_path) -> None:
+    lifecycle = ConversationLifecycle(
+        path=tmp_path / "conversations.json",
+        conversation_id_factory=lambda: "chat-fork",
+    )
+    lifecycle.save("chat-source", {
+        "title": "Source",
+        "messages": [
+            {
+                "id": "u1",
+                "role": "user",
+                "text": "What is in this image?",
+                "attachments": [{
+                    "name": "diagram.png",
+                    "kind": "image",
+                    "mime_type": "image/png",
+                    "data_url": "data:image/png;base64,ZmFrZQ==",
+                }],
+            },
+            {"id": "a1", "role": "assistant", "text": "It is a diagram."},
+        ],
+    })
+    lifecycle.fork("chat-source", through_message_id="a1")
+    monkeypatch.setattr(api, "_conversation_lifecycle", lambda: lifecycle)
+
+    class SeedAgent:
+        def __init__(self):
+            self.messages = []
+            self.updates = []
+
+        async def aget_state(self, config, **_kwargs):
+            assert config["configurable"]["thread_id"] == "chat-fork"
+            return SimpleNamespace(values={"messages": list(self.messages)})
+
+        async def aupdate_state(self, _config, values, **_kwargs):
+            self.updates.append(values)
+            self.messages.extend(values["messages"])
+
+    seeded_agent = SeedAgent()
+    monkeypatch.setattr(api, "agent", seeded_agent)
+
+    first = await api._ensure_fork_runtime_context("chat-fork", model="test-model", reasoning_mode=None)
+    second = await api._ensure_fork_runtime_context("chat-fork", model="test-model", reasoning_mode=None)
+
+    assert first == 2
+    assert second == 0
+    assert len(seeded_agent.updates) == 1
+    assert seeded_agent.messages[0]["role"] == "user"
+    assert seeded_agent.messages[0]["content"] == [
+        {"type": "text", "text": "What is in this image?"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,ZmFrZQ=="}},
+    ]
+    assert seeded_agent.messages[1] == {"role": "assistant", "content": "It is a diagram."}
+
+
+@pytest.mark.asyncio
 async def test_conversation_nlp_actions_persist_and_bypass_the_agent(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
     monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
@@ -147,6 +204,54 @@ async def test_conversation_nlp_actions_persist_and_bypass_the_agent(monkeypatch
     assert reloaded.get("chat-current")["pinned"] is True
     assert reloaded.get("chat-current")["archived"] is False
     assert reloaded.get("chat-old")["archived"] is True
+
+
+@pytest.mark.asyncio
+async def test_fork_and_share_nlp_actions_run_through_the_live_chat_stream(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    lifecycle = ConversationLifecycle(
+        path=tmp_path / "conversations.json",
+        conversation_id_factory=lambda: "chat-fork",
+    )
+    lifecycle.save("chat-current", {
+        "thread_id": "thread-current",
+        "title": "Current chat",
+        "messages": [
+            {"id": "u1", "role": "user", "text": "Question"},
+            {"id": "a1", "role": "assistant", "text": "Answer"},
+            {"id": "u2", "role": "user", "text": "Later"},
+        ],
+    })
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(
+        conversation_lifecycle=lifecycle,
+        conversation_sharing=ConversationShareService(export_dir=tmp_path / "exports"),
+    ))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("pure conversation actions must not reach the model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    fork_response = await api.chat_stream(api.ChatRequest(
+        message="fork this chat through message a1",
+        thread_id="thread-current",
+    ))
+    share_response = await api.chat_stream(api.ChatRequest(
+        message="share this chat",
+        thread_id="thread-current",
+    ))
+
+    fork_events = parse_sse("".join([chunk async for chunk in fork_response.body_iterator]))
+    share_events = parse_sse("".join([chunk async for chunk in share_response.body_iterator]))
+    fork_receipt = next(data["receipt"] for name, data in fork_events if name == "app.action.receipt")
+    share_receipt = next(data["receipt"] for name, data in share_events if name == "app.action.receipt")
+
+    assert fork_receipt["status"] == "applied"
+    assert [message["id"] for message in lifecycle.get("chat-fork")["messages"]] == ["u1", "a1"]
+    assert share_receipt["status"] == "confirmation_required"
+    assert share_receipt["result"]["share_review"]["destination"] == "local_export"
+    assert not (tmp_path / "exports").exists()
 
 
 @pytest.mark.asyncio

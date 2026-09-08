@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 from threading import Lock, RLock
 from typing import Any, Callable
+from uuid import uuid4
 
 from agent.conversations.library import organization_id, organize_conversation
 
@@ -43,6 +45,8 @@ class ConversationLifecycle:
         clear_context: Callable[[str], int] | None = None,
         delete_session: Callable[[str], None] | None = None,
         rename_session: Callable[[str, str], None] | None = None,
+        copy_context: Callable[[str, str], int] | None = None,
+        conversation_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self.path = Path(path)
         self._clock = clock or (lambda: datetime.now(timezone.utc))
@@ -53,6 +57,8 @@ class ConversationLifecycle:
         self._clear_context = clear_context or (lambda _thread_id: 0)
         self._delete_session = delete_session or (lambda _thread_id: None)
         self._rename_session = rename_session or (lambda _thread_id, _title: None)
+        self._copy_context = copy_context or (lambda _source_thread_id, _destination_thread_id: 0)
+        self._conversation_id_factory = conversation_id_factory or (lambda: f"chat_{uuid4().hex}")
         self._lock = _path_lock(self.path)
 
     def list(self) -> list[dict[str, Any]]:
@@ -261,6 +267,91 @@ class ConversationLifecycle:
                     "obsidian_projection": projection,
                 }
         raise ConversationLifecycleError("CONVERSATION_NOT_FOUND", "Conversation not found.")
+
+    def fork(
+        self,
+        conversation_id: str,
+        *,
+        through_message_id: str = "",
+        title: str = "",
+        expected_revision: int | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            source = self.get(conversation_id)
+            current_revision = int(source.get("revision", 0))
+            if expected_revision is not None and expected_revision != current_revision:
+                raise ConversationLifecycleError(
+                    "STALE_ACTION_TARGET",
+                    "The conversation changed before it could be forked.",
+                )
+            source_messages = source.get("messages") if isinstance(source.get("messages"), list) else []
+            boundary = str(through_message_id or "").strip()
+            messages = source_messages
+            if boundary:
+                boundary_index = next(
+                    (index for index, message in enumerate(source_messages)
+                     if isinstance(message, dict) and str(message.get("id") or "") == boundary),
+                    None,
+                )
+                if boundary_index is None:
+                    raise ConversationLifecycleError(
+                        "FORK_BOUNDARY_NOT_FOUND",
+                        "The selected message is not part of this conversation.",
+                    )
+                messages = source_messages[: boundary_index + 1]
+
+            existing_ids = {
+                value
+                for item in self.list()
+                for value in (str(item.get("id") or ""), str(item.get("thread_id") or ""))
+                if value
+            }
+            destination_id = ""
+            for _attempt in range(10):
+                candidate = str(self._conversation_id_factory() or "").strip()
+                if candidate and candidate not in existing_ids:
+                    destination_id = candidate
+                    break
+            if not destination_id:
+                raise ConversationLifecycleError("FORK_ID_UNAVAILABLE", "A new conversation ID could not be allocated.")
+
+            source_title = str(source.get("title") or "New chat")
+            requested_title = " ".join(str(title or "").split())
+            fork_title = (requested_title or f"{source_title} (fork)")[:160]
+            record = deepcopy(source)
+            record.update({
+                "id": destination_id,
+                "thread_id": destination_id,
+                "title": fork_title,
+                "created": "Today",
+                "pinned": False,
+                "archived": False,
+                "messages": deepcopy(messages),
+                "revision": 0,
+                "fork": {
+                    "source_conversation_id": str(source.get("id") or conversation_id),
+                    "source_thread_id": str(source.get("thread_id") or source.get("id") or conversation_id),
+                    "through_message_id": boundary or None,
+                    "message_count": len(messages),
+                },
+            })
+            record.pop("updated_at", None)
+            try:
+                copied_context = self._copy_context(
+                    str(source.get("thread_id") or source.get("id") or conversation_id),
+                    destination_id,
+                )
+                mutation = self.save(destination_id, record)
+            except Exception:
+                self._clear_context(destination_id)
+                raise
+            destination = mutation["conversation"]
+            return {
+                **mutation,
+                "source_conversation": source,
+                "fork_boundary": boundary or None,
+                "copied_context_refs": copied_context,
+            }
 
     def _write(self, conversations: list[dict[str, Any]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

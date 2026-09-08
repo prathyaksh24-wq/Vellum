@@ -60,6 +60,7 @@ from agent.contracts.conversations import (
 )
 from agent.conversations import build_conversation_library, search_conversations
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
+from agent.conversations.sharing import ConversationShareService
 from agent.agents.books import INSTALLED_BOOK_CONTEXT_END, INSTALLED_BOOK_CONTEXT_START
 from agent.agents.live_dispatcher import LiveAgentDispatcher
 from agent.graph.agent import agent
@@ -127,6 +128,7 @@ _observability = ObservabilityService(REPO_ROOT / "data" / "memory" / "observabi
 _memory_orchestrator = get_memory_orchestrator()
 _app_action_runtime = get_app_action_runtime()
 _conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
+_conversation_share_service = ConversationShareService(export_dir=REPO_ROOT / "data" / "exports" / "conversations")
 _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
@@ -771,10 +773,12 @@ def _conversation_lifecycle() -> ConversationLifecycle:
         clear_context=_conversation_context_store.clear,
         delete_session=lambda thread_id: _conversation_sessions().delete(thread_id),
         rename_session=lambda thread_id, title: _conversation_sessions().rename(thread_id, title),
+        copy_context=_conversation_context_store.copy,
     )
 
 
 _app_action_runtime.set_conversation_lifecycle_provider(_conversation_lifecycle)
+_app_action_runtime.set_conversation_sharing_provider(lambda: _conversation_share_service)
 
 
 def _conversation_http_error(exc: ConversationLifecycleError) -> HTTPException:
@@ -1319,7 +1323,6 @@ async def _repair_incomplete_tool_history(thread_id: str) -> int:
     update_state = getattr(agent, "aupdate_state", None)
     if get_state is None or update_state is None:
         return 0
-
     config = _thread_config(thread_id)
     try:
         state = await get_state(config)
@@ -1351,6 +1354,63 @@ async def _repair_incomplete_tool_history(thread_id: str) -> int:
             exc,
         )
         return 0
+
+
+def _fork_runtime_seed(conversation: dict[str, Any]) -> list[dict[str, Any]]:
+    fork = conversation.get("fork") if isinstance(conversation.get("fork"), dict) else {}
+    message_count = int(fork.get("message_count") or 0)
+    messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+    seeded: list[dict[str, Any]] = []
+    for message in messages[:message_count]:
+        if not isinstance(message, dict):
+            continue
+        role = str(message.get("role") or "").strip().casefold()
+        if role not in {"user", "assistant"}:
+            continue
+        text = str(message.get("text") or "").strip()
+        content: str | list[dict[str, Any]] = text
+        if role == "user":
+            attachments = []
+            for raw in message.get("attachments") or []:
+                if not isinstance(raw, dict):
+                    continue
+                try:
+                    attachments.append(ChatAttachment.model_validate(raw))
+                except ValueError:
+                    continue
+            content = _agent_content_with_attachments(text, attachments)
+        if not text and not isinstance(content, list):
+            continue
+        seeded.append({"role": role, "content": content})
+    return seeded
+
+
+async def _ensure_fork_runtime_context(
+    thread_id: str,
+    *,
+    model: str | None,
+    reasoning_mode: str | None,
+) -> int:
+    try:
+        conversation = await asyncio.to_thread(_conversation_lifecycle().get, thread_id)
+    except ConversationLifecycleError:
+        return 0
+    if not isinstance(conversation.get("fork"), dict):
+        return 0
+    seeded = _fork_runtime_seed(conversation)
+    if not seeded:
+        return 0
+    config = _thread_config(thread_id)
+    state = await agent.aget_state(config, model=model, reasoning_mode=reasoning_mode)
+    if _state_values(state).get("messages"):
+        return 0
+    await agent.aupdate_state(
+        config,
+        {"messages": seeded},
+        model=model,
+        reasoning_mode=reasoning_mode,
+    )
+    return len(seeded)
 
 
 async def _ensure_model(model: str | None) -> str:
@@ -1473,9 +1533,14 @@ async def _run_agent(
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+            resolved_reasoning = _resolve_reasoning_mode(reasoning_mode)
+            await _ensure_fork_runtime_context(
+                active_thread_id,
+                model=resolved_model,
+                reasoning_mode=resolved_reasoning,
+            )
             await _repair_incomplete_tool_history(active_thread_id)
             agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
-            resolved_reasoning = _resolve_reasoning_mode(reasoning_mode)
             result = await agent.ainvoke(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
@@ -3553,6 +3618,11 @@ async def _stream_agent_turn(
             prepare_agent = getattr(agent, "prepare", None)
             if prepare_agent is not None:
                 await prepare_agent(resolved_model, resolved_reasoning)
+            await _ensure_fork_runtime_context(
+                active_thread_id,
+                model=resolved_model,
+                reasoning_mode=resolved_reasoning,
+            )
             await _repair_incomplete_tool_history(active_thread_id)
             if computer_use_runtime.status().get("enabled") and not computer_use_runtime.status().get("paused"):
                 try:

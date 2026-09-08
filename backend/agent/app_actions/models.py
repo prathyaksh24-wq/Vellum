@@ -16,6 +16,7 @@ ActionStatus = Literal[
     "unavailable",
     "failed",
     "undone",
+    "cancelled",
 ]
 PersistenceMode = Literal["device", "session"]
 
@@ -161,4 +162,9 @@ class AppActionUndoEnvelope(BaseModel):
 class AppActionConfirmEnvelope(BaseModel):
     token: str = Field(min_length=1)
     request: AppActionRequest
+    context: AppActionContext
+
+
+class AppActionCancelEnvelope(BaseModel):
+    token: str = Field(min_length=1)
     context: AppActionContext

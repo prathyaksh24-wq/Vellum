@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from agent.app_actions.models import (
     ActionReceipt,
     AppActionCatalog,
+    AppActionCancelEnvelope,
     AppActionConfirmEnvelope,
     AppActionDispatchEnvelope,
     AppActionUndoEnvelope,
@@ -33,3 +34,8 @@ def undo_app_action(envelope: AppActionUndoEnvelope) -> ActionReceipt:
 @router.post("/confirm", response_model=ActionReceipt)
 def confirm_app_action(envelope: AppActionConfirmEnvelope) -> ActionReceipt:
     return get_app_action_runtime().confirm(envelope.token, envelope.request, envelope.context)
+
+
+@router.post("/cancel", response_model=ActionReceipt)
+def cancel_app_action(envelope: AppActionCancelEnvelope) -> ActionReceipt:
+    return get_app_action_runtime().cancel(envelope.token, envelope.context)
