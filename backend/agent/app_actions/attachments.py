@@ -185,11 +185,15 @@ class AttachmentImportService:
             raise AttachmentImportError("ATTACHMENT_PATH_REQUIRED", "Provide an explicit file path.")
         candidate = Path(raw)
         if candidate.is_absolute():
-            return candidate.resolve()
-        for root in self._granted_folders:
-            resolved = (root / candidate).resolve()
-            if _is_within(resolved, root) and resolved.is_file():
-                return resolved
+            resolved = candidate.resolve()
+            for root in self._granted_folders:
+                if _is_within(resolved, root) and resolved.is_file():
+                    return resolved
+        else:
+            for root in self._granted_folders:
+                resolved = (root / candidate).resolve()
+                if _is_within(resolved, root) and resolved.is_file():
+                    return resolved
         raise AttachmentImportError(
             "ATTACHMENT_PATH_NOT_GRANTED",
             "Use an explicit file path or choose a file from a granted folder.",
