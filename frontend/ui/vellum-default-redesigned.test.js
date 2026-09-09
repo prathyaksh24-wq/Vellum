@@ -39,6 +39,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain('<script src="api/chat.js"></script>');
     expect(html).toContain('<script src="api/app-actions.js"></script>');
     expect(html).toContain('<script src="components/app-action-runtime.js"></script>');
+    expect(html).toContain('<script src="components/attachment-runtime.js"></script>');
     expect(html).toContain('<script src="api/conversations.js"></script>');
     expect(html).toContain('<script src="api/plugins.js"></script>');
     expect(html).toMatch(/<script src="api\/settings\.js(?:\?[^\"]+)?"><\/script>/);
@@ -48,7 +49,7 @@ describe("Vellum default redesigned frontend", () => {
 
   test("routes submitted NLP and sidebar controls through App Action receipts", () => {
     expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
-    expect(html).toContain("actionReceipt: receipt =>");
+    expect(html).toContain("actionReceipt: (receipt, turn) =>");
     expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
     expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned)}");
     expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true)}");
@@ -58,6 +59,14 @@ describe("Vellum default redesigned frontend", () => {
 
   test("keeps mixed App Action turns in the visible conversation", () => {
     expect(html).toContain("turn.turn_kind !== 'mixed'");
+  });
+
+  test("normalizes picker, drop, paste, and NLP attachment routes through one record path", () => {
+    expect(html).toContain("AttachmentRuntime.prepareFiles(files, attach, API.appActions)");
+    expect(html).toContain("onDrop={event =>");
+    expect(html).toContain("onPaste={event =>");
+    expect(html).toContain("vellum:attachment-action");
+    expect(html).toContain("result.attachments");
   });
 
   test("routes fork, native-window, and share controls through conversation actions", () => {

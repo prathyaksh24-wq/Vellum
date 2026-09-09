@@ -194,7 +194,7 @@
           continue;
         }
         if (ev === "app.action.receipt") {
-          if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data);
+          if (handlers.actionReceipt) handlers.actionReceipt(data.receipt || data, { turn_kind: data.turn_kind || "action" });
           continue;
         }
         if (ev === "agent.activity") {

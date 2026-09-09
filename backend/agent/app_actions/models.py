@@ -60,6 +60,7 @@ class AppActionContext(BaseModel):
     focused_ui_reference: str = ""
     selected_ui_reference: str = ""
     visible_ui_references: list[str] = Field(default_factory=list)
+    attachment_digests: list[str] = Field(default_factory=list)
 
 
 class AppActionRequest(BaseModel):
