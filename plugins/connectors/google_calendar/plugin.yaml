@@ -1,0 +1,15 @@
+id: google-calendar
+name: Google Calendar
+type: connector
+category: Connectors
+version: 1.0.0
+description: Private calendar reads and confirmation-controlled event management for Vellum.
+capabilities:
+  - calendar.account
+  - calendar.calendars
+  - calendar.events
+  - calendar.event
+  - calendar.free_busy
+  - calendar.create_event
+  - calendar.update_event
+  - calendar.delete_event

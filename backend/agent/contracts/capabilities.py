@@ -145,6 +145,21 @@ def build_capability_contract() -> CapabilityContract:
                     "import_conversations": "/api/memory/import-conversations",
                 },
             ),
+            "google_calendar": FeatureContract(
+                enabled=True,
+                source="plugins/connectors/google_calendar",
+                plugin_owned=True,
+                endpoints={
+                    "status": "/api/plugins/google-calendar/status",
+                    "oauth_start": "/api/plugins/google-calendar/oauth/start",
+                    "oauth_callback": "/api/plugins/google-calendar/oauth/callback",
+                    "calendars": "/api/plugins/google-calendar/calendars",
+                    "events": "/api/plugins/google-calendar/events",
+                    "free_busy": "/api/plugins/google-calendar/free-busy",
+                    "disconnect": "/api/plugins/google-calendar/connection",
+                },
+                notes="Private reads and confirmation-controlled event changes through CalendarAgent.",
+            ),
             "knowledge_wiki": FeatureContract(
                 enabled=True,
                 source="backend.agent.obsidian.wiki_api",

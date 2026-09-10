@@ -244,7 +244,7 @@ class LiveAgentDispatcher:
 
     def _clean_surface_prefix(self, message: str) -> str:
         return re.sub(
-            r"^\s*(?:x|youtube|discord|sports|memory|mcp|research)\s+agent\s*:\s*",
+            r"^\s*(?:x|youtube|discord|calendar|sports|memory|mcp|research)\s+agent\s*:\s*",
             "",
             message,
             count=1,

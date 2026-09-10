@@ -13,6 +13,10 @@ const booksView = readFileSync(
   resolve(here, "../../design/Velllum/uploads/components/books-view.jsx"),
   "utf8",
 );
+const mcpSetup = readFileSync(
+  resolve(here, "terminal/vellum/setup/screens/09-mcp.jsx"),
+  "utf8",
+);
 
 describe("Vellum default redesigned frontend", () => {
   test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
@@ -126,6 +130,18 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("API.plugins.discordCreateThread");
     expect(html).toContain("API.plugins.discordSendAttachment");
     expect(html).toContain("Confirm Discord action");
+  });
+
+  test("uses the backend-owned Google Calendar plugin without the legacy MCP duplicate", () => {
+    expect(html).toContain("const CalendarWorkspace");
+    expect(html).toContain("API.plugins.calendarOAuthStart()");
+    expect(html).toContain("API.plugins.calendarEvents");
+    expect(html).toContain("API.plugins.calendarCreateEvent");
+    expect(html).toContain("API.plugins.calendarUpdateEvent");
+    expect(html).toContain("API.plugins.calendarDeleteEvent");
+    expect(html).toContain("Confirm Google Calendar");
+    expect(html).not.toContain("@modelcontextprotocol/server-gcal");
+    expect(mcpSetup).not.toContain("mcp://gcal");
   });
 
   test("keeps model selection request-scoped and persisted with conversations", () => {
