@@ -97,6 +97,12 @@ from agent.plugins.spotify_runtime import (
 )
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
+from agent.plugins.google_calendar_api import (
+    CALENDAR_STATE_PREFIX,
+    oauth_callback as google_calendar_oauth_callback,
+    router as google_calendar_router,
+)
+from agent.plugins.google_calendar_runtime import portable_google_calendar_status
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
@@ -4871,6 +4877,7 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
         agent_reach_plugin_status().model_dump(),
         portable_spotify_status(),
         portable_discord_status(),
+        portable_google_calendar_status(),
     ]
     plugins = _plugin_registry().catalog(
         runtime_statuses=runtime_statuses,
@@ -5162,6 +5169,7 @@ router.include_router(knowledge_router)
 router.include_router(automations_router)
 router.include_router(youtube_router)
 router.include_router(discord_router)
+router.include_router(google_calendar_router)
 router.include_router(privacy_router)
 router.include_router(plugin_mcp_router)
 
@@ -5272,6 +5280,8 @@ async def desktop_oauth_callback(
     error: str = "",
 ) -> Any:
     if code or state or error:
+        if state.startswith(CALENDAR_STATE_PREFIX):
+            return await google_calendar_oauth_callback(code=code, state=state, error=error)
         return await youtube_oauth_callback(code=code, state=state, error=error)
     return {"service": "Vellum API", "health": "/api/health"}
 

@@ -185,6 +185,17 @@ def test_youtube_profile_bypasses_generic_response_cache(tmp_path: Path) -> None
     assert profile.memory.cache_first is False
 
 
+def test_calendar_profile_requires_confirmation_for_every_event_change(tmp_path: Path) -> None:
+    profile = AgentCatalog(profile_dir=tmp_path).get("CalendarAgent")
+
+    assert "calendar.events" in profile.tools.allow
+    assert set(profile.tools.require_confirmation) == {
+        "calendar.create_event",
+        "calendar.update_event",
+        "calendar.delete_event",
+    }
+
+
 def test_registry_discovers_new_llm_profile_from_yaml(tmp_path: Path) -> None:
     (tmp_path / "ResearchAgent.yaml").write_text(
         yaml.safe_dump(
@@ -242,6 +253,7 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
     x_binding = catalog.resolve("XAgent")
     youtube_binding = catalog.resolve("YoutubeAgent")
     discord_binding = catalog.resolve("DiscordAgent")
+    calendar_binding = catalog.resolve("CalendarAgent")
     memory_binding = catalog.resolve("MemoryAgent")
 
     assert x_binding.profile.version == 2
@@ -249,8 +261,10 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
     assert x_binding.executor.tool_registry is youtube_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is memory_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is discord_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is calendar_binding.executor.tool_registry
     assert "youtube.search_videos" in x_binding.executor.tool_registry.names()
     assert "discord.messages" in x_binding.executor.tool_registry.names()
+    assert "calendar.events" in x_binding.executor.tool_registry.names()
 
 
 def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_path: Path) -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent.tools.capabilities.books_service import BooksCapabilityService
+from agent.tools.capabilities.calendar_service import CalendarCapabilityService
 from agent.tools.capabilities.discord_service import DiscordCapabilityService
 from agent.tools.capabilities.mcp_service import McpCapabilityService
 from agent.tools.capabilities.memory_service import MemoryCapabilityService
@@ -19,6 +20,7 @@ def build_shared_tool_registry(
     youtube_service: YoutubeCapabilityService | None = None,
     memory_service: MemoryCapabilityService | None = None,
     books_service: BooksCapabilityService | None = None,
+    calendar_service: CalendarCapabilityService | None = None,
     discord_service: DiscordCapabilityService | None = None,
     mcp_service: McpCapabilityService | None = None,
     tool_observer: ToolInvocationObserver | None = None,
@@ -31,6 +33,7 @@ def build_shared_tool_registry(
         memory_service or MemoryCapabilityService(vault_root=root, sessions_db=memory_sessions_db),
         mcp_service or McpCapabilityService(),
         books_service or BooksCapabilityService(),
+        calendar_service or CalendarCapabilityService(),
         discord_service or _default_discord_service(),
     )
     if tool_observer is None:

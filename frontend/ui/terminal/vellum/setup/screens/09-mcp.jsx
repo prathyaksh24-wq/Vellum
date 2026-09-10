@@ -20,7 +20,6 @@ const MCP_DEFAULT = [
 
   { id: "p.notion",     category: "Productivity", label: "Notion",           sub: "— pages, databases (read+write)", url: "mcp://notion",                    enabled: false },
   { id: "p.linear",     category: "Productivity", label: "Linear",           sub: "— issues, projects",              url: "mcp://linear",                    enabled: false },
-  { id: "p.gcal",       category: "Productivity", label: "Google Calendar",  sub: "— next 7 days · read-only",       url: "mcp://gcal",                      enabled: false },
 
   { id: "d.github",     category: "Dev tools",    label: "GitHub",           sub: "— repos, PRs, issues",            url: "mcp://github",                    enabled: true  },
   { id: "d.fs.work",    category: "Dev tools",    label: "Filesystem (~/work)", sub: "— second filesystem mount, scoped to ~/work/", url: "mcp://fs?root=~/work",  enabled: false },

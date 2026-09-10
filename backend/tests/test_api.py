@@ -180,6 +180,21 @@ def test_api_root_supports_google_desktop_loopback_without_replacing_health(monk
     assert observed == {"code": "code", "state": "state", "error": ""}
 
 
+def test_api_root_routes_calendar_desktop_loopback_by_state_prefix(monkeypatch):
+    observed = {}
+
+    async def fake_callback(**kwargs):
+        observed.update(kwargs)
+        return {"calendar_oauth": "complete"}
+
+    monkeypatch.setattr(api, "google_calendar_oauth_callback", fake_callback)
+    with TestClient(api.app) as client:
+        callback = client.get("/", params={"code": "code", "state": "calendar.state"})
+
+    assert callback.json() == {"calendar_oauth": "complete"}
+    assert observed == {"code": "code", "state": "calendar.state", "error": ""}
+
+
 def test_capabilities_endpoint_publishes_stable_frontend_contract():
     with TestClient(api.app) as client:
         response = client.get("/api/capabilities")
@@ -191,7 +206,7 @@ def test_capabilities_endpoint_publishes_stable_frontend_contract():
     assert body["frontend"]["canonical_entry"] == "/design-uploads/Vellum%20Default%20Re-designed.html"
 
     features = body["features"]
-    for key in ["chat", "plugins", "spotify", "youtube", "discord", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
+    for key in ["chat", "plugins", "spotify", "youtube", "discord", "google_calendar", "memory_orchestrator", "knowledge_wiki", "hermes_skills", "openrouter", "agent_runtime"]:
         assert key in features
         assert isinstance(features[key]["enabled"], bool)
         assert features[key]["contract"] == "v1"

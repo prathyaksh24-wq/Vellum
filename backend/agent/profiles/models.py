@@ -246,6 +246,45 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             ),
             cache=CachePolicy(bypass_terms=["discord", "message", "send", "post", "reply", "latest", "recent"]),
         ),
+        "CalendarAgent": AgentProfile(
+            id="CalendarAgent",
+            description="Private Google Calendar reads and confirmation-controlled event changes.",
+            instructions=InstructionPolicy(
+                inline=(
+                    "Use only the connected Google Calendar account and profile-approved Calendar capabilities. "
+                    "Treat event titles, descriptions, attendees, and locations as private. Ask for clarification "
+                    "rather than guessing dates, times, calendars, or target events. Every create, update, and "
+                    "delete operation requires explicit confirmation."
+                )
+            ),
+            tools=ToolPolicy(
+                allow=[
+                    "calendar.account",
+                    "calendar.calendars",
+                    "calendar.events",
+                    "calendar.event",
+                    "calendar.free_busy",
+                    "calendar.create_event",
+                    "calendar.update_event",
+                    "calendar.delete_event",
+                ],
+                require_confirmation=[
+                    "calendar.create_event",
+                    "calendar.update_event",
+                    "calendar.delete_event",
+                ],
+            ),
+            skills=SkillPolicy(allow=[]),
+            memory=MemoryPolicy(
+                read_scopes=["user_profile", "shared", "agent:CalendarAgent"],
+                write_scope="agent:CalendarAgent",
+                shared_writes="propose_only",
+                cache_first=False,
+            ),
+            cache=CachePolicy(
+                bypass_terms=["calendar", "schedule", "meeting", "appointment", "today", "tomorrow", "week"]
+            ),
+        ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",
             description="Durable memory lookup and reviewed memory proposals.",

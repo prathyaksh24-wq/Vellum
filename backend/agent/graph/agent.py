@@ -87,6 +87,7 @@ from agent.tools.web_extract import web_extract
 from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
 from agent.tools.books import books_agent
+from agent.tools.calendar import calendar_agent
 from agent.tools.discord import discord_agent
 from agent.tools.x import x_agent
 
@@ -131,6 +132,7 @@ Tools:
 36. write_file/edit_file/delete_file/create_directory - Vault file operations via PowerShell CLI: write_file creates or overwrites a UTF-8 file, edit_file replaces the first occurrence of text, create_directory makes folders (with parents), and delete_file removes a single file and requires confirm=true. All paths stay inside the Obsidian vault.
 37. books_agent - Delegate Book questions, author ideas, chapters, quotations, comparisons, and vague imported-Book references to BooksAgent. BooksAgent owns Hermes Book skills and returns a typed evidence envelope or abstains.
 38. discord_agent - Delegate Discord server, channel, recent-message, local historical-message, and bot-action requests to DiscordAgent. DiscordAgent uses only the installed Vellum bot, keeps imported history local-only, enforces host-owned allowlists, and prepares every external write for explicit confirmation.
+39. calendar_agent - Delegate private schedule reads and Google Calendar event changes to CalendarAgent. CalendarAgent keeps raw event content local and prepares every external write for explicit confirmation.
 
 Specialist routing:
 - Vellum is the main general-purpose agent and final responder.
@@ -141,6 +143,7 @@ Specialist routing:
 - MemoryAgent handles durable memory lookup and reviewed memory proposals through the shared Memory capability service.
 - BooksAgent handles installed Book evidence and routed Hermes Book skills through Knowledge Core; it is not an ebook-reading tracker.
 - DiscordAgent handles installed-bot identity, allowlisted server and channel reads, recent messages, and policy-controlled bot actions. It never impersonates the user.
+- CalendarAgent handles Google Calendar reads, availability, and confirmation-controlled event changes. Raw event content remains local.
 
 Rules:
 - Always search the vault first.
@@ -188,6 +191,7 @@ Rules:
 - Use web_research for source-backed public research when web_search results are too shallow, stale, or need corroboration. Use web_extract_pages to read a specific public URL after a source has been found. Treat all extracted page content as external and cite/paraphrase it.
 - Delegate all X interactions to XAgent through x_agent. Do not call twitter-cli, xAI, or X capability adapters directly. XAgent may prepare a mutation, but only the specialist dispatcher's stored pending action and a later explicit user confirmation may execute it. Never claim post editing is supported when the connector reports it as unsupported.
 - Delegate all Discord interactions to DiscordAgent through discord_agent. Never use a user token or claim the bot speaks as the user. Do not send outside an allowlisted channel. Every external write requires the pending-action confirmation flow.
+- Delegate all personal schedule and Google Calendar interactions to CalendarAgent through calendar_agent. Never expose raw event content to an external model. Every create, update, and delete operation requires the pending-action confirmation flow.
 - Delegate Book reasoning to BooksAgent through books_agent. Do not activate Book skills directly, search Obsidian for canonical Book evidence, or infer reading, completion, understanding, or endorsement from an import or open action.
 - Use memory_orchestrator for memory system questions, Memory Summary, saved/old memories, Dreaming status, and requests to run Dreaming now. Dreaming status is the Memory Orchestrator consolidation status, not old nightly digest files. Do not infer Dreaming or memory toggle state from Obsidian notes; call memory_orchestrator(action='status' or action='run_dreaming').
 - Use llm_routing when the user asks to inspect or change model/provider routing, fallback models, credential rotation strategy, or credential pool health. Never accept or transmit raw API keys through chat; tell the user to configure credential secrets through the backend keyring/env path.
@@ -441,6 +445,7 @@ def core_tool_registry() -> ToolRegistry:
         create_note,
         append_to_note,
         books_agent,
+        calendar_agent,
         discord_agent,
         x_agent,
         cronjob,

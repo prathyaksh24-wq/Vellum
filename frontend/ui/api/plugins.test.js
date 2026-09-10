@@ -57,6 +57,26 @@ describe("Vellum plugins API adapter", () => {
     ]);
   });
 
+  test("owns Google Calendar OAuth, reads, and confirmed writes", async () => {
+    const fetchImpl = vi.fn(async (path, options) => ({ path, options }));
+    const api = await loadPluginsApi(fetchImpl);
+
+    await api.calendarStatus(true);
+    await api.calendarOAuthStart();
+    await api.calendarCalendars();
+    await api.calendarEvents({ time_min: "2026-09-10T00:00:00Z", time_max: "2026-09-11T00:00:00Z" });
+    await api.calendarCreateEvent({ summary: "Review", start: "2026-09-10T10:00:00Z", end: "2026-09-10T11:00:00Z", confirm: true });
+    await api.calendarDeleteEvent("event-1", "primary", true);
+
+    expect(fetchImpl.mock.calls[0][0]).toBe("/api/plugins/google-calendar/status?probe=true");
+    expect(fetchImpl.mock.calls[1][0]).toBe("/api/plugins/google-calendar/oauth/start");
+    expect(fetchImpl.mock.calls[2][0]).toBe("/api/plugins/google-calendar/calendars");
+    expect(fetchImpl.mock.calls[3][0]).toContain("/api/plugins/google-calendar/events?");
+    expect(fetchImpl.mock.calls[4][0]).toBe("/api/plugins/google-calendar/events");
+    expect(fetchImpl.mock.calls[5][0]).toBe("/api/plugins/google-calendar/events/event-1/delete");
+    expect(fetchImpl.mock.calls[5][1].body.confirm).toBe(true);
+  });
+
   test("owns scoped Discord bot reads and sends", async () => {
     const fetchImpl = vi.fn(async (path, options) => ({ path, options }));
     const api = await loadPluginsApi(fetchImpl);

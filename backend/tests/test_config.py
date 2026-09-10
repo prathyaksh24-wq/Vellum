@@ -57,6 +57,10 @@ def test_settings_loads_paths_and_privacy_defaults():
     assert isinstance(settings.youtube_oauth_client_secret, str)
     assert settings.youtube_oauth_keyring_service == "vellum.youtube"
     assert settings.youtube_oauth_account_label == "primary"
+    assert isinstance(settings.google_calendar_oauth_client_id, str)
+    assert isinstance(settings.google_calendar_oauth_client_secret, str)
+    assert settings.google_calendar_oauth_keyring_service == "vellum.google-calendar"
+    assert settings.google_calendar_oauth_account_label == "primary"
     assert settings.x_tool_allow_xai_fallback is False
 
 

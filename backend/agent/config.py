@@ -177,6 +177,16 @@ class Settings(BaseSettings):
         alias="YOUTUBE_OAUTH_KEYRING_SERVICE",
     )
     youtube_oauth_account_label: str = Field(default="primary", alias="YOUTUBE_OAUTH_ACCOUNT_LABEL")
+    google_calendar_oauth_client_id: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_ID")
+    google_calendar_oauth_client_secret: str = Field(default="", alias="GOOGLE_CALENDAR_OAUTH_CLIENT_SECRET")
+    google_calendar_oauth_keyring_service: str = Field(
+        default="vellum.google-calendar",
+        alias="GOOGLE_CALENDAR_OAUTH_KEYRING_SERVICE",
+    )
+    google_calendar_oauth_account_label: str = Field(
+        default="primary",
+        alias="GOOGLE_CALENDAR_OAUTH_ACCOUNT_LABEL",
+    )
     discord_application_id: str = Field(default="", alias="DISCORD_APPLICATION_ID")
     discord_bot_token: str = Field(default="", alias="DISCORD_BOT_TOKEN")
     discord_allowed_guild_ids: str = Field(default="", alias="DISCORD_ALLOWED_GUILD_IDS")
