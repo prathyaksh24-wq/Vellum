@@ -100,7 +100,7 @@ class AttachmentImportService:
             reference = _clean_name(arguments.get("reference"))
             records = [self._recent_attachment(reference)]
         elif source == "path":
-            records = [self._from_path(self._resolve_path(arguments))]
+            records = [self._from_granted_path(arguments)]
         else:
             raise AttachmentImportError("ATTACHMENT_SOURCE_REQUIRED", "Choose a file, clipboard, or recent attachment source.")
 
@@ -180,7 +180,7 @@ class AttachmentImportService:
             raise AttachmentImportError("ATTACHMENT_RECENT_NOT_FOUND", "That recent attachment is unavailable. Choose it from the file picker.")
         raise AttachmentImportError("ATTACHMENT_RECENT_AMBIGUOUS", "More than one recent attachment matches that name.")
 
-    def _resolve_path(self, arguments: dict[str, Any]) -> Path:
+    def _from_granted_path(self, arguments: dict[str, Any]) -> ConversationAttachment:
         raw = str(arguments.get("path") or "").strip().strip('"\'')
         if not raw or "\x00" in raw or any(character in raw for character in "\r\n"):
             raise AttachmentImportError("ATTACHMENT_PATH_REQUIRED", "Provide an explicit file path.")
@@ -191,7 +191,20 @@ class AttachmentImportService:
             comparison_candidate = os.path.normcase(candidate)
             safe_prefix = comparison_root.rstrip(os.sep) + os.sep
             if comparison_candidate == comparison_root or comparison_candidate.startswith(safe_prefix):
-                return Path(candidate)
+                path = Path(candidate)
+                if not path.exists():
+                    raise AttachmentImportError("ATTACHMENT_NOT_FOUND", f"{path.name or 'The file'} was not found.")
+                if not path.is_file():
+                    raise AttachmentImportError("ATTACHMENT_NOT_A_FILE", "Only individual files can be attached.")
+                if not self._path_egress_allowed(path):
+                    raise AttachmentImportError(
+                        "ATTACHMENT_FOLDER_POLICY_BLOCKED",
+                        f"{path.name} is local-only under its folder policy.",
+                    )
+                size = path.stat().st_size
+                if size > MAX_ATTACHMENT_BYTES:
+                    raise AttachmentImportError("ATTACHMENT_TOO_LARGE", f"{path.name} is larger than 10 MB.")
+                return self._from_bytes(path.name, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "")
         raise AttachmentImportError(
             "ATTACHMENT_PATH_NOT_GRANTED",
             "Use an explicit file path or choose a file from a granted folder.",
@@ -422,7 +435,7 @@ def _default_path_egress_allowed(path: Path) -> bool:
     from agent.obsidian.folder_policy import access_decision
 
     try:
-        relative = path.resolve().relative_to(get_settings().obsidian_vault_path.resolve())
+        relative = path.relative_to(get_settings().obsidian_vault_path.resolve())
     except ValueError:
         return True
     return access_decision(relative).can_send_to_llm
