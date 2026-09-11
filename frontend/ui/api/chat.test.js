@@ -227,13 +227,13 @@ describe("Vellum default chat stream trace", () => {
       { message: "hide the sidebar", thread_id: "t1" },
       {
         actionRequested: (request) => requested.push(request),
-        actionReceipt: (value) => receipts.push(value),
+        actionReceipt: (value, turn) => receipts.push({value, turn}),
         delta: (text) => deltas.push(text),
       },
     );
 
     expect(requested).toEqual([{ action_id: "ui.sidebar.set" }]);
-    expect(receipts).toEqual([receipt]);
+    expect(receipts).toEqual([{value: receipt, turn: {turn_kind: "action"}}]);
     expect(deltas).toEqual(["Sidebar hidden."]);
   });
 

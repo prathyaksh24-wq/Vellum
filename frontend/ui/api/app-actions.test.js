@@ -26,6 +26,7 @@ describe("Vellum App Action API adapter", () => {
     await api.confirm("confirm-1", action, context);
     await api.cancel("confirm-1", context);
     await api.undo("undo-1", context);
+    await api.prepareAttachments([{name: "note.txt", mime_type: "text/plain", data_url: "data:text/plain;base64,aGk="}], ["old"]);
 
     expect(request.mock.calls[0]).toEqual(["/api/app-actions/catalog"]);
     expect(request.mock.calls[1][0]).toBe("/api/app-actions/dispatch");
@@ -36,5 +37,10 @@ describe("Vellum App Action API adapter", () => {
     expect(JSON.parse(request.mock.calls[3][1].body)).toEqual({ token: "confirm-1", context });
     expect(request.mock.calls[4][0]).toBe("/api/app-actions/undo");
     expect(JSON.parse(request.mock.calls[4][1].body)).toEqual({ token: "undo-1", context });
+    expect(request.mock.calls[5][0]).toBe("/api/app-actions/attachments/prepare");
+    expect(JSON.parse(request.mock.calls[5][1].body)).toEqual({
+      uploads: [{name: "note.txt", mime_type: "text/plain", data_url: "data:text/plain;base64,aGk="}],
+      existing_digests: ["old"],
+    });
   });
 });

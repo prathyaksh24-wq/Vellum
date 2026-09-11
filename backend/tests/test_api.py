@@ -413,6 +413,8 @@ def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tm
                         "kind": "image",
                         "mime_type": "image/png",
                         "data_url": "data:image/png;base64,iVBORw0KGgo=",
+                        "egress_scope": "current_turn",
+                        "metadata_stripped": True,
                     }
                 ],
             },
@@ -421,7 +423,14 @@ def test_chat_endpoint_passes_image_attachments_to_model_content(monkeypatch, tm
     assert response.status_code == 200
     content = fake_agent.calls[0][0]["messages"][0]["content"]
     assert content[0] == {"type": "text", "text": "what can you see?"}
-    assert content[1] == {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}}
+    assert content[1] == {
+        "type": "vellum_attachment_image",
+        "name": "frame.png",
+        "mime_type": "image/png",
+        "data_url": "data:image/png;base64,iVBORw0KGgo=",
+        "egress_scope": "current_turn",
+        "metadata_stripped": True,
+    }
 
 
 def test_ui_conversation_endpoints_persist_sidebar_history(monkeypatch, tmp_path):

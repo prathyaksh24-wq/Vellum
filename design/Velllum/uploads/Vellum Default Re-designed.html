@@ -20,6 +20,7 @@
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
 <script src="components/app-action-runtime.js"></script>
+<script src="components/attachment-runtime.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
@@ -733,6 +734,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .cpill{background:var(--glass);backdrop-filter:blur(20px) saturate(165%);-webkit-backdrop-filter:blur(20px) saturate(165%);border:1px solid var(--line2);border-radius:24px;padding:8px 10px 8px 8px;display:flex;flex-direction:column;gap:6px;box-shadow:0 10px 34px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.10)}
 .cpill:focus-within{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 14%,transparent)}
 .attach-strip{display:flex;gap:6px;flex-wrap:wrap;padding:2px 4px 0}
+.attach-error{margin:2px 6px 0;padding:7px 9px;border:1px solid color-mix(in srgb,var(--danger) 42%,var(--line));border-radius:9px;background:color-mix(in srgb,var(--danger) 8%,transparent);color:var(--danger);font-size:11px;line-height:1.35}
 .attach-chip{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt);border:1px solid var(--line2);background:var(--hover);border-radius:8px;padding:3px 8px}
 .attach-chip .ax{cursor:pointer;color:var(--dim)}
 .attach-chip .ax:hover{color:var(--danger)}
@@ -3506,6 +3508,7 @@ let MODELS = [
   { id: 'moonshotai/kimi-k2.6',           label: 'Kimi K2.6' },
 ];
 const DEFAULT_MODEL = 'google/gemma-4-31b-it';
+const AttachmentRuntime = window.VellumUI && window.VellumUI.Attachments;
 const readDefaultModel = () => { try { return localStorage.getItem('vellum-default-model') || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; } };
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
@@ -3760,6 +3763,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
 
 const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, presentation = {}}) => {
   const [attach, setAttach] = useState([]);
+  const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
   const [epubImportBusy, setEpubImportBusy] = useState('');
   const [epubImportError, setEpubImportError] = useState('');
@@ -3806,6 +3810,16 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
   const fileRef = useRef(null);
   const taRef = useRef(null);
   const cpillRef = useRef(null);
+  const prepareComposerFiles = async files => {
+    try {
+      setAttachError('');
+      const prepared = await AttachmentRuntime.prepareFiles(files, attach, API.appActions);
+      setAttach(current => AttachmentRuntime.mergeAttachments(current, prepared));
+    } catch (error) {
+      const detail = error && error.detail;
+      setAttachError((detail && (detail.message || (detail.detail && detail.detail.message))) || error.message || 'Attachment could not be prepared.');
+    }
+  };
   const [glow, setGlow] = useState(false);
   useEffect(() => {
     if (!glow) return;
@@ -3828,6 +3842,20 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
     };
     window.addEventListener('vellum-composer', onCmd);
     return () => window.removeEventListener('vellum-composer', onCmd);
+  }, []);
+  useEffect(() => {
+    const onAttachmentAction = event => {
+      const detail = event.detail || {};
+      const effect = AttachmentRuntime.actionEffect(detail.receipt, detail.turn);
+      if (!effect) return;
+      if (effect.error) setAttachError(effect.error);
+      else setAttachError('');
+      if (effect.attachments.length) setAttach(current => AttachmentRuntime.mergeAttachments(current, effect.attachments));
+      if (effect.deferredMessage) setText(current => current.trim() ? current : effect.deferredMessage);
+      if (effect.openPicker && fileRef.current) fileRef.current.click();
+    };
+    window.addEventListener('vellum:attachment-action', onAttachmentAction);
+    return () => window.removeEventListener('vellum:attachment-action', onAttachmentAction);
   }, []);
   const slashMatch = text.match(/(?:^|\s)\/(\S*)$/);
   const hasSlash = !!slashMatch;
@@ -3892,6 +3920,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
     if (!text.trim()) return;
     onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope});
     setText(''); setAttach([]);
+    setAttachError('');
     setSearchMode(false);
   };
   const composerSize = ['compact','comfortable','large'].includes(presentation.size) ? presentation.size : 'comfortable';
@@ -3903,7 +3932,10 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
       {voiceState !== 'idle' && (
         <div className="voice-status">{voiceState === 'connecting' ? 'Connecting to voice' : 'Start talking'}</div>
       )}
-      <div className={'cpill' + (glow ? ' glowing' : '') + (voiceState !== 'idle' ? ' voicing' : '')} ref={cpillRef}>
+      <div className={'cpill' + (glow ? ' glowing' : '') + (voiceState !== 'idle' ? ' voicing' : '')} ref={cpillRef}
+        onDragOver={event => { if (event.dataTransfer && event.dataTransfer.files.length) event.preventDefault(); }}
+        onDrop={event => { if (event.dataTransfer && event.dataTransfer.files.length) { event.preventDefault(); prepareComposerFiles(event.dataTransfer.files); } }}>
+        {attachError && <div className="attach-error" role="alert">{attachError}</div>}
         {attach.length > 0 && (
           <div className="attach-strip">
             {attach.map((a, i) => a.url ? (
@@ -3927,6 +3959,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           <textarea ref={taRef} rows={1} value={text} data-ui-reference="composer"
             onFocus={() => setGlow(true)} onBlur={() => setGlow(false)}
             onChange={e => setText(e.target.value)}
+            onPaste={event => { if (event.clipboardData && event.clipboardData.files.length) { event.preventDefault(); prepareComposerFiles(event.clipboardData.files); } }}
             onKeyDown={e => {
               if (slashOpen && slashFlat.length) {
                 if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIdx(i => (i + 1) % slashFlat.length); return; }
@@ -3950,22 +3983,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
                 const epubFiles = files.filter(isEpubFile);
                 const epub = epubFiles[0];
                 const regularFiles = files.filter(file => !isEpubFile(file));
-                const items = await Promise.all(regularFiles.map(f => new Promise(resolve => {
-                  const base = {
-                    name: f.name,
-                    size: fmtSize(f.size),
-                    kind: kindOf(f.name),
-                    mime_type: f.type || '',
-                    url: f.type && f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
-                    fresh: true,
-                  };
-                  if (!f.type || !f.type.startsWith('image/')) return resolve(base);
-                  const reader = new FileReader();
-                  reader.onload = () => resolve({...base, data_url: String(reader.result || '')});
-                  reader.onerror = () => resolve(base);
-                  reader.readAsDataURL(f);
-                })));
-                setAttach(at => [...at, ...items]);
+                if (regularFiles.length) await prepareComposerFiles(regularFiles);
                 if (epub) {
                   setEpubImportError(epubFiles.length > 1 ? 'Import one EPUB at a time. The first book is ready.' : '');
                   try {
@@ -3989,7 +4007,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           )}
           {plusOpen && <PlusMenu library={library || []} projects={projects || []} drop={drop} onWeb={() => { setPlusOpen(false); enableSearch(); }}
             onAttachFile={() => { setPlusOpen(false); fileRef.current.click(); }}
-            onAttachRecent={it => { setPlusOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+            onAttachRecent={it => { setPlusOpen(false); setAttach(at => AttachmentRuntime.mergeAttachments(at, [it.attachment ? {...it.attachment, fresh:false} : {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}])); }}
             onOpenLibrary={() => { setPlusOpen(false); setLibOpen(true); }}
             onOpenProject={id => { setPlusOpen(false); onOpenProject && onOpenProject(id); }}
             onClose={() => setPlusOpen(false)}/>}
@@ -4060,7 +4078,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
         </div>
       )}
       {libOpen && <LibPickModal library={library || []}
-        onPick={it => { setLibOpen(false); setAttach(at => [...at, {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}]); }}
+        onPick={it => { setLibOpen(false); setAttach(at => AttachmentRuntime.mergeAttachments(at, [it.attachment ? {...it.attachment, fresh:false} : {name: it.name, size: it.size, kind: it.kind, url: null, fresh: false}])); }}
         onClose={() => setLibOpen(false)}/>}
       {epubImport && BooksImportDialog && <BooksImportDialog
         version={epubImport.version}
@@ -8830,8 +8848,18 @@ const [slashSkills, setSlashSkills] = useState([]);
             appActionRequested = true;
             if (turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
-          actionReceipt: receipt => {
-            applyAppActionReceipt(receipt, {notify:true});
+          actionReceipt: (receipt, turn) => {
+            applyAppActionReceipt(receipt, {notify:true, turn});
+            const imported = receipt && receipt.result && receipt.result.attachments || [];
+            if (turn.turn_kind === 'mixed' && imported.length) {
+              updateAgentConvo(agent.id, convoId, convo => {
+                const assistantIndex = convo.messages.findIndex(message => message.id === assistantId);
+                const userIndex = assistantIndex - 1;
+                return {...convo, messages:convo.messages.map((message, index) => index === userIndex
+                  ? {...message, attachments:AttachmentRuntime.mergeAttachments(message.attachments || [], imported)}
+                  : message)};
+              });
+            }
           },
           delta: text => {
             finishTurn(assistantId);
@@ -9337,8 +9365,18 @@ const [slashSkills, setSlashSkills] = useState([]);
               streaming: true,
             }));
           },
-          actionReceipt: receipt => {
-            applyAppActionReceipt(receipt, {notify:true});
+          actionReceipt: (receipt, turn) => {
+            applyAppActionReceipt(receipt, {notify:true, turn});
+            const imported = receipt && receipt.result && receipt.result.attachments || [];
+            if (turn.turn_kind === 'mixed' && imported.length) {
+              updateChat(chatId, chat => {
+                const assistantIndex = chat.messages.findIndex(message => message.id === assistantId);
+                const userIndex = assistantIndex - 1;
+                return {...chat, messages:chat.messages.map((message, index) => index === userIndex
+                  ? {...message, attachments:AttachmentRuntime.mergeAttachments(message.attachments || [], imported)}
+                  : message)};
+              });
+            }
             updateTurn(chatId, assistantId, m => ({
               ...m,
               actionReceipts: [...(m.actionReceipts || []), receipt],
@@ -9421,7 +9459,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
       setLibrary(lib => [
-        ...freshAttach.map(a => ({id: uid(), name: a.name, kind: a.kind || kindOf(a.name), size: a.size, modified: 'Today'})),
+        ...freshAttach.map(a => ({id: uid(), name: a.name, kind: a.kind || kindOf(a.name), size: a.size, modified: 'Today', attachment:{...a, fresh:false}})),
         ...lib,
       ]);
     }
@@ -9548,6 +9586,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
+      if (receipt && receipt.action_id === 'composer.attachment.import') {
+        setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:attachment-action', {detail:{receipt, turn:options.turn || {turn_kind:'action'}}})), 0);
+      }
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {

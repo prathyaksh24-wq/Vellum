@@ -24,6 +24,7 @@ from agent.app_actions.models import (
     UISurfaceDefinition,
     WorkspaceLayoutSnapshot,
 )
+from agent.app_actions.attachments import AttachmentImportError
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -44,6 +45,7 @@ CONVERSATION_DELETE_ACTION_ID = "conversation.delete"
 CONVERSATION_FORK_ACTION_ID = "conversation.fork"
 CONVERSATION_WINDOW_OPEN_ACTION_ID = "conversation.window.open"
 CONVERSATION_SHARE_ACTION_ID = "conversation.share"
+ATTACHMENT_IMPORT_ACTION_ID = "composer.attachment.import"
 _UNDO_TTL = timedelta(minutes=15)
 
 
@@ -145,6 +147,7 @@ class AppActionRuntime:
         confirmation_token_factory: Callable[[], str] | None = None,
         conversation_lifecycle: ConversationLifecycle | Callable[[], ConversationLifecycle] | None = None,
         conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
+        attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
         self._receipt_store = receipt_store or InMemoryReceiptStore()
@@ -154,6 +157,7 @@ class AppActionRuntime:
         self._confirmation_token_factory = confirmation_token_factory or (lambda: secrets.token_urlsafe(24))
         self._conversation_lifecycle = conversation_lifecycle
         self._conversation_sharing = conversation_sharing
+        self._attachment_importer = attachment_importer
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._surfaces = {surface.reference: surface for surface in self._surface_definitions()}
@@ -163,6 +167,7 @@ class AppActionRuntime:
                 self._sidebar_definition(),
                 self._surface_action_definition(),
                 self._reset_definition(),
+                self._attachment_definition(),
                 *self._conversation_definitions(),
             )
         }
@@ -172,6 +177,12 @@ class AppActionRuntime:
         self._register(WORKSPACE_RESET_ACTION_ID, "Reset interface presentation", self._reset_workspace)
         if self._conversation_lifecycle is not None:
             self.set_conversation_lifecycle_provider(self._conversation_lifecycle)
+
+    def set_attachment_importer(
+        self,
+        importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]],
+    ) -> None:
+        self._attachment_importer = importer
 
     def _register(
         self,
@@ -323,6 +334,52 @@ class AppActionRuntime:
         normalized = normalized.rstrip(".!?")
         submitted = submitted.rstrip(".!?")
         polite = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
+
+        if re.fullmatch(
+            polite + r"(?:attach|add|import|use)\s+(?:(?:the|my)\s+)?(?:current\s+)?(?:clipboard|clipboard content|copied text|copied image)",
+            normalized,
+        ):
+            return AppActionRequest(
+                action_id=ATTACHMENT_IMPORT_ACTION_ID,
+                arguments={"source": "clipboard"},
+            )
+
+        recent_attachment = re.fullmatch(
+            polite
+            + r"(?:attach|add|import)\s+(?:the\s+)?(?:most\s+)?recent\s+(?:file|image|photo|document|attachment)"
+            + r"(?:\s+(?:called|named)\s+(.+))?",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if recent_attachment:
+            reference = self._spoken_value(recent_attachment.group(1) or "")
+            arguments = {"source": "recent"}
+            if reference:
+                arguments["reference"] = reference
+            return AppActionRequest(action_id=ATTACHMENT_IMPORT_ACTION_ID, arguments=arguments)
+
+        if re.fullmatch(
+            polite + r"(?:attach|add|import|upload|choose)\s+(?:an?\s+|the\s+)?(?:file|image|photo|document)(?:\s+for\s+me)?",
+            normalized,
+        ):
+            return AppActionRequest(
+                action_id=ATTACHMENT_IMPORT_ACTION_ID,
+                arguments={"source": "picker"},
+            )
+
+        path_attachment = re.fullmatch(
+            polite
+            + r"(?:attach|add|import|upload)\s+(?:(?:the|this)\s+)?(?:(?:file|image|photo|document)\s+)?(?:at\s+|from\s+)?(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if path_attachment:
+            path = self._spoken_value(path_attachment.group(1))
+            if re.match(r"^(?:[A-Za-z]:[\\/]|\\\\|/)", path):
+                return AppActionRequest(
+                    action_id=ATTACHMENT_IMPORT_ACTION_ID,
+                    arguments={"source": "path", "path": path},
+                )
 
         if re.fullmatch(
             polite + r"(?:start|create|open)(?:\s+(?:a|another))?\s+new\s+(?:chat|conversation)",
@@ -685,6 +742,8 @@ class AppActionRuntime:
 
         if request.action_id.startswith("conversation."):
             return self._dispatch_conversation(request, context, definition)
+        if request.action_id == ATTACHMENT_IMPORT_ACTION_ID:
+            return self._dispatch_attachment(request, context, definition)
 
         try:
             result = self._registry.invoke(
@@ -786,6 +845,51 @@ class AppActionRuntime:
             receipts.append(receipt)
             current_context = self._context_after_receipt(current_context, receipt)
         return receipts
+
+    def _dispatch_attachment(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        if self._attachment_importer is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ATTACHMENT_IMPORT_UNAVAILABLE",
+                message="Attachment import is unavailable.",
+            )
+        try:
+            result = self._attachment_importer(dict(request.arguments), tuple(context.attachment_digests))
+        except AttachmentImportError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                result=exc.details,
+                authorized=True,
+            )
+        attachments = list(result.get("attachments") or [])
+        target_id = str(attachments[0].get("digest") if attachments else "composer")
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="applied",
+            authorization=self._authorization(definition.access_class, context, allowed=True),
+            target=ActionTarget(kind="composer_attachment", id=target_id),
+            result=result,
+            message=str(result.get("message") or "Attachment ready."),
+            audit_label=definition.audit_label,
+            created_at=self._now(),
+        )
 
     @staticmethod
     def _context_after_receipt(
@@ -1935,6 +2039,35 @@ class AppActionRuntime:
             argument_schema={"type": "object", "additionalProperties": False},
             result_schema={"type": "object", "required": ["workspace_layout_patch", "changed"]},
             ui_reference="workspace-layout", audit_label="workspace.layout.reset",
+        )
+
+    @staticmethod
+    def _attachment_definition() -> AppActionDefinition:
+        return AppActionDefinition(
+            id=ATTACHMENT_IMPORT_ACTION_ID,
+            version="1",
+            owner="conversation-attachments",
+            title="Attach local content",
+            description="Attach an explicit file, current clipboard content, or recent attachment.",
+            scope="conversation",
+            access_class=CapabilityAccess.WRITE.value,
+            confirmation_rule="current_user_intent",
+            executor_location="server_or_client",
+            supports_undo=False,
+            idempotent=False,
+            argument_schema={
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["source"],
+                "properties": {
+                    "source": {"enum": ["path", "clipboard", "recent", "picker"]},
+                    "path": {"type": "string"},
+                    "reference": {"type": "string"},
+                },
+            },
+            result_schema={"type": "object", "required": ["attachments"]},
+            ui_reference="composer",
+            audit_label="conversation.attachment.import",
         )
 
     @staticmethod

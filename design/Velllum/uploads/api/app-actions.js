@@ -33,11 +33,19 @@
     );
   }
 
+  function prepareAttachments(uploads, existingDigests) {
+    return client.request(
+      "/api/app-actions/attachments/prepare",
+      client.jsonOptions("POST", { uploads: uploads, existing_digests: existingDigests || [] }),
+    );
+  }
+
   window.VellumApi.appActions = {
     catalog: catalog,
     dispatch: dispatch,
     confirm: confirm,
     cancel: cancel,
     undo: undo,
+    prepareAttachments: prepareAttachments,
   };
 })();

@@ -42,6 +42,7 @@ from agent.cli.project_commands import (
     handle_project_command,
 )
 from agent.app_actions.api import router as app_actions_router
+from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.runtime import get_app_action_runtime
 from agent.coding.api import create_coding_router
@@ -133,6 +134,8 @@ _api_ledger = UsageLedger(REPO_ROOT / "data" / "memory" / "usage.db")
 _observability = ObservabilityService(REPO_ROOT / "data" / "memory" / "observability.db")
 _memory_orchestrator = get_memory_orchestrator()
 _app_action_runtime = get_app_action_runtime()
+_attachment_import_service = get_attachment_import_service()
+_app_action_runtime.set_attachment_importer(_attachment_import_service.import_from_action)
 _conversation_context_store = ConversationContextStore(REPO_ROOT / "data" / "memory" / "conversation-context.db")
 _conversation_share_service = ConversationShareService(export_dir=REPO_ROOT / "data" / "exports" / "conversations")
 _fts5_memory = _memory_orchestrator.fts5
@@ -283,13 +286,8 @@ class ChatRequest(BaseModel):
     action_context: AppActionContext | None = None
 
 
-class ChatAttachment(BaseModel):
-    name: str = ""
-    kind: str = ""
-    mime_type: str = ""
-    data_url: str | None = None
-    url: str | None = None
-    book_import_id: str = ""
+class ChatAttachment(ConversationAttachment):
+    """Compatibility name for the canonical conversation attachment record."""
 
 
 def _ingest_epub_attachment(attachment: ChatAttachment) -> dict[str, Any]:
@@ -3228,15 +3226,31 @@ def _with_forced_web_search_context(clean_message: str) -> str:
 
 
 def _agent_content_with_attachments(message: str, attachments: list[ChatAttachment] | None) -> str | list[dict[str, Any]]:
-    image_parts: list[dict[str, Any]] = []
+    attachment_parts: list[dict[str, Any]] = []
     for attachment in attachments or []:
-        data_url = (attachment.data_url or "").strip()
-        mime_type = (attachment.mime_type or "").strip().lower()
-        if data_url.startswith("data:image/") or (mime_type.startswith("image/") and data_url.startswith("data:")):
-            image_parts.append({"type": "image_url", "image_url": {"url": data_url}})
-    if not image_parts:
+        envelope = {
+            "name": attachment.name,
+            "egress_scope": attachment.egress_scope,
+            "metadata_stripped": attachment.metadata_stripped,
+        }
+        if attachment.text_content:
+            attachment_parts.append({
+                **envelope,
+                "type": "vellum_attachment_text",
+                "text": attachment.text_content,
+            })
+        elif attachment.data_url:
+            attachment_parts.append({
+                **envelope,
+                "type": "vellum_attachment_image",
+                "mime_type": attachment.mime_type,
+                "data_url": attachment.data_url,
+            })
+    if not attachment_parts:
         return message
-    return [{"type": "text", "text": message}, *image_parts]
+    # These local envelopes are not provider content. DisclosureBroker validates,
+    # scrubs, tags, and converts them at the final external-model boundary.
+    return [{"type": "text", "text": message}, *attachment_parts]
 
 
 def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, live_sources: list[dict[str, Any]]) -> str:
@@ -4244,6 +4258,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     action_turn = _app_action_runtime.plan_submission(action_message)
     submitted_actions = list(action_turn.actions)
     action_receipts = []
+    for attachment in request.attachments:
+        _attachment_import_service.remember(attachment)
     if submitted_actions:
         action_context = request.action_context or AppActionContext(
             source="nlp",
@@ -4252,8 +4268,29 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         action_context = action_context.model_copy(update={
             "source": "nlp",
             "invocation_conversation_id": active_thread_id,
+            "attachment_digests": list(dict.fromkeys([
+                *action_context.attachment_digests,
+                *(attachment.digest for attachment in request.attachments if attachment.digest),
+            ])),
         })
         action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
+
+    action_attachments: list[ChatAttachment] = []
+    for receipt in action_receipts:
+        if receipt.status != "applied":
+            continue
+        for raw_attachment in receipt.result.get("attachments") or []:
+            action_attachments.append(ChatAttachment.model_validate(raw_attachment))
+    turn_attachments = [*request.attachments, *action_attachments]
+
+    deferred_selection = action_turn.is_mixed and any(
+        receipt.status == "applied" and receipt.result.get("requires_user_selection")
+        for receipt in action_receipts
+    )
+    if deferred_selection:
+        for receipt in action_receipts:
+            if receipt.result.get("requires_user_selection"):
+                receipt.result["deferred_message"] = action_turn.conversation_message
 
     turn_kind = "mixed" if action_turn.is_mixed else "action"
 
@@ -4283,13 +4320,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 yield action_event
 
     def stream_response(events) -> StreamingResponse:
-        combined = with_action_events(events) if action_turn.is_mixed else events
+        combined = with_action_events(events) if action_turn.is_mixed and not deferred_selection else events
         return StreamingResponse(
             _audited_turn_stream(combined, turn_audit),
             media_type="text/event-stream",
         )
 
-    if submitted_actions and not action_turn.conversation_message:
+    if submitted_actions and (not action_turn.conversation_message or deferred_selection):
         response_text = "\n".join(
             receipt.message or "App action completed."
             for receipt in action_receipts
@@ -4384,7 +4421,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             source="voice" if request.voice else "agent",
             voice=request.voice,
             store=request.store,
-            attachments=request.attachments,
+            attachments=turn_attachments,
             turn_audit=turn_audit,
             reasoning_mode=request.reasoning_mode,
         )

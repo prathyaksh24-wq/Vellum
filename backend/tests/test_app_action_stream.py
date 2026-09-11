@@ -125,6 +125,8 @@ async def test_forked_chat_seeds_model_history_and_attachment_content_once(monke
                     "kind": "image",
                     "mime_type": "image/png",
                     "data_url": "data:image/png;base64,ZmFrZQ==",
+                    "egress_scope": "current_turn",
+                    "metadata_stripped": True,
                 }],
             },
             {"id": "a1", "role": "assistant", "text": "It is a diagram."},
@@ -158,7 +160,14 @@ async def test_forked_chat_seeds_model_history_and_attachment_content_once(monke
     assert seeded_agent.messages[0]["role"] == "user"
     assert seeded_agent.messages[0]["content"] == [
         {"type": "text", "text": "What is in this image?"},
-        {"type": "image_url", "image_url": {"url": "data:image/png;base64,ZmFrZQ=="}},
+        {
+            "type": "vellum_attachment_image",
+            "name": "diagram.png",
+            "mime_type": "image/png",
+            "data_url": "data:image/png;base64,ZmFrZQ==",
+            "egress_scope": "current_turn",
+            "metadata_stripped": True,
+        },
     ]
     assert seeded_agent.messages[1] == {"role": "assistant", "content": "It is a diagram."}
 
