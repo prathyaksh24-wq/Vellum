@@ -186,25 +186,38 @@ class AttachmentImportService:
             raise AttachmentImportError("ATTACHMENT_PATH_REQUIRED", "Provide an explicit file path.")
         for root in self._granted_folders:
             safe_root = os.path.realpath(str(root))
-            candidate = os.path.realpath(os.path.join(safe_root, raw))
-            comparison_root = os.path.normcase(safe_root)
-            comparison_candidate = os.path.normcase(candidate)
-            safe_prefix = comparison_root.rstrip(os.sep) + os.sep
-            if comparison_candidate == comparison_root or comparison_candidate.startswith(safe_prefix):
-                path = Path(candidate)
-                if not path.exists():
-                    raise AttachmentImportError("ATTACHMENT_NOT_FOUND", f"{path.name or 'The file'} was not found.")
-                if not path.is_file():
-                    raise AttachmentImportError("ATTACHMENT_NOT_A_FILE", "Only individual files can be attached.")
-                if not self._path_egress_allowed(path):
-                    raise AttachmentImportError(
-                        "ATTACHMENT_FOLDER_POLICY_BLOCKED",
-                        f"{path.name} is local-only under its folder policy.",
-                    )
-                size = path.stat().st_size
-                if size > MAX_ATTACHMENT_BYTES:
-                    raise AttachmentImportError("ATTACHMENT_TOO_LARGE", f"{path.name} is larger than 10 MB.")
-                return self._from_bytes(path.name, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "")
+            requested = Path(os.path.realpath(os.path.join(safe_root, raw)))
+            try:
+                relative = requested.relative_to(safe_root)
+            except ValueError:
+                continue
+
+            safe_parts: list[str] = []
+            for part in relative.parts:
+                safe_part = os.path.basename(part)
+                if safe_part != part or safe_part in {"", ".", ".."}:
+                    safe_parts = []
+                    break
+                safe_parts.append(safe_part)
+            if not safe_parts:
+                continue
+
+            # Rebuild from the trusted grant and individually sanitized components.
+            # The user-controlled absolute path is used only to identify this relative name.
+            path = Path(safe_root).joinpath(*safe_parts)
+            if not path.exists():
+                raise AttachmentImportError("ATTACHMENT_NOT_FOUND", f"{path.name or 'The file'} was not found.")
+            if not path.is_file():
+                raise AttachmentImportError("ATTACHMENT_NOT_A_FILE", "Only individual files can be attached.")
+            if not self._path_egress_allowed(path):
+                raise AttachmentImportError(
+                    "ATTACHMENT_FOLDER_POLICY_BLOCKED",
+                    f"{path.name} is local-only under its folder policy.",
+                )
+            size = path.stat().st_size
+            if size > MAX_ATTACHMENT_BYTES:
+                raise AttachmentImportError("ATTACHMENT_TOO_LARGE", f"{path.name} is larger than 10 MB.")
+            return self._from_bytes(path.name, path.read_bytes(), mimetypes.guess_type(path.name)[0] or "")
         raise AttachmentImportError(
             "ATTACHMENT_PATH_NOT_GRANTED",
             "Use an explicit file path or choose a file from a granted folder.",

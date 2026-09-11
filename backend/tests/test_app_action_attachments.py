@@ -38,7 +38,9 @@ def _docx_bytes(text: str) -> bytes:
 
 
 def test_explicit_path_produces_a_path_free_canonical_attachment(tmp_path: Path) -> None:
-    source = tmp_path / "notes.txt"
+    folder = tmp_path / "research"
+    folder.mkdir()
+    source = folder / "notes.txt"
     source.write_text("A local research note.", encoding="utf-8")
     service = AttachmentImportService(granted_folders=(tmp_path,))
 
