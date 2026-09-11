@@ -375,7 +375,7 @@ class AppActionRuntime:
         )
         if path_attachment:
             path = self._spoken_value(path_attachment.group(1))
-            if re.match(r"^(?:[A-Za-z]:[\\/]|\\\\)", path):
+            if re.match(r"^(?:[A-Za-z]:[\\/]|\\\\|/)", path):
                 return AppActionRequest(
                     action_id=ATTACHMENT_IMPORT_ACTION_ID,
                     arguments={"source": "path", "path": path},

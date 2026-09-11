@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import hashlib
 import io
 import mimetypes
+import os
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Iterable
@@ -181,19 +182,16 @@ class AttachmentImportService:
 
     def _resolve_path(self, arguments: dict[str, Any]) -> Path:
         raw = str(arguments.get("path") or "").strip().strip('"\'')
-        if not raw:
+        if not raw or "\x00" in raw or any(character in raw for character in "\r\n"):
             raise AttachmentImportError("ATTACHMENT_PATH_REQUIRED", "Provide an explicit file path.")
-        candidate = Path(raw)
-        if candidate.is_absolute():
-            resolved = candidate.resolve()
-            for root in self._granted_folders:
-                if _is_within(resolved, root) and resolved.is_file():
-                    return resolved
-        else:
-            for root in self._granted_folders:
-                resolved = (root / candidate).resolve()
-                if _is_within(resolved, root) and resolved.is_file():
-                    return resolved
+        for root in self._granted_folders:
+            safe_root = os.path.realpath(str(root))
+            candidate = os.path.realpath(os.path.join(safe_root, raw))
+            comparison_root = os.path.normcase(safe_root)
+            comparison_candidate = os.path.normcase(candidate)
+            safe_prefix = comparison_root.rstrip(os.sep) + os.sep
+            if comparison_candidate == comparison_root or comparison_candidate.startswith(safe_prefix):
+                return Path(candidate)
         raise AttachmentImportError(
             "ATTACHMENT_PATH_NOT_GRANTED",
             "Use an explicit file path or choose a file from a granted folder.",
@@ -385,14 +383,6 @@ def _read_windows_clipboard() -> ClipboardPayload:
         user32.CloseClipboard()
 
 
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        path.relative_to(root)
-        return True
-    except ValueError:
-        return False
-
-
 def _clean_name(value: Any) -> str:
     return " ".join(str(value or "").strip().strip('"\'').split())[:255]
 
@@ -417,7 +407,13 @@ _service: AttachmentImportService | None = None
 def get_attachment_import_service() -> AttachmentImportService:
     global _service
     if _service is None:
-        _service = AttachmentImportService(path_egress_allowed=_default_path_egress_allowed)
+        from agent.config import get_settings
+
+        settings = get_settings()
+        _service = AttachmentImportService(
+            granted_folders=(settings.obsidian_vault_path,),
+            path_egress_allowed=_default_path_egress_allowed,
+        )
     return _service
 
 
