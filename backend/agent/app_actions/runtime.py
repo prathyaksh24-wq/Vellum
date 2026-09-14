@@ -34,6 +34,8 @@ from agent.app_actions.session_controls import (
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
+from agent.plugins.contributions import PluginContribution, PluginContributionCatalog
+from agent.plugins.registry import PluginRegistry
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
@@ -163,6 +165,7 @@ class AppActionRuntime:
         conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
         attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
         session_control_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
+        plugin_registry: PluginRegistry | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
         self._receipt_store = receipt_store or InMemoryReceiptStore()
@@ -176,6 +179,7 @@ class AppActionRuntime:
         self._session_control_handler = session_control_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
+        self._registry = ToolRegistry()
         self._surfaces = {surface.reference: surface for surface in self._surface_definitions()}
         self._definitions = {
             definition.id: definition
@@ -188,7 +192,21 @@ class AppActionRuntime:
                 *self._conversation_definitions(),
             )
         }
-        self._registry = ToolRegistry()
+        self._plugin_contributions = (
+            PluginContributionCatalog(
+                plugins=plugin_registry,
+                capabilities=self._registry,
+                reserved_action_ids=set(self._definitions),
+                reserved_surface_references=set(self._surfaces),
+                control_kernel_references={
+                    reference
+                    for reference, surface in self._surfaces.items()
+                    if surface.control_kernel
+                },
+            )
+            if plugin_registry is not None
+            else None
+        )
         self._register(SIDEBAR_ACTION_ID, "Change sidebar visibility", self._set_sidebar)
         self._register(SURFACE_ACTION_ID, "Customize interface presentation", self._configure_surface)
         self._register(WORKSPACE_RESET_ACTION_ID, "Reset interface presentation", self._reset_workspace)
@@ -206,6 +224,21 @@ class AppActionRuntime:
         handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]],
     ) -> None:
         self._session_control_handler = handler
+
+    def register_plugin_contribution(self, contribution: PluginContribution) -> None:
+        if self._plugin_contributions is None:
+            raise RuntimeError("Plugin contributions require a PluginRegistry")
+        self._plugin_contributions.register(contribution)
+
+    def plugin_contribution_diagnostics(self) -> list[dict[str, str]]:
+        if self._plugin_contributions is None:
+            return []
+        return [diagnostic.__dict__.copy() for diagnostic in self._plugin_contributions.diagnostics()]
+
+    def plugin_contribution_summary(self, plugin_id: str) -> dict[str, list[dict[str, Any]]]:
+        if self._plugin_contributions is None:
+            return {"app_actions": [], "ui_surfaces": []}
+        return self._plugin_contributions.summary(plugin_id)
 
     def _register(
         self,
@@ -227,13 +260,15 @@ class AppActionRuntime:
         )
 
     def catalog(self, context: AppActionContext | None = None) -> AppActionCatalog:
+        contributed_actions = self._plugin_contributions.actions(context) if self._plugin_contributions else []
+        surfaces = self._surface_map(context)
         return AppActionCatalog(
             actions=[
                 definition
-                for definition in self._definitions.values()
+                for definition in [*self._definitions.values(), *contributed_actions]
                 if self._is_available(definition, context)
             ],
-            surfaces=list(self._surfaces.values()),
+            surfaces=list(surfaces.values()),
         )
 
     def plan_submission(self, message: str) -> AppActionTurn:
@@ -330,9 +365,29 @@ class AppActionRuntime:
         definition: AppActionDefinition,
         context: AppActionContext | None,
     ) -> bool:
+        if self._plugin_contributions and self._plugin_contributions.has_action(definition.id):
+            return self._plugin_contributions.action_available(definition.id, context)
         if definition.id in SESSION_CONTROL_ACTION_IDS and self._session_control_handler is None:
             return False
         return bool(self._action_availability(definition, context))
+
+    def _definition(self, action_id: str) -> AppActionDefinition | None:
+        definition = self._definitions.get(action_id)
+        if definition is not None or self._plugin_contributions is None:
+            return definition
+        return self._plugin_contributions.action_definition(action_id)
+
+    def _surface_map(
+        self,
+        context: AppActionContext | None = None,
+    ) -> dict[str, UISurfaceDefinition]:
+        surfaces = dict(self._surfaces)
+        if self._plugin_contributions is not None:
+            surfaces.update({
+                surface.reference: surface
+                for surface in self._plugin_contributions.surfaces(context)
+            })
+        return surfaces
 
     def match_submission(self, message: str) -> AppActionRequest | None:
         """Match only complete, explicitly submitted presentation instructions."""
@@ -792,7 +847,7 @@ class AppActionRuntime:
         return AppActionRequest(action_id=SURFACE_ACTION_ID, arguments=arguments)
 
     def dispatch(self, request: AppActionRequest, context: AppActionContext) -> ActionReceipt:
-        definition = self._definitions.get(request.action_id)
+        definition = self._definition(request.action_id)
         if definition is None:
             return self._error_receipt(
                 request=request,
@@ -832,6 +887,8 @@ class AppActionRuntime:
             ):
                 return self._control_confirmation_receipt(request, context, definition)
             return self._dispatch_session_control(request, context, definition)
+        if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
+            return self._dispatch_plugin_action(request, context, definition)
 
         try:
             result = self._registry.invoke(
@@ -917,6 +974,60 @@ class AppActionRuntime:
             message=self._result_message(result),
             audit_label=definition.audit_label,
             created_at=created_at,
+        )
+
+    def _dispatch_plugin_action(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        try:
+            raw_result = self._registry.invoke(
+                request.action_id,
+                {"arguments": dict(request.arguments), "context": context},
+                agent_name=self._agent_name(context),
+            )
+            if not isinstance(raw_result, dict):
+                raise TypeError("Plugin App Action adapters must return an object")
+            result = dict(raw_result)
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except (TypeError, ValueError) as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code="PLUGIN_ACTION_FAILED",
+                message=str(exc),
+                authorized=True,
+            )
+
+        target_kind = str(result.pop("_target_kind", "plugin"))
+        target_id = str(result.pop("_target_id", definition.plugin_id or definition.owner))
+        message = str(result.pop("_message", f"{definition.title} completed."))
+        result.setdefault("changed", True)
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="applied",
+            authorization=self._authorization(definition.access_class, context, allowed=True),
+            target=ActionTarget(kind=target_kind, id=target_id),
+            result=result,
+            message=message,
+            audit_label=definition.audit_label,
+            created_at=self._now(),
         )
 
     def dispatch_many(
@@ -1188,7 +1299,7 @@ class AppActionRuntime:
                 revision=result["workspace_layout_patch"]["revision"],
             ),
             result=result,
-            message=f"{self._surfaces[record.target_reference].title} change undone.",
+            message=f"{self._surface_map(context)[record.target_reference].title} change undone.",
             audit_label=f"{definition.audit_label}.undo",
             created_at=self._now(),
         )
@@ -2023,13 +2134,14 @@ class AppActionRuntime:
     def _reset_workspace(self, payload: dict[str, Any]) -> dict[str, Any]:
         context = AppActionContext.model_validate(payload.get("context"))
         snapshot = context.workspace_layout
+        surfaces = self._surface_map(context)
         defaults = {
             reference: surface.default_presentation.model_dump(mode="json")
-            for reference, surface in self._surfaces.items()
+            for reference, surface in surfaces.items()
         }
         current = {
             reference: self._current_presentation(reference, context).model_dump(mode="json")
-            for reference in self._surfaces
+            for reference in surfaces
         }
         changed = current != defaults
         return {
@@ -2050,15 +2162,16 @@ class AppActionRuntime:
 
     def _resolve_surface(self, reference: str, context: AppActionContext) -> UISurfaceDefinition:
         normalized = self._normalize_reference(reference)
+        surfaces = self._surface_map(context)
         if normalized in {"this", "this button", "this control", "selected control"}:
             contextual = [context.selected_ui_reference, context.focused_ui_reference]
             matches = [
-                self._surfaces[item]
+                surfaces[item]
                 for item in contextual
-                if item in self._surfaces
+                if item in surfaces
                 and (
                     normalized not in {"this button"}
-                    or "label" in self._surfaces[item].configurable_properties
+                    or "label" in surfaces[item].configurable_properties
                 )
             ]
             unique = {item.reference: item for item in matches}
@@ -2068,12 +2181,12 @@ class AppActionRuntime:
                 "UI_CONTEXT_REQUIRED",
                 "Select or name the control you want to change.",
             )
-        direct = self._surfaces.get(normalized)
+        direct = surfaces.get(normalized)
         if direct:
             return direct
         matches = [
             surface
-            for surface in self._surfaces.values()
+            for surface in surfaces.values()
             if normalized in {self._normalize_reference(alias) for alias in surface.aliases}
         ]
         if len(matches) > 1 and context.visible_ui_references:
@@ -2125,15 +2238,21 @@ class AppActionRuntime:
         return value
 
     def _current_presentation(self, reference: str, context: AppActionContext) -> SurfacePresentation:
+        surfaces = self._surface_map(context)
+        if reference not in surfaces:
+            raise SurfaceActionError(
+                "UI_REFERENCE_UNAVAILABLE",
+                f"{reference or 'That interface surface'} is unavailable.",
+            )
         current = context.workspace_layout.surfaces.get(reference)
         if current is not None:
-            default = self._surfaces[reference].default_presentation
+            default = surfaces[reference].default_presentation
             return SurfacePresentation(
                 visible=current.visible,
                 location=current.location or default.location,
                 properties={**default.properties, **current.properties},
             )
-        return self._surfaces[reference].default_presentation.model_copy(deep=True)
+        return surfaces[reference].default_presentation.model_copy(deep=True)
 
     @staticmethod
     def _result_message(result: dict[str, Any]) -> str:
@@ -2426,7 +2545,9 @@ _runtime: AppActionRuntime | None = None
 def get_app_action_runtime() -> AppActionRuntime:
     global _runtime
     if _runtime is None:
-        _runtime = AppActionRuntime()
+        from agent.plugins.registry import get_plugin_registry
+
+        _runtime = AppActionRuntime(plugin_registry=get_plugin_registry())
     return _runtime
 
 

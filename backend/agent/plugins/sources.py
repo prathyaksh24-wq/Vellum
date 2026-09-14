@@ -21,6 +21,7 @@ class PluginSourceRecord:
     mcp_connectors: list[dict[str, Any]] = field(default_factory=list)
     capabilities: list[str] = field(default_factory=list)
     required: bool = False
+    protected: bool = False
 
 
 class CodexPluginSource:

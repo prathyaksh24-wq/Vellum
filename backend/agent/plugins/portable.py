@@ -21,6 +21,7 @@ class PortablePluginManifest:
     apps: list[dict[str, Any]] = field(default_factory=list)
     mcp_connectors: list[dict[str, Any]] = field(default_factory=list)
     required: bool = False
+    protected: bool = False
     path: Path = Path()
 
 
@@ -63,11 +64,18 @@ class PortableRegisteredTool:
 class PortablePluginContext:
     """Minimal Hermes-compatible registration context for Vellum wrappers."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        contribution_registrar: Callable[[Any], None] | None = None,
+    ) -> None:
         self.connectors: dict[str, dict[str, Any]] = {}
         self.system_plugins: dict[str, dict[str, Any]] = {}
         self.memory_providers: dict[str, dict[str, Any]] = {}
         self.tools: dict[str, PortableRegisteredTool] = {}
+        self.contributions: list[Any] = []
+        self._contribution_registrar = contribution_registrar
+        self._active_plugin_id = ""
 
     def register_connector(self, **kwargs: Any) -> None:
         self.connectors[str(kwargs["id"])] = dict(kwargs)
@@ -96,6 +104,18 @@ class PortablePluginContext:
             schema=dict(schema),
             handler=handler,
         )
+
+    def register_contribution(self, contribution: Any) -> None:
+        owner = str(getattr(contribution, "owner", "") or "").strip()
+        if not owner:
+            raise ValueError("Plugin contributions must declare an owner")
+        if self._active_plugin_id and owner != self._active_plugin_id:
+            raise ValueError(
+                f"Plugin {self._active_plugin_id} cannot register a contribution owned by {owner}"
+            )
+        if self._contribution_registrar is not None:
+            self._contribution_registrar(contribution)
+        self.contributions.append(contribution)
 
 
 def discover_portable_plugins(root: str | Path) -> list[PortablePluginManifest]:
@@ -132,10 +152,19 @@ def load_portable_plugin(plugin_dir: str | Path) -> PortablePlugin:
     return PortablePlugin(manifest=manifest, module=module)
 
 
-def register_portable_plugins(root: str | Path, ctx: PortablePluginContext | None = None) -> PortablePluginContext:
-    context = ctx or PortablePluginContext()
+def register_portable_plugins(
+    root: str | Path,
+    ctx: PortablePluginContext | None = None,
+    *,
+    contribution_registrar: Callable[[Any], None] | None = None,
+) -> PortablePluginContext:
+    context = ctx or PortablePluginContext(contribution_registrar=contribution_registrar)
     for manifest in discover_portable_plugins(root):
-        load_portable_plugin(manifest.path).register(context)
+        context._active_plugin_id = manifest.id
+        try:
+            load_portable_plugin(manifest.path).register(context)
+        finally:
+            context._active_plugin_id = ""
     return context
 
 
@@ -153,6 +182,7 @@ def _read_manifest(path: Path) -> PortablePluginManifest:
         apps=[dict(item) for item in data.get("apps", []) if isinstance(item, dict)],
         mcp_connectors=[dict(item) for item in data.get("mcp_connectors", []) if isinstance(item, dict)],
         required=_as_bool(data.get("required")),
+        protected=_as_bool(data.get("protected")),
         path=path.parent,
     )
 
