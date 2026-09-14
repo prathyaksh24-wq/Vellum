@@ -14,7 +14,7 @@ from agent.app_actions.session_controls import SessionControlService
 from agent.conversations.lifecycle import ConversationLifecycle
 from agent.conversations.sharing import ConversationShareService
 from agent.master.state import MasterThreadStateStore
-from agent.profiles import AgentCatalog
+from agent.profiles import AgentCatalog, AgentProfile
 import agent.skills.curator_runtime as curator_runtime
 
 
@@ -108,6 +108,45 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
     subject = AppActionRuntime()
 
     assert subject.match_submission("What are the benefits of a sidebar in a research app?") is None
+
+
+@pytest.mark.asyncio
+async def test_catalog_subagent_switch_runs_through_chat_stream_without_model_fallback(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    profile = AgentProfile(id="CalendarAgent")
+    catalog = AgentCatalog(
+        profile_dir=tmp_path / "profiles",
+        builtins={"CalendarAgent": profile},
+        executors={"CalendarAgent": SimpleNamespace()},
+    )
+    controls = SessionControlService(
+        agent_catalog=catalog,
+        state_store=state_store,
+        provider_registry=SimpleNamespace(resolve=lambda _query: None, list_models=lambda: []),
+    )
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(session_control_handler=controls.execute))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("an action-only agent switch must not call the conversational model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="switch to Calendar agent",
+        thread_id="chat-calendar",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "applied"
+    assert receipt["action_id"] == "agent.select"
+    assert receipt["result"]["session_control_patch"] == {"agent_id": "calendar"}
+    assert state_store.get("chat-calendar").active_agent == "CalendarAgent"
 
 
 @pytest.mark.asyncio

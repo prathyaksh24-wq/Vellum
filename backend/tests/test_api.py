@@ -12,6 +12,7 @@ import pytest
 from agent import api
 from agent.agents.live_dispatcher import LiveAgentResult
 from agent.computer_use_runtime import ComputerUseRuntime
+from agent.profiles import AgentCatalog, AgentProfile
 
 
 @pytest.fixture(autouse=True)
@@ -1155,6 +1156,27 @@ def test_ui_catalog_endpoints_expose_plugins_skills_automations_and_subagents(mo
     assert any(item["name"] == "Nightly digest" for item in automations_body["automations"])
     assert subagents.status_code == 200
     assert {"SportsAgent", "XAgent", "YoutubeAgent", "MemoryAgent"} <= {item["name"] for item in subagents.json()["subagents"]}
+
+
+def test_subagent_catalog_reports_runtime_availability_from_the_agent_catalog(monkeypatch, tmp_path):
+    catalog = AgentCatalog(
+        profile_dir=tmp_path / "profiles",
+        builtins={
+            "CalendarAgent": AgentProfile(id="CalendarAgent"),
+            "FutureAgent": AgentProfile(id="FutureAgent"),
+        },
+        executors={"CalendarAgent": SimpleNamespace()},
+    )
+    monkeypatch.setattr(api, "_agent_catalog", catalog)
+
+    with TestClient(api.app) as client:
+        response = client.get("/api/subagents")
+
+    by_id = {item["id"]: item for item in response.json()["subagents"]}
+    assert by_id["calendar"]["status"] == "available"
+    assert by_id["calendar"]["enabled"] is True
+    assert by_id["future"]["status"] == "unavailable"
+    assert by_id["future"]["enabled"] is False
 
 
 def test_plugin_catalog_does_not_block_the_async_api(monkeypatch):
