@@ -10,8 +10,11 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.runtime import AppActionRuntime
+from agent.app_actions.session_controls import SessionControlService
 from agent.conversations.lifecycle import ConversationLifecycle
 from agent.conversations.sharing import ConversationShareService
+from agent.master.state import MasterThreadStateStore
+from agent.profiles import AgentCatalog
 import agent.skills.curator_runtime as curator_runtime
 
 
@@ -337,6 +340,51 @@ async def test_mixed_safe_action_continues_the_ordinary_agent_stream(monkeypatch
     ]
     assert streamed_messages == ["tell me about Bitcoin"]
     assert completed["output_text"] == "Bitcoin answer."
+
+
+@pytest.mark.asyncio
+async def test_mixed_session_controls_change_the_same_agent_turn_and_persist(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    model = SimpleNamespace(id="google/gemma-4-31b-it", label="Gemma 4 31B", provider="google")
+    providers = SimpleNamespace(
+        resolve=lambda query: model if "gemma" in query.casefold() else None,
+        list_models=lambda: [model],
+    )
+    controls = SessionControlService(
+        agent_catalog=AgentCatalog(profile_dir=tmp_path / "profiles", builtins={}, executors={}),
+        state_store=state_store,
+        provider_registry=providers,
+    )
+    monkeypatch.setattr(
+        api,
+        "_app_action_runtime",
+        AppActionRuntime(session_control_handler=controls.execute),
+    )
+    monkeypatch.setattr(api, "_session_control_service", controls)
+    streamed = []
+
+    async def agent_stream(**kwargs):
+        streamed.append(kwargs)
+        yield 'event: response.created\ndata: {"thread_id":"chat-controls"}\n\n'
+        yield 'event: response.completed\ndata: {"response":{"thread_id":"chat-controls","output_text":"Answer.","tools":[],"sources":[]}}\n\n'
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_stream)
+    response = await api.chat_stream(api.ChatRequest(
+        message="use the model Gemma, turn memory off for this chat, and explain Bitcoin",
+        thread_id="chat-controls",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+
+    receipts = [data["receipt"] for name, data in events if name == "app.action.receipt"]
+    assert [receipt["action_id"] for receipt in receipts] == ["model.select", "memory.conversation.set"]
+    assert streamed[0]["clean_message"] == "explain Bitcoin"
+    assert streamed[0]["model"] == "google/gemma-4-31b-it"
+    assert streamed[0]["store"] is False
+    persisted = state_store.get("chat-controls")
+    assert persisted.selected_model == "google/gemma-4-31b-it"
+    assert persisted.store_to_memory is False
 
 
 @pytest.mark.asyncio

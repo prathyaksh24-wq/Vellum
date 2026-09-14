@@ -599,6 +599,26 @@ def test_live_dispatcher_allows_casual_turns_after_subagent_activity(tmp_path):
     assert state_store.get("t1").active_agent == "VellumAgent"
 
 
+def test_live_dispatcher_honors_an_explicit_persistent_agent_selection(tmp_path):
+    state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
+    state_store.set_active_agent("t1", "SportsAgent", selected=True)
+    dispatcher = LiveAgentDispatcher(
+        vault_root=tmp_path / "Vault",
+        agent_catalog=catalog_for({
+            "SportsAgent": SportsAgent(vault_root=tmp_path / "Vault", web_searcher=lambda query: "")
+        }),
+        state_store=state_store,
+    )
+
+    result = dispatcher.maybe_handle("Help me plan what to ask next", thread_id="t1")
+
+    assert result is not None
+    assert result.agent_name == "SportsAgent"
+    assert result.route_source == "selected"
+    assert state_store.get("t1").active_agent == "SportsAgent"
+    assert state_store.get("t1").agent_selected is True
+
+
 def test_live_dispatcher_routes_x_youtube_and_memory_agents(tmp_path):
     x_service = XCapabilityService(
         search_posts_backend=lambda query, max_results: [

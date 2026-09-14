@@ -13,6 +13,10 @@ from agent.memory.sessions import SESSIONS_DB
 class MasterThreadState:
     thread_id: str
     active_agent: str = "VellumAgent"
+    agent_selected: bool = False
+    selected_model: str = ""
+    reasoning_mode: str = ""
+    store_to_memory: bool = True
     pending_reroute_target: str = ""
     pending_reroute_reason: str = ""
 
@@ -41,6 +45,18 @@ class MasterThreadStateStore:
                 )
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in conn.execute("PRAGMA table_info(master_thread_state)").fetchall()
+            }
+            if "selected_model" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN selected_model TEXT NOT NULL DEFAULT ''")
+            if "reasoning_mode" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN reasoning_mode TEXT NOT NULL DEFAULT ''")
+            if "store_to_memory" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN store_to_memory INTEGER NOT NULL DEFAULT 1")
+            if "agent_selected" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN agent_selected INTEGER NOT NULL DEFAULT 0")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS master_pending_actions (
@@ -62,21 +78,65 @@ class MasterThreadStateStore:
         return MasterThreadState(
             thread_id=thread_id,
             active_agent=row["active_agent"],
+            agent_selected=bool(row["agent_selected"]),
+            selected_model=row["selected_model"],
+            reasoning_mode=row["reasoning_mode"],
+            store_to_memory=bool(row["store_to_memory"]),
             pending_reroute_target=row["pending_reroute_target"],
             pending_reroute_reason=row["pending_reroute_reason"],
         )
 
-    def set_active_agent(self, thread_id: str, agent_name: str) -> None:
+    def set_active_agent(self, thread_id: str, agent_name: str, *, selected: bool = False) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO master_thread_state (thread_id, active_agent, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO master_thread_state (thread_id, active_agent, agent_selected, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(thread_id) DO UPDATE SET
                     active_agent = excluded.active_agent,
+                    agent_selected = excluded.agent_selected,
                     updated_at = excluded.updated_at
                 """,
-                (thread_id, agent_name),
+                (thread_id, agent_name, int(selected)),
+            )
+
+    def set_selected_model(self, thread_id: str, model_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, selected_model, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    selected_model = excluded.selected_model,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, model_id),
+            )
+
+    def set_reasoning_mode(self, thread_id: str, reasoning_mode: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, reasoning_mode, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    reasoning_mode = excluded.reasoning_mode,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, reasoning_mode),
+            )
+
+    def set_store_to_memory(self, thread_id: str, enabled: bool) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO master_thread_state (thread_id, store_to_memory, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(thread_id) DO UPDATE SET
+                    store_to_memory = excluded.store_to_memory,
+                    updated_at = excluded.updated_at
+                """,
+                (thread_id, int(enabled)),
             )
 
     def set_pending_reroute(self, thread_id: str, target: str, reason: str) -> None:

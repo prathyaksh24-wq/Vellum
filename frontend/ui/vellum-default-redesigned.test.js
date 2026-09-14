@@ -171,8 +171,18 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("modelFamily");
     expect(html).toContain("label: 'OpenAI'");
     expect(html).toContain("label: 'Claude'");
-    expect(html).toContain("updateChat(activeChatId, chat => ({...chat, model: id}), true)");
+    expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
+    expect(html).toContain("updateChat(chatId, chat => ({...chat, model: id}), true)");
     expect(html).not.toContain("API.settings.setActiveModel(id)");
+  });
+
+  test("routes visible agent, model, and per-chat memory controls through App Actions", () => {
+    expect(html).toContain("dispatchConversationAction('agent.select', {agent:id})");
+    expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
+    expect(html).toContain("dispatchConversationAction('memory.conversation.set', {enabled})");
+    expect(html).toContain("store: opts.storeToMemory !== false");
+    expect(html).toContain("reasoning_mode: opts.reasoningMode || null");
+    expect(html).toContain("applySessionControl: (controlPatch, receipt)");
   });
 
   test("does not contain unresolved Git conflict markers", () => {

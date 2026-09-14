@@ -45,6 +45,7 @@ from agent.app_actions.api import router as app_actions_router
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.runtime import get_app_action_runtime
+from agent.app_actions.session_controls import SessionControlService
 from agent.coding.api import create_coding_router
 from agent.coding.service import CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
@@ -73,6 +74,7 @@ from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
 from agent.llm.routing.api import router as llm_routing_router
 from agent.llm.routing.runtime import reset_routing_runtime
+from agent.llm.providers import get_provider_registry
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
 from agent.obsidian.conversation_context import ConversationContextStore
@@ -215,6 +217,12 @@ _live_dispatcher = LiveAgentDispatcher(
     agent_catalog=_agent_catalog,
     delegation_runtime=_delegation_runtime,
 )
+_session_control_service = SessionControlService(
+    agent_catalog=_agent_catalog,
+    state_store=_live_dispatcher.state_store,
+    provider_registry=get_provider_registry(),
+)
+_app_action_runtime.set_session_control_handler(_session_control_service.execute)
 _oauth_flows: dict[str, dict[str, Any]] = {}
 SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
@@ -4245,14 +4253,6 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
     active_thread_id = request.thread_id or get_settings().thread_id
-    turn_audit = TurnAudit(
-        thread_id=active_thread_id,
-        model=request.model or get_settings().primary_model,
-        provider="openrouter",
-        privacy_class=classify(clean_message)[0].value,
-        saved=request.store,
-    )
-
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
     action_turn = _app_action_runtime.plan_submission(action_message)
@@ -4274,6 +4274,35 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             ])),
         })
         action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
+
+    thread_preferences = _session_control_service.state_store.get(active_thread_id)
+    turn_overrides: dict[str, Any] = {}
+    for receipt in action_receipts:
+        if receipt.status == "applied" and isinstance(receipt.result.get("turn_overrides"), dict):
+            turn_overrides.update(receipt.result["turn_overrides"])
+    effective_model = str(
+        turn_overrides.get("model")
+        or request.model
+        or thread_preferences.selected_model
+        or ""
+    ) or None
+    effective_reasoning_mode = (
+        turn_overrides["reasoning_mode"]
+        if "reasoning_mode" in turn_overrides
+        else request.reasoning_mode or thread_preferences.reasoning_mode or None
+    )
+    effective_store = bool(
+        turn_overrides["store"]
+        if "store" in turn_overrides
+        else request.store and thread_preferences.store_to_memory
+    )
+    turn_audit = TurnAudit(
+        thread_id=active_thread_id,
+        model=effective_model or get_settings().primary_model,
+        provider="openrouter",
+        privacy_class=classify(clean_message)[0].value,
+        saved=effective_store,
+    )
 
     action_attachments: list[ChatAttachment] = []
     for receipt in action_receipts:
@@ -4417,13 +4446,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         _stream_agent_turn(
             clean_message=clean_message,
             active_thread_id=active_thread_id,
-            model=request.model,
+            model=effective_model,
             source="voice" if request.voice else "agent",
             voice=request.voice,
-            store=request.store,
+            store=effective_store,
             attachments=turn_attachments,
             turn_audit=turn_audit,
-            reasoning_mode=request.reasoning_mode,
+            reasoning_mode=effective_reasoning_mode,
         )
     )
 
