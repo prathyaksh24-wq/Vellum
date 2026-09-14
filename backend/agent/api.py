@@ -4961,6 +4961,7 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
         connector_error = "unavailable"
     for plugin in plugins:
         plugin_id = str(plugin.get("id") or "")
+        plugin.update(_app_action_runtime.plugin_contribution_summary(plugin_id))
         enriched = []
         for raw_connector in plugin.get("mcp_connectors", []):
             connector = dict(raw_connector)

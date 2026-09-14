@@ -135,6 +135,8 @@ class AppActionDefinition(BaseModel):
     result_schema: dict[str, Any]
     ui_reference: str
     audit_label: str
+    plugin_id: str = ""
+    required_permissions: list[str] = Field(default_factory=list)
 
 
 class UISurfaceDefinition(BaseModel):
@@ -146,6 +148,8 @@ class UISurfaceDefinition(BaseModel):
     supported_locations: list[str]
     configurable_properties: dict[str, dict[str, Any]] = Field(default_factory=dict)
     control_kernel: bool = False
+    plugin_id: str = ""
+    required_permissions: list[str] = Field(default_factory=list)
 
 
 class AppActionCatalog(BaseModel):

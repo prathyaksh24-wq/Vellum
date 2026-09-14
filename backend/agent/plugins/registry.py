@@ -73,6 +73,29 @@ class PluginRegistry:
             return True
         return bool(self._read_state().get(plugin_id, True))
 
+    def contains(self, plugin_id: str) -> bool:
+        return self._exists(plugin_id)
+
+    def capabilities(self, plugin_id: str) -> frozenset[str]:
+        try:
+            return frozenset(self._manifest(plugin_id).capabilities)
+        except KeyError:
+            return frozenset(self._source_record(plugin_id).capabilities)
+
+    def is_protected(self, plugin_id: str) -> bool:
+        try:
+            manifest = self._manifest(plugin_id)
+            return bool(manifest.protected or manifest.required)
+        except KeyError:
+            record = self._source_record(plugin_id)
+            return bool(record.protected or record.required)
+
+    def assert_removable(self, plugin_id: str) -> None:
+        if not self._exists(plugin_id):
+            raise KeyError(plugin_id)
+        if self.is_protected(plugin_id):
+            raise PluginRegistryError(f"{plugin_id} is protected and cannot be removed")
+
     def set_enabled(self, plugin_id: str, enabled: bool) -> dict[str, Any]:
         if not self._exists(plugin_id):
             raise KeyError(plugin_id)
@@ -133,6 +156,7 @@ class PluginRegistry:
             "configured": configured,
             "enabled": enabled,
             "required": manifest.required,
+            "protected": bool(manifest.protected or manifest.required),
             "manageable": True,
             "status": runtime_state if enabled else "disabled",
             "notes": str(status.get("notes") or manifest.description),
@@ -196,6 +220,7 @@ class PluginRegistry:
                     "configured": configured,
                     "enabled": configured,
                     "required": False,
+                    "protected": False,
                     "manageable": False,
                     "status": str(server.get("status") or "unknown"),
                     "notes": str(server.get("notes") or ""),
@@ -251,6 +276,7 @@ class PluginRegistry:
             "configured": configured,
             "enabled": enabled,
             "required": record.required,
+            "protected": bool(record.protected or record.required),
             "manageable": True,
             "status": runtime_state if enabled else "disabled",
             "notes": str(status.get("notes") or record.description),
