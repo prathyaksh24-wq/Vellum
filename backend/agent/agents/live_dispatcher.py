@@ -111,37 +111,48 @@ class LiveAgentDispatcher:
         matched_binding = None
         profile_only_id = ""
         route_source = "deterministic"
-        try:
-            resolve_all = getattr(self.skill_route_resolver, "resolve_all", None)
-            if callable(resolve_all):
-                skill_routes = resolve_all(message)
+        if state.agent_selected and active_agent != "VellumAgent":
+            selected = self.agent_catalog.try_resolve(active_agent)
+            if selected is not None and selected.executor is not None:
+                matched_binding = selected
+                route_source = "selected"
+            elif selected is not None and selected.profile.executor == "llm":
+                profile_only_id = selected.profile.id
+                route_source = "selected"
             else:
-                skill_route = self.skill_route_resolver.resolve(message)
-                skill_routes = [skill_route] if skill_route is not None else []
-        except Exception:
-            logger.exception("Skill route resolution failed.")
-            skill_routes = []
-        for skill_route in skill_routes:
-            binding = self.agent_catalog.try_resolve(skill_route.agent_name)
-            if binding is not None and skill_route.skill_id not in binding.profile.skills.allow:
-                logger.warning(
-                    "Ignoring skill route %s because it is not allowed by %s.",
-                    skill_route.skill_id,
-                    binding.profile.id,
-                )
-                continue
-            if binding is not None and binding.executor is not None:
-                matched_binding = binding
-                route_source = "skill"
-                break
-            else:
+                self.state_store.set_active_agent(thread_id, "VellumAgent")
+                self.state_store.clear_pending_reroute(thread_id)
+                active_agent = "VellumAgent"
+        if matched_binding is None and not profile_only_id:
+            try:
+                resolve_all = getattr(self.skill_route_resolver, "resolve_all", None)
+                if callable(resolve_all):
+                    skill_routes = resolve_all(message)
+                else:
+                    skill_route = self.skill_route_resolver.resolve(message)
+                    skill_routes = [skill_route] if skill_route is not None else []
+            except Exception:
+                logger.exception("Skill route resolution failed.")
+                skill_routes = []
+            for skill_route in skill_routes:
+                binding = self.agent_catalog.try_resolve(skill_route.agent_name)
+                if binding is not None and skill_route.skill_id not in binding.profile.skills.allow:
+                    logger.warning(
+                        "Ignoring skill route %s because it is not allowed by %s.",
+                        skill_route.skill_id,
+                        binding.profile.id,
+                    )
+                    continue
+                if binding is not None and binding.executor is not None:
+                    matched_binding = binding
+                    route_source = "skill"
+                    break
                 profile = binding.profile if binding is not None else None
                 if profile is not None and profile.executor == "llm" and self.delegation_runtime is not None:
                     profile_only_id = profile.id
                     route_source = "skill"
                     break
-                else:
-                    logger.warning("Ignoring skill route %s to unknown agent %s.", skill_route.skill_id, skill_route.agent_name)
+                logger.warning("Ignoring skill route %s to unknown agent %s.", skill_route.skill_id, skill_route.agent_name)
         if matched_binding is None and not profile_only_id:
             matched_binding = self.agent_catalog.match(message)
 
@@ -160,7 +171,7 @@ class LiveAgentDispatcher:
                 )
                 response = run.response
                 result = self._result_from_response(response, run=run, route_source=route_source)
-                if response.status == "error":
+                if response.status == "error" and route_source != "selected":
                     self.state_store.set_active_agent(thread_id, "VellumAgent")
                     self.state_store.clear_pending_reroute(thread_id)
                 response_action = response.action_request
@@ -169,15 +180,20 @@ class LiveAgentDispatcher:
                 return result
             except Exception:
                 logger.exception("Agent %s failed while answering.", agent_name)
-                self.state_store.set_active_agent(thread_id, "VellumAgent")
-                self.state_store.clear_pending_reroute(thread_id)
+                if route_source != "selected":
+                    self.state_store.set_active_agent(thread_id, "VellumAgent")
+                    self.state_store.clear_pending_reroute(thread_id)
                 return LiveAgentResult(
                     handled=True,
                     agent_name=agent_name,
                     status="error",
                     answer=(
-                        f"{agent_name} could not complete this request. "
-                        "I routed control back to Vellum so the main agent can continue."
+                        f"{agent_name} could not complete this request."
+                        + (
+                            ""
+                            if route_source == "selected"
+                            else " I routed control back to Vellum so the main agent can continue."
+                        )
                     ),
                     tools=[self._tool_name(agent_name)],
                     route_source=route_source,

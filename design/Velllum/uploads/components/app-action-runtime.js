@@ -287,6 +287,7 @@
     var navigate = options.navigate || function () {};
     var openNativeWindow = options.openNativeWindow || function () {};
     var sideEffectError = options.sideEffectError || function () {};
+    var applySessionControl = options.applySessionControl || function () {};
     var contextResolver = options.contextResolver || function () { return {}; };
     var requestIdFactory = options.requestIdFactory || function () {
       return "ui_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
@@ -329,6 +330,7 @@
       pendingRequests.delete(receipt.request_id);
       if (["applied", "undone"].indexOf(receipt.status) < 0) return receipt;
       var result = receipt.result || {};
+      if (result.session_control_patch) applySessionControl(result.session_control_patch, receipt);
       if (result.deleted && result.conversation_id) {
         removeConversation(result.conversation_id);
       } else if (result.conversation && result.conversation.id) {

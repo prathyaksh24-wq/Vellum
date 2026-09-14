@@ -25,6 +25,13 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.attachments import AttachmentImportError
+from agent.app_actions.session_controls import (
+    AGENT_SELECT_ACTION_ID,
+    MEMORY_CONVERSATION_SET_ACTION_ID,
+    MODEL_SELECT_ACTION_ID,
+    REASONING_SET_ACTION_ID,
+    SessionControlError,
+)
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -46,6 +53,12 @@ CONVERSATION_FORK_ACTION_ID = "conversation.fork"
 CONVERSATION_WINDOW_OPEN_ACTION_ID = "conversation.window.open"
 CONVERSATION_SHARE_ACTION_ID = "conversation.share"
 ATTACHMENT_IMPORT_ACTION_ID = "composer.attachment.import"
+SESSION_CONTROL_ACTION_IDS = frozenset({
+    AGENT_SELECT_ACTION_ID,
+    MODEL_SELECT_ACTION_ID,
+    REASONING_SET_ACTION_ID,
+    MEMORY_CONVERSATION_SET_ACTION_ID,
+})
 _UNDO_TTL = timedelta(minutes=15)
 
 
@@ -77,6 +90,7 @@ class _ConfirmationRecord:
     action_id: str
     action_version: str
     arguments: dict[str, Any]
+    target_kind: str
     target_reference: str
     expected_revision: int
     expires_at: datetime
@@ -148,6 +162,7 @@ class AppActionRuntime:
         conversation_lifecycle: ConversationLifecycle | Callable[[], ConversationLifecycle] | None = None,
         conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
         attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
+        session_control_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
         self._receipt_store = receipt_store or InMemoryReceiptStore()
@@ -158,6 +173,7 @@ class AppActionRuntime:
         self._conversation_lifecycle = conversation_lifecycle
         self._conversation_sharing = conversation_sharing
         self._attachment_importer = attachment_importer
+        self._session_control_handler = session_control_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._surfaces = {surface.reference: surface for surface in self._surface_definitions()}
@@ -168,6 +184,7 @@ class AppActionRuntime:
                 self._surface_action_definition(),
                 self._reset_definition(),
                 self._attachment_definition(),
+                *self._session_control_definitions(),
                 *self._conversation_definitions(),
             )
         }
@@ -183,6 +200,12 @@ class AppActionRuntime:
         importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]],
     ) -> None:
         self._attachment_importer = importer
+
+    def set_session_control_handler(
+        self,
+        handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]],
+    ) -> None:
+        self._session_control_handler = handler
 
     def _register(
         self,
@@ -307,6 +330,8 @@ class AppActionRuntime:
         definition: AppActionDefinition,
         context: AppActionContext | None,
     ) -> bool:
+        if definition.id in SESSION_CONTROL_ACTION_IDS and self._session_control_handler is None:
+            return False
         return bool(self._action_availability(definition, context))
 
     def match_submission(self, message: str) -> AppActionRequest | None:
@@ -334,6 +359,62 @@ class AppActionRuntime:
         normalized = normalized.rstrip(".!?")
         submitted = submitted.rstrip(".!?")
         polite = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
+
+        agent_selection = re.fullmatch(
+            polite
+            + r"(?:open|use|select|switch(?:\s+over)?\s+to|change(?:\s+over)?\s+to|go\s+to)\s+"
+            + r"(?:the\s+)?(vellum|x|twitter|youtube|sports|books|research|memory)(?:\s+agent)?",
+            normalized,
+        )
+        if agent_selection:
+            return AppActionRequest(
+                action_id=AGENT_SELECT_ACTION_ID,
+                arguments={"agent": agent_selection.group(1)},
+            )
+
+        model_selection = re.fullmatch(
+            polite
+            + r"(?:use|select|switch(?:\s+over)?\s+to|change(?:\s+the)?\s+model\s+to|set(?:\s+the)?\s+model\s+to)\s+"
+            + r"(?:the\s+)?(?:model\s+)?(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if model_selection and re.search(r"\bmodel\b", normalized):
+            model = self._spoken_value(model_selection.group(1))
+            if model:
+                return AppActionRequest(action_id=MODEL_SELECT_ACTION_ID, arguments={"model": model})
+
+        reasoning_selection = re.fullmatch(
+            polite
+            + r"(?:use|set|change(?:\s+the)?)(?:\s+reasoning)?(?:\s+(?:mode|level))?(?:\s+to)?\s+"
+            + r"(light|medium|high|extra high|max|ultra|default|standard|off)(?:\s+reasoning)?",
+            normalized,
+        )
+        if reasoning_selection and "reason" in normalized:
+            return AppActionRequest(
+                action_id=REASONING_SET_ACTION_ID,
+                arguments={"mode": reasoning_selection.group(1)},
+            )
+
+        memory_selection = re.fullmatch(
+            polite
+            + r"(?:turn|switch|set)\s+(?:the\s+)?memory\s+(on|off)"
+            + r"(?:\s+for\s+(?:(?:this|the current)\s+)?(?:chat|conversation))?",
+            normalized,
+        )
+        if memory_selection:
+            return AppActionRequest(
+                action_id=MEMORY_CONVERSATION_SET_ACTION_ID,
+                arguments={"enabled": memory_selection.group(1) == "on"},
+            )
+        if re.fullmatch(
+            polite + r"(?:do not|don't|dont|stop)\s+(?:save|store|remember)(?:ing)?\s+(?:this\s+)?(?:chat|conversation)(?:\s+(?:to|in)\s+memory)?",
+            normalized,
+        ):
+            return AppActionRequest(
+                action_id=MEMORY_CONVERSATION_SET_ACTION_ID,
+                arguments={"enabled": False},
+            )
 
         if re.fullmatch(
             polite + r"(?:attach|add|import|use)\s+(?:(?:the|my)\s+)?(?:current\s+)?(?:clipboard|clipboard content|copied text|copied image)",
@@ -744,6 +825,13 @@ class AppActionRuntime:
             return self._dispatch_conversation(request, context, definition)
         if request.action_id == ATTACHMENT_IMPORT_ACTION_ID:
             return self._dispatch_attachment(request, context, definition)
+        if request.action_id in SESSION_CONTROL_ACTION_IDS:
+            if (
+                request.action_id == MEMORY_CONVERSATION_SET_ACTION_ID
+                and request.arguments.get("enabled") is True
+            ):
+                return self._control_confirmation_receipt(request, context, definition)
+            return self._dispatch_session_control(request, context, definition)
 
         try:
             result = self._registry.invoke(
@@ -891,6 +979,101 @@ class AppActionRuntime:
             created_at=self._now(),
         )
 
+    def _dispatch_session_control(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        if self._session_control_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="SESSION_CONTROLS_UNAVAILABLE",
+                message="Conversation controls are unavailable.",
+            )
+        try:
+            result = self._session_control_handler(request.action_id, dict(request.arguments), context)
+        except SessionControlError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        target_kind = str(result.pop("target_kind", "conversation_runtime"))
+        target_id = str(result.pop("target_id", context.invocation_conversation_id or request.action_id))
+        message = str(result.pop("message", "Chat setting updated."))
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="applied",
+            authorization=self._authorization(definition.access_class, context, allowed=True),
+            target=ActionTarget(kind=target_kind, id=target_id),
+            result=result,
+            message=message,
+            audit_label=definition.audit_label,
+            created_at=self._now(),
+        )
+
+    def _control_confirmation_receipt(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        target_id = str(context.invocation_conversation_id or "").strip()
+        if not target_id:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code="CONVERSATION_CONTEXT_REQUIRED",
+                message="Choose or start a chat before changing this setting.",
+                authorized=True,
+            )
+        token = self._confirmation_token_factory()
+        expires_at = self._now() + _UNDO_TTL
+        self._receipt_store.put_confirmation(_ConfirmationRecord(
+            token=token,
+            action_id=request.action_id,
+            action_version=request.action_version,
+            arguments=dict(request.arguments),
+            target_kind="conversation_runtime",
+            target_reference=target_id,
+            expected_revision=0,
+            expires_at=expires_at,
+        ))
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="confirmation_required",
+            authorization=self._authorization(
+                definition.access_class,
+                context,
+                allowed=True,
+                confirmation_required=True,
+            ),
+            target=ActionTarget(kind="conversation_runtime", id=target_id),
+            result={"requested_store_to_memory": True},
+            confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
+            message="Confirm turning memory on for this chat.",
+            audit_label=f"{definition.audit_label}.confirmation_requested",
+            created_at=self._now(),
+        )
+
     @staticmethod
     def _context_after_receipt(
         context: AppActionContext,
@@ -898,6 +1081,19 @@ class AppActionRuntime:
     ) -> AppActionContext:
         if receipt.status != "applied":
             return context
+        control_patch = receipt.result.get("session_control_patch")
+        if isinstance(control_patch, dict):
+            updates = {}
+            if "agent_id" in control_patch:
+                updates["active_agent"] = str(control_patch["agent_id"] or "")
+            if "model_id" in control_patch:
+                updates["selected_model"] = str(control_patch["model_id"] or "")
+            if "reasoning_mode" in control_patch:
+                updates["reasoning_mode"] = str(control_patch["reasoning_mode"] or "")
+            if "store_to_memory" in control_patch:
+                updates["store_to_memory"] = bool(control_patch["store_to_memory"])
+            if updates:
+                context = context.model_copy(update=updates)
         patch = receipt.result.get("workspace_layout_patch")
         if not isinstance(patch, dict) or not isinstance(patch.get("surfaces"), dict):
             return context
@@ -1154,6 +1350,7 @@ class AppActionRuntime:
                 action_id=request.action_id,
                 action_version=request.action_version,
                 arguments=dict(request.arguments),
+                target_kind="conversation",
                 target_reference=conversation_id,
                 expected_revision=revision,
                 expires_at=expires_at,
@@ -1226,6 +1423,19 @@ class AppActionRuntime:
                 message="Confirmation does not match the requested operation.",
                 authorized=True,
             )
+        if request.action_id in SESSION_CONTROL_ACTION_IDS:
+            if context.invocation_conversation_id != record.target_reference:
+                return self._error_receipt(
+                    request=request,
+                    context=context,
+                    status="failed",
+                    access_class=access_class,
+                    error_code="CONFIRMATION_MISMATCH",
+                    message="Confirmation does not match the current chat.",
+                    authorized=True,
+                )
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_session_control(request, context, definition)
         try:
             current = self._conversation_service().get(record.target_reference)
         except ConversationLifecycleError as exc:
@@ -1287,7 +1497,7 @@ class AppActionRuntime:
             source=context.source,
             status="cancelled",
             authorization=self._authorization(definition.access_class, context, allowed=True),
-            target=ActionTarget(kind="conversation", id=record.target_reference, revision=record.expected_revision),
+            target=ActionTarget(kind=record.target_kind, id=record.target_reference, revision=record.expected_revision),
             result={"cancelled": True},
             message="Operation cancelled.",
             audit_label=f"{definition.audit_label}.cancelled",
@@ -2069,6 +2279,63 @@ class AppActionRuntime:
             ui_reference="composer",
             audit_label="conversation.attachment.import",
         )
+
+    @staticmethod
+    def _session_control_definitions() -> list[AppActionDefinition]:
+        specs = [
+            (
+                AGENT_SELECT_ACTION_ID,
+                "Select an agent",
+                "Select the specialist that handles future turns in this chat.",
+                {"agent": {"type": "string"}, "agent_id": {"type": "string"}},
+                "none",
+            ),
+            (
+                MODEL_SELECT_ACTION_ID,
+                "Select a model",
+                "Select an available model for this chat without changing the process default.",
+                {"model": {"type": "string"}, "model_id": {"type": "string"}},
+                "none",
+            ),
+            (
+                REASONING_SET_ACTION_ID,
+                "Set reasoning level",
+                "Set or reset reasoning effort for this chat.",
+                {"mode": {"type": "string"}},
+                "none",
+            ),
+            (
+                MEMORY_CONVERSATION_SET_ACTION_ID,
+                "Set chat memory",
+                "Choose whether future turns in this chat may be stored as memory.",
+                {"enabled": {"type": "boolean"}},
+                "operation_bound",
+            ),
+        ]
+        return [
+            AppActionDefinition(
+                id=action_id,
+                version="1",
+                owner="master-thread-state",
+                title=title,
+                description=description,
+                scope="conversation",
+                access_class=CapabilityAccess.WRITE.value,
+                confirmation_rule=confirmation_rule,
+                executor_location="server_and_client",
+                supports_undo=False,
+                idempotent=True,
+                argument_schema={
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": properties,
+                },
+                result_schema={"type": "object", "required": ["session_control_patch", "changed"]},
+                ui_reference="conversation-runtime",
+                audit_label=action_id,
+            )
+            for action_id, title, description, properties, confirmation_rule in specs
+        ]
 
     @staticmethod
     def _conversation_definitions() -> list[AppActionDefinition]:

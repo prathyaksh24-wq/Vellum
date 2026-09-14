@@ -269,3 +269,46 @@ describe("Workspace Layout App Action adapter", () => {
     expect(context.visible_ui_references).not.toContain("right-panel");
   });
 });
+
+describe("Conversation session-control receipts", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    window.VellumUI = {};
+  });
+
+  test("UI dispatch and NLP receipts apply the same client state patch", async () => {
+    const AppActions = await loadRuntime();
+    const applied = [];
+    const uiReceipt = {
+      request_id: "ui-model",
+      action_id: "model.select",
+      status: "applied",
+      result: { session_control_patch: { model_id: "google/gemma-4-31b-it" } },
+      target: { kind: "conversation_runtime", id: "chat-1" },
+    };
+    const client = { dispatch: vi.fn(async () => uiReceipt) };
+    const runtime = AppActions.createConversationActionRuntime({
+      client,
+      requestIdFactory: () => "ui-model",
+      applySessionControl: (patch, receipt) => applied.push({ patch, target: receipt.target.id }),
+    });
+
+    await runtime.dispatch("model.select", { model_id: "google/gemma-4-31b-it" }, { conversationId: "chat-1" });
+    runtime.applyReceipt({
+      ...uiReceipt,
+      request_id: "nlp-memory",
+      action_id: "memory.conversation.set",
+      source: "nlp",
+      result: { session_control_patch: { store_to_memory: false } },
+    });
+
+    expect(client.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ action_id: "model.select", arguments: { model_id: "google/gemma-4-31b-it" } }),
+      expect.objectContaining({ source: "ui", invocation_conversation_id: "chat-1" }),
+    );
+    expect(applied).toEqual([
+      { patch: { model_id: "google/gemma-4-31b-it" }, target: "chat-1" },
+      { patch: { store_to_memory: false }, target: "chat-1" },
+    ]);
+  });
+});

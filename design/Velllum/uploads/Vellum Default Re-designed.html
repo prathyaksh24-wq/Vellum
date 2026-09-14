@@ -3761,7 +3761,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, presentation = {}}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, presentation = {}}) => {
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -4046,6 +4046,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           {searchMode
             ? <button className={'model-pill' + (scopeOpen ? ' select-open' : '')} onClick={() => setScopeOpen(o => !o)} title="Search depth"><span className="model-num">{searchScope}</span><IcChevD size={12}/></button>
             : <button className={'model-pill' + (modelOpen ? ' select-open' : '')} onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
+          {onMemoryChange && <button className={'cbtn' + (memoryEnabled ? '' : ' muted')} title={memoryEnabled ? 'Memory is on for this chat' : 'Memory is off for this chat'} aria-label={memoryEnabled ? 'Turn memory off for this chat' : 'Turn memory on for this chat'} onClick={() => onMemoryChange(!memoryEnabled)}><IcBrain size={15}/></button>}
           <button className={'cbtn' + (mic ? ' mic-on' : '')} title={mic ? 'Stop dictation (Ctrl+Shift+D)' : 'Dictation (Ctrl+Shift+D)'} onClick={() => setMic(m => !m)}><IcMic/></button>
           {voiceState === 'idle' && (busy
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
@@ -8279,6 +8280,7 @@ const App = () => {
       navigate: navigation => conversationActionHandlersRef.current.navigate && conversationActionHandlersRef.current.navigate(navigation),
       openNativeWindow: target => conversationActionHandlersRef.current.openNativeWindow && conversationActionHandlersRef.current.openNativeWindow(target),
       sideEffectError: error => conversationActionHandlersRef.current.sideEffectError && conversationActionHandlersRef.current.sideEffectError(error),
+      applySessionControl: (patch, receipt) => conversationActionHandlersRef.current.applySessionControl && conversationActionHandlersRef.current.applySessionControl(patch, receipt),
       contextResolver: () => {
         const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.uiReference || '';
         return {focused_ui_reference: focused};
@@ -8749,7 +8751,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     setMenu(null);
     setActivityMsg(null);
   };
-  const openAgent = id => { setView('agent'); setActiveAgentId(id); setMenu(null); setActivityMsg(null); };
+  const applyAgentSelection = id => {
+    if (id === 'vellum') { setView('chat'); setActiveAgentId(null); }
+    else { setView('agent'); setActiveAgentId(id); }
+    setMenu(null);
+    setActivityMsg(null);
+  };
+  const openAgent = async id => {
+    if (!activeChatId) { applyAgentSelection(id); return; }
+    await dispatchConversationAction('agent.select', {agent:id});
+  };
   const agentNewConvo = () => setActiveConvo(a => ({...a, [activeAgentId]: null}));
   const openAgentConvo = cid => setActiveConvo(a => ({...a, [activeAgentId]: cid}));
   const streamAgentReply = (agentId, convoId, msgId, data) => {
@@ -8789,7 +8800,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     let appActionRequested = false;
     try {
       await API.chat.stream(
-        {message: routedMessage, action_message: opts.submittedText || message, thread_id: convoId, model: selModel, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', convoId)},
+        {message: routedMessage, action_message: opts.submittedText || message, thread_id: convoId, model: selModel, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', convoId)},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {agentId: agent.id, convoId, timers: []};
@@ -9319,7 +9330,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     let appActionRequested = false;
     try {
       await API.chat.stream(
-        {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, store: true, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
+        {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
         {
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
@@ -9492,7 +9503,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           try { localStorage.removeItem('vellum-active-chat-id'); } catch {}
         }
       };
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn}, turnModel);
+      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
@@ -9516,7 +9527,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       ? {...c, messages: c.messages.map(m => m.id === msgId ? {...m, text: '', full: reply, streaming: true, sources: act.sources, phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity} : m)}
       : c));
     if (FEATURE_FLAGS.realChat) {
-      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : [], {}, chat.model || selModel);
+      streamBackendReply(chat.id, msgId, messageForBackend(prevUser ? prevUser.text : '', prevUser ? prevUser.attachments : [], chat), threadRef.current[chat.id] || chat.thread_id, prevUser ? prevUser.attachments : [], {reasoningMode:chat.reasoning_mode, storeToMemory:chat.store_to_memory !== false}, chat.model || selModel);
     } else {
       streamReply(chat.id, msgId, {...act, answer: reply});
     }
@@ -9556,6 +9567,27 @@ const [slashSkills, setSlashSkills] = useState([]);
       return invoke('open_conversation_window', {conversationId:target.conversation_id});
     },
     sideEffectError: error => pushToast((error && error.message) || 'Native window could not be opened.'),
+    applySessionControl: (controlPatch, receipt) => {
+      const runtimeTargetId = receipt && receipt.target && receipt.target.id;
+      const targetChat = chats.find(chat => chat.id === runtimeTargetId || chat.thread_id === runtimeTargetId);
+      const targetChatId = targetChat ? targetChat.id : runtimeTargetId;
+      const targetAgentId = AGENTS.find(agent => (agentConvos[agent.id] || []).some(convo => convo.id === runtimeTargetId))?.id;
+      if (Object.prototype.hasOwnProperty.call(controlPatch, 'agent_id')) applyAgentSelection(controlPatch.agent_id);
+      if (Object.prototype.hasOwnProperty.call(controlPatch, 'model_id') && targetAgentId) {
+        setSelModel(controlPatch.model_id);
+        updateAgentConvo(targetAgentId, runtimeTargetId, convo => ({...convo, model:controlPatch.model_id}));
+      } else if (Object.prototype.hasOwnProperty.call(controlPatch, 'model_id')) applyModelSelection(controlPatch.model_id, targetChatId);
+      if (Object.prototype.hasOwnProperty.call(controlPatch, 'reasoning_mode') && targetAgentId) {
+        updateAgentConvo(targetAgentId, runtimeTargetId, convo => ({...convo, reasoning_mode:controlPatch.reasoning_mode || ''}));
+      } else if (Object.prototype.hasOwnProperty.call(controlPatch, 'reasoning_mode') && targetChatId) {
+        updateChat(targetChatId, chat => ({...chat, reasoning_mode:controlPatch.reasoning_mode || ''}), true);
+      }
+      if (Object.prototype.hasOwnProperty.call(controlPatch, 'store_to_memory') && targetAgentId) {
+        updateAgentConvo(targetAgentId, runtimeTargetId, convo => ({...convo, store_to_memory:controlPatch.store_to_memory !== false}));
+      } else if (Object.prototype.hasOwnProperty.call(controlPatch, 'store_to_memory') && targetChatId) {
+        updateChat(targetChatId, chat => ({...chat, store_to_memory:controlPatch.store_to_memory !== false}), true);
+      }
+    },
   };
 
   const pushToast = value => {
@@ -9578,7 +9610,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       message: nativeUnavailable ? 'Native windows require Vellum desktop.' : (share && share.export_path ? `Local export ready: ${share.export_path}` : (confirmationMessage || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'))),
       undoReceipt: receipt.undo ? receipt : null,
       confirmationReceipt: receipt.confirmation ? receipt : null,
-      confirmationLabel: receipt.action_id === 'conversation.share' ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export') : 'Delete',
+      confirmationLabel: receipt.action_id === 'conversation.share'
+        ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
+        : receipt.action_id === 'memory.conversation.set' ? 'Turn on' : 'Delete',
       duration: receipt.confirmation ? 10000 : (receipt.undo ? 6500 : 2800),
     });
   };
@@ -9598,10 +9632,15 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const dispatchConversationAction = async (actionId, args = {}, options = {}) => {
     try {
+      const sessionControl = ['agent.select', 'model.select', 'reasoning.set', 'memory.conversation.set'].includes(actionId);
+      const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
+      const defaultConversationId = sessionControl
+        ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
+        : activeChatId;
       const receipt = await conversationActionRuntimeRef.current.dispatch(
         actionId,
         args,
-        {conversationId: options.conversationId === undefined ? activeChatId : options.conversationId},
+        {conversationId: options.conversationId === undefined ? defaultConversationId : options.conversationId},
       );
       showAppActionReceipt(receipt, options);
       return receipt;
@@ -9612,7 +9651,11 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const confirmAppAction = async receipt => {
     try {
-      const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:activeChatId});
+      const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
+      const confirmationConversationId = receipt && receipt.action_id === 'memory.conversation.set'
+        ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
+        : activeChatId;
+      const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:confirmationConversationId});
       showAppActionReceipt(confirmed);
       return confirmed;
     } catch (_) {
@@ -9671,13 +9714,22 @@ const [slashSkills, setSlashSkills] = useState([]);
       pushToast('Undo is unavailable.');
     }
   };
-  const selectModel = id => {
+  const applyModelSelection = (id, chatId = activeChatId) => {
     setSelModel(id);
-    if (view === 'chat' && activeChatId) {
-      updateChat(activeChatId, chat => ({...chat, model: id}), true);
+    if (chatId) {
+      updateChat(chatId, chat => ({...chat, model: id}), true);
       return;
     }
     try { localStorage.setItem('vellum-default-model', id); } catch {}
+  };
+  const selectModel = async id => {
+    const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
+    if (!activeChatId && !agentConversationId) { applyModelSelection(id, null); return; }
+    await dispatchConversationAction('model.select', {model_id:id});
+  };
+  const setConversationMemory = async enabled => {
+    if (!activeChatId) { pushToast('Start a chat before changing its memory.'); return; }
+    await dispatchConversationAction('memory.conversation.set', {enabled});
   };
   const saveProviderKey = async (provider, apiKey) => {
     const result = await API.settings.setProviderKey(provider, apiKey);
@@ -9806,7 +9858,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}

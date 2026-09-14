@@ -61,6 +61,10 @@ class AppActionContext(BaseModel):
     selected_ui_reference: str = ""
     visible_ui_references: list[str] = Field(default_factory=list)
     attachment_digests: list[str] = Field(default_factory=list)
+    active_agent: str = ""
+    selected_model: str = ""
+    reasoning_mode: str = ""
+    store_to_memory: bool = True
 
 
 class AppActionRequest(BaseModel):
