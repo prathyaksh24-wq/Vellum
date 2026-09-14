@@ -34,10 +34,20 @@ class FakeProviderRegistry:
 def make_runtime(tmp_path):
     state_store = MasterThreadStateStore(sessions_db=tmp_path / "sessions.db")
     x_profile = AgentProfile(id="XAgent")
+    calendar_profile = AgentProfile(id="CalendarAgent")
+    market_research_profile = AgentProfile(id="MarketResearchAgent")
     catalog = AgentCatalog(
         profile_dir=tmp_path / "profiles",
-        builtins={"XAgent": x_profile},
-        executors={"XAgent": SimpleNamespace()},
+        builtins={
+            "XAgent": x_profile,
+            "CalendarAgent": calendar_profile,
+            "MarketResearchAgent": market_research_profile,
+        },
+        executors={
+            "XAgent": SimpleNamespace(),
+            "CalendarAgent": SimpleNamespace(),
+            "MarketResearchAgent": SimpleNamespace(),
+        },
     )
     service = SessionControlService(
         agent_catalog=catalog,
@@ -60,10 +70,33 @@ def test_nlp_matcher_exposes_agent_model_reasoning_and_chat_memory_actions(tmp_p
     runtime, _store = make_runtime(tmp_path)
 
     assert runtime.match_submission("switch to X agent").action_id == AGENT_SELECT_ACTION_ID
+    assert runtime.match_submission("switch to Calendar agent").arguments == {"agent": "calendar"}
+    assert runtime.match_submission("open Market Research agent").arguments == {"agent": "market research"}
     assert runtime.match_submission("use the model Gemma 4 31B").action_id == MODEL_SELECT_ACTION_ID
     assert runtime.match_submission("set reasoning to extra high").arguments == {"mode": "extra high"}
     assert runtime.match_submission("turn memory off for this chat").arguments == {"enabled": False}
     assert runtime.match_submission("what do you remember about me?") is None
+
+
+def test_catalog_agents_resolve_from_spoken_names_without_fixed_aliases(tmp_path) -> None:
+    runtime, state_store = make_runtime(tmp_path)
+
+    calendar = runtime.dispatch(
+        AppActionRequest(action_id=AGENT_SELECT_ACTION_ID, arguments={"agent": "calendar"}),
+        context(),
+    )
+    market_research = runtime.dispatch(
+        AppActionRequest(action_id=AGENT_SELECT_ACTION_ID, arguments={"agent": "market research"}),
+        context(),
+    )
+
+    assert calendar.status == "applied"
+    assert calendar.result["active_agent"] == "CalendarAgent"
+    assert calendar.result["session_control_patch"] == {"agent_id": "calendar"}
+    assert market_research.status == "applied"
+    assert market_research.result["active_agent"] == "MarketResearchAgent"
+    assert market_research.result["session_control_patch"] == {"agent_id": "marketresearch"}
+    assert state_store.get("chat-1").active_agent == "MarketResearchAgent"
 
 
 def test_session_controls_persist_to_the_existing_thread_state_owner(tmp_path) -> None:

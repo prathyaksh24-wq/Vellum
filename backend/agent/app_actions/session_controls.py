@@ -44,15 +44,6 @@ class SessionControlService:
         "memory": "MemoryAgent",
         "memoryagent": "MemoryAgent",
     }
-    _CLIENT_AGENT_IDS = {
-        "VellumAgent": "vellum",
-        "XAgent": "x",
-        "YoutubeAgent": "youtube",
-        "SportsAgent": "sports",
-        "BooksAgent": "books",
-        "ResearchAgent": "research",
-        "MemoryAgent": "memory",
-    }
 
     def __init__(
         self,
@@ -89,13 +80,7 @@ class SessionControlService:
 
     def _select_agent(self, thread_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         raw = str(arguments.get("agent_id") or arguments.get("agent") or "").strip()
-        normalized = "".join(character for character in raw.casefold() if character.isalnum())
-        agent_id = self._AGENT_ALIASES.get(normalized)
-        if agent_id is None:
-            agent_id = next(
-                (profile.id for profile in self.agent_catalog.list() if profile.id.casefold() == raw.casefold()),
-                "",
-            )
+        agent_id = self._resolve_agent_id(raw)
         binding = None if not agent_id or agent_id == "VellumAgent" else self.agent_catalog.try_resolve(agent_id)
         unavailable = agent_id != "VellumAgent" and (
             binding is None
@@ -109,7 +94,7 @@ class SessionControlService:
             )
         previous = self.state_store.get(thread_id).active_agent
         self.state_store.set_active_agent(thread_id, agent_id, selected=agent_id != "VellumAgent")
-        client_id = self._CLIENT_AGENT_IDS.get(agent_id, agent_id)
+        client_id = self._client_agent_id(agent_id)
         return {
             "changed": previous != agent_id,
             "active_agent": agent_id,
@@ -119,6 +104,29 @@ class SessionControlService:
             "target_id": thread_id,
             "message": "Main Vellum agent selected." if agent_id == "VellumAgent" else f"{agent_id.removesuffix('Agent')} Agent selected.",
         }
+
+    def _resolve_agent_id(self, raw: str) -> str:
+        normalized = self._normalize_agent_name(raw)
+        alias = self._AGENT_ALIASES.get(normalized)
+        if alias is not None:
+            return alias
+        matches = [
+            profile.id
+            for profile in self.agent_catalog.list()
+            if normalized in {
+                self._normalize_agent_name(profile.id),
+                self._normalize_agent_name(profile.id.removesuffix("Agent")),
+            }
+        ]
+        return matches[0] if len(matches) == 1 else ""
+
+    @staticmethod
+    def _client_agent_id(agent_id: str) -> str:
+        return agent_id.removesuffix("Agent").casefold()
+
+    @staticmethod
+    def _normalize_agent_name(value: str) -> str:
+        return "".join(character for character in value.casefold() if character.isalnum())
 
     def _select_model(self, thread_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         requested = str(arguments.get("model_id") or arguments.get("model") or "").strip()

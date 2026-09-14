@@ -363,13 +363,13 @@ class AppActionRuntime:
         agent_selection = re.fullmatch(
             polite
             + r"(?:open|use|select|switch(?:\s+over)?\s+to|change(?:\s+over)?\s+to|go\s+to)\s+"
-            + r"(?:the\s+)?(vellum|x|twitter|youtube|sports|books|research|memory)(?:\s+agent)?",
+            + r"(?:the\s+)?(?:(vellum|x|twitter|youtube|sports|books|research|memory)(?:\s+agent)?|(.+?)\s+agent)",
             normalized,
         )
         if agent_selection:
             return AppActionRequest(
                 action_id=AGENT_SELECT_ACTION_ID,
-                arguments={"agent": agent_selection.group(1)},
+                arguments={"agent": agent_selection.group(1) or agent_selection.group(2)},
             )
 
         model_selection = re.fullmatch(

@@ -178,6 +178,9 @@ describe("Vellum default redesigned frontend", () => {
 
   test("routes visible agent, model, and per-chat memory controls through App Actions", () => {
     expect(html).toContain("dispatchConversationAction('agent.select', {agent:id})");
+    expect(html).toContain('window.VellumUI.AgentCatalog.merge(AGENTS, subagents');
+    expect(html).toContain('agents={availableAgents}');
+    expect(html).toContain('agents: availableAgents');
     expect(html).toContain("dispatchConversationAction('model.select', {model_id:id})");
     expect(html).toContain("dispatchConversationAction('memory.conversation.set', {enabled})");
     expect(html).toContain("store: opts.storeToMemory !== false");

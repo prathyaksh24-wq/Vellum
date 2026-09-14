@@ -2508,23 +2508,22 @@ async def get_skill_detail(skill_name: str, path: str = "") -> dict[str, Any]:
 
 @router.get("/subagents")
 async def list_subagents() -> dict[str, Any]:
-    descriptions = {
-        "SportsAgent": "Scores, schedules, standings, injuries, and sports analysis.",
-        "XAgent": "X search, account reads, bookmarks, and confirmed posting workflows.",
-        "YoutubeAgent": "YouTube search, video metadata, transcripts, and summaries.",
-        "MemoryAgent": "Long-term memory lookup, context packs, and preference recall.",
-    }
+    subagents = []
+    for profile in _agent_catalog.list():
+        binding = _agent_catalog.try_resolve(profile.id)
+        available = bool(
+            binding is not None
+            and (profile.executor != "deterministic" or binding.executor is not None)
+        )
+        subagents.append({
+            "id": profile.id.removesuffix("Agent").casefold(),
+            "name": profile.id,
+            "enabled": available,
+            "status": "available" if available else "unavailable",
+            "description": profile.description or "Specialized Vellum sub-agent.",
+        })
     return {
-        "subagents": [
-            {
-                "id": name.replace("Agent", "").casefold() or name.casefold(),
-                "name": name,
-                "enabled": True,
-                "status": "available",
-                "description": descriptions.get(name, "Specialized Vellum sub-agent."),
-            }
-            for name in _agent_catalog.names()
-        ]
+        "subagents": subagents,
     }
 
 

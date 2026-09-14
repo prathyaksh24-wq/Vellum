@@ -21,6 +21,7 @@
 <script src="components/books-state.js"></script>
 <script src="components/app-action-runtime.js"></script>
 <script src="components/attachment-runtime.js"></script>
+<script src="components/agent-catalog.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
@@ -2855,7 +2856,7 @@ const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipS
 
 const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
 
-const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, onNewChat, onSearch, onNav, onOpenAgent, onSettings}) => {
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onOpenAgent, onSettings}) => {
   const [near, setNear] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const closeTimer = useRef(null);
@@ -2904,7 +2905,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
             <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
             {agentsOpen && <div className={`dock-flyout ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
               <div className="dock-fly-head">Agents</div>
-              {AGENTS.map(agent => <button type="button" key={agent.id} className={`dock-agent ${view === 'agent' && activeAgentId === agent.id ? 'active' : ''}`} onClick={() => run(() => onOpenAgent(agent.id))}>
+              {agents.map(agent => <button type="button" key={agent.id} className={`dock-agent ${view === 'agent' && activeAgentId === agent.id ? 'active' : ''}`} onClick={() => run(() => onOpenAgent(agent.id))}>
                 <span className="sb-ic"><agent.icon size={15}/></span><span>{agent.name}</span>{view === 'agent' && activeAgentId === agent.id && <span className="dock-agent-check"><IcCheck size={13}/></span>}
               </button>)}
             </div>}
@@ -3573,7 +3574,7 @@ const SLASH_ITEMS = [
 ];
 
 const slashText = value => String(value || '').toLowerCase();
-const buildReasoningSlashItems = ({q='', apps=[], skills=[]}) => {
+const buildReasoningSlashItems = ({q='', apps=[], skills=[], agents=AGENTS}) => {
   const query = slashText(q);
   const matches = item => !query || slashText([item.label,item.description,item.owner].join(' ')).includes(query);
   const commands = SLASH_ITEMS.filter(matches).map(item => ({...item, kind:'command'}));
@@ -3594,7 +3595,7 @@ const buildReasoningSlashItems = ({q='', apps=[], skills=[]}) => {
     kind:'mcp', k:'mcp:'+plugin.id+':'+(item.id || item.name), label:item.name || item.id || plugin.name,
     description:item.description || item.transport || item.command || 'MCP connector', owner:plugin.name, ic:IcMcp, raw:item, plugin,
   }))).filter(item => item.label && matches(item));
-  const agentRows = AGENTS.map(agent => ({
+  const agentRows = agents.map(agent => ({
     kind:'agent', k:'agent:'+agent.id, label:agent.name, description:agent.desc || 'Specialized Vellum agent',
     owner:'Vellum', ic:agent.icon, raw:agent,
   })).filter(matches);
@@ -3608,10 +3609,10 @@ const buildReasoningSlashItems = ({q='', apps=[], skills=[]}) => {
   ].filter(section => section.items.length);
 };
 
-const SlashMenu = ({q, drop, apps, skills, projects, activeIdx, onRun, onProject}) => {
+const SlashMenu = ({q, drop, apps, skills, agents, projects, activeIdx, onRun, onProject}) => {
   const [mode, setMode] = useState('root');
   useEffect(() => { setMode('root'); }, [q]);
-  const sections = buildReasoningSlashItems({q,apps,skills});
+  const sections = buildReasoningSlashItems({q,apps,skills,agents});
   const projHit = (!q || 'projects'.includes(q)) && (projects || []).length > 0;
   if (!sections.length && !projHit) return null;
   let idx = -1;
@@ -3761,7 +3762,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, presentation = {}}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, presentation = {}}) => {
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -3869,7 +3870,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
   const removeSlashToken = value => value.replace(/(?:^|\s)\/\S*$/, '').trimEnd();
   const focusComposer = () => setTimeout(() => { if (taRef.current) taRef.current.focus(); }, 0);
   const stripSlash = () => { setText(t => removeSlashToken(t)); focusComposer(); };
-  const slashSections = buildReasoningSlashItems({q:slashQ,apps,skills});
+  const slashSections = buildReasoningSlashItems({q:slashQ,apps,skills,agents});
   const slashProj = (!slashQ || 'projects'.includes(slashQ)) && (projects || []).length > 0;
   const slashFlat = [...slashSections.flatMap(section => section.items), ...(slashProj ? [{kind:'project'}] : [])];
   const enableSearch = () => { setSearchMode(true); setText(t => removeSlashToken(t)); setSlashDismissed(true); setSlashIdx(0); focusComposer(); };
@@ -4039,7 +4040,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             );
           })()}
           {slashOpen && <SlashMenu q={slashQ} drop={drop} activeIdx={slashIdx}
-            apps={apps} skills={skills} projects={projects} onRun={runSlashItem}
+            apps={apps} skills={skills} agents={agents} projects={projects} onRun={runSlashItem}
             onProject={id => { stripSlash(); onOpenProject && onOpenProject(id); }}
           />}
           <div className="cspace"/>
@@ -8420,7 +8421,17 @@ const [slashSkills, setSlashSkills] = useState([]);
   const activePetRecord = pxPetRecord(petManifest, petActive) || PETDEX_FALLBACK;
   const petToggleInstall = slug => { setPetInstalled(list => list.indexOf(slug) === -1 ? list.concat(slug) : list.filter(s => s !== slug)); };
   const petSetActive = slug => setPetActive(slug);
-  const [subagents, setSubagents] = useState([]);
+  const [subagents, setSubagents] = useState(null);
+  const availableAgents = useMemo(
+    () => window.VellumUI.AgentCatalog.merge(AGENTS, subagents, {fallbackIcon:IcSparkle}),
+    [subagents],
+  );
+  useEffect(() => {
+    setAgentCfg(current => Object.fromEntries(availableAgents.map(agent => [
+      agent.id,
+      current[agent.id] || {model: DEFAULT_MODEL, autonomy: 'ask', tone: '', enabled: true, memory: true},
+    ])));
+  }, [availableAgents]);
   const [draftApps, setDraftApps] = useState([]);
   const [activityMsg, setActivityMsg] = useState(null);
   useEffect(() => { if (!rightPanelVisible) setActivityMsg(null); }, [rightPanelVisible]);
@@ -8914,7 +8925,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
   };
   const sendToAgent = (text, attach, opts = {}) => {
-    const ag = AGENTS.find(a => a.id === activeAgentId);
+    const ag = availableAgents.find(a => a.id === activeAgentId)
+      || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle);
     if (!ag) return;
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
@@ -8949,7 +8961,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     }
   };
   const regenAgent = (msgId) => {
-    const ag = AGENTS.find(a => a.id === activeAgentId);
+    const ag = availableAgents.find(a => a.id === activeAgentId)
+      || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle);
     if (!ag) return;
     const cid = activeConvo[ag.id];
     const convo = (agentConvos[ag.id] || []).find(c => c.id === cid);
@@ -9541,7 +9554,9 @@ const [slashSkills, setSlashSkills] = useState([]);
   const menuChat = menu && menu.type === 'chat' ? chats.find(c => c.id === menu.id) : null;
   const menuChatProject = menuChat && menuChat.projectId ? projects.find(p => p.id === menuChat.projectId) : null;
   const activeChat = chats.find(c => c.id === activeChatId) || null;
-  const activeAgent = activeAgentId ? AGENTS.find(a => a.id === activeAgentId) : null;
+  const activeAgent = activeAgentId
+    ? availableAgents.find(a => a.id === activeAgentId) || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle)
+    : null;
   const activeAgentConvo = activeAgentId && activeConvo[activeAgentId] ? (agentConvos[activeAgentId] || []).find(c => c.id === activeConvo[activeAgentId]) : null;
   const getTauriInvoke = () => window.__TAURI_INTERNALS__ && window.__TAURI_INTERNALS__.invoke;
   conversationActionHandlersRef.current = {
@@ -9571,7 +9586,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       const runtimeTargetId = receipt && receipt.target && receipt.target.id;
       const targetChat = chats.find(chat => chat.id === runtimeTargetId || chat.thread_id === runtimeTargetId);
       const targetChatId = targetChat ? targetChat.id : runtimeTargetId;
-      const targetAgentId = AGENTS.find(agent => (agentConvos[agent.id] || []).some(convo => convo.id === runtimeTargetId))?.id;
+      const targetAgentId = availableAgents.find(agent => (agentConvos[agent.id] || []).some(convo => convo.id === runtimeTargetId))?.id;
       if (Object.prototype.hasOwnProperty.call(controlPatch, 'agent_id')) applyAgentSelection(controlPatch.agent_id);
       if (Object.prototype.hasOwnProperty.call(controlPatch, 'model_id') && targetAgentId) {
         setSelModel(controlPatch.model_id);
@@ -9858,7 +9873,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, presentation:composerPresentation}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -9867,7 +9882,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onAddSource={f => addSource(activeProject.id, f)}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
             {view === 'ledger' && <ObservabilityView/>}
@@ -9876,10 +9891,10 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
           </div>
         </div>
-        <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen}
+        <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
           onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
@@ -9896,7 +9911,11 @@ const [slashSkills, setSlashSkills] = useState([]);
           onNewProject={() => { pendingMoveRef.current = activeChat.id; setMenu(null); setCreateOpen(true); }}
           onClose={() => setMenu(null)}/>}
         {createOpen && <CreateProjectModal onCreate={createProject} onClose={() => setCreateOpen(false)}/>}
-        {agentSettingsOpen && activeAgentId && <AgentSettingsModal agent={AGENTS.find(a => a.id === activeAgentId)} cfg={agentCfg[activeAgentId]} onClose={() => setAgentSettingsOpen(false)} onSave={c => { setAgentCfg(m => ({...m, [activeAgentId]: c})); setAgentSettingsOpen(false); }}/>}
+        {agentSettingsOpen && activeAgentId && <AgentSettingsModal
+          agent={activeAgent}
+          cfg={agentCfg[activeAgentId] || {model:DEFAULT_MODEL, autonomy:'ask', tone:'', enabled:true, memory:true}}
+          onClose={() => setAgentSettingsOpen(false)}
+          onSave={c => { setAgentCfg(m => ({...m, [activeAgentId]: c})); setAgentSettingsOpen(false); }}/>}
         {menu && menu.type === 'project' && <ProjectMenu pos={menu} onAction={a => projectMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
         {searchOpen && <SearchOverlay chats={chats} initialPreset={searchPreset}
           onNewChat={() => { setSearchOpen(false); setSearchPreset(null); newChat(); }}
