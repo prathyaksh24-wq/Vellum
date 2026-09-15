@@ -44,6 +44,7 @@ from agent.cli.project_commands import (
 from agent.app_actions.api import router as app_actions_router
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.models import AppActionContext
+from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.runtime import get_app_action_runtime
 from agent.app_actions.session_controls import SessionControlService
 from agent.app_actions.lifecycle_controls import (
@@ -2853,6 +2854,11 @@ def _observability_snapshot(period: str) -> dict[str, Any]:
         "runs": _observability.summary(days=days),
         "recent_runs": _observability.recent_runs(limit=12),
     }
+
+
+_app_action_runtime.set_observability_handler(
+    ObservabilityActionService(_observability_snapshot).execute
+)
 
 
 @router.get("/observability/summary")
