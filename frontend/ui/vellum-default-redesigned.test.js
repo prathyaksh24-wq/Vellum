@@ -43,6 +43,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain('<script src="api/chat.js"></script>');
     expect(html).toContain('<script src="api/app-actions.js"></script>');
     expect(html).toContain('<script src="components/app-action-runtime.js"></script>');
+    expect(html).toContain('<script src="components/observability-action-runtime.js"></script>');
     expect(html).toContain('<script src="components/attachment-runtime.js"></script>');
     expect(html).toContain('<script src="api/conversations.js"></script>');
     expect(html).toContain('<script src="api/plugins.js"></script>');
@@ -194,6 +195,16 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("onSkillAction('skill.mutation.approve'");
     expect(html).toContain("onSkillAction('skill.mutation.reject'");
     expect(html).toContain("onSkillAction('skill.uninstall'");
+  });
+
+  test("routes observability navigation and controls through App Actions", () => {
+    expect(html).toContain("dispatchObservabilityAction('observability.open', {})");
+    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:true})");
+    expect(html).toContain("dispatchControl('observability.stream.set', {enabled:paused})");
+    expect(html).toContain("dispatchControl('observability.refresh', {period})");
+    expect(html).toContain("ObservabilityActions.applyReceipt(current, receipt)");
+    expect(html).toContain("navigation.view === 'ledger'");
+    expect(html).not.toContain("onClick={() => setPaused");
   });
 
   test("does not contain unresolved Git conflict markers", () => {

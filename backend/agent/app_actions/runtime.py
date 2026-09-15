@@ -42,6 +42,15 @@ from agent.app_actions.lifecycle_controls import (
     LifecycleControlError,
     lifecycle_action_definitions,
 )
+from agent.app_actions.observability import (
+    OBSERVABILITY_ACTION_IDS,
+    OBSERVABILITY_OPEN_ACTION_ID,
+    OBSERVABILITY_REFRESH_ACTION_ID,
+    OBSERVABILITY_STATUS_ACTION_ID,
+    OBSERVABILITY_STREAM_SET_ACTION_ID,
+    ObservabilityActionError,
+    observability_action_definitions,
+)
 from agent.app_actions.petdex import (
     PETDEX_ACTION_IDS,
     PETDEX_ACTIVE_SET_ACTION_ID,
@@ -188,6 +197,7 @@ class AppActionRuntime:
         attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
         session_control_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         lifecycle_control_handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]] | None = None,
+        observability_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         plugin_registry: PluginRegistry | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
@@ -201,6 +211,7 @@ class AppActionRuntime:
         self._attachment_importer = attachment_importer
         self._session_control_handler = session_control_handler
         self._lifecycle_control_handler = lifecycle_control_handler
+        self._observability_handler = observability_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._registry = ToolRegistry()
@@ -215,6 +226,7 @@ class AppActionRuntime:
                 *self._session_control_definitions(),
                 *self._conversation_definitions(),
                 *lifecycle_action_definitions(),
+                *observability_action_definitions(),
                 *petdex_action_definitions(),
             )
         }
@@ -247,6 +259,17 @@ class AppActionRuntime:
                 ),
                 access=CapabilityAccess(definition.access_class),
             )
+        for action_id in OBSERVABILITY_ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._invoke_observability(
+                    registered_action_id,
+                    payload,
+                ),
+                access=CapabilityAccess(definition.access_class),
+            )
         if self._conversation_lifecycle is not None:
             self.set_conversation_lifecycle_provider(self._conversation_lifecycle)
 
@@ -267,6 +290,12 @@ class AppActionRuntime:
         handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]],
     ) -> None:
         self._lifecycle_control_handler = handler
+
+    def set_observability_handler(
+        self,
+        handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]],
+    ) -> None:
+        self._observability_handler = handler
 
     def register_plugin_contribution(self, contribution: PluginContribution) -> None:
         if self._plugin_contributions is None:
@@ -414,6 +443,8 @@ class AppActionRuntime:
             return False
         if definition.id in LIFECYCLE_CONTROL_ACTION_IDS and self._lifecycle_control_handler is None:
             return False
+        if definition.id in OBSERVABILITY_ACTION_IDS and self._observability_handler is None:
+            return False
         return bool(self._action_availability(definition, context))
 
     def _definition(self, action_id: str) -> AppActionDefinition | None:
@@ -515,6 +546,46 @@ class AppActionRuntime:
                 action_id=MEMORY_CONVERSATION_SET_ACTION_ID,
                 arguments={"enabled": False},
             )
+
+        observability_status = re.fullmatch(
+            polite
+            + r"(?:(?:show|get|check|tell\s+me)\s+(?:the\s+)?observability\s+status|"
+            + r"(?:what(?:'s|\s+is)|how\s+is)\s+(?:the\s+)?observability(?:\s+status)?|"
+            + r"is\s+(?:the\s+)?observability\s+(?:running|live|working))",
+            normalized,
+        )
+        if observability_status:
+            return AppActionRequest(action_id=OBSERVABILITY_STATUS_ACTION_ID)
+
+        observability_refresh = re.fullmatch(
+            polite + r"refresh\s+(?:the\s+)?observability(?:\s+(?:view|dashboard|surface))?",
+            normalized,
+        )
+        if observability_refresh:
+            return AppActionRequest(action_id=OBSERVABILITY_REFRESH_ACTION_ID)
+
+        observability_stream = re.fullmatch(
+            polite
+            + r"(pause|resume|start|run|reconnect)\s+(?:the\s+)?observability(?:\s+(?:stream|feed))?",
+            normalized,
+        )
+        if observability_stream:
+            operation = observability_stream.group(1)
+            return AppActionRequest(
+                action_id=OBSERVABILITY_STREAM_SET_ACTION_ID,
+                arguments={
+                    "enabled": operation != "pause",
+                    **({"reconnect": True} if operation == "reconnect" else {}),
+                },
+            )
+
+        observability_open = re.fullmatch(
+            polite
+            + r"(?:open|show|go\s+to|view)\s+(?:the\s+)?observability(?:\s+(?:view|dashboard|surface))?",
+            normalized,
+        )
+        if observability_open:
+            return AppActionRequest(action_id=OBSERVABILITY_OPEN_ACTION_ID)
 
         plugin_state = re.fullmatch(
             polite + r"(enable|disable|turn\s+on|turn\s+off)\s+(?:the\s+)?(.+?)\s+plugin",
@@ -1042,6 +1113,8 @@ class AppActionRuntime:
             if definition.confirmation_rule == "operation_bound":
                 return self._lifecycle_confirmation_receipt(request, context, definition)
             return self._dispatch_lifecycle_control(request, context, definition)
+        if request.action_id in OBSERVABILITY_ACTION_IDS:
+            return self._dispatch_observability(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
@@ -1356,6 +1429,65 @@ class AppActionRuntime:
             dict(payload.get("arguments") or {}),
             payload["context"],
             payload.get("confirmed") is True,
+        )
+
+    def _dispatch_observability(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        if self._observability_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="OBSERVABILITY_UNAVAILABLE",
+                message="Observability controls are unavailable.",
+            )
+        try:
+            result = self._registry.invoke(
+                request.action_id,
+                {"arguments": dict(request.arguments), "context": context},
+                agent_name=self._agent_name(context),
+            )
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except ObservabilityActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _invoke_observability(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._observability_handler is None:
+            raise ObservabilityActionError(
+                "OBSERVABILITY_UNAVAILABLE",
+                "Observability controls are unavailable.",
+                unavailable=True,
+            )
+        return self._observability_handler(
+            action_id,
+            dict(payload.get("arguments") or {}),
+            payload["context"],
         )
 
     def _dispatch_petdex_action(

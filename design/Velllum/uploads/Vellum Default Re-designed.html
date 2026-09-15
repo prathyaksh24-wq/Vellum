@@ -20,6 +20,7 @@
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
 <script src="components/app-action-runtime.js"></script>
+<script src="components/observability-action-runtime.js"></script>
 <script src="components/petdex-action-runtime.js"></script>
 <script src="components/attachment-runtime.js"></script>
 <script src="components/agent-catalog.js"></script>
@@ -5688,18 +5689,17 @@ const obsEventTone = type => {
   return 'var(--obs-cool)';
 };
 
-const ObservabilityView = () => {
+const ObservabilityView = ({control, onAction}) => {
   const [period, setPeriod] = useState('7d');
   const [snapshot, setSnapshot] = useState(null);
   const [health, setHealth] = useState(null);
   const [models, setModels] = useState([]);
   const [events, setEvents] = useState([]);
   const [connection, setConnection] = useState('connecting');
-  const [paused, setPaused] = useState(false);
-  const [streamKey, setStreamKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const lastEventId = useRef(0);
+  const paused = !control || control.streaming === false;
 
   const load = async (quiet=false) => {
     if (!quiet) setRefreshing(true);
@@ -5723,6 +5723,12 @@ const ObservabilityView = () => {
 
   useEffect(() => { load(); }, [period]);
   useEffect(() => {
+    if (control && control.snapshot && control.snapshot.period === period) {
+      setSnapshot(control.snapshot);
+      setError('');
+    }
+  }, [control && control.snapshot, period]);
+  useEffect(() => {
     if (paused) return;
     const timer = setInterval(() => load(true), 10000);
     return () => clearInterval(timer);
@@ -5745,7 +5751,21 @@ const ObservabilityView = () => {
     source.onerror = () => setConnection('reconnecting');
     source.addEventListener('observability.event', onLive);
     return () => { source.removeEventListener('observability.event', onLive); source.close(); };
-  }, [paused, streamKey, period]);
+  }, [paused, control && control.reconnectRevision, period]);
+
+  const dispatchControl = async (actionId, arguments_ = {}) => {
+    if (typeof onAction !== 'function') return null;
+    const receipt = await onAction(actionId, arguments_);
+    if (!receipt || receipt.status !== 'applied') {
+      setError(receipt && receipt.message ? receipt.message : 'Observability is unreachable.');
+    }
+    return receipt;
+  };
+  const refresh = async () => {
+    setRefreshing(true);
+    try { await dispatchControl('observability.refresh', {period}); }
+    finally { setRefreshing(false); }
+  };
 
   const data = snapshot || {};
   const usage = data.usage || {models:[], daily:[], recent:[]};
@@ -5788,10 +5808,10 @@ const ObservabilityView = () => {
           <div className="obs-head-copy"><div className="obs-title">Observability</div><div className="obs-sub">Live insight into Vellum runs, token pressure, cost, and system health.</div></div>
           <div className="obs-head-actions">
             <div className="obs-source"><span className="obs-status-dot" style={{color:connection === 'live' ? 'var(--obs-good)' : 'var(--obs-warm)'}}/><span>Source</span><strong>Vellum native</strong></div>
-            <button className={'obs-control on' + (paused ? '' : ' live')} onClick={() => setPaused(false)} aria-pressed={!paused}><span className="obs-live-dot"/>Live</button>
-            <button className={'obs-control pause' + (paused ? ' on' : '')} onClick={() => setPaused(value => !value)} aria-pressed={paused}>{paused ? 'Resume' : 'Pause'}</button>
-            <button className="obs-control" onClick={() => { setPaused(false); setStreamKey(value => value + 1); }}>Reconnect</button>
-            <button className={'obs-control' + (refreshing ? ' refreshing' : '')} onClick={() => load()} disabled={refreshing}><IcRefresh size={13}/>{refreshing ? 'Refreshing' : 'Refresh'}</button>
+            <button className={'obs-control on' + (paused ? '' : ' live')} onClick={() => dispatchControl('observability.stream.set', {enabled:true})} aria-pressed={!paused}><span className="obs-live-dot"/>Live</button>
+            <button className={'obs-control pause' + (paused ? ' on' : '')} onClick={() => dispatchControl('observability.stream.set', {enabled:paused})} aria-pressed={paused}>{paused ? 'Resume' : 'Pause'}</button>
+            <button className="obs-control" onClick={() => dispatchControl('observability.stream.set', {enabled:true,reconnect:true})}>Reconnect</button>
+            <button className={'obs-control' + (refreshing ? ' refreshing' : '')} onClick={refresh} disabled={refreshing}><IcRefresh size={13}/>{refreshing ? 'Refreshing' : 'Refresh'}</button>
             <span className="obs-updated">{snapshot ? 'Updated ' + obsClock(snapshot.generated_at) : 'Waiting for data'}</span>
           </div>
         </div>
@@ -8336,6 +8356,9 @@ const App = () => {
   }
   const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
   useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
+  const [observabilityControl, setObservabilityControl] = useState(
+    () => window.VellumUI.ObservabilityActions.initialState()
+  );
   const theme = workspaceLayout.surfaces.workspace.properties.theme;
   const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
   const settingsOpen = workspaceLayout.surfaces.settings.visible;
@@ -9624,7 +9647,8 @@ const [slashSkills, setSlashSkills] = useState([]);
       scheduleConversationLibraryRefresh();
     },
     navigate: navigation => {
-      if (navigation && navigation.conversation_id) applyOpenChatNavigation(navigation.conversation_id);
+      if (navigation && navigation.view === 'ledger') nav('ledger');
+      else if (navigation && navigation.conversation_id) applyOpenChatNavigation(navigation.conversation_id);
       else applyNewChatNavigation();
     },
     openNativeWindow: target => {
@@ -9686,6 +9710,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
+      setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
       if (receipt && receipt.result && receipt.result.petdex_patch) {
         const nextPetdex = window.VellumUI.PetdexActions.applyReceipt(petdexStateRef.current, receipt);
         petdexStateRef.current = nextPetdex;
@@ -9725,6 +9750,16 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  const dispatchObservabilityAction = async (actionId, arguments_) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId});
+    if (receipt) {
+      setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
+    }
+    return receipt;
+  };
+  const navigateFromControl = targetView => targetView === 'ledger'
+    ? dispatchObservabilityAction('observability.open', {})
+    : nav(targetView);
   const dispatchPetdexAction = async (actionId, arguments_) => {
     const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId});
     if (receipt) applyAppActionReceipt(receipt, {notify:false});
@@ -9867,7 +9902,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       else if (c === 'KeyS') { e.preventDefault(); dispatchSidebarVisibility(!sidebarPinned); }
       else if (c === 'KeyI') { e.preventDefault(); setCustomInstrOpen(true); }
       else if (c === 'KeyL') { e.preventDefault(); nav('library'); }
-      else if (c === 'KeyG') { e.preventDefault(); nav('ledger'); }
+      else if (c === 'KeyG') { e.preventDefault(); navigateFromControl('ledger'); }
       else if (c === 'KeyK') { e.preventDefault(); nav('skills'); }
       else if (c === 'KeyE') { e.preventDefault(); nav('memory'); }
       else if (c === 'KeyM') { e.preventDefault(); window.dispatchEvent(new CustomEvent('vellum-composer', {detail: 'model'})); }
@@ -9938,7 +9973,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
             onExpand={() => dispatchSidebarVisibility(true)} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
-            onNav={nav} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
+            onNav={navigateFromControl} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
             onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}/>}
 
@@ -9965,7 +10000,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
-            {view === 'ledger' && <ObservabilityView/>}
+            {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
             {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
@@ -9975,7 +10010,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
-          onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
+          onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
         {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}

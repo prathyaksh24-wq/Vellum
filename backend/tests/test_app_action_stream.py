@@ -10,6 +10,7 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.runtime import AppActionRuntime
+from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.session_controls import SessionControlService
 from agent.conversations.lifecycle import ConversationLifecycle
 from agent.conversations.sharing import ConversationShareService
@@ -108,6 +109,32 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
     subject = AppActionRuntime()
 
     assert subject.match_submission("What are the benefits of a sidebar in a research app?") is None
+
+
+@pytest.mark.asyncio
+async def test_observability_nlp_streams_a_navigation_receipt_without_calling_agent(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    service = ObservabilityActionService(lambda _period: {})
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(observability_handler=service.execute))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("an observability action must not call the conversational model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="open observability",
+        thread_id="chat-observability",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+    completed = next(data["response"] for name, data in events if name == "response.completed")
+
+    assert receipt["status"] == "applied"
+    assert receipt["action_id"] == "observability.open"
+    assert receipt["result"]["navigation"] == {"view": "ledger"}
+    assert completed["output_text"] == "Observability opened."
 
 
 @pytest.mark.asyncio
