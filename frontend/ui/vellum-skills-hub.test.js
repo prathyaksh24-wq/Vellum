@@ -10,7 +10,7 @@ describe("production Skills Hub", () => {
   test("uses live catalog contracts without a runtime seed catalog", () => {
     const html = fs.readFileSync(htmlPath, "utf8");
     expect(html).toContain("const SkillsHubView");
-    expect(html).toContain("<SkillsHubView/>");
+    expect(html).toContain("<SkillsHubView onSkillAction={dispatchSkillAction}/>");
     expect(html).not.toContain("useState(SEED_SKILLS)");
     expect(html).not.toContain("const SEED_SKILLS");
     expect(html).toContain("API.plugins.skillsCatalog");
@@ -93,7 +93,8 @@ describe("production Skills Hub", () => {
     expect(html).toContain("valid public skill URL");
     expect(html).toContain("confirm:true");
     expect(html).toContain("Built-in skills can't be removed");
-    expect(html).toContain("startInstallActivity(payload)");
+    expect(html).toContain("startInstallActivity(payload,onSkillAction)");
+    expect(html).toContain("onSkillAction=skillActionDispatcher");
     expect(html).toContain("SKILL_RANKING_OPTIONS");
     expect(html).toContain('ariaLabel="Discovery ranking"');
     expect(html).toContain("setInterval(()=>loadList(false,''),300000)");

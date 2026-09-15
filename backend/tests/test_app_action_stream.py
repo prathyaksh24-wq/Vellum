@@ -111,6 +111,54 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
 
 
 @pytest.mark.asyncio
+async def test_petdex_nlp_runs_through_chat_stream_without_calling_agent(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime())
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("a Petdex presentation action must not call the conversational model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="make the pet large",
+        thread_id="petdex-chat-1",
+        action_context=AppActionContext(
+            source="ui",
+            petdex={
+                "revision": 2,
+                "available": ["boba", "zoro"],
+                "installed": ["boba"],
+                "active": "boba",
+                "hidden": False,
+                "size": "md",
+                "position": {},
+            },
+        ),
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+    completed = next(data["response"] for name, data in events if name == "response.completed")
+
+    assert receipt["source"] == "nlp"
+    assert receipt["status"] == "applied"
+    assert receipt["result"]["petdex_patch"] == {
+        "version": 1,
+        "base_revision": 2,
+        "revision": 3,
+        "state": {
+            "installed": ["boba"],
+            "active": "boba",
+            "hidden": False,
+            "size": "lg",
+            "position": {},
+        },
+    }
+    assert completed["output_text"] == "Pet size changed to large."
+
+
+@pytest.mark.asyncio
 async def test_catalog_subagent_switch_runs_through_chat_stream_without_model_fallback(
     monkeypatch,
     tmp_path,

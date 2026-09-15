@@ -65,6 +65,7 @@ class AppActionContext(BaseModel):
     selected_model: str = ""
     reasoning_mode: str = ""
     store_to_memory: bool = True
+    petdex: dict[str, Any] = Field(default_factory=dict)
 
 
 class AppActionRequest(BaseModel):

@@ -51,7 +51,7 @@ describe("Vellum Petdex companion", () => {
   });
 
   test("persists every pet preference to localStorage", () => {
-    for (const key of ["vellum-pet-installed", "vellum-pet-active", "vellum-pet-hidden", "vellum-pet-size", "vellum-pet-pos"]) {
+    for (const key of ["vellum-pet-installed", "vellum-pet-active", "vellum-pet-hidden", "vellum-pet-size", "vellum-pet-pos", "vellum-pet-revision"]) {
       expect(html).toContain(`'${key}'`);
     }
   });
@@ -65,7 +65,7 @@ describe("Vellum Petdex companion", () => {
 
   test("mounts a draggable floating pet with a hover menu", () => {
     expect(html).toContain("<PetFloater record={activePetRecord}");
-    expect(html).toContain("setPetHidden(true)");
+    expect(html).toContain("petSetHidden(true)");
     expect(html).toContain("onPointerDown={onPointerDown}");
     expect(html).toContain("setPointerCapture");
     expect(html).toContain("Hide pet");
@@ -80,5 +80,13 @@ describe("Vellum Petdex companion", () => {
     expect(html).toContain("px-size");
     expect(html).toContain("{id: 'sm', label: 'Small'}");
     expect(html).toContain("Nothing installed yet");
+  });
+
+  test("routes Petdex controls through App Actions", () => {
+    expect(html).toContain("dispatchPetdexAction('petdex.visibility.set'");
+    expect(html).toContain("dispatchPetdexAction('petdex.size.set'");
+    expect(html).toContain("dispatchPetdexAction('petdex.position.set'");
+    expect(html).toContain("'petdex.remove' : 'petdex.install'");
+    expect(html).toContain("window.VellumUI.PetdexActions.applyReceipt");
   });
 });

@@ -188,6 +188,14 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("applySessionControl: (controlPatch, receipt)");
   });
 
+  test("routes plugin and skill lifecycle controls through App Actions", () => {
+    expect(html).toContain("dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})");
+    expect(html).toContain("onSkillAction('skill.mutation.submit'");
+    expect(html).toContain("onSkillAction('skill.mutation.approve'");
+    expect(html).toContain("onSkillAction('skill.mutation.reject'");
+    expect(html).toContain("onSkillAction('skill.uninstall'");
+  });
+
   test("does not contain unresolved Git conflict markers", () => {
     expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
   });

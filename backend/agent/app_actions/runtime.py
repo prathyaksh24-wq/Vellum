@@ -32,6 +32,28 @@ from agent.app_actions.session_controls import (
     REASONING_SET_ACTION_ID,
     SessionControlError,
 )
+from agent.app_actions.lifecycle_controls import (
+    LIFECYCLE_CONTROL_ACTION_IDS,
+    PLUGIN_STATE_SET_ACTION_ID,
+    SKILL_MUTATION_APPROVE_ACTION_ID,
+    SKILL_MUTATION_REJECT_ACTION_ID,
+    SKILL_MUTATION_SUBMIT_ACTION_ID,
+    SKILL_UNINSTALL_ACTION_ID,
+    LifecycleControlError,
+    lifecycle_action_definitions,
+)
+from agent.app_actions.petdex import (
+    PETDEX_ACTION_IDS,
+    PETDEX_ACTIVE_SET_ACTION_ID,
+    PETDEX_INSTALL_ACTION_ID,
+    PETDEX_POSITION_SET_ACTION_ID,
+    PETDEX_REMOVE_ACTION_ID,
+    PETDEX_SIZE_SET_ACTION_ID,
+    PETDEX_VISIBILITY_SET_ACTION_ID,
+    PetdexActionError,
+    execute_petdex_action,
+    petdex_action_definitions,
+)
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
 from agent.plugins.contributions import PluginContribution, PluginContributionCatalog
@@ -165,6 +187,7 @@ class AppActionRuntime:
         conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
         attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
         session_control_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
+        lifecycle_control_handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]] | None = None,
         plugin_registry: PluginRegistry | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
@@ -177,6 +200,7 @@ class AppActionRuntime:
         self._conversation_sharing = conversation_sharing
         self._attachment_importer = attachment_importer
         self._session_control_handler = session_control_handler
+        self._lifecycle_control_handler = lifecycle_control_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._registry = ToolRegistry()
@@ -190,6 +214,8 @@ class AppActionRuntime:
                 self._attachment_definition(),
                 *self._session_control_definitions(),
                 *self._conversation_definitions(),
+                *lifecycle_action_definitions(),
+                *petdex_action_definitions(),
             )
         }
         self._plugin_contributions = (
@@ -210,6 +236,17 @@ class AppActionRuntime:
         self._register(SIDEBAR_ACTION_ID, "Change sidebar visibility", self._set_sidebar)
         self._register(SURFACE_ACTION_ID, "Customize interface presentation", self._configure_surface)
         self._register(WORKSPACE_RESET_ACTION_ID, "Reset interface presentation", self._reset_workspace)
+        for action_id in LIFECYCLE_CONTROL_ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._invoke_lifecycle_control(
+                    registered_action_id,
+                    payload,
+                ),
+                access=CapabilityAccess(definition.access_class),
+            )
         if self._conversation_lifecycle is not None:
             self.set_conversation_lifecycle_provider(self._conversation_lifecycle)
 
@@ -224,6 +261,12 @@ class AppActionRuntime:
         handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]],
     ) -> None:
         self._session_control_handler = handler
+
+    def set_lifecycle_control_handler(
+        self,
+        handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]],
+    ) -> None:
+        self._lifecycle_control_handler = handler
 
     def register_plugin_contribution(self, contribution: PluginContribution) -> None:
         if self._plugin_contributions is None:
@@ -369,6 +412,8 @@ class AppActionRuntime:
             return self._plugin_contributions.action_available(definition.id, context)
         if definition.id in SESSION_CONTROL_ACTION_IDS and self._session_control_handler is None:
             return False
+        if definition.id in LIFECYCLE_CONTROL_ACTION_IDS and self._lifecycle_control_handler is None:
+            return False
         return bool(self._action_availability(definition, context))
 
     def _definition(self, action_id: str) -> AppActionDefinition | None:
@@ -469,6 +514,112 @@ class AppActionRuntime:
             return AppActionRequest(
                 action_id=MEMORY_CONVERSATION_SET_ACTION_ID,
                 arguments={"enabled": False},
+            )
+
+        plugin_state = re.fullmatch(
+            polite + r"(enable|disable|turn\s+on|turn\s+off)\s+(?:the\s+)?(.+?)\s+plugin",
+            normalized,
+        )
+        if plugin_state:
+            return AppActionRequest(
+                action_id=PLUGIN_STATE_SET_ACTION_ID,
+                arguments={
+                    "plugin_id": self._spoken_value(plugin_state.group(2)),
+                    "enabled": plugin_state.group(1) in {"enable", "turn on"},
+                },
+            )
+
+        skill_review = re.fullmatch(
+            polite + r"(approve|reject)\s+(?:the\s+)?(?:skill\s+)?(?:change|mutation)\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if skill_review:
+            return AppActionRequest(
+                action_id=(SKILL_MUTATION_APPROVE_ACTION_ID if skill_review.group(1).casefold() == "approve" else SKILL_MUTATION_REJECT_ACTION_ID),
+                arguments={"mutation_id": self._spoken_value(skill_review.group(2))},
+            )
+
+        skill_install = re.fullmatch(
+            polite + r"install\s+(?:the\s+)?(?:skill\s+(.+)|(.+?)\s+skill)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if skill_install:
+            return AppActionRequest(
+                action_id=SKILL_MUTATION_SUBMIT_ACTION_ID,
+                arguments={"operation": "install", "identifier": self._spoken_value(skill_install.group(1) or skill_install.group(2))},
+            )
+
+        skill_mutation = re.fullmatch(
+            polite
+            + r"(update|enable|disable|archive|restore|remove|uninstall)\s+"
+            + r"(?:the\s+)?(?:(?:skill\s+)?(?:called|named)\s+)?(.+?)(?:\s+skill)?",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if skill_mutation and "skill" in normalized:
+            operation = skill_mutation.group(1).casefold()
+            name = self._spoken_value(skill_mutation.group(2))
+            if operation == "uninstall":
+                return AppActionRequest(action_id=SKILL_UNINSTALL_ACTION_ID, arguments={"name": name})
+            return AppActionRequest(
+                action_id=SKILL_MUTATION_SUBMIT_ACTION_ID,
+                arguments={"operation": "remove" if operation == "remove" else operation, "name": name},
+            )
+
+        pet_visibility = re.fullmatch(
+            polite + r"(?:show|hide)\s+(?:the\s+|my\s+)?(?:pet|companion)",
+            normalized,
+        )
+        if pet_visibility:
+            return AppActionRequest(
+                action_id=PETDEX_VISIBILITY_SET_ACTION_ID,
+                arguments={"visible": "hide" not in normalized},
+            )
+        pet_toggle = re.fullmatch(
+            polite + r"turn\s+(?:the\s+|my\s+)?(?:pet|companion)\s+(on|off)",
+            normalized,
+        )
+        if pet_toggle:
+            return AppActionRequest(
+                action_id=PETDEX_VISIBILITY_SET_ACTION_ID,
+                arguments={"visible": pet_toggle.group(1) == "on"},
+            )
+        pet_size = re.fullmatch(
+            polite + r"(?:make|set)\s+(?:the\s+|my\s+)?(?:pet|companion)(?:\s+size)?(?:\s+to)?\s+(small|medium|large)",
+            normalized,
+        )
+        if pet_size:
+            return AppActionRequest(action_id=PETDEX_SIZE_SET_ACTION_ID, arguments={"size": pet_size.group(1)})
+        pet_position = re.fullmatch(
+            polite + r"(?:move|put)\s+(?:the\s+|my\s+)?(?:pet|companion)\s+(?:to|in)\s+(?:the\s+)?(top left|top right|bottom left|bottom right)",
+            normalized,
+        )
+        if pet_position:
+            return AppActionRequest(
+                action_id=PETDEX_POSITION_SET_ACTION_ID,
+                arguments={"anchor": pet_position.group(1).replace(" ", "-")},
+            )
+        pet_install = re.fullmatch(
+            polite + r"(install|remove)\s+(?:the\s+)?(.+?)\s+(?:pet|companion)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if pet_install:
+            return AppActionRequest(
+                action_id=PETDEX_INSTALL_ACTION_ID if pet_install.group(1).casefold() == "install" else PETDEX_REMOVE_ACTION_ID,
+                arguments={"slug": self._spoken_value(pet_install.group(2)).casefold()},
+            )
+        pet_selection = re.fullmatch(
+            polite + r"(?:use|select|switch(?:\s+over)?\s+to)\s+(?:the\s+)?(.+?)\s+(?:pet|companion)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if pet_selection:
+            return AppActionRequest(
+                action_id=PETDEX_ACTIVE_SET_ACTION_ID,
+                arguments={"slug": self._spoken_value(pet_selection.group(1)).casefold()},
             )
 
         if re.fullmatch(
@@ -887,6 +1038,12 @@ class AppActionRuntime:
             ):
                 return self._control_confirmation_receipt(request, context, definition)
             return self._dispatch_session_control(request, context, definition)
+        if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
+            if definition.confirmation_rule == "operation_bound":
+                return self._lifecycle_confirmation_receipt(request, context, definition)
+            return self._dispatch_lifecycle_control(request, context, definition)
+        if request.action_id in PETDEX_ACTION_IDS:
+            return self._dispatch_petdex_action(request, context, definition)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             return self._dispatch_plugin_action(request, context, definition)
 
@@ -1132,6 +1289,155 @@ class AppActionRuntime:
             result=result,
             message=message,
             audit_label=definition.audit_label,
+            created_at=self._now(),
+        )
+
+    def _dispatch_lifecycle_control(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        *,
+        confirmed: bool = False,
+    ) -> ActionReceipt:
+        if self._lifecycle_control_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="LIFECYCLE_CONTROLS_UNAVAILABLE",
+                message="Plugin and skill controls are unavailable.",
+            )
+        try:
+            result = self._registry.invoke(
+                request.action_id,
+                {
+                    "arguments": dict(request.arguments),
+                    "context": context,
+                    "confirmed": confirmed,
+                },
+                agent_name=self._agent_name(context),
+            )
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except LifecycleControlError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _invoke_lifecycle_control(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._lifecycle_control_handler is None:
+            raise LifecycleControlError(
+                "LIFECYCLE_CONTROLS_UNAVAILABLE",
+                "Plugin and skill controls are unavailable.",
+                unavailable=True,
+            )
+        return self._lifecycle_control_handler(
+            action_id,
+            dict(payload.get("arguments") or {}),
+            payload["context"],
+            payload.get("confirmed") is True,
+        )
+
+    def _dispatch_petdex_action(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        try:
+            result = execute_petdex_action(request.action_id, dict(request.arguments), context)
+        except PetdexActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _domain_action_receipt(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        raw_result: dict[str, Any],
+    ) -> ActionReceipt:
+        result = dict(raw_result)
+        target_kind = str(result.pop("_target_kind", definition.owner))
+        target_id = str(result.pop("_target_id", definition.ui_reference or definition.owner))
+        message = str(result.pop("_message", f"{definition.title} completed."))
+        result.setdefault("changed", True)
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="applied",
+            authorization=self._authorization(definition.access_class, context, allowed=True),
+            target=ActionTarget(kind=target_kind, id=target_id),
+            result=result,
+            message=message,
+            audit_label=definition.audit_label,
+            created_at=self._now(),
+        )
+
+    def _lifecycle_confirmation_receipt(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        target_kind = "skill" if request.action_id == SKILL_UNINSTALL_ACTION_ID else definition.owner
+        target_id = str(request.arguments.get("name") or request.arguments.get("plugin_id") or request.action_id)
+        token = self._confirmation_token_factory()
+        expires_at = self._now() + _UNDO_TTL
+        self._receipt_store.put_confirmation(_ConfirmationRecord(
+            token=token,
+            action_id=request.action_id,
+            action_version=request.action_version,
+            arguments=dict(request.arguments),
+            target_kind=target_kind,
+            target_reference=target_id,
+            expected_revision=0,
+            expires_at=expires_at,
+        ))
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="confirmation_required",
+            authorization=self._authorization(definition.access_class, context, allowed=True, confirmation_required=True),
+            target=ActionTarget(kind=target_kind, id=target_id),
+            result={"operation": request.action_id, "target": target_id},
+            confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
+            message=f"Confirm removing {target_id}.",
+            audit_label=f"{definition.audit_label}.confirmation_requested",
             created_at=self._now(),
         )
 
@@ -1547,6 +1853,9 @@ class AppActionRuntime:
                 )
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_session_control(request, context, definition)
+        if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_lifecycle_control(request, context, definition, confirmed=True)
         try:
             current = self._conversation_service().get(record.target_reference)
         except ConversationLifecycleError as exc:
