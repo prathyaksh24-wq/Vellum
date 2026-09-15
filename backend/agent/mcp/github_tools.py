@@ -34,6 +34,7 @@ ACTION_TO_TOOL = {
 
 WRITE_ACTION_TO_TOOL = {
     "create_issue": "create_issue",
+    "create_pull_request": "create_pull_request",
     "create_repository": "create_repository",
     "create_branch": "create_branch",
     "create_or_update_file": "create_or_update_file",
@@ -69,6 +70,9 @@ PARAM_KEYS = {
     "private",
     "autoInit",
     "from_branch",
+    "head",
+    "base",
+    "draft",
     "content",
     "message",
     "files",

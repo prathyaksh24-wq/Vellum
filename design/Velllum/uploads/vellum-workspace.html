@@ -859,6 +859,7 @@ function createCodingApi(apiBase){
     projectFile:(root,path)=>json("/api/coding/projects/file?root="+encodeURIComponent(root)+"&path="+encodeURIComponent(path)),
     plugins:()=>json("/api/plugins"),
     skills:()=>json("/api/skills/v2/catalog?view=installed&limit=200"),
+    appAction:(request,context)=>json("/api/app-actions/dispatch",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({request,context})}),
     setPlugin:(id,enabled)=>json("/api/plugins/"+encodeURIComponent(id)+"/state",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled:!!enabled})}),
     stop:(id)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/stop",{method:"POST"}),
     closeSession:(id,discardChanges=false)=>json("/api/coding/sessions/"+encodeURIComponent(id)+"/close",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({discard_changes:discardChanges})}),
@@ -1881,6 +1882,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
   const rootRef = useRef(null), trigRef = useRef(null), msgsRef = useRef(null), projInputRef = useRef(null), threadRef = useRef({});
   const idRef = useRef(2000), timerRef = useRef(null), tabCt = useRef(0), streamTargetRef = useRef(null), sideCtRef = useRef(0), openProgRef = useRef(null), abortRef = useRef(null);
   const codingSessionRef = useRef(null), activeCodingSessionRef = useRef(null), codingApiRef = useRef(null), lastSequenceRef = useRef({});
+  const requestedSessionRef = useRef(new URLSearchParams(window.location.search).get("session")||"");
   const nextId = ()=> (++idRef.current);
 
   const accessLabel = (ACCESS_MODES.find(a=>a.id===accessMode)||ACCESS_MODES[0]).label;
@@ -2079,7 +2081,15 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
     setCodingStatus("checking");
     try{
       const [health,sessions]=await Promise.all([api.health(),api.sessions()]);
-      setCodingHealth(health); setCodingSessions(sessions.sessions||[]); setCodingStatus("ready"); setCodingError("");
+      const availableSessions=sessions.sessions||[];
+      setCodingHealth(health); setCodingSessions(availableSessions); setCodingStatus("ready"); setCodingError("");
+      const requestedSession=requestedSessionRef.current;
+      if(requestedSession){
+        requestedSessionRef.current="";
+        const selected=availableSessions.find(item=>item.id===requestedSession&&item.status!=="closed");
+        if(selected) await openCodingSession(selected);
+        else setCodingError("The requested coding session is unavailable.");
+      }
     }catch(e){ setCodingHealth({providers:[]}); setCodingSessions([]); setCodingStatus("offline"); setCodingError((e&&e.message)||"Coding backend unavailable."); }
   }
   async function refreshExtensions(){
@@ -2177,6 +2187,24 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
       });
       setMsgsFor(chatId,()=>messages.filter(item=>item.type!=="user"||item.text)); setCodingStatus("ready");
     }catch(e){ setCodingStatus("error"); setCodingError((e&&e.message)||"Could not restore the coding session."); }
+  }
+  async function openPullRequestFromControl(){
+    const session=codingSessionRef.current;
+    if(!session||!codingApiRef.current){setCodingError("Open a coding session before inspecting a pull request.");return;}
+    const value=window.prompt("Pull request number");
+    if(value===null)return;
+    const pullNumber=Number.parseInt(String(value).replace(/^#/,""),10);
+    if(!Number.isInteger(pullNumber)||pullNumber<1){setCodingError("Enter a valid pull request number.");return;}
+    try{
+      const receipt=await codingApiRef.current.appAction(
+        {action_id:"github.pull_request.open",action_version:"1",arguments:{pull_number:pullNumber,session_id:session.id,open:true}},
+        {source:"ui",invocation_conversation_id:"coding-"+session.id}
+      );
+      if(receipt.status!=="applied")throw new Error(receipt.message||"Pull request is unavailable.");
+      const navigation=receipt.result&&receipt.result.navigation;
+      if(navigation&&navigation.url)window.open(navigation.url,"_blank","noopener,noreferrer");
+      setCodingError("");
+    }catch(error){setCodingError((error&&error.message)||"Pull request is unavailable.");}
   }
   async function closeCodingSession(session,event){
     if(event) event.stopPropagation();
@@ -2747,7 +2775,7 @@ function VellumWorkspace({ shell, onSwitchShell, onToggleMax, maximized }){
             </div>}
           </div>
           <button className="sb-nav-btn" onClick={()=>{setActiveProject(null);setActiveChat("new");setSbHover(false);}}><IcEdit size={15}/><span>New chat</span></button>
-          <button className="sb-nav-btn" aria-disabled="true" title="GitHub pull requests are not connected in this frontend-only pass"><IcGitHub size={15}/><span>Pull requests</span></button>
+          <button className="sb-nav-btn" disabled={!codingSession} title={codingSession?"Inspect a GitHub pull request":"Open a coding session first"} onClick={openPullRequestFromControl}><IcGitHub size={15}/><span>Pull requests</span></button>
           <button className="sb-nav-btn" aria-disabled="true" title="Scheduled coding runs are not connected yet"><IcGauge size={15}/><span>Scheduled</span></button>
           <button className="sb-nav-btn" onClick={()=>{setSettingsSection("providers");setShowModels(true);}} title="Open model and provider settings"><IcPlugin size={15}/><span>Models & providers</span></button>
         </div>
