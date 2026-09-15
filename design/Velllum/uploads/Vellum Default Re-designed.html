@@ -20,6 +20,7 @@
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
 <script src="components/app-action-runtime.js"></script>
+<script src="components/petdex-action-runtime.js"></script>
 <script src="components/attachment-runtime.js"></script>
 <script src="components/agent-catalog.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
@@ -5893,6 +5894,7 @@ const SKILL_ACTIVITY_STORAGE = 'vellum-skill-activities-v1';
 const skillActivityListeners = new Set();
 const SKILL_ACTIVITY_TERMINAL = new Set(['INSTALLED','ARCHIVED','UNINSTALLED']);
 let skillNotificationAudio = null;
+let skillActionDispatcher = null;
 const primeSkillNotificationAudio = () => {try{const AudioContext=window.AudioContext||window.webkitAudioContext;if(!AudioContext)return;if(!skillNotificationAudio)skillNotificationAudio=new AudioContext();if(skillNotificationAudio.state==='suspended')void skillNotificationAudio.resume();}catch(_){}};
 const playSkillCompletionTone = () => {try{primeSkillNotificationAudio();if(!skillNotificationAudio||skillNotificationAudio.state!=='running')return;const now=skillNotificationAudio.currentTime;[0,0.09].forEach((delay,index)=>{const oscillator=skillNotificationAudio.createOscillator(),gain=skillNotificationAudio.createGain();oscillator.type='sine';oscillator.frequency.setValueAtTime(index?880:660,now+delay);gain.gain.setValueAtTime(.0001,now+delay);gain.gain.exponentialRampToValueAtTime(.055,now+delay+.012);gain.gain.exponentialRampToValueAtTime(.0001,now+delay+.12);oscillator.connect(gain);gain.connect(skillNotificationAudio.destination);oscillator.start(now+delay);oscillator.stop(now+delay+.13);});}catch(_){}};
 const readSkillActivities = () => {try{const parsed=JSON.parse(localStorage.getItem(SKILL_ACTIVITY_STORAGE)||'[]');return Array.isArray(parsed)?parsed.slice(0,12):[];}catch(_){return [];}};
@@ -5904,15 +5906,15 @@ const createSkillActivity = job => {const next={id:`skill-${Date.now()}-${Math.r
 const useSkillActivities = () => {const [jobs,setJobs]=useState(skillActivities);useEffect(()=>{skillActivityListeners.add(setJobs);return()=>skillActivityListeners.delete(setJobs);},[]);return jobs;};
 const runLearnActivity = async job => {updateSkillActivity(job.id,{status:'LEARNING',error:''});try{const result=await API.plugins.learn(job.source,'skills-hub','community');if(!result||result.status!=='pending'||!result.mutation||!result.mutation.id)throw new Error('The skill was not persisted in Pending.');updateSkillActivity(job.id,{status:'LEARNT',mutation:result.mutation,name:result.mutation.identity});await skillStagePause(500);updateSkillActivity(job.id,{status:'DRAFT_APPROVED'});await skillStagePause(650);updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL'});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
 const startLearnActivity = source => {primeSkillNotificationAudio();const job=createSkillActivity({type:'learn',source,status:'LEARNING'});void runLearnActivity(job);return job;};
-const runInstallActivity = async job => {updateSkillActivity(job.id,{status:'INSTALLING',error:''});try{const response=await API.plugins.hubMutation('install',{identifier:job.item.identifier,category:'community'});const mutation=response&&response.result;if(!mutation||!mutation.id)throw new Error('The install request was not persisted in Pending.');updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL',mutation,name:mutation.identity||skillName(job.item)});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
-const startInstallActivity = item => {primeSkillNotificationAudio();const job=createSkillActivity({type:'install',item,status:'INSTALLING',name:skillName(item)});void runInstallActivity(job);return job;};
-const retrySkillActivity = job => {if(job.type==='learn')void runLearnActivity(job);else if(job.type==='install')void runInstallActivity(job);};
+const runInstallActivity = async (job,onSkillAction) => {updateSkillActivity(job.id,{status:'INSTALLING',error:''});try{const response=onSkillAction?await onSkillAction('skill.mutation.submit',{operation:'install',identifier:job.item.identifier,category:'community'}):await API.plugins.hubMutation('install',{identifier:job.item.identifier,category:'community'});const mutation=onSkillAction?(response&&response.result&&response.result.mutation):(response&&response.result);if(!mutation||!mutation.id)throw new Error('The install request was not persisted in Pending.');updateSkillActivity(job.id,{status:'AWAITING_USER_APPROVAL',mutation,name:mutation.identity||skillName(job.item)});}catch(err){updateSkillActivity(job.id,{status:'FAILED',error:String(err.message||err)});}};
+const startInstallActivity = (item,onSkillAction) => {primeSkillNotificationAudio();const job=createSkillActivity({type:'install',item,status:'INSTALLING',name:skillName(item)});void runInstallActivity(job,onSkillAction);return job;};
+const retrySkillActivity = (job,onSkillAction=skillActionDispatcher) => {if(job.type==='learn')void runLearnActivity(job);else if(job.type==='install')void runInstallActivity(job,onSkillAction);};
 const isValidSkillLearnInput = value => {const clean=value.trim();if(/^(skills-sh|skills\.sh|skillsmp|clawhub|official)\//i.test(clean))return true;try{const url=new URL(clean);if((url.protocol==='http:'||url.protocol==='https:')&&url.hostname&&!url.username&&!url.password&&!/\s/.test(clean))return true;}catch(_){}return clean.length>=12&&/\s/.test(clean);};
 const skillActivityMatches = (job,item) => {if(!job||!item)return false;const jobIdentifier=job.item&&job.item.identifier;return !!(jobIdentifier&&item.identifier&&jobIdentifier===item.identifier)||String(job.name||'').toLowerCase()===String(skillName(item)||'').toLowerCase();};
 const skillActivityElapsed = (job,now) => {const seconds=Math.max(0,Math.floor((now-(job.createdAt||now))/1000));if(seconds<60)return `${seconds}s`;const minutes=Math.floor(seconds/60);return minutes<60?`${minutes}m`:`${Math.floor(minutes/60)}h`;};
 const toSkillNotificationStackItem = (job,now) => {const stage=LEARN_STAGE_META[job.status]||LEARN_STAGE_META.LEARNING,name=job.name||(job.item&&skillName(job.item))||(job.type==='learn'?'New skill':'Skill');return {id:job.id,title:`${stage.label} ${name}`,description:`${skillActivityElapsed(job,now)} · ${job.error||job.message||stage.body}`,trailing:job.status==='FAILED'?'retry':SKILL_ACTIVITY_TERMINAL.has(job.status)?'complete':'status'};};
 const SkillNotificationStack = ({onOpenSkills,maxVisible=3,defaultExpanded=false}) => {const jobs=useSkillActivities(),[expanded,setExpanded]=useState(defaultExpanded),[now,setNow]=useState(Date.now());const signature=jobs.map(job=>`${job.id}:${job.status}:${job.updatedAt||0}`).join('|');useEffect(()=>{if(!jobs.length)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[jobs.length]);useEffect(()=>{const timers=jobs.filter(job=>SKILL_ACTIVITY_TERMINAL.has(job.status)).map(job=>setTimeout(()=>removeSkillActivity(job.id),Math.max(0,5200-(Date.now()-(job.updatedAt||job.createdAt||Date.now())))));return()=>timers.forEach(clearTimeout);},[signature]);if(!jobs.length)return null;const openJob=(job,mode)=>{onOpenSkills();setTimeout(()=>window.dispatchEvent(new CustomEvent('vellum:skills-activity',{detail:{job,mode}})),40);},items=jobs.slice(0,maxVisible);const stack=<div className="sk-notification-portal" aria-live="polite" aria-label="Skill activity notifications"><section className={'sk-notification-stack'+(expanded?' expanded':'')} aria-expanded={expanded} onMouseEnter={()=>jobs.length>1&&setExpanded(true)} onMouseLeave={()=>setExpanded(false)}>{items.map(job=>{const item=toSkillNotificationStackItem(job,now),running=['LEARNING','INSTALLING','UNINSTALLING'].includes(job.status),finished=item.trailing==='complete';return <article className={'sk-notification-item'+(running?' running':'')+(job.phase==='leaving'?' leaving':'')} key={item.id} onClick={()=>jobs.length>1&&setExpanded(value=>!value)}><div className="sk-notification-icon" aria-hidden="true">{running?'':item.trailing==='retry'?<IcXCircle size={16}/>:finished?<IcCheck size={16}/>:<span>•</span>}</div><div className="sk-notification-copy" key={`${job.id}-${job.status}`}><strong>{item.title}</strong><span title={job.error||''}>{item.description}</span></div><div className="sk-notification-actions" onClick={event=>event.stopPropagation()}>{job.status==='AWAITING_USER_APPROVAL'&&<button className="primary" onClick={()=>openJob(job,'review')}>Review</button>}{item.trailing==='retry'&&<button className="primary" onClick={()=>retrySkillActivity(job)} aria-label={`Retry ${job.name||'skill action'}`} title="Retry"><IcRefresh size={14}/></button>}{job.status==='INSTALLED'&&<button className="primary" onClick={()=>openJob(job,'installed')}>Open</button>}{(item.trailing==='retry'||finished)&&<button onClick={()=>removeSkillActivity(job.id)} aria-label="Dismiss skill status"><IcX size={13}/></button>}</div></article>})}{expanded&&<footer className="sk-notification-footer"><span>{jobs.length>maxVisible?`${jobs.length-maxVisible} more activities`:`${jobs.length} skill ${jobs.length===1?'activity':'activities'}`}</span><button onClick={()=>onOpenSkills()}>View all</button></footer>}</section></div>;return ReactDOM.createPortal(stack,document.body);};
-const SkillsHubView = () => {
+const SkillsHubView = ({onSkillAction}) => {
   const activities=useSkillActivities();
   const [tab,setTab]=useState('installed'),[overview,setOverview]=useState(null),[items,setItems]=useState([]),[query,setQuery]=useState(''),[source,setSource]=useState('all'),[category,setCategory]=useState('all'),[ranking,setRanking]=useState('most-popular');
   const [cursor,setCursor]=useState(null),[loading,setLoading]=useState(true),[mutating,setMutating]=useState(false),[error,setError]=useState(''),[health,setHealth]=useState([]);
@@ -5932,7 +5934,27 @@ const SkillsHubView = () => {
   const submitLearn=e=>{e.preventDefault();const sourceValue=learnSource.trim();if(!isValidSkillLearnInput(sourceValue)){setLearnError('Enter a valid public skill URL or a meaningful procedure.');return;}setLearnOpen(false);setLearnSource('');setLearnError('');startLearnActivity(sourceValue);};
   const reviewActivity=async job=>{if(!job||!job.mutation)return;setTab('review');setQuery('');setCategory('all');setSelected({...job.mutation,_reviewType:'pending'});setDetail(null);setDetailLoading(true);try{setDetail((await API.plugins.skillAction({action:'pending_diff',name:job.mutation.id})).result);}catch(e){setDetail({error:String(e.message||e)});}finally{setDetailLoading(false);setTimeout(()=>drawerRef.current&&drawerRef.current.focus(),0);}};
   useEffect(()=>{const handler=e=>{const detail=e.detail||{};if(detail.mode==='installed'){setTab('installed');setQuery(detail.job&&detail.job.name||'');return;}reviewActivity(detail.job);};window.addEventListener('vellum:skills-activity',handler);return()=>window.removeEventListener('vellum:skills-activity',handler);},[]);
-  const mutate=async(action,payload)=>{const activity=activities.find(job=>job.mutation&&job.mutation.id===payload.id);if(action==='install'){startInstallActivity(payload);setSelected(null);setDetail(null);return;}setMutating(true);setError('');if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'INSTALLING',error:'',message:'Applying the approved skill package.'});try{let response;if(action==='approve')response=await API.plugins.pendingApprove(payload.id);else if(action==='reject')response=await API.plugins.pendingReject(payload.id);else if(action==='uninstall_confirm')response=await API.plugins.hubMutation('uninstall',{name:payload.name,confirm:true});else if(['update','import_local'].includes(action))response=await API.plugins.hubMutation(action,{name:payload.name});else if(['archive','restore','delete'].includes(action))response=await API.plugins.skillAction({action,name:payload.name});else response=await API.plugins.duplicateDecision(payload.id,action,action==='distinct'?'Explicitly retained as a distinct workflow':'');const staged=response&&(response.result||response);if(action==='approve'&&activity){const finalStatus=activity.type==='archive'?'ARCHIVED':activity.type==='delete'?'UNINSTALLED':'INSTALLED';updateSkillActivity(activity.id,{status:finalStatus,message:finalStatus==='ARCHIVED'?'The skill is now available in Archived.':'The approved skill change is complete.'});}if(action==='reject'&&activity)removeSkillActivity(activity.id);if(action==='uninstall_confirm'){createSkillActivity({type:'uninstall',name:payload.name,status:'UNINSTALLED'});setConfirmAction(null);}if(['archive','update','import_local','delete','restore'].includes(action)&&staged&&staged.status==='pending'){const job=createSkillActivity({type:action,name:payload.name,status:'AWAITING_USER_APPROVAL',mutation:staged,message:`Review the ${action.replace('_',' ')} change before applying it.`});setTab('review');await reviewActivity(job);}else{setSelected(null);setDetail(null);}setSkillMdOpen(false);await Promise.all([refreshOverview(),loadList(false,'')]);}catch(e){const message=String(e.message||e);setError(message);if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'AWAITING_USER_APPROVAL',error:message});if(action==='uninstall_confirm')setConfirmAction(null);}finally{setMutating(false);}};
+  const mutate=async(action,payload)=>{
+    const activity=activities.find(job=>job.mutation&&job.mutation.id===payload.id);
+    if(action==='install'){startInstallActivity(payload,onSkillAction);setSelected(null);setDetail(null);return;}
+    setMutating(true);setError('');
+    if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'INSTALLING',error:'',message:'Applying the approved skill package.'});
+    try{
+      let response;
+      if(action==='approve')response=await onSkillAction('skill.mutation.approve',{mutation_id:payload.id});
+      else if(action==='reject')response=await onSkillAction('skill.mutation.reject',{mutation_id:payload.id});
+      else if(action==='uninstall_confirm')response=await onSkillAction('skill.uninstall',{name:payload.name},{confirmedFromUi:true});
+      else if(['update','import_local','archive','restore','delete'].includes(action))response=await onSkillAction('skill.mutation.submit',{operation:action==='delete'?'remove':action,name:payload.name});
+      else response=await API.plugins.duplicateDecision(payload.id,action,action==='distinct'?'Explicitly retained as a distinct workflow':'');
+      if(response&&response.status&&response.status!=='applied')throw new Error(response.message||'Skill operation could not be completed.');
+      const staged=response&&response.result&&response.result.mutation||(response&&response.result)||response;
+      if(action==='approve'&&activity){const finalStatus=activity.type==='archive'?'ARCHIVED':activity.type==='delete'?'UNINSTALLED':'INSTALLED';updateSkillActivity(activity.id,{status:finalStatus,message:finalStatus==='ARCHIVED'?'The skill is now available in Archived.':'The approved skill change is complete.'});}
+      if(action==='reject'&&activity)removeSkillActivity(activity.id);
+      if(action==='uninstall_confirm'){createSkillActivity({type:'uninstall',name:payload.name,status:'UNINSTALLED'});setConfirmAction(null);}
+      if(['archive','update','import_local','delete','restore'].includes(action)&&staged&&staged.status==='pending'){const job=createSkillActivity({type:action,name:payload.name,status:'AWAITING_USER_APPROVAL',mutation:staged,message:`Review the ${action.replace('_',' ')} change before applying it.`});setTab('review');await reviewActivity(job);}else{setSelected(null);setDetail(null);}
+      setSkillMdOpen(false);await Promise.all([refreshOverview(),loadList(false,'')]);
+    }catch(e){const message=String(e.message||e);setError(message);if(action==='approve'&&activity)updateSkillActivity(activity.id,{status:'AWAITING_USER_APPROVAL',error:message});if(action==='uninstall_confirm')setConfirmAction(null);}finally{setMutating(false);}
+  };
   const copyDetail=async value=>{if(!value)return;try{await navigator.clipboard.writeText(value);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch(_){setCopied(false);}};
   useEffect(()=>{if(!selected)return;const trap=e=>{if(skillMdOpen)return;if(e.key==='Escape'){setSelected(null);setDetail(null);return;}if(e.key!=='Tab'||!drawerRef.current)return;const a=[...drawerRef.current.querySelectorAll('button,a,input,textarea,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled);if(!a.length)return;if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a[a.length-1].focus();}else if(!e.shiftKey&&document.activeElement===a[a.length-1]){e.preventDefault();a[0].focus();}};window.addEventListener('keydown',trap);return()=>window.removeEventListener('keydown',trap);},[selected,skillMdOpen]);
   useEffect(()=>{if(!skillMdOpen)return;setTimeout(()=>skillMdRef.current&&skillMdRef.current.focus(),0);const trap=e=>{if(e.key==='Escape'){setSkillMdOpen(false);return;}if(e.key!=='Tab'||!skillMdRef.current)return;const a=[...skillMdRef.current.querySelectorAll('button,[tabindex]:not([tabindex="-1"])')].filter(x=>!x.disabled);if(!a.length)return;if(e.shiftKey&&document.activeElement===a[0]){e.preventDefault();a[a.length-1].focus();}else if(!e.shiftKey&&document.activeElement===a[a.length-1]){e.preventDefault();a[0].focus();}};window.addEventListener('keydown',trap);return()=>window.removeEventListener('keydown',trap);},[skillMdOpen]);
@@ -6291,7 +6313,7 @@ const CalendarWorkspace = () => {
     {error&&<div className="calendar-error" role="alert">{error}</div>}
   </section>;
 };
-const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) => {
+const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, youtubeIntelligence}) => {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('plugins');
   const [selected, setSelected] = useState(null);
@@ -6303,8 +6325,9 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
     setBusyPlugin(app.id);
     setPluginError('');
     try {
-      const result = await API.plugins.setEnabled(app.id, !app.enabled);
-      Object.assign(app, result.plugin || {});
+      const receipt = await onPluginState(app.id, !app.enabled);
+      if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'Plugin state could not be updated.');
+      Object.assign(app, receipt.result && receipt.result.plugin || {});
       setRevision(value => value + 1);
     } catch (error) {
       setPluginError((error && error.message) || 'Plugin state could not be updated.');
@@ -7971,7 +7994,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
 const PETDEX_MANIFEST = 'https://petdex.dev/api/manifest';
 const PETDEX_MANIFEST_TTL = 24 * 60 * 60 * 1000;
 const PETDEX_FALLBACK = {slug: 'boba', displayName: 'Boba', submittedBy: 'Petdex', spritesheetUrl: 'assets/pets/boba.webp'};
-const PETDEX_LS = {manifest: 'vellum-pet-manifest', manifestAt: 'vellum-pet-manifest-at', installed: 'vellum-pet-installed', active: 'vellum-pet-active', hidden: 'vellum-pet-hidden', size: 'vellum-pet-size', pos: 'vellum-pet-pos'};
+const PETDEX_LS = {manifest: 'vellum-pet-manifest', manifestAt: 'vellum-pet-manifest-at', installed: 'vellum-pet-installed', active: 'vellum-pet-active', hidden: 'vellum-pet-hidden', size: 'vellum-pet-size', pos: 'vellum-pet-pos', revision: 'vellum-pet-revision'};
 const PETDEX_COLLECTIONS = [
   {id: 'pokemon', label: 'Pokemon', slugs: ['giratina', 'goose-default', 'kabi', 'gardevoir', 'kaka-2', 'capvolt', 'chimchar']},
   {id: 'anime-heroes', label: 'Anime Heroes', slugs: ['luffy', 'luffy-2', 'zoro', 'sabo', 'naruto', 'itachi', 'goku', 'goku-blue', 'yamcha', 'nezuko', 'kyojuro-rengoku', 'gojo', 'sukuna', 'frieren-3', 'frieren-4', 'totoro', 'gon', 'killua', 'futuduozaemon', 'ryo-yamada-bass', 'marcille-dungeon-meshi', 'bochi-guitar']},
@@ -8036,7 +8059,9 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
   const drag = useRef(null);
   const [menu, setMenu] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const p = pos || {};
+  const [previewPos, setPreviewPos] = useState(null);
+  const p = previewPos || pos || {};
+  const placement = window.VellumUI.PetdexActions.positionStyle(p, {width:window.innerWidth, height:window.innerHeight});
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.px-menu')) return;
@@ -8050,7 +8075,10 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
     if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
-    if (d.moved) onPos({x: Math.max(0, Math.min(d.px + dx, window.innerWidth - 200)), y: Math.max(0, Math.min(d.py + dy, window.innerHeight - 240))});
+    if (d.moved) {
+      d.next = {x: Math.max(0, Math.min(d.px + dx, window.innerWidth - 200)), y: Math.max(0, Math.min(d.py + dy, window.innerHeight - 240))};
+      setPreviewPos(d.next);
+    }
   };
   const onPointerUp = () => {
     const d = drag.current;
@@ -8058,10 +8086,12 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
     const moved = d.moved;
     drag.current = null;
     setDragging(false);
+    setPreviewPos(null);
+    if (moved && d.next) onPos(d.next);
     if (!moved) onJump();
   };
   return (
-    <div className={'px-floater' + (dragging ? ' dragging' : '')} style={{left: p.x != null ? p.x : window.innerWidth - 190, top: p.y != null ? p.y : window.innerHeight - 250}}
+    <div className={'px-floater' + (dragging ? ' dragging' : '')} style={placement}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       onMouseEnter={() => setMenu(true)} onMouseLeave={() => setMenu(false)}>
       <PetSprite record={record} state={state} size={size}/>
@@ -8270,6 +8300,15 @@ const mergeConversationRecords = (current, serverConversations) => {
 };
 
 const App = () => {
+  const petdexStateRef = useRef({
+    revision: pxLsGet(PETDEX_LS.revision, 0),
+    installed: pxLsGet(PETDEX_LS.installed, ['boba']),
+    active: pxLsGet(PETDEX_LS.active, 'boba'),
+    hidden: pxLsGet(PETDEX_LS.hidden, false),
+    size: pxLsGet(PETDEX_LS.size, 'md'),
+    position: pxLsGet(PETDEX_LS.pos, {}),
+    available: ['boba'],
+  });
   const conversationActionHandlersRef = useRef({});
   const conversationActionRuntimeRef = useRef(null);
   if (!conversationActionRuntimeRef.current) {
@@ -8284,13 +8323,16 @@ const App = () => {
       applySessionControl: (patch, receipt) => conversationActionHandlersRef.current.applySessionControl && conversationActionHandlersRef.current.applySessionControl(patch, receipt),
       contextResolver: () => {
         const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.uiReference || '';
-        return {focused_ui_reference: focused};
+        return {focused_ui_reference: focused, petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)};
       },
     });
   }
   const workspaceActionRuntimeRef = useRef(null);
   if (!workspaceActionRuntimeRef.current) {
-    workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({client: API.appActions});
+    workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({
+      client: API.appActions,
+      contextResolver: () => ({petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)}),
+    });
   }
   const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
   useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
@@ -8384,15 +8426,17 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [petManifest, setPetManifest] = useState(null);
   const [petLoading, setPetLoading] = useState(true);
   const [petError, setPetError] = useState('');
-  const [petInstalled, setPetInstalled] = useState(() => { const v = pxLsGet(PETDEX_LS.installed, null); return Array.isArray(v) ? v : ['boba']; });
-  const [petActive, setPetActive] = useState(() => pxLsGet(PETDEX_LS.active, 'boba'));
-  const [petHidden, setPetHidden] = useState(() => pxLsGet(PETDEX_LS.hidden, false));
-  const [petSize, setPetSize] = useState(() => pxLsGet(PETDEX_LS.size, 'md'));
-  const [petPos, setPetPos] = useState(() => pxLsGet(PETDEX_LS.pos, null));
+  const [petInstalled, setPetInstalled] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).installed);
+  const [petActive, setPetActive] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).active);
+  const [petHidden, setPetHidden] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).hidden);
+  const [petSize, setPetSize] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).size);
+  const [petPos, setPetPos] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).position);
+  const [petRevision, setPetRevision] = useState(() => window.VellumUI.PetdexActions.normalize(petdexStateRef.current).revision);
   useEffect(() => { pxLsSet(PETDEX_LS.installed, petInstalled); pxLsSet(PETDEX_LS.active, petActive); }, [petInstalled, petActive]);
   useEffect(() => { pxLsSet(PETDEX_LS.hidden, petHidden); }, [petHidden]);
   useEffect(() => { pxLsSet(PETDEX_LS.size, petSize); }, [petSize]);
   useEffect(() => { if (petPos) pxLsSet(PETDEX_LS.pos, petPos); }, [petPos]);
+  useEffect(() => { pxLsSet(PETDEX_LS.revision, petRevision); }, [petRevision]);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -8418,9 +8462,16 @@ const [slashSkills, setSlashSkills] = useState([]);
   }, []);
   const petMessages = (chats || []).reduce((acc, c) => acc.concat(c.messages || []), []).concat(Object.values(agentConvos || {}).reduce((acc, c) => acc.concat((c || {}).messages || []), []));
   const petActivity = usePetActivity(petMessages);
-  const activePetRecord = pxPetRecord(petManifest, petActive) || PETDEX_FALLBACK;
-  const petToggleInstall = slug => { setPetInstalled(list => list.indexOf(slug) === -1 ? list.concat(slug) : list.filter(s => s !== slug)); };
-  const petSetActive = slug => setPetActive(slug);
+  petdexStateRef.current = {
+    revision: petRevision,
+    installed: petInstalled,
+    active: petActive,
+    hidden: petHidden,
+    size: petSize,
+    position: petPos || {},
+    available: ['boba'].concat((petManifest && petManifest.pets || []).map(pet => pet.slug)),
+  };
+  const activePetRecord = petInstalled.includes(petActive) ? (pxPetRecord(petManifest, petActive) || (petActive === 'boba' ? PETDEX_FALLBACK : null)) : null;
   const [subagents, setSubagents] = useState(null);
   const availableAgents = useMemo(
     () => window.VellumUI.AgentCatalog.merge(AGENTS, subagents, {fallbackIcon:IcSparkle}),
@@ -9635,6 +9686,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
+      if (receipt && receipt.result && receipt.result.petdex_patch) {
+        const nextPetdex = window.VellumUI.PetdexActions.applyReceipt(petdexStateRef.current, receipt);
+        petdexStateRef.current = nextPetdex;
+        setPetInstalled(nextPetdex.installed);
+        setPetActive(nextPetdex.active);
+        setPetHidden(nextPetdex.hidden);
+        setPetSize(nextPetdex.size);
+        setPetPos(nextPetdex.position);
+        setPetRevision(nextPetdex.revision);
+      }
       if (receipt && receipt.action_id === 'composer.attachment.import') {
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:attachment-action', {detail:{receipt, turn:options.turn || {turn_kind:'action'}}})), 0);
       }
@@ -9664,6 +9725,25 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  const dispatchPetdexAction = async (actionId, arguments_) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId});
+    if (receipt) applyAppActionReceipt(receipt, {notify:false});
+    return receipt;
+  };
+  const petToggleInstall = slug => dispatchPetdexAction(
+    petInstalled.includes(slug) ? 'petdex.remove' : 'petdex.install',
+    {slug},
+  );
+  const petSetActive = slug => dispatchPetdexAction('petdex.active.set', {slug});
+  const petSetHidden = hidden => dispatchPetdexAction('petdex.visibility.set', {visible:!hidden});
+  const petSetSize = size => dispatchPetdexAction('petdex.size.set', {size});
+  const petSetPosition = position => dispatchPetdexAction('petdex.position.set', position || {});
+  const dispatchSkillAction = async (actionId, arguments_, options = {}) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId, notify:!options.confirmedFromUi});
+    if (options.confirmedFromUi && receipt && receipt.status === 'confirmation_required') return confirmAppAction(receipt);
+    return receipt;
+  };
+  skillActionDispatcher = dispatchSkillAction;
   const confirmAppAction = async receipt => {
     try {
       const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
@@ -9886,8 +9966,8 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
             {view === 'ledger' && <ObservabilityView/>}
-            {view === 'skills' && <SkillsHubView/>}
-            {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')}/>}
+            {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
+            {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
@@ -9898,7 +9978,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onNewChat={newChat} onSearch={() => openSearch()} onNav={nav} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
-        {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={setPetPos} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => setPetHidden(true)} installed={petInstalled} active={petActive} onSwitch={setPetActive}/>}
+        {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
         </React.Fragment>}
         {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
@@ -9938,7 +10018,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
           onOpenScheduled={() => nav('scheduled')}
-          petManifest={petManifest} petLoading={petLoading} petError={petError} petInstalled={petInstalled} petActive={petActive} petSize={petSize} petHidden={petHidden} onPetToggleInstall={petToggleInstall} onPetSetActive={petSetActive} onPetSize={setPetSize} onPetHidden={setPetHidden}
+          petManifest={petManifest} petLoading={petLoading} petError={petError} petInstalled={petInstalled} petActive={petActive} petSize={petSize} petHidden={petHidden} onPetToggleInstall={petToggleInstall} onPetSetActive={petSetActive} onPetSize={petSetSize} onPetHidden={petSetHidden}
           onClose={() => dispatchSurfacePresentation('settings', {visible:false})}/>}
         {spotifyConnectOpen && <SpotifyConnectModal onClose={() => setSpotifyConnectOpen(false)} onConnected={status => { setSpotify(status); setSpotifyConnectOpen(false); pushToast('Spotify connected'); }}/>}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}

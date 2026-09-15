@@ -46,6 +46,11 @@ from agent.app_actions.attachments import ConversationAttachment, get_attachment
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.runtime import get_app_action_runtime
 from agent.app_actions.session_controls import SessionControlService
+from agent.app_actions.lifecycle_controls import (
+    PLUGIN_STATE_SET_ACTION_ID,
+    PluginSkillActionService,
+    decode_skill_hub_result,
+)
 from agent.coding.api import create_coding_router
 from agent.coding.service import CodingSessionService
 from agent.computer_use.overlay import DesktopActivityOverlay
@@ -260,6 +265,34 @@ def _skill_surface() -> SkillSurfaceService:
             owned_external_dirs=_plugin_registry().skill_roots(),
         )
     return _skill_surface_singleton
+
+
+def _plugin_state_changed() -> None:
+    global _skill_surface_singleton
+    reset_skill_registry()
+    _skill_surface_singleton = None
+    agent_graph = importlib.import_module("agent.graph.agent")
+    agent_graph._prompt_skill_registry = None
+    agent.invalidate()
+
+
+def _execute_lifecycle_action(
+    action_id: str,
+    arguments: dict[str, Any],
+    context: AppActionContext,
+    confirmed: bool,
+) -> dict[str, Any]:
+    service = PluginSkillActionService(
+        plugin_registry=_plugin_registry(),
+        skill_surface_provider=_skill_surface,
+        skill_hub_handler=lambda payload: decode_skill_hub_result(skill_hub.invoke(payload)),
+        uninstall_handler=uninstall_confirmed,
+        plugin_state_changed=_plugin_state_changed,
+    )
+    return service.execute(action_id, arguments, context, confirmed=confirmed)
+
+
+_app_action_runtime.set_lifecycle_control_handler(_execute_lifecycle_action)
 
 
 def _spotify_store():
