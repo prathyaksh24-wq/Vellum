@@ -20,6 +20,7 @@
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
 <script src="components/app-action-runtime.js"></script>
+<script src="components/coding-action-runtime.js"></script>
 <script src="components/observability-action-runtime.js"></script>
 <script src="components/petdex-action-runtime.js"></script>
 <script src="components/attachment-runtime.js"></script>
@@ -2858,7 +2859,7 @@ const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipS
 
 const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
 
-const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onOpenAgent, onSettings}) => {
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings}) => {
   const [near, setNear] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const closeTimer = useRef(null);
@@ -2901,7 +2902,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
           <DockItem ariaLabel="New chat" tooltip="New chat" tooltipSide={tooltipSide} active={view === 'chat'} onClick={() => run(onNewChat)}><IcPencilSq size={18}/></DockItem>
           <DockItem ariaLabel="Search chats" tooltip="Search" tooltipSide={tooltipSide} onClick={() => run(onSearch)}><IcSearch size={18}/></DockItem>
           <DockItem ariaLabel="Library" tooltip="Library" tooltipSide={tooltipSide} active={view === 'library'} onClick={() => run(() => onNav('library'))}><IcLibrary size={18}/></DockItem>
-          <DockItem ariaLabel="Coding" tooltip="Coding" tooltipSide={tooltipSide} onClick={() => run(() => window.location.assign('vellum-workspace.html'))}><IcTerminal size={18}/></DockItem>
+          <DockItem ariaLabel="Coding" tooltip="Coding" tooltipSide={tooltipSide} onClick={() => run(onCoding)}><IcTerminal size={18}/></DockItem>
           <DockSeparator/>
           <span className="dock-tooltip-wrap">
             <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
@@ -8354,6 +8355,10 @@ const App = () => {
       contextResolver: () => ({petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)}),
     });
   }
+  const codingActionRuntimeRef = useRef(null);
+  if (!codingActionRuntimeRef.current) {
+    codingActionRuntimeRef.current = window.VellumUI.CodingActions.createRuntime();
+  }
   const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
   useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
   const [observabilityControl, setObservabilityControl] = useState(
@@ -9702,7 +9707,8 @@ const [slashSkills, setSlashSkills] = useState([]);
       confirmationReceipt: receipt.confirmation ? receipt : null,
       confirmationLabel: receipt.action_id === 'conversation.share'
         ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
-        : receipt.action_id === 'memory.conversation.set' ? 'Turn on' : 'Delete',
+        : receipt.action_id === 'memory.conversation.set' ? 'Turn on'
+        : receipt.action_id === 'github.pull_request.create' ? 'Create PR' : 'Delete',
       duration: receipt.confirmation ? 10000 : (receipt.undo ? 6500 : 2800),
     });
   };
@@ -9710,6 +9716,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
+      codingActionRuntimeRef.current.applyReceipt(receipt);
       setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
       if (receipt && receipt.result && receipt.result.petdex_patch) {
         const nextPetdex = window.VellumUI.PetdexActions.applyReceipt(petdexStateRef.current, receipt);
@@ -9755,6 +9762,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (receipt) {
       setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
     }
+    return receipt;
+  };
+  const dispatchCodingAction = async () => {
+    const receipt = await dispatchConversationAction('coding.workspace.open', {}, {conversationId:activeChatId});
+    if (receipt) codingActionRuntimeRef.current.applyReceipt(receipt);
     return receipt;
   };
   const navigateFromControl = targetView => targetView === 'ledger'
@@ -10010,7 +10022,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
-          onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onOpenAgent={openAgent}
+          onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
           onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
         {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}

@@ -29,6 +29,10 @@ def test_workspace_html_uses_web_native_coding_runtime() -> None:
     assert "PLANNER_SYS" not in html
     assert "async function streamModel" not in html
     assert "? <ChromeBrowser" not in html
+    assert 'appAction:(request,context)=>json("/api/app-actions/dispatch"' in html
+    assert 'action_id:"github.pull_request.open"' in html
+    assert 'onClick={openPullRequestFromControl}' in html
+    assert 'new URLSearchParams(window.location.search).get("session")' in html
 
 
 def test_workspace_html_exposes_real_project_files_without_secret_preview() -> None:

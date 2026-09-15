@@ -702,6 +702,46 @@ def test_github_create_issue_when_writes_allowed(monkeypatch):
     )
 
 
+def test_github_create_pull_request_when_writes_allowed(monkeypatch):
+    fake_session = FakeSession(
+        tools=["create_pull_request"],
+        text="https://github.com/me/vellum/pull/7",
+    )
+    monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
+    monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)
+    monkeypatch.setattr(github_tools, "streamablehttp_client", lambda *args, **kwargs: AsyncStreamableHttpContext())
+    monkeypatch.setattr(github_tools, "ClientSession", lambda read, write: fake_session)
+
+    result = asyncio.run(
+        github_tools.run_tool_async(
+            {
+                "action": "create_pull_request",
+                "owner": "me",
+                "repo": "vellum",
+                "title": "App Actions",
+                "body": "Details",
+                "head": "feature/actions",
+                "base": "main",
+                "draft": True,
+            }
+        )
+    )
+
+    assert result.endswith("/pull/7")
+    assert fake_session.calls[0] == (
+        "create_pull_request",
+        {
+            "owner": "me",
+            "repo": "vellum",
+            "title": "App Actions",
+            "body": "Details",
+            "head": "feature/actions",
+            "base": "main",
+            "draft": True,
+        },
+    )
+
+
 def test_github_delete_repository_requires_destructive_flag(monkeypatch):
     monkeypatch.setattr(github_tools, "_github_token", lambda: "ghp_test")
     monkeypatch.setattr(github_tools, "_writes_allowed", lambda: True)

@@ -43,6 +43,7 @@ from agent.cli.project_commands import (
 )
 from agent.app_actions.api import router as app_actions_router
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
+from agent.app_actions.coding_github import CodingGitHubActionService
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.runtime import get_app_action_runtime
@@ -153,6 +154,8 @@ _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SEC
 _dreaming_lock = asyncio.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
+_coding_github_actions = CodingGitHubActionService(coding_service=coding_service)
+_app_action_runtime.set_coding_github_handler(_coding_github_actions.execute)
 
 
 class _ThreadTurnCoordinator:
