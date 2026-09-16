@@ -25,6 +25,18 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.attachments import AttachmentImportError
+from agent.app_actions.automations import (
+    AUTOMATION_ACTION_IDS,
+    AUTOMATION_CREATE_ACTION_ID,
+    AUTOMATION_HISTORY_ACTION_ID,
+    AUTOMATION_PAUSE_ACTION_ID,
+    AUTOMATION_REMOVE_ACTION_ID,
+    AUTOMATION_RESUME_ACTION_ID,
+    AUTOMATION_RUN_ACTION_ID,
+    AUTOMATION_UPDATE_ACTION_ID,
+    AutomationActionError,
+    automation_action_definitions,
+)
 from agent.app_actions.coding_github import (
     CODING_GITHUB_ACTION_IDS,
     CODING_WORKSPACE_OPEN_ACTION_ID,
@@ -208,6 +220,7 @@ class AppActionRuntime:
         lifecycle_control_handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]] | None = None,
         observability_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         coding_github_handler: Callable[..., dict[str, Any]] | None = None,
+        automation_handler: Callable[..., dict[str, Any]] | None = None,
         plugin_registry: PluginRegistry | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
@@ -223,6 +236,7 @@ class AppActionRuntime:
         self._lifecycle_control_handler = lifecycle_control_handler
         self._observability_handler = observability_handler
         self._coding_github_handler = coding_github_handler
+        self._automation_handler = automation_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._registry = ToolRegistry()
@@ -239,6 +253,7 @@ class AppActionRuntime:
                 *lifecycle_action_definitions(),
                 *observability_action_definitions(),
                 *coding_github_action_definitions(),
+                *automation_action_definitions(),
                 *petdex_action_definitions(),
             )
         }
@@ -293,6 +308,17 @@ class AppActionRuntime:
                 ),
                 access=CapabilityAccess(definition.access_class),
             )
+        for action_id in AUTOMATION_ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._invoke_automation(
+                    registered_action_id,
+                    payload,
+                ),
+                access=CapabilityAccess(definition.access_class),
+            )
         if self._conversation_lifecycle is not None:
             self.set_conversation_lifecycle_provider(self._conversation_lifecycle)
 
@@ -325,6 +351,12 @@ class AppActionRuntime:
         handler: Callable[..., dict[str, Any]],
     ) -> None:
         self._coding_github_handler = handler
+
+    def set_automation_handler(
+        self,
+        handler: Callable[..., dict[str, Any]],
+    ) -> None:
+        self._automation_handler = handler
 
     def register_plugin_contribution(self, contribution: PluginContribution) -> None:
         if self._plugin_contributions is None:
@@ -475,6 +507,8 @@ class AppActionRuntime:
         if definition.id in OBSERVABILITY_ACTION_IDS and self._observability_handler is None:
             return False
         if definition.id in CODING_GITHUB_ACTION_IDS and self._coding_github_handler is None:
+            return False
+        if definition.id in AUTOMATION_ACTION_IDS and self._automation_handler is None:
             return False
         return bool(self._action_availability(definition, context))
 
@@ -630,6 +664,79 @@ class AppActionRuntime:
             if title:
                 arguments["title"] = title
             return AppActionRequest(action_id=GITHUB_PULL_REQUEST_CREATE_ACTION_ID, arguments=arguments)
+
+        automation_create = re.fullmatch(
+            polite
+            + r"(?:create|add|schedule)\s+(?:a\s+|an\s+)?(?:automation|scheduled task)\s+"
+            + r"(?:called|named)\s+(.+?)\s+(?:to|with instructions?\s+to?)\s+(.+?)\s+"
+            + r"((?:every|in)\s+.+|\d{1,2}\s+\d{1,2}\s+\S+\s+\S+\s+\S+|\d{4}-\d{2}-\d{2}T\S+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if automation_create:
+            return AppActionRequest(
+                action_id=AUTOMATION_CREATE_ACTION_ID,
+                arguments={
+                    "name": self._spoken_value(automation_create.group(1)),
+                    "instructions": self._spoken_value(automation_create.group(2)),
+                    "schedule": self._spoken_value(automation_create.group(3)),
+                    "destination": {"kind": "new_chat"},
+                    "permission": {"full_access": False},
+                },
+            )
+
+        automation_update = re.fullmatch(
+            polite
+            + r"(?:update|change|set)\s+(?:the\s+)?(?:automation|scheduled task)\s+(.+?)\s+"
+            + r"(schedule|instructions?|description|name)\s+to\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if automation_update:
+            field = automation_update.group(2).casefold()
+            field = "instructions" if field.startswith("instruction") else field
+            return AppActionRequest(
+                action_id=AUTOMATION_UPDATE_ACTION_ID,
+                arguments={
+                    "reference": self._spoken_value(automation_update.group(1)),
+                    field: self._spoken_value(automation_update.group(3)),
+                },
+            )
+
+        automation_history = re.fullmatch(
+            polite
+            + r"(?:show|inspect|view|get)\s+(?:the\s+)?(?:run\s+)?history\s+(?:for|of)\s+"
+            + r"(?:the\s+)?(?:automation|scheduled task)\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if automation_history:
+            return AppActionRequest(
+                action_id=AUTOMATION_HISTORY_ACTION_ID,
+                arguments={"reference": self._spoken_value(automation_history.group(1))},
+            )
+
+        automation_control = re.fullmatch(
+            polite
+            + r"(pause|resume|run|run now|remove|delete)\s+(?:the\s+)?(?:automation|scheduled task)"
+            + r"(?:\s+(?:called|named))?\s+(.+?)(?:\s+now)?",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if automation_control:
+            operation = automation_control.group(1).casefold()
+            action_id = {
+                "pause": AUTOMATION_PAUSE_ACTION_ID,
+                "resume": AUTOMATION_RESUME_ACTION_ID,
+                "run": AUTOMATION_RUN_ACTION_ID,
+                "run now": AUTOMATION_RUN_ACTION_ID,
+                "remove": AUTOMATION_REMOVE_ACTION_ID,
+                "delete": AUTOMATION_REMOVE_ACTION_ID,
+            }[operation]
+            return AppActionRequest(
+                action_id=action_id,
+                arguments={"reference": self._spoken_value(automation_control.group(2))},
+            )
 
         observability_status = re.fullmatch(
             polite
@@ -1203,6 +1310,10 @@ class AppActionRuntime:
             if request.action_id == GITHUB_PULL_REQUEST_CREATE_ACTION_ID:
                 return self._coding_github_confirmation_receipt(request, context, definition)
             return self._dispatch_coding_github(request, context, definition)
+        if request.action_id in AUTOMATION_ACTION_IDS:
+            if request.action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
+                return self._automation_confirmation_receipt(request, context, definition)
+            return self._dispatch_automation(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
@@ -1730,6 +1841,157 @@ class AppActionRuntime:
             confirmation_binding=payload.get("confirmation_binding"),
         )
 
+    def _automation_confirmation_receipt(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+    ) -> ActionReceipt:
+        if self._automation_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="AUTOMATIONS_UNAVAILABLE",
+                message="Automation controls are unavailable.",
+            )
+        try:
+            result = self._automation_handler(
+                request.action_id,
+                dict(request.arguments),
+                context,
+                confirmed=False,
+                confirmation_binding=None,
+            )
+        except AutomationActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        binding = result.pop("_confirmation_binding", None)
+        target_kind = str(result.pop("_target_kind", "automation"))
+        target_id = str(result.pop("_target_id", request.action_id))
+        message = str(result.pop("_message", f"Confirm {definition.title.casefold()}."))
+        if not isinstance(binding, dict) or not binding:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code="CONFIRMATION_BINDING_UNAVAILABLE",
+                message="Automation confirmation could not be prepared.",
+                authorized=True,
+            )
+        token = self._confirmation_token_factory()
+        expires_at = self._now() + _UNDO_TTL
+        self._receipt_store.put_confirmation(_ConfirmationRecord(
+            token=token,
+            action_id=request.action_id,
+            action_version=request.action_version,
+            arguments=dict(request.arguments),
+            target_kind=target_kind,
+            target_reference=target_id,
+            expected_revision=0,
+            expires_at=expires_at,
+            binding=dict(binding),
+        ))
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="confirmation_required",
+            authorization=self._authorization(
+                definition.access_class,
+                context,
+                allowed=True,
+                confirmation_required=True,
+            ),
+            target=ActionTarget(kind=target_kind, id=target_id),
+            result=result,
+            confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
+            message=message,
+            audit_label=f"{definition.audit_label}.confirmation_requested",
+            created_at=self._now(),
+        )
+
+    def _dispatch_automation(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        *,
+        confirmed: bool = False,
+        confirmation_binding: dict[str, Any] | None = None,
+    ) -> ActionReceipt:
+        if self._automation_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="AUTOMATIONS_UNAVAILABLE",
+                message="Automation controls are unavailable.",
+            )
+        try:
+            result = self._registry.invoke(
+                request.action_id,
+                {
+                    "arguments": dict(request.arguments),
+                    "context": context,
+                    "confirmed": confirmed,
+                    "confirmation_binding": confirmation_binding,
+                    "confirm": confirmed,
+                },
+                agent_name=self._agent_name(context),
+            )
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except AutomationActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _invoke_automation(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._automation_handler is None:
+            raise AutomationActionError(
+                "AUTOMATIONS_UNAVAILABLE",
+                "Automation controls are unavailable.",
+                unavailable=True,
+            )
+        return self._automation_handler(
+            action_id,
+            dict(payload.get("arguments") or {}),
+            payload["context"],
+            confirmed=payload.get("confirmed") is True,
+            confirmation_binding=payload.get("confirmation_binding"),
+        )
+
     def _dispatch_petdex_action(
         self,
         request: AppActionRequest,
@@ -2231,6 +2493,15 @@ class AppActionRuntime:
         if request.action_id == GITHUB_PULL_REQUEST_CREATE_ACTION_ID:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_coding_github(
+                request,
+                context,
+                definition,
+                confirmed=True,
+                confirmation_binding=record.binding,
+            )
+        if request.action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_automation(
                 request,
                 context,
                 definition,

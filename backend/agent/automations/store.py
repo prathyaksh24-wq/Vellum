@@ -75,13 +75,15 @@ class AutomationStore:
         return dict(record)
 
     def list(self, *, state: str | None = None) -> list[dict[str, Any]]:
-        records = [dict(item) for item in self._read().values()]
+        with self._lock:
+            records = [dict(item) for item in self._read().values()]
         if state:
             records = [record for record in records if record.get("state") == state]
         return sorted(records, key=lambda item: str(item.get("created_at") or ""))
 
     def get(self, automation_id: str) -> dict[str, Any]:
-        record = self._read().get(automation_id)
+        with self._lock:
+            record = self._read().get(automation_id)
         if record is None:
             raise ValueError(f"automation not found: {automation_id}")
         return dict(record)

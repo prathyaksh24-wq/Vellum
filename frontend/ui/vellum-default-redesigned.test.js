@@ -215,6 +215,14 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("window.location.assign('vellum-workspace.html')");
   });
 
+  test("applies automation receipts from chat and visible controls to one UI state", () => {
+    expect(html).toContain("const applyAutomationReceipt = receipt =>");
+    expect(html).toContain("String(receipt.action_id || '').startsWith('automation.')");
+    expect(html).toContain("const dispatchAutomationAction = async (actionId, arguments_, options = {}) =>");
+    expect(html).toContain("applyAutomationReceipt(receipt)");
+    expect(html).toContain("applyAutomationReceipt(confirmed)");
+  });
+
   test("does not contain unresolved Git conflict markers", () => {
     expect(html).not.toMatch(/^(<<<<<<<|=======|>>>>>>>)/m);
   });
