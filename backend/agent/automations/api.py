@@ -49,14 +49,27 @@ def set_mutation_hook(hook: Any | None) -> None:
     _MUTATION_HOOK = hook
 
 
-def _notify_mutation(automation_id: str) -> None:
+def mutation_hook_available() -> bool:
+    return _MUTATION_HOOK is not None
+
+
+def notify_mutation(automation_id: str, *, required: bool = False) -> bool:
     hook = _MUTATION_HOOK
     if hook is None:
-        return
+        if required:
+            raise RuntimeError("automation scheduler is unavailable")
+        return False
     try:
         hook(automation_id)
-    except Exception:  # noqa: BLE001 — the scheduler must never break the API
-        pass
+    except Exception:  # noqa: BLE001 — compatibility API calls remain best-effort
+        if required:
+            raise
+        return False
+    return True
+
+
+def _notify_mutation(automation_id: str) -> None:
+    notify_mutation(automation_id)
 
 
 class AutomationDestination(BaseModel):

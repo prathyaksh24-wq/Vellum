@@ -7905,7 +7905,7 @@ const AutomationConfirmModal = ({record, builtin, onCancel, onConfirm, busy}) =>
   </div>
 );
 
-const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, onStartChat, onItemsChange}) => {
+const ScheduledView = ({automations = [], projects = [], chats = [], models = MODELS, onStartChat, onItemsChange, onAction}) => {
   const [items, setItems] = useState(automations || []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -7914,6 +7914,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   const [selectedId, setSelectedId] = useState(automations && automations[0] ? automations[0].id : null);
   const [menu, setMenu] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [history, setHistory] = useState(null);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
 
@@ -7932,30 +7933,38 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
     }
   };
   useEffect(() => { refresh(); }, []);
+  useEffect(() => { setItems(automations || []); }, [automations]);
 
   const runNow = async record => {
     setMenu(null); setBusy(record.id); setError('');
-    try { await API.automations.run(record.id); await refresh(); }
+    try { const receipt = await onAction('automation.run', {automation_id:record.id}); if (receipt && receipt.status === 'applied') await refresh(); }
     catch (_) { setError('Run failed'); }
     finally { setBusy(''); }
   };
   const toggleState = async record => {
     setMenu(null); setBusy(record.id); setError('');
-    try { await API.automations.update(record.id, {state: record.state === 'active' ? 'paused' : 'active'}); await refresh(); }
+    try { const receipt = await onAction(record.state === 'active' ? 'automation.pause' : 'automation.resume', {automation_id:record.id}); if (!receipt || receipt.status !== 'applied') throw new Error('Update failed'); await refresh(); }
     catch (_) { setError('Update failed'); }
     finally { setBusy(''); }
   };
   const removeAutomation = async record => {
     setMenu(null); setBusy(record.id); setError('');
-    try { await API.automations.remove(record.id); setConfirm(null); await refresh(); }
+    try { const receipt = await onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true}); if (!receipt || receipt.status !== 'applied') throw new Error('Delete failed'); setConfirm(null); await refresh(); }
     catch (_) { setError('Delete failed'); }
+    finally { setBusy(''); }
+  };
+  const inspectHistory = async record => {
+    setBusy(record.id); setError('');
+    try { const receipt = await onAction('automation.history', {automation_id:record.id}); if (!receipt || receipt.status !== 'applied') throw new Error('History unavailable'); setHistory({automationId:record.id, runs:(receipt.result && receipt.result.runs) || []}); }
+    catch (_) { setError('History unavailable'); }
     finally { setBusy(''); }
   };
   const saveAutomation = async payload => {
     setBusy('save');
     try {
-      const response = editing && editing.mode === 'edit' ? await API.automations.update(editing.record.id, payload) : await API.automations.create(payload);
-      const saved = response && response.automation;
+      const receipt = editing && editing.mode === 'edit' ? await onAction('automation.update', {automation_id:editing.record.id, ...payload}) : await onAction('automation.create', payload);
+      if (!receipt || receipt.status !== 'applied') throw new Error('Save failed');
+      const saved = receipt.result && receipt.result.automation;
       setEditing(null);
       if (saved) setSelectedId(saved.id);
       await refresh();
@@ -7994,13 +8003,14 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
           </section>
           <section className="au-detail-panel" aria-label="Scheduled task details">
             {editing ? <AutomationForm key={editing.mode + ':' + (editing.record ? editing.record.id : 'new')} record={editing.mode === 'edit' ? editing.record : null} projects={projects} chats={chats} models={models} onSave={saveAutomation} onCancel={() => setEditing(null)}/> : selected ? <div className="au-detail">
-              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
+              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn" onClick={() => inspectHistory(selected)}>History</button><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
               <div className="au-prompt-card">{selected.instructions}</div>
               <div className="au-section-label">Details</div>
               <div className="au-detail-card"><div className="au-detail-row"><span>Runs in</span><strong>{destinationLabel(selected.destination, chats)}</strong></div><div className="au-detail-row"><span>Project</span><strong className={!selected.project_id ? 'au-detail-muted' : ''}>{selected.project_id ? ((projects.find(project => project.id === selected.project_id) || {}).name || selected.project_id) : 'None'}</strong></div><div className="au-detail-row"><span>Model</span><strong>{(selected.model_profile && selected.model_profile.model) || 'Default model'}</strong></div><div className="au-detail-row"><span>Reasoning</span><strong>{(selected.model_profile && selected.model_profile.reasoning_mode) || 'Default'}</strong></div></div>
               <div className="au-section-label">Frequency</div>
               <div className="au-detail-card"><div className="au-detail-row"><span>Repeat</span><strong>{scheduleLabel(selected.schedule)}</strong></div><div className="au-detail-row"><span>Notifications</span><strong>{automationNotificationLabel(selected.notifications && selected.notifications.level)}</strong></div></div>
               {lastRun(selected) && <div className="au-last-run">{runStatusLabel(lastRun(selected))}</div>}
+              {history && history.automationId === selected.id && <div className="au-last-run">{history.runs.length ? `${history.runs.length} recorded run${history.runs.length === 1 ? '' : 's'}` : 'No recorded runs yet'}</div>}
               {error && <div className="au-form-error" role="alert">{error}</div>}
             </div> : <div className="au-list-empty"><strong>Select a scheduled task</strong>Choose a task to see its instructions and details.</div>}
           </section>
@@ -9691,6 +9701,19 @@ const [slashSkills, setSlashSkills] = useState([]);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), next && next.duration || 2200);
   };
+  const applyAutomationReceipt = receipt => {
+    if (!receipt || receipt.status !== 'applied' || !String(receipt.action_id || '').startsWith('automation.')) return receipt;
+    const result = receipt.result || {};
+    setAutomations(current => {
+      if (result.removed) return current.filter(record => record.id !== result.removed);
+      if (!result.automation || !result.automation.id) return current;
+      const exists = current.some(record => record.id === result.automation.id);
+      return exists
+        ? current.map(record => record.id === result.automation.id ? result.automation : record)
+        : [...current, result.automation];
+    });
+    return receipt;
+  };
   const showAppActionReceipt = (receipt, options = {}) => {
     if (!receipt) return;
     const notify = options.notify !== false;
@@ -9708,7 +9731,10 @@ const [slashSkills, setSlashSkills] = useState([]);
       confirmationLabel: receipt.action_id === 'conversation.share'
         ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
         : receipt.action_id === 'memory.conversation.set' ? 'Turn on'
-        : receipt.action_id === 'github.pull_request.create' ? 'Create PR' : 'Delete',
+        : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
+        : receipt.action_id === 'automation.run' ? 'Run now'
+        : receipt.action_id === 'automation.remove' && receipt.result && receipt.result.automation_review && receipt.result.automation_review.builtin ? 'Reset'
+        : 'Delete',
       duration: receipt.confirmation ? 10000 : (receipt.undo ? 6500 : 2800),
     });
   };
@@ -9731,6 +9757,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       if (receipt && receipt.action_id === 'composer.attachment.import') {
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:attachment-action', {detail:{receipt, turn:options.turn || {turn_kind:'action'}}})), 0);
       }
+      applyAutomationReceipt(receipt);
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
@@ -9791,6 +9818,12 @@ const [slashSkills, setSlashSkills] = useState([]);
     return receipt;
   };
   skillActionDispatcher = dispatchSkillAction;
+  const dispatchAutomationAction = async (actionId, arguments_, options = {}) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId, notify:!options.confirmedFromUi});
+    if (options.confirmedFromUi && receipt && receipt.status === 'confirmation_required') return confirmAppAction(receipt);
+    applyAutomationReceipt(receipt);
+    return receipt;
+  };
   const confirmAppAction = async receipt => {
     try {
       const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
@@ -9798,6 +9831,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
         : activeChatId;
       const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:confirmationConversationId});
+      applyAutomationReceipt(confirmed);
       showAppActionReceipt(confirmed);
       return confirmed;
     } catch (_) {
@@ -10011,7 +10045,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onViewImage={setViewer}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
-            {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations}/>}
+            {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
             {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}

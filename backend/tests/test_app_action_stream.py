@@ -10,6 +10,8 @@ from agent.app_actions.models import (
     WorkspaceLayoutSnapshot,
 )
 from agent.app_actions.runtime import AppActionRuntime
+from agent.app_actions.automations import AutomationActionService
+from agent.automations.store import AutomationStore
 from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.session_controls import SessionControlService
 from agent.conversations.lifecycle import ConversationLifecycle
@@ -174,6 +176,42 @@ async def test_coding_workspace_nlp_streams_the_same_navigation_receipt_without_
         "url": "vellum-workspace.html",
     }
     assert completed["output_text"] == "Coding workspace opened."
+
+
+@pytest.mark.asyncio
+async def test_automation_nlp_streams_the_same_mutation_receipt_without_calling_agent(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+    store = AutomationStore(tmp_path / "automations")
+    record = store.create(
+        name="Morning brief",
+        instructions="Summarize overnight changes.",
+        schedule={"kind": "interval", "expression": "every 2h", "seconds": 7200},
+        destination={"kind": "new_chat"},
+    )
+    service = AutomationActionService(
+        store_provider=lambda: store,
+        scheduler_available=lambda: True,
+        mutation_notifier=lambda _automation_id: None,
+    )
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(automation_handler=service.execute))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("an automation mutation action must not call the conversational model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="pause automation Morning brief",
+        thread_id="chat-automation",
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "applied"
+    assert receipt["action_id"] == "automation.pause"
+    assert receipt["result"]["automation"]["id"] == record["id"]
+    assert store.get(record["id"])["state"] == "paused"
 
 
 @pytest.mark.asyncio

@@ -59,12 +59,18 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("onStartAutomationChat");
   });
 
-  test("mutations call the extended API client and refresh the list", () => {
-    expect(html).toContain("API.automations.create(payload)");
-    expect(html).toContain("API.automations.update(editing.record.id, payload)");
-    expect(html).toContain("API.automations.update(record.id, {state:");
-    expect(html).toContain("API.automations.remove(record.id)");
-    expect(html).toContain("API.automations.run(record.id)");
+  test("every automation control dispatches its typed App Action", () => {
+    expect(html).toContain("onAction('automation.create', payload)");
+    expect(html).toContain("onAction('automation.update', {automation_id:editing.record.id, ...payload})");
+    expect(html).toContain("record.state === 'active' ? 'automation.pause' : 'automation.resume'");
+    expect(html).toContain("onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true})");
+    expect(html).toContain("onAction('automation.run', {automation_id:record.id})");
+    expect(html).toContain("onAction('automation.history', {automation_id:record.id})");
+    expect(html).toContain("onAction={dispatchAutomationAction}");
+    expect(html).not.toContain("API.automations.create(payload)");
+    expect(html).not.toContain("API.automations.update(editing.record.id, payload)");
+    expect(html).not.toContain("API.automations.remove(record.id)");
+    expect(html).not.toContain("API.automations.run(record.id)");
     expect(html).toContain("API.automations.list()");
   });
 

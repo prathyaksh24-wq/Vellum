@@ -43,6 +43,7 @@ from agent.cli.project_commands import (
 )
 from agent.app_actions.api import router as app_actions_router
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
+from agent.app_actions.automations import AutomationActionService
 from agent.app_actions.coding_github import CodingGitHubActionService
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.observability import ObservabilityActionService
@@ -156,6 +157,8 @@ terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _coding_github_actions = CodingGitHubActionService(coding_service=coding_service)
 _app_action_runtime.set_coding_github_handler(_coding_github_actions.execute)
+_automation_actions = AutomationActionService()
+_app_action_runtime.set_automation_handler(_automation_actions.execute)
 
 
 class _ThreadTurnCoordinator:
