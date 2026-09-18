@@ -77,7 +77,12 @@
   }
 
   function BooksView({agentProps, DefaultAgentView, icons}) {
-    const controller = useMemo(() => window.VellumBooks.createController(window.VellumApi.books), []);
+    const actionHandlers = useRef({onAction:agentProps.onKnowledgeAction, onReceipt:agentProps.onAppActionReceipt});
+    actionHandlers.current = {onAction:agentProps.onKnowledgeAction, onReceipt:agentProps.onAppActionReceipt};
+    const controller = useMemo(() => window.VellumBooks.createController(window.VellumApi.books, {
+      onAction: (...args) => actionHandlers.current.onAction && actionHandlers.current.onAction(...args),
+      onReceipt: receipt => actionHandlers.current.onReceipt && actionHandlers.current.onReceipt(receipt),
+    }), []);
     const [state, setState] = useState(controller.getState), [surface, setSurface] = useState('library');
     const [selected, setSelected] = useState(''), [query, setQuery] = useState(''), [importOpen, setImportOpen] = useState(false);
     const [draft, setDraft] = useState(null), [confirmation, setConfirmation] = useState(null);

@@ -18,6 +18,15 @@ class PluginContributionError(ValueError):
     pass
 
 
+class PluginContributionActionError(ValueError):
+    """Truthful plugin action failure without exposing connector internals."""
+
+    def __init__(self, code: str, message: str, *, unavailable: bool = False) -> None:
+        super().__init__(message)
+        self.code = code
+        self.unavailable = unavailable
+
+
 @dataclass(frozen=True)
 class PluginActionContribution:
     definition: AppActionDefinition

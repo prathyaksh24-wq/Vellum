@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from . import auth, client, errors
 
-
 YouTubeAuthStore = auth.YouTubeAuthStore
 YouTubeClient = client.YouTubeClient
 
 
 def register(ctx) -> None:
+    from agent.plugins.youtube_controls import youtube_plugin_contribution
+
     ctx.register_connector(
         id="youtube",
         name="YouTube",
@@ -20,11 +21,28 @@ def register(ctx) -> None:
             "type": "connector",
             "category": "Connectors",
             "status": "backend_managed",
-            "capabilities": ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"],
+            "capabilities": [
+                "youtube.account",
+                "youtube.subscriptions",
+                "youtube.liked_videos",
+                "youtube.connection.start",
+                "youtube.sync",
+                "youtube.connection.disconnect",
+                "youtube.intelligence.rebuild",
+            ],
         },
         service_factory=YouTubeClient,
-        capabilities=["youtube.account", "youtube.subscriptions", "youtube.liked_videos"],
+        capabilities=[
+            "youtube.account",
+            "youtube.subscriptions",
+            "youtube.liked_videos",
+            "youtube.connection.start",
+            "youtube.sync",
+            "youtube.connection.disconnect",
+            "youtube.intelligence.rebuild",
+        ],
     )
+    ctx.register_contribution(youtube_plugin_contribution())
 
 
 __all__ = ["YouTubeAuthStore", "YouTubeClient", "auth", "client", "errors", "register"]

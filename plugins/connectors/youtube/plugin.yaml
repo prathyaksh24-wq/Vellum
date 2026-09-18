@@ -8,3 +8,7 @@ capabilities:
   - youtube.account
   - youtube.subscriptions
   - youtube.liked_videos
+  - youtube.connection.start
+  - youtube.sync
+  - youtube.connection.disconnect
+  - youtube.intelligence.rebuild

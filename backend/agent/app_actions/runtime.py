@@ -62,6 +62,17 @@ from agent.app_actions.lifecycle_controls import (
     LifecycleControlError,
     lifecycle_action_definitions,
 )
+from agent.app_actions.knowledge_sources import (
+    BOOK_COMPILE_ACTION_ID,
+    BOOK_IMPORT_ACTION_ID,
+    BOOK_PROCESS_ACTION_ID,
+    KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
+    KNOWLEDGE_SOURCE_ACTION_IDS,
+    KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS,
+    KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
+    KnowledgeSourceActionError,
+    knowledge_source_action_definitions,
+)
 from agent.app_actions.observability import (
     OBSERVABILITY_ACTION_IDS,
     OBSERVABILITY_OPEN_ACTION_ID,
@@ -85,8 +96,18 @@ from agent.app_actions.petdex import (
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
-from agent.plugins.contributions import PluginContribution, PluginContributionCatalog
+from agent.plugins.contributions import (
+    PluginContribution,
+    PluginContributionActionError,
+    PluginContributionCatalog,
+)
 from agent.plugins.registry import PluginRegistry
+from agent.plugins.youtube_contract import (
+    YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID,
+    YOUTUBE_CONNECTION_START_ACTION_ID,
+    YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID,
+    YOUTUBE_SYNC_ACTION_ID,
+)
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
 
 
@@ -221,6 +242,7 @@ class AppActionRuntime:
         observability_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         coding_github_handler: Callable[..., dict[str, Any]] | None = None,
         automation_handler: Callable[..., dict[str, Any]] | None = None,
+        knowledge_source_handler: Callable[..., dict[str, Any]] | None = None,
         plugin_registry: PluginRegistry | None = None,
         action_availability: Callable[[AppActionDefinition, AppActionContext | None], bool] | None = None,
     ) -> None:
@@ -237,6 +259,7 @@ class AppActionRuntime:
         self._observability_handler = observability_handler
         self._coding_github_handler = coding_github_handler
         self._automation_handler = automation_handler
+        self._knowledge_source_handler = knowledge_source_handler
         self._action_availability = action_availability or (lambda _definition, _context: True)
         self._conversation_actions_registered = False
         self._registry = ToolRegistry()
@@ -254,6 +277,7 @@ class AppActionRuntime:
                 *observability_action_definitions(),
                 *coding_github_action_definitions(),
                 *automation_action_definitions(),
+                *knowledge_source_action_definitions(),
                 *petdex_action_definitions(),
             )
         }
@@ -319,6 +343,17 @@ class AppActionRuntime:
                 ),
                 access=CapabilityAccess(definition.access_class),
             )
+        for action_id in KNOWLEDGE_SOURCE_ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._invoke_knowledge_source(
+                    registered_action_id,
+                    payload,
+                ),
+                access=CapabilityAccess(definition.access_class),
+            )
         if self._conversation_lifecycle is not None:
             self.set_conversation_lifecycle_provider(self._conversation_lifecycle)
 
@@ -357,6 +392,12 @@ class AppActionRuntime:
         handler: Callable[..., dict[str, Any]],
     ) -> None:
         self._automation_handler = handler
+
+    def set_knowledge_source_handler(
+        self,
+        handler: Callable[..., dict[str, Any]],
+    ) -> None:
+        self._knowledge_source_handler = handler
 
     def register_plugin_contribution(self, contribution: PluginContribution) -> None:
         if self._plugin_contributions is None:
@@ -510,6 +551,8 @@ class AppActionRuntime:
             return False
         if definition.id in AUTOMATION_ACTION_IDS and self._automation_handler is None:
             return False
+        if definition.id in KNOWLEDGE_SOURCE_ACTION_IDS and self._knowledge_source_handler is None:
+            return False
         return bool(self._action_availability(definition, context))
 
     def _definition(self, action_id: str) -> AppActionDefinition | None:
@@ -610,6 +653,58 @@ class AppActionRuntime:
             return AppActionRequest(
                 action_id=MEMORY_CONVERSATION_SET_ACTION_ID,
                 arguments={"enabled": False},
+            )
+
+        if re.fullmatch(polite + r"(?:connect|reconnect)\s+(?:my\s+)?youtube(?:\s+account)?", normalized):
+            return AppActionRequest(action_id=YOUTUBE_CONNECTION_START_ACTION_ID)
+        if re.fullmatch(polite + r"(?:sync|synchronize|refresh)\s+(?:my\s+)?youtube(?:\s+(?:subscriptions|account|data))?", normalized):
+            return AppActionRequest(action_id=YOUTUBE_SYNC_ACTION_ID)
+        if re.fullmatch(polite + r"disconnect\s+(?:my\s+)?youtube(?:\s+account)?", normalized):
+            return AppActionRequest(action_id=YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID)
+        youtube_rebuild = re.fullmatch(
+            polite + r"rebuild\s+(?:my\s+)?youtube\s+intelligence(?:\s+(incrementally|from scratch))?",
+            normalized,
+        )
+        if youtube_rebuild:
+            mode = "incremental" if youtube_rebuild.group(1) == "incrementally" else "backfill" if youtube_rebuild.group(1) else ""
+            return AppActionRequest(
+                action_id=YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID,
+                arguments={"mode": mode} if mode else {},
+            )
+
+        if re.fullmatch(polite + r"(?:rebuild|refresh)\s+(?:the\s+)?knowledge\s+index", normalized):
+            return AppActionRequest(action_id=KNOWLEDGE_INDEX_REBUILD_ACTION_ID)
+        if re.fullmatch(polite + r"(?:import|add)\s+(?:a\s+|an\s+)?(?:epub|book)(?:\s+file)?", normalized):
+            return AppActionRequest(action_id=BOOK_IMPORT_ACTION_ID)
+        book_process = re.fullmatch(
+            polite + r"process\s+(?:the\s+)?(?:epub|book)\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if book_process:
+            return AppActionRequest(
+                action_id=BOOK_PROCESS_ACTION_ID,
+                arguments={"reference": self._spoken_value(book_process.group(1))},
+            )
+        book_compile = re.fullmatch(
+            polite + r"(?:build|compile)\s+(?:the\s+)?book\s+(?:skill|knowledge)(?:\s+for)?\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if book_compile:
+            return AppActionRequest(
+                action_id=BOOK_COMPILE_ACTION_ID,
+                arguments={"reference": self._spoken_value(book_compile.group(1))},
+            )
+        source_import = re.fullmatch(
+            polite + r"import\s+(?:the\s+)?knowledge\s+source(?:\s+at|\s+from)?\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if source_import:
+            return AppActionRequest(
+                action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
+                arguments={"source_path": self._spoken_value(source_import.group(1))},
             )
 
         coding_workspace = re.fullmatch(
@@ -1314,9 +1409,39 @@ class AppActionRuntime:
             if request.action_id in {AUTOMATION_RUN_ACTION_ID, AUTOMATION_REMOVE_ACTION_ID}:
                 return self._automation_confirmation_receipt(request, context, definition)
             return self._dispatch_automation(request, context, definition)
+        if request.action_id in KNOWLEDGE_SOURCE_ACTION_IDS:
+            if request.action_id in KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS:
+                return self._domain_confirmation_receipt(
+                    request,
+                    context,
+                    definition,
+                    target_kind="knowledge_source" if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID else "book_document",
+                    target_reference=str(
+                        "knowledge-source"
+                        if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID
+                        else request.arguments.get("import_id")
+                        or request.arguments.get("reference")
+                        or request.action_id
+                    ),
+                    message=(
+                        "Confirm importing this approved source into Knowledge."
+                        if request.action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID
+                        else "Confirm changing this Book knowledge."
+                    ),
+                )
+            return self._dispatch_knowledge_source(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
+            if definition.confirmation_rule == "operation_bound":
+                return self._domain_confirmation_receipt(
+                    request,
+                    context,
+                    definition,
+                    target_kind="plugin",
+                    target_reference=definition.plugin_id or definition.owner,
+                    message=f"Confirm {definition.title.casefold()}.",
+                )
             return self._dispatch_plugin_action(request, context, definition)
 
         try:
@@ -1410,11 +1535,17 @@ class AppActionRuntime:
         request: AppActionRequest,
         context: AppActionContext,
         definition: AppActionDefinition,
+        *,
+        confirmed: bool = False,
     ) -> ActionReceipt:
         try:
             raw_result = self._registry.invoke(
                 request.action_id,
-                {"arguments": dict(request.arguments), "context": context},
+                {
+                    "arguments": dict(request.arguments),
+                    "context": context,
+                    "confirmed": confirmed,
+                },
                 agent_name=self._agent_name(context),
             )
             if not isinstance(raw_result, dict):
@@ -1428,6 +1559,16 @@ class AppActionRuntime:
                 access_class=definition.access_class,
                 error_code="ACTION_NOT_AUTHORIZED",
                 message=str(exc),
+            )
+        except PluginContributionActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
             )
         except (TypeError, ValueError) as exc:
             return self._error_receipt(
@@ -1992,6 +2133,72 @@ class AppActionRuntime:
             confirmation_binding=payload.get("confirmation_binding"),
         )
 
+    def _dispatch_knowledge_source(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        *,
+        confirmed: bool = False,
+    ) -> ActionReceipt:
+        if self._knowledge_source_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="KNOWLEDGE_CONTROLS_UNAVAILABLE",
+                message="Knowledge and source controls are unavailable.",
+            )
+        try:
+            result = self._registry.invoke(
+                request.action_id,
+                {
+                    "arguments": dict(request.arguments),
+                    "context": context,
+                    "confirmed": confirmed,
+                },
+                agent_name=self._agent_name(context),
+            )
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except KnowledgeSourceActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _invoke_knowledge_source(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._knowledge_source_handler is None:
+            raise KnowledgeSourceActionError(
+                "KNOWLEDGE_CONTROLS_UNAVAILABLE",
+                "Knowledge and source controls are unavailable.",
+                unavailable=True,
+            )
+        return self._knowledge_source_handler(
+            action_id,
+            dict(payload.get("arguments") or {}),
+            payload["context"],
+            confirmed=payload.get("confirmed") is True,
+        )
+
     def _dispatch_petdex_action(
         self,
         request: AppActionRequest,
@@ -2071,6 +2278,49 @@ class AppActionRuntime:
             result={"operation": request.action_id, "target": target_id},
             confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
             message=f"Confirm removing {target_id}.",
+            audit_label=f"{definition.audit_label}.confirmation_requested",
+            created_at=self._now(),
+        )
+
+    def _domain_confirmation_receipt(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        *,
+        target_kind: str,
+        target_reference: str,
+        message: str,
+    ) -> ActionReceipt:
+        token = self._confirmation_token_factory()
+        expires_at = self._now() + _UNDO_TTL
+        self._receipt_store.put_confirmation(_ConfirmationRecord(
+            token=token,
+            action_id=request.action_id,
+            action_version=request.action_version,
+            arguments=dict(request.arguments),
+            target_kind=target_kind,
+            target_reference=target_reference,
+            expected_revision=0,
+            expires_at=expires_at,
+        ))
+        return ActionReceipt(
+            receipt_id=self._receipt_id_factory(),
+            request_id=request.request_id,
+            action_id=request.action_id,
+            action_version=definition.version,
+            source=context.source,
+            status="confirmation_required",
+            authorization=self._authorization(
+                definition.access_class,
+                context,
+                allowed=True,
+                confirmation_required=True,
+            ),
+            target=ActionTarget(kind=target_kind, id=target_reference),
+            result={"operation": request.action_id},
+            confirmation=ActionConfirmation(token=token, expires_at=expires_at, target_revision=0),
+            message=message,
             audit_label=f"{definition.audit_label}.confirmation_requested",
             created_at=self._now(),
         )
@@ -2439,7 +2689,7 @@ class AppActionRuntime:
         context: AppActionContext,
     ) -> ActionReceipt:
         record = self._receipt_store.get_confirmation(token)
-        definition = self._definitions.get(request.action_id)
+        definition = self._definition(request.action_id)
         access_class = definition.access_class if definition else "unknown"
         if record is None:
             return self._error_receipt(
@@ -2508,6 +2758,12 @@ class AppActionRuntime:
                 confirmed=True,
                 confirmation_binding=record.binding,
             )
+        if request.action_id in KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS:
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_knowledge_source(request, context, definition, confirmed=True)
+        if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_plugin_action(request, context, definition, confirmed=True)
         try:
             current = self._conversation_service().get(record.target_reference)
         except ConversationLifecycleError as exc:
@@ -2554,7 +2810,18 @@ class AppActionRuntime:
                 error_code="CONFIRMATION_UNAVAILABLE",
                 message="Confirmation is unavailable.",
             )
-        definition = self._definitions[record.action_id]
+        definition = self._definition(record.action_id)
+        if definition is None:
+            request = AppActionRequest(action_id=record.action_id)
+            self._receipt_store.remove_confirmation(token)
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class="unknown",
+                error_code="ACTION_UNAVAILABLE",
+                message="The action is no longer available.",
+            )
         request = AppActionRequest(
             action_id=record.action_id,
             action_version=record.action_version,

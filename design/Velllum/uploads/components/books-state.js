@@ -1,5 +1,5 @@
 (function () {
-  function createController(api) {
+  function createController(api, options = {}) {
     let state = {items:[], total:0, offset:0, limit:40, loading:false, detail:null, detailLoading:false, busy:'', error:''};
     let alive = true, listVersion = 0, detailVersion = 0;
     let listAbort, detailAbort;
@@ -33,12 +33,17 @@
         if (version === detailVersion && error.name !== 'AbortError') update({detailLoading:false, error:error.message || 'Book is unavailable.'});
       }
     }
-    async function mutate(label, operation) {
+    async function mutate(label, operation, {applyReceipt = true} = {}) {
       if (state.busy || !alive) return false;
       update({busy:label, error:''});
       try {
-        const result = await operation();
+        const response = await operation();
         if (!alive) return false;
+        if (response && response.action_id) {
+          if (applyReceipt && options.onReceipt) options.onReceipt(response);
+          if (response.status !== 'applied') throw new Error(response.message || 'Book operation failed.');
+        }
+        const result = response && response.result && response.result.library ? response.result.library : response;
         await load(0);
         if (result.book?.id) await open(result.book.id);
         if (result.error_code) update({error:result.error_code});
@@ -54,8 +59,8 @@
       load, open,
       close() { ++detailVersion; detailAbort?.abort(); update({detail:null, detailLoading:false}); },
       importEpub(file, consent) { return mutate('Importing EPUB', () => api.importEpub(file, consent)); },
-      process(id) { return mutate('Processing book', () => api.process(id)); },
-      compile(id) { return mutate('Building Book knowledge', () => api.compile(id)); },
+      process(id) { return mutate('Processing book', () => options.onAction ? options.onAction('book.process', {import_id:id}, {confirmedFromUi:true}) : api.process(id), {applyReceipt:!options.onAction}); },
+      compile(id) { return mutate('Building Book knowledge', () => options.onAction ? options.onAction('book.compile', {import_id:id}, {confirmedFromUi:true}) : api.compile(id), {applyReceipt:!options.onAction}); },
       destroy() { alive = false; ++listVersion; ++detailVersion; listAbort?.abort(); detailAbort?.abort(); listeners.clear(); },
     };
   }

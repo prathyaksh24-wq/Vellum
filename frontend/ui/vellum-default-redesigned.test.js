@@ -38,6 +38,19 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).not.toContain("reader.readAsDataURL(epub)");
   });
 
+  test("routes Knowledge, Books, YouTube, and feed mutations through App Actions", () => {
+    expect(html).toContain("onAction('knowledge.index.rebuild', {})");
+    expect(html).toContain("dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})");
+    expect(html).toContain("onAction('youtube.connection.start'");
+    expect(html).toContain("onAction('youtube.sync'");
+    expect(html).toContain("dispatchKnowledgeAction('youtube.connection.disconnect'");
+    expect(html).toContain("dispatchKnowledgeAction('plugin.state.set'");
+    expect(html).toContain("receipt.action_id === 'book.import'");
+    expect(html).toContain("Sports stays available on demand without a background feed");
+    expect(html).not.toContain("runWikiAction(() => API.knowledge.indexRebuild())");
+    expect(html).not.toContain("sources: [item, ...(p.sources || [])]");
+  });
+
   test("loads the modular frontend API bridge used by backend integrations", () => {
     expect(html).toMatch(/<script src="api\/client\.js(?:\?[^\"]+)?"><\/script>/);
     expect(html).toContain('<script src="api/chat.js"></script>');
@@ -191,7 +204,7 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("routes plugin and skill lifecycle controls through App Actions", () => {
-    expect(html).toContain("dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})");
+    expect(html).toContain("dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})");
     expect(html).toContain("onSkillAction('skill.mutation.submit'");
     expect(html).toContain("onSkillAction('skill.mutation.approve'");
     expect(html).toContain("onSkillAction('skill.mutation.reject'");
@@ -220,7 +233,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("String(receipt.action_id || '').startsWith('automation.')");
     expect(html).toContain("const dispatchAutomationAction = async (actionId, arguments_, options = {}) =>");
     expect(html).toContain("applyAutomationReceipt(receipt)");
-    expect(html).toContain("applyAutomationReceipt(confirmed)");
+    expect(html).toContain("applyAppActionReceipt(confirmed)");
   });
 
   test("does not contain unresolved Git conflict markers", () => {

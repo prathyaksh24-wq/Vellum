@@ -29,7 +29,7 @@
       body.set('scan_approved', 'true');
       body.set('rights_attestation_version', rightsAttestationVersion);
       body.set('local_only', String(localOnly === true));
-      return request('/import', {method:'POST', body, signal});
+      return client.request('/api/app-actions/books/import', {method:'POST', body, signal});
     },
     process(id) { return request(bookPath(id) + '/process', client.jsonOptions('POST', {confirm:true})); },
     compile(id) { return request(bookPath(id) + '/compile', client.jsonOptions('POST', {confirm:true})); },

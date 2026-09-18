@@ -44,3 +44,21 @@ test('processing is single flight and refreshes backend state after completion',
   expect(controller.getState().busy).toBe('');
   controller.destroy();
 });
+
+test('process and compile use App Actions and apply their canonical library projection', async () => {
+  await import('../../design/Velllum/uploads/components/books-state.js');
+  const onAction = vi.fn(async (actionId, args, options) => ({
+    action_id:actionId,
+    status:'applied',
+    result:{library:{book:{id:args.import_id,state:'parsed'},status:'ready'}},
+  }));
+  const api = {
+    list:vi.fn(async () => ({items:[{id:'book',state:'parsed'}],total:1,offset:0,limit:40})),
+    detail:vi.fn(async () => ({book:{id:'book',state:'parsed'}})),
+  };
+  const controller = window.VellumBooks.createController(api, {onAction});
+  expect(await controller.process('book')).toBe(true);
+  expect(onAction).toHaveBeenCalledWith('book.process', {import_id:'book'}, {confirmedFromUi:true});
+  expect(controller.getState().detail.state).toBe('parsed');
+  controller.destroy();
+});

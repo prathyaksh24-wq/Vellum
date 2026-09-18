@@ -3028,9 +3028,9 @@ const SEED_SAVED = [
 ];
 
 const SEED_FEEDS = [
-  { id: 'f1', name: 'X',       sub: 'Quotes from your handles ? last filed 09/06', on: true },
-  { id: 'f2', name: 'YouTube', sub: 'Transcripts from subscriptions ? last filed 08/06', on: true },
-  { id: 'f3', name: 'Sports',  sub: 'Curiosity-driven snapshots ? last filed 07/06', on: false },
+  { id: 'f1', pluginId: 'agent-reach', name: 'X', sub: 'Uses the enabled Agent-Reach connector when you ask about X.', on: false },
+  { id: 'f2', pluginId: 'youtube', name: 'YouTube', sub: 'Uses the enabled YouTube connector and its local Knowledge projection.', on: false },
+  { id: 'f3', name: 'Sports', sub: 'Runs on demand when you ask a sports question.', on: true, mode: 'on-demand' },
 ];
 
 /* Sidebar */
@@ -3765,7 +3765,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, presentation = {}}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}}) => {
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -4096,9 +4096,12 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
           setEpubImportBusy('Importing and building Book knowledge');
           setEpubImportError('');
           try {
-            const result = await API.books.importEpub(file, consent);
-            if (result.error_code || result.book?.skill_status !== 'compiled') {
-              throw new Error(result.error_code || 'Book knowledge could not be built.');
+            const receipt = await API.books.importEpub(file, consent);
+            if (onAppActionReceipt) onAppActionReceipt(receipt);
+            if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'Book import failed.');
+            const result = receipt.result && receipt.result.library;
+            if (!result || result.error_code || result.book?.skill_status !== 'compiled') {
+              throw new Error(result && result.error_code || 'Book knowledge could not be built.');
             }
             setAttach(current => [...current, {
               name:file.name,
@@ -4793,7 +4796,7 @@ const GLogo = ({size=22}) => (
 const YTLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
 );
-const YouTubeConnectModal = ({onClose, onConnected}) => {
+const YouTubeConnectModal = ({onClose, onConnected, onAction}) => {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -4823,9 +4826,12 @@ const YouTubeConnectModal = ({onClose, onConnected}) => {
     setBusy('connect'); setError('');
     const popup = window.open('about:blank', 'vellum-youtube-oauth', 'popup,width=620,height=760');
     try {
-      const result = await YouTubeAPI.start();
-      if (popup) popup.location.href = result.authorization_url;
-      else window.open(result.authorization_url, '_blank', 'noopener,noreferrer');
+      const receipt = await onAction('youtube.connection.start', {}, {suppressClientEffect:true});
+      if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'Could not start YouTube authorization.');
+      const authorizationUrl = receipt.result && receipt.result.connection && receipt.result.connection.authorization_url;
+      if (!authorizationUrl) throw new Error('YouTube authorization URL is unavailable.');
+      if (popup) popup.location.href = authorizationUrl;
+      else window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
       const startedAt = Date.now();
       const poll = async () => {
         const next = await loadStatus();
@@ -4840,7 +4846,11 @@ const YouTubeConnectModal = ({onClose, onConnected}) => {
   };
   const sync = async () => {
     setBusy('sync'); setError('');
-    try { await YouTubeAPI.sync('manual:' + Date.now()); await loadStatus(); }
+    try {
+      const receipt = await onAction('youtube.sync', {idempotency_key:'manual:' + Date.now()});
+      if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'YouTube synchronization failed.');
+      await loadStatus();
+    }
     catch (err) { setError(err && err.message ? err.message : 'YouTube synchronization failed.'); }
     finally { setBusy(''); }
   };
@@ -5450,7 +5460,6 @@ const ProjectsView = ({projects, chats, onNewProject, onOpenProject}) => (
 const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, onOpenChat, onAddSource, onChatMenu, composerExtras, onViewImage}) => {
   const [text, setText] = useState('');
   const [tab, setTab] = useState('Chats');
-  const fileRef = useRef(null);
   const mine = chats.filter(c => c.projectId === project.id && !c.archived);
   return (
     <div className="page">
@@ -5499,8 +5508,6 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
           )
         ) : (
           <React.Fragment>
-            <input ref={fileRef} type="file" style={{display: 'none'}}
-              onChange={e => { const f = e.target.files && e.target.files[0]; if (f) onAddSource(f); e.target.value = ''; }}/>
             {project.sources.length === 0 ? (
               <div className="src-card">
                 <div className="src-icons">
@@ -5509,8 +5516,8 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
                   <div className="kind-ic note"><IcFile size={16}/></div>
                 </div>
                 <div className="src-title">Give Vellum more context</div>
-                <div className="src-sub">Upload sources to give Vellum deeper context about your project. They are filed in your Library too.</div>
-                <button className="new-btn" style={{marginTop: 10}} onClick={() => fileRef.current.click()}>Add sources</button>
+                <div className="src-sub">Attach sources to your next project message. Vellum keeps the selected files in the composer until you send.</div>
+                <button className="new-btn" style={{marginTop: 10}} onClick={onAddSource}>Add to chat</button>
               </div>
             ) : (
               <div>
@@ -5522,7 +5529,7 @@ const ProjectPage = ({project, chats, model, setModel, models = MODELS, onSend, 
                   </div>
                 ))}
                 <div style={{marginTop: 14}}>
-                  <button className="new-btn" onClick={() => fileRef.current.click()}>Add sources</button>
+                  <button className="new-btn" onClick={onAddSource}>Add to chat</button>
                 </div>
               </div>
             )}
@@ -6671,7 +6678,7 @@ const memoryEntryDate = (entry) => {
   if (Number.isNaN(parsed.getTime())) return String(raw);
   return parsed.toLocaleDateString(undefined, {year:'numeric', month:'short', day:'numeric'});
 };
-function KnowledgeGraphView({ onBack, onAttachContext }){
+function KnowledgeGraphView({ onBack, onAttachContext, onAction }){
   const [status, setStatus] = useState(null);
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
@@ -6741,7 +6748,7 @@ function KnowledgeGraphView({ onBack, onAttachContext }){
         </form>
         <div className="wiki-actions">
           <div className="wiki-status-copy">{loading ? 'Checking wiki…' : status ? (status.page_count || 0) + ' pages · ' + (status.root || 'ready') : 'Wiki status unavailable'}</div>
-          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.lint())}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.indexRebuild())}>Rebuild index</button></div>
+          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.lint())}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.index.rebuild', {}))}>Rebuild index</button></div>
         </div>
         {lintReport && <div className="wiki-report"><span>Lint · {lintReport.health || 'complete'}</span>{lintIssueCount + ' issue' + (lintIssueCount === 1 ? '' : 's')}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
         <div className="wiki-layout">
@@ -7580,11 +7587,14 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                 <div key={f.id} className="set-row">
                   <div>{f.name}<span className="sr-sub">{f.sub}</span></div>
                   <span className="sr-end">
-                    <div className={'sw' + (f.on ? ' on' : '')} role="switch" aria-checked={f.on} onClick={() => onToggleFeed(f.id)}/>
+                    {f.mode === 'on-demand'
+                      ? <span className="cu-pill on">On demand</span>
+                      : <div className={'sw' + (f.on ? ' on' : '')} role="switch" tabIndex="0" aria-checked={f.on} onClick={() => onToggleFeed(f.id)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onToggleFeed(f.id); } }}/>
+                    }
                   </span>
                 </div>
               ))}
-              <div className="set-note">Preview ? switches hold state, nothing is fetched.</div>
+              <div className="set-note">Connector choices persist in the plugin registry. Sports stays available on demand without a background feed.</div>
             </React.Fragment>
           )}
           {tab === 'Plugins' && (
@@ -8657,7 +8667,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     return () => { window.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); };
   }, []);
   const disconnectYouTube = async () => {
-    try { await YouTubeAPI.disconnect(); setYtConn({connected:false,status:'not_connected',channel_id:'',channel_title:''}); pushToast('YouTube disconnected'); }
+    try { await dispatchKnowledgeAction('youtube.connection.disconnect', {}); }
     catch (_) { pushToast('YouTube disconnect failed'); }
   };
 
@@ -8748,7 +8758,13 @@ const [slashSkills, setSlashSkills] = useState([]);
         }
         if (settingsData) setBackendSettings(settingsData);
         if (pluginData && Array.isArray(pluginData.plugins)) {
-          setApps(pluginData.plugins.map(p => ({...p, state: p.configured ? 'ready' : 'off', note: p.notes || p.status})));
+          const plugins = pluginData.plugins.map(p => ({...p, state: p.configured ? 'ready' : 'off', note: p.notes || p.status}));
+          setApps(plugins);
+          setFeeds(current => current.map(feed => {
+            if (!feed.pluginId) return feed;
+            const plugin = plugins.find(item => item.id === feed.pluginId);
+            return plugin ? {...feed, on:plugin.enabled !== false} : feed;
+          }));
         }
         if (skillData && Array.isArray(skillData.items)) setSlashSkills(skillData.items);
         if (automationData && Array.isArray(automationData.automations)) setAutomations(automationData.automations);
@@ -9165,11 +9181,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     else setChats(cs => cs.filter(c => c.id !== id));
   };
 
-  const addSource = (projId, file) => {
-    const item = {id: uid(), name: file.name, kind: kindOf(file.name), size: fmtSize(file.size), modified: 'Today'};
-    setProjects(ps => ps.map(p => p.id === projId ? {...p, sources: [item, ...p.sources], updated: 'Today'} : p));
-    setLibrary(lib => [{...item, id: uid()}, ...lib]);
-  };
+  const addSource = () => dispatchKnowledgeAction('composer.attachment.import', {source:'picker'});
   const renameProject = (id, name) => {
     setProjRenamingId(null);
     if (name && name.trim()) setProjects(ps => ps.map(p => p.id === id ? {...p, name: name.trim()} : p));
@@ -9732,6 +9744,10 @@ const [slashSkills, setSlashSkills] = useState([]);
         ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
         : receipt.action_id === 'memory.conversation.set' ? 'Turn on'
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
+        : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'
+        : receipt.action_id === 'book.process' ? 'Process'
+        : receipt.action_id === 'book.compile' ? 'Build'
+        : receipt.action_id === 'knowledge.source.import' ? 'Import'
         : receipt.action_id === 'automation.run' ? 'Run now'
         : receipt.action_id === 'automation.remove' && receipt.result && receipt.result.automation_review && receipt.result.automation_review.builtin ? 'Reset'
         : 'Delete',
@@ -9756,6 +9772,25 @@ const [slashSkills, setSlashSkills] = useState([]);
       }
       if (receipt && receipt.action_id === 'composer.attachment.import') {
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:attachment-action', {detail:{receipt, turn:options.turn || {turn_kind:'action'}}})), 0);
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'plugin.state.set' && receipt.result && receipt.result.plugin) {
+        const plugin = receipt.result.plugin;
+        setApps(current => current.map(item => item.id === plugin.id ? {...item, ...plugin} : item));
+        setFeeds(current => current.map(feed => feed.pluginId === plugin.id ? {...feed, on:plugin.enabled !== false} : feed));
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'book.import' && receipt.result && receipt.result.client_effect && receipt.result.client_effect.type === 'book.import.picker.open') {
+        setTimeout(() => window.dispatchEvent(new CustomEvent('vellum-composer', {detail:'addfiles'})), 0);
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'youtube.connection.start' && options.suppressClientEffect !== true) {
+        const url = receipt.result && receipt.result.connection && receipt.result.connection.authorization_url;
+        if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'youtube.connection.disconnect') {
+        setYtConn({connected:false,status:'not_connected',channel_id:'',channel_title:''});
+      }
+      if (receipt && receipt.status === 'applied' && (receipt.action_id === 'youtube.sync' || receipt.action_id === 'youtube.intelligence.rebuild')) {
+        refreshYouTube();
+        refreshYouTubeIntelligence();
       }
       applyAutomationReceipt(receipt);
       showAppActionReceipt(receipt, options);
@@ -9824,6 +9859,16 @@ const [slashSkills, setSlashSkills] = useState([]);
     applyAutomationReceipt(receipt);
     return receipt;
   };
+  const dispatchKnowledgeAction = async (actionId, arguments_ = {}, options = {}) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId, notify:false});
+    if (options.confirmedFromUi && receipt && receipt.status === 'confirmation_required') return confirmAppAction(receipt);
+    return receipt ? applyAppActionReceipt(receipt, options) : null;
+  };
+  const toggleFeed = async id => {
+    const feed = feeds.find(item => item.id === id);
+    if (!feed || !feed.pluginId) return;
+    await dispatchKnowledgeAction('plugin.state.set', {plugin_id:feed.pluginId, enabled:!feed.on});
+  };
   const confirmAppAction = async receipt => {
     try {
       const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
@@ -9831,9 +9876,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
         : activeChatId;
       const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:confirmationConversationId});
-      applyAutomationReceipt(confirmed);
-      showAppActionReceipt(confirmed);
-      return confirmed;
+      return applyAppActionReceipt(confirmed);
     } catch (_) {
       pushToast('Confirmation is unavailable.');
       return null;
@@ -10034,25 +10077,25 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, presentation:composerPresentation}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
               model={selModel} setModel={selectModel} models={models}
               onSend={sendInProject(activeProject.id)} onOpenChat={openChat}
-              onAddSource={f => addSource(activeProject.id, f)}
+              onAddSource={addSource}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
+              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
-            {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchConversationAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
-            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext}/>}
+            {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
@@ -10094,7 +10137,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
         {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})} workspaceLayout={workspaceLayout} onSurfaceChange={dispatchSurfacePresentation} onLayoutReset={resetWorkspaceLayout} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
-          feeds={feeds} onToggleFeed={id => setFeeds(fs => fs.map(f => f.id === id ? {...f, on: !f.on} : f))}
+          feeds={feeds} onToggleFeed={toggleFeed}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
           onStartAutomationChat={startAutomationChat}
@@ -10109,7 +10152,11 @@ const [slashSkills, setSlashSkills] = useState([]);
         {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)}/>}
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
-        {ytConnectOpen && <YouTubeConnectModal onClose={() => setYtConnectOpen(false)} onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>}
+        {ytConnectOpen && <YouTubeConnectModal
+          onClose={() => setYtConnectOpen(false)}
+          onAction={dispatchKnowledgeAction}
+          onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
+        }
         {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
