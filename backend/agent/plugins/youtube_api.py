@@ -12,10 +12,8 @@ from pydantic import BaseModel, Field
 
 from agent.config import get_settings
 from agent.knowledge.runtime import get_knowledge_core
-from agent.plugins.contributions import PluginContributionActionError
 from agent.plugins.youtube_channel_identity import YouTubeChannelIdentityService
 from agent.plugins.youtube_contract import YOUTUBE_REDIRECT_URI
-from agent.plugins.youtube_controls import YouTubeControlService
 from agent.plugins.youtube_intelligence import YouTubeIntelligenceService
 from agent.plugins.youtube_runtime import (
     YouTubeAPIError,
@@ -32,7 +30,11 @@ from agent.plugins.youtube_runtime import (
 router = APIRouter(prefix="/plugins/youtube", tags=["youtube"])
 
 
-def _controls() -> YouTubeControlService:
+def _controls() -> Any:
+    # Load plugin contributions only after this compatibility module is initialized.
+    # Importing them first would make app_actions.runtime re-enter a partial module.
+    from agent.plugins.youtube_controls import YouTubeControlService
+
     return YouTubeControlService(
         settings_provider=get_settings,
         status_provider=youtube_status,
@@ -74,8 +76,11 @@ async def get_youtube_status() -> YouTubeStatusResponse:
 
 @router.post("/oauth/start", response_model=YouTubeOAuthStartResponse)
 async def start_youtube_oauth() -> YouTubeOAuthStartResponse:
+    controls = _controls()
+    from agent.plugins.contributions import PluginContributionActionError
+
     try:
-        return YouTubeOAuthStartResponse(**await asyncio.to_thread(_controls().start_connection))
+        return YouTubeOAuthStartResponse(**await asyncio.to_thread(controls.start_connection))
     except PluginContributionActionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -109,8 +114,11 @@ async def youtube_oauth_callback(
 
 @router.post("/sync")
 async def sync_youtube(request: YouTubeSyncRequest) -> dict[str, Any]:
+    controls = _controls()
+    from agent.plugins.contributions import PluginContributionActionError
+
     try:
-        return await asyncio.to_thread(_controls().sync, idempotency_key=request.idempotency_key)
+        return await asyncio.to_thread(controls.sync, idempotency_key=request.idempotency_key)
     except PluginContributionActionError as exc:
         status_code = 401 if exc.code == "YOUTUBE_REAUTH_REQUIRED" else 502 if exc.code == "YOUTUBE_SYNC_UNAVAILABLE" else 409
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
@@ -143,8 +151,11 @@ async def get_youtube_identity_profile(
 async def rebuild_youtube_intelligence(
     mode: Literal["backfill", "incremental"] | None = Query(default=None),
 ) -> dict[str, Any]:
+    controls = _controls()
+    from agent.plugins.contributions import PluginContributionActionError
+
     try:
-        return await asyncio.to_thread(_controls().rebuild_intelligence, mode=mode or "")
+        return await asyncio.to_thread(controls.rebuild_intelligence, mode=mode or "")
     except PluginContributionActionError as exc:
         raise HTTPException(
             status_code=500,
@@ -154,8 +165,11 @@ async def rebuild_youtube_intelligence(
 
 @router.delete("/connection")
 async def disconnect_youtube() -> dict[str, Any]:
+    controls = _controls()
+    from agent.plugins.contributions import PluginContributionActionError
+
     try:
-        return await asyncio.to_thread(_controls().disconnect)
+        return await asyncio.to_thread(controls.disconnect)
     except PluginContributionActionError as exc:
         raise HTTPException(status_code=502, detail="YouTube disconnection could not be completed.") from exc
 

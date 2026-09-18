@@ -47,12 +47,17 @@ def test_youtube_manifest_registers_read_only_connector() -> None:
 
     plugin.register(context)
 
-    assert plugin.manifest.capabilities == ["youtube.account", "youtube.subscriptions", "youtube.liked_videos"]
-    assert context.connectors["youtube"]["capabilities"] == [
+    expected_capabilities = [
         "youtube.account",
         "youtube.subscriptions",
         "youtube.liked_videos",
+        "youtube.connection.start",
+        "youtube.sync",
+        "youtube.connection.disconnect",
+        "youtube.intelligence.rebuild",
     ]
+    assert plugin.manifest.capabilities == expected_capabilities
+    assert context.connectors["youtube"]["capabilities"] == expected_capabilities
 
 
 def test_youtube_auth_url_uses_readonly_scope_and_pkce() -> None:
