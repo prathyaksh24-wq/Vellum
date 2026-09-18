@@ -114,6 +114,45 @@ def test_ordinary_conversation_is_not_classified_as_an_app_action() -> None:
 
 
 @pytest.mark.asyncio
+async def test_book_import_nlp_opens_the_epub_picker_without_calling_agent(monkeypatch) -> None:
+    monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
+    monkeypatch.setattr(api, "_audited_turn_stream", passthrough)
+
+    def execute(action_id, arguments, _context, *, confirmed=False):
+        assert action_id == "book.import"
+        assert arguments == {}
+        assert confirmed is False
+        return {
+            "changed": False,
+            "client_effect": {"type": "book.import.picker.open", "accept": ".epub"},
+            "requires_user_selection": True,
+            "_target_kind": "books_library",
+            "_target_id": "books-library",
+            "_message": "Choose an EPUB to import.",
+        }
+
+    monkeypatch.setattr(api, "_app_action_runtime", AppActionRuntime(knowledge_source_handler=execute))
+
+    async def agent_must_not_run(**_kwargs):
+        raise AssertionError("a matched Book action must not call the conversational model")
+        yield ""
+
+    monkeypatch.setattr(api, "_stream_agent_turn", agent_must_not_run)
+    response = await api.chat_stream(api.ChatRequest(
+        message="import a book",
+        thread_id="chat-books",
+        action_context=AppActionContext(source="ui"),
+    ))
+    events = parse_sse("".join([chunk async for chunk in response.body_iterator]))
+    receipt = next(data["receipt"] for name, data in events if name == "app.action.receipt")
+
+    assert receipt["status"] == "applied"
+    assert receipt["action_id"] == "book.import"
+    assert receipt["result"]["client_effect"] == {"type": "book.import.picker.open", "accept": ".epub"}
+    assert next(data["response"]["output_text"] for name, data in events if name == "response.completed") == "Choose an EPUB to import."
+
+
+@pytest.mark.asyncio
 async def test_observability_nlp_streams_a_navigation_receipt_without_calling_agent(monkeypatch) -> None:
     monkeypatch.setattr(curator_runtime, "get_curator_runtime", lambda: SimpleNamespace(mark_activity=lambda: None))
     monkeypatch.setattr(api, "_audited_turn_stream", passthrough)

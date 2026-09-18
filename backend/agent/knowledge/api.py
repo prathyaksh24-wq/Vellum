@@ -58,24 +58,27 @@ async def book_library_import(
     scan_approved: Annotated[bool, Form()],
     local_only: Annotated[bool, Form()] = True,
 ) -> dict[str, Any]:
-    if rights_attestation_version != RIGHTS_ATTESTATION_VERSION:
-        await file.close()
-        raise HTTPException(status_code=409, detail={"code": "BOOK_RIGHTS_ATTESTATION_REQUIRED"})
-    if not str(file.filename or "").lower().endswith(".epub"):
-        await file.close()
-        raise HTTPException(status_code=422, detail={"code": "BOOK_EPUB_REQUIRED"})
-    if not scan_approved:
-        await file.close()
-        raise HTTPException(status_code=409, detail={"code": "BOOK_SCAN_APPROVAL_REQUIRED"})
     library = _book_library()
-    result = await core_import_book_epub(
-        file=file, user_id=library.user_id, rights_attestation_version=rights_attestation_version,
-        scan_approved=scan_approved, local_only=local_only,
-    )
-    if result.error_code:
-        return {**await asyncio.to_thread(library.detail, result.import_id),
-                "status": result.status, "error_code": result.error_code}
-    return await asyncio.to_thread(library.materialize, result.import_id)
+    maximum = library.core.book_ingestion.policy.max_asset_bytes
+    try:
+        if file.size is not None and file.size > maximum:
+            raise HTTPException(status_code=413, detail={"code": "BOOK_EPUB_TOO_LARGE"})
+        content = await file.read(maximum + 1)
+    finally:
+        await file.close()
+    try:
+        return await asyncio.to_thread(
+            library.import_epub,
+            filename=str(file.filename or ""),
+            content=content,
+            rights_attestation_version=rights_attestation_version,
+            scan_approved=scan_approved,
+            local_only=local_only,
+        )
+    except ValueError as exc:
+        code = str(exc)
+        status_code = 413 if code == "BOOK_EPUB_TOO_LARGE" else 422 if code in {"BOOK_EPUB_REQUIRED", "BOOK_EPUB_EMPTY"} else 409
+        raise HTTPException(status_code=status_code, detail={"code": code}) from exc
 
 
 @router.get("/books/library/{import_id}")

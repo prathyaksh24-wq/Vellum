@@ -45,6 +45,7 @@ from agent.app_actions.api import router as app_actions_router
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.automations import AutomationActionService
 from agent.app_actions.coding_github import CodingGitHubActionService
+from agent.app_actions.knowledge_sources import KnowledgeSourceActionService
 from agent.app_actions.models import AppActionContext
 from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.runtime import get_app_action_runtime
@@ -115,6 +116,7 @@ from agent.plugins.google_calendar_api import (
 )
 from agent.plugins.google_calendar_runtime import portable_google_calendar_status
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
+from agent.plugins.youtube_controls import youtube_plugin_contribution
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
@@ -159,6 +161,9 @@ _coding_github_actions = CodingGitHubActionService(coding_service=coding_service
 _app_action_runtime.set_coding_github_handler(_coding_github_actions.execute)
 _automation_actions = AutomationActionService()
 _app_action_runtime.set_automation_handler(_automation_actions.execute)
+_knowledge_source_actions = KnowledgeSourceActionService()
+_app_action_runtime.set_knowledge_source_handler(_knowledge_source_actions.execute)
+_app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
 
 
 class _ThreadTurnCoordinator:

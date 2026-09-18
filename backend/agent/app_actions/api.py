@@ -1,6 +1,11 @@
 """HTTP adapter for the App Action Runtime."""
 
-from fastapi import APIRouter, HTTPException
+from __future__ import annotations
+
+import asyncio
+from typing import Annotated
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from agent.app_actions.attachments import MAX_DATA_URL_CHARS, AttachmentImportError, get_attachment_import_service
@@ -10,9 +15,13 @@ from agent.app_actions.models import (
     AppActionCatalog,
     AppActionCancelEnvelope,
     AppActionConfirmEnvelope,
+    AppActionContext,
     AppActionDispatchEnvelope,
+    AppActionRequest,
     AppActionUndoEnvelope,
 )
+from agent.app_actions.knowledge_sources import BOOK_IMPORT_ACTION_ID
+from agent.knowledge.runtime import get_knowledge_core
 from agent.app_actions.runtime import get_app_action_runtime
 
 
@@ -48,6 +57,36 @@ def prepare_attachments(envelope: AttachmentPrepareEnvelope) -> dict:
             detail={"code": exc.code, "message": str(exc), **exc.details},
         ) from exc
     return {"attachments": [attachment.model_dump(mode="json") for attachment in attachments]}
+
+
+@router.post("/books/import", response_model=ActionReceipt)
+async def import_book_action(
+    file: Annotated[UploadFile, File(...)],
+    rights_attestation_version: Annotated[str, Form(max_length=120)],
+    scan_approved: Annotated[bool, Form()],
+    local_only: Annotated[bool, Form()] = True,
+    conversation_id: Annotated[str, Form(max_length=240)] = "",
+) -> ActionReceipt:
+    """Move selected EPUB bytes into the same typed action used by chat."""
+
+    maximum = get_knowledge_core().book_ingestion.policy.max_asset_bytes
+    filename = str(file.filename or "")
+    try:
+        content = await file.read(maximum + 1)
+    finally:
+        await file.close()
+    request = AppActionRequest(
+        action_id=BOOK_IMPORT_ACTION_ID,
+        arguments={
+            "file_name": filename,
+            "rights_attestation_version": rights_attestation_version,
+            "scan_approved": scan_approved,
+            "local_only": local_only,
+            "_content": content,
+        },
+    )
+    context = AppActionContext(source="ui", invocation_conversation_id=conversation_id.strip())
+    return await asyncio.to_thread(get_app_action_runtime().dispatch, request, context)
 
 
 @router.post("/dispatch", response_model=ActionReceipt)

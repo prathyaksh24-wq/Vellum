@@ -9,7 +9,12 @@ from zipfile import BadZipFile
 from PIL import Image, UnidentifiedImageError
 
 from agent.knowledge.book_documents import BookDocumentError, read_epub_presentation
-from agent.knowledge.models import BookDocumentRequest, BookMaterializationRequest, BookQualityRequest
+from agent.knowledge.models import (
+    BookDocumentRequest,
+    BookImportRequest,
+    BookMaterializationRequest,
+    BookQualityRequest,
+)
 
 if TYPE_CHECKING:
     from agent.knowledge.service import KnowledgeCore
@@ -29,6 +34,46 @@ class BookLibrary:
         return {"schema_version": SCHEMA_VERSION, "items": [self.book(item) for item in ids],
                 "total": total, "limit": limit, "offset": offset,
                 "rights_attestation_version": RIGHTS_ATTESTATION_VERSION}
+
+    def import_epub(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        rights_attestation_version: str,
+        scan_approved: bool,
+        local_only: bool,
+    ) -> dict[str, Any]:
+        """Import through the canonical EPUB pipeline, then project the Books library view."""
+
+        if rights_attestation_version != RIGHTS_ATTESTATION_VERSION:
+            raise ValueError("BOOK_RIGHTS_ATTESTATION_REQUIRED")
+        if not str(filename or "").strip().casefold().endswith(".epub"):
+            raise ValueError("BOOK_EPUB_REQUIRED")
+        if scan_approved is not True:
+            raise ValueError("BOOK_SCAN_APPROVAL_REQUIRED")
+        if not content:
+            raise ValueError("BOOK_EPUB_EMPTY")
+        if len(content) > self.core.book_ingestion.policy.max_asset_bytes:
+            raise ValueError("BOOK_EPUB_TOO_LARGE")
+
+        status = self.core.import_book_epub(
+            BookImportRequest(
+                user_id=self.user_id,
+                rights_attestation_version=rights_attestation_version,
+                scan_approved=True,
+                requested_by="user",
+                local_only=bool(local_only),
+            ),
+            bytes(content),
+        )
+        if status.error_code:
+            return {
+                **self.detail(status.import_id),
+                "status": status.status,
+                "error_code": status.error_code,
+            }
+        return self.materialize(status.import_id)
 
     def _source(self, import_id: str):
         status = self.core.get_book_ingestion_status(user_id=self.user_id, import_id=import_id)

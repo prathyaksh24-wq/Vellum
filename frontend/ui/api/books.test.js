@@ -28,14 +28,14 @@ test('encodes identities and permits cover assets only from the Books endpoint',
   for (const path of ['https://remote.example/cover', '/api/knowledge/core/books/library/../private/cover', '//evil.example/cover', '/etc/passwd']) expect(api.coverUrl(path)).toBe('');
 });
 
-test('import uses multipart with explicit consent and no user identity', async () => {
-  const request = vi.fn(async () => ({schema_version:'books-library-v1'}));
+test('import uses the App Action upload endpoint with explicit consent and no user identity', async () => {
+  const request = vi.fn(async () => ({action_id:'book.import',status:'applied',result:{library:{schema_version:'books-library-v1'}}}));
   const api = await load(request);
   const file = new File(['epub'], 'example.epub');
   expect(() => api.importEpub(file, {scanApproved:false})).toThrow(/Confirm/);
   await api.importEpub(file, {scanApproved:true, rightsAttestationVersion:'test-v1', localOnly:true, user_id:'untrusted'});
   const [path, opts] = request.mock.calls[0];
-  expect(path).toBe('/api/knowledge/core/books/library/import');
+  expect(path).toBe('/api/app-actions/books/import');
   expect(opts.body.get('scan_approved')).toBe('true');
   expect(opts.body.get('local_only')).toBe('true');
   expect(opts.body.has('user_id')).toBe(false);
