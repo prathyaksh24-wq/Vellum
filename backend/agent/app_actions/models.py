@@ -66,6 +66,9 @@ class AppActionContext(BaseModel):
     reasoning_mode: str = ""
     store_to_memory: bool = True
     petdex: dict[str, Any] = Field(default_factory=dict)
+    device_settings: dict[str, Any] = Field(
+        default_factory=lambda: {"version": 1, "revision": 0, "values": {}}
+    )
 
 
 class AppActionRequest(BaseModel):

@@ -18,6 +18,7 @@ import re
 import secrets
 import shutil
 import sys
+import threading
 import time
 from typing import Any, Literal
 import urllib.error
@@ -50,6 +51,7 @@ from agent.app_actions.models import AppActionContext
 from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.runtime import get_app_action_runtime
 from agent.app_actions.session_controls import SessionControlService
+from agent.app_actions.settings_runtime import SettingsRuntimeActionService
 from agent.app_actions.lifecycle_controls import (
     PLUGIN_STATE_SET_ACTION_ID,
     PluginSkillActionService,
@@ -82,7 +84,7 @@ from agent.memory.sessions import SessionsReader
 from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
 from agent.llm.routing.api import router as llm_routing_router
-from agent.llm.routing.runtime import reset_routing_runtime
+from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
@@ -107,6 +109,7 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.plugins.spotify_controls import SPOTIFY_REDIRECT_URI, spotify_plugin_contribution
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.google_calendar_api import (
@@ -154,7 +157,7 @@ _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
 _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SECONDS", "900")))
-_dreaming_lock = asyncio.Lock()
+_dreaming_lock = threading.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _coding_github_actions = CodingGitHubActionService(coding_service=coding_service)
@@ -164,6 +167,7 @@ _app_action_runtime.set_automation_handler(_automation_actions.execute)
 _knowledge_source_actions = KnowledgeSourceActionService()
 _app_action_runtime.set_knowledge_source_handler(_knowledge_source_actions.execute)
 _app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
+_app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
 
 class _ThreadTurnCoordinator:
@@ -241,7 +245,6 @@ _session_control_service = SessionControlService(
 )
 _app_action_runtime.set_session_control_handler(_session_control_service.execute)
 _oauth_flows: dict[str, dict[str, Any]] = {}
-SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
 _project_context_singleton: ProjectContext | None = None
 _skill_surface_singleton: SkillSurfaceService | None = None
@@ -919,6 +922,25 @@ def _set_env_value(key: str, value: str) -> None:
         get_provider_registry.cache_clear()
     except Exception:
         pass
+
+
+def _write_provider_credential(provider: str, secret: str) -> None:
+    env_name = _PROVIDER_KEY_ENV.get(provider)
+    if env_name is None:
+        raise ValueError(f"Unsupported provider: {provider}")
+    _set_env_value(env_name, secret)
+    reset_routing_runtime()
+
+
+_settings_runtime_actions = SettingsRuntimeActionService(
+    memory_store_provider=lambda: _memory_orchestrator.store,
+    provider_registry_provider=get_provider_registry,
+    routing_runtime_provider=get_routing_runtime,
+    credential_writer=_write_provider_credential,
+    memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
+    conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
+)
+_app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
 
 
 def _x_oauth_file(provider: str) -> Path:
@@ -1771,7 +1793,7 @@ def _last_dreaming_run_at() -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> bool:
+def _run_dreaming_cycle(*, reason: str = "auto", force: bool = False) -> bool:
     store = getattr(_memory_orchestrator, "store", None)
     if store is None:
         return False
@@ -1792,9 +1814,9 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
         elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
         if elapsed < _DREAMING_COOLDOWN_SECONDS:
             return False
-    if _dreaming_lock.locked():
+    if not _dreaming_lock.acquire(blocking=False):
         return False
-    async with _dreaming_lock:
+    try:
         try:
             pending_count = len(store.list_pending())
         except Exception:
@@ -1803,8 +1825,8 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
             return False
         _dreaming_status.update({"status": "running", "reason": reason, "pending_count": pending_count})
         try:
-            import_result = await asyncio.to_thread(_import_ui_conversations_to_memory)
-            result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
+            import_result = _import_ui_conversations_to_memory()
+            result = _memory_orchestrator.run_dreaming()
             result = dict(result)
             result["conversation_import"] = import_result
         except Exception as exc:
@@ -1827,6 +1849,21 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
             }
         )
         return True
+    finally:
+        _dreaming_lock.release()
+
+
+async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> bool:
+    return await asyncio.to_thread(_run_dreaming_cycle, reason=reason, force=force)
+
+
+def _run_memory_dreaming_action() -> dict[str, Any]:
+    ok = _run_dreaming_cycle(reason="app_action", force=True)
+    if not ok:
+        if _dreaming_status.get("status") == "error":
+            raise RuntimeError(str(_dreaming_status.get("error") or "dreaming failed"))
+        raise RuntimeError("dreaming is already running")
+    return dict(_dreaming_status.get("last_result") or {})
 
 
 def _vector_health() -> dict[str, Any]:
@@ -5107,8 +5144,7 @@ async def set_provider_key(request: ProviderKeyRequest, response: Response) -> d
     api_key = request.api_key.strip()
     if not api_key:
         raise HTTPException(status_code=400, detail="api_key cannot be empty")
-    _set_env_value(_PROVIDER_KEY_ENV[provider], api_key)
-    reset_routing_runtime()
+    _write_provider_credential(provider, api_key)
     response.headers["Deprecation"] = "true"
     response.headers["Sunset"] = "Thu, 01 Jul 2027 00:00:00 GMT"
     models = await list_models()

@@ -312,3 +312,110 @@ describe("Conversation session-control receipts", () => {
     ]);
   });
 });
+
+describe("Device Settings App Action adapter", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  test("migrates existing device preferences into one revisioned owner", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage({
+      "vellum-background": "aurora",
+      "vellum-accent": "blue-eclipse",
+      "vellum-dock-position": "left",
+      "vellum-dock-locked": "1",
+      "vellum-pers": JSON.stringify({ warm: "more", memory: false }),
+    });
+
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage, client: {} });
+
+    expect(runtime.snapshot()).toMatchObject({
+      version: 1,
+      revision: 0,
+      values: {
+        background: "aurora",
+        accent: "blue-eclipse",
+        dock_position: "left",
+        dock_locked: true,
+        personalization: { warm: "more" },
+      },
+    });
+    expect(runtime.snapshot().values.personalization).not.toHaveProperty("memory");
+    expect(storage.value("vellum-background")).toBeUndefined();
+    expect(JSON.parse(storage.value(AppActions.DEVICE_SETTINGS_STORAGE_KEY)).values.accent).toBe("blue-eclipse");
+  });
+
+  test("visible controls and NLP receipts converge on the same persisted state", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage();
+    const applied = {
+      request_id: "device-1",
+      action_id: "settings.device.update",
+      status: "applied",
+      result: {
+        changed: true,
+        device_settings_patch: {
+          version: 1,
+          base_revision: 0,
+          revision: 1,
+          values: { accent: "matrix", personalization: { webSearch: false } },
+        },
+      },
+    };
+    const client = { dispatch: vi.fn(async () => applied) };
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage, client, requestIdFactory: () => "device-1" });
+
+    await runtime.dispatch({ accent: "matrix", personalization: { webSearch: false } }, { conversationId: "chat-1" });
+
+    expect(client.dispatch).toHaveBeenCalledWith(
+      {
+        request_id: "device-1",
+        action_id: "settings.device.update",
+        action_version: "1",
+        arguments: { patch: { accent: "matrix", personalization: { webSearch: false } } },
+      },
+      expect.objectContaining({
+        source: "ui",
+        invocation_conversation_id: "chat-1",
+        device_settings: expect.objectContaining({ revision: 0 }),
+      }),
+    );
+    expect(runtime.snapshot()).toMatchObject({
+      revision: 1,
+      values: { accent: "matrix", personalization: { webSearch: false } },
+    });
+    const reloaded = AppActions.createDeviceSettingsRuntime({ storage, client: {} });
+    expect(reloaded.snapshot()).toEqual(runtime.snapshot());
+  });
+
+  test("rejects stale device receipts instead of overwriting newer choices", async () => {
+    const AppActions = await loadRuntime();
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage: memoryStorage(), client: {} });
+
+    expect(() => runtime.applyReceipt({
+      status: "applied",
+      result: { device_settings_patch: { version: 1, base_revision: 7, revision: 8, values: { accent: "matrix" } } },
+    })).toThrow("STALE_DEVICE_SETTINGS_RECEIPT");
+    expect(runtime.snapshot().values.accent).toBe("default");
+  });
+
+  test("keeps the previous device state when an action fails", async () => {
+    const AppActions = await loadRuntime();
+    const client = {
+      dispatch: vi.fn(async () => ({
+        action_id: "settings.device.update",
+        status: "failed",
+        error_code: "INVALID_ACTION_ARGUMENTS",
+        result: {},
+      })),
+    };
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage: memoryStorage(), client });
+
+    const receipt = await runtime.dispatch({ accent: "not-a-palette" });
+
+    expect(receipt.status).toBe("failed");
+    expect(runtime.snapshot()).toMatchObject({ revision: 0, values: { accent: "default" } });
+  });
+});

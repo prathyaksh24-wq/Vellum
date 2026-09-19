@@ -17,6 +17,20 @@
   var CONVERSATION_FORK_ACTION_ID = "conversation.fork";
   var CONVERSATION_WINDOW_OPEN_ACTION_ID = "conversation.window.open";
   var CONVERSATION_SHARE_ACTION_ID = "conversation.share";
+  var DEVICE_SETTINGS_STORAGE_KEY = "vellum-device-settings-v1";
+  var DEVICE_SETTINGS_UPDATE_ACTION_ID = "settings.device.update";
+  var DEVICE_SETTINGS_DEFAULTS = {
+    background: "galaxy",
+    accent: "default",
+    dock_position: "auto",
+    dock_locked: false,
+    computer_use_preview: false,
+    personalization: {
+      baseStyle: "default", warm: "default", enthusiastic: "default", headers: "default", emoji: "default",
+      fastAnswers: true, custom: "", nickname: "", occupation: "", about: "", recordHist: true,
+      webSearch: true, canvas: true, voice: true, advVoice: true, connector: true,
+    },
+  };
 
   var SURFACE_DEFAULTS = {
     workspace: { visible: true, location: "application", properties: { theme: "dark" } },
@@ -278,6 +292,112 @@
     };
   }
 
+  function normalizeDeviceSettings(value) {
+    var source = value && typeof value === "object" ? value : {};
+    var rawValues = source.values && typeof source.values === "object" ? source.values : {};
+    return {
+      version: Number.isInteger(source.version) && source.version > 0 ? source.version : 1,
+      revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
+      values: Object.assign({}, DEVICE_SETTINGS_DEFAULTS, rawValues, {
+        personalization: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.personalization, rawValues.personalization || {}),
+      }),
+    };
+  }
+
+  function loadDeviceSettings(storage) {
+    var stored = safeGet(storage, DEVICE_SETTINGS_STORAGE_KEY);
+    var raw = null;
+    if (stored) {
+      try { raw = JSON.parse(stored); } catch (_) {}
+    }
+    if (raw) return normalizeDeviceSettings(raw);
+    var values = clone(DEVICE_SETTINGS_DEFAULTS);
+    var background = safeGet(storage, "vellum-background");
+    var accent = safeGet(storage, "vellum-accent");
+    var dockPosition = safeGet(storage, "vellum-dock-position");
+    var dockLocked = safeGet(storage, "vellum-dock-locked");
+    var personalization = safeGet(storage, "vellum-pers");
+    if (background) values.background = background;
+    if (accent) values.accent = accent;
+    if (dockPosition) values.dock_position = dockPosition;
+    if (dockLocked === "0" || dockLocked === "1") values.dock_locked = dockLocked === "1";
+    if (personalization) {
+      try {
+        var parsed = JSON.parse(personalization);
+        if (parsed && typeof parsed === "object") {
+          Object.keys(DEVICE_SETTINGS_DEFAULTS.personalization).forEach(function (key) {
+            if (parsed[key] !== undefined) values.personalization[key] = parsed[key];
+          });
+        }
+      } catch (_) {}
+    }
+    var migrated = normalizeDeviceSettings({ version: 1, revision: 0, values: values });
+    safeSet(storage, DEVICE_SETTINGS_STORAGE_KEY, JSON.stringify(migrated));
+    ["vellum-background", "vellum-accent", "vellum-dock-position", "vellum-dock-locked", "vellum-pers"].forEach(function (key) {
+      safeRemove(storage, key);
+    });
+    return migrated;
+  }
+
+  function createDeviceSettingsRuntime(options) {
+    options = options || {};
+    var storage = options.storage === undefined ? window.localStorage : options.storage;
+    var client = options.client || (window.VellumApi && window.VellumApi.appActions);
+    var requestIdFactory = options.requestIdFactory || function () {
+      return "ui_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+    };
+    var contextResolver = options.contextResolver || function () { return {}; };
+    var state = loadDeviceSettings(storage);
+    var listeners = [];
+
+    function snapshot() { return clone(state); }
+    function persist() { safeSet(storage, DEVICE_SETTINGS_STORAGE_KEY, JSON.stringify(state)); }
+    function emit() {
+      var value = snapshot();
+      listeners.slice().forEach(function (listener) { listener(value); });
+    }
+    function context(source, conversationId) {
+      return Object.assign({
+        source: source || "ui",
+        invocation_conversation_id: conversationId || "",
+        device_id: "local-device",
+        device_settings: snapshot(),
+      }, contextResolver() || {});
+    }
+    function applyReceipt(receipt) {
+      if (!receipt || ["applied", "undone"].indexOf(receipt.status) < 0) return receipt;
+      var patch = receipt.result && receipt.result.device_settings_patch;
+      if (!patch || !patch.values) return receipt;
+      if (patch.version !== state.version) throw new Error("DEVICE_SETTINGS_VERSION_MISMATCH");
+      if (patch.base_revision !== state.revision) throw new Error("STALE_DEVICE_SETTINGS_RECEIPT");
+      var nextValues = Object.assign({}, state.values, patch.values);
+      if (patch.values.personalization) {
+        nextValues.personalization = Object.assign({}, state.values.personalization, patch.values.personalization);
+      }
+      state = normalizeDeviceSettings({ version: patch.version, revision: patch.revision, values: nextValues });
+      persist();
+      emit();
+      return receipt;
+    }
+    async function dispatch(patch, dispatchOptions) {
+      if (!client || typeof client.dispatch !== "function") throw new Error("APP_ACTIONS_UNREACHABLE");
+      dispatchOptions = dispatchOptions || {};
+      var request = {
+        request_id: requestIdFactory(),
+        action_id: DEVICE_SETTINGS_UPDATE_ACTION_ID,
+        action_version: "1",
+        arguments: { patch: patch || {} },
+      };
+      var receipt = await client.dispatch(request, context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""));
+      return applyReceipt(receipt);
+    }
+    function subscribe(listener) {
+      listeners.push(listener);
+      return function () { listeners = listeners.filter(function (item) { return item !== listener; }); };
+    }
+    return { snapshot: snapshot, context: context, applyReceipt: applyReceipt, dispatch: dispatch, subscribe: subscribe };
+  }
+
   function createConversationActionRuntime(options) {
     options = options || {};
     var client = options.client || (window.VellumApi && window.VellumApi.appActions);
@@ -438,9 +558,13 @@
     CONVERSATION_FORK_ACTION_ID: CONVERSATION_FORK_ACTION_ID,
     CONVERSATION_WINDOW_OPEN_ACTION_ID: CONVERSATION_WINDOW_OPEN_ACTION_ID,
     CONVERSATION_SHARE_ACTION_ID: CONVERSATION_SHARE_ACTION_ID,
+    DEVICE_SETTINGS_STORAGE_KEY: DEVICE_SETTINGS_STORAGE_KEY,
+    DEVICE_SETTINGS_UPDATE_ACTION_ID: DEVICE_SETTINGS_UPDATE_ACTION_ID,
+    DEVICE_SETTINGS_DEFAULTS: clone(DEVICE_SETTINGS_DEFAULTS),
     SURFACE_DEFAULTS: clone(SURFACE_DEFAULTS),
     SURFACE_DEFINITIONS: clone(SURFACE_DEFINITIONS),
     createWorkspaceLayoutRuntime: createWorkspaceLayoutRuntime,
+    createDeviceSettingsRuntime: createDeviceSettingsRuntime,
     createConversationActionRuntime: createConversationActionRuntime,
   };
 })();

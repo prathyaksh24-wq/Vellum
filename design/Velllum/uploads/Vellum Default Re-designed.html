@@ -2638,7 +2638,9 @@ const applyBackgroundTheme = (entry, mode='dark') => {
   let accent = palette.accent;
   let accent2 = palette.accent2;
   try {
-    const selectedAccent = ACCENTS.find(item => item.id === localStorage.getItem('vellum-accent'));
+    const savedDeviceSettings = JSON.parse(localStorage.getItem('vellum-device-settings-v1') || '{}');
+    const savedAccent = savedDeviceSettings && savedDeviceSettings.values && savedDeviceSettings.values.accent;
+    const selectedAccent = ACCENTS.find(item => item.id === (savedAccent || localStorage.getItem('vellum-accent')));
     if (selectedAccent && selectedAccent.id !== 'default') {
       accent = backgroundMixHex(palette.accent, selectedAccent.accent, .24);
       accent2 = backgroundMixHex(palette.accent2, selectedAccent.accent2, .16);
@@ -2687,7 +2689,9 @@ const applyBackgroundTheme = (entry, mode='dark') => {
 const syncBackgroundTheme = () => {
   try {
     const root = document.documentElement;
-    applyBackgroundTheme(resolveBackground(localStorage.getItem('vellum-background') || root.dataset.background || 'galaxy'), root.dataset.theme || 'dark');
+    const saved = JSON.parse(localStorage.getItem('vellum-device-settings-v1') || '{}');
+    const background = saved && saved.values && saved.values.background;
+    applyBackgroundTheme(resolveBackground(background || localStorage.getItem('vellum-background') || root.dataset.background || 'galaxy'), root.dataset.theme || 'dark');
   } catch {}
 };
 const AmbientBackground = () => null;
@@ -3513,7 +3517,8 @@ let MODELS = [
 ];
 const DEFAULT_MODEL = 'google/gemma-4-31b-it';
 const AttachmentRuntime = window.VellumUI && window.VellumUI.Attachments;
-const readDefaultModel = () => { try { return localStorage.getItem('vellum-default-model') || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; } };
+let APPLICATION_DEFAULT_MODEL = DEFAULT_MODEL;
+const readDefaultModel = () => APPLICATION_DEFAULT_MODEL;
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
   { id: 'anthropic',  name: 'Anthropic',  note: 'Claude Opus 5 / Sonnet 4.5' },
@@ -6769,14 +6774,15 @@ function KnowledgeGraphView({ onBack, onAttachContext, onAction }){
     </div>
   );
 }
-function MemoryConsole({ onClose, onBack, page, memoryData, onRefresh, onDreamComplete }){
+function MemoryConsole({ onClose, onBack, page, memoryData, onRefresh, onDreamComplete, onMemoryAction }){
   const [tab, setTab] = useState('summary');
   const [q, setQ] = useState('');
   const [dreamStatus, setDreamStatus] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
   const data = memoryData || {summary:null, saved:[], archived:[], entries:[], loading:true, error:''};
   const loading = !!data.loading;
-  const error = data.error || '';
+  const error = actionError || data.error || '';
 
   const load = async () => {
     try {
@@ -6788,14 +6794,22 @@ function MemoryConsole({ onClose, onBack, page, memoryData, onRefresh, onDreamCo
     } catch (err) { console.warn('Memory refresh failed', err); }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('vellum:memory-changed', refresh);
+    return () => window.removeEventListener('vellum:memory-changed', refresh);
+  }, []);
   const runDream = async () => {
     if (busy) return;
-    setBusy(true); setError('');
+    setBusy(true); setActionError('');
     try {
-      const result = await API.settings.memoryDreamingRun();
-      if (onDreamComplete) await onDreamComplete(result);
-      await load();
-    } catch (err) { setError((err && err.message) || 'Dreaming failed.'); }
+      if (!onMemoryAction) throw new Error('Memory actions unavailable');
+      const receipt = await onMemoryAction('memory.dreaming.run', {});
+      if (receipt && receipt.status === 'applied') {
+        if (onDreamComplete) await onDreamComplete(receipt.result);
+        await load();
+      }
+    } catch (err) { setActionError((err && err.message) || 'Dreaming failed.'); }
     finally { setBusy(false); }
   };
   const filterItems = items => items.filter(item => !q || String(item.text || item.content || '').toLowerCase().includes(q.toLowerCase()));
@@ -6969,7 +6983,7 @@ const MemoryListRow = ({memory, tab, menuOpen, children}) => {
   </div>;
 };
 
-const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
+const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged, onMemoryAction}) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [summary, setSummary] = useState((memoryData && memoryData.summary) || null);
@@ -6991,12 +7005,20 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
     }
   };
   useEffect(() => { if (!summary) load(); }, []);
+  useEffect(() => {
+    const refreshMemory = () => load();
+    window.addEventListener('vellum:memory-changed', refreshMemory);
+    return () => window.removeEventListener('vellum:memory-changed', refreshMemory);
+  }, []);
   const refresh = async () => {
     setBusy(true);
     setError('');
     try {
-      await API.settings.memoryImportConversations();
-      await API.settings.memoryDreamingRun();
+      if (!onMemoryAction) throw new Error('Memory actions unavailable');
+      const receipt = await onMemoryAction('memory.dreaming.run', {});
+      if (!receipt || !['applied','confirmation_required'].includes(receipt.status)) {
+        throw new Error('Memory action failed');
+      }
       await load();
     } catch (err) {
       setError('Memory refresh failed.');
@@ -7011,7 +7033,9 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
     setBusy(true);
     setError('');
     try {
-      await API.settings.createMemory({text, kind: 'manual', scope: 'global'});
+      if (!onMemoryAction) throw new Error('Memory actions unavailable');
+      const receipt = await onMemoryAction('memory.entry.create', {text, kind:'manual', scope:'global'});
+      if (!receipt || receipt.status !== 'applied') throw new Error('Memory action failed');
       setDraft('');
       await load();
     } catch (err) {
@@ -7055,7 +7079,7 @@ const MemorySummaryCard = ({memoryData, onClose, onTurnOff, onChanged}) => {
   );
 };
 
-const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
+const SavedMemoriesCard = ({memoryData, onClose, onChanged, onMemoryAction, onMemorySettings}) => {
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('saved');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -7078,6 +7102,11 @@ const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
     }
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const refresh = () => load();
+    window.addEventListener('vellum:memory-changed', refresh);
+    return () => window.removeEventListener('vellum:memory-changed', refresh);
+  }, []);
   useEffect(() => setAutoManage(!memoryData || !memoryData.settings || memoryData.settings.dreaming_enabled !== false), [memoryData && memoryData.settings]);
   const runAction = async action => {
     setBusy(true);
@@ -7095,9 +7124,10 @@ const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
   };
   const toggleAutoManage = async () => {
     const next = !autoManage;
-    setAutoManage(next);
-    try { await API.settings.updateMemorySettings({dreaming_enabled: next}); }
-    catch (err) { setAutoManage(!next); setError('Could not update automatic memory management.'); }
+    try {
+      if (!onMemorySettings) throw new Error('Memory settings unavailable');
+      await onMemorySettings({dreaming_enabled: next});
+    } catch (err) { setError('Could not update automatic memory management.'); }
   };
   const visibleSaved = items.filter(memory => !isMemoryOperationalNoise(memory && memory.text));
   const visibleArchived = archived.filter(memory => !isMemoryOperationalNoise(memory && memory.text));
@@ -7117,7 +7147,7 @@ const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
             {menuOpen && <div className="sm-menu">
               <div className="sm-menu-row">Automatically manage<div className={'sw' + (autoManage ? ' on' : '')} role="switch" onClick={toggleAutoManage}/></div>
               <div className="sm-menu-item" onClick={() => { setHistoryOpen(h => !h); setMenuOpen(false); }}>View history</div>
-              <div className="sm-menu-item" onClick={() => runAction(() => API.settings.memoryImportConversations())}>Import old chats</div>
+              <div className="sm-menu-item" onClick={() => runAction(() => onMemoryAction('memory.conversations.import', {}))}>Import old chats</div>
             </div>}
           </div>
         </div>
@@ -7140,11 +7170,11 @@ const SavedMemoriesCard = ({memoryData, onClose, onChanged}) => {
                 {rowMenu === m.id && <div className="sm-row-menu" onClick={e => e.stopPropagation()}>
                   {tab === 'saved' && <div className="sm-row-del" onClick={() => {
                     const next = window.prompt('Update memory', m.text || '');
-                    if (next !== null && next.trim()) runAction(() => API.settings.updateMemory(m.id, {text: next.trim()}));
+                    if (next !== null && next.trim()) runAction(() => onMemoryAction('memory.entry.update', {memory_id:m.id, text:next.trim()}));
                   }}><IcPenLine size={15}/>Edit</div>}
-                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.pinMemory(m.id, !m.pinned))}><IcCheck size={15}/>{m.pinned ? 'Unpin' : 'Pin'}</div>}
-                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.archiveMemory(m.id))}><IcArchive size={15}/>Archive</div>}
-                  {tab !== 'recent' && <div className="sm-row-del" onClick={() => runAction(() => API.settings.deleteMemory(m.id))}><IcTrash size={15}/>Delete</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => onMemoryAction('memory.entry.pin', {memory_id:m.id, pinned:!m.pinned}))}><IcCheck size={15}/>{m.pinned ? 'Unpin' : 'Pin'}</div>}
+                  {tab === 'saved' && <div className="sm-row-del" onClick={() => runAction(() => onMemoryAction('memory.entry.archive', {memory_id:m.id}))}><IcArchive size={15}/>Archive</div>}
+                  {tab !== 'recent' && <div className="sm-row-del" onClick={() => runAction(() => onMemoryAction('memory.entry.delete', {memory_id:m.id}))}><IcTrash size={15}/>Delete</div>}
                   <div className="sm-row-div"/>
                   <div className="sm-row-meta">{tab === 'archived' ? 'Archived' : (tab === 'recent' ? 'Indexed' : 'Saved')} {memoryEntryDate(m)} from <span className="sm-row-chat">{m.source_thread_id || 'chat'}</span>.</div>
                 </div>}
@@ -7344,20 +7374,31 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
-  const [accent, setAccentState] = useState(() => { try { return localStorage.getItem('vellum-accent') || 'default'; } catch { return 'default'; } });
   const sendPresentation = workspaceLayout && workspaceLayout.surfaces && workspaceLayout.surfaces['composer.send'];
   const [sendLabelDraft, setSendLabelDraft] = useState(() => String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send'));
   useEffect(() => setSendLabelDraft(String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send')), [sendPresentation && sendPresentation.properties && sendPresentation.properties.label]);
-  const setAccent = id => { setAccentState(id); try { localStorage.setItem('vellum-accent', id); } catch {} applyAccent(id); };
-  const [pers, setPers] = useState(() => { try { return {...DEFAULT_PERS, ...(JSON.parse(localStorage.getItem('vellum-pers')) || {})}; } catch { return DEFAULT_PERS; } });
-  useEffect(() => { try { localStorage.setItem('vellum-pers', JSON.stringify(pers)); } catch {} }, [pers]);
-  const setP = (k, v) => setPers(p => ({...p, [k]: v}));
+  const setAccent = id => onDeviceSettings && onDeviceSettings({accent:id});
+  const [pers, setPers] = useState(() => ({...DEFAULT_PERS, ...(personalization || {})}));
+  useEffect(() => setPers(current => ({...current, ...(personalization || {})})), [personalization]);
+  const setP = async (k, v) => {
+    const previous = pers[k];
+    setPers(p => ({...p, [k]: v}));
+    const receipt = onDeviceSettings ? await onDeviceSettings({personalization:{[k]:v}}) : null;
+    if (!receipt || receipt.status !== 'applied') setPers(p => ({...p, [k]: previous}));
+  };
+  const setPDraft = (k, v) => setPers(p => ({...p, [k]: v}));
+  const savePDraft = async k => {
+    const receipt = onDeviceSettings ? await onDeviceSettings({personalization:{[k]:pers[k]}}) : null;
+    if (!receipt || receipt.status !== 'applied') {
+      setPers(p => ({...p, [k]:(personalization && personalization[k]) ?? DEFAULT_PERS[k]}));
+    }
+  };
   const applyMemorySettings = (settings) => {
     if (!settings) return;
     setPers(p => ({
@@ -7369,28 +7410,40 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
   };
   useEffect(() => applyMemorySettings(memoryData && memoryData.settings), [memoryData && memoryData.settings]);
   const setMemoryToggle = async (persKey, settingsKey, value) => {
-    setP(persKey, value);
     try {
-      const result = await API.settings.updateMemorySettings({[settingsKey]: value});
-      applyMemorySettings(result && result.settings);
-    } catch (err) {
-      setP(persKey, !value);
-    }
+      if (onMemorySettings) await onMemorySettings({[settingsKey]: value});
+    } catch (err) {}
   };
   const [memCardOpen, setMemCardOpen] = useState(false);
   const [savedMemOpen, setSavedMemOpen] = useState(false);
   useEffect(() => setKeyStatus((backendSettings && backendSettings.provider_keys) || {}), [backendSettings]);
+  useEffect(() => {
+    const configured = event => {
+      const provider = event && event.detail && event.detail.provider;
+      if (!provider) return;
+      setKeyStatus(status => ({...status, [provider]:true}));
+      setKeys(current => ({...current, [provider]:''}));
+      setSavingKey('');
+    };
+    window.addEventListener('vellum:provider-configured', configured);
+    const cancelled = event => {
+      const provider = event && event.detail && event.detail.provider;
+      if (provider) setSavingKey('');
+    };
+    window.addEventListener('vellum:provider-credential-cancelled', cancelled);
+    return () => {
+      window.removeEventListener('vellum:provider-configured', configured);
+      window.removeEventListener('vellum:provider-credential-cancelled', cancelled);
+    };
+  }, []);
   const saveProviderKey = async (provider) => {
     const value = (keys[provider] || '').trim();
     if (!value || savingKey) return;
     setSavingKey(provider);
     try {
-      if (onProviderKey) await onProviderKey(provider, value);
-      setKeyStatus(s => ({...s, [provider]: true}));
-      setKeys(k => ({...k, [provider]: ''}));
-    } finally {
-      setSavingKey('');
-    }
+      const receipt = onProviderKey ? await onProviderKey(provider, value) : null;
+      if (!receipt || receipt.status !== 'confirmation_required') setSavingKey('');
+    } catch (_) { setSavingKey(''); }
   };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
@@ -7451,7 +7504,7 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                 <div className="set-row">Settings surface<span className="sr-end"><button className="btn" aria-pressed="true" onClick={() => onSurfaceChange('settings', {visible:false})}>Hide now</button></span></div>
                 <div className="set-row">Composer size<span className="sr-end"><div className="ap-seg">{['compact','comfortable','large'].map(size => <button key={size} className={'ap-seg-b' + (workspaceLayout.surfaces.composer.properties.size === size ? ' on' : '')} aria-pressed={workspaceLayout.surfaces.composer.properties.size === size} onClick={() => onSurfaceChange('composer', {properties:{size}})}>{size === 'comfortable' ? 'Normal' : size[0].toUpperCase()+size.slice(1)}</button>)}</div></span></div>
                 <form className="set-row layout-label-row" onSubmit={event => { event.preventDefault(); onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}}); }}><label htmlFor="workspace-send-label">Send button label</label><span className="sr-end"><input id="workspace-send-label" value={sendLabelDraft} maxLength="24" onChange={event => setSendLabelDraft(event.target.value)}/><button className="btn" disabled={!sendLabelDraft.trim()}>Apply</button></span></form>
-                <div className="set-row">Registered defaults<span className="sr-end"><button className="btn" onClick={onLayoutReset}>Reset interface</button></span></div>
+                <div className="set-row">Workspace surface defaults<span className="sr-end"><button className="btn" onClick={onLayoutReset}>Reset surfaces</button></span></div>
               </div>}
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
@@ -7513,12 +7566,12 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                 <div>Fast answers<span className="sr-sub">Vellum can sometimes use its general knowledge to give fast, in-depth answers. These aren't personalized and don't use your memory.</span></div>
                 <span className="sr-end"><div className={'sw' + (pers.fastAnswers ? ' on' : '')} role="switch" aria-checked={pers.fastAnswers} onClick={() => setP('fastAnswers', !pers.fastAnswers)}/></span>
               </div>
-              <div className="pers-field"><label>Custom instructions</label><textarea className="pers-ta" value={pers.custom} onChange={e => setP('custom', e.target.value)} placeholder="Additional behavior, style, and tone preferences"/></div>
+              <div className="pers-field"><label>Custom instructions</label><textarea className="pers-ta" value={pers.custom} onChange={e => setPDraft('custom', e.target.value)} onBlur={() => savePDraft('custom')} placeholder="Additional behavior, style, and tone preferences"/></div>
 
               <div className="pers-h">About you</div>
-              <div className="pers-field"><label>Nickname</label><input value={pers.nickname} onChange={e => setP('nickname', e.target.value)} placeholder="What should Vellum call you?"/></div>
-              <div className="pers-field"><label>Occupation</label><input value={pers.occupation} onChange={e => setP('occupation', e.target.value)} placeholder="e.g. Family law attorney"/></div>
-              <div className="pers-field"><label>More about you</label><input value={pers.about} onChange={e => setP('about', e.target.value)} placeholder="Interests, values, or preferences to keep in mind"/></div>
+              <div className="pers-field"><label>Nickname</label><input value={pers.nickname} onChange={e => setPDraft('nickname', e.target.value)} onBlur={() => savePDraft('nickname')} placeholder="What should Vellum call you?"/></div>
+              <div className="pers-field"><label>Occupation</label><input value={pers.occupation} onChange={e => setPDraft('occupation', e.target.value)} onBlur={() => savePDraft('occupation')} placeholder="e.g. Family law attorney"/></div>
+              <div className="pers-field"><label>More about you</label><input value={pers.about} onChange={e => setPDraft('about', e.target.value)} onBlur={() => savePDraft('about')} placeholder="Interests, values, or preferences to keep in mind"/></div>
 
               <div className="pers-h">Memory</div>
               <div className="set-row"><div>Enable memory<span className="sr-sub">Let Vellum personalize your experience based on your chats, files, and connected apps.</span></div><span className="sr-end"><div className={'sw' + (pers.memory ? ' on' : '')} role="switch" aria-checked={pers.memory} onClick={() => setMemoryToggle('memory', 'memory_enabled', !pers.memory)}/></span></div>
@@ -7548,7 +7601,8 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                 <div key={p.id} className="set-row">
                   <div>{p.name}<span className="sr-sub">{p.note}</span></div>
                   <span className="sr-end cfg-keywrap">
-                    <input type="password" className="cfg-key" placeholder={keyStatus[p.id] ? 'Connected' : 'Paste key\u2026'} value={keys[p.id] || ''} onChange={e => setKeys(k => ({...k, [p.id]: e.target.value}))} onBlur={() => saveProviderKey(p.id)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveProviderKey(p.id); } }}/>
+                    <input id={'provider-key-' + p.id} type="password" className="cfg-key" placeholder={keyStatus[p.id] ? 'Connected' : 'Paste key\u2026'} value={keys[p.id] || ''} onChange={e => setKeys(k => ({...k, [p.id]: e.target.value}))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveProviderKey(p.id); } }}/>
+                    <button type="button" className="btn" disabled={savingKey === p.id || !(keys[p.id] || '').trim()} onClick={() => saveProviderKey(p.id)}>Review &amp; save</button>
                     <span className={'cfg-dot' + ((keyStatus[p.id] || (keys[p.id] || '').trim()) ? ' on' : '')} title={savingKey === p.id ? 'Saving' : keyStatus[p.id] ? 'Connected' : 'Not set'}/>
                   </span>
                 </div>
@@ -7660,8 +7714,14 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
           )}
         </div>
       </div>
-      {memCardOpen && <MemorySummaryCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setMemCardOpen(false)} onTurnOff={() => { setMemoryToggle('memory', 'memory_enabled', false); setMemCardOpen(false); }}/>} 
-      {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onChanged={onMemoryChanged} onClose={() => setSavedMemOpen(false)}/>}
+      {memCardOpen && <MemorySummaryCard
+        memoryData={memoryData}
+        onChanged={onMemoryChanged}
+        onMemoryAction={onMemoryAction}
+        onClose={() => setMemCardOpen(false)}
+        onTurnOff={() => { setMemoryToggle('memory', 'memory_enabled', false); setMemCardOpen(false); }}
+      />}
+      {savedMemOpen && <SavedMemoriesCard memoryData={memoryData} onChanged={onMemoryChanged} onMemoryAction={onMemoryAction} onMemorySettings={onMemorySettings} onClose={() => setSavedMemOpen(false)}/>}
     </React.Fragment>
   );
 };
@@ -8350,6 +8410,13 @@ const App = () => {
     position: pxLsGet(PETDEX_LS.pos, {}),
     available: ['boba'],
   });
+  const deviceSettingsRuntimeRef = useRef(null);
+  if (!deviceSettingsRuntimeRef.current) {
+    deviceSettingsRuntimeRef.current = window.VellumUI.AppActions.createDeviceSettingsRuntime({
+      client: API.appActions,
+      contextResolver: () => ({petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)}),
+    });
+  }
   const conversationActionHandlersRef = useRef({});
   const conversationActionRuntimeRef = useRef(null);
   if (!conversationActionRuntimeRef.current) {
@@ -8364,7 +8431,11 @@ const App = () => {
       applySessionControl: (patch, receipt) => conversationActionHandlersRef.current.applySessionControl && conversationActionHandlersRef.current.applySessionControl(patch, receipt),
       contextResolver: () => {
         const focused = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.uiReference || '';
-        return {focused_ui_reference: focused, petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)};
+        return {
+          focused_ui_reference: focused,
+          petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current),
+          device_settings: deviceSettingsRuntimeRef.current.snapshot(),
+        };
       },
     });
   }
@@ -8372,7 +8443,10 @@ const App = () => {
   if (!workspaceActionRuntimeRef.current) {
     workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({
       client: API.appActions,
-      contextResolver: () => ({petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current)}),
+      contextResolver: () => ({
+        petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current),
+        device_settings: deviceSettingsRuntimeRef.current.snapshot(),
+      }),
     });
   }
   const codingActionRuntimeRef = useRef(null);
@@ -8381,6 +8455,8 @@ const App = () => {
   }
   const [workspaceLayout, setWorkspaceLayout] = useState(() => workspaceActionRuntimeRef.current.snapshot());
   useEffect(() => workspaceActionRuntimeRef.current.subscribe(setWorkspaceLayout), []);
+  const [deviceSettings, setDeviceSettings] = useState(() => deviceSettingsRuntimeRef.current.snapshot());
+  useEffect(() => deviceSettingsRuntimeRef.current.subscribe(setDeviceSettings), []);
   const [observabilityControl, setObservabilityControl] = useState(
     () => window.VellumUI.ObservabilityActions.initialState()
   );
@@ -8393,11 +8469,8 @@ const App = () => {
     sendLabel: workspaceLayout.surfaces['composer.send'].properties.label,
     sendSize: workspaceLayout.surfaces['composer.send'].properties.size,
   };
-  const [backgroundId, setBackgroundIdState] = useState(() => {
-    try { return resolveBackground(localStorage.getItem('vellum-background') || 'galaxy').id; }
-    catch { return 'galaxy'; }
-  });
-  const setBackgroundId = id => setBackgroundIdState(resolveBackground(id).id);
+  const backgroundId = resolveBackground(deviceSettings.values.background || 'galaxy').id;
+  const setBackgroundId = id => dispatchDeviceSettings({background:resolveBackground(id).id});
   const background = resolveBackground(backgroundId);
   const selectableBackgrounds = BACKGROUND_REGISTRY.filter(entry => entry.selectable !== false);
   useEffect(() => {
@@ -8412,9 +8485,8 @@ const App = () => {
     root.style.setProperty('--background-side-cover', tokens.sideCover || tokens.cover || '78%');
     root.style.setProperty('--background-blur', tokens.blur || '7px');
     applyBackgroundTheme(entry, theme);
-    try { localStorage.setItem('vellum-background', entry.id); } catch {}
   }, [backgroundId, theme]);
-  useEffect(() => { try { applyAccent(localStorage.getItem('vellum-accent') || 'default'); } catch (e) {} }, []);
+  useEffect(() => { try { applyAccent(deviceSettings.values.accent || 'default'); } catch (e) {} }, [deviceSettings.values.accent]);
 
   const [sidebarHover, setSidebarHover] = useState(false);
   useEffect(() => {
@@ -8424,10 +8496,10 @@ const App = () => {
     narrow.addEventListener('change', collapse);
     return () => narrow.removeEventListener('change', collapse);
   }, []);
-  const [dockPosition, setDockPosition] = useState(() => { try { return localStorage.getItem('vellum-dock-position') || 'auto'; } catch { return 'auto'; } });
-  const [dockLocked, setDockLocked] = useState(() => { try { return localStorage.getItem('vellum-dock-locked') === '1'; } catch { return false; } });
-  useEffect(() => { try { localStorage.setItem('vellum-dock-position', dockPosition); } catch {} }, [dockPosition]);
-  useEffect(() => { try { localStorage.setItem('vellum-dock-locked', dockLocked ? '1' : '0'); } catch {} }, [dockLocked]);
+  const dockPosition = deviceSettings.values.dock_position || 'auto';
+  const dockLocked = !!deviceSettings.values.dock_locked;
+  const setDockPosition = value => dispatchDeviceSettings({dock_position:value});
+  const setDockLocked = value => dispatchDeviceSettings({dock_locked:!!value});
   const [view, setView] = useState(() => appViewFromLocation() || 'chat');
   useEffect(() => {
     const syncLocation = () => setView(current => appViewFromLocation() || (current === '404' ? 'chat' : current));
@@ -8458,6 +8530,7 @@ const App = () => {
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(readDefaultModel);
+  const [defaultModel, setDefaultModel] = useState(readDefaultModel);
   const [models, setModels] = useState(MODELS);
   useEffect(() => {
     if (!activeChatId) return;
@@ -8581,7 +8654,8 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [expandedProj, setExpandedProj] = useState({});
   const toggleSec = k => setSecOpen(s => ({...s, [k]: !s[k]}));
   const toggleProj = id => setExpandedProj(e => ({...e, [id]: !e[id]}));
-  const [cuEnabled, setCuEnabled] = useState(false);
+  const cuEnabled = !!deviceSettings.values.computer_use_preview;
+  const setCuEnabled = value => dispatchDeviceSettings({computer_use_preview:!!value});
   const [settingsTab, setSettingsTab] = useState('General');
   const [menu, setMenu] = useState(null);          // {type:'chat'|'project'|'profile', id?, x, y}
   const [renamingId, setRenamingId] = useState(null);
@@ -8751,10 +8825,11 @@ const [slashSkills, setSlashSkills] = useState([]);
             MODELS = liveModels;
             setModels(liveModels);
           }
-          const preferred = readDefaultModel();
-          const availableIds = new Set(liveModels.map(model => model.id));
-          if (availableIds.has(preferred)) setSelModel(preferred);
-          else if (modelData.active && modelData.active.id) setSelModel(modelData.active.id);
+          if (modelData.active && modelData.active.id) {
+            APPLICATION_DEFAULT_MODEL = modelData.active.id;
+            setDefaultModel(modelData.active.id);
+            if (!activeChatId) setSelModel(modelData.active.id);
+          }
         }
         if (settingsData) setBackendSettings(settingsData);
         if (pluginData && Array.isArray(pluginData.plugins)) {
@@ -9743,6 +9818,11 @@ const [slashSkills, setSlashSkills] = useState([]);
       confirmationLabel: receipt.action_id === 'conversation.share'
         ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
         : receipt.action_id === 'memory.conversation.set' ? 'Turn on'
+        : receipt.action_id === 'memory.settings.update' ? 'Apply'
+        : receipt.action_id === 'memory.entry.delete' ? 'Delete'
+        : receipt.action_id === 'memory.dreaming.run' ? 'Run'
+        : receipt.action_id === 'memory.conversations.import' ? 'Import'
+        : receipt.action_id === 'provider.credential.configure' ? 'Save key'
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
         : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'
         : receipt.action_id === 'book.process' ? 'Process'
@@ -9757,6 +9837,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const applyAppActionReceipt = (receipt, options = {}) => {
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
+      deviceSettingsRuntimeRef.current.applyReceipt(receipt);
       conversationActionRuntimeRef.current.applyReceipt(receipt);
       codingActionRuntimeRef.current.applyReceipt(receipt);
       setObservabilityControl(current => window.VellumUI.ObservabilityActions.applyReceipt(current, receipt));
@@ -9780,6 +9861,41 @@ const [slashSkills, setSlashSkills] = useState([]);
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'book.import' && receipt.result && receipt.result.client_effect && receipt.result.client_effect.type === 'book.import.picker.open') {
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum-composer', {detail:'addfiles'})), 0);
+      }
+      if (receipt && receipt.status === 'applied' && receipt.result && receipt.result.client_effect && receipt.result.client_effect.type === 'settings.open') {
+        const requestedTab = String(receipt.result.client_effect.tab || 'General');
+        setSettingsTab(requestedTab.charAt(0).toUpperCase() + requestedTab.slice(1));
+        dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
+        const focusId = receipt.result.client_effect.focus;
+        if (focusId) setTimeout(() => { const field = document.getElementById(focusId); if (field) field.focus(); }, 80);
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'settings.default_model.set' && receipt.result && receipt.result.model) {
+        APPLICATION_DEFAULT_MODEL = receipt.result.model.id;
+        setDefaultModel(receipt.result.model.id);
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'provider.credential.configure') {
+        const provider = receipt.result && receipt.result.provider;
+        setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:provider-configured', {detail:{provider}})), 0);
+        API.settings.models().then(result => {
+          const liveModels = Array.isArray(result && result.models) ? result.models.map(m => ({id:m.id,label:m.label || m.id,provider:m.provider || String(m.id).split('/')[0]})) : [];
+          if (liveModels.length) { MODELS = liveModels; setModels(liveModels); }
+          if (result && result.active && result.active.id) {
+            APPLICATION_DEFAULT_MODEL = result.active.id;
+            setDefaultModel(result.active.id);
+          }
+        }).catch(() => {});
+        API.settings.get().then(setBackendSettings).catch(() => {});
+      }
+      if (receipt && receipt.status === 'applied' && receipt.action_id === 'memory.settings.update' && receipt.result && receipt.result.settings) {
+        setMemoryData(current => ({...current, settings:receipt.result.settings}));
+      }
+      if (receipt && receipt.status === 'applied' && (
+        String(receipt.action_id || '').startsWith('memory.entry.')
+        || receipt.action_id === 'memory.dreaming.run'
+        || receipt.action_id === 'memory.conversations.import'
+      )) {
+        refreshMemoryData();
+        setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:memory-changed')), 0);
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'youtube.connection.start' && options.suppressClientEffect !== true) {
         const url = receipt.result && receipt.result.connection && receipt.result.connection.authorization_url;
@@ -9816,6 +9932,19 @@ const [slashSkills, setSlashSkills] = useState([]);
       return receipt;
     } catch (_) {
       if (options.notify !== false) pushToast('App actions are unreachable.');
+      return null;
+    }
+  };
+  const dispatchDeviceSettings = async (patch, options = {}) => {
+    try {
+      const receipt = await deviceSettingsRuntimeRef.current.dispatch(
+        patch,
+        {conversationId:activeChatId},
+      );
+      showAppActionReceipt(receipt, options);
+      return receipt;
+    } catch (_) {
+      if (options.notify !== false) pushToast('Device settings could not be changed.');
       return null;
     }
   };
@@ -9885,6 +10014,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   const cancelAppAction = async receipt => {
     try {
       const cancelled = await conversationActionRuntimeRef.current.cancel(receipt, {conversationId:activeChatId});
+      if (cancelled && cancelled.action_id === 'provider.credential.configure') {
+        const provider = String(cancelled.target && cancelled.target.id || '').split(':').pop();
+        window.dispatchEvent(new CustomEvent('vellum:provider-credential-cancelled', {detail:{provider}}));
+      }
       showAppActionReceipt(cancelled);
       return cancelled;
     } catch (_) {
@@ -9939,30 +10072,38 @@ const [slashSkills, setSlashSkills] = useState([]);
       updateChat(chatId, chat => ({...chat, model: id}), true);
       return;
     }
-    try { localStorage.setItem('vellum-default-model', id); } catch {}
   };
   const selectModel = async id => {
     const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
     if (!activeChatId && !agentConversationId) { applyModelSelection(id, null); return; }
     await dispatchConversationAction('model.select', {model_id:id});
   };
+  const selectDefaultModel = async id => {
+    const receipt = await dispatchConversationAction('settings.default_model.set', {model_id:id}, {notify:false});
+    if (receipt) applyAppActionReceipt(receipt);
+  };
+  const updateMemorySettings = async patch => {
+    const receipt = await dispatchConversationAction('memory.settings.update', {patch}, {notify:false});
+    if (receipt) applyAppActionReceipt(receipt);
+    return receipt;
+  };
+  const dispatchMemoryAction = async (actionId, arguments_) => {
+    const receipt = await dispatchConversationAction(actionId, arguments_, {notify:false});
+    if (receipt) applyAppActionReceipt(receipt);
+    return receipt;
+  };
   const setConversationMemory = async enabled => {
     if (!activeChatId) { pushToast('Start a chat before changing its memory.'); return; }
     await dispatchConversationAction('memory.conversation.set', {enabled});
   };
   const saveProviderKey = async (provider, apiKey) => {
-    const result = await API.settings.setProviderKey(provider, apiKey);
-    if (Array.isArray(result.models)) {
-      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
-      if (liveModels.length) {
-        MODELS = liveModels;
-        setModels(liveModels);
-      }
-    }
-    if (result.active && result.active.id) setSelModel(result.active.id);
-    const settingsData = await API.settings.get().catch(() => null);
-    if (settingsData) setBackendSettings(settingsData);
-    pushToast((provider || 'Provider') + ' connected');
+    const receipt = await dispatchConversationAction(
+      'provider.credential.configure',
+      {provider, secret:apiKey},
+      {notify:false},
+    );
+    if (receipt) applyAppActionReceipt(receipt);
+    return receipt;
   };
   const copyLastCodeBlock = () => {
     let msgs = [];
@@ -10092,7 +10233,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
             {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
-            {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData}/>}
+            {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
@@ -10136,7 +10277,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})} workspaceLayout={workspaceLayout} onSurfaceChange={dispatchSurfacePresentation} onLayoutReset={resetWorkspaceLayout} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} model={selModel} models={models} onModel={selectModel} onProviderKey={saveProviderKey} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})} workspaceLayout={workspaceLayout} onSurfaceChange={dispatchSurfacePresentation} onLayoutReset={resetWorkspaceLayout} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           feeds={feeds} onToggleFeed={toggleFeed}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
@@ -10231,7 +10372,8 @@ const CustomInstructionsModal = ({value, onSave, onClose}) => {
 try {
   const bootLayout = JSON.parse(localStorage.getItem('vellum-workspace-layout-v1') || 'null');
   const bootTheme = bootLayout && bootLayout.surfaces && bootLayout.surfaces.workspace && bootLayout.surfaces.workspace.properties && bootLayout.surfaces.workspace.properties.theme || localStorage.getItem('vellum-theme') || 'dark';
-  const bootBackground = resolveBackground(localStorage.getItem('vellum-background') || 'galaxy');
+  const storedDeviceSettings = JSON.parse(localStorage.getItem('vellum-device-settings-v1') || '{}');
+  const bootBackground = resolveBackground((storedDeviceSettings.values && storedDeviceSettings.values.background) || localStorage.getItem('vellum-background') || 'galaxy');
   document.documentElement.setAttribute('data-theme', bootTheme);
   document.documentElement.dataset.background = bootBackground.id;
   applyBackgroundTheme(bootBackground, bootTheme);
