@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Vellum - Default Mode (preview)</title>
+<title>Vellum</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231a1717'/%3E%3Cpath d='M15 17h10l7 27 7-27h10L38 51H26z' fill='%23988686'/%3E%3C/svg%3E"/>
 <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
@@ -847,6 +847,9 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .model-num{font-weight:600;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-drop{position:absolute;right:44px;bottom:44px;z-index:50;width:232px;border:1px solid var(--line2);border-radius:12px;padding-bottom:4px;box-shadow:0 14px 50px rgba(0,0,0,.4);background:var(--modal)}
 .drop-lbl{font-size:10.5px;color:var(--dim2);padding:9px 13px 4px;letter-spacing:.05em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center}
+.model-provider-filters{display:flex;gap:4px;overflow-x:auto;padding:0 9px 6px;scrollbar-width:thin}
+.model-provider-filter{border:1px solid var(--line2);background:transparent;color:var(--dim);border-radius:10px;padding:4px 7px;font:inherit;font-size:10px;cursor:pointer;white-space:nowrap}
+.model-provider-filter.active,.model-provider-filter:hover{background:var(--hover);color:var(--txt2);border-color:var(--line2)}
 .model-search{width:calc(100% - 18px);margin:2px 9px 4px;background:var(--input);border:1px solid var(--line2);border-radius:7px;padding:5px 9px;color:var(--txt2);font:inherit;font-size:12px;outline:none}
 .model-search::placeholder{color:var(--dim2)}
 .model-list{max-height:240px;overflow-y:auto}
@@ -1779,14 +1782,15 @@ body{font-size:14px}
 .px-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;border:1px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer}.px-card:hover{border-color:var(--line2)}.px-card.on{border-color:var(--ember)}
 .px-card-name{font-size:10.5px;color:var(--txt);text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.px-card-sub{font-size:9px;color:var(--dim2)}
 .px-card .btn{padding:4px 8px;font-size:9.5px}
-.px-installed{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 2px}
-.px-in-card{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:6px 10px 6px 4px;background:var(--panel);cursor:pointer}.px-in-card:hover{border-color:var(--line2)}.px-in-card.on{border-color:var(--ember)}
-.px-in-name{font-size:11px;color:var(--txt);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.px-installed{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin:8px 0 2px}
+.px-in-card{display:flex;flex-direction:column;align-items:center;gap:4px;border:1px solid var(--line);border-radius:10px;padding:8px 6px;background:var(--panel);cursor:pointer;min-width:0}.px-in-card:hover{border-color:var(--line2)}.px-in-card.on{border-color:var(--ember)}
+.px-in-name{font-size:11px;color:var(--txt);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .px-sizes{display:flex;gap:6px}.px-size{padding:4px 10px;border:1px solid var(--line2);border-radius:8px;font-size:10.5px;color:var(--dim);cursor:pointer;background:none}.px-size.on{color:var(--txt2);border-color:var(--ember);background:var(--hover)}
 .px-preview{display:flex;align-items:center;gap:14px;padding:10px 0 4px}
 .px-preview-copy{min-width:0}.px-preview-name{font-family:var(--font-d);font-size:14px;color:var(--txt2)}.px-preview-sub{font-size:10.5px;color:var(--dim2);margin-top:2px}
 @media(max-width:720px){.px-grid{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}}
 </style>
+<link rel="stylesheet" href="workspace.css">
 </head>
 <body>
 <div id="root"></div>
@@ -3389,12 +3393,33 @@ const vellumReply = (text, exclude) => {
   return pick.replace('{q}', q);
 };
 
+const MODEL_PROVIDER_FILTERS = [
+  {id: 'all', label: 'All'},
+  {id: 'openai', label: 'OpenAI'},
+  {id: 'anthropic', label: 'Claude'},
+  {id: 'google', label: 'Google'},
+  {id: 'deepseek', label: 'DeepSeek'},
+  {id: 'other', label: 'Other'},
+];
+const modelFamily = model => {
+  const vendor = String(model.provider || model.id || '').split('/')[0].toLowerCase();
+  if (vendor === 'anthropic') return 'anthropic';
+  if (vendor === 'openai') return 'openai';
+  if (vendor === 'google') return 'google';
+  if (vendor === 'deepseek') return 'deepseek';
+  return 'other';
+};
 const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
   const [q, setQ] = useState('');
+  const [providerFilter, setProviderFilter] = useState('all');
   const [idx, setIdx] = useState(0);
   const listRef = useRef(null);
-  const hits = models.filter(m => !q || m.label.toLowerCase().includes(q.toLowerCase()) || m.id.toLowerCase().includes(q.toLowerCase()));
-  useEffect(() => { setIdx(0); }, [q]);
+  const query = q.toLowerCase();
+  const hits = models.filter(m =>
+    (providerFilter === 'all' || modelFamily(m) === providerFilter)
+    && (!query || m.label.toLowerCase().includes(query) || m.id.toLowerCase().includes(query))
+  );
+  useEffect(() => { setIdx(0); }, [q, providerFilter]);
   useEffect(() => {
     const p = listRef.current; if (!p) return;
     const el = p.querySelector('.drop-item.active'); if (!el) return;
@@ -3410,6 +3435,20 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
   return (
     <Popover className={'model-drop select-motion' + (drop === 'down' ? ' down' : '')} onClose={onClose}>
       <div className="drop-lbl"><span>Model</span></div>
+      <div className="model-provider-filters" role="tablist" aria-label="Model provider">
+        {MODEL_PROVIDER_FILTERS.map(filter => (
+          <button
+            key={filter.id}
+            type="button"
+            role="tab"
+            aria-selected={providerFilter === filter.id}
+            className={'model-provider-filter' + (providerFilter === filter.id ? ' active' : '')}
+            onClick={() => setProviderFilter(filter.id)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
       <input className="model-search" autoFocus placeholder="Search models" value={q} onChange={e => setQ(e.target.value)} onKeyDown={onKey}/>
       <div className="model-list" ref={listRef}>
         {hits.map((m, i) => (
@@ -3454,8 +3493,8 @@ const DEFAULT_MODEL = 'google/gemma-4-31b-it';
 const readDefaultModel = () => { try { return localStorage.getItem('vellum-default-model') || DEFAULT_MODEL; } catch { return DEFAULT_MODEL; } };
 const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
 const PROVIDERS = [
-  { id: 'anthropic',  name: 'Anthropic',  note: 'Claude models' },
-  { id: 'openai',     name: 'OpenAI',     note: 'GPT-4.1, GPT-4o' },
+  { id: 'anthropic',  name: 'Anthropic',  note: 'Claude Opus 5 / Sonnet 4.5' },
+  { id: 'openai',     name: 'OpenAI',     note: 'GPT-5.6 Sol / Terra / Luna' },
   { id: 'google',     name: 'Google',     note: 'Gemini models' },
   { id: 'openrouter', name: 'OpenRouter', note: 'DeepSeek, MiniMax & more' },
 ];
@@ -5007,7 +5046,6 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
     return (
       <div className="landing">
         <div className="land-mark"><em>v</em>ellum</div>
-        <TypingGreet/>
         <Composer text={text} setText={setText} model={model} setModel={setModel} models={models} onSend={onSend} onStop={onStop} busy={busy} drop="up" onViewImage={onViewImage} {...composerExtras}/>
       </div>
     );
@@ -5633,7 +5671,7 @@ const ObservabilityView = () => {
     <div className="obs-page" style={style}>
       <div className="obs-shell">
         <div className="obs-head">
-          <div className="obs-head-copy"><div className="obs-title">Observability</div><div className="obs-sub">Live insight into Vellum runs, token pressure, cost, and system health.</div></div>
+          <div className="obs-head-copy"><div className="obs-title">Observability</div><div className="obs-sub">Runs, usage, cost, and service health.</div></div>
           <div className="obs-head-actions">
             <div className="obs-source"><span className="obs-status-dot" style={{color:connection === 'live' ? 'var(--obs-good)' : 'var(--obs-warm)'}}/><span>Source</span><strong>Vellum native</strong></div>
             <button className={'obs-control on' + (paused ? '' : ' live')} onClick={() => setPaused(false)} aria-pressed={!paused}><span className="obs-live-dot"/>Live</button>
@@ -5649,8 +5687,8 @@ const ObservabilityView = () => {
         <div className="obs-overview">
           <section className="obs-active obs-glass">
             <div className="obs-kicker"><span className="obs-live-dot"/>{run && run.status === 'in_progress' ? 'Live run' : run ? 'Latest run' : 'Ready'}</div>
-            <div className="obs-active-title">{run ? 'Run ' + obsShortId(run.response_id) : 'Waiting for your next Vellum turn'}</div>
-            <div className="obs-active-sub">{run ? (liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run completed' : 'Listening for live activity') : 'Start chatting or use a tool and the observatory will fill in here.'}</div>
+            <div className="obs-active-title">{run ? 'Run ' + obsShortId(run.response_id) : snapshot ? 'No runs recorded' : 'Waiting for data'}</div>
+            {run && <div className="obs-active-sub">{liveEvent ? liveEvent.label : run.status === 'completed' ? 'Run completed' : 'Waiting for activity'}</div>}
             <div className="obs-run-meta">
               <div><div className="obs-meta-k">Thread</div><div className="obs-meta-v">{run ? obsShortId(run.thread_id) : '\u2014'}</div></div>
               <div><div className="obs-meta-k">Elapsed</div><div className="obs-meta-v">{obsDuration(run)}</div></div>
@@ -5791,7 +5829,7 @@ const SkillsHubView = () => {
   const pendingReviewCount=tab==='review'?items.filter(item=>item._reviewType==='pending').length:0;
   const selectedFailure=selected&&activities.find(job=>job.error&&skillActivityMatches(job,selected));
   return <div className="skills-page"><main className="sk-hub"><div className="sk-hub-inner">
-    <header className="sk-head"><div className="sk-head-main"><h1 className="sk-title">Skills</h1><p className="sk-sub">Curated procedural knowledge for reliable, repeatable work.</p></div><div className={'sk-health'+(partial?' partial':'')}><i/>{partial?'Partial source access':'Sources healthy'}</div><button className="sk-primary" onClick={()=>setLearnOpen(true)}>Add skill&nbsp; +</button></header>
+    <header className="sk-head"><div className="sk-head-main"><h1 className="sk-title">Skills</h1></div><div className={'sk-health'+(partial?' partial':'')}><i/>{partial?'Partial source access':'Sources healthy'}</div><button className="sk-primary" onClick={()=>setLearnOpen(true)}>Add skill&nbsp; +</button></header>
     <section className="sk-stats" aria-label="Skill statistics"><div className="sk-stat"><div className="sk-stat-k">Installed</div><div className="sk-stat-v">{overview&&overview.counts?overview.counts.active:0}</div><div className="sk-stat-note">Ready on demand</div></div><div className="sk-stat"><div className="sk-stat-k">Pending approval</div><div className="sk-stat-v">{overview?overview.pending:0}</div><div className="sk-stat-note">Needs your review</div></div><div className="sk-stat"><div className="sk-stat-k">Archived</div><div className="sk-stat-v">{overview&&overview.counts?overview.counts.archived:0}</div><div className="sk-stat-note">Recoverable</div></div><div className="sk-stat"><div className="sk-stat-k">Curator</div><div className="sk-stat-v" style={{fontSize:18}}>{overview&&overview.curator&&overview.curator.paused?'Paused':'Healthy'}</div><div className="sk-stat-note">7-day review cadence</div></div></section>
     <div className="sk-toolbar"><label className="sk-search"><IcSearch size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={tab==='discover'?'Search live skill inventories':'Search installed skills'} aria-label="Search skills"/></label>{tab==='discover'&&<VSelect className="sk-filter" value={ranking} onValueChange={setRanking} options={SKILL_RANKING_OPTIONS} ariaLabel="Discovery ranking" menuWidth={190}/>} {tab==='discover'&&<VSelect className="sk-filter" value={source} onValueChange={setSource} options={SKILL_SOURCE_OPTIONS} ariaLabel="Skill source" menuWidth={210}/>}<VSelect className="sk-filter" value={category} onValueChange={setCategory} options={SKILL_CATEGORY_OPTIONS} ariaLabel="Skill category" menuWidth={190}/></div>
     <nav className="sk-tabs" aria-label="Skill views">{SKILL_TABS.map(([k,l])=><button key={k} className={'sk-tab'+(tab===k?' on':'')} onClick={()=>{setTab(k);setSelected(null);setDetail(null);}}>{l}{countFor(k)>0&&<span className="sk-count">{countFor(k)}</span>}</button>)}</nav>
@@ -5911,7 +5949,6 @@ const MCP_SOURCES = [
   makeRegistryAdapter({ id:'official', label:'Official MCP Registry', color:'#5b8def', catalog:[
     ...REQUIRED_CONNECTORS,
     { id:'slack', name:'Slack', category:'Productivity', authType:'OAuth', install:'npm', pkg:'@modelcontextprotocol/server-slack', trust:'verified', description:'Post messages and read channels in your Slack workspace.', tools:['list_channels','post_message','read_channel','search_messages'] },
-    { id:'filesystem', name:'Filesystem', category:'Developer', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-filesystem', trust:'verified', description:'Read and write files within an allow-listed directory.', tools:['read_file','write_file','list_dir','search_files'] },
     { id:'postgres', name:'Postgres', category:'Data', authType:'API key', install:'docker', image:'mcp/postgres:latest', trust:'verified', description:'Run read-only SQL queries against a Postgres database.', tools:['query','list_tables','describe_table'] },
     { id:'puppeteer', name:'Puppeteer', category:'Web', authType:'None', install:'npm', pkg:'@modelcontextprotocol/server-puppeteer', trust:'community', description:'Drive a headless browser to navigate and scrape pages.', tools:['navigate','screenshot','extract_text','click'] },
   ]}),
@@ -6143,7 +6180,6 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
           <span className="page-head-ic"><IcPlugins/></span>
           <div style={{flex: 1}}>
             <div className="page-title">Plugins</div>
-            <div className="page-sub">Live apps, MCP connectors, system plugins, tools, and Hermes skills from the Vellum backend.</div>
           </div>
           <span className="cu-pill">{ready}/{plugins.length} ready</span>
         </div>
@@ -6153,7 +6189,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
           <div className="conn-search"><IcSearch size={15}/><input aria-label={'Search '+tab} placeholder={'Search '+tab} value={query} onChange={e => setQuery(e.target.value)}/></div>
           {tab === 'skills' && <button className="btn" onClick={onOpenSkills}>Open Skills Hub</button>}
         </div>
-        <div className="plugin-manage">
+        <div className={'plugin-manage' + (selected ? ' has-selection' : '')}>
           <section className="plugin-list">
             <div className="plugin-tabs">{[['plugins','Plugins'],['apps','Apps'],['mcps','MCPs'],['skills','Skills']].map(([id,label]) => <button key={id} className={'plugin-tab'+(tab===id?' active':'')} onClick={() => {setTab(id);setSelected(null);}}>{label} {count(id)}</button>)}</div>
             {rows.length ? rows.map(row => {
@@ -6162,12 +6198,12 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, youtubeIntelligence}) =
               return <button key={row.kind+':'+(owner&&owner.id)+':'+name} className={'plugin-row'+(active?' active':'')} onClick={() => setSelected(row)}>
                 <span className="conn-ic"><ConnLogo c={owner || row.item} size={18}/></span>
                 <span className="plugin-row-copy"><div className="plugin-row-name">{name}</div><div className="plugin-row-desc">{rowDescription(row)}</div></span>
-                <span className={'conn-trust '+(connectorStatus(owner)==='ready'?'verified':'community')}>{owner && owner.enabled===false?'Disabled':'Active'}</span>
+                <span className={'conn-trust '+(connectorStatus(owner)==='ready'?'verified':'community')}>{CONNECTOR_STATUS_LABELS[connectorStatus(owner)] || connectorStatus(owner)}</span>
               </button>;
             }) : <div className="apps-empty">No {tab} match this search.</div>}
           </section>
           <section className="plugin-detail">
-            {!selected ? <div className="plugin-detail-empty">Select an item to inspect its apps, MCPs, skills, and status.</div> : <React.Fragment>
+            {!selected ? <div className="plugin-detail-empty">No plugin selected</div> : <React.Fragment>
               <div className="plugin-detail-head"><span className="conn-ic"><ConnLogo c={detailPlugin || selected.item} size={22}/></span><div style={{minWidth:0}}><div className="plugin-detail-title">{rowName(selected)}</div><div className="plugin-detail-sub">{rowDescription(selected) || connectorSetupNote(detailPlugin)}</div></div>
                 <div className="plugin-detail-actions">{selected.kind === 'plugin' && selected.item.manageable && <button className="btn" disabled={selected.item.required || busyPlugin === selected.item.id} onClick={() => togglePlugin(selected.item)}>{selected.item.required ? 'Required' : selected.item.enabled === false ? 'Enable' : 'Disable'}</button>}</div>
               </div>
@@ -6467,7 +6503,7 @@ function KnowledgeGraphView({ onBack, onAttachContext }){
       <div className="page-inner wiki-page" style={{maxWidth: 980}}>
         <div className="page-head">
           <span className="page-head-ic kg-ic"><IcGraph size={18}/></span>
-          <div style={{flex:1}}><div className="page-title">Knowledge wiki</div><div className="page-sub">Search the maintained pages behind Vellum's answers. Open a result to read the source.</div></div>
+          <div style={{flex:1}}><div className="page-title">Knowledge wiki</div></div>
           {onBack && <button className="btn" onClick={onBack}>Back</button>}
         </div>
         {error && <div className="wiki-state error" role="alert">{error}</div>}
@@ -7740,6 +7776,13 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
 const PETDEX_MANIFEST = 'https://petdex.dev/api/manifest';
 const PETDEX_MANIFEST_TTL = 24 * 60 * 60 * 1000;
 const PETDEX_FALLBACK = {slug: 'boba', displayName: 'Boba', submittedBy: 'Petdex', spritesheetUrl: 'assets/pets/boba.webp'};
+const PETDEX_PROXY_BASE = (() => { try { return (window.VellumApi && VellumApi.client && VellumApi.client.backendBase()) || 'http://127.0.0.1:8000'; } catch { return 'http://127.0.0.1:8000'; } })();
+const PETDEX_MANIFEST_PROXY = PETDEX_PROXY_BASE + '/api/petdex/manifest';
+const PETDEX_SPRITE_PROXY = PETDEX_PROXY_BASE + '/api/petdex/assets/';
+const pxRewriteSprites = data => {
+  if (!data || !Array.isArray(data.pets)) return data;
+  return {...data, pets: data.pets.map(p => p && typeof p.spritesheetUrl === 'string' && p.spritesheetUrl.indexOf('assets.petdex.dev') !== -1 ? {...p, spritesheetUrl: PETDEX_SPRITE_PROXY + p.spritesheetUrl.replace('https://assets.petdex.dev/', '')} : p)};
+};
 const PETDEX_LS = {manifest: 'vellum-pet-manifest', manifestAt: 'vellum-pet-manifest-at', installed: 'vellum-pet-installed', active: 'vellum-pet-active', hidden: 'vellum-pet-hidden', size: 'vellum-pet-size', pos: 'vellum-pet-pos'};
 const PETDEX_COLLECTIONS = [
   {id: 'pokemon', label: 'Pokemon', slugs: ['giratina', 'goose-default', 'kabi', 'gardevoir', 'kaka-2', 'capvolt', 'chimchar']},
@@ -7772,10 +7815,22 @@ const pxPetRecord = (manifest, slug) => {
 const PetSprite = ({record, state = 'idle', size = 'md', label}) => {
   const st = PETDEX_STATES[state] || PETDEX_STATES.idle;
   const scale = PETDEX_SIZES[size] || PETDEX_SIZES.md;
+  const boxRef = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    if (typeof IntersectionObserver === 'undefined') { setInView(true); return; }
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(en => { if (en.isIntersecting) { setInView(true); obs.disconnect(); } });
+    }, {rootMargin: '320px 0px 320px 0px'});
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
   if (!record || !record.spritesheetUrl) return <div className="px-sprite-box" style={{width: 192 * scale, height: 208 * scale}}/>;
   return (
-    <div className="px-sprite-box" role="img" aria-label={label || record.displayName} style={{width: 192 * scale, height: 208 * scale}}>
-      <div className="px-sprite" style={{'--px-url': 'url("' + record.spritesheetUrl + '")', '--px-row': st.row, '--px-frames': st.frames, '--px-ms': st.ms + 'ms', '--px-scale': scale}}/>
+    <div ref={boxRef} className="px-sprite-box" role="img" aria-label={label || record.displayName} style={{width: 192 * scale, height: 208 * scale}}>
+      {inView && <div className="px-sprite" style={{'--px-url': 'url("' + record.spritesheetUrl + '")', '--px-row': st.row, '--px-frames': st.frames, '--px-ms': st.ms + 'ms', '--px-scale': scale}}/>}
     </div>
   );
 };
@@ -7804,13 +7859,17 @@ const usePetActivity = (messages) => {
 const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed, active, onSwitch}) => {
   const drag = useRef(null);
   const [menu, setMenu] = useState(false);
+  const menuTimer = useRef(null);
+  const showMenu = () => { clearTimeout(menuTimer.current); setMenu(true); };
+  const hideMenu = () => { clearTimeout(menuTimer.current); menuTimer.current = setTimeout(() => setMenu(false), 240); };
   const [dragging, setDragging] = useState(false);
   const p = pos || {};
   const onPointerDown = (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.px-menu')) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    drag.current = {x: e.clientX, y: e.clientY, px: rect.left, py: rect.top, moved: false};
+    const scale = PETDEX_SIZES[size] || PETDEX_SIZES.md;
+    drag.current = {x: e.clientX, y: e.clientY, px: rect.left, py: rect.top, w: 192 * scale, h: 208 * scale, moved: false};
     setDragging(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -7819,7 +7878,7 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
     if (!d) return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
     if (!d.moved && Math.hypot(dx, dy) > 4) d.moved = true;
-    if (d.moved) onPos({x: Math.max(0, Math.min(d.px + dx, window.innerWidth - 200)), y: Math.max(0, Math.min(d.py + dy, window.innerHeight - 240))});
+    if (d.moved) onPos({x: Math.max(0, Math.min(d.px + dx, window.innerWidth - d.w)), y: Math.max(0, Math.min(d.py + dy, window.innerHeight - d.h))});
   };
   const onPointerUp = () => {
     const d = drag.current;
@@ -7830,12 +7889,16 @@ const PetFloater = ({record, state, size, pos, onPos, onJump, onHide, installed,
     if (!moved) onJump();
   };
   return (
-    <div className={'px-floater' + (dragging ? ' dragging' : '')} style={{left: p.x != null ? p.x : window.innerWidth - 190, top: p.y != null ? p.y : window.innerHeight - 250}}
+    <div className={'px-floater' + (dragging ? ' dragging' : '')} style={{
+      left: p.x != null ? Math.max(0, Math.min(p.x, window.innerWidth - (PETDEX_SIZES[size] || PETDEX_SIZES.md) * 192)) : window.innerWidth - (PETDEX_SIZES[size] || PETDEX_SIZES.md) * 192,
+      top: p.y != null ? Math.max(0, Math.min(p.y, window.innerHeight - (PETDEX_SIZES[size] || PETDEX_SIZES.md) * 208)) : window.innerHeight - (PETDEX_SIZES[size] || PETDEX_SIZES.md) * 208
+    }}
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-      onMouseEnter={() => setMenu(true)} onMouseLeave={() => setMenu(false)}>
+      onMouseEnter={showMenu} onMouseLeave={hideMenu}
+      onContextMenu={e => { e.preventDefault(); onHide(); }}>
       <PetSprite record={record} state={state} size={size}/>
       {menu && (
-        <div className="px-menu">
+        <div className="px-menu" onMouseEnter={showMenu} onMouseLeave={hideMenu}>
           <button onClick={() => { setMenu(false); onHide(); }}>Hide pet</button>
           {(installed || []).filter(s => s !== active).slice(0, 6).map(slug => (
             <button key={slug} onClick={() => { setMenu(false); onSwitch(slug); }}>{slug}</button>
@@ -7922,8 +7985,7 @@ const PetdexTab = ({manifest, loading, error, installed = [], active, size, hidd
     </React.Fragment>
   );
 };
-const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','memory','kg','archive','agent']);
-const isNotFoundLocation = () => {
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','memory','kg','archive','agent']);const isNotFoundLocation = () => {
   try {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.replace(/\/+$/,'');
@@ -8118,18 +8180,26 @@ const [slashSkills, setSlashSkills] = useState([]);
       const at = pxLsGet(PETDEX_LS.manifestAt, 0);
       if (cached && Date.now() - at < PETDEX_MANIFEST_TTL) { setPetManifest(cached); setPetLoading(false); return; }
       setPetLoading(true);
-      try {
-        const res = await fetch(PETDEX_MANIFEST);
-        if (!res.ok) throw new Error('bad status');
-        const data = await res.json();
-        if (cancelled) return;
+      let data = null;
+      for (const url of [PETDEX_MANIFEST_PROXY, PETDEX_MANIFEST]) {
+        try {
+          const res = await fetch(url, {signal: AbortSignal.timeout(12000)});
+          if (!res.ok) throw new Error('bad status');
+          const parsed = await res.json();
+          if (parsed && Array.isArray(parsed.pets)) { data = url === PETDEX_MANIFEST_PROXY ? pxRewriteSprites(parsed) : parsed; break; }
+        } catch (_) {}
+      }
+      if (cancelled) return;
+      if (data) {
         setPetManifest(data);
         pxLsSet(PETDEX_LS.manifest, data);
         pxLsSet(PETDEX_LS.manifestAt, Date.now());
         setPetError('');
-      } catch (_) {
-        if (!cancelled) { setPetManifest(cached); setPetError(cached ? 'Gallery unreachable. Showing the cached list.' : 'Gallery unreachable.'); }
-      } finally { if (!cancelled) setPetLoading(false); }
+      } else {
+        setPetManifest(cached);
+        setPetError(cached ? 'Gallery unreachable. Showing the cached list.' : 'Gallery unreachable.');
+      }
+      setPetLoading(false);
     };
     load();
     return () => { cancelled = true; };
@@ -8352,7 +8422,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           } catch {}
         }
         if (modelData && Array.isArray(modelData.models)) {
-          const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id}));
+          const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
           if (liveModels.length) {
             MODELS = liveModels;
             setModels(liveModels);
@@ -9188,7 +9258,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const saveProviderKey = async (provider, apiKey) => {
     const result = await API.settings.setProviderKey(provider, apiKey);
     if (Array.isArray(result.models)) {
-      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id}));
+      const liveModels = result.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
       if (liveModels.length) {
         MODELS = liveModels;
         setModels(liveModels);
@@ -9271,12 +9341,8 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   return (
     <BackgroundContext.Provider value={{backgroundId, setBackgroundId, background, selectableBackgrounds}}>
-    <div className="stage" onMouseMove={e => { const r = e.currentTarget.getBoundingClientRect(); e.currentTarget.style.setProperty('--mx', (e.clientX - r.left) + 'px'); e.currentTarget.style.setProperty('--my', (e.clientY - r.top) + 'px'); }}>
+    <div className="stage">
       <SharedLayoutBg/>
-      <div className="bg-orb orb1"></div>
-      <div className="bg-orb orb2"></div>
-      <div className="bg-orb orb3"></div>
-      <div className="cursor-glow"></div>
       <div className="win">
         <AppBackground/>
         {view !== '404' && <React.Fragment>

@@ -6,6 +6,22 @@
 
 ---
 
+## 0. Operating Principles
+
+- When explaining something to the user, use the Visualize skill when a diagram, flow, architecture map, state model, or decision table would make the answer clearer.
+- Be concise, direct, and candid. Challenge weak assumptions and distinguish verified facts from uncertainty.
+- Ground research in authoritative, current sources and link important evidence.
+- Preserve the original goal and constraints. Finish authorized work end to end and verify the actual result before claiming completion.
+- Ask questions only when a decision is materially ambiguous, risky, or requires approval.
+- Use relevant skills. Spawn subagents only for genuinely independent work, then synthesize their findings.
+- Keep changes focused and simple. Avoid unrelated edits, unnecessary abstractions, and low-signal tests.
+- Test observable behavior, review substantial changes, and validate user-facing work in the real interface when applicable.
+- Preserve unrelated work and never take destructive, production, or external actions beyond what the user authorized.
+- Report meaningful blockers, outcomes, and evidence without noisy progress.
+- Keep this file current as Vellum and Vellum Code evolve. Update it only from repeated evidence in commits, PRs, and Codex conversations; record meaningful feature additions, removals, architecture direction, and workflow changes without secrets or unnecessary personal data.
+
+---
+
 ## 1. Privacy & Scrubbing Protocol (CRITICAL — READ FIRST)
 
 Privacy is architecture, not policy. Every piece of data that touches the pipeline goes through
@@ -82,14 +98,15 @@ Before including any Obsidian chunk in the LLM prompt, check its folder against
 Folders and their permissions:
 - `X/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
 - `Youtube/` — INDEXED locally, SENT to LLM, TOOL ACCESSIBLE
-- `Books/` — INDEXED locally, NEVER sent to LLM raw
+- `Books/` — INDEXED locally, CONDITIONALLY SENT under the Books egress policy, TOOL ACCESSIBLE
 - `feedback/` — INDEXED locally, NEVER sent to LLM raw
 - `Sports/` — INDEXED locally, SENT to LLM
 - `Agent/` — INDEXED locally, SENT to LLM
 
-Private folder chunks (Books, feedback, and any default private folders) contribute
-to retrieval scoring but their content is NEVER injected into the LLM prompt.
-Public folders like X, Youtube, Sports, and Agent can be used as LLM context.
+Book source content follows explicit profile consent and per-book `Local only`
+overrides. Private User book state remains separate and may enter external context
+only through the privacy-brokered context policy or when the user explicitly
+selects an item. Raw feedback and other default-private folders remain withheld.
 
 ### What the External API Never Sees
 
@@ -98,7 +115,9 @@ The following must never appear in any payload sent to OpenRouter:
 - Email addresses
 - Physical addresses or precise locations
 - Financial account numbers or passwords
-- Raw content from private folders (Books, feedback, and default private folders)
+- Raw feedback or content from other default-private folders
+- Book source content without profile consent or when the book is `Local only`
+- Raw private User book state outside its approved disclosure boundary
 - File paths from the user's machine
 - The user's real handle or username from any platform
 
@@ -206,6 +225,13 @@ automatic curator maintenance. The curator can archive but never permanently
 delete; bundled, external, hub-installed, pinned, protected, and user-owned skills
 are exempt. See `docs/SKILLS_SYSTEM.md` and `docs/SKILLS_OPERATIONS.md`.
 
+### Specialist Agent Ownership
+
+- `AgentCatalog` is the canonical owner of specialist profiles and executors.
+- Specialist work enters through typed `DelegationRuntime` requests; API and compatibility paths must not bypass profile admission, tool and skill narrowing, memory scope, cache identity, confirmation, or audit policy.
+- Specialist agents may read profile-approved Knowledge Core context. Shared-memory writes remain proposals that Knowledge Core validates, deduplicates, reconciles, and promotes.
+- BooksAgent answers remain bounded by Knowledge Core evidence and profile-approved Hermes skill metadata. Importing, opening, or owning a Book does not establish a user belief or endorsement.
+
 ---
 
 ## 3. MCP Integration
@@ -216,10 +242,10 @@ entire Obsidian vault into context.
 
 ### Active MCP Servers
 
-**Filesystem MCP** (`@modelcontextprotocol/server-filesystem`)
-- Scope: restricted to `OBSIDIAN_VAULT_PATH` only
-- Used for: reading specific note files when the agent needs the full text
-  of a note it has already identified via vector retrieval
+**Filesystem (PowerShell CLI, no MCP)**
+- Implemented in `agent/tools/filesystem.py`; calls `powershell -NoProfile -NonInteractive`
+- Scope: confined to `OBSIDIAN_VAULT_PATH` (+ browser cache for reads)
+- Used for: reading/writing/editing/deleting vault notes; `delete_file` requires `confirm=true`
 - Never used for: bulk reading, directory traversal, writing outside `Agent/`
 
 **Apify (REST API for scheduled ingestion + MCP for agent calls)**
@@ -237,10 +263,22 @@ entire Obsidian vault into context.
   `Library/X/<handle>/`.
 
 **Playwright MCP** (`@playwright/mcp@latest --isolated`)
-- Used for: browser navigation and accessibility snapshots through `browser_action`
+- Used for: the Hermes-style browser toolset (`browser_navigate`, `browser_snapshot`,
+  `browser_click`, `browser_type`, `browser_scroll`, `browser_press`, `browser_back`,
+  `browser_get_images`, `browser_vision`, `browser_console`, `browser_cdp`,
+  `browser_dialog`, plus `browser_tabs`, `browser_select_option`, `browser_hover`,
+  `browser_wait`, `browser_close`, and generic `browser_action`)
+- Pages are accessibility trees with ref IDs (`@e1`); `browser_type` clears fields first
+- Snapshots over `BROWSER_SNAPSHOT_BUDGET` (default 15000) characters are truncated and the
+  full tree is saved to `BROWSER_CACHE_DIR` (default `data/browser-cache`) for `read_file` paging
+- Sessions are reaped after `BROWSER_INACTIVITY_TIMEOUT` (default 120s) idle, checked every
+  `BROWSER_CLEANUP_INTERVAL` (default 30s); `BROWSER_HEADED=true` shows a visible browser window
 - Default mode: navigation/snapshot/read-only browser inspection
-- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`) require
+- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`, `cdp`, `dialog`) require
   `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true`
+- `browser_cdp` and `browser_dialog` additionally require `BROWSER_CDP_URL` (attach to a running
+  Chromium-family browser, Hermes `/browser connect` equivalent); `browser_dialog` policy is set
+  with `BROWSER_DIALOG_POLICY` (`must_respond` default, `auto_dismiss`, `auto_accept`)
 - Never used for: banking, purchases, password managers, account settings,
   destructive operations, or sending messages without an explicit control layer
 
@@ -492,6 +530,13 @@ and do not send data to external services.
 - It uses live providers and does not run a sports daemon or curiosity loop.
 - `Library/Sports/` is legacy reference material, not a canonical truth source.
 
+### AGENTS.md Evolution Refresh (about every 2.5 weeks)
+- Review recent Vellum and Vellum Code commits, PRs, and accessible Codex conversations for repeated evidence of how the system has changed.
+- Update only `AGENTS.md` when the evidence supports a meaningful change in operating rules, architecture direction, active features, removed features, or workflow conventions.
+- Preserve useful existing instructions. Avoid unrelated rewrites, achievement language, and speculative roadmap claims.
+- Do not include secrets, tokens, pairing URLs, credentials, private personal data, or unnecessary identifying details.
+- If no meaningful evidence-backed change is found, leave `AGENTS.md` unchanged and report that.
+
 ---
 
 ## 5. Vault Write-Back Standards
@@ -577,7 +622,7 @@ agent/
 ├── obsidian/                 ← vault.py, ingester.py, folder_policy.py, watcher.py
 ├── rag/                      ← embedder.py, store.py, reranker.py, graph_retriever.py
 ├── llm/                      ← openrouter.py (ZDR enforced)
-├── mcp/                      ← client.py, filesystem_tools.py, apify_tools.py
+├── mcp/                      ← client.py, apify_tools.py (filesystem tools live in tools/filesystem.py)
 ├── memory/                   ← honcho_client.py, fts5.py, resolved.py, skills.py, sessions.py
 ├── usage/                    ← audit_log.py, suggestions.py, pricing.py
 ├── scheduler/                ← digest.py, reflection.py, skill_detector.py

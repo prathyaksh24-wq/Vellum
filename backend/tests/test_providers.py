@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
+from agent.config import Settings
 from agent.llm.providers import (
     DEFAULT_TEMPERATURE,
     ModelEntry,
     ProviderGroup,
     ProviderRegistry,
+    _CATALOG,
 )
 
 
@@ -14,6 +18,32 @@ def test_catalog_has_expected_provider_groups() -> None:
     registry = ProviderRegistry()
     groups = {group.key for group in registry.list_groups()}
     assert groups == {"google", "qwen", "minimax", "anthropic", "openai", "deepseek", "moonshot"}
+
+
+def test_default_openrouter_allowlist_covers_curated_catalog() -> None:
+    default = Settings.model_fields["openrouter_model_allowlist"].default
+    allowlist = {item.strip() for item in str(default).split(",") if item.strip()}
+
+    assert {entry.id for entry in _CATALOG}.issubset(allowlist)
+
+
+def test_available_models_hides_unapproved_openrouter_models(monkeypatch) -> None:
+    from agent.llm import providers
+
+    monkeypatch.setattr(
+        providers,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openrouter_api_key="or-key",
+            openai_api_key="sk-openai",
+            reviewed_openrouter_models=("openai/gpt-5.6-sol",),
+            primary_model="openai/gpt-5.6-sol",
+        ),
+    )
+
+    models = providers.available_models()
+
+    assert [item.id for item in models] == ["openai/gpt-5.6-sol"]
 
 
 def test_each_group_has_at_least_one_model() -> None:

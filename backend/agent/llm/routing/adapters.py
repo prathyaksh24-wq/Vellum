@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 
+from agent.privacy.disclosure import DisclosureBlocked
 from agent.llm.routing.models import (
     OPENROUTER_DEFAULT_PROVIDER_ORDER,
     FailureKind,
@@ -68,6 +69,9 @@ def classify_provider_exception(exc: BaseException) -> ProviderFailure:
     if isinstance(exc, httpx.TimeoutException):
         kind = FailureKind.timeout
         status = None
+    elif isinstance(exc, DisclosureBlocked):
+        kind = FailureKind.invalid_request
+        status = None
     elif isinstance(exc, httpx.NetworkError):
         kind = FailureKind.network
         status = None
@@ -115,9 +119,11 @@ class OpenRouterAdapter:
         *,
         base_url: str,
         reviewed_providers: tuple[str, ...] = OPENROUTER_DEFAULT_PROVIDER_ORDER,
+        request_timeout: float = 30.0,
     ) -> None:
         self.base_url = base_url
         self.reviewed_providers = reviewed_providers
+        self.request_timeout = request_timeout
 
     def build_model(
         self,
@@ -155,6 +161,8 @@ class OpenRouterAdapter:
                 "X-Title": "Vellum",
             },
             extra_body=extra,
+            timeout=self.request_timeout,
+            max_retries=0,
             **kwargs,
         )
 
@@ -162,8 +170,9 @@ class OpenRouterAdapter:
 class OpenAIAdapter:
     provider = "openai"
 
-    def __init__(self, *, base_url: str) -> None:
+    def __init__(self, *, base_url: str, request_timeout: float = 30.0) -> None:
         self.base_url = base_url
+        self.request_timeout = request_timeout
 
     def build_model(
         self,
@@ -188,5 +197,7 @@ class OpenAIAdapter:
             temperature=temperature,
             max_tokens=max(256, max_tokens),
             extra_body=reasoning_extra_body(reasoning_mode) or None,
+            timeout=self.request_timeout,
+            max_retries=0,
             **kwargs,
         )

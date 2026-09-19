@@ -8,6 +8,7 @@ from agent.llm.routing.adapters import (
     OpenRouterAdapter,
     classify_provider_exception,
 )
+from agent.privacy.disclosure import DisclosureBlocked
 from agent.llm.routing.models import FailureKind, FallbackTarget, ProviderRoutingPolicy
 
 
@@ -136,3 +137,9 @@ def test_network_and_timeout_exceptions_are_distinct() -> None:
 
     assert classify_provider_exception(httpx.ReadTimeout("slow", request=request)).kind is FailureKind.timeout
     assert classify_provider_exception(httpx.ConnectError("offline", request=request)).kind is FailureKind.network
+
+
+def test_local_disclosure_blocks_fail_fast_as_invalid_request() -> None:
+    failure = classify_provider_exception(DisclosureBlocked("model is not approved"))
+
+    assert failure.kind is FailureKind.invalid_request

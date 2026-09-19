@@ -222,10 +222,10 @@ entire Obsidian vault into context.
 
 ### Active MCP Servers
 
-**Filesystem MCP** (`@modelcontextprotocol/server-filesystem`)
-- Scope: restricted to `OBSIDIAN_VAULT_PATH` only
-- Used for: reading specific note files when the agent needs the full text
-  of a note it has already identified via vector retrieval
+**Filesystem (PowerShell CLI, no MCP)**
+- Implemented in `agent/tools/filesystem.py`; calls `powershell -NoProfile -NonInteractive`
+- Scope: confined to `OBSIDIAN_VAULT_PATH` (+ browser cache for reads)
+- Used for: reading/writing/editing/deleting vault notes; `delete_file` requires `confirm=true`
 - Never used for: bulk reading, directory traversal, writing outside `Agent/`
 
 **Apify (REST API for scheduled ingestion + MCP for agent calls)**
@@ -243,10 +243,22 @@ entire Obsidian vault into context.
   `Library/X/<handle>/`.
 
 **Playwright MCP** (`@playwright/mcp@latest --isolated`)
-- Used for: browser navigation and accessibility snapshots through `browser_action`
+- Used for: the Hermes-style browser toolset (`browser_navigate`, `browser_snapshot`,
+  `browser_click`, `browser_type`, `browser_scroll`, `browser_press`, `browser_back`,
+  `browser_get_images`, `browser_vision`, `browser_console`, `browser_cdp`,
+  `browser_dialog`, plus `browser_tabs`, `browser_select_option`, `browser_hover`,
+  `browser_wait`, `browser_close`, and generic `browser_action`)
+- Pages are accessibility trees with ref IDs (`@e1`); `browser_type` clears fields first
+- Snapshots over `BROWSER_SNAPSHOT_BUDGET` (default 15000) characters are truncated and the
+  full tree is saved to `BROWSER_CACHE_DIR` (default `data/browser-cache`) for `read_file` paging
+- Sessions are reaped after `BROWSER_INACTIVITY_TIMEOUT` (default 120s) idle, checked every
+  `BROWSER_CLEANUP_INTERVAL` (default 30s); `BROWSER_HEADED=true` shows a visible browser window
 - Default mode: navigation/snapshot/read-only browser inspection
-- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`) require
+- Mutating actions (`click`, `type`, `press_key`, `select_option`, `hover`, `cdp`, `dialog`) require
   `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true`
+- `browser_cdp` and `browser_dialog` additionally require `BROWSER_CDP_URL` (attach to a running
+  Chromium-family browser, Hermes `/browser connect` equivalent); `browser_dialog` policy is set
+  with `BROWSER_DIALOG_POLICY` (`must_respond` default, `auto_dismiss`, `auto_accept`)
 - Never used for: banking, purchases, password managers, account settings,
   destructive operations, or sending messages without an explicit control layer
 
@@ -594,7 +606,7 @@ agent/
 ├── obsidian/                 ← vault.py, ingester.py, folder_policy.py, watcher.py
 ├── rag/                      ← embedder.py, store.py, reranker.py, graph_retriever.py
 ├── llm/                      ← openrouter.py (ZDR enforced)
-├── mcp/                      ← client.py, filesystem_tools.py, apify_tools.py
+├── mcp/                      ← client.py, apify_tools.py (filesystem tools live in tools/filesystem.py)
 ├── memory/                   ← honcho_client.py, fts5.py, resolved.py, skills.py, sessions.py
 ├── usage/                    ← audit_log.py, suggestions.py, pricing.py
 ├── scheduler/                ← digest.py, reflection.py, skill_detector.py
@@ -668,3 +680,19 @@ It returns the model string to use for the current query.
 
 Failure messages are always one word where possible. They are never apologetic.
 They are never explained at length. The user can ask why if they want to know.
+
+---
+
+## Agent skills
+
+### Issue tracker
+
+Vellum work is tracked in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Incoming work uses the five canonical triage roles. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Vellum uses a single-context domain model in root `CONTEXT.md`, with decisions under `docs/adr/`. See `docs/agents/domain.md`.

@@ -73,6 +73,10 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("model: turnModel");
     expect(html).toContain("model: modelId");
     expect(html).toContain("chat.model || selModel");
+    expect(html).toContain("MODEL_PROVIDER_FILTERS");
+    expect(html).toContain("modelFamily");
+    expect(html).toContain("label: 'OpenAI'");
+    expect(html).toContain("label: 'Claude'");
     expect(html).toContain("updateChat(activeChatId, chat => ({...chat, model: id}), true)");
     expect(html).not.toContain("API.settings.setActiveModel(id)");
   });

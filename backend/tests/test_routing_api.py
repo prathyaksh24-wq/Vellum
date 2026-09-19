@@ -118,6 +118,7 @@ def test_policy_credentials_strategy_reset_and_status_contract(monkeypatch, tmp_
     assert strategy.json()["strategy"] == "round_robin"
     assert reset.json()["ok"] is True
     assert status.status_code == 200
+    assert status.json()["primary_provider"] == "openrouter"
     assert status.json()["global_policy"]["data_collection"] == "deny"
     assert status.json()["credential_health"]["openrouter"]["healthy"] == 1
 

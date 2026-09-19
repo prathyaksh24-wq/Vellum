@@ -4,13 +4,14 @@
     "created_at": null,
     "created_by": null,
     "last_patched_at": null,
-    "last_used_at": "2026-07-03T11:02:24.974309+00:00",
-    "last_viewed_at": "2026-07-03T11:02:24.956191+00:00",
+    "last_used_at": "2026-08-06T13:55:40.272455+00:00",
+    "last_viewed_at": "2026-08-06T13:55:40.254465+00:00",
+    "origin": null,
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 2,
-    "view_count": 2
+    "use_count": 13,
+    "view_count": 13
   },
   "skill-browser-automation-v1": {
     "archived_at": null,
@@ -187,12 +188,13 @@
     "created_at": null,
     "created_by": null,
     "last_patched_at": null,
-    "last_used_at": "2026-07-03T11:02:24.783248+00:00",
-    "last_viewed_at": "2026-07-03T11:02:24.840070+00:00",
+    "last_used_at": "2026-08-06T13:55:40.079049+00:00",
+    "last_viewed_at": "2026-08-06T13:55:40.149913+00:00",
+    "origin": null,
     "patch_count": 0,
     "pinned": false,
     "state": "active",
-    "use_count": 2,
-    "view_count": 4
+    "use_count": 13,
+    "view_count": 26
   }
 }

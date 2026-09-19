@@ -59,11 +59,9 @@ def routing_status() -> dict:
         }
     attempts = runtime.store.list_attempts(limit=50, offset=0)
     latest = attempts[-1].model_dump(mode="json") if attempts else None
-    primary_provider = (
-        "openai"
-        if active.startswith("openai/") and health["openai"]["healthy"] > 0
-        else "openrouter"
-    )
+    # Catalog IDs use vendor namespaces inside OpenRouter; they are not
+    # native-provider selections. Native routes must be explicitly configured.
+    primary_provider = "openrouter"
     return {
         "active_model": active,
         "primary_provider": primary_provider,

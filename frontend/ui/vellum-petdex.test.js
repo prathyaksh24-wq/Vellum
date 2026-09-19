@@ -10,7 +10,10 @@ describe("Vellum Petdex companion", () => {
   test("fetches the live manifest with a localStorage cache", () => {
     expect(html).toContain("const PETDEX_MANIFEST = 'https://petdex.dev/api/manifest';");
     expect(html).toContain("PETDEX_MANIFEST_TTL");
-    expect(html).toContain("fetch(PETDEX_MANIFEST)");
+    expect(html).toContain("for (const url of [PETDEX_MANIFEST_PROXY, PETDEX_MANIFEST])");
+    expect(html).toContain("PETDEX_MANIFEST_PROXY");
+    expect(html).toContain("PETDEX_SPRITE_PROXY");
+    expect(html).toContain("pxRewriteSprites");
     expect(html).toContain("vellum-pet-manifest");
     expect(html).toContain("vellum-pet-manifest-at");
     expect(html).toContain("setPetError(cached ? 'Gallery unreachable.");
