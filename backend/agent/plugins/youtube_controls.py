@@ -287,7 +287,6 @@ def youtube_plugin_contribution(
                 required_permissions=[YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID],
                 **common,
             ),
-            connected,
         ),
     ))
 

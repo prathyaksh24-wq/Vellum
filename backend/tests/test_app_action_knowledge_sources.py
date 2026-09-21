@@ -4,6 +4,7 @@ from agent.app_actions.knowledge_sources import (
     BOOK_COMPILE_ACTION_ID,
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
+    KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
     KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
     KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
     KnowledgeSourceActionService,
@@ -14,6 +15,7 @@ from agent.plugins.registry import PluginRegistry
 from agent.plugins.youtube_contract import (
     YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID,
     YOUTUBE_CONNECTION_START_ACTION_ID,
+    YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID,
     YOUTUBE_SYNC_ACTION_ID,
 )
 from agent.plugins.youtube_controls import youtube_plugin_contribution
@@ -22,6 +24,7 @@ from agent.plugins.youtube_controls import youtube_plugin_contribution
 class _Wiki:
     def __init__(self) -> None:
         self.imports = []
+        self.lints = []
 
     def rebuild_index(self):
         return {"path": "Knowledge/index.md", "page_count": 4}
@@ -36,6 +39,10 @@ class _Wiki:
                 "page": {"title": "Private source", "status": "draft", "sensitivity": "private"},
             },
         }
+
+    def lint(self, **payload):
+        self.lints.append(payload)
+        return {"health": "healthy", "stale_days": payload["stale_days"], "issues": []}
 
 
 class _Books:
@@ -96,7 +103,7 @@ def _knowledge_runtime():
     return runtime, wiki, books
 
 
-def _youtube_runtime(tmp_path: Path):
+def _youtube_runtime(tmp_path: Path, *, connected: bool = True):
     root = tmp_path / "plugins"
     plugin = root / "connectors" / "youtube"
     plugin.mkdir(parents=True)
@@ -121,7 +128,7 @@ def _youtube_runtime(tmp_path: Path):
     runtime.register_plugin_contribution(
         youtube_plugin_contribution(
             controls,
-            status_provider=lambda: {"configured": True, "connected": True},
+            status_provider=lambda: {"configured": True, "connected": connected},
         )
     )
     return runtime, registry, controls
@@ -156,24 +163,67 @@ def test_knowledge_index_and_epub_import_use_canonical_owners_without_user_claim
     assert "belief" not in imported.model_dump_json()
 
 
+def test_knowledge_health_check_uses_the_canonical_wiki_linter():
+    runtime, wiki, _books = _knowledge_runtime()
+
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=KNOWLEDGE_HEALTH_CHECK_ACTION_ID, arguments={"stale_days": 45}),
+        _context("ui"),
+    )
+
+    assert receipt.status == "applied"
+    assert receipt.result["lint"] == {"health": "healthy", "stale_days": 45, "issues": []}
+    assert wiki.lints == [{"stale_days": 45, "write_report": True}]
+
+
 def test_source_path_is_withheld_from_confirmation_and_only_used_after_confirmation():
     runtime, wiki, _books = _knowledge_runtime()
     source_path = r"D:\Private\identity-notes.md"
     request = AppActionRequest(
         action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
-        arguments={"source_path": source_path, "title": "Private source"},
+        arguments={
+            "source_path": source_path,
+            "title": "Private source",
+            "content": "Maintained synthesis only.",
+            "provenance": [{"kind": "approved_path", "ref": "private-source"}],
+        },
     )
 
     review = runtime.dispatch(request, _context())
 
     assert review.status == "confirmation_required"
     assert source_path not in review.model_dump_json()
+    assert "Maintained synthesis only" not in review.model_dump_json()
     assert wiki.imports == []
     applied = runtime.confirm(review.confirmation.token, request, _context())
     assert applied.status == "applied"
     assert applied.target.id == "source:opaque-1"
     assert source_path not in applied.model_dump_json()
     assert wiki.imports[0]["source_path"] == source_path
+    assert wiki.imports[0]["synthesis"] == "Maintained synthesis only."
+    assert wiki.imports[0]["provenance"] == [{"kind": "approved_path", "ref": "private-source"}]
+
+
+def test_source_import_rejects_a_raw_path_without_maintained_synthesis():
+    runtime, wiki, _books = _knowledge_runtime()
+
+    review = runtime.dispatch(
+        AppActionRequest(
+            action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
+            arguments={"source_path": "Library/Research/raw.md"},
+        ),
+        _context(),
+    )
+    request = AppActionRequest(
+        action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
+        arguments={"source_path": "Library/Research/raw.md"},
+    )
+    receipt = runtime.confirm(review.confirmation.token, request, _context())
+
+    assert review.status == "confirmation_required"
+    assert receipt.status == "failed"
+    assert receipt.error_code == "INVALID_ACTION_ARGUMENTS"
+    assert wiki.imports == []
 
 
 def test_book_process_and_compile_require_bound_confirmation():
@@ -211,10 +261,22 @@ def test_youtube_actions_follow_plugin_state_and_disconnect_confirmation(tmp_pat
     assert (unavailable.status, unavailable.error_code) == ("unavailable", "ACTION_UNAVAILABLE")
 
 
+def test_youtube_intelligence_rebuild_remains_available_without_oauth(tmp_path):
+    runtime, _registry, _controls = _youtube_runtime(tmp_path, connected=False)
+
+    action_ids = {item.id for item in runtime.catalog(_context()).actions}
+
+    assert YOUTUBE_CONNECTION_START_ACTION_ID in action_ids
+    assert YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID in action_ids
+    assert YOUTUBE_SYNC_ACTION_ID not in action_ids
+    assert YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID not in action_ids
+
+
 def test_nlp_matches_explicit_knowledge_and_youtube_controls_without_catching_questions():
     runtime, _wiki, _books = _knowledge_runtime()
 
     assert runtime.match_submission("rebuild the knowledge index").action_id == KNOWLEDGE_INDEX_REBUILD_ACTION_ID
+    assert runtime.match_submission("check knowledge health").action_id == KNOWLEDGE_HEALTH_CHECK_ACTION_ID
     assert runtime.match_submission("import a book").action_id == BOOK_IMPORT_ACTION_ID
     assert runtime.match_submission("process book book-1").action_id == BOOK_PROCESS_ACTION_ID
     assert runtime.match_submission("build book skill book-1").action_id == BOOK_COMPILE_ACTION_ID
@@ -222,3 +284,4 @@ def test_nlp_matches_explicit_knowledge_and_youtube_controls_without_catching_qu
     assert runtime.match_submission("sync YouTube").action_id == YOUTUBE_SYNC_ACTION_ID
     assert runtime.match_submission("disconnect YouTube").action_id == YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID
     assert runtime.match_submission("How does YouTube synchronization work?") is None
+    assert runtime.match_submission("import knowledge source at Library/Research/raw.md") is None

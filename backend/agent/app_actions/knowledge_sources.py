@@ -14,6 +14,7 @@ from agent.tools.registry import CapabilityAccess
 
 
 KNOWLEDGE_SOURCE_IMPORT_ACTION_ID = "knowledge.source.import"
+KNOWLEDGE_HEALTH_CHECK_ACTION_ID = "knowledge.health.check"
 KNOWLEDGE_INDEX_REBUILD_ACTION_ID = "knowledge.index.rebuild"
 BOOK_IMPORT_ACTION_ID = "book.import"
 BOOK_PROCESS_ACTION_ID = "book.process"
@@ -21,6 +22,7 @@ BOOK_COMPILE_ACTION_ID = "book.compile"
 
 KNOWLEDGE_SOURCE_ACTION_IDS = frozenset({
     KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
+    KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
     KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
@@ -69,6 +71,8 @@ class KnowledgeSourceActionService:
         confirmed: bool = False,
     ) -> dict[str, Any]:
         try:
+            if action_id == KNOWLEDGE_HEALTH_CHECK_ACTION_ID:
+                return self._check_health(arguments)
             if action_id == KNOWLEDGE_INDEX_REBUILD_ACTION_ID:
                 return self._rebuild_index()
             if action_id == KNOWLEDGE_SOURCE_IMPORT_ACTION_ID:
@@ -96,6 +100,22 @@ class KnowledgeSourceActionService:
             raise KnowledgeSourceActionError("KNOWLEDGE_ACTION_FAILED", str(exc)) from exc
         raise KnowledgeSourceActionError("ACTION_UNAVAILABLE", f"{action_id} is unavailable.", unavailable=True)
 
+    def _check_health(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        stale_days = arguments.get("stale_days", 120)
+        if isinstance(stale_days, bool) or not isinstance(stale_days, int) or not 0 <= stale_days <= 3650:
+            raise KnowledgeSourceActionError(
+                "INVALID_ACTION_ARGUMENTS",
+                "Stale days must be an integer between 0 and 3650.",
+            )
+        result = dict(self._knowledge_wiki_provider().lint(stale_days=stale_days, write_report=True))
+        return {
+            "changed": True,
+            "lint": result,
+            "_target_kind": "knowledge_health",
+            "_target_id": "knowledge-health",
+            "_message": "Checked Knowledge health.",
+        }
+
     def _rebuild_index(self) -> dict[str, Any]:
         result = dict(self._knowledge_wiki_provider().rebuild_index())
         return {
@@ -111,11 +131,17 @@ class KnowledgeSourceActionService:
 
     def _import_source(self, arguments: dict[str, Any]) -> dict[str, Any]:
         source_path = _required_string(arguments, "source_path")
+        synthesis = _required_string(arguments, "content")
         result = dict(self._knowledge_wiki_provider().ingest_source(
             source_path=source_path,
             title=str(arguments.get("title") or "").strip(),
+            synthesis=synthesis,
             description=str(arguments.get("description") or "").strip(),
+            links=_string_list(arguments.get("links")),
             tags=_string_list(arguments.get("tags")),
+            related_pages=_dictionary_list(arguments.get("related_pages")),
+            source_trust=str(arguments.get("source_trust") or "approved_path").strip(),
+            provenance=_provenance_list(arguments.get("provenance")),
             approved_source=True,
         ))
         source_page = dict(result.get("source_page") or {})
@@ -204,19 +230,43 @@ def knowledge_source_action_definitions() -> list[AppActionDefinition]:
     }
     return [
         AppActionDefinition(
+            id=KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
+            title="Check Knowledge health",
+            description="Lint the maintained Knowledge Wiki and write its local health report.",
+            confirmation_rule="none",
+            argument_schema={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "stale_days": {"type": "integer", "minimum": 0, "maximum": 3650},
+                },
+            },
+            ui_reference="knowledge",
+            audit_label="knowledge.health.check",
+            **common,
+        ),
+        AppActionDefinition(
             id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
             title="Import a source into Knowledge",
-            description="Import one explicitly approved Vault source through Knowledge Wiki path policy.",
+            description="Import a maintained synthesis of one explicitly approved Vault source.",
             confirmation_rule="operation_bound",
             argument_schema={
                 "type": "object",
-                "required": ["source_path"],
+                "required": ["source_path", "content"],
                 "additionalProperties": False,
                 "properties": {
                     "source_path": {"type": "string"},
                     "title": {"type": "string"},
+                    "content": {"type": "string"},
                     "description": {"type": "string"},
+                    "links": {"type": "array", "items": {"type": "string"}},
                     "tags": {"type": "array", "items": {"type": "string"}},
+                    "related_pages": {"type": "array", "items": {"type": "object"}},
+                    "source_trust": {"type": "string"},
+                    "provenance": {
+                        "type": "array",
+                        "items": {"anyOf": [{"type": "object"}, {"type": "string"}]},
+                    },
                 },
             },
             ui_reference="knowledge.sources",
@@ -289,6 +339,22 @@ def _string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _dictionary_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _provenance_list(value: Any) -> list[dict[str, Any] | str]:
+    if not isinstance(value, list):
+        return []
+    return [
+        dict(item) if isinstance(item, dict) else str(item).strip()
+        for item in value
+        if isinstance(item, dict) or str(item).strip()
+    ]
 
 
 def _book_error_message(code: str) -> str:

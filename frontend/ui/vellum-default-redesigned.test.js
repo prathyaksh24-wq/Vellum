@@ -39,6 +39,7 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("routes Knowledge, Books, YouTube, and feed mutations through App Actions", () => {
+    expect(html).toContain("onAction('knowledge.health.check', {})");
     expect(html).toContain("onAction('knowledge.index.rebuild', {})");
     expect(html).toContain("dispatchKnowledgeAction('composer.attachment.import', {source:'picker'})");
     expect(html).toContain("onAction('youtube.connection.start'");
@@ -48,6 +49,7 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("receipt.action_id === 'book.import'");
     expect(html).toContain("Sports stays available on demand without a background feed");
     expect(html).not.toContain("runWikiAction(() => API.knowledge.indexRebuild())");
+    expect(html).not.toContain("runWikiAction(() => API.knowledge.lint())");
     expect(html).not.toContain("sources: [item, ...(p.sources || [])]");
   });
 
