@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -82,3 +84,26 @@ def test_set_active_model_returns_active_on_models_endpoint(client: TestClient) 
     client.post("/api/settings/active-model", json={"model": "deepseek/deepseek-v4-flash"})
     body = client.get("/api/models").json()
     assert body["active"]["id"] == "deepseek/deepseek-v4-flash"
+
+
+def test_provider_credential_write_rolls_back_file_and_environment(monkeypatch, tmp_path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=old-value\nUNCHANGED=yes\n", encoding="utf-8")
+    monkeypatch.setattr(api_mod, "_env_path", lambda: env_path)
+    monkeypatch.setenv("OPENAI_API_KEY", "old-value")
+    calls = 0
+
+    def reset_runtime():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("reset failed")
+
+    monkeypatch.setattr(api_mod, "reset_routing_runtime", reset_runtime)
+
+    with pytest.raises(RuntimeError, match="reset failed"):
+        api_mod._write_provider_credential("openai", "new-secret")
+
+    assert env_path.read_text(encoding="utf-8") == "OPENAI_API_KEY=old-value\nUNCHANGED=yes\n"
+    assert os.environ["OPENAI_API_KEY"] == "old-value"
+    assert "new-secret" not in env_path.read_text(encoding="utf-8")

@@ -18,6 +18,7 @@ import re
 import secrets
 import shutil
 import sys
+import threading
 import time
 from typing import Any, Literal
 import urllib.error
@@ -46,10 +47,23 @@ from agent.app_actions.attachments import ConversationAttachment, get_attachment
 from agent.app_actions.automations import AutomationActionService
 from agent.app_actions.coding_github import CodingGitHubActionService
 from agent.app_actions.knowledge_sources import KnowledgeSourceActionService
-from agent.app_actions.models import AppActionContext
+from agent.app_actions.models import ActionReceipt, AppActionContext, AppActionRequest
 from agent.app_actions.observability import ObservabilityActionService
 from agent.app_actions.runtime import get_app_action_runtime
 from agent.app_actions.session_controls import SessionControlService
+from agent.app_actions.settings_runtime import (
+    DEFAULT_MODEL_SET_ACTION_ID,
+    MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_DREAMING_RUN_ACTION_ID,
+    MEMORY_ENTRY_ARCHIVE_ACTION_ID,
+    MEMORY_ENTRY_CREATE_ACTION_ID,
+    MEMORY_ENTRY_DELETE_ACTION_ID,
+    MEMORY_ENTRY_PIN_ACTION_ID,
+    MEMORY_ENTRY_UPDATE_ACTION_ID,
+    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
+    MEMORY_SETTINGS_UPDATE_ACTION_ID,
+    SettingsRuntimeActionService,
+)
 from agent.app_actions.lifecycle_controls import (
     PLUGIN_STATE_SET_ACTION_ID,
     PluginSkillActionService,
@@ -81,8 +95,8 @@ from agent.memory.project_context import ProjectContext
 from agent.memory.sessions import SessionsReader
 from agent.master.live_runtime import get_agent_catalog, get_delegation_runtime
 from agent.automations.api import router as automations_router
-from agent.llm.routing.api import router as llm_routing_router
-from agent.llm.routing.runtime import reset_routing_runtime
+from agent.llm.routing.api import configure_action_dispatcher, router as llm_routing_router
+from agent.llm.routing.runtime import get_routing_runtime, reset_routing_runtime
 from agent.llm.providers import get_provider_registry
 from agent.obsidian.ingester import VaultIngester
 from agent.obsidian.conversation_export import archive_conversation_projection, export_conversations
@@ -107,6 +121,7 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
+from agent.plugins.spotify_controls import SPOTIFY_REDIRECT_URI, spotify_plugin_contribution
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.google_calendar_api import (
@@ -154,7 +169,7 @@ _fts5_memory = _memory_orchestrator.fts5
 _dreaming_status: dict[str, Any] = {"status": "idle", "last_run": None, "last_result": None}
 _DREAMING_MIN_PENDING = max(1, int(os.getenv("VELLUM_DREAMING_MIN_PENDING", "3")))
 _DREAMING_COOLDOWN_SECONDS = max(60, int(os.getenv("VELLUM_DREAMING_COOLDOWN_SECONDS", "900")))
-_dreaming_lock = asyncio.Lock()
+_dreaming_lock = threading.Lock()
 terminal_session_manager = TerminalSessionManager()
 coding_service = CodingSessionService()
 _coding_github_actions = CodingGitHubActionService(coding_service=coding_service)
@@ -164,6 +179,7 @@ _app_action_runtime.set_automation_handler(_automation_actions.execute)
 _knowledge_source_actions = KnowledgeSourceActionService()
 _app_action_runtime.set_knowledge_source_handler(_knowledge_source_actions.execute)
 _app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
+_app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
 
 class _ThreadTurnCoordinator:
@@ -241,7 +257,6 @@ _session_control_service = SessionControlService(
 )
 _app_action_runtime.set_session_control_handler(_session_control_service.execute)
 _oauth_flows: dict[str, dict[str, Any]] = {}
-SPOTIFY_REDIRECT_URI = "http://127.0.0.1:8000/api/plugins/spotify/oauth/callback"
 
 _project_context_singleton: ProjectContext | None = None
 _skill_surface_singleton: SkillSurfaceService | None = None
@@ -894,6 +909,16 @@ def _env_path() -> Path:
     return REPO_ROOT / ".env"
 
 
+def _clear_provider_settings_caches() -> None:
+    get_settings.cache_clear()
+    try:
+        from agent.llm.providers import get_provider_registry
+
+        get_provider_registry.cache_clear()
+    except Exception:
+        pass
+
+
 def _set_env_value(key: str, value: str) -> None:
     path = _env_path()
     lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
@@ -912,13 +937,86 @@ def _set_env_value(key: str, value: str) -> None:
         next_lines.append(replacement)
     path.write_text("\n".join(next_lines).rstrip() + "\n", encoding="utf-8")
     os.environ[key] = value.strip()
-    get_settings.cache_clear()
-    try:
-        from agent.llm.providers import get_provider_registry
+    _clear_provider_settings_caches()
 
-        get_provider_registry.cache_clear()
+
+def _write_provider_credential(provider: str, secret: str) -> None:
+    env_name = _PROVIDER_KEY_ENV.get(provider)
+    if env_name is None:
+        raise ValueError(f"Unsupported provider: {provider}")
+    path = _env_path()
+    file_existed = path.exists()
+    previous_file = path.read_text(encoding="utf-8") if file_existed else ""
+    env_existed = env_name in os.environ
+    previous_env = os.environ.get(env_name)
+    try:
+        _set_env_value(env_name, secret)
+        reset_routing_runtime()
     except Exception:
-        pass
+        if file_existed:
+            path.write_text(previous_file, encoding="utf-8")
+        elif path.exists():
+            path.unlink()
+        if env_existed and previous_env is not None:
+            os.environ[env_name] = previous_env
+        else:
+            os.environ.pop(env_name, None)
+        _clear_provider_settings_caches()
+        try:
+            reset_routing_runtime()
+        except Exception:
+            pass
+        raise
+
+
+_settings_runtime_actions = SettingsRuntimeActionService(
+    memory_store_provider=lambda: _memory_orchestrator.store,
+    memory_creator=lambda **values: _memory_orchestrator.save_explicit_memory(**values),
+    provider_registry_provider=get_provider_registry,
+    routing_runtime_provider=get_routing_runtime,
+    credential_writer=_write_provider_credential,
+    memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
+    conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
+    obsidian_memory_importer=lambda: _memory_orchestrator.import_obsidian_memories(
+        get_settings().obsidian_vault_path
+    ),
+)
+_app_action_runtime.set_settings_runtime_handler(_settings_runtime_actions.execute)
+
+
+def _dispatch_compat_action(action_id: str, arguments: dict[str, Any]) -> ActionReceipt:
+    """Keep legacy HTTP adapters on the App Action authorization and receipt path."""
+
+    request = AppActionRequest(action_id=action_id, arguments=arguments)
+    receipt = _app_action_runtime.dispatch(request, AppActionContext(source="ui"))
+    if receipt.status == "confirmation_required":
+        raise HTTPException(
+            status_code=428,
+            detail={
+                "code": "APP_ACTION_CONFIRMATION_REQUIRED",
+                "request": request.model_dump(mode="json"),
+                "receipt": receipt.model_dump(mode="json"),
+            },
+        )
+    if receipt.status != "applied":
+        if receipt.error_code in {"INVALID_ACTION_ARGUMENTS", "MODEL_UNAVAILABLE", "PROVIDER_UNAVAILABLE"}:
+            status_code = 400
+        elif receipt.error_code in {"MEMORY_NOT_FOUND", "ROUTING_POLICY_NOT_FOUND", "CREDENTIAL_NOT_FOUND"}:
+            status_code = 404
+        else:
+            status_code = 503 if receipt.status == "unavailable" else 409
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "code": receipt.error_code or "APP_ACTION_FAILED",
+                "message": receipt.message,
+                "receipt": receipt.model_dump(mode="json"),
+            },
+        )
+    return receipt
+
+
+configure_action_dispatcher(_dispatch_compat_action)
 
 
 def _x_oauth_file(provider: str) -> Path:
@@ -1771,7 +1869,7 @@ def _last_dreaming_run_at() -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> bool:
+def _run_dreaming_cycle(*, reason: str = "auto", force: bool = False) -> bool:
     store = getattr(_memory_orchestrator, "store", None)
     if store is None:
         return False
@@ -1792,9 +1890,9 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
         elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
         if elapsed < _DREAMING_COOLDOWN_SECONDS:
             return False
-    if _dreaming_lock.locked():
+    if not _dreaming_lock.acquire(blocking=False):
         return False
-    async with _dreaming_lock:
+    try:
         try:
             pending_count = len(store.list_pending())
         except Exception:
@@ -1803,8 +1901,8 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
             return False
         _dreaming_status.update({"status": "running", "reason": reason, "pending_count": pending_count})
         try:
-            import_result = await asyncio.to_thread(_import_ui_conversations_to_memory)
-            result = await asyncio.to_thread(_memory_orchestrator.run_dreaming)
+            import_result = _import_ui_conversations_to_memory()
+            result = _memory_orchestrator.run_dreaming()
             result = dict(result)
             result["conversation_import"] = import_result
         except Exception as exc:
@@ -1827,6 +1925,21 @@ async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> b
             }
         )
         return True
+    finally:
+        _dreaming_lock.release()
+
+
+async def _maybe_run_dreaming(*, reason: str = "auto", force: bool = False) -> bool:
+    return await asyncio.to_thread(_run_dreaming_cycle, reason=reason, force=force)
+
+
+def _run_memory_dreaming_action() -> dict[str, Any]:
+    ok = _run_dreaming_cycle(reason="app_action", force=True)
+    if not ok:
+        if _dreaming_status.get("status") == "error":
+            raise RuntimeError(str(_dreaming_status.get("error") or "dreaming failed"))
+        raise RuntimeError("dreaming is already running")
+    return dict(_dreaming_status.get("last_result") or {})
 
 
 def _vector_health() -> dict[str, Any]:
@@ -4657,28 +4770,21 @@ async def archived_memories() -> dict[str, list[dict[str, Any]]]:
 
 @router.post("/memory")
 async def create_memory(request: CreateMemoryRequest) -> dict[str, Any]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
     clean_text = request.text.strip()
     if not clean_text:
         raise HTTPException(status_code=422, detail="memory text is required")
-    memory_id = await asyncio.to_thread(
-        store.save_memory,
-        kind=request.kind.strip() or "fact",
-        text=clean_text,
-        source_thread_id=request.source_thread_id.strip() or "manual",
-        confidence=request.confidence,
-        scope=request.scope.strip() or "global",
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_ENTRY_CREATE_ACTION_ID,
+        {
+            "kind": request.kind.strip() or "fact",
+            "text": clean_text,
+            "source_thread_id": request.source_thread_id.strip() or "manual",
+            "confidence": request.confidence,
+            "scope": request.scope.strip() or "global",
+        },
     )
-    if getattr(_memory_orchestrator, "fts5", None) is not None:
-        await asyncio.to_thread(
-            _memory_orchestrator.fts5.add_document,
-            content=f"Saved memory: {clean_text}",
-            thread_id=request.source_thread_id.strip() or "manual",
-            source_paths=[f"memory:{memory_id}"],
-        )
-    return {"memory": store.get_memory(memory_id)}
+    return {"memory": receipt.result["memory"]}
 
 
 @router.get("/memory/settings")
@@ -4691,11 +4797,13 @@ async def memory_settings() -> dict[str, Any]:
 
 @router.post("/memory/settings")
 async def update_memory_settings(request: MemorySettingsRequest) -> dict[str, Any]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
     patch = request.model_dump(exclude_none=True)
-    return {"settings": await asyncio.to_thread(store.update_settings, patch)}
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_SETTINGS_UPDATE_ACTION_ID,
+        {"patch": patch},
+    )
+    return {"settings": receipt.result["settings"]}
 
 
 @router.get("/memory/dreaming/status")
@@ -4705,85 +4813,66 @@ async def dreaming_status() -> dict[str, Any]:
 
 @router.post("/memory/dreaming/run")
 async def run_dreaming() -> dict[str, Any]:
-    ok = await _maybe_run_dreaming(reason="manual", force=True)
-    if not ok and _dreaming_status.get("status") == "error":
-        raise HTTPException(status_code=500, detail=str(_dreaming_status.get("error") or "dreaming failed"))
-    result = _dreaming_status.get("last_result") or {
-        "new_memories": [],
-        "updated_memories": [],
-        "archived_memories": [],
-        "contradictions": [],
-        "global_summary": "",
-        "project_summaries": {},
-        "audit_log": [],
-    }
-    return result
+    receipt = await asyncio.to_thread(_dispatch_compat_action, MEMORY_DREAMING_RUN_ACTION_ID, {})
+    return receipt.result
 
 
 @router.post("/memory/import-conversations")
 async def import_conversation_memories(limit: int | None = None) -> dict[str, int]:
-    return await asyncio.to_thread(_import_ui_conversations_to_memory, limit)
+    arguments = {"limit": limit} if limit is not None else {}
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+        arguments,
+    )
+    return dict(receipt.result.get("counts") or {})
 
 
 @router.post("/memory/import-obsidian")
 async def import_obsidian_memories() -> dict[str, Any]:
-    return await asyncio.to_thread(_memory_orchestrator.import_obsidian_memories, get_settings().obsidian_vault_path)
+    receipt = await asyncio.to_thread(_dispatch_compat_action, MEMORY_OBSIDIAN_IMPORT_ACTION_ID, {})
+    return dict(receipt.result.get("counts") or {})
 
 
 @router.post("/memory/{memory_id}/archive")
 async def archive_memory(memory_id: int) -> dict[str, Any]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
-    try:
-        return {"memory": await asyncio.to_thread(store.archive, memory_id)}
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="memory not found") from exc
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_ENTRY_ARCHIVE_ACTION_ID,
+        {"memory_id": memory_id},
+    )
+    return {"memory": receipt.result["memory"]}
 
 
 @router.post("/memory/{memory_id}/delete")
 async def delete_memory(memory_id: int) -> dict[str, bool]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
-    try:
-        await asyncio.to_thread(store.delete, memory_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="memory not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_ENTRY_DELETE_ACTION_ID,
+        {"memory_id": memory_id},
+    )
     return {"ok": True}
 
 
 @router.post("/memory/{memory_id}/pin")
 async def pin_memory(memory_id: int, request: PinMemoryRequest) -> dict[str, Any]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
-    try:
-        return {"memory": await asyncio.to_thread(store.pin, memory_id, request.pinned)}
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="memory not found") from exc
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_ENTRY_PIN_ACTION_ID,
+        {"memory_id": memory_id, "pinned": request.pinned},
+    )
+    return {"memory": receipt.result["memory"]}
 
 
 @router.post("/memory/{memory_id}/update")
 async def update_memory(memory_id: int, request: UpdateMemoryRequest) -> dict[str, Any]:
-    store = _memory_orchestrator.store
-    if store is None:
-        raise HTTPException(status_code=503, detail="memory store unavailable")
-    try:
-        return {
-            "memory": await asyncio.to_thread(
-                store.update,
-                memory_id,
-                text=request.text,
-                kind=request.kind,
-            )
-        }
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="memory not found") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    arguments = {"memory_id": memory_id, **request.model_dump(exclude_none=True)}
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        MEMORY_ENTRY_UPDATE_ACTION_ID,
+        arguments,
+    )
+    return {"memory": receipt.result["memory"]}
 
 
 class PrivacyClassifyRequest(BaseModel):
@@ -5060,18 +5149,17 @@ async def set_plugin_state(plugin_id: str, request: PluginStateRequest) -> dict[
 @router.post("/settings/active-model", response_model=ActiveModelResponse)
 async def set_active_model(request: SetActiveModelRequest) -> ActiveModelResponse:
     """Set the default for model-less callers without interrupting active turns."""
-    from agent.llm.providers import get_provider_registry
-
-    registry = get_provider_registry()
-    try:
-        entry = registry.set_active(request.model)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    receipt = await asyncio.to_thread(
+        _dispatch_compat_action,
+        DEFAULT_MODEL_SET_ACTION_ID,
+        {"model": request.model},
+    )
+    entry = receipt.result["model"]
     return ActiveModelResponse(
-        id=entry.id,
-        label=entry.label,
-        provider=entry.provider,
-        open_weights=entry.open_weights,
+        id=entry["id"],
+        label=entry["label"],
+        provider=entry["provider"],
+        open_weights=entry["open_weights"],
     )
 
 
@@ -5107,19 +5195,15 @@ async def set_provider_key(request: ProviderKeyRequest, response: Response) -> d
     api_key = request.api_key.strip()
     if not api_key:
         raise HTTPException(status_code=400, detail="api_key cannot be empty")
-    _set_env_value(_PROVIDER_KEY_ENV[provider], api_key)
-    reset_routing_runtime()
     response.headers["Deprecation"] = "true"
     response.headers["Sunset"] = "Thu, 01 Jul 2027 00:00:00 GMT"
-    models = await list_models()
-    return {
-        "ok": True,
-        "provider": provider,
-        "configured": True,
-        "models": models["models"],
-        "active": models["active"],
-        "provider_keys": models.get("provider_keys", {}),
-    }
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "APP_ACTION_REQUIRED",
+            "message": "Use provider.credential.configure so the credential change is confirmation-bound.",
+        },
+    )
 
 
 _SETUP_STATE_PATH = Path("data/memory/setup_state.json")

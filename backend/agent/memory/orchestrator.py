@@ -410,6 +410,33 @@ class MemoryOrchestrator:
         if self.provider_extensions is None:
             self.provider_extensions = build_default_memory_provider_extensions()
 
+    def save_explicit_memory(
+        self,
+        *,
+        kind: str,
+        text: str,
+        source_thread_id: str,
+        confidence: float,
+        scope: str = "global",
+    ) -> dict[str, Any]:
+        """Persist a user-authored memory and update its canonical search projection."""
+
+        if self.store is None:
+            raise RuntimeError("memory store unavailable")
+        memory_id = self.store.save_memory(
+            kind=kind,
+            text=text,
+            source_thread_id=source_thread_id,
+            confidence=confidence,
+            scope=scope,
+        )
+        self.fts5.add_document(
+            content=f"Saved memory: {text}",
+            thread_id=source_thread_id,
+            source_paths=[f"memory:{memory_id}"],
+        )
+        return self.store.get_memory(memory_id)
+
     def lookup_specialist_response(self, *, profile: AgentProfile, query: str) -> CacheDecision:
         if self.store is not None:
             settings = self.store.get_settings()

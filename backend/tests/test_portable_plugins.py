@@ -100,6 +100,8 @@ def test_spotify_manifest_declares_full_hermes_toolset():
         "spotify.playlists",
         "spotify.albums",
         "spotify.library",
+        "spotify.connection.start",
+        "spotify.connection.disconnect",
     ]
 
 

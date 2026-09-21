@@ -36,6 +36,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Changed
 
+- Migrated remaining settings, memory, Spotify connection, and LLM-routing mutations to typed App Actions with catalog-aware UI dispatch and compatibility adapters.
+- Unified explicit memory creation with the canonical FTS-backed memory writer and made credential-pool reset receipts report actual state changes.
 - Consolidated chat history ownership around `data/ui/conversations.json` and `/api/conversations`, with Obsidian conversation notes as projections.
 - Clarified that Knowledge Wiki pages are maintained synthesis and raw Library material requires explicit approved ingestion.
 - Shifted procedural memory from legacy JSON skill records toward Hermes-compatible `SKILL.md` packages.
@@ -54,6 +56,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Security
 
+- Added confirmation-bound, redacted credential and destructive-setting changes with rollback-safe provider-key persistence.
 - Enforced zero-data-retention OpenRouter routing controls.
 - Added privacy scrubbing for skill authoring and learning flows.
 - Added security checks for remote skill packages and marketplace sources.

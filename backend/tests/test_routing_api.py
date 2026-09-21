@@ -5,6 +5,9 @@ from types import SimpleNamespace
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from agent.app_actions.models import AppActionContext, AppActionRequest
+from agent.app_actions.runtime import AppActionRuntime
+from agent.app_actions.settings_runtime import SettingsRuntimeActionService
 from agent.llm.routing import api as routing_api
 from agent.llm.routing.api import router
 from agent.llm.routing.pool import CredentialPool
@@ -39,6 +42,23 @@ def make_client(monkeypatch, tmp_path) -> TestClient:
         pool=CredentialPool(store),
     )
     monkeypatch.setattr(routing_api, "get_routing_runtime", lambda: runtime)
+    service = SettingsRuntimeActionService(
+        memory_store_provider=lambda: None,
+        memory_creator=lambda **_values: {},
+        provider_registry_provider=lambda: None,
+        routing_runtime_provider=lambda: runtime,
+        credential_writer=lambda _provider, _secret: None,
+        memory_dreaming_runner=lambda: {},
+        conversation_memory_importer=lambda _limit: {},
+        obsidian_memory_importer=lambda: {},
+    )
+    actions = AppActionRuntime(settings_runtime_handler=service.execute)
+    routing_api.configure_action_dispatcher(
+        lambda action_id, arguments: actions.dispatch(
+            AppActionRequest(action_id=action_id, arguments=arguments),
+            AppActionContext(source="ui"),
+        )
+    )
     app = FastAPI()
     app.include_router(router, prefix="/api")
     return TestClient(app)
@@ -53,11 +73,10 @@ def test_add_credential_never_echoes_secret(monkeypatch, tmp_path, caplog) -> No
         json={"provider": "openrouter", "label": "backup", "secret": secret},
     )
 
-    assert response.status_code == 201
+    assert response.status_code == 410
     assert secret not in response.text
     assert secret not in caplog.text
-    assert response.json()["label"] == "backup"
-    assert response.json()["fingerprint"]
+    assert response.json()["detail"]["code"] == "APP_ACTION_REQUIRED"
 
 
 def test_credential_request_model_excludes_secret_from_repr_and_dump() -> None:
@@ -114,13 +133,13 @@ def test_policy_credentials_strategy_reset_and_status_contract(monkeypatch, tmp_
 
     assert policy.status_code == 200
     assert policy.json()["sort"] == "price"
-    assert credential.status_code == 201
+    assert credential.status_code == 410
     assert strategy.json()["strategy"] == "round_robin"
     assert reset.json()["ok"] is True
     assert status.status_code == 200
     assert status.json()["primary_provider"] == "openrouter"
     assert status.json()["global_policy"]["data_collection"] == "deny"
-    assert status.json()["credential_health"]["openrouter"]["healthy"] == 1
+    assert status.json()["credential_health"]["openrouter"]["healthy"] == 0
 
 
 def test_attempt_endpoint_is_bounded_and_redacted(monkeypatch, tmp_path) -> None:
