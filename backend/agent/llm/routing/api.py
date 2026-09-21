@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Literal
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,9 +13,37 @@ from agent.llm.routing.models import (
     ProviderRoutingPolicy,
 )
 from agent.llm.routing.runtime import get_routing_runtime
+from agent.app_actions.settings_runtime import (
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
+    ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
+    ROUTING_FALLBACKS_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+    ROUTING_MODEL_POLICY_SET_ACTION_ID,
+    ROUTING_POLICY_SET_ACTION_ID,
+    ROUTING_POOL_RESET_ACTION_ID,
+)
 
 
 router = APIRouter(prefix="/llm-routing", tags=["llm-routing"])
+_action_dispatcher: Callable[[str, dict[str, Any]], Any] | None = None
+
+
+def configure_action_dispatcher(dispatcher: Callable[[str, dict[str, Any]], Any]) -> None:
+    global _action_dispatcher
+    _action_dispatcher = dispatcher
+
+
+def _dispatch_action(action_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    if _action_dispatcher is None:
+        raise HTTPException(status_code=503, detail="App Action runtime is unavailable.")
+    receipt = _action_dispatcher(action_id, arguments)
+    if receipt.status != "applied":
+        status_code = 422 if receipt.error_code == "INVALID_ACTION_ARGUMENTS" else 409
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": receipt.error_code or "APP_ACTION_FAILED", "message": receipt.message},
+        )
+    return dict(receipt.result)
 
 
 class StrictModel(BaseModel):
@@ -86,24 +114,24 @@ def list_policies() -> dict:
 
 @router.put("/policies/global")
 def replace_global_policy(policy: ProviderRoutingPolicy) -> dict:
-    runtime = get_routing_runtime()
-    runtime.store.set_global_policy(policy)
-    return runtime.store.get_global_policy().model_dump(mode="json")
+    arguments = policy.model_dump(mode="json", exclude={"data_collection", "zdr"})
+    return _dispatch_action(ROUTING_POLICY_SET_ACTION_ID, arguments)["global_policy"]
 
 
 @router.put("/policies/models/{model_id:path}")
 def replace_model_policy(model_id: str, policy: ProviderRoutingPolicy) -> dict:
-    runtime = get_routing_runtime()
-    runtime.store.set_model_policy(model_id, policy)
-    saved = runtime.store.get_model_policy(model_id)
-    return saved.model_dump(mode="json")
+    return _dispatch_action(
+        ROUTING_MODEL_POLICY_SET_ACTION_ID,
+        {
+            "model_id": model_id,
+            "policy": policy.model_dump(mode="json", exclude={"data_collection", "zdr"}),
+        },
+    )["policy"]
 
 
 @router.delete("/policies/models/{model_id:path}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_model_policy(model_id: str) -> Response:
-    runtime = get_routing_runtime()
-    if not runtime.store.delete_model_policy(model_id):
-        raise HTTPException(status_code=404, detail="Model routing policy not found.")
+    _dispatch_action(ROUTING_MODEL_POLICY_REMOVE_ACTION_ID, {"model_id": model_id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -119,12 +147,9 @@ def list_fallbacks() -> dict:
 
 @router.put("/fallbacks")
 def replace_fallbacks(body: FallbackChainBody) -> dict:
-    runtime = get_routing_runtime()
-    try:
-        runtime.store.replace_fallbacks(body.targets)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return list_fallbacks()
+    models = [target.model for target in body.targets if target.provider == "openrouter"]
+    result = _dispatch_action(ROUTING_FALLBACKS_SET_ACTION_ID, {"models": models})
+    return {"targets": result["fallbacks"]}
 
 
 @router.get("/credentials")
@@ -143,37 +168,34 @@ def list_credentials() -> dict:
 
 @router.post("/credentials", status_code=status.HTTP_201_CREATED)
 def add_credential(body: CredentialCreateBody) -> dict:
-    runtime = get_routing_runtime()
-    try:
-        record = runtime.secrets.add_manual(body.provider, body.label, body.secret)
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Credential could not be stored.") from exc
-    return _public_credential(record)
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "APP_ACTION_REQUIRED",
+            "message": "Use llm.routing.credential.add so the secret is confirmation-bound.",
+        },
+    )
 
 
 @router.delete("/credentials/{credential_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_credential(credential_id: str) -> Response:
-    runtime = get_routing_runtime()
-    try:
-        runtime.secrets.remove_manual(credential_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Credential not found.") from exc
-    except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    _dispatch_action(ROUTING_CREDENTIAL_REMOVE_ACTION_ID, {"credential_id": credential_id})
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.put("/credentials/{provider}/strategy")
 def replace_strategy(provider: Literal["openrouter", "openai"], body: StrategyBody) -> dict:
-    runtime = get_routing_runtime()
-    runtime.pool.set_strategy(provider, body.strategy)
-    return {"provider": provider, "strategy": body.strategy.value}
+    result = _dispatch_action(
+        ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
+        {"provider": provider, "strategy": body.strategy.value},
+    )
+    return {"provider": result["provider"], "strategy": result["strategy"]}
 
 
 @router.post("/credentials/{provider}/reset")
 def reset_pool(provider: Literal["openrouter", "openai"]) -> dict:
-    get_routing_runtime().pool.reset_provider(provider)
-    return {"ok": True, "provider": provider}
+    result = _dispatch_action(ROUTING_POOL_RESET_ACTION_ID, {"provider": provider})
+    return {"ok": True, "provider": provider, "changed": result["changed"], "reset_count": result["reset_count"]}
 
 
 @router.get("/attempts")

@@ -20,6 +20,7 @@ from agent.app_actions.models import (
     AppActionContext,
     AppActionDefinition,
     AppActionRequest,
+    DeviceSettingsSnapshot,
     SurfacePresentation,
     UISurfaceDefinition,
     WorkspaceLayoutSnapshot,
@@ -64,10 +65,14 @@ from agent.app_actions.settings_runtime import (
     MEMORY_ENTRY_UPDATE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
+    ROUTING_CREDENTIAL_ADD_ACTION_ID,
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
     ROUTING_FALLBACKS_SET_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
     ROUTING_POOL_RESET_ACTION_ID,
     SETTINGS_RUNTIME_ACTION_IDS,
     SettingsRuntimeActionError,
@@ -738,7 +743,7 @@ class AppActionRuntime:
             )
 
         computer_preview = re.fullmatch(
-            polite + r"(?:enable|disable|turn\s+(on|off))\s+(?:the\s+)?computer use(?:\s+preview)?",
+            polite + r"(?:enable|disable|turn\s+(on|off))\s+(?:the\s+)?computer use preview",
             normalized,
         )
         if computer_preview:
@@ -1739,6 +1744,20 @@ class AppActionRuntime:
                 elif request.action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
                     target_kind, target_reference = "memory_runtime", "conversation-import"
                     confirmation_message = "Confirm importing existing chats into memory."
+                elif request.action_id == MEMORY_OBSIDIAN_IMPORT_ACTION_ID:
+                    target_kind, target_reference = "memory_runtime", "obsidian-import"
+                    confirmation_message = "Confirm importing reviewed local memory notes."
+                elif request.action_id == ROUTING_MODEL_POLICY_REMOVE_ACTION_ID:
+                    target_kind = "llm_routing"
+                    target_reference = f"model-policy:{str(request.arguments.get('model_id') or '').strip()}"
+                    confirmation_message = "Confirm removing this model routing policy."
+                elif request.action_id == ROUTING_CREDENTIAL_ADD_ACTION_ID:
+                    target_kind, target_reference = "llm_credential", "new"
+                    confirmation_message = "Confirm adding this provider credential. The secret will not appear in the receipt."
+                elif request.action_id == ROUTING_CREDENTIAL_REMOVE_ACTION_ID:
+                    target_kind = "llm_credential"
+                    target_reference = str(request.arguments.get("credential_id") or "credential")
+                    confirmation_message = "Confirm removing this provider credential."
                 else:
                     target_kind = "application_credential"
                     target_reference = f"provider-credential:{str(request.arguments.get('provider') or '').strip().casefold()}"
@@ -2820,7 +2839,10 @@ class AppActionRuntime:
                 context = context.model_copy(update=updates)
         device_patch = receipt.result.get("device_settings_patch")
         if isinstance(device_patch, dict) and isinstance(device_patch.get("values"), dict):
-            snapshot = context.device_settings if isinstance(context.device_settings, dict) else {}
+            snapshot = DeviceSettingsSnapshot.model_validate(context.device_settings).model_dump(
+                exclude_none=True,
+                exclude_defaults=True,
+            )
             values = dict(snapshot.get("values") or {})
             for key, value in device_patch["values"].items():
                 if key == "personalization" and isinstance(value, dict):

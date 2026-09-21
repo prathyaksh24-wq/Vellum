@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ActionSource = Literal["nlp", "ui"]
@@ -52,6 +52,46 @@ class WorkspaceLayoutSnapshot(BaseModel):
     surfaces: dict[str, SurfacePresentation] = Field(default_factory=_default_surfaces)
 
 
+class DevicePersonalizationSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom: str = ""
+    nickname: str = ""
+    occupation: str = ""
+    about: str = ""
+    fastAnswers: bool = False
+    recordHist: bool = False
+    webSearch: bool = False
+    canvas: bool = False
+    voice: bool = False
+    advVoice: bool = False
+    connector: bool = False
+    baseStyle: str = "default"
+    warm: str = "default"
+    enthusiastic: str = "default"
+    headers: str = "default"
+    emoji: str = "default"
+
+
+class DeviceSettingsValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    background: str | None = None
+    accent: str | None = None
+    dock_position: str | None = None
+    dock_locked: bool | None = None
+    computer_use_preview: bool | None = None
+    personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)
+
+
+class DeviceSettingsSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(default=1, ge=1)
+    revision: int = Field(default=0, ge=0)
+    values: DeviceSettingsValues = Field(default_factory=DeviceSettingsValues)
+
+
 class AppActionContext(BaseModel):
     source: ActionSource
     invocation_conversation_id: str = ""
@@ -66,9 +106,7 @@ class AppActionContext(BaseModel):
     reasoning_mode: str = ""
     store_to_memory: bool = True
     petdex: dict[str, Any] = Field(default_factory=dict)
-    device_settings: dict[str, Any] = Field(
-        default_factory=lambda: {"version": 1, "revision": 0, "values": {}}
-    )
+    device_settings: DeviceSettingsSnapshot = Field(default_factory=DeviceSettingsSnapshot)
 
 
 class AppActionRequest(BaseModel):

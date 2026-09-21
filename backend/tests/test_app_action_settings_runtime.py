@@ -13,13 +13,17 @@ from agent.app_actions.settings_runtime import (
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
+    ROUTING_CREDENTIAL_ADD_ACTION_ID,
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
     ROUTING_FALLBACKS_SET_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+    ROUTING_MODEL_POLICY_SET_ACTION_ID,
     ROUTING_POOL_RESET_ACTION_ID,
     SettingsRuntimeActionService,
 )
-from agent.llm.routing.models import CredentialStrategy, ProviderRoutingPolicy
+from agent.llm.routing.models import CredentialRecord, CredentialStrategy, ProviderRoutingPolicy
 
 
 class FakeMemoryStore:
@@ -125,12 +129,22 @@ class FakeRoutingStore:
         self.policy = ProviderRoutingPolicy(sort="price", allow_fallbacks=True)
         self.fallbacks = []
         self.strategies = {"openrouter": CredentialStrategy.fill_first, "openai": CredentialStrategy.fill_first}
+        self.model_policies = {}
 
     def get_global_policy(self):
         return self.policy
 
     def set_global_policy(self, policy):
         self.policy = policy
+
+    def get_model_policy(self, model_id):
+        return self.model_policies.get(model_id)
+
+    def set_model_policy(self, model_id, policy):
+        self.model_policies[model_id] = policy
+
+    def delete_model_policy(self, model_id):
+        return self.model_policies.pop(model_id, None) is not None
 
     def list_fallbacks(self):
         return list(self.fallbacks)
@@ -152,17 +166,46 @@ class FakeRoutingPool:
 
     def reset_provider(self, provider):
         self.resets.append(provider)
+        return 1
+
+
+class FakeRoutingSecrets:
+    def __init__(self) -> None:
+        self.records = {}
+
+    def add_manual(self, provider, label, secret):
+        record = CredentialRecord(
+            id="credential-1",
+            provider=provider,
+            label=label,
+            source="manual",
+            fingerprint="0123456789abcdef0123456789abcdef",
+        )
+        self.records[record.id] = (record, secret)
+        return record
+
+    def remove_manual(self, credential_id):
+        if credential_id not in self.records:
+            raise KeyError(credential_id)
+        del self.records[credential_id]
 
 
 def make_runtime():
     memory = FakeMemoryStore()
     providers = FakeProviderRegistry()
     routing_store = FakeRoutingStore()
-    routing = SimpleNamespace(store=routing_store, pool=FakeRoutingPool(routing_store))
+    routing = SimpleNamespace(
+        store=routing_store,
+        pool=FakeRoutingPool(routing_store),
+        secrets=FakeRoutingSecrets(),
+    )
     written_credentials = []
     maintenance_calls = []
     service = SettingsRuntimeActionService(
         memory_store_provider=lambda: memory,
+        memory_creator=lambda **values: (
+            memory.save_memory(**values) and memory.get_memory(max(memory.memories))
+        ),
         provider_registry_provider=lambda: providers,
         routing_runtime_provider=lambda: routing,
         credential_writer=lambda provider, secret: written_credentials.append((provider, secret)),
@@ -178,6 +221,7 @@ def make_runtime():
             "skipped_turns": 1,
             "scanned_turns": 4,
         },
+        obsidian_memory_importer=lambda: {"imported_count": 0, "skipped_count": 0},
     )
     runtime = AppActionRuntime(
         clock=lambda: datetime(2026, 9, 18, tzinfo=timezone.utc),
@@ -207,6 +251,10 @@ def test_matcher_distinguishes_global_settings_from_chat_and_casual_questions() 
     assert runtime.match_submission("turn web search off").arguments == {
         "patch": {"personalization": {"webSearch": False}}
     }
+    assert runtime.match_submission("enable computer use preview").arguments == {
+        "patch": {"computer_use_preview": True}
+    }
+    assert runtime.match_submission("enable computer use") is None
     assert runtime.match_submission("turn memory off everywhere").arguments == {"patch": {"memory_enabled": False}}
     assert runtime.match_submission("turn reference history off").action_id == MEMORY_SETTINGS_UPDATE_ACTION_ID
     assert runtime.match_submission("remember that I prefer short answers").action_id == MEMORY_ENTRY_CREATE_ACTION_ID
@@ -458,6 +506,68 @@ def test_routing_actions_mutate_only_the_canonical_routing_runtime() -> None:
     ]
     assert routing.store.strategies["openrouter"] == CredentialStrategy.round_robin
     assert routing.pool.resets == ["openrouter"]
+
+
+def test_model_policy_and_credential_pool_writes_share_confirmation_and_redaction() -> None:
+    runtime, _memory, _providers, routing, _credentials, _maintenance = make_runtime()
+    model_id = "openai/gpt-5.6-sol"
+    policy = runtime.dispatch(
+        AppActionRequest(
+            action_id=ROUTING_MODEL_POLICY_SET_ACTION_ID,
+            arguments={"model_id": model_id, "policy": {"sort": "latency"}},
+        ),
+        context(),
+    )
+    remove_policy_request = AppActionRequest(
+        action_id=ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+        arguments={"model_id": model_id},
+    )
+    pending_remove_policy = runtime.dispatch(remove_policy_request, context())
+    removed_policy = runtime.confirm("confirm-setting", remove_policy_request, context())
+
+    secret = "routing-secret-sentinel"
+    add_request = AppActionRequest(
+        action_id=ROUTING_CREDENTIAL_ADD_ACTION_ID,
+        arguments={"provider": "openrouter", "label": "backup", "secret": secret},
+    )
+    pending_add = runtime.dispatch(add_request, context("ui"))
+    added = runtime.confirm("confirm-setting", add_request, context("ui"))
+    remove_request = AppActionRequest(
+        action_id=ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
+        arguments={"credential_id": "credential-1"},
+    )
+    pending_remove = runtime.dispatch(remove_request, context("ui"))
+    removed = runtime.confirm("confirm-setting", remove_request, context("ui"))
+
+    assert policy.status == "applied"
+    assert policy.result["policy"]["data_collection"] == "deny"
+    assert pending_remove_policy.status == "confirmation_required"
+    assert removed_policy.result["removed"] is True
+    assert pending_add.status == "confirmation_required"
+    assert secret not in pending_add.model_dump_json()
+    assert secret not in added.model_dump_json()
+    assert added.result["credential"]["fingerprint"] == "0123456789abcdef"
+    assert pending_remove.status == "confirmation_required"
+    assert removed.result["removed"] is True
+    assert routing.secrets.records == {}
+
+
+def test_pool_reset_receipt_is_truthful_when_no_state_changes() -> None:
+    runtime, _memory, _providers, routing, _credentials, _maintenance = make_runtime()
+    routing.pool.reset_provider = lambda _provider: 0
+
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=ROUTING_POOL_RESET_ACTION_ID, arguments={"provider": "openrouter"}),
+        context(),
+    )
+
+    assert receipt.status == "applied"
+    assert receipt.result == {
+        "changed": False,
+        "provider": "openrouter",
+        "reset": False,
+        "reset_count": 0,
+    }
 
 
 def test_unwired_settings_actions_are_truthfully_unavailable() -> None:

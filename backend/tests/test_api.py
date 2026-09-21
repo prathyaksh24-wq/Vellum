@@ -583,6 +583,7 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
         archived = client.get("/api/memory/archived")
         pinned = client.post(f"/api/memory/{saved_id}/pin", json={"pinned": True})
         dream = client.post("/api/memory/dreaming/run")
+        dreamed = _confirm_legacy_action(client, dream)
         status = client.get("/api/memory/dreaming/status")
 
     assert summary.status_code == 200
@@ -590,7 +591,9 @@ def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_p
     assert saved.json()["memories"][0]["text"] == "User prefers concise answers."
     assert archived.json()["memories"][0]["id"] == archived_id
     assert pinned.json()["memory"]["pinned"] is True
-    assert dream.json()["global_summary"]
+    assert dreamed.status_code == 200
+    assert dreamed.json()["result"]["completed"] is True
+    assert "global_summary" not in dreamed.text
     assert status.json()["status"] in {"idle", "completed"}
 
 
@@ -616,13 +619,14 @@ def test_memory_settings_endpoint_and_background_learning_gate(monkeypatch, tmp_
             "/api/memory/settings",
             json={"memory_enabled": False, "dreaming_enabled": False, "reference_history_enabled": False},
         )
+        applied = _confirm_legacy_action(client, updated)
 
     assert before.status_code == 200
     assert before.json()["settings"]["memory_enabled"] is True
-    assert updated.status_code == 200
-    assert updated.json()["settings"]["memory_enabled"] is False
-    assert updated.json()["settings"]["dreaming_enabled"] is False
-    assert updated.json()["settings"]["reference_history_enabled"] is False
+    assert applied.status_code == 200
+    assert applied.json()["result"]["settings"]["memory_enabled"] is False
+    assert applied.json()["result"]["settings"]["dreaming_enabled"] is False
+    assert applied.json()["result"]["settings"]["reference_history_enabled"] is False
 
     asyncio.run(
         api._background_learn(
@@ -918,13 +922,15 @@ def test_memory_crud_endpoints_create_update_pin_archive_and_delete(monkeypatch,
         unpinned = client.post(f"/api/memory/{memory_id}/pin", json={"pinned": False})
         archived = client.post(f"/api/memory/{memory_id}/archive")
         deleted = client.post(f"/api/memory/{memory_id}/delete")
+        deletion = _confirm_legacy_action(client, deleted)
 
     assert created.status_code == 200
     assert updated.json()["memory"]["text"] == "User prefers editable memory controls."
     assert pinned.json()["memory"]["pinned"] is True
     assert unpinned.json()["memory"]["pinned"] is False
     assert archived.json()["memory"]["status"] == "archived"
-    assert deleted.json()["ok"] is True
+    assert deletion.status_code == 200
+    assert deletion.json()["result"]["deleted"] is True
 
 
 def test_memory_summary_includes_indexed_conversation_context(monkeypatch, tmp_path):
@@ -1060,7 +1066,7 @@ def test_memory_orchestrator_search_returns_indexed_conversation_hits(monkeypatc
     assert "F1 standings" in result["indexed_conversation_hits"][0]["content"]
 
 
-def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tmp_path):
+def test_provider_key_legacy_endpoint_requires_confirmed_app_action(monkeypatch, tmp_path):
     monkeypatch.setattr(api, "_env_path", lambda: tmp_path / ".env")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -1071,14 +1077,36 @@ def test_provider_key_endpoint_persists_key_and_refreshes_models(monkeypatch, tm
 
     with TestClient(api.app) as client:
         before = client.get("/api/models")
-        saved = client.post("/api/settings/provider-key", json={"provider": "openai", "api_key": "sk-test"})
+        legacy = client.post("/api/settings/provider-key", json={"provider": "openai", "api_key": "sk-test"})
+        request = {
+            "request_id": "provider-key-test",
+            "action_id": "provider.credential.configure",
+            "action_version": "1",
+            "arguments": {"provider": "openai", "secret": "sk-test"},
+        }
+        pending = client.post(
+            "/api/app-actions/dispatch",
+            json={"request": request, "context": {"source": "ui"}},
+        )
+        saved = client.post(
+            "/api/app-actions/confirm",
+            json={
+                "token": pending.json()["confirmation"]["token"],
+                "request": request,
+                "context": {"source": "ui"},
+            },
+        )
+        models = client.get("/api/models").json()
 
     assert before.status_code == 200
-    assert saved.status_code == 200
-    assert saved.headers["Deprecation"] == "true"
-    body = saved.json()
-    assert body["provider_keys"]["openai"] is True
-    assert any(item["provider"] == "openai" and not item["open_weights"] for item in body["models"])
+    assert legacy.status_code == 410
+    assert legacy.json()["detail"]["code"] == "APP_ACTION_REQUIRED"
+    assert pending.json()["status"] == "confirmation_required"
+    assert "sk-test" not in pending.text
+    assert saved.json()["status"] == "applied"
+    assert "sk-test" not in saved.text
+    assert models["provider_keys"]["openai"] is True
+    assert any(item["provider"] == "openai" and not item["open_weights"] for item in models["models"])
     assert "OPENAI_API_KEY=sk-test" in (tmp_path / ".env").read_text(encoding="utf-8")
 
 
@@ -1635,7 +1663,8 @@ def test_chat_stream_intercepts_enable_computer_use_command(monkeypatch, tmp_pat
 
     events = _parse_sse(body)
     names = [event for event, _payload in events]
-    final_payload = next(payload for event, payload in events if event == "final")
+    final_payload = next((payload for event, payload in events if event == "final"), None)
+    assert final_payload is not None, body
 
     assert response.status_code == 200
     assert names[:3] == ["meta", "computer_use", "token"]
@@ -2044,3 +2073,15 @@ def test_runtime_mutation_waits_for_turns_and_blocks_new_turns():
         await asyncio.gather(first_task, mutation_task, second_task)
 
     asyncio.run(run_case())
+
+def _confirm_legacy_action(client: TestClient, response):
+    assert response.status_code == 428, response.text
+    detail = response.json()["detail"]
+    return client.post(
+        "/api/app-actions/confirm",
+        json={
+            "token": detail["receipt"]["confirmation"]["token"],
+            "request": detail["request"],
+            "context": {"source": "ui"},
+        },
+    )

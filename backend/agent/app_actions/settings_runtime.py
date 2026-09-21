@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.app_actions.models import AppActionContext, AppActionDefinition
+from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot
 from agent.llm.providers import canonical_model_id
 from agent.llm.routing.models import CredentialStrategy, FallbackTarget, ProviderRoutingPolicy
 from agent.tools.registry import CapabilityAccess
@@ -21,9 +21,14 @@ MEMORY_ENTRY_ARCHIVE_ACTION_ID = "memory.entry.archive"
 MEMORY_ENTRY_DELETE_ACTION_ID = "memory.entry.delete"
 MEMORY_DREAMING_RUN_ACTION_ID = "memory.dreaming.run"
 MEMORY_CONVERSATIONS_IMPORT_ACTION_ID = "memory.conversations.import"
+MEMORY_OBSIDIAN_IMPORT_ACTION_ID = "memory.obsidian.import"
 PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID = "provider.credential.configure"
 ROUTING_POLICY_SET_ACTION_ID = "llm.routing.policy.set"
+ROUTING_MODEL_POLICY_SET_ACTION_ID = "llm.routing.model_policy.set"
+ROUTING_MODEL_POLICY_REMOVE_ACTION_ID = "llm.routing.model_policy.remove"
 ROUTING_FALLBACKS_SET_ACTION_ID = "llm.routing.fallbacks.set"
+ROUTING_CREDENTIAL_ADD_ACTION_ID = "llm.routing.credential.add"
+ROUTING_CREDENTIAL_REMOVE_ACTION_ID = "llm.routing.credential.remove"
 ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID = "llm.routing.credential_strategy.set"
 ROUTING_POOL_RESET_ACTION_ID = "llm.routing.pool.reset"
 
@@ -38,9 +43,14 @@ SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
     PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
     ROUTING_POLICY_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
     ROUTING_FALLBACKS_SET_ACTION_ID,
+    ROUTING_CREDENTIAL_ADD_ACTION_ID,
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
     ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
     ROUTING_POOL_RESET_ACTION_ID,
 })
@@ -51,6 +61,10 @@ CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS = frozenset({
     MEMORY_ENTRY_DELETE_ACTION_ID,
     MEMORY_DREAMING_RUN_ACTION_ID,
     MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+    ROUTING_CREDENTIAL_ADD_ACTION_ID,
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
 })
 
 _MEMORY_SETTING_KEYS = frozenset({
@@ -98,18 +112,22 @@ class SettingsRuntimeActionService:
         self,
         *,
         memory_store_provider: Callable[[], Any],
+        memory_creator: Callable[..., dict[str, Any]],
         provider_registry_provider: Callable[[], Any],
         routing_runtime_provider: Callable[[], Any],
         credential_writer: Callable[[str, str], None],
         memory_dreaming_runner: Callable[[], dict[str, Any]],
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
+        obsidian_memory_importer: Callable[[], dict[str, Any]],
     ) -> None:
         self._memory_store_provider = memory_store_provider
+        self._memory_creator = memory_creator
         self._provider_registry_provider = provider_registry_provider
         self._routing_runtime_provider = routing_runtime_provider
         self._credential_writer = credential_writer
         self._memory_dreaming_runner = memory_dreaming_runner
         self._conversation_memory_importer = conversation_memory_importer
+        self._obsidian_memory_importer = obsidian_memory_importer
 
     def execute(
         self,
@@ -143,12 +161,26 @@ class SettingsRuntimeActionService:
         if action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
             self._require_confirmation(confirmed)
             return self._import_conversation_memories(arguments)
+        if action_id == MEMORY_OBSIDIAN_IMPORT_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._import_obsidian_memories()
         if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID:
             return self._configure_provider_credential(arguments, confirmed=confirmed)
         if action_id == ROUTING_POLICY_SET_ACTION_ID:
             return self._set_routing_policy(arguments)
+        if action_id == ROUTING_MODEL_POLICY_SET_ACTION_ID:
+            return self._set_model_routing_policy(arguments)
+        if action_id == ROUTING_MODEL_POLICY_REMOVE_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._remove_model_routing_policy(arguments)
         if action_id == ROUTING_FALLBACKS_SET_ACTION_ID:
             return self._set_fallbacks(arguments)
+        if action_id == ROUTING_CREDENTIAL_ADD_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._add_routing_credential(arguments)
+        if action_id == ROUTING_CREDENTIAL_REMOVE_ACTION_ID:
+            self._require_confirmation(confirmed)
+            return self._remove_routing_credential(arguments)
         if action_id == ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID:
             return self._set_credential_strategy(arguments)
         if action_id == ROUTING_POOL_RESET_ACTION_ID:
@@ -202,7 +234,10 @@ class SettingsRuntimeActionService:
                 "Unknown device setting: " + ", ".join(sorted(unknown)),
             )
         normalized = self._validate_device_patch(patch)
-        snapshot = context.device_settings if isinstance(context.device_settings, dict) else {}
+        snapshot = DeviceSettingsSnapshot.model_validate(context.device_settings).model_dump(
+            exclude_none=True,
+            exclude_defaults=True,
+        )
         version = int(snapshot.get("version") or 1)
         revision = int(snapshot.get("revision") or 0)
         current = dict(snapshot.get("values") or {})
@@ -364,8 +399,7 @@ class SettingsRuntimeActionService:
         text = str(arguments.get("text") or "").strip()
         if not text:
             raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "memory text is required")
-        store = self._memory_store()
-        memory_id = store.save_memory(
+        memory = self._memory_creator(
             kind=str(arguments.get("kind") or "manual").strip() or "manual",
             text=text,
             source_thread_id=str(arguments.get("source_thread_id") or "manual").strip() or "manual",
@@ -374,9 +408,9 @@ class SettingsRuntimeActionService:
         )
         return {
             "changed": True,
-            "memory": store.get_memory(memory_id),
+            "memory": memory,
             "_target_kind": "memory_entry",
-            "_target_id": str(memory_id),
+            "_target_id": str(memory["id"]),
             "_message": "Memory saved.",
         }
 
@@ -502,6 +536,21 @@ class SettingsRuntimeActionService:
             "_message": "Conversation memories imported.",
         }
 
+    def _import_obsidian_memories(self) -> dict[str, Any]:
+        try:
+            result = dict(self._obsidian_memory_importer() or {})
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise SettingsRuntimeActionError("MEMORY_IMPORT_FAILED", "Obsidian memory import failed.") from exc
+        imported = int(result.get("imported_count") or 0)
+        skipped = int(result.get("skipped_count") or 0)
+        return {
+            "changed": imported > 0,
+            "counts": {"imported_count": imported, "skipped_count": skipped},
+            "_target_kind": "memory_runtime",
+            "_target_id": "obsidian-import",
+            "_message": "Obsidian memories imported.",
+        }
+
     @staticmethod
     def _memory_id(arguments: dict[str, Any]) -> int:
         raw = arguments.get("memory_id", arguments.get("id"))
@@ -582,6 +631,50 @@ class SettingsRuntimeActionService:
             "_message": "Provider routing updated." if changed else "Provider routing was already set.",
         }
 
+    def _set_model_routing_policy(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        model_id = canonical_model_id(str(arguments.get("model_id") or "").strip())
+        if not model_id:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "model_id is required")
+        raw_policy = arguments.get("policy") if isinstance(arguments.get("policy"), dict) else {
+            key: value for key, value in arguments.items() if key != "model_id"
+        }
+        values = dict(raw_policy)
+        values["data_collection"] = "deny"
+        values["zdr"] = True
+        try:
+            policy = ProviderRoutingPolicy.model_validate(values)
+        except ValueError as exc:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", str(exc)) from exc
+        runtime = self._routing_runtime_provider()
+        previous = runtime.store.get_model_policy(model_id)
+        changed = previous != policy
+        if changed:
+            runtime.store.set_model_policy(model_id, policy)
+        return {
+            "changed": changed,
+            "model_id": model_id,
+            "policy": policy.model_dump(mode="json"),
+            "_target_kind": "llm_routing",
+            "_target_id": f"model-policy:{model_id}",
+            "_message": "Model routing policy updated." if changed else "Model routing policy was already set.",
+        }
+
+    def _remove_model_routing_policy(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        model_id = canonical_model_id(str(arguments.get("model_id") or "").strip())
+        if not model_id:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "model_id is required")
+        removed = bool(self._routing_runtime_provider().store.delete_model_policy(model_id))
+        if not removed:
+            raise SettingsRuntimeActionError("ROUTING_POLICY_NOT_FOUND", "Model routing policy not found.", unavailable=True)
+        return {
+            "changed": True,
+            "removed": True,
+            "model_id": model_id,
+            "_target_kind": "llm_routing",
+            "_target_id": f"model-policy:{model_id}",
+            "_message": "Model routing policy removed.",
+        }
+
     def _set_fallbacks(self, arguments: dict[str, Any]) -> dict[str, Any]:
         raw_models = arguments.get("models")
         if not isinstance(raw_models, list):
@@ -601,6 +694,46 @@ class SettingsRuntimeActionService:
             "_target_kind": "llm_routing",
             "_target_id": "fallbacks",
             "_message": "Model fallbacks updated." if changed else "Model fallbacks were already set.",
+        }
+
+    def _add_routing_credential(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        provider = self._routing_provider(arguments)
+        label = str(arguments.get("label") or "").strip()
+        secret = str(arguments.get("secret") or "").strip()
+        if not label or not secret:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "label and secret are required")
+        try:
+            record = self._routing_runtime_provider().secrets.add_manual(provider, label, secret)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise SettingsRuntimeActionError("CREDENTIAL_SAVE_FAILED", "Credential could not be stored.") from exc
+        public = record.model_dump(mode="json")
+        public["fingerprint"] = str(public.get("fingerprint") or "")[-16:]
+        public.pop("secret", None)
+        return {
+            "changed": True,
+            "credential": public,
+            "_target_kind": "llm_credential",
+            "_target_id": str(record.id),
+            "_message": f"{provider} credential added.",
+        }
+
+    def _remove_routing_credential(self, arguments: dict[str, Any]) -> dict[str, Any]:
+        credential_id = str(arguments.get("credential_id") or "").strip()
+        if not credential_id:
+            raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "credential_id is required")
+        try:
+            self._routing_runtime_provider().secrets.remove_manual(credential_id)
+        except KeyError as exc:
+            raise SettingsRuntimeActionError("CREDENTIAL_NOT_FOUND", "Credential not found.", unavailable=True) from exc
+        except (ValueError, RuntimeError) as exc:
+            raise SettingsRuntimeActionError("CREDENTIAL_REMOVE_CONFLICT", str(exc)) from exc
+        return {
+            "changed": True,
+            "removed": True,
+            "credential_id": credential_id,
+            "_target_kind": "llm_credential",
+            "_target_id": credential_id,
+            "_message": "Credential removed.",
         }
 
     def _set_credential_strategy(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -629,14 +762,19 @@ class SettingsRuntimeActionService:
 
     def _reset_credential_pool(self, arguments: dict[str, Any]) -> dict[str, Any]:
         provider = self._routing_provider(arguments)
-        self._routing_runtime_provider().pool.reset_provider(provider)
+        reset_count = int(self._routing_runtime_provider().pool.reset_provider(provider) or 0)
         return {
-            "changed": True,
+            "changed": reset_count > 0,
             "provider": provider,
-            "reset": True,
+            "reset": reset_count > 0,
+            "reset_count": reset_count,
             "_target_kind": "llm_routing",
             "_target_id": f"credential-pool:{provider}",
-            "_message": f"{provider} credential pool reset.",
+            "_message": (
+                f"{provider} credential pool reset."
+                if reset_count
+                else f"{provider} credential pool was already healthy."
+            ),
         }
 
     @staticmethod
@@ -775,6 +913,15 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "memory-import",
         ),
         (
+            MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
+            "Import Obsidian memories",
+            "Import reviewed local memory notes without returning their content.",
+            "user",
+            "operation_bound",
+            {},
+            "memory-import",
+        ),
+        (
             PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
             "Configure a provider credential",
             "Open the secure credential control or save a credential entered there. Secrets are never returned.",
@@ -804,6 +951,38 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "settings-routing",
         ),
         (
+            ROUTING_MODEL_POLICY_SET_ACTION_ID,
+            "Set model routing policy",
+            "Set a model-specific provider routing policy while preserving Vellum's privacy floor.",
+            "process",
+            "none",
+            {
+                "model_id": {"type": "string", "minLength": 1},
+                "policy": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "sort": {"enum": ["price", "latency", "throughput", None]},
+                        "only": {"type": ["array", "null"], "items": {"type": "string"}},
+                        "ignore": {"type": ["array", "null"], "items": {"type": "string"}},
+                        "order": {"type": ["array", "null"], "items": {"type": "string"}},
+                        "require_parameters": {"type": ["boolean", "null"]},
+                        "allow_fallbacks": {"type": ["boolean", "null"]},
+                    },
+                },
+            },
+            "settings-routing",
+        ),
+        (
+            ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+            "Remove model routing policy",
+            "Remove a model-specific provider routing override after confirmation.",
+            "process",
+            "operation_bound",
+            {"model_id": {"type": "string", "minLength": 1}},
+            "settings-routing",
+        ),
+        (
             ROUTING_FALLBACKS_SET_ACTION_ID,
             "Set model fallbacks",
             "Replace the ordered OpenRouter model fallback chain.",
@@ -811,6 +990,28 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             "none",
             {"models": {"type": "array", "items": {"type": "string"}}},
             "settings-routing",
+        ),
+        (
+            ROUTING_CREDENTIAL_ADD_ACTION_ID,
+            "Add routing credential",
+            "Add a credential to the canonical provider pool after confirmation.",
+            "device",
+            "operation_bound",
+            {
+                "provider": {"enum": sorted(_ROUTING_PROVIDERS)},
+                "label": {"type": "string", "minLength": 1, "maxLength": 120},
+                "secret": {"type": "string", "minLength": 1, "writeOnly": True},
+            },
+            "settings-routing-credentials",
+        ),
+        (
+            ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
+            "Remove routing credential",
+            "Remove a credential from the canonical provider pool after confirmation.",
+            "device",
+            "operation_bound",
+            {"credential_id": {"type": "string", "minLength": 1}},
+            "settings-routing-credentials",
         ),
         (
             ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
@@ -852,7 +1053,12 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
                 "additionalProperties": False,
                 "properties": properties,
             },
-            result_schema={"type": "object", "required": ["changed"]},
+            result_schema={
+                "type": "object",
+                "additionalProperties": True,
+                "required": ["changed"],
+                "properties": {"changed": {"type": "boolean"}},
+            },
             ui_reference=ui_reference,
             audit_label=action_id,
         )
