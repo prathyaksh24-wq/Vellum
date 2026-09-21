@@ -267,6 +267,9 @@ def test_matcher_distinguishes_global_settings_from_chat_and_casual_questions() 
     assert runtime.match_submission("set model fallbacks to alpha/model, beta/model").arguments == {
         "models": ["alpha/model", "beta/model"]
     }
+    assert runtime.match_submission("set model fallbacks to alpha/model   AND beta/model, gamma/model").arguments == {
+        "models": ["alpha/model", "beta/model", "gamma/model"]
+    }
     assert runtime.match_submission("what is the best default model?") is None
     assert runtime.match_submission("what do you remember about me?") is None
 

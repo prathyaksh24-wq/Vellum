@@ -898,7 +898,7 @@ class AppActionRuntime:
             flags=re.IGNORECASE,
         )
         if routing_fallbacks:
-            models = [self._spoken_value(value) for value in re.split(r"\s*,\s*|\s+and\s+", routing_fallbacks.group(1))]
+            models = [self._spoken_value(value) for value in self._split_spoken_list(routing_fallbacks.group(1))]
             return AppActionRequest(
                 action_id=ROUTING_FALLBACKS_SET_ACTION_ID,
                 arguments={"models": [model for model in models if model]},
@@ -1614,6 +1614,22 @@ class AppActionRuntime:
     @staticmethod
     def _spoken_value(value: str) -> str:
         return " ".join(str(value or "").strip().strip("\"'").split())
+
+    @staticmethod
+    def _split_spoken_list(value: str) -> list[str]:
+        items: list[str] = []
+        for comma_segment in str(value or "").split(","):
+            current: list[str] = []
+            for token in comma_segment.split():
+                if token.casefold() == "and":
+                    if current:
+                        items.append(" ".join(current))
+                        current = []
+                else:
+                    current.append(token)
+            if current:
+                items.append(" ".join(current))
+        return items
 
     @staticmethod
     def _split_mixed_clauses(submitted: str) -> list[str]:
