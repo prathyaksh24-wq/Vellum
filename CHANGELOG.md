@@ -48,6 +48,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Fixed
 
+- Knowledge health checks now use the App Actions boundary, source imports require maintained synthesis, and local YouTube intelligence rebuilds remain available without OAuth.
 - Spotify playback recovery on inactive devices.
 - Provider routing and 404 handling.
 - Routing settings control polish.

@@ -6731,7 +6731,9 @@ function KnowledgeGraphView({ onBack, onAttachContext, onAction }){
     setBusy(true); setError('');
     try {
       const result = await action();
-      if (result && (result.issues || result.health)) setLintReport(result);
+      const payload = result && result.action_id ? result.result : result;
+      const lint = payload && payload.lint ? payload.lint : payload;
+      if (lint && (lint.issues || lint.health)) setLintReport(lint);
       await loadStatus();
     } catch (err) { setError((err && err.message) || 'Knowledge wiki action failed.'); }
     finally { setBusy(false); }
@@ -6753,7 +6755,7 @@ function KnowledgeGraphView({ onBack, onAttachContext, onAction }){
         </form>
         <div className="wiki-actions">
           <div className="wiki-status-copy">{loading ? 'Checking wiki…' : status ? (status.page_count || 0) + ' pages · ' + (status.root || 'ready') : 'Wiki status unavailable'}</div>
-          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => API.knowledge.lint())}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.index.rebuild', {}))}>Rebuild index</button></div>
+          <div className="wiki-action-buttons"><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.health.check', {}))}>Check health</button><button className="btn" disabled={busy || loading} onClick={() => runWikiAction(() => onAction('knowledge.index.rebuild', {}))}>Rebuild index</button></div>
         </div>
         {lintReport && <div className="wiki-report"><span>Lint · {lintReport.health || 'complete'}</span>{lintIssueCount + ' issue' + (lintIssueCount === 1 ? '' : 's')}{lintReport.stale_days != null ? ' · stale after ' + lintReport.stale_days + ' days' : ''}</div>}
         <div className="wiki-layout">

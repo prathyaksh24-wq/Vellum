@@ -92,6 +92,7 @@ from agent.app_actions.knowledge_sources import (
     BOOK_COMPILE_ACTION_ID,
     BOOK_IMPORT_ACTION_ID,
     BOOK_PROCESS_ACTION_ID,
+    KNOWLEDGE_HEALTH_CHECK_ACTION_ID,
     KNOWLEDGE_INDEX_REBUILD_ACTION_ID,
     KNOWLEDGE_SOURCE_ACTION_IDS,
     KNOWLEDGE_SOURCE_CONFIRMED_ACTION_IDS,
@@ -1004,6 +1005,11 @@ class AppActionRuntime:
 
         if re.fullmatch(polite + r"(?:rebuild|refresh)\s+(?:the\s+)?knowledge\s+index", normalized):
             return AppActionRequest(action_id=KNOWLEDGE_INDEX_REBUILD_ACTION_ID)
+        if re.fullmatch(
+            polite + r"(?:check|lint)\s+(?:the\s+)?knowledge(?:\s+wiki)?(?:\s+health)?",
+            normalized,
+        ):
+            return AppActionRequest(action_id=KNOWLEDGE_HEALTH_CHECK_ACTION_ID)
         if re.fullmatch(polite + r"(?:import|add)\s+(?:a\s+|an\s+)?(?:epub|book)(?:\s+file)?", normalized):
             return AppActionRequest(action_id=BOOK_IMPORT_ACTION_ID)
         book_process = re.fullmatch(
@@ -1026,17 +1032,6 @@ class AppActionRuntime:
                 action_id=BOOK_COMPILE_ACTION_ID,
                 arguments={"reference": self._spoken_value(book_compile.group(1))},
             )
-        source_import = re.fullmatch(
-            polite + r"import\s+(?:the\s+)?knowledge\s+source(?:\s+at|\s+from)?\s+(.+)",
-            submitted,
-            flags=re.IGNORECASE,
-        )
-        if source_import:
-            return AppActionRequest(
-                action_id=KNOWLEDGE_SOURCE_IMPORT_ACTION_ID,
-                arguments={"source_path": self._spoken_value(source_import.group(1))},
-            )
-
         coding_workspace = re.fullmatch(
             polite
             + r"(?:open|show|go\s+to|switch\s+to)\s+(?:the\s+)?coding(?:\s+(?:workspace|room))?",
