@@ -8,6 +8,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Added
 
+- Adaptive UI rules for reversible presentation preferences, with three-signal learning, context scoping, explanations, Undo suppression, and local rule controls.
 - Capability-discovery contract for the frontend/backend boundary through `/api/capabilities`.
 - Stable API adapter pattern for the Vellum web UI.
 - Memory Orchestrator surfaces for summaries, saved memories, archived memories, settings, dreaming runs, and conversation imports.

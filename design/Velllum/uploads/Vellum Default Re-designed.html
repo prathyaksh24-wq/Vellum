@@ -7378,7 +7378,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   );
 };
 
-const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, dockPosition='auto', onDockPosition, dockLocked=false, onDockLocked, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, onAdaptiveRuleAction, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
@@ -7449,6 +7449,14 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
       if (!receipt || receipt.status !== 'confirmation_required') setSavingKey('');
     } catch (_) { setSavingKey(''); }
   };
+  const adaptiveRules = (workspaceLayout && workspaceLayout.adaptive_ui && workspaceLayout.adaptive_ui.rules) || [];
+  const adaptiveRuleLabel = rule => {
+    const args = rule.arguments || {};
+    const value = Object.prototype.hasOwnProperty.call(args, 'visible')
+      ? (args.visible ? 'shown' : 'hidden')
+      : Object.values(args.properties || {})[0];
+    return `${String(args.reference || 'Surface').replaceAll('-', ' ')}: ${value}`;
+  };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
     {k: 'Appearance', ic: <IcSun size={14}/>},
@@ -7510,6 +7518,17 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                 <form className="set-row layout-label-row" onSubmit={event => { event.preventDefault(); onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}}); }}><label htmlFor="workspace-send-label">Send button label</label><span className="sr-end"><input id="workspace-send-label" value={sendLabelDraft} maxLength="24" onChange={event => setSendLabelDraft(event.target.value)}/><button className="btn" disabled={!sendLabelDraft.trim()}>Apply</button></span></form>
                 <div className="set-row">Workspace surface defaults<span className="sr-end"><button className="btn" onClick={onLayoutReset}>Reset surfaces</button></span></div>
               </div>}
+              <div className="cfg-sec">Adaptive UI</div>
+              <div className="cfg-note">Vellum can learn reversible presentation choices after three matching changes in one context. Rules stay on this device and can be disabled or removed here.</div>
+              {adaptiveRules.length === 0 && <div className="set-row">No learned interface rules yet.</div>}
+              {adaptiveRules.map(rule => <div className="set-row" key={rule.id}>
+                <div>{adaptiveRuleLabel(rule)}<span className="sr-sub">{rule.origin === 'explicit' ? 'Always instruction' : `${rule.evidence_count} matching changes`} · {rule.scope === 'global' ? 'All contexts' : rule.scope}{rule.suppressed ? ' · suppressed' : ''}</span></div>
+                <span className="sr-end">
+                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.explain', {rule_id:rule.id})}>Why?</button>
+                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.set_enabled', {rule_id:rule.id, enabled:!rule.enabled})}>{rule.enabled ? 'Disable' : 'Enable'}</button>
+                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.remove', {rule_id:rule.id})}>Remove</button>
+                </span>
+              </div>)}
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
@@ -8443,11 +8462,13 @@ const App = () => {
       },
     });
   }
+  const workspaceContextRef = useRef({active_agent:'', project_id:''});
   const workspaceActionRuntimeRef = useRef(null);
   if (!workspaceActionRuntimeRef.current) {
     workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({
       client: API.appActions,
       contextResolver: () => ({
+        ...workspaceContextRef.current,
         petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current),
         device_settings: deviceSettingsRuntimeRef.current.snapshot(),
       }),
@@ -8521,6 +8542,10 @@ const App = () => {
     const requested = new URLSearchParams(window.location.search).get('agent');
     return AGENTS.some(agent => agent.id === requested) ? requested : null;
   });
+  workspaceContextRef.current = {
+    active_agent: view === 'agent' ? (activeAgentId || '') : '',
+    project_id: view === 'project' ? (activeProjectId || '') : '',
+  };
   const [agentConvos, setAgentConvos] = useState({});
   const [activeConvo, setActiveConvo] = useState({});
   const [agentSettingsOpen, setAgentSettingsOpen] = useState(false);
@@ -9828,6 +9853,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     pushToast({
       message: nativeUnavailable ? 'Native windows require Vellum desktop.' : (share && share.export_path ? `Local export ready: ${share.export_path}` : (confirmationMessage || (receipt.status === 'failed' ? 'App action failed.' : 'App action completed.'))),
       undoReceipt: receipt.undo ? receipt : null,
+      adaptiveRuleReceipt: receipt.result && receipt.result.adaptive_rule && receipt.result.adaptive_rule.first_use ? receipt : null,
       confirmationReceipt: receipt.confirmation ? receipt : null,
       confirmationLabel: receipt.action_id === 'conversation.share'
         ? (shareReview && shareReview.external_disclosure ? 'Share' : 'Export')
@@ -10049,7 +10075,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const dispatchSidebarVisibility = async (visible, options = {}) => {
     try {
-      const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId, persistence:options.persistence});
+      const receipt = await workspaceActionRuntimeRef.current.dispatchSidebar(visible, {conversationId:activeChatId, persistence:options.persistence, learn:options.learn});
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
@@ -10059,7 +10085,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const dispatchSurfacePresentation = async (reference, presentation, options = {}) => {
     try {
-      const receipt = await workspaceActionRuntimeRef.current.dispatchSurface(reference, presentation, {conversationId:activeChatId, persistence:options.persistence});
+      const receipt = await workspaceActionRuntimeRef.current.dispatchSurface(reference, presentation, {conversationId:activeChatId, persistence:options.persistence, learn:options.learn});
       showAppActionReceipt(receipt, options);
       return receipt;
     } catch (_) {
@@ -10088,6 +10114,23 @@ const [slashSkills, setSlashSkills] = useState([]);
       pushToast('Undo is unavailable.');
     }
   };
+  const dispatchAdaptiveRuleAction = async (actionId, arguments_ = {}) => {
+    try {
+      if (!actionAvailable(actionId)) { pushToast('Adaptive UI is unavailable.'); return null; }
+      const receipt = await workspaceActionRuntimeRef.current.dispatch(actionId, arguments_, {conversationId:activeChatId});
+      showAppActionReceipt(receipt);
+      if (actionId === 'ui.adaptive.rule.set_enabled' && arguments_.enabled && receipt.status === 'applied') {
+        workspaceActionRuntimeRef.current.maybeApply({conversationId:activeChatId, onReceipt:showAppActionReceipt}).catch(() => {});
+      }
+      return receipt;
+    } catch (_) {
+      pushToast('Adaptive UI could not be changed.');
+      return null;
+    }
+  };
+  useEffect(() => {
+    workspaceActionRuntimeRef.current.maybeApply({conversationId:activeChatId, onReceipt:showAppActionReceipt}).catch(() => {});
+  }, [activeProjectId, activeAgentId, view]);
   const applyModelSelection = (id, chatId = activeChatId) => {
     setSelModel(id);
     if (chatId) {
@@ -10151,7 +10194,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     if (e.shiftKey) {
       if (c === 'KeyO') { e.preventDefault(); newChat(); }
       else if (c === 'KeyH') { e.preventDefault(); newChat(); }
-      else if (c === 'KeyS') { e.preventDefault(); dispatchSidebarVisibility(!sidebarPinned); }
+      else if (c === 'KeyS') { e.preventDefault(); dispatchSidebarVisibility(!sidebarPinned, {learn:true}); }
       else if (c === 'KeyI') { e.preventDefault(); setCustomInstrOpen(true); }
       else if (c === 'KeyL') { e.preventDefault(); nav('library'); }
       else if (c === 'KeyG') { e.preventDefault(); navigateFromControl('ledger'); }
@@ -10213,7 +10256,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
-                onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned)} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
+                onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})} pinned={sidebarPinned} onNewChat={newChat} onSearch={() => openSearch()}
                 onSmartView={openSearch}
                 onNav={nav} onOpenChat={openChat} onOpenAgent={openAgent} activeAgentId={activeAgentId}
                 onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
@@ -10223,7 +10266,7 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectRename={renameProject} onOpenProject={openProject}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
-            onExpand={() => dispatchSidebarVisibility(true)} onNewChat={newChat} onSearch={() => openSearch()}
+            onExpand={() => dispatchSidebarVisibility(true, {learn:true})} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={navigateFromControl} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
@@ -10234,7 +10277,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
-              filesOpen={rightPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false})}
+              filesOpen={rightPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false}, {learn:true})}
               onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }}
               onAnswerNow={answerNow}
               activity={rightPanelVisible ? activityMsg : null}
@@ -10299,7 +10342,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})} workspaceLayout={workspaceLayout} onSurfaceChange={dispatchSurfacePresentation} onLayoutReset={resetWorkspaceLayout} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} workspaceLayout={workspaceLayout} onSurfaceChange={(reference, presentation) => dispatchSurfacePresentation(reference, presentation, {learn:true})} onLayoutReset={resetWorkspaceLayout} onAdaptiveRuleAction={dispatchAdaptiveRuleAction} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           feeds={feeds} onToggleFeed={toggleFeed}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}
@@ -10330,7 +10373,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
         }
-        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
+        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>
