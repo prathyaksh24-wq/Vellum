@@ -8,6 +8,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Added
 
+- Action Parity inventory and served-JSX contract gate for visual controls, with explicit non-state exemptions, deferrals, and disposable browser validation.
 - Adaptive UI rules for reversible presentation preferences, with three-signal learning, context scoping, explanations, Undo suppression, and local rule controls.
 - Capability-discovery contract for the frontend/backend boundary through `/api/capabilities`.
 - Stable API adapter pattern for the Vellum web UI.
@@ -49,6 +50,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Fixed
 
+- Restored the served Vellum interface by importing React's `useMemo` hook used during startup.
 - Knowledge health checks now use the App Actions boundary, source imports require maintained synthesis, and local YouTube intelligence rebuilds remain available without OAuth.
 - Spotify playback recovery on inactive devices.
 - Provider routing and 404 handling.
