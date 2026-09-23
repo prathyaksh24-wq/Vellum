@@ -63,6 +63,16 @@ describe("served visual-control parity gate", () => {
     expect(() => validateParityInventory(inventory, sources)).toThrow("Expected one reviewed inline React script");
   });
 
+  test("HTML-valid whitespace in a closing script tag cannot bypass the gate", () => {
+    const sources = servedSources();
+    const path = "design/Velllum/uploads/Vellum Default Re-designed.html";
+    sources[path] = sources[path].replace(
+      "</body>",
+      '<SCRIPT TYPE="text/babel"><button onClick={() => setBypass(true)}>Bypass</button></script ></body>',
+    );
+    expect(() => validateParityInventory(inventory, sources)).toThrow("Expected one reviewed inline React script");
+  });
+
   test("a reviewed React component cannot silently become unserved", () => {
     const sources = servedSources();
     const path = "design/Velllum/uploads/Vellum Default Re-designed.html";

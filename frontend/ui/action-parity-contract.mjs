@@ -2,6 +2,7 @@ import {createHash} from "node:crypto";
 import {existsSync, readFileSync} from "node:fs";
 import {createRequire} from "node:module";
 import {dirname, resolve} from "node:path";
+import {JSDOM} from "jsdom";
 
 // Vite's React plugin already depends on Babel. Parse the *served* JSX, not a
 // hand-maintained list of controls or the obsolete preview HTML files.
@@ -25,12 +26,17 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/books-view.jsx",
 ];
 
+function reactScripts(content) {
+  const document = new JSDOM(content).window.document;
+  return [...document.querySelectorAll("script")]
+    .filter(script => script.getAttribute("type")?.toLowerCase() === "text/babel");
+}
+
 export function jsxSource(path, content) {
   if (!path.endsWith(".html")) return content;
-  const scripts = [...content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
-    .filter(match => /\btype\s*=\s*["']text\/babel["']/i.test(match[1]) && !/\bsrc\s*=/i.test(match[1]));
+  const scripts = reactScripts(content).filter(script => !script.hasAttribute("src"));
   if (scripts.length !== 1) throw new Error(`Expected one reviewed inline React script in ${path}; found ${scripts.length}`);
-  return scripts[0][2];
+  return scripts[0].textContent;
 }
 
 function visit(node, parent, callback) {
@@ -81,10 +87,8 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   const errors = [];
   const servedExternalSources = new Set();
   for (const path of SOURCE_FILES.filter(item => item.endsWith(".html"))) {
-    const html = sources[path];
-    for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
-      if (!/\btype\s*=\s*["']text\/babel["']/i.test(match[1])) continue;
-      const source = match[1].match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
+    for (const script of reactScripts(sources[path])) {
+      const source = script.getAttribute("src");
       if (!source) continue;
       const referenced = resolve(root, "design/Velllum/uploads", source).replaceAll("\\", "/");
       const expected = resolve(root, "design/Velllum/uploads").replaceAll("\\", "/") + "/";
