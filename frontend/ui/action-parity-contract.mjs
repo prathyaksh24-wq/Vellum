@@ -27,8 +27,8 @@ export const SOURCE_FILES = [
 
 export function jsxSource(path, content) {
   if (!path.endsWith(".html")) return content;
-  const scripts = [...content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
-    .filter(match => /\btype\s*=\s*["']text\/babel["']/.test(match[1]) && !/\bsrc\s*=/.test(match[1]));
+  const scripts = [...content.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter(match => /\btype\s*=\s*["']text\/babel["']/i.test(match[1]) && !/\bsrc\s*=/i.test(match[1]));
   if (scripts.length !== 1) throw new Error(`Expected one reviewed inline React script in ${path}; found ${scripts.length}`);
   return scripts[0][2];
 }
@@ -82,9 +82,9 @@ export function validateParityInventory(inventory, sources = servedSources()) {
   const servedExternalSources = new Set();
   for (const path of SOURCE_FILES.filter(item => item.endsWith(".html"))) {
     const html = sources[path];
-    for (const match of html.matchAll(/<script\b([^>]*)>/g)) {
-      if (!/\btype\s*=\s*["']text\/babel["']/.test(match[1])) continue;
-      const source = match[1].match(/\bsrc\s*=\s*["']([^"']+)["']/)?.[1];
+    for (const match of html.matchAll(/<script\b([^>]*)>/gi)) {
+      if (!/\btype\s*=\s*["']text\/babel["']/i.test(match[1])) continue;
+      const source = match[1].match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];
       if (!source) continue;
       const referenced = resolve(root, "design/Velllum/uploads", source).replaceAll("\\", "/");
       const expected = resolve(root, "design/Velllum/uploads").replaceAll("\\", "/") + "/";

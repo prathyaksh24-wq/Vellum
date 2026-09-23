@@ -43,6 +43,16 @@ describe("served visual-control parity gate", () => {
     expect(validateParityInventory(inventory, sources).join("\n")).toContain("unreviewed served React source");
   });
 
+  test("uppercase script tags cannot bypass React source discovery", () => {
+    const sources = servedSources();
+    const path = "design/Velllum/uploads/Vellum Default Re-designed.html";
+    sources[path] = sources[path].replace(
+      "</body>",
+      '<SCRIPT TYPE="text/babel" SRC="components/new-controls.jsx"></SCRIPT></body>',
+    );
+    expect(validateParityInventory(inventory, sources).join("\n")).toContain("unreviewed served React source");
+  });
+
   test("an extra inline React control script cannot bypass the gate", () => {
     const sources = servedSources();
     const path = "design/Velllum/uploads/Vellum Default Re-designed.html";
