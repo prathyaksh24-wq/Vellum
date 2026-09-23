@@ -22,7 +22,7 @@ def test_visible_workspace_controls_dispatch_through_app_actions() -> None:
     ui_source = UI_PATH.read_text(encoding="utf-8")
 
     assert "AppActions.createWorkspaceLayoutRuntime" in ui_source
-    assert "dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}})" in ui_source
+    assert "dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})" in ui_source
     assert "dispatchSurfacePresentation('settings', {visible:true})" in ui_source
     assert "dispatchSurfacePresentation('right-panel', {visible:true})" in ui_source
     assert "onSurfaceChange('composer', {properties:{size}})" in ui_source

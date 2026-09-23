@@ -46,10 +46,43 @@ def _default_surfaces() -> dict[str, SurfacePresentation]:
     }
 
 
+AdaptiveScope = Literal["global", "device", "agent", "project", "window"]
+
+
+class AdaptiveUIRule(BaseModel):
+    id: str
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    origin: Literal["explicit", "inferred"]
+    evidence_count: int = Field(default=1, ge=1)
+    enabled: bool = True
+    suppressed: bool = False
+    explained: bool = False
+
+
+class AdaptiveUISignal(BaseModel):
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    count: int = Field(default=1, ge=1)
+
+
+class AdaptiveUIState(BaseModel):
+    revision: int = Field(default=0, ge=0)
+    rules: list[AdaptiveUIRule] = Field(default_factory=list)
+    signals: list[AdaptiveUISignal] = Field(default_factory=list)
+    suppressions: list[str] = Field(default_factory=list)
+    last_rule_id: str = ""
+
+
 class WorkspaceLayoutSnapshot(BaseModel):
     version: int = Field(default=1, ge=1)
     revision: int = Field(default=0, ge=0)
     surfaces: dict[str, SurfacePresentation] = Field(default_factory=_default_surfaces)
+    adaptive_ui: AdaptiveUIState = Field(default_factory=AdaptiveUIState)
 
 
 class DevicePersonalizationSettings(BaseModel):
@@ -94,8 +127,11 @@ class DeviceSettingsSnapshot(BaseModel):
 
 class AppActionContext(BaseModel):
     source: ActionSource
+    adaptive_learning_signal: bool = False
     invocation_conversation_id: str = ""
     device_id: str = "local-device"
+    project_id: str = ""
+    window_id: str = ""
     workspace_layout: WorkspaceLayoutSnapshot = Field(default_factory=WorkspaceLayoutSnapshot)
     focused_ui_reference: str = ""
     selected_ui_reference: str = ""

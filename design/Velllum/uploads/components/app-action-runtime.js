@@ -5,6 +5,8 @@
   var SIDEBAR_ACTION_ID = "ui.sidebar.set";
   var SURFACE_ACTION_ID = "ui.surface.configure";
   var RESET_ACTION_ID = "ui.workspace.reset";
+  var ADAPTIVE_APPLY_ACTION_ID = "ui.adaptive.apply";
+  var WINDOW_ID_KEY = "vellum-adaptive-window-id";
   var CONVERSATION_NEW_ACTION_ID = "conversation.new";
   var CONVERSATION_OPEN_ACTION_ID = "conversation.open";
   var CONVERSATION_PIN_ACTION_ID = "conversation.pin";
@@ -55,7 +57,22 @@
   }
 
   function defaultLayout() {
-    return { version: 1, revision: 0, surfaces: clone(SURFACE_DEFAULTS) };
+    return { version: 1, revision: 0, surfaces: clone(SURFACE_DEFAULTS), adaptive_ui: defaultAdaptiveState() };
+  }
+
+  function defaultAdaptiveState() {
+    return { revision: 0, rules: [], signals: [], suppressions: [], last_rule_id: "" };
+  }
+
+  function normalizeAdaptiveState(value) {
+    var source = value && typeof value === "object" ? value : {};
+    return {
+      revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
+      rules: Array.isArray(source.rules) ? clone(source.rules) : [],
+      signals: Array.isArray(source.signals) ? clone(source.signals) : [],
+      suppressions: Array.isArray(source.suppressions) ? clone(source.suppressions) : [],
+      last_rule_id: typeof source.last_rule_id === "string" ? source.last_rule_id : "",
+    };
   }
 
   function safeGet(storage, key) {
@@ -95,6 +112,7 @@
       version: Number.isInteger(source.version) && source.version > 0 ? source.version : defaults.version,
       revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : defaults.revision,
       surfaces: surfaces,
+      adaptive_ui: normalizeAdaptiveState(source.adaptive_ui),
     };
   }
 
@@ -164,6 +182,12 @@
       };
     };
     var deviceState = loadLayout(storage);
+    var windowStorage = options.windowStorage === undefined ? window.sessionStorage : options.windowStorage;
+    var windowId = options.windowId || safeGet(windowStorage, WINDOW_ID_KEY);
+    if (!windowId) {
+      windowId = "window_" + Math.random().toString(36).slice(2, 12);
+      safeSet(windowStorage, WINDOW_ID_KEY, windowId);
+    }
     var sessionOverrides = {};
     var effectiveRevision = deviceState.revision;
     var listeners = [];
@@ -197,6 +221,7 @@
         source: source || "ui",
         invocation_conversation_id: conversationId || "",
         device_id: "local-device",
+        window_id: windowId,
         workspace_layout: snapshot(),
       }, contextResolver() || {});
     }
@@ -204,27 +229,44 @@
     function applyReceipt(receipt) {
       if (!receipt || ["applied", "undone"].indexOf(receipt.status) < 0) return receipt;
       var patch = receiptPatch(receipt);
-      if (!patch || !patch.surfaces) return receipt;
-      if (patch.version !== state.version) throw new Error("WORKSPACE_LAYOUT_VERSION_MISMATCH");
-      if (patch.base_revision !== state.revision) {
-        if (patchMatches(state, patch)) return receipt;
-        throw new Error("STALE_WORKSPACE_LAYOUT_RECEIPT");
+      var adaptivePatch = receipt.result && receipt.result.adaptive_ui_patch;
+      if ((!patch || !patch.surfaces) && !adaptivePatch) return receipt;
+      if (patch && patch.surfaces) {
+        if (patch.version !== state.version) throw new Error("WORKSPACE_LAYOUT_VERSION_MISMATCH");
+        if (patch.base_revision !== state.revision && !patchMatches(state, patch)) {
+          throw new Error("STALE_WORKSPACE_LAYOUT_RECEIPT");
+        }
       }
-      effectiveRevision = patch.revision;
-      if (patch.replace) {
-        deviceState = normalizeLayout({ version: patch.version, revision: patch.revision, surfaces: patch.surfaces });
-        sessionOverrides = {};
-        persist();
-      } else if (patch.persistence === "session") {
-        Object.keys(patch.surfaces).forEach(function (reference) {
-          sessionOverrides[reference] = normalizePresentation(reference, patch.surfaces[reference]);
-        });
-      } else {
-        deviceState = applySurfaces(deviceState, patch.surfaces, patch.revision);
-        Object.keys(patch.surfaces).forEach(function (reference) { delete sessionOverrides[reference]; });
-        persist();
+      if (adaptivePatch) {
+        if (!adaptivePatch.state || !Number.isInteger(adaptivePatch.revision)) throw new Error("INVALID_ADAPTIVE_UI_RECEIPT");
+        if (adaptivePatch.base_revision !== state.adaptive_ui.revision) {
+          if (adaptivePatch.revision !== state.adaptive_ui.revision || JSON.stringify(normalizeAdaptiveState(adaptivePatch.state)) !== JSON.stringify(state.adaptive_ui)) {
+            throw new Error("STALE_ADAPTIVE_UI_RECEIPT");
+          }
+        }
+      }
+      if (patch && patch.surfaces && patch.base_revision === state.revision) {
+        effectiveRevision = patch.revision;
+        if (patch.replace) {
+          deviceState = normalizeLayout({
+            version: patch.version, revision: patch.revision,
+            surfaces: patch.surfaces, adaptive_ui: deviceState.adaptive_ui,
+          });
+          sessionOverrides = {};
+        } else if (patch.persistence === "session") {
+          Object.keys(patch.surfaces).forEach(function (reference) {
+            sessionOverrides[reference] = normalizePresentation(reference, patch.surfaces[reference]);
+          });
+        } else {
+          deviceState = applySurfaces(deviceState, patch.surfaces, patch.revision);
+          Object.keys(patch.surfaces).forEach(function (reference) { delete sessionOverrides[reference]; });
+        }
+      }
+      if (adaptivePatch && adaptivePatch.base_revision === state.adaptive_ui.revision) {
+        deviceState.adaptive_ui = normalizeAdaptiveState(adaptivePatch.state);
       }
       state = composeState();
+      if (adaptivePatch || (patch && patch.persistence !== "session")) persist();
       emit();
       return receipt;
     }
@@ -240,7 +282,9 @@
       };
       var receipt = await client.dispatch(
         request,
-        context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""),
+        Object.assign(context(dispatchOptions.source || "ui", dispatchOptions.conversationId || ""), {
+          adaptive_learning_signal: dispatchOptions.learn === true,
+        }),
       );
       return applyReceipt(receipt);
     }
@@ -261,6 +305,56 @@
 
     function reset(dispatchOptions) {
       return dispatch(RESET_ACTION_ID, {}, dispatchOptions || {});
+    }
+
+    function ruleMatches(rule, actionContext) {
+      if (rule.scope === "global") return true;
+      var field = {
+        device: "device_id", agent: "active_agent", project: "project_id", window: "window_id",
+      }[rule.scope];
+      return !!field && !!rule.scope_id && rule.scope_id === actionContext[field];
+    }
+
+    function ruleNeedsChange(rule) {
+      var args = rule.arguments || {};
+      if (Object.prototype.hasOwnProperty.call(sessionOverrides, args.reference)) return false;
+      var current = state.surfaces[args.reference];
+      if (!current) return false;
+      if (Object.prototype.hasOwnProperty.call(args, "visible")) return current.visible !== args.visible;
+      var properties = args.properties || {};
+      return Object.keys(properties).some(function (name) { return current.properties[name] !== properties[name]; });
+    }
+
+    var applying = null;
+    async function maybeApply(applyOptions) {
+      if (applying) {
+        await applying;
+        return maybeApply(applyOptions);
+      }
+      applyOptions = applyOptions || {};
+      applying = (async function () {
+        var actionContext = context("ui", applyOptions.conversationId || "");
+        var rules = state.adaptive_ui.rules || [];
+        var suppressions = new Set(state.adaptive_ui.suppressions || []);
+        var priority = { project: 4, agent: 3, window: 2, device: 1, global: 0 };
+        var selected = new Map();
+        rules.forEach(function (rule, index) {
+          if (!rule.enabled || rule.suppressed || suppressions.has(rule.signature) || !ruleMatches(rule, actionContext)) return;
+          var args = rule.arguments || {};
+          var field = Object.prototype.hasOwnProperty.call(args, "visible") ? "visible" : Object.keys(args.properties || {})[0];
+          if (!field) return;
+          var key = args.reference + ":" + field;
+          var score = (rule.origin === "explicit" ? 100 : 0) + (priority[rule.scope] || 0) * 10 + index / 1000;
+          if (!selected.has(key) || selected.get(key).score < score) selected.set(key, { rule: rule, score: score });
+        });
+        for (var candidate of selected.values()) {
+          if (!ruleNeedsChange(candidate.rule)) continue;
+          var receipt = await dispatch(ADAPTIVE_APPLY_ACTION_ID, { rule_id: candidate.rule.id }, applyOptions);
+          if (typeof applyOptions.onReceipt === "function") applyOptions.onReceipt(receipt);
+          if (!receipt || receipt.status !== "applied") break;
+        }
+      })();
+      try { return await applying; } finally { applying = null; }
     }
 
     async function undo(receipt, undoOptions) {
@@ -287,6 +381,7 @@
       dispatchSidebar: dispatchSidebar,
       dispatchSurface: dispatchSurface,
       reset: reset,
+      maybeApply: maybeApply,
       undo: undo,
       subscribe: subscribe,
     };

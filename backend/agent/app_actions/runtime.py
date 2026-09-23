@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any, Callable
 from uuid import uuid4
 
+from agent.app_actions import adaptive_ui
 from agent.app_actions.models import (
     ActionConfirmation,
     ActionAuthorization,
@@ -172,6 +173,7 @@ class _UndoRecord:
     expected_presentation: dict[str, Any]
     expected_revision: int
     expires_at: datetime
+    adaptive_signature: str = ""
 
 
 @dataclass(frozen=True)
@@ -299,6 +301,7 @@ class AppActionRuntime:
                 self._sidebar_definition(),
                 self._surface_action_definition(),
                 self._reset_definition(),
+                *adaptive_ui.action_definitions(),
                 self._attachment_definition(),
                 *self._session_control_definitions(),
                 *settings_runtime_action_definitions(),
@@ -329,6 +332,14 @@ class AppActionRuntime:
         self._register(SIDEBAR_ACTION_ID, "Change sidebar visibility", self._set_sidebar)
         self._register(SURFACE_ACTION_ID, "Customize interface presentation", self._configure_surface)
         self._register(WORKSPACE_RESET_ACTION_ID, "Reset interface presentation", self._reset_workspace)
+        for action_id in adaptive_ui.ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._adaptive_action(registered_action_id, payload),
+                access=CapabilityAccess(definition.access_class),
+            )
         for action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             definition = self._definitions[action_id]
             self._register(
@@ -647,6 +658,49 @@ class AppActionRuntime:
         normalized = normalized.rstrip(".!?")
         submitted = submitted.rstrip(".!?")
         polite = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
+
+        if normalized in {"list adaptive ui rules", "show adaptive ui rules", "list interface rules", "show interface rules"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_LIST)
+        if normalized in {"why did my interface change", "why did the interface change", "explain the last ui change"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_EXPLAIN)
+        if normalized in {"don't learn this", "do not learn this", "don't learn this ui change"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_SUPPRESS)
+        rule_control = re.fullmatch(
+            r"(?:please\s+)?(enable|disable|remove|explain)\s+(?:adaptive\s+ui\s+|interface\s+)?rule\s+(adaptive_[a-f0-9]+)",
+            normalized,
+        )
+        if rule_control:
+            verb, rule_id = rule_control.groups()
+            action_id = {
+                "enable": adaptive_ui.RULE_SET_ENABLED,
+                "disable": adaptive_ui.RULE_SET_ENABLED,
+                "remove": adaptive_ui.RULE_REMOVE,
+                "explain": adaptive_ui.RULE_EXPLAIN,
+            }[verb]
+            arguments = {"rule_id": rule_id}
+            if verb in {"enable", "disable"}:
+                arguments["enabled"] = verb == "enable"
+            return AppActionRequest(action_id=action_id, arguments=arguments)
+        always = re.fullmatch(r"(?:please\s+)?always\s+(.+)", submitted, flags=re.IGNORECASE)
+        if always:
+            instruction = always.group(1)
+            scope = "global"
+            for suffix, candidate in (
+                (" in this project", "project"),
+                (" for this agent", "agent"),
+                (" in this window", "window"),
+                (" on this device", "device"),
+            ):
+                if instruction.casefold().endswith(suffix):
+                    instruction = instruction[: -len(suffix)].rstrip()
+                    scope = candidate
+                    break
+            inner = self.match_submission(instruction)
+            if inner and inner.action_id in {SIDEBAR_ACTION_ID, SURFACE_ACTION_ID}:
+                return AppActionRequest(
+                    action_id=adaptive_ui.RULE_CREATE,
+                    arguments={"rule_action_id": inner.action_id, "rule_arguments": inner.arguments, "scope": scope},
+                )
 
         device_appearance = re.fullmatch(
             polite + r"(?:change|set|switch)\s+(?:the\s+|my\s+)?(background|accent(?:\s+palette)?|dock\s+position)\s+to\s+(.+)",
@@ -1857,6 +1911,16 @@ class AppActionRuntime:
                 result=exc.details,
                 authorized=True,
             )
+        except adaptive_ui.AdaptiveUIError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=True,
+            )
         except (TypeError, ValueError) as exc:
             return self._error_receipt(
                 request=request,
@@ -1868,7 +1932,15 @@ class AppActionRuntime:
                 authorized=True,
             )
 
+        if request.action_id in {SIDEBAR_ACTION_ID, SURFACE_ACTION_ID}:
+            adaptive_patch, key = adaptive_ui.observation(context, result)
+            if adaptive_patch is not None:
+                result["adaptive_ui_patch"] = adaptive_patch
+            if key:
+                result["_adaptive_signature"] = key
         undo_arguments = result.pop("_undo_arguments", None)
+        adaptive_signature = str(result.pop("_adaptive_signature", ""))
+        message = str(result.pop("_message", "")) or self._result_message(result)
         created_at = self._now()
         undo = None
         if result["changed"] and definition.supports_undo and undo_arguments:
@@ -1886,6 +1958,7 @@ class AppActionRuntime:
                     expected_presentation=expected_presentation,
                     expected_revision=target_revision,
                     expires_at=expires_at,
+                    adaptive_signature=adaptive_signature,
                 )
             )
             undo = ActionUndo(
@@ -1897,6 +1970,7 @@ class AppActionRuntime:
             )
 
         target_reference = str(result.get("target_reference") or "workspace")
+        target_revision = int(result["workspace_layout_patch"]["revision"])
         return ActionReceipt(
             receipt_id=self._receipt_id_factory(),
             request_id=request.request_id,
@@ -1906,13 +1980,13 @@ class AppActionRuntime:
             status="applied",
             authorization=self._authorization(definition.access_class, context, allowed=True),
             target=ActionTarget(
-                kind="ui_surface" if target_reference != "workspace-layout" else "workspace_layout",
+                kind=str(result.get("target_kind") or ("ui_surface" if target_reference != "workspace-layout" else "workspace_layout")),
                 id=target_reference,
-                revision=result["workspace_layout_patch"]["revision"],
+                revision=target_revision,
             ),
             result=result,
             undo=undo,
-            message=self._result_message(result),
+            message=message,
             audit_label=definition.audit_label,
             created_at=created_at,
         )
@@ -2868,19 +2942,22 @@ class AppActionRuntime:
                 }
             })
         patch = receipt.result.get("workspace_layout_patch")
-        if not isinstance(patch, dict) or not isinstance(patch.get("surfaces"), dict):
+        adaptive_patch = receipt.result.get("adaptive_ui_patch")
+        if not isinstance(patch, dict) and not isinstance(adaptive_patch, dict):
             return context
-        surfaces = {} if patch.get("replace") else {
-            reference: presentation.model_copy(deep=True)
-            for reference, presentation in context.workspace_layout.surfaces.items()
-        }
-        for reference, presentation in patch["surfaces"].items():
-            surfaces[str(reference)] = SurfacePresentation.model_validate(presentation)
-        layout = WorkspaceLayoutSnapshot(
-            version=int(patch.get("version", context.workspace_layout.version)),
-            revision=int(patch.get("revision", context.workspace_layout.revision)),
-            surfaces=surfaces,
-        )
+        layout = context.workspace_layout.model_copy(deep=True)
+        if isinstance(patch, dict) and isinstance(patch.get("surfaces"), dict):
+            surfaces = {} if patch.get("replace") else dict(layout.surfaces)
+            for reference, presentation in patch["surfaces"].items():
+                surfaces[str(reference)] = SurfacePresentation.model_validate(presentation)
+            layout = WorkspaceLayoutSnapshot(
+                version=int(patch.get("version", layout.version)),
+                revision=int(patch.get("revision", layout.revision)),
+                surfaces=surfaces,
+                adaptive_ui=layout.adaptive_ui,
+            )
+        if isinstance(adaptive_patch, dict) and isinstance(adaptive_patch.get("state"), dict):
+            layout.adaptive_ui = adaptive_ui.AdaptiveUIState.model_validate(adaptive_patch["state"])
         return context.model_copy(update={"workspace_layout": layout})
 
     def undo(self, token: str, context: AppActionContext) -> ActionReceipt:
@@ -2929,11 +3006,17 @@ class AppActionRuntime:
             )
 
         try:
-            result = self._registry.invoke(
-                record.action_id,
-                {"arguments": dict(record.previous_arguments), "context": context},
-                agent_name=self._agent_name(context),
-            )
+            if record.action_id == adaptive_ui.RULE_APPLY:
+                result = self._configure_surface({
+                    "arguments": dict(record.previous_arguments["revert"]),
+                    "context": context,
+                })
+            else:
+                result = self._registry.invoke(
+                    record.action_id,
+                    {"arguments": dict(record.previous_arguments), "context": context},
+                    agent_name=self._agent_name(context),
+                )
         except (ToolPermissionError, SurfaceActionError, TypeError, ValueError) as exc:
             return self._error_receipt(
                 request=request,
@@ -2946,6 +3029,14 @@ class AppActionRuntime:
             )
 
         result.pop("_undo_arguments", None)
+        result.pop("_adaptive_signature", None)
+        result.pop("_message", None)
+        if record.adaptive_signature:
+            suppression = adaptive_ui.suppress_signature(
+                context.workspace_layout.adaptive_ui, record.adaptive_signature,
+            )
+            if suppression is not None:
+                result["adaptive_ui_patch"] = suppression
         self._receipt_store.remove(token)
         return ActionReceipt(
             receipt_id=self._receipt_id_factory(),
@@ -3846,8 +3937,13 @@ class AppActionRuntime:
             reference: self._current_presentation(reference, context).model_dump(mode="json")
             for reference in surfaces
         }
-        changed = current != defaults
-        return {
+        adaptive_state = snapshot.adaptive_ui
+        adaptive_changed = bool(
+            adaptive_state.rules or adaptive_state.signals
+            or adaptive_state.suppressions or adaptive_state.last_rule_id
+        )
+        changed = current != defaults or adaptive_changed
+        result = {
             "changed": changed,
             "target_reference": "workspace-layout",
             "presentation": {},
@@ -3862,6 +3958,109 @@ class AppActionRuntime:
                 "surfaces": defaults,
             },
         }
+        if adaptive_changed:
+            result["adaptive_ui_patch"] = adaptive_ui.state_patch(
+                adaptive_state, adaptive_ui.AdaptiveUIState(),
+            )
+        return result
+
+    def _adaptive_action(self, action_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        state = context.workspace_layout.adaptive_ui
+
+        def no_layout_change() -> dict[str, Any]:
+            return {
+                "changed": False,
+                "target_kind": "adaptive_rule",
+                "target_reference": "adaptive-ui",
+                "presentation": {},
+                "previous_presentation": {},
+                "workspace_layout_patch": {
+                    "version": context.workspace_layout.version,
+                    "base_revision": context.workspace_layout.revision,
+                    "revision": context.workspace_layout.revision,
+                    "persistence": "device",
+                    "replace": False,
+                    "surfaces": {},
+                },
+            }
+
+        if action_id == adaptive_ui.RULE_CREATE:
+            rule_action_id = str(arguments.get("rule_action_id") or "")
+            raw = arguments.get("rule_arguments")
+            if not isinstance(raw, dict):
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Rule arguments are required.")
+            canonical = adaptive_ui.canonical_arguments(rule_action_id, raw)
+            configured = self._configure_surface({"arguments": canonical, "context": context})
+            scope = str(arguments.get("scope") or "global")
+            if scope not in {"global", "device", "agent", "project", "window"}:
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Unsupported Adaptive UI scope.")
+            rule, patch = adaptive_ui.create_rule(context, rule_action_id, raw, scope=scope)
+            configured.pop("_undo_arguments", None)
+            configured["changed"] = bool(configured["changed"] or patch)
+            configured["target_kind"] = "adaptive_rule"
+            configured["rule"] = rule.model_dump(mode="json")
+            if patch is not None:
+                configured["adaptive_ui_patch"] = patch
+            configured["_message"] = "Adaptive UI rule saved. " + adaptive_ui.explain(rule)
+            return configured
+
+        if action_id == adaptive_ui.RULE_APPLY:
+            if set(arguments) != {"rule_id"}:
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Only a rule ID can be applied.")
+            rule = adaptive_ui.find_rule(state, str(arguments.get("rule_id") or ""))
+            if not rule.enabled or rule.suppressed or rule.signature in state.suppressions:
+                raise adaptive_ui.AdaptiveUIError("ADAPTIVE_RULE_UNAVAILABLE", "This Adaptive UI rule is disabled.")
+            if not adaptive_ui.matches(rule, context):
+                raise adaptive_ui.AdaptiveUIError("ADAPTIVE_CONTEXT_MISMATCH", "This rule does not apply in the current context.")
+            canonical = adaptive_ui.canonical_arguments("ui.surface.configure", rule.arguments)
+            configured = self._configure_surface({"arguments": canonical, "context": context})
+            if not configured["changed"]:
+                configured["_message"] = "The learned presentation is already set."
+                return configured
+            first_use, patch = adaptive_ui.mark_applied(state, rule.id)
+            inverse = configured.pop("_undo_arguments")
+            configured["_undo_arguments"] = {"rule_id": rule.id, "revert": inverse}
+            configured["_adaptive_signature"] = rule.signature
+            configured["adaptive_ui_patch"] = patch
+            configured["adaptive_rule"] = {"id": rule.id, "first_use": first_use, "explanation": adaptive_ui.explain(rule)}
+            configured["_message"] = (
+                f"Adaptive UI applied a learned rule: {adaptive_ui.explain(rule)}"
+                if first_use else "Adaptive UI applied a learned presentation rule."
+            )
+            return configured
+
+        result = no_layout_change()
+        if action_id == adaptive_ui.RULE_LIST:
+            result["rules"] = [rule.model_dump(mode="json") for rule in state.rules]
+            result["_message"] = f"{len(state.rules)} Adaptive UI rules on this device."
+            return result
+        if action_id == adaptive_ui.RULE_EXPLAIN:
+            rule = adaptive_ui.find_rule(state, str(arguments.get("rule_id") or ""))
+            result["rule"] = rule.model_dump(mode="json")
+            result["_message"] = adaptive_ui.explain(rule)
+            return result
+        if action_id == adaptive_ui.RULE_SET_ENABLED:
+            enabled = arguments.get("enabled")
+            if not isinstance(enabled, bool):
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "enabled must be true or false.")
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), enabled=enabled)
+            result["_message"] = f"Adaptive UI rule {'enabled' if enabled else 'disabled'}."
+        elif action_id == adaptive_ui.RULE_REMOVE:
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), remove=True)
+            result["_message"] = "Adaptive UI rule removed."
+        elif action_id == adaptive_ui.RULE_SUPPRESS:
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), suppress=True)
+            result["_message"] = "Vellum will not learn or apply that interface preference."
+        else:
+            raise adaptive_ui.AdaptiveUIError("ACTION_UNAVAILABLE", "That Adaptive UI action is unavailable.")
+        result["changed"] = patch is not None
+        result["target_reference"] = rule.id
+        result["rule"] = rule.model_dump(mode="json")
+        if patch is not None:
+            result["adaptive_ui_patch"] = patch
+        return result
 
     def _resolve_surface(self, reference: str, context: AppActionContext) -> UISurfaceDefinition:
         normalized = self._normalize_reference(reference)
