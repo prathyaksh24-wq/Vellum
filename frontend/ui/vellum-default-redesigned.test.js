@@ -19,6 +19,11 @@ const mcpSetup = readFileSync(
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test("binds every React hook used at application startup", () => {
+    expect(html).toContain("const {useState, useRef, useEffect, useMemo} = React;");
+    expect(html).toContain("const availableAgents = useMemo(");
+  });
+
   test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
     expect(html).toContain('<script src="api/books.js"></script>');
     expect(html).toContain('<script src="components/books-state.js"></script>');
