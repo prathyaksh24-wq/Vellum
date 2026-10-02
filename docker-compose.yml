@@ -1,22 +1,146 @@
-# Vector search runs embedded via ChromaDB (agent/rag/store.py) — no container.
-# Only Honcho's user-model store needs services.
+# Honcho's API, storage, embedding, and background reasoning stay local. The
+# OpenAI-compatible transport points to Ollama on the host and uses no cloud
+# credential. The upstream source is pinned so a future Honcho release cannot
+# silently change the local memory runtime.
+x-honcho-image: &honcho-image
+  image: vellum-honcho:3.0.12
+  build:
+    context: https://github.com/plastic-labs/honcho.git#93dcf59c4a4225bb020b20c628799737fefae318
+    dockerfile: Dockerfile
+
+x-honcho-environment: &honcho-environment
+  DB_CONNECTION_URI: postgresql+psycopg://postgres:postgres@honcho-db:5432/postgres
+  CACHE_URL: redis://honcho-cache:6379/0?suppress=true
+  CACHE_ENABLED: "true"
+  AUTH_USE_AUTH: "false"
+  LLM_OPENAI_API_KEY: ollama-local
+  EMBEDDING_VECTOR_DIMENSIONS: "768"
+  EMBEDDING_MODEL_CONFIG__TRANSPORT: openai
+  EMBEDDING_MODEL_CONFIG__MODEL: nomic-embed-text
+  EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DERIVER_MODEL_CONFIG__TRANSPORT: openai
+  DERIVER_MODEL_CONFIG__MODEL: gemma4:12b
+  DERIVER_MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DERIVER_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS: '{"extra_body":{"reasoning_effort":"none"}}'
+  DERIVER_POLLING_STARTUP_JITTER_SECONDS: "0"
+  DERIVER_REPRESENTATION_BATCH_MAX_AGE_SECONDS: "300"
+  DERIVER_REPRESENTATION_BATCH_TARGET_INPUT_TOKENS: "4096"
+  DERIVER_MAX_INPUT_TOKENS: "8000"
+  DERIVER_MODEL_CONFIG__MAX_OUTPUT_TOKENS: "1024"
+  SUMMARY_MODEL_CONFIG__TRANSPORT: openai
+  SUMMARY_MODEL_CONFIG__MODEL: gemma4:12b
+  SUMMARY_MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  SUMMARY_MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS: '{"extra_body":{"reasoning_effort":"none"}}'
+  SUMMARY_MAX_TOKENS_SHORT: "256"
+  SUMMARY_MAX_TOKENS_LONG: "512"
+  DIALECTIC_MAX_INPUT_TOKENS: "8000"
+  DIALECTIC_MAX_OUTPUT_TOKENS: "512"
+  DIALECTIC_LEVELS__minimal__MODEL_CONFIG__TRANSPORT: openai
+  DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL: gemma4:12b
+  DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DIALECTIC_LEVELS__minimal__MODEL_CONFIG__OVERRIDES__PROVIDER_PARAMS: '{"extra_body":{"reasoning_effort":"none"}}'
+  DIALECTIC_LEVELS__low__MODEL_CONFIG__TRANSPORT: openai
+  DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL: gemma4:12b
+  DIALECTIC_LEVELS__low__MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DIALECTIC_LEVELS__medium__MODEL_CONFIG__TRANSPORT: openai
+  DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL: gemma4:12b
+  DIALECTIC_LEVELS__medium__MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DIALECTIC_LEVELS__high__MODEL_CONFIG__TRANSPORT: openai
+  DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL: gemma4:12b
+  DIALECTIC_LEVELS__high__MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DIALECTIC_LEVELS__max__MODEL_CONFIG__TRANSPORT: openai
+  DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL: gemma4:12b
+  DIALECTIC_LEVELS__max__MODEL_CONFIG__OVERRIDES__BASE_URL: http://host.docker.internal:11434/v1
+  DREAM_ENABLED: "false"
+  TELEMETRY_ENABLED: "false"
+  COLLECT_METRICS_LOCAL: "false"
+
 services:
+  honcho-configure:
+    <<: *honcho-image
+    entrypoint:
+      [
+        "sh",
+        "-c",
+        "/app/.venv/bin/python scripts/provision_db.py && /app/.venv/bin/python scripts/configure_embeddings.py --yes",
+      ]
+    depends_on:
+      honcho-db:
+        condition: service_healthy
+    environment: *honcho-environment
+    restart: "no"
+
   honcho:
-    image: plasticlabs/honcho:latest
+    <<: *honcho-image
+    entrypoint: ["sh", "docker/entrypoint.sh"]
+    depends_on:
+      honcho-configure:
+        condition: service_completed_successfully
+      honcho-cache:
+        condition: service_healthy
     ports:
       - "127.0.0.1:8001:8000"
-    environment:
-      - DATABASE_URL=postgresql://honcho:honcho@honcho-db:5432/honcho
+    environment: *honcho-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/app/.venv/bin/python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  honcho-deriver:
+    <<: *honcho-image
+    entrypoint: ["/app/.venv/bin/python", "-m", "src.deriver"]
     depends_on:
-      - honcho-db
+      honcho:
+        condition: service_healthy
+      honcho-db:
+        condition: service_healthy
+      honcho-cache:
+        condition: service_healthy
+    environment: *honcho-environment
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
   honcho-db:
-    image: postgres:16
+    image: pgvector/pgvector:pg15
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
-      POSTGRES_USER: honcho
-      POSTGRES_PASSWORD: honcho
-      POSTGRES_DB: honcho
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
+      - ./docker/honcho-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - honcho_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  honcho-cache:
+    image: redis:8.2
+    volumes:
+      - honcho_cache:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
 
 volumes:
   honcho_data:
+  honcho_cache:

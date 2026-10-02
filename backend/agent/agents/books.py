@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import logging
+import re
 from typing import Any
 
-from agent.agents.base import SpecialistResponse, SpecialistSource
+from agent.agents.base import SpecialistResponse, SpecialistSource, user_query_text
 from agent.contracts.books import BookEvidenceAnchor, BooksAgentEnvelope, BooksDiscoveryTask, books_envelope_payload
 from agent.tools.registry import ToolRegistry
 
@@ -28,7 +29,26 @@ class BooksAgent:
 
     def can_handle(self, query: str) -> bool:
         text = str(query or "")
-        return INSTALLED_BOOK_CONTEXT_START in text and INSTALLED_BOOK_CONTEXT_END in text
+        if INSTALLED_BOOK_CONTEXT_START in text and INSTALLED_BOOK_CONTEXT_END in text:
+            return True
+        lowered = " ".join(text.casefold().split())
+        return bool(
+            self._inventory_kind(lowered)
+            or re.search(r"\b(?:about|from|in)\s+the\s+book\s+", lowered)
+            or
+            re.search(r"\b(?:my|installed|uploaded|imported)\s+(?:book|books|library)\b", lowered)
+            or re.search(r"\b(?:book|books)\s+(?:in|from)\s+my\s+library\b", lowered)
+            or re.search(r"\bwhat\s+(?:book|books)\s+(?:do\s+i\s+have|are\s+in\s+my\s+library)\b", lowered)
+        )
+
+    @staticmethod
+    def _inventory_kind(query: str) -> str:
+        lowered = query.casefold()
+        if re.search(r"\bskills?\b", lowered) and re.search(r"\b(?:book|books|epub|imported)\b", lowered):
+            return "skills"
+        if re.search(r"\b(?:which|what|list|show)\b", lowered) and re.search(r"\b(?:books|library)\b", lowered) and re.search(r"\b(?:my|i|installed|imported|uploaded)\b", lowered):
+            return "library"
+        return ""
 
     def execute_action_request(self, action_request: dict[str, Any]) -> SpecialistResponse:
         task = BooksDiscoveryTask.model_validate(action_request.get("payload"))
@@ -55,7 +75,7 @@ class BooksAgent:
         return response
 
     def answer(self, query: str) -> SpecialistResponse:
-        clean_query = str(query or "").strip()
+        clean_query = user_query_text(query)
         if not clean_query:
             return self._response(
                 status="blocked",
@@ -63,6 +83,33 @@ class BooksAgent:
                 summary="BooksAgent requires a question.",
                 uncertainty=["No Book question was supplied."],
             )
+
+        inventory_kind = self._inventory_kind(clean_query)
+        if inventory_kind:
+            result = self.tool_registry.invoke("books.skill_lookup", {"query":clean_query}, agent_name=self.name)
+            books = list(result.get("books") or [])
+            skills = list(result.get("skills") or [])
+            if books:
+                lines = []
+                for book in books[:12]:
+                    title = str(book.get("title") or "Book import")
+                    error = str(book.get("error_code") or "")
+                    if error:
+                        lines.append(f"- {title}: import blocked ({error.replace('_', ' ').lower()}).")
+                    elif book.get("quality_outcome") == "OCR_REQUIRED":
+                        lines.append(f"- {title}: imported and scanned; image-only pages require local OCR before its Book skill can be built.")
+                    elif book.get("skill_status") == "compiled":
+                        lines.append(f"- {title}: Book skill ready.")
+                    else:
+                        lines.append(f"- {title}: Book skill has not been built yet.")
+                summary = "\n".join(lines)
+            elif skills and "books" not in result:
+                summary = "Matched Book skills: " + ", ".join(str(item.get("name")) for item in skills[:8]) + "."
+            else:
+                summary = "No books have been successfully imported and compiled yet. Import an EPUB in the Books library to build its Book skill."
+            return self._response(status="answered", envelope_status="abstained", summary=summary,
+                uncertainty=[], activity=[{"name":"books.skill_lookup", "status":"completed", "count":len(books)}],
+                sources=_safe_sources([], skills))
 
         activity: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -145,6 +192,11 @@ class BooksAgent:
                 logger.exception("BooksAgent synthesis failed.")
                 errors.append("books.synthesize")
                 activity.append({"name": "books.synthesize", "status": "error"})
+
+        if evidence and errors:
+            return self._response(status="error", envelope_status="failed",
+                summary="I retrieved the book passages, but could not produce a validated summary. Please try the question again.",
+                uncertainty=["Book synthesis failed validation."], sources=sources, activity=activity)
 
         if sources:
             summary = (
@@ -243,8 +295,17 @@ def _validated_synthesis(
     payload = {key: value for key, value in dict(draft).items() if key in allowed}
     payload["evidence"] = [anchor.model_dump(mode="json") for anchor in _evidence_anchors(evidence)]
     payload["retrieval_policy"] = retrieval_policy
-    envelope = BooksAgentEnvelope.model_validate(payload)
-    if not envelope.answer_claim_ids:
+    # Optional personal observations cannot invalidate an otherwise grounded
+    # answer. Validate the answer first, then accept observations only if the
+    # complete contract (including their evidence/learning links) also passes.
+    answer_payload = {**payload, "user_learning_events": [], "wisdom_proposals": []}
+    envelope = BooksAgentEnvelope.model_validate(answer_payload)
+    if payload.get("user_learning_events") or payload.get("wisdom_proposals"):
+        try:
+            envelope = BooksAgentEnvelope.model_validate(payload)
+        except ValueError:
+            envelope.uncertainty.append("Optional personal observations were omitted because they could not be validated.")
+    if envelope.status in {"complete", "partial"} and not envelope.answer_claim_ids:
         raise ValueError("Books synthesis must ground the answer in at least one claim")
     return envelope
 

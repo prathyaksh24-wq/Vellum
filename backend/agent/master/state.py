@@ -49,6 +49,8 @@ class MasterThreadStateStore:
                 str(row["name"])
                 for row in conn.execute("PRAGMA table_info(master_thread_state)").fetchall()
             }
+            if "specialist_context_json" not in columns:
+                conn.execute("ALTER TABLE master_thread_state ADD COLUMN specialist_context_json TEXT NOT NULL DEFAULT '{}'")
             if "selected_model" not in columns:
                 conn.execute("ALTER TABLE master_thread_state ADD COLUMN selected_model TEXT NOT NULL DEFAULT ''")
             if "reasoning_mode" not in columns:
@@ -225,3 +227,30 @@ class MasterThreadStateStore:
     def clear_pending_action(self, thread_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+
+    def get_specialist_context(self, thread_id: str, agent_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            row = conn.execute("SELECT specialist_context_json FROM master_thread_state WHERE thread_id = ?", (thread_id,)).fetchone()
+        try:
+            value = json.loads(row[0] if row else "{}").get(agent_id, {})
+            return value if isinstance(value, dict) else {}
+        except (ValueError, AttributeError):
+            return {}
+
+    def set_specialist_context(self, thread_id: str, agent_id: str, context: dict[str, Any]) -> None:
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT specialist_context_json FROM master_thread_state WHERE thread_id = ?", (thread_id,)).fetchone()
+            try:
+                scopes = json.loads(row[0] if row else "{}")
+            except ValueError:
+                scopes = {}
+            if not isinstance(scopes, dict): scopes = {}
+            scopes[agent_id] = context
+            conn.execute("INSERT INTO master_thread_state(thread_id, specialist_context_json) VALUES (?, ?) ON CONFLICT(thread_id) DO UPDATE SET specialist_context_json=excluded.specialist_context_json", (thread_id,json.dumps(scopes,ensure_ascii=False)))
+
+    def delete(self, thread_id: str) -> None:
+        """Remove local specialist references and pending authority with a chat."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM master_pending_actions WHERE thread_id = ?", (thread_id,))
+            conn.execute("DELETE FROM master_thread_state WHERE thread_id = ?", (thread_id,))

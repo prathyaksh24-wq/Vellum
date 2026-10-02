@@ -25,8 +25,9 @@ def test_global_spotify_player_contract_is_present():
     html = HTML_PATH.read_text(encoding="utf-8")
 
     assert "const SpotifyPlayer" in html
-    assert "/plugins/spotify/player" in html
-    assert "/plugins/spotify/player/action" in html
+    assert "API.plugins.spotifyPlayer(details)" in html
+    assert "API.plugins.spotifyAction(body)" in html
+    assert 'components/spotify-playback.js' in html
     assert "document.visibilityState" in html
     assert "spotify-player-pill" in html
     assert "spotify-player-panel" in html

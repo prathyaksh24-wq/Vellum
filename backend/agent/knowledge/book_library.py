@@ -8,7 +8,7 @@ from zipfile import BadZipFile
 
 from PIL import Image, UnidentifiedImageError
 
-from agent.knowledge.book_documents import BookDocumentError, read_epub_presentation
+from agent.knowledge.book_documents import BookDocumentError, read_epub_presentation, section_display_title
 from agent.knowledge.models import (
     BookDocumentRequest,
     BookImportRequest,
@@ -60,6 +60,7 @@ class BookLibrary:
         status = self.core.import_book_epub(
             BookImportRequest(
                 user_id=self.user_id,
+                pipeline_version=self._pipeline_version(),
                 rights_attestation_version=rights_attestation_version,
                 scan_approved=True,
                 requested_by="user",
@@ -74,6 +75,9 @@ class BookLibrary:
                 "error_code": status.error_code,
             }
         return self.materialize(status.import_id)
+
+    def _pipeline_version(self) -> str:
+        return "book-epub-intake-" + self.core.book_documents.parser_version if self.core.book_documents.ocr_provider is not None else "book-epub-intake-v1"
 
     def _source(self, import_id: str):
         status = self.core.get_book_ingestion_status(user_id=self.user_id, import_id=import_id)
@@ -90,8 +94,11 @@ class BookLibrary:
         book = {
             "id": import_id, "title": "Untitled book", "authors": [], "published_at": "",
             "document_id": status.document_id, "run_id": status.run_id, "state": status.status,
+            "quality_outcome": status.quality_outcome,
             "error_code": status.error_code, "local_only": status.local_only, "cover_url": "",
-            "can_process": usable and not status.quality_evaluated,
+            "can_process": usable and (not status.quality_evaluated or
+                (status.document_id and self.core.book_documents.ocr_provider is not None and
+                 self.core.get_book_document(user_id=self.user_id, document_id=status.document_id).parser_version != self.core.book_documents.parser_version)),
             "can_compile": usable and status.quality_outcome == "PASS" and not compiled_current
             and callable(self.core.materialize_book_document),
             "skill_status": "compiled" if compiled_current else "not_compiled",
@@ -111,7 +118,7 @@ class BookLibrary:
                 try:
                     document = self.core.get_book_document(user_id=self.user_id, document_id=status.document_id)
                     book["section_count"] = len(document.sections)
-                    book["sections"] = [{"id": s.id, "title": s.title[:1000], "block_count": len(s.blocks)}
+                    book["sections"] = [{"id": s.id, "title": section_display_title(document, s)[:1000], "block_count": len(s.blocks)}
                                         for s in document.sections[:500]]
                     book["sections_truncated"] = len(document.sections) > 500
                 except DISPLAY_ERRORS:
@@ -137,7 +144,8 @@ class BookLibrary:
             error = str(compiled.get("error_code") or "")
             book = compiled["book"]
         if not error and book.get("skill_status") != "compiled":
-            status, error = "blocked", "BOOK_COMPILE_NOT_ELIGIBLE"
+            status = "blocked"
+            error = "BOOK_OCR_REQUIRED" if book.get("quality_outcome") == "OCR_REQUIRED" else "BOOK_COMPILE_NOT_ELIGIBLE"
         return {**self.detail(import_id), "status": status, "error_code": error}
 
     def cover(self, import_id: str) -> tuple[bytes, str]:
@@ -169,6 +177,15 @@ class BookLibrary:
             args = dict(user_id=self.user_id, import_id=import_id, run_id=book["run_id"])
             try:
                 if action == "process":
+                    if book["document_id"] and self.core.get_book_document(user_id=self.user_id, document_id=book["document_id"]).parser_version != self.core.book_documents.parser_version:
+                        _, asset = self._source(import_id)
+                        upgraded = self.core.import_book_epub(BookImportRequest(user_id=self.user_id,
+                            pipeline_version=self._pipeline_version(), rights_attestation_version=RIGHTS_ATTESTATION_VERSION,
+                            scan_approved=True, local_only=book["local_only"], requested_by="user"),
+                            self.core.store.blobs.resolve(asset["blob_path"]).read_bytes())
+                        if upgraded.error_code:
+                            return {**self.detail(import_id), "status":upgraded.status, "error_code":upgraded.error_code}
+                        args["run_id"] = upgraded.run_id
                     result = self.core.construct_book_document(BookDocumentRequest(**args))
                     if result.document_id:
                         result = self.core.evaluate_book_document_quality(

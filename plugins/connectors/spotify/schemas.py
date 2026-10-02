@@ -137,6 +137,20 @@ SPOTIFY_LIBRARY = _tool(
     ["kind", "action"],
 )
 
+SPOTIFY_PODCASTS = _tool(
+    "spotify_podcasts",
+    "Read a podcast show, its episodes, or an episode. Search shows/episodes with spotify_search; play an episode URI with spotify_playback.",
+    {
+        "action": {"type":"string", "enum":["show", "episodes", "episode"]},
+        "show_id": {"type":"string", "pattern":"^[A-Za-z0-9]+$"},
+        "episode_id": {"type":"string", "pattern":"^[A-Za-z0-9]+$"},
+        "market": {"type":"string"},
+        "limit": {"type":"integer", "minimum":1, "maximum":50},
+        "offset": {"type":"integer", "minimum":0},
+    },
+    ["action"],
+)
+
 ALL_SCHEMAS = [
     SPOTIFY_PLAYBACK,
     SPOTIFY_DEVICES,
@@ -145,4 +159,5 @@ ALL_SCHEMAS = [
     SPOTIFY_PLAYLISTS,
     SPOTIFY_ALBUMS,
     SPOTIFY_LIBRARY,
+    SPOTIFY_PODCASTS,
 ]

@@ -110,6 +110,8 @@ class WindowsDefenderScanner:
         detection_markers = ("threat was found", "threats were found", "malware detected")
         if return_code == 2 and any(marker in output for marker in detection_markers):
             return MalwareScanResult(outcome="detected", reason_code="MALWARE_DETECTED", **details)
+        if "product/feature disabled" in output:
+            return MalwareScanResult(outcome="unavailable", reason_code="MALWARE_SCANNER_DISABLED", **details)
         reason_code = "MALWARE_SCAN_AMBIGUOUS" if return_code == 2 else "MALWARE_SCAN_FAILED"
         return MalwareScanResult(outcome="error", reason_code=reason_code, **details)
 

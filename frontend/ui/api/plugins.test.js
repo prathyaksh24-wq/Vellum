@@ -13,6 +13,27 @@ async function loadPluginsApi(fetchImpl) {
 }
 
 describe("Vellum plugins API adapter", () => {
+  test("coalesces overlapping Next clicks into one receipt-backed command", async () => {
+    const api = await loadPluginsApi(vi.fn());
+    let finish;
+    window.VellumApi.appActions = {dispatch:vi.fn(() => new Promise(resolve => {finish=resolve;}))};
+    const first = api.spotifyAction({action:'next'});
+    const second = api.spotifyAction({action:'next'});
+    expect(window.VellumApi.appActions.dispatch).toHaveBeenCalledTimes(1);
+    finish({status:'applied',result:{changed:true}});
+    await Promise.all([first,second]);
+    expect(window.VellumApi.appActions.dispatch.mock.calls[0][0]).toMatchObject({action_id:'spotify.playback.control',arguments:{action:'next'}});
+    expect(window.VellumApi.appActions.dispatch.mock.calls[0][0].request_id).toBeTruthy();
+  });
+  test("keeps Spotify SDK tokens behind the playback adapter with no caching", async () => {
+    const fetchImpl = vi.fn(async (path, options) => ({path, options}));
+    const api = await loadPluginsApi(fetchImpl);
+    const token = await api.spotifyPlaybackToken();
+    expect(token.path).toBe('/api/plugins/spotify/playback/token');
+    expect(token.options).toMatchObject({method:'POST',cache:'no-store',headers:{'X-Vellum-Spotify-Playback':'1'}});
+    const device = await api.spotifyPlaybackDevice({owner_id:'owner',device_id:'device'});
+    expect(device.options.headers['X-Vellum-Spotify-Playback']).toBe('1');
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -115,4 +136,12 @@ describe("Vellum plugins API adapter", () => {
     expect(fetchImpl.mock.calls[12][1].method).toBe("POST");
     expect(fetchImpl.mock.calls[12][1].body).toBeInstanceOf(FormData);
   });
+});
+
+test("Calendar availability stays inside the plugin adapter", async () => {
+  const fetchImpl = vi.fn(async (path, options) => ({path, options}));
+  const api = await loadPluginsApi(fetchImpl);
+  const body={start:"2026-10-02T15:00:00+05:30",end:"2026-10-02T15:30:00+05:30"};
+  await api.calendarAvailability(body);
+  expect(fetchImpl).toHaveBeenCalledWith("/api/plugins/google-calendar/availability",{method:"POST",body});
 });

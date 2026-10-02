@@ -206,7 +206,7 @@ def test_duplicate_import_recompiles_an_outdated_active_book_skill(library_clien
         vault_root=core.vault_root,
         book_malware_scanner=CleanScanner(),
         book_embedding_provider=FixedBookEmbedder(),
-        book_materialization_compiler_version="book-to-skill-v1.3.0-vellum.2",
+        book_materialization_compiler_version="book-to-skill-v1.3.0-vellum.test-upgrade",
         book_retrieval_index=core.book_materializations.retrieval_index,
     )
     set_knowledge_core(upgraded)
@@ -216,7 +216,7 @@ def test_duplicate_import_recompiles_an_outdated_active_book_skill(library_clien
 
     assert second["book"]["id"] == first["book"]["id"]
     assert before[0]["compiler_version"] != after[0]["compiler_version"]
-    assert after[0]["compiler_version"] == "book-to-skill-v1.3.0-vellum.2"
+    assert after[0]["compiler_version"] == "book-to-skill-v1.3.0-vellum.test-upgrade"
     assert upgraded.store.status()["counts"]["book_materializations"] == 2
     assert upgraded.store.status()["counts"]["active_book_materializations"] == 1
 
@@ -344,3 +344,21 @@ def test_concurrent_artifact_publication_accepts_only_identical_bytes(tmp_path, 
     else:
         with pytest.raises(PermissionError):
             blobs.put_book_artifact(b"same content", tenant_scope="test_user", category="quality", suffix="json")
+
+
+def test_parser_upgrade_preserves_old_document_and_library_identity(library_client):
+    client, core, _ = library_client
+    content = _epub_bytes()
+    first = _import(client, content)
+    old_document = first["book"]["document_id"]
+    class LocalOCR:
+        def __call__(self, data): raise AssertionError("Native text must not invoke OCR")
+    upgraded = KnowledgeCore(core.store, conversations_path=core.conversations_path,
+        vault_root=core.vault_root, book_ocr_provider=LocalOCR(), book_malware_scanner=CleanScanner(),
+        book_embedding_provider=FixedBookEmbedder(), book_retrieval_index=core.book_materializations.retrieval_index)
+    set_knowledge_core(upgraded)
+    second = _import(client, content)
+    assert second["book"]["id"] == first["book"]["id"]
+    assert second["book"]["document_id"] != old_document
+    assert second["book"]["skill_status"] == "compiled"
+    assert core.get_book_document(user_id="tenant-a", document_id=old_document).parser_version == "epub-native-v1"

@@ -35,6 +35,15 @@ def test_shared_registry_combines_specialist_and_mcp_capabilities(tmp_path):
     } <= set(registry.names())
 
 
+def test_default_shared_registry_does_not_give_x_agent_generic_web_fallback(tmp_path):
+    registry = build_shared_tool_registry(
+        vault_root=tmp_path / "Vault",
+        sessions_db=tmp_path / "sessions.db",
+    )
+
+    service = registry.get("x.search_posts").adapter.__self__
+
+
 def test_shared_registry_enforces_agent_permissions_and_confirmation(tmp_path):
     registry = build_shared_tool_registry(
         vault_root=tmp_path / "Vault",

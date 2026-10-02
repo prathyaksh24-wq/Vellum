@@ -377,6 +377,46 @@ def test_tool_observer_records_evidence_but_not_preferences(tmp_path: Path) -> N
     assert annotations[0]["requires_review"] is True
 
 
+def test_tool_observer_stores_x_bookmark_categories_in_knowledge_core(tmp_path: Path) -> None:
+    core = build_core(tmp_path)
+    KnowledgeToolObserver(core)(
+        ToolInvocation(
+            name="x.bookmarks",
+            namespace="x",
+            access=CapabilityAccess.READ,
+            agent_name="XAgent",
+            payload={"max_results": 5},
+            result={
+                "items": [
+                    {
+                        "id": "789",
+                        "text": "A useful local AI agent workflow",
+                        "url": "https://x.com/example/status/789",
+                        "handle": "example",
+                        "bookmark_intelligence": {
+                            "taxonomy_version": "siftly-inspired-v1",
+                            "assignments": [
+                                {"category": "ai-resources", "name": "AI & Machine Learning", "confidence": 0.85}
+                            ],
+                            "entities": {"hashtags": [], "urls": [], "mentions": [], "tools": []},
+                        },
+                    }
+                ],
+                "provider": "agent-reach",
+            },
+        )
+    )
+
+    source = core.store.list_sources(kind="x_post")[0]
+    annotations = core.store.list_content_annotations(target_id=source["id"])
+    bookmark_annotation = next(
+        item for item in annotations if item["taxonomy_version"] == "siftly-inspired-v1"
+    )
+    assert bookmark_annotation["labels"] == ["x_bookmark:ai-resources"]
+    assert bookmark_annotation["context"] == "x_bookmark_category"
+    assert bookmark_annotation["eligible_for_preference"] is False
+
+
 def test_tool_observer_withholds_transcript_raw_content_from_external_context(tmp_path: Path) -> None:
     core = build_core(tmp_path)
     core.tool_learning_enabled = True

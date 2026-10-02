@@ -505,12 +505,13 @@ def _query_terms(value: str) -> set[str]:
         "gaining", "have", "interest", "interests", "losing", "more",
         "repeat", "repeated", "repeatedly", "search", "searched", "theme",
         "themes", "what", "which",
-        "youtube",
+        "youtube", "discover", "something", "based", "recommend", "suggest",
+        "suggestions", "please", "ideas", "recommendations", "show", "find",
     }
     return {
         term
         for term in re.findall(r"[a-z0-9]+", value.casefold())
-        if len(term) > 3 and term not in ignored
+        if (len(term) > 3 or term in {"ai", "ml", "f1"}) and term not in ignored
     }
 
 

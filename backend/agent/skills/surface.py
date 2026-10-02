@@ -45,7 +45,7 @@ class SkillSurfaceService:
         self.suggestions = BlueprintSuggestionStore(self.root)
 
     def catalog(self) -> dict[str, Any]:
-        active = [self._card(self.registry.view(entry.name), "active") for entry in self.registry.list_skills()]
+        active = [self._card(package, "active") for package in self.registry.list_packages()]
         proposed = [self._card(package, "proposed") for package in self._packages(self.root / "proposed", "proposed")]
         retired = [self._card(package, "retired") for package in self._packages(self.root / "retired", "retired")]
         archived = [self._card(package, "archived") for package in self._packages(self.root / ".archive", "archived")]

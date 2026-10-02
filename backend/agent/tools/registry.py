@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
+
 from agent.profiles.policy import get_active_profile_policy
 
 
@@ -68,10 +70,20 @@ class ToolRegistry:
     def names(self) -> list[str]:
         return sorted(self._records)
 
-    def invoke(self, name: str, payload: dict[str, Any], *, agent_name: str) -> Any:
+    def invoke(
+        self,
+        name: str,
+        payload: dict[str, Any],
+        *,
+        agent_name: str,
+        runtime_config: RunnableConfig | None = None,
+    ) -> Any:
         record = self.get(name)
         self._check_permission(record, payload, agent_name=agent_name)
-        result = record.adapter(payload)
+        if record.runtime_tool is not None:
+            result = record.runtime_tool.invoke(payload, config=runtime_config)
+        else:
+            result = record.adapter(payload)
         if self._observer is not None:
             try:
                 self._observer(
@@ -123,8 +135,16 @@ class ToolRegistry:
             if tool is None:
                 continue
 
-            def invoke(_capability_name=record.name, **payload):
-                return self.invoke(_capability_name, payload, agent_name=agent_name)
+            def make_invoker(capability_name: str):
+                def invoke(config: RunnableConfig = None, **payload):
+                    return self.invoke(
+                        capability_name,
+                        payload,
+                        agent_name=agent_name,
+                        runtime_config=config,
+                    )
+
+                return invoke
 
             wrapped.append(
                 StructuredTool(
@@ -137,7 +157,7 @@ class ToolRegistry:
                     handle_tool_error=tool.handle_tool_error,
                     handle_validation_error=tool.handle_validation_error,
                     response_format=tool.response_format,
-                    func=invoke,
+                    func=make_invoker(record.name),
                 )
             )
         return wrapped

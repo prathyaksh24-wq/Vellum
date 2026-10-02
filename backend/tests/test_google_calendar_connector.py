@@ -246,7 +246,8 @@ def test_event_answers_include_the_exact_id_needed_for_a_safe_change() -> None:
 
     response = agent.answer("What is on my calendar today?")
 
-    assert "event ID: event-123" in response.summary
+    assert "event ID:" not in response.summary
+    assert response.structured_payload["events"][0]["id"] == "event-123"
 
 
 def test_main_model_calendar_envelope_withholds_event_content_and_action_payload() -> None:
@@ -274,7 +275,7 @@ def test_main_model_calendar_envelope_withholds_event_content_and_action_payload
     assert "private-event-id" not in payload
 
 
-def test_live_dispatcher_routes_calendar_queries_to_the_local_specialist(tmp_path: Path) -> None:
+def test_live_dispatcher_routes_natural_calendar_intent_through_the_catalog(tmp_path: Path) -> None:
     service = build_service(events_backend=lambda **_kwargs: [{
         "id": "event-123",
         "summary": "Project review",
@@ -292,9 +293,8 @@ def test_live_dispatcher_routes_calendar_queries_to_the_local_specialist(tmp_pat
         state_store=MasterThreadStateStore(sessions_db=tmp_path / "sessions.db"),
     )
 
-    result = dispatcher.maybe_handle("Calendar agent: what is on my calendar today?", thread_id="calendar-thread")
+    result = dispatcher.maybe_handle("what is on my calendar today?", thread_id="calendar-thread")
 
     assert result is not None
     assert result.agent_name == "CalendarAgent"
-    assert result.tools == ["calendar_agent"]
     assert "Project review" in result.answer

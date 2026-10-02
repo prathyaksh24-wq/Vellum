@@ -96,7 +96,8 @@ class BooksCapabilityService:
         policy = get_active_profile_policy()
         user_id = policy.user_id if policy is not None else "default"
         max_chunks = max(1, min(int(payload.get("max_chunks") or 6), 12))
-        token_budget = max(256, min(int(payload.get("token_budget") or 2400), 8000))
+        default_budget = 8000 if re.search(r"\b(?:summari[sz]e|summary|overview)\b", query, re.I) else 2400
+        token_budget = max(256, min(int(payload.get("token_budget") or default_budget), 8000))
         result = self._knowledge_core_provider().search_active_book_materializations(
             BookRetrievalRequest(
                 user_id=user_id,
@@ -148,10 +149,19 @@ class BooksCapabilityService:
                 }
             )
         deduplicated = {str(item.get("name") or ""): item for item in matches}
-        return {
+        result = {
             "action": "books.skill_lookup",
             "skills": list(deduplicated.values())[:8],
         }
+        if getattr(core, "store", None) is not None:
+            from agent.knowledge.book_library import BookLibrary
+            library = BookLibrary(core, policy.user_id if policy is not None else "default")
+            books = library.list(limit=40, offset=0)["items"]
+            # A named-book question should not list unrelated books. Keep the
+            # complete inventory only when the user did not name an installed title.
+            named = [book for book in books if str(book.get("title") or "").casefold() in str(payload.get("query") or "").casefold()]
+            result["books"] = named or books
+        return result
 
 
 def _terms(value: str) -> set[str]:

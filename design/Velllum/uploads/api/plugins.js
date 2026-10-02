@@ -1,6 +1,32 @@
 (function () {
   var client = window.VellumApi.client;
+  var playbackCommand;
+  function spotifyAction(body) {
+    var key = JSON.stringify(body);
+    if (playbackCommand) {
+      if (playbackCommand.key === key) return playbackCommand.promise;
+      return Promise.reject(new Error('Wait for the current Spotify control to finish.'));
+    }
+    var request = {request_id:'spotify_' + crypto.randomUUID(), action_id:'spotify.playback.control', arguments:body};
+    var promise = window.VellumApi.appActions.dispatch(request, {source:'ui'}).then(receipt => {
+      if (receipt.status !== 'applied') throw new Error(receipt.message || 'Spotify control failed.');
+      return receipt.result;
+    }).finally(() => { playbackCommand = null; });
+    playbackCommand = {key, promise};
+    return promise;
+  }
   window.VellumApi.plugins = {
+    spotifyStatus: () => client.request('/api/plugins/spotify/status'),
+    spotifyStart: clientId => client.request('/api/plugins/spotify/oauth/start', client.jsonOptions('POST', {client_id: clientId || ''})),
+    spotifyLogout: () => client.request('/api/plugins/spotify/logout', client.jsonOptions('POST')),
+    spotifyPlayer: details => client.request('/api/plugins/spotify/player' + (details ? '?details=true' : '')),
+    spotifyAction,
+    spotifyPlaybackToken: forceRefresh => client.request('/api/plugins/spotify/playback/token', {
+      ...client.jsonOptions('POST', {force_refresh: !!forceRefresh}), headers: {'Content-Type': 'application/json', 'X-Vellum-Spotify-Playback': '1'}, cache: 'no-store', signal: AbortSignal.timeout(25000),
+    }),
+    spotifyPlaybackDevice: body => client.request('/api/plugins/spotify/playback/device', {
+      ...client.jsonOptions('POST', body), headers: {'Content-Type': 'application/json', 'X-Vellum-Spotify-Playback': '1'}, signal: AbortSignal.timeout(10000),
+    }),
     list: function () { return client.request("/api/plugins"); },
     setEnabled: function (id, enabled) { return client.request("/api/plugins/" + encodeURIComponent(id) + "/state", client.jsonOptions("POST", {enabled:!!enabled})); },
     skills: function () { return client.request("/api/skills"); },
@@ -31,6 +57,7 @@
     calendarEvents: function (params) { var query = new URLSearchParams(params || {}).toString(); return client.request("/api/plugins/google-calendar/events" + (query ? "?" + query : "")); },
     calendarEvent: function (eventId, calendarId) { return client.request("/api/plugins/google-calendar/events/" + encodeURIComponent(eventId) + "?calendar_id=" + encodeURIComponent(calendarId || "primary")); },
     calendarFreeBusy: function (body) { return client.request("/api/plugins/google-calendar/free-busy", client.jsonOptions("POST", body)); },
+    calendarAvailability: function (body) { return client.request("/api/plugins/google-calendar/availability", client.jsonOptions("POST", body)); },
     calendarCreateEvent: function (body) { return client.request("/api/plugins/google-calendar/events", client.jsonOptions("POST", body)); },
     calendarUpdateEvent: function (eventId, body) { return client.request("/api/plugins/google-calendar/events/" + encodeURIComponent(eventId), client.jsonOptions("PATCH", body)); },
     calendarDeleteEvent: function (eventId, calendarId, confirm) { return client.request("/api/plugins/google-calendar/events/" + encodeURIComponent(eventId) + "/delete", client.jsonOptions("POST", {calendar_id:calendarId || "primary", confirm:confirm === true})); },

@@ -6,7 +6,7 @@ import os
 from typing import Any
 
 from agent.config import get_settings
-from agent.llm.routing.adapters import OpenRouterAdapter
+from agent.llm.routing.adapters import OllamaAdapter, OpenRouterAdapter
 from agent.llm.routing.chat_model import RoutedChatModel
 from agent.llm.routing.engine import RoutingEngine
 from agent.llm.routing.models import FallbackTarget
@@ -55,6 +55,7 @@ def build_routing_runtime(
         fingerprint_salt=fingerprint_salt,
     )
     resolver.reconcile_environment({"openrouter": "OPENROUTER_API_KEY"})
+    resolver.reconcile_borrowed("ollama", "local-runtime", "ollama-local")
     borrowed = {
         "openrouter": ("OPENROUTER_API_KEY", getattr(settings, "openrouter_api_key", None)),
     }
@@ -79,7 +80,11 @@ def build_routing_runtime(
         )
         if model
     }
-    unreviewed_models = configured_models - approved_models
+    unreviewed_models = {
+        model
+        for model in configured_models - approved_models
+        if not model.casefold().startswith("ollama/")
+    }
     if unreviewed_models:
         raise ValueError(
             "configured model is outside OPENROUTER_MODEL_ALLOWLIST: "
@@ -110,6 +115,12 @@ def build_routing_runtime(
         pool=pool,
         secret_resolver=resolver,
         adapters={
+            "ollama": OllamaAdapter(
+                base_url=getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"),
+                request_timeout=getattr(settings, "ollama_request_timeout_seconds", 300.0),
+                context_length=getattr(settings, "ollama_context_length", 16384),
+                batch_size=getattr(settings, "ollama_batch_size", 1024),
+            ),
             "openrouter": DisclosureModelAdapter(
                 adapter=OpenRouterAdapter(
                     base_url=settings.openrouter_base_url,

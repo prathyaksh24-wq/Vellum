@@ -7,6 +7,8 @@ from typing import Any
 
 from agent.config import REPO_ROOT, get_settings
 from agent.plugins.portable import load_portable_plugin
+from agent.plugins.registry import get_plugin_registry
+from agent.tools.registry import ToolPermissionError
 
 
 PLUGIN_DIR = REPO_ROOT / "plugins" / "connectors" / "google_calendar"
@@ -42,6 +44,8 @@ def google_calendar_store(*, keyring_backend: Any | None = None):
 
 
 def google_calendar_client(*, store: Any | None = None, request_backend: Any | None = None):
+    if not get_plugin_registry().is_enabled("google-calendar"):
+        raise ToolPermissionError("Google Calendar is disabled. Enable it in Plugins to use it.")
     client_id, client_secret = _credentials()
     return _calendar_module.client.GoogleCalendarClient(
         client_id=client_id,
@@ -67,11 +71,12 @@ def google_calendar_status(*, probe: bool = False) -> dict[str, Any]:
     settings = get_settings()
     client_id, _ = _credentials()
     store = google_calendar_store()
+    enabled = get_plugin_registry().is_enabled("google-calendar")
     try:
         connected = bool(store.load_tokens(required=False))
         metadata = store.load_metadata()
         status = "ready" if connected else "not_connected"
-        if connected and probe:
+        if connected and probe and enabled:
             profile = google_calendar_client(store=store).primary_calendar()
             store.save_profile(profile)
             metadata = store.load_metadata()
@@ -85,8 +90,9 @@ def google_calendar_status(*, probe: bool = False) -> dict[str, Any]:
         status = "unreachable"
     return {
         "configured": bool(client_id),
+        "enabled": enabled,
         "connected": connected,
-        "status": status if client_id else "not_configured",
+        "status": "disabled" if not enabled else status if client_id else "not_configured",
         "account_label": settings.google_calendar_oauth_account_label,
         "calendar_label": str(metadata.get("calendar_label") or ""),
         "time_zone": str(metadata.get("time_zone") or ""),

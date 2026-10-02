@@ -19,7 +19,8 @@ def test_settings_loads_paths_and_privacy_defaults():
         "CoreWeave",
         "DigitalOcean",
     )
-    assert settings.primary_model in settings.reviewed_openrouter_models
+    assert settings.primary_model == "ollama/qwen3.5:9b"
+    assert settings.primary_model not in settings.reviewed_openrouter_models
     assert settings.cloud_escalation_model in settings.reviewed_openrouter_models
     assert 0 <= settings.min_retrieval_score <= 1
     assert settings.fast_model == "google/gemma-3-12b-it"

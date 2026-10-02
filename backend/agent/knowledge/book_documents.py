@@ -57,6 +57,10 @@ class BookSourceAnchor(BookDocumentModel):
     source_start: int = Field(ge=0)
     source_end: int = Field(ge=0)
     offset_map: list[tuple[int, int, int, int]] = Field(default_factory=list)
+    extraction_method: Literal["native", "windows_ocr"] = "native"
+    image_resource_path: str = ""
+    image_sha256: str = ""
+    ocr_version: str = ""
 
 
 class BookLink(BookDocumentModel):
@@ -199,13 +203,15 @@ class LexicalBlockSpan:
 class BookDocumentPipeline:
     """Build and publish one immutable BookDocument behind the Knowledge Core seam."""
 
-    def __init__(self, store: KnowledgeStore) -> None:
+    def __init__(self, store: KnowledgeStore, *, ocr_provider=None) -> None:
         self.store = store
+        self.ocr_provider = ocr_provider
+        self.parser_version = "epub-native-windows-ocr-v2" if ocr_provider is not None else EPUB_PARSER_VERSION
 
     def construct(self, request: BookDocumentRequest) -> BookImportStatus:
         document_id = self.store.book_document_id(
             run_id=request.run_id,
-            parser_version=EPUB_PARSER_VERSION,
+            parser_version=self.parser_version,
             schema_version=BOOK_DOCUMENT_SCHEMA_VERSION,
         )
         existing = self.store.find_book_document_status(
@@ -221,11 +227,11 @@ class BookDocumentPipeline:
             user_id=request.user_id,
             import_id=request.import_id,
             run_id=request.run_id,
-            parser_version=EPUB_PARSER_VERSION,
+            parser_version=self.parser_version,
             schema_version=BOOK_DOCUMENT_SCHEMA_VERSION,
         )
         receipt_metadata = {
-            "parser_version": EPUB_PARSER_VERSION,
+            "parser_version": self.parser_version,
             "schema_version": BOOK_DOCUMENT_SCHEMA_VERSION,
         }
         try:
@@ -239,8 +245,9 @@ class BookDocumentPipeline:
                 document_id=document_id,
                 asset_id=str(source["asset_id"]),
                 run_id=request.run_id,
-                parser_version=EPUB_PARSER_VERSION,
+                parser_version=self.parser_version,
                 schema_version=BOOK_DOCUMENT_SCHEMA_VERSION,
+                ocr_provider=self.ocr_provider,
             )
             tenant_scope = self.store.book_tenant_scope(request.user_id)
             resource_rows: list[BookDocumentResourcePublication] = []
@@ -332,7 +339,7 @@ class BookDocumentPipeline:
                 input_digest=str(source["asset_sha256"]),
                 document_digest=document_digest,
                 document_blob_path=document_path,
-                parser_version=EPUB_PARSER_VERSION,
+                parser_version=self.parser_version,
                 schema_version=BOOK_DOCUMENT_SCHEMA_VERSION,
                 quality_outcome=quality.outcome or "",
                 quality_evaluated=quality.evaluated,
@@ -372,7 +379,7 @@ class BookDocumentPipeline:
             import_id=request.import_id,
             run_id=request.run_id,
             stage=error.stage,
-            stage_version=f"{EPUB_PARSER_VERSION}:{BOOK_DOCUMENT_SCHEMA_VERSION}",
+            stage_version=f"{self.parser_version}:{BOOK_DOCUMENT_SCHEMA_VERSION}",
             input_digest=input_digest,
             output_digest="",
             status="failed_retryable" if error.retryable else "failed_permanent",
@@ -390,6 +397,7 @@ def parse_epub_document(
     run_id: str,
     parser_version: str,
     schema_version: str,
+    ocr_provider=None,
 ) -> ParsedBook:
     try:
         archive = ZipFile(BytesIO(raw))
@@ -438,6 +446,8 @@ def parse_epub_document(
                 spine_position=item.position,
                 source_text=source_text,
             )
+            if not section.blocks and ocr_provider is not None and any(prior.blocks for prior in sections):
+                section, text = _ocr_image_section(section, root, source_text, archive, names, asset_id, ocr_provider)
             sections.append(section)
             resource_fragments[item.resource_path] = _element_ids(root)
             if item.idref not in extracted:
@@ -1023,6 +1033,48 @@ def _section_from_resource(
     )
 
 
+def _ocr_image_section(section, root, source_text, archive, names, asset_id, provider):
+    """Anchor inferred image transcription to its real tag and original image hash."""
+    blocks = []
+    cursor = 0
+    for element in root.iter():
+        tag = _local_name(element.tag)
+        if tag not in {"img", "image"}:
+            continue
+        href = _attribute(element, "src") or _attribute(element, "href")
+        if not href:
+            continue
+        image_path, _ = _resolve_href(section.resource_path, href)
+        if image_path not in names:
+            raise BookDocumentError("EPUB_OCR_IMAGE_MISSING")
+        info = archive.getinfo(image_path)
+        if info.file_size > 16 * 1024 * 1024:
+            raise BookDocumentError("EPUB_OCR_IMAGE_TOO_LARGE")
+        image = archive.read(info)
+        try:
+            text = str(provider(image) or "").strip()
+        except (OSError, ValueError, RuntimeError) as exc:
+            raise BookDocumentError("BOOK_LOCAL_OCR_FAILED", retryable=True) from exc
+        if not text:
+            continue
+        # This span identifies the image element, never a claimed character range
+        # inside bitmap bytes. The explicit extraction label travels with citations.
+        match = next((m for m in re.finditer(r"<(?:img|image)\b[^>]*>", source_text, re.I)
+                      if href in unescape(m.group(0))), None)
+        if match is None:
+            raise BookDocumentError("EPUB_SOURCE_ANCHOR_INVALID")
+        fingerprint = sha256(f"{section.resource_path}\x1fnote\x1f{text}\x1f{len(blocks)}".encode()).hexdigest()
+        block_id = "bkb_" + sha256(f"{asset_id}:{section.id}:{fingerprint}".encode()).hexdigest()[:32]
+        anchor = BookSourceAnchor(asset_id=asset_id, resource_path=section.resource_path, source_element=tag,
+            block_fingerprint=fingerprint, normalized_start=cursor, normalized_end=cursor+len(text),
+            source_start=match.start(), source_end=match.end(), offset_map=[(cursor,cursor+len(text),match.start(),match.end())],
+            extraction_method="windows_ocr", image_resource_path=image_path, image_sha256=sha256(image).hexdigest(),
+            ocr_version=str(getattr(provider, "version", "windows-media-ocr-v1")))
+        blocks.append(BookBlock(id=block_id, type="note", text=text, role="ocr_transcription_unverified", anchor=anchor))
+        cursor += len(text)+1
+    return section.model_copy(update={"blocks":blocks}), "\n".join(b.text for b in blocks)
+
+
 def _links(element: ET.Element) -> list[BookLink]:
     result: list[BookLink] = []
     for child in element.iter():
@@ -1297,3 +1349,23 @@ def _unresolved_navigation(
         if item.fragment and item.fragment not in fragments.get(item.resource_path, set()):
             unresolved.append(item.href)
     return unresolved
+
+
+def section_display_title(document: BookDocument, section: BookSection) -> str:
+    """Use the EPUB's own navigation labels without altering immutable documents."""
+    if section.title:
+        return section.title
+    labels = list(dict.fromkeys(item.label for item in _flatten_navigation(document.navigation)
+        if item.resource_path == section.resource_path and item.label))
+    if labels:
+        return labels[-1]
+    position = document.sections.index(section)
+    previous_resources = [prior.resource_path for prior in document.sections[:position]]
+    for resource in reversed(previous_resources):
+        previous_labels = [item.label for item in _flatten_navigation(document.navigation) if item.resource_path == resource]
+        if previous_labels:
+            label = previous_labels[-1]
+            if re.match(r"(?:book|chapter)\s+\d+\b", label, re.I):
+                return label + " (continued)"
+            break
+    return f"Section {position + 1}"

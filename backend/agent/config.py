@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     )
 
     # OpenRouter
-    openrouter_api_key: str = Field(alias="OPENROUTER_API_KEY")
+    openrouter_api_key: str | None = Field(default=None, alias="OPENROUTER_API_KEY")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         alias="OPENROUTER_BASE_URL",
@@ -46,7 +46,18 @@ class Settings(BaseSettings):
         default="https://api.openai.com/v1",
         alias="OPENAI_BASE_URL",
     )
-    primary_model: str = Field(default="google/gemma-4-31b-it", alias="PRIMARY_MODEL")
+    # Local Ollama is the default brain. Cloud routes remain optional.
+    ollama_base_url: str = Field(
+        default="http://127.0.0.1:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+    ollama_request_timeout_seconds: float = Field(
+        default=300.0,
+        alias="OLLAMA_REQUEST_TIMEOUT_SECONDS",
+    )
+    ollama_context_length: int = Field(default=16384, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
+    ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
+    primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
     fast_model: str = Field(default="google/gemma-3-12b-it", alias="FAST_MODEL")
     llm_routing_db_path: Path = Field(
@@ -218,8 +229,8 @@ class Settings(BaseSettings):
 
     # Tool search (progressive tool disclosure)
     tool_search_enabled: str = Field(default="auto", alias="TOOL_SEARCH_ENABLED")
-    tool_search_threshold_ratio: float = Field(default=0.05, alias="TOOL_SEARCH_THRESHOLD_RATIO")
-    tool_search_listing_max_tokens: int = Field(default=4000, alias="TOOL_SEARCH_LISTING_MAX_TOKENS")
+    tool_search_threshold_ratio: float = Field(default=0.005, alias="TOOL_SEARCH_THRESHOLD_RATIO")
+    tool_search_listing_max_tokens: int = Field(default=512, alias="TOOL_SEARCH_LISTING_MAX_TOKENS")
     tool_search_context_length: int = Field(default=0, alias="TOOL_SEARCH_CONTEXT_LENGTH")
 
     # Agent
@@ -322,6 +333,10 @@ class Settings(BaseSettings):
             raise ValueError("LLM_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
         if self.llm_stream_timeout_seconds <= 0:
             raise ValueError("LLM_STREAM_TIMEOUT_SECONDS must be greater than 0.")
+        if self.ollama_request_timeout_seconds <= 0:
+            raise ValueError("OLLAMA_REQUEST_TIMEOUT_SECONDS must be greater than 0.")
+        if not self.ollama_base_url.startswith(("https://", "http://")):
+            raise ValueError("OLLAMA_BASE_URL must be an HTTP(S) URL.")
         if self.vault_watcher_debounce_seconds < 0:
             raise ValueError("VAULT_WATCHER_DEBOUNCE_SECONDS cannot be negative.")
         if self.retention_archive_days < 1:

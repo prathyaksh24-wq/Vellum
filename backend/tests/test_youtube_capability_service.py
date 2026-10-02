@@ -223,6 +223,7 @@ def test_youtube_service_registry_is_read_only(tmp_path):
         "youtube.subscription_feed",
         "youtube.subscriptions",
         "youtube.takeout_history",
+        "youtube.takeout_library",
     ]
     account = registry.invoke("youtube.account", {}, agent_name="YoutubeAgent")
     subscriptions = registry.invoke("youtube.subscriptions", {}, agent_name="YoutubeAgent")

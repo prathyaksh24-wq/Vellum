@@ -45,7 +45,7 @@
   }
 
   function ImportDialog({version, busy, error='', onImport, onClose, icons, initialFile=null}) {
-    const [file, setFile] = useState(initialFile), [rights, setRights] = useState(false), [scan, setScan] = useState(false), [localOnly, setLocalOnly] = useState(false);
+    const [file, setFile] = useState(initialFile), [rights, setRights] = useState(false), [scan, setScan] = useState(false), [localOnly, setLocalOnly] = useState(true);
     const dialog = useRef(null);
     useEffect(() => { dialog.current.showModal(); return () => dialog.current?.close(); }, []);
     const submit = async event => {
@@ -126,8 +126,9 @@
             <div className="bk-detail-copy">
               <p className="bk-status-label">{titleCase(detail.state)}</p><h2>{detail.title}</h2><p className="bk-author">{author(detail)}</p>
               <dl><div><dt>Source policy</dt><dd>{detail.local_only ? 'Local only' : 'Profile policy'}</dd></div><div><dt>Book skill</dt><dd>{titleCase(detail.skill_status)}</dd></div><div><dt>Sections</dt><dd>{detail.section_count ?? 0}</dd></div></dl>
+              {detail.quality_outcome === 'OCR_REQUIRED' && <p role="status">Imported and scanned. Image-only pages require local OCR before this Book skill can be verified.</p>}
               <div className="bk-actions">
-                <button className="bk-button primary" onClick={() => attach(detail)}><icons.Chat size={16}/>Add to Chat</button>
+                <button className="bk-button primary" disabled={detail.quality_outcome === 'OCR_REQUIRED'} title={detail.quality_outcome === 'OCR_REQUIRED' ? 'Image-only pages need validated OCR before this Book can be used in chat.' : undefined} onClick={() => attach(detail)}><icons.Chat size={16}/>Add to Chat</button>
                 {detail.can_process && <button className="bk-button" disabled={!!state.busy} onClick={() => setConfirmation({action:'process',id:detail.id,title:'Process this EPUB locally?'})}><icons.Book size={16}/>Process EPUB</button>}
                 {detail.can_compile && <button className="bk-button" disabled={!!state.busy} onClick={() => setConfirmation({action:'compile',id:detail.id,title:'Build Book skill knowledge?'})}><icons.Book size={16}/>Build Book skill</button>}
               </div>
@@ -140,7 +141,7 @@
           <footer className="bk-pagination"><button className="bk-icon" aria-label="Previous books" title="Previous books" disabled={!state.offset || state.loading} onClick={() => controller.load(Math.max(0,state.offset-state.limit))}><icons.Back size={18}/></button><span>{state.offset+1}-{Math.min(state.offset+state.items.length,state.total)} of {state.total}</span><button className="bk-icon" aria-label="Next books" title="Next books" disabled={state.offset+state.items.length>=state.total || state.loading} onClick={() => controller.load(state.offset+state.limit)}><icons.Next size={18}/></button></footer>
         </>}
       </div>}
-      {importOpen && <ImportDialog version={state.rightsAttestationVersion} busy={state.busy} onImport={controller.importEpub} onClose={() => setImportOpen(false)} icons={icons}/>}
+      {importOpen && <ImportDialog version={state.rightsAttestationVersion} busy={state.busy} error={state.error} onImport={controller.importEpub} onClose={() => setImportOpen(false)} icons={icons}/>}
       {confirmation && <Confirmation title={confirmation.title} onCancel={() => setConfirmation(null)} onConfirm={act}/>}
     </section>;
   }

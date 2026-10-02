@@ -17,6 +17,7 @@ dependencies = [
   "uvicorn[standard]>=0.30.0",
   "websockets>=13.0",
   "langchain-openai>=0.1.22",
+  "langchain-ollama>=1.1,<2",
   "langchain-core>=0.3.0",
   "langgraph>=0.2.0",
   "langgraph-checkpoint-sqlite>=2.0.0",
@@ -59,6 +60,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["agent*", "evals*"]
+
+[tool.setuptools.package-data]
+"agent.knowledge" = ["*.ps1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -15,6 +15,7 @@ from plugins.connectors.spotify.tools import (
     spotify_library,
     spotify_playback,
     spotify_playlists,
+    spotify_podcasts,
     spotify_queue,
     spotify_search,
 )
@@ -56,6 +57,9 @@ class FakeService:
         (spotify_playlists, {"action": "list"}, "GET", "/me/playlists"),
         (spotify_albums, {"action": "get", "album_id": "a1"}, "GET", "/albums/a1"),
         (spotify_library, {"kind": "tracks", "action": "list"}, "GET", "/me/tracks"),
+        (spotify_podcasts, {"action":"episodes", "show_id":"show1"}, "GET", "/shows/show1/episodes"),
+        (spotify_podcasts, {"action":"show", "show_id":"show1"}, "GET", "/shows/show1"),
+        (spotify_podcasts, {"action":"episode", "episode_id":"ep1"}, "GET", "/episodes/ep1"),
     ],
 )
 def test_handler_routes(handler, args, method, path):
@@ -101,8 +105,7 @@ def test_playlist_create_uses_current_user():
 
     assert result["ok"] is True
     assert service.calls == [
-        ("GET", "/me", {}),
-        ("POST", "/users/user-1/playlists", {"json_body": {"name": "Focus", "public": False}}),
+        ("POST", "/me/playlists", {"json_body": {"name": "Focus", "public": False}}),
     ]
 
 
@@ -265,7 +268,7 @@ def test_spotify_search_blocks_secret_material_before_network_call():
     assert service.calls == []
 
 
-def test_plugin_registers_all_seven_tools():
+def test_plugin_registers_all_music_tools():
     ctx = PortablePluginContext()
 
     load_portable_plugin(Path("plugins/connectors/spotify")).register(ctx)
@@ -278,5 +281,6 @@ def test_plugin_registers_all_seven_tools():
         "spotify_playlists",
         "spotify_albums",
         "spotify_library",
+        "spotify_podcasts",
     }
     assert "spotify" in ctx.connectors

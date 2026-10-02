@@ -1,4 +1,24 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
+import { readFileSync } from "node:fs";
+
+test("main and specialist chat retain Spotify control turns and acknowledgements", () => {
+  const html = readFileSync("../design/Velllum/uploads/Vellum Default Re-designed.html", "utf8");
+  const blocks = [...html.matchAll(/actionRequested: \(request, turn\) => \{[\s\S]*?\n\s*\},/g)];
+  expect(blocks).toHaveLength(2);
+  for (const [block] of blocks) {
+    const rollback = vi.fn();
+    const remember = vi.fn();
+    const handlers = new Function("conversationActionRuntimeRef", "opts", "let appActionRequested = false; return {" + block + "};")(
+      {current:{rememberRequest:remember}}, {onAppAction:rollback});
+    handlers.actionRequested({action_id:"spotify.playback.control"}, {turn_kind:"action"});
+    expect(remember).toHaveBeenCalledOnce();
+    expect(rollback).not.toHaveBeenCalled();
+    const workspace = new Function("conversationActionRuntimeRef", "opts", "let appActionRequested = false; return {" + block + "};")(
+      {current:{rememberRequest:remember}}, {onAppAction:rollback});
+    workspace.actionRequested({action_id:"conversation.new"}, {turn_kind:"action"});
+    expect(rollback).toHaveBeenCalledOnce();
+  }
+});
 
 async function loadRuntime() {
   vi.resetModules();
@@ -42,6 +62,18 @@ function handlers(initial) {
 
 describe("Conversation App Action adapter", () => {
   beforeEach(() => vi.restoreAllMocks());
+
+  test("optimistic New chat navigation is not repeated by a delayed receipt", async () => {
+    const AppActions = await loadRuntime();
+    const state = handlers([]);
+    const client = {dispatch:vi.fn(async () => actionReceipt({actionId:'conversation.new',navigation:{view:'chat',conversation_id:null}}))};
+    const runtime = AppActions.createConversationActionRuntime({client,...state});
+    const receipt = await runtime.dispatch('conversation.new',{}, {applyNavigation:false});
+    expect(receipt.status).toBe('applied');
+    expect(state.navigate).not.toHaveBeenCalled();
+    await runtime.dispatch('conversation.new',{});
+    expect(state.navigate).toHaveBeenCalledOnce();
+  });
 
   test("visible controls dispatch revisions and NLP receipts update the same state", async () => {
     const AppActions = await loadRuntime();

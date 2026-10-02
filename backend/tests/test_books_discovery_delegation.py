@@ -37,7 +37,9 @@ def build_runtime(tmp_path, *, enabled=True, now=None):
     core = DiscoveryCore()
     service = BooksCapabilityService(knowledge_core_provider=lambda: core)
     base = AgentCatalog(profile_dir=tmp_path / "empty-profiles").get("BooksAgent")
-    profile = base.model_copy(update={"book_discovery_network": enabled})
+    # Public discovery fixtures opt into both existing network policy gates.
+    # The production Books profile defaults to local source egress.
+    profile = base.model_copy(update={"book_discovery_network": enabled, "source_egress": "external"})
     agent = BooksAgent(tool_registry=service.build_registry())
     catalog = AgentCatalog(
         profile_dir=tmp_path / "profiles", builtins={"BooksAgent": profile}, executors={"BooksAgent": agent},

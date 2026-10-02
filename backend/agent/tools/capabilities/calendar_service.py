@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Callable
 
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -14,6 +15,12 @@ FreeBusyBackend = Callable[..., dict[str, Any]]
 CreateBackend = Callable[..., dict[str, Any]]
 UpdateBackend = Callable[..., dict[str, Any]]
 DeleteBackend = Callable[..., dict[str, Any]]
+
+
+class CalendarConflictError(ValueError):
+    def __init__(self, availability: dict[str, Any]) -> None:
+        super().__init__("That time overlaps another calendar event. Choose an available time before confirming.")
+        self.availability = availability
 
 
 class CalendarCapabilityService:
@@ -47,6 +54,7 @@ class CalendarCapabilityService:
             ("calendar.events", "Read calendar events", self.events),
             ("calendar.event", "Read calendar event", self.event),
             ("calendar.free_busy", "Checked calendar availability", self.free_busy),
+            ("calendar.availability", "Found available calendar time", self.availability),
         ):
             registry.register(CapabilityRecord(
                 name=name,
@@ -82,14 +90,31 @@ class CalendarCapabilityService:
         time_min = self._timestamp(payload.get("time_min"), "time_min")
         time_max = self._timestamp(payload.get("time_max"), "time_max")
         self._ordered(time_min, time_max)
-        items = self.events_backend(
-            calendar_id=self._calendar_id(payload.get("calendar_id")),
-            time_min=time_min,
-            time_max=time_max,
-            query=str(payload.get("query") or "").strip()[:500],
-            max_results=min(max(int(payload.get("max_results") or 50), 1), 250),
-        )
-        return {"action": "calendar.events", "items": [self._event(item) for item in items]}
+        calendar_id = self._calendar_id(payload.get("calendar_id"))
+        limit = min(max(int(payload.get("max_results") or 50), 1), 250)
+        known = self.calendars({})["items"]
+        if calendar_id == "all":
+            calendars = [c for c in known if not c.get("hidden") and c.get("access_role") != "freeBusyReader"]
+        else:
+            calendar = next((c for c in known if c["id"]==calendar_id or calendar_id=="primary" and c.get("primary")), {"id":calendar_id})
+            calendars = [{**calendar, "id":calendar_id}]
+
+        items, errors = [], []
+        for calendar in calendars:
+            try:
+                raw = self.events_backend(calendar_id=calendar["id"], time_min=time_min, time_max=time_max,
+                    query=str(payload.get("query") or "").strip()[:500], max_results=limit)
+                items.extend({**self._event(item), "calendar_id":calendar["id"],
+                    "calendar_label":calendar.get("summary", ""), "access_role":calendar.get("access_role", "")} for item in raw)
+            except Exception:
+                if calendar_id != "all": raise
+                errors.append({"calendar_id":calendar["id"],"calendar_label":calendar.get("summary", ""),"message":"Could not read this calendar."})
+        def event_time(item):
+            stamp = datetime.fromisoformat(str(item.get("start") or "9999-12-31").replace("Z", "+00:00"))
+            return stamp.replace(tzinfo=UTC) if stamp.tzinfo is None else stamp.astimezone(UTC)
+        items.sort(key=event_time)
+        return {"action": "calendar.events", "items": items[:limit], "calendars":calendars, "errors":errors,
+                "truncated":len(items)>limit}
 
     def event(self, payload: dict[str, Any]) -> dict[str, Any]:
         item = self.event_backend(
@@ -110,9 +135,85 @@ class CalendarCapabilityService:
             calendar_ids=calendar_ids,
         ))}
 
+    def availability(self, payload: dict[str, Any]) -> dict[str, Any]:
+        start_text = self._timestamp(payload.get("start"), "start")
+        end_text = self._timestamp(payload.get("end"), "end")
+        self._ordered(start_text, end_text)
+        start = datetime.fromisoformat(start_text.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(end_text.replace("Z", "+00:00"))
+        zone_name = str(payload.get("time_zone") or "").strip()
+        try:
+            tz = ZoneInfo(zone_name) if zone_name else start.tzinfo
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("Unknown calendar time zone.") from exc
+        start, end = start.astimezone(tz), end.astimezone(tz)
+        if end - start > timedelta(days=1):
+            raise ValueError("Availability searches support events up to 24 hours.")
+        calendar_id = self._calendar_id(payload.get("calendar_id"))
+        horizon = start + timedelta(days=7)
+        calendars = self.calendars({})["items"]
+        ids = [c["id"] for c in calendars if not c.get("hidden") and c.get("access_role") != "freeBusyReader"]
+        primary_id = next((c["id"] for c in calendars if c.get("primary")), "primary")
+        target_id = primary_id if calendar_id == "primary" else calendar_id
+        ids = list(dict.fromkeys([target_id, *ids]))
+        items = []
+        excluded = str(payload.get("event_id") or "")
+        for owner in ids:
+            entries = self.events_backend(calendar_id=owner, time_min=start.isoformat(), time_max=horizon.isoformat(), query="", max_results=250)
+            if len(entries)>=250:
+                raise ValueError("Too many events to safely determine availability in this range.")
+            items.extend(item for item in entries if not (owner==target_id and excluded and str(item.get("id") or "")==excluded))
+        if len(items) >= 250:
+            raise ValueError("Too many events to safely determine availability in this range.")
+        busy: list[tuple[datetime, datetime]] = []
+        for item in items:
+            if item.get("status") == "cancelled" or item.get("transparency") == "transparent":
+                continue
+            if any(a.get("self") and a.get("responseStatus") == "declined"
+                   for a in item.get("attendees", []) if isinstance(a, dict)):
+                continue
+            def stamp(value):
+                if isinstance(value, dict): value = value.get("dateTime") or value.get("date")
+                if not value: raise ValueError("Calendar event timing is incomplete.")
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                return parsed.replace(tzinfo=tz) if parsed.tzinfo is None else parsed.astimezone(tz)
+            busy.append((stamp(item.get("start")), stamp(item.get("end"))))
+        def collisions(first, last):
+            return sum(first < busy_end and last > busy_start for busy_start, busy_end in busy)
+        count = collisions(start, end)
+        proposal = None
+        if count:
+            duration = end - start
+            candidate = start.replace(second=0, microsecond=0) + timedelta(minutes=15)
+            # Prefer daytime slots; never silently book an alternative.
+            while candidate + duration <= horizon:
+                if candidate.hour < 9:
+                    candidate = candidate.replace(hour=9, minute=0)
+                if candidate.hour >= 18 or (candidate + duration).date() != candidate.date() or (candidate + duration).time() > time(18):
+                    candidate = datetime.combine(candidate.date() + timedelta(days=1), time(9), tz)
+                    continue
+                if duration > timedelta(hours=9):
+                    break
+                if not collisions(candidate, candidate + duration):
+                    proposal = {"start": candidate.isoformat(), "end": (candidate + duration).isoformat(),
+                                "time_zone": zone_name}
+                    break
+                candidate += timedelta(minutes=15)
+        return {"action": "calendar.availability", "checked_calendar_ids":ids, "available": count == 0,
+                "conflict_count": count, "proposed": proposal, "calendar_id": calendar_id,
+                "requested": {"start": start.isoformat(), "end": end.isoformat()},
+                "search_horizon": horizon.isoformat()}
+
+    def _check_available(self, payload: dict[str, Any]) -> None:
+        if payload.get("start") and payload.get("end"):
+            result = self.availability(payload)
+            if not result["available"]:
+                raise CalendarConflictError(result)
+
     def create_event(self, payload: dict[str, Any]) -> dict[str, Any]:
         self._confirmed(payload)
         event = self._event_body(payload)
+        self._check_available({key: value for key, value in payload.items() if key != "event_id"})
         created = self.create_backend(calendar_id=self._calendar_id(payload.get("calendar_id")), event=event)
         return {"action": "calendar.create_event", "event": self._event(created)}
 
@@ -122,6 +223,7 @@ class CalendarCapabilityService:
         patch = self._event_body(payload, require_summary=False)
         if not patch:
             raise ValueError("Calendar event update is empty")
+        self._check_available(payload)
         updated = self.update_backend(
             calendar_id=self._calendar_id(payload.get("calendar_id")),
             event_id=event_id,
@@ -213,6 +315,8 @@ class CalendarCapabilityService:
             "access_role": str(item.get("accessRole") or ""),
             "time_zone": str(item.get("timeZone") or ""),
             "background_color": str(item.get("backgroundColor") or ""),
+            "hidden": item.get("hidden") is True,
+            "selected": item.get("selected") is not False,
         }
 
     @staticmethod

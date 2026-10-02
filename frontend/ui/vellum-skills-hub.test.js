@@ -91,7 +91,7 @@ describe("production Skills Hub", () => {
     }
     expect(html).toContain("isValidSkillLearnInput");
     expect(html).toContain("valid public skill URL");
-    expect(html).toContain("confirm:true");
+    expect(html.includes("onSkillAction('skill.uninstall',{name:payload.name},{confirmedFromUi:true})")).toBe(true);
     expect(html).toContain("Built-in skills can't be removed");
     expect(html).toContain("startInstallActivity(payload,onSkillAction)");
     expect(html).toContain("onSkillAction=skillActionDispatcher");

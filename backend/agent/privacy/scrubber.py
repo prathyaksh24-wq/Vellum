@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
+from importlib.util import find_spec
 import logging
 import re
 
@@ -270,6 +271,14 @@ def _apply_detections(clean: str, detections: list[PIIDetection]) -> tuple[str, 
 
 @lru_cache(maxsize=1)
 def _get_presidio_analyzer():
+    # Check the optional language model before importing Presidio. Importing
+    # the NLP stack takes several seconds on Windows even though Presidio
+    # cannot be used without this model and would immediately fall back.
+    if find_spec("en_core_web_lg") is None:
+        logger.warning(
+            "Presidio spaCy model is not installed; using deterministic regex PII fallback."
+        )
+        return None
     try:
         from presidio_analyzer import AnalyzerEngine
         from presidio_analyzer.nlp_engine import NlpEngineProvider

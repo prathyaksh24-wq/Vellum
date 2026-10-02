@@ -8,11 +8,18 @@ from . import auth, client, errors
 GoogleCalendarAuthStore = auth.GoogleCalendarAuthStore
 GoogleCalendarClient = client.GoogleCalendarClient
 CAPABILITIES = [
+    "calendar.connection.start",
+    "calendar.connection.disconnect",
+    "calendar.event.create",
+    "calendar.event.update",
+    "calendar.event.delete",
+
     "calendar.account",
     "calendar.calendars",
     "calendar.events",
     "calendar.event",
     "calendar.free_busy",
+    "calendar.availability",
     "calendar.create_event",
     "calendar.update_event",
     "calendar.delete_event",

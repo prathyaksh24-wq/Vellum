@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+from agent.profiles import profile_policy
 from agent.skills import SkillConfigStore, SkillRegistry, SkillUsageStore
 from agent.tools import skills as skill_tools
 
@@ -65,7 +67,44 @@ def test_skill_view_reports_missing_skill_without_crashing(tmp_path: Path, monke
 
     payload = json.loads(skill_tools.skill_view.invoke({"name": "missing"}))
 
-    assert payload == {"ok": False, "error": "Skill not found: missing"}
+    assert payload == {"ok": False, "error": "Skill not found or unavailable to this agent."}
+
+
+def test_main_skill_tools_hide_specialist_owned_skills_but_keep_them_for_owner(monkeypatch):
+    entries = [
+        SimpleNamespace(
+            name=name,
+            description=name,
+            category="research",
+            available=True,
+            unavailable_reason=None,
+        )
+        for name in ("code-review", "book-to-skill")
+    ]
+
+    class FakeRegistry:
+        def list_skills(self, *, include_unavailable=False):
+            return entries
+
+    class FakeCatalog:
+        def specialist_skill_ids(self):
+            return frozenset({"book-to-skill"})
+
+    monkeypatch.setattr(skill_tools, "get_skill_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("agent.master.live_runtime.get_agent_catalog", lambda: FakeCatalog())
+
+    main_result = json.loads(skill_tools.skills_list.invoke({}))
+    assert [item["name"] for item in main_result["skills"]] == ["code-review"]
+    assert json.loads(skill_tools.skill_view.invoke({"name": "book-to-skill"}))["ok"] is False
+
+    with profile_policy(
+        profile_id="BooksAgent",
+        allowed_tools=frozenset(),
+        allowed_skills=frozenset({"book-to-skill"}),
+    ):
+        owner_result = json.loads(skill_tools.skills_list.invoke({}))
+
+    assert [item["name"] for item in owner_result["skills"]] == ["book-to-skill"]
 
 
 def test_skill_view_resolves_config_and_reports_setup_without_secret_values(tmp_path: Path, monkeypatch) -> None:

@@ -274,7 +274,7 @@
           } else if (ev === "response.completed") {
             var finalResponse = data.response || {};
             if (finalResponse.thread_id && handlers.meta) handlers.meta({ thread_id: finalResponse.thread_id });
-            text = text || finalResponse.output_text || "";
+            text = finalResponse.output_text || text || "";
             sources = finalResponse.sources || sources;
             tools = finalResponse.tools || tools;
             trace.sources = sources.slice();
@@ -284,7 +284,7 @@
             upsertStep({ id: "answering", status: "completed" });
             completed = true;
             emitTrace("done");
-            if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: finalResponse.thread_id });
+            if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: finalResponse.thread_id });
           } else if (ev === "response.output_item.done") {
             var doneItem = data.item || {};
             activity = activity.map(function (item) {
@@ -331,7 +331,7 @@
           if (handlers.delta) handlers.delta(text, data.text);
         } else if (ev === "final" && !semanticSeen) {
           if (data.thread_id && handlers.meta) handlers.meta({ thread_id: data.thread_id });
-          text = text || data.answer || "";
+          text = data.answer || text || "";
           sources = data.sources || sources;
           tools = data.tools || tools;
           trace.sources = sources.slice();
@@ -341,7 +341,7 @@
           upsertStep({ id: "answering", status: "completed" });
           completed = true;
           emitTrace("done");
-          if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, thread_id: data.thread_id });
+          if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: data.thread_id });
         }
       }
     }

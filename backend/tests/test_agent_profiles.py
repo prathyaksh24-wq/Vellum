@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 import yaml
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
 
 from agent.profiles import AgentCatalog, AgentProfile, profile_policy
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -52,12 +54,43 @@ def test_builtin_profiles_preserve_deterministic_specialists(tmp_path: Path) -> 
     registry = AgentCatalog(profile_dir=tmp_path)
 
     sports = registry.get("SportsAgent")
+    x_agent = registry.get("XAgent")
 
     assert sports.executor == "deterministic"
     assert sports.memory.write_scope == "agent:SportsAgent"
     assert sports.memory.read_scopes == ["user_profile", "shared", "agent:SportsAgent"]
     assert sports.memory.cache_first is True
+    assert x_agent.memory.cache_first is False
     assert sports.delegation.can_delegate is False
+
+
+def test_delegation_manifest_exposes_summaries_without_profile_policies(tmp_path: Path) -> None:
+    catalog = AgentCatalog(profile_dir=tmp_path)
+
+    manifest = catalog.delegation_manifest()
+    entry = next(item for item in manifest if item["id"] == "BooksAgent")
+
+    assert set(entry) == {"id", "description"}
+    assert "book-to-skill" not in str(manifest)
+    assert "books.knowledge_query" not in str(manifest)
+    assert "book-to-skill" in catalog.specialist_skill_ids()
+
+
+def test_specialist_directory_describes_domains_in_user_language(tmp_path: Path) -> None:
+    manifest = {
+        item["id"]: item["description"]
+        for item in AgentCatalog(profile_dir=tmp_path).delegation_manifest()
+    }
+
+    assert "scores" in manifest["SportsAgent"]
+    assert "upcoming games" in manifest["SportsAgent"]
+    assert "what a person or account posted about a topic" in manifest["XAgent"]
+    assert "what an author says" in manifest["BooksAgent"]
+    assert "read a transcript" in manifest["YoutubeAgent"]
+    assert "what someone said" in manifest["DiscordAgent"]
+    assert "scheduled today or tomorrow" in manifest["CalendarAgent"]
+    assert "personal memory" in manifest["MemoryAgent"]
+    assert "previously shared" in manifest["MemoryAgent"]
 
 
 def test_yaml_profile_overrides_builtin_without_losing_defaults(tmp_path: Path) -> None:
@@ -173,6 +206,29 @@ def test_no_active_profile_preserves_legacy_tool_permissions() -> None:
     assert registry.invoke("sports.search", {}, agent_name="SportsAgent") == {"ok": True}
 
 
+def test_langchain_tool_wrapper_forwards_runnable_config() -> None:
+    @tool
+    def thread_id_tool(query: str, config: RunnableConfig) -> str:
+        """Return the configured thread ID."""
+        _ = query
+        configurable = config.get("configurable", {}) if config else {}
+        return str(configurable.get("thread_id") or "")
+
+    registry = ToolRegistry()
+    registry.register_langchain(
+        thread_id_tool,
+        access=CapabilityAccess.READ,
+        allowed_agents=frozenset({"VellumAgent"}),
+    )
+
+    wrapped = registry.langchain_tools(agent_name="VellumAgent")[0]
+
+    assert wrapped.invoke(
+        {"query": "thread"},
+        config={"configurable": {"thread_id": "thread-123"}},
+    ) == "thread-123"
+
+
 def test_memory_profile_bypasses_mutating_memory_instructions(tmp_path: Path) -> None:
     profile = AgentCatalog(profile_dir=tmp_path).get("MemoryAgent")
 
@@ -255,16 +311,39 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
     discord_binding = catalog.resolve("DiscordAgent")
     calendar_binding = catalog.resolve("CalendarAgent")
     memory_binding = catalog.resolve("MemoryAgent")
+    sports_binding = catalog.resolve("SportsAgent")
+    books_binding = catalog.resolve("BooksAgent")
 
     assert x_binding.profile.version == 2
     assert x_binding.profile.instructions.inline
+    assert {
+        x_binding.profile.id,
+        youtube_binding.profile.id,
+        discord_binding.profile.id,
+        calendar_binding.profile.id,
+        memory_binding.profile.id,
+        sports_binding.profile.id,
+        books_binding.profile.id,
+    } == {
+        "XAgent",
+        "YoutubeAgent",
+        "DiscordAgent",
+        "CalendarAgent",
+        "MemoryAgent",
+        "SportsAgent",
+        "BooksAgent",
+    }
     assert x_binding.executor.tool_registry is youtube_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is memory_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is discord_binding.executor.tool_registry
     assert x_binding.executor.tool_registry is calendar_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is sports_binding.executor.tool_registry
+    assert x_binding.executor.tool_registry is books_binding.executor.tool_registry
     assert "youtube.search_videos" in x_binding.executor.tool_registry.names()
     assert "discord.messages" in x_binding.executor.tool_registry.names()
     assert "calendar.events" in x_binding.executor.tool_registry.names()
+    assert "sports.web_search" in x_binding.executor.tool_registry.names()
+    assert "books.knowledge_query" in x_binding.executor.tool_registry.names()
 
 
 def test_builtin_books_profile_uses_knowledge_core_and_explicit_delegation(tmp_path: Path) -> None:
@@ -291,3 +370,8 @@ def test_agent_catalog_does_not_auto_route_explicit_only_books_profile(tmp_path:
     )
 
     assert catalog.match("Tell me about this book") is None
+
+
+def test_x_profile_allows_inverse_actions_and_supported_writes(tmp_path):
+    profile = AgentCatalog(profile_dir=tmp_path).get("XAgent")
+    assert {"x.publish_post", "x.reply", "x.repost", "x.unrepost", "x.delete", "x.like", "x.unlike", "x.bookmark", "x.unbookmark", "x.quote", "x.follow", "x.unfollow"} <= set(profile.tools.allow)

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { createRequire } from "node:module";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(here, "../../design/Velllum/uploads/Vellum Default Re-designed.html"), "utf8");
@@ -19,6 +20,16 @@ const mcpSetup = readFileSync(
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test("the production inline React script parses as JSX", () => {
+    const require = createRequire(import.meta.url);
+    const babel = createRequire(require.resolve('@vitejs/plugin-react'))('@babel/parser');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const scripts = [...doc.querySelectorAll('script[type="text/babel"]')].filter(script => !script.src);
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      expect(() => babel.parse(script.textContent, {sourceType:'script',plugins:['jsx']})).not.toThrow();
+    }
+  });
   test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
     expect(html).toContain('<script src="api/books.js"></script>');
     expect(html).toContain('<script src="components/books-state.js"></script>');
@@ -122,9 +133,9 @@ describe("Vellum default redesigned frontend", () => {
 
   test("includes Spotify plugin controls and player API integration", () => {
     expect(html).toContain("const SpotifyAPI");
-    expect(html).toContain("/api/plugins/spotify/status");
-    expect(html).toContain("/api/plugins/spotify/oauth/start");
-    expect(html).toContain("/api/plugins/spotify/player/action");
+    expect(html).toContain("API.plugins.spotifyStatus()");
+    expect(html).toContain("API.plugins.spotifyStart(clientId)");
+    expect(html).toContain("API.plugins.spotifyAction(body)");
     expect(html).toContain("SpotifyPlayer");
   });
 
@@ -159,15 +170,18 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("uses the backend-owned Google Calendar plugin without the legacy MCP duplicate", () => {
-    expect(html).toContain("const CalendarWorkspace");
-    expect(html).toContain("API.plugins.calendarOAuthStart()");
-    expect(html).toContain("API.plugins.calendarEvents");
-    expect(html).toContain("API.plugins.calendarCreateEvent");
-    expect(html).toContain("API.plugins.calendarUpdateEvent");
-    expect(html).toContain("API.plugins.calendarDeleteEvent");
-    expect(html).toContain("Confirm Google Calendar");
-    expect(html).not.toContain("@modelcontextprotocol/server-gcal");
-    expect(mcpSetup).not.toContain("mcp://gcal");
+    const calendar=readFileSync(resolve(here,"../../design/Velllum/uploads/components/calendar-workspace.jsx"),"utf8");
+    expect(html).toContain("const CalendarWorkspace = window.VellumUI.CalendarWorkspace");
+    expect(html).toContain('src="components/calendar-workspace.jsx"');
+    for(const call of ["calendarEvents","calendarAvailability"]){
+      expect(calendar.includes("api."+call)).toBe(true);
+    }
+    expect(calendar.includes("calendar.connection.start")).toBe(true);
+    expect(calendar.includes("calendar.connection.disconnect")).toBe(true);
+    expect(calendar.includes("calendar.event.${pending.kind}")).toBe(true);
+    expect(calendar.includes("Confirm Google Calendar")).toBe(true);
+    expect(html.includes("@modelcontextprotocol/server-gcal")).toBe(false);
+    expect(mcpSetup.includes("mcp://gcal")).toBe(false);
   });
 
   test("keeps model selection request-scoped and persisted with conversations", () => {

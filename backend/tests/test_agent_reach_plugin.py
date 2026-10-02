@@ -22,6 +22,28 @@ def test_agent_reach_plugin_status_ready_when_bins_exist_and_twitter_authenticat
     assert calls[0] == ["agent-reach", "--version"]
 
 
+def test_agent_reach_plugin_status_passes_saved_credentials_only_to_twitter(monkeypatch):
+    monkeypatch.setattr("agent.plugins.agent_reach.shutil.which", lambda name: f"C:/bin/{name}.exe")
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs.get("env")))
+        return subprocess.CompletedProcess(args, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("agent.plugins.agent_reach.subprocess.run", fake_run)
+    child_env = {"TWITTER_AUTH_TOKEN": "saved-auth", "TWITTER_CT0": "saved-ct0"}
+
+    status = agent_reach_plugin_status(
+        agent_reach_bin="agent-reach",
+        twitter_cli_bin="twitter",
+        twitter_env=child_env,
+    )
+
+    assert status.status == "ready"
+    assert calls[0] == (["agent-reach", "--version"], None)
+    assert calls[1] == (["twitter", "status", "--yaml"], child_env)
+
+
 def test_agent_reach_plugin_status_reports_missing_agent_reach(monkeypatch):
     monkeypatch.setattr("agent.plugins.agent_reach.shutil.which", lambda name: None)
 

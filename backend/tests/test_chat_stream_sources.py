@@ -12,6 +12,7 @@ import json
 import time
 
 from langchain_core.messages import ToolMessage
+from langgraph.errors import GraphRecursionError
 
 from agent import api
 from agent.agents.live_dispatcher import LiveAgentResult
@@ -211,6 +212,277 @@ def _run_stream(monkeypatch, fake_agent=None):
         return chunks
 
     return asyncio.run(_collect())
+
+
+def test_stream_agent_turn_includes_specialist_sources(monkeypatch):
+    specialist_result = {
+        "agent": "XAgent",
+        "status": "answered",
+        "summary": "Found a matching public post.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Naval on X",
+                "path_or_url": "https://x.com/naval/status/123",
+                "snippet": "A public post about AI.",
+                "captured_at": "2026-09-25T00:00:00Z",
+                "freshness": "live",
+            }
+        ],
+    }
+
+    class DelegateAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "XAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-x")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "RoutedChatModel",
+                "data": {"chunk": SimpleNamespace(content="Found a public post about AI.")},
+            }
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, DelegateAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+
+    assert final["answer"] == specialist_result["summary"]
+    assert final["sources"][0]["url"] == "https://x.com/naval/status/123"
+    assert final["sources"][0]["provider_label"] == "X"
+    assert any(name == "source" for name, _data in events)
+
+
+def test_stream_agent_turn_uses_specialist_summary_when_model_only_defers(monkeypatch):
+    specialist_result = {
+        "agent": "XAgent",
+        "status": "answered",
+        "summary": "@naval: AI safety policy depends on the kind of risk involved.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Naval on X",
+                "path_or_url": "https://x.com/naval/status/123",
+                "snippet": "AI safety policy depends on the kind of risk involved.",
+                "captured_at": "2026-09-25T00:00:00Z",
+                "freshness": "live",
+            }
+        ],
+    }
+
+    class DeferringAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "XAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-x")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "RoutedChatModel",
+                "data": {"chunk": SimpleNamespace(content="I am Vellum, your private, local-first assistant. How can I help you today?")},
+            }
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, DeferringAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+    token_text = "".join(json.loads(data)["text"] for name, data in events if name == "token")
+
+    assert final["answer"] == specialist_result["summary"]
+    assert token_text == specialist_result["summary"]
+    assert "how can i help" not in token_text.casefold()
+
+
+def test_stream_agent_turn_prefers_x_result_over_stale_prior_topic(monkeypatch):
+    specialist_result = {
+        "agent": "XAgent",
+        "status": "answered",
+        "summary": "- @naval: AI will make leverage cheaper and more widely available.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Naval on X",
+                "path_or_url": "https://x.com/naval/status/123",
+                "captured_at": "2026-09-25T00:00:00Z",
+            }
+        ],
+    }
+
+    class StaleTopicAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "XAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-x")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "RoutedChatModel",
+                "data": {"chunk": SimpleNamespace(content="The NBA released its 2026 schedule.")},
+            }
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, StaleTopicAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+
+    assert final["answer"] == specialist_result["summary"]
+    assert "NBA" not in final["answer"]
+
+
+def test_stream_agent_turn_stops_after_sourced_x_result_before_unrelated_specialist(monkeypatch):
+    specialist_result = {
+        "agent": "XAgent",
+        "status": "answered",
+        "summary": "- @naval: AI will make leverage cheaper and more widely available.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Naval on X",
+                "path_or_url": "https://x.com/naval/status/123",
+                "captured_at": "2026-09-25T00:00:00Z",
+            }
+        ],
+    }
+
+    class CrossTopicAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "XAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-x")},
+            }
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "SportsAgent"}}}
+            raise AssertionError("a sourced X answer must end the specialist routing loop")
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, CrossTopicAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+
+    assert final["answer"] == specialist_result["summary"]
+    assert [source["url"] for source in final["sources"]] == ["https://x.com/naval/status/123"]
+    assert "NBA" not in final["answer"]
+
+
+def test_stream_agent_turn_finalizes_completed_specialist_after_graph_recursion(monkeypatch):
+    specialist_result = {
+        "agent": "SportsAgent",
+        "status": "answered",
+        "summary": "The next Chiefs game is listed for Sunday at 1:00 PM.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Chiefs schedule",
+                "path_or_url": "https://www.chiefs.com/schedule/",
+                "captured_at": "2026-09-25T00:00:00Z",
+                "freshness": "live",
+            }
+        ],
+    }
+
+    class LoopingAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "SportsAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-sports")},
+            }
+            raise GraphRecursionError("recursion limit reached")
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, LoopingAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+
+    assert final["answer"] == specialist_result["summary"]
+    assert final["sources"][0]["url"] == "https://www.chiefs.com/schedule/"
+    assert not any(name == "error" for name, _data in events)
+
+
+def test_stream_agent_turn_stops_duplicate_delegation_after_first_completed_result(monkeypatch):
+    specialist_result = {
+        "agent": "SportsAgent",
+        "status": "answered",
+        "summary": "The next Chiefs game is Sunday at 1:00 PM.",
+        "sources": [
+            {
+                "kind": "web",
+                "title": "Chiefs schedule",
+                "path_or_url": "https://www.chiefs.com/schedule/",
+                "captured_at": "2026-09-25T00:00:00Z",
+            }
+        ],
+    }
+
+    class RepeatingAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "SportsAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-sports-1")},
+            }
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "SportsAgent"}}}
+            raise AssertionError("the duplicate specialist call should be cancelled")
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, RepeatingAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+
+    assert final["answer"] == specialist_result["summary"]
+    assert len(final["sources"]) == 1
+    assert not any(name == "error" for name, _data in events)
+
+
+def test_stream_agent_turn_reports_missing_specialist_evidence(monkeypatch):
+    specialist_result = {
+        "agent": "SportsAgent",
+        "status": "error",
+        "summary": "SportsAgent could not find fresh web sources.",
+        "sources": [],
+    }
+
+    class DelegateAgent:
+        async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            yield {"event": "on_tool_start", "name": "delegate_to_agent", "data": {"input": {"agent_id": "SportsAgent"}}}
+            yield {
+                "event": "on_tool_end",
+                "name": "delegate_to_agent",
+                "data": {"output": ToolMessage(content=json.dumps(specialist_result), name="delegate_to_agent", tool_call_id="call-sports")},
+            }
+            yield {
+                "event": "on_chat_model_stream",
+                "name": "RoutedChatModel",
+                "data": {"chunk": SimpleNamespace(content="Today is September 25, 2026.")},
+            }
+
+        async def aclose(self):
+            return None
+
+    events = _parse_sse(_run_stream(monkeypatch, DelegateAgent()))
+    final = json.loads(next(data for name, data in events if name == "final"))
+    token_text = "".join(json.loads(data)["text"] for name, data in events if name == "token")
+
+    assert final["answer"] == "I couldn't verify this request because the sports lookup returned no source evidence."
+    assert "Today is" not in final["answer"]
+    assert token_text == final["answer"]
+    assert final["sources"] == []
 
 
 def test_stream_agent_turn_emits_chat_model_end_answer(monkeypatch):

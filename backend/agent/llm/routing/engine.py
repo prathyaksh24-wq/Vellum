@@ -19,6 +19,7 @@ from agent.llm.routing.models import (
     RoutingAttempt,
     RoutingTerminalError,
     merge_policy,
+    provider_for_model,
 )
 from agent.llm.routing.pool import CredentialPool, CredentialPoolExhausted
 from agent.llm.routing.store import RoutingStore
@@ -69,13 +70,13 @@ class RoutingEngine:
             pass
 
     def _primary_provider(self, model: str) -> str:
-        """Keep catalog model IDs on the OpenRouter route by default.
+        """Route explicit local IDs locally and keep cloud catalog IDs on OpenRouter.
 
         A vendor namespace such as ``openai/`` identifies the model inside
         OpenRouter; it does not authorize a native vendor API call. Native
         adapters must be selected explicitly with ``primary_provider``.
         """
-        return "openrouter"
+        return provider_for_model(model)
 
     def build_plan(self, primary_model: str, primary_provider: str | None = None) -> AttemptPlan:
         primary = FallbackTarget(
@@ -84,6 +85,8 @@ class RoutingEngine:
         )
         targets = [primary]
         for fallback in self.store.list_fallbacks():
+            if primary.provider == "ollama" and fallback.provider != "ollama":
+                continue
             if fallback.identity != primary.identity:
                 targets.append(fallback)
         return AttemptPlan(

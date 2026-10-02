@@ -33,8 +33,18 @@ if (Test-HttpReady $healthUrl) {
   Write-Host "API is already running on port $Port."
 } else {
   $env:PYTHONPATH = Join-Path $Root "backend"
+  $venvScripts = Join-Path $Root ".venv\Scripts"
+  if (-not (($env:PATH -split ';') -contains $venvScripts)) {
+    $env:PATH = "$venvScripts;$env:PATH"
+  }
   $env:API_HOST = $HostName
   $env:API_PORT = [string]$Port
+  # Use the resumable HTTP transport for public local model downloads on Windows.
+  # Preserve an explicit operator override; this changes no inference destination.
+  # Leave CPU capacity for interactive requests during local indexing.
+  if (-not $env:OMP_NUM_THREADS) { $env:OMP_NUM_THREADS = "4" }
+  if (-not $env:MKL_NUM_THREADS) { $env:MKL_NUM_THREADS = "4" }
+  if (-not $env:HF_HUB_DISABLE_XET) { $env:HF_HUB_DISABLE_XET = "1" }
   if (-not $env:TWITTER_AUTH_TOKEN) {
     $env:TWITTER_AUTH_TOKEN = [Environment]::GetEnvironmentVariable("TWITTER_AUTH_TOKEN", "User")
   }

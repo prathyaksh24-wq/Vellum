@@ -44,8 +44,9 @@ class AgentCatalog:
         from agent.agents.books import BooksAgent
         from agent.agents.books_synthesis import RoutedBooksSynthesizer
         from agent.agents.calendar import CalendarAgent
-        from agent.agents.discord import DiscordAgent
+        from agent.agents.discord import DiscordAgent, LocalDiscordSummarizer
         from agent.agents.memory_agent import MemoryAgent
+        from agent.agents.music import MusicAgent
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
         from agent.agents.youtube import YoutubeAgent
@@ -58,10 +59,11 @@ class AgentCatalog:
         catalog = cls(profile_dir=profile_dir)
         books_profile = catalog.get("BooksAgent")
         agents = [
+            MusicAgent(tool_registry=tools),
             XAgent(vault_root=root, tool_registry=tools),
             YoutubeAgent(vault_root=root, tool_registry=tools),
             MemoryAgent(vault_root=root, tool_registry=tools),
-            DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service),
+            DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service, summarizer=LocalDiscordSummarizer()),
             CalendarAgent(tool_registry=tools),
             SportsAgent(vault_root=root, tool_registry=tools),
             BooksAgent(
@@ -135,6 +137,22 @@ class AgentCatalog:
     def names(self) -> list[str]:
         return sorted(profile.id for profile in self.list())
 
+    def delegation_manifest(self) -> list[dict[str, str]]:
+        """Return only the identity and summary needed for main-agent routing."""
+        return [
+            {"id": profile.id, "description": profile.description}
+            for profile in self.list()
+            if profile.delegation.can_receive
+        ]
+
+    def specialist_skill_ids(self) -> frozenset[str]:
+        """Skills reserved by specialist profiles and hidden from the main agent."""
+        return frozenset(
+            skill_id
+            for profile in self.list()
+            for skill_id in profile.skills.allow
+        )
+
     def executor(self, profile_id: str) -> Any | None:
         return self._executors.get(profile_id)
 
@@ -181,6 +199,7 @@ class AgentCatalog:
                 "model": profile.model,
                 "reasoning_mode": profile.reasoning_mode,
                 "source_egress": profile.source_egress,
+                "result_visibility": profile.result_visibility,
                 "tools": profile.tools.model_dump(mode="json"),
                 "skills": profile.skills.model_dump(mode="json"),
                 "memory": profile.memory.model_dump(mode="json"),

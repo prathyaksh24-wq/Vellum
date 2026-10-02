@@ -1,8 +1,4 @@
-"""Progressive tool search (Hermes-style) for Vellum.
-
-Defers MCP/plugin tool schemas behind three bridge tools so the model-visible
-tools array stays small: `tool_search`, `tool_describe`, `tool_call`.
-"""
+"""Progressive search for deferred general capabilities."""
 
 from __future__ import annotations
 
@@ -13,6 +9,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel, Field as PydanticField
@@ -26,8 +23,8 @@ TOOL_CALL_NAME = "tool_call"
 BRIDGE_TOOL_NAMES = frozenset({TOOL_SEARCH_NAME, TOOL_DESCRIBE_NAME, TOOL_CALL_NAME})
 
 DEFAULT_ENABLED = "auto"
-DEFAULT_THRESHOLD_RATIO = 0.05
-DEFAULT_LISTING_MAX_TOKENS = 4000
+DEFAULT_THRESHOLD_RATIO = 0.005
+DEFAULT_LISTING_MAX_TOKENS = 512
 DEFAULT_CONTEXT_LENGTH = 128_000
 DEFAULT_SEARCH_LIMIT = 8
 MAX_SEARCH_LIMIT = 20
@@ -330,9 +327,8 @@ def _bridge_defs(
     sources: list[str],
 ) -> list[dict[str, Any]]:
     search_description = (
-        "Search the catalog of deferred tools (MCP/plugin connectors that were "
-        "hidden from the visible tools list). Returns ranked matches with name, "
-        "source, and required parameters. Use this before tool_call."
+        "Search deferred general capabilities that are hidden from the visible tools list. "
+        "Returns ranked matches with name, source, and required parameters. Use this before tool_call."
     )
     if listing_form == "full":
         search_description += (
@@ -382,7 +378,7 @@ def _bridge_defs(
             "function": {
                 "name": TOOL_CALL_NAME,
                 "description": (
-                    "Execute a deferred tool by name with its full arguments object. "
+                    "Execute a deferred capability by name with its full arguments object. "
                     "Search and describe first; mutating tools still require confirmation."
                 ),
                 "parameters": {
@@ -511,7 +507,7 @@ def build_tool_search_bridge(catalog: list[CatalogEntry]) -> StructuredTool:
     return StructuredTool.from_function(
         run,
         name=TOOL_SEARCH_NAME,
-        description="Search the deferred MCP/plugin tool catalog.",
+        description="Search deferred general capabilities by task or topic.",
         args_schema=ToolSearchArgs,
     )
 
@@ -541,18 +537,18 @@ def build_tool_describe_bridge(catalog: list[CatalogEntry]) -> StructuredTool:
     return StructuredTool.from_function(
         run,
         name=TOOL_DESCRIBE_NAME,
-        description="Describe one deferred MCP/plugin tool's schema.",
+        description="Describe one deferred capability's schema.",
         args_schema=ToolDescribeArgs,
     )
 
 
 def build_tool_call_bridge(tools_by_name: dict[str, StructuredTool]) -> StructuredTool:
-    def run(name: str, arguments: dict[str, Any]) -> str:
+    def run(name: str, arguments: dict[str, Any], config: RunnableConfig | None = None) -> str:
         tool = tools_by_name.get(name)
         if tool is None:
             return _bridge_result({"error": f"Unknown tool '{name}'."})
         try:
-            output = tool.invoke(arguments)
+            output = tool.invoke(arguments, config=config)
             return _bridge_result({"name": name, "output": output})
         except Exception as exc:
             return _bridge_result({"name": name, "error": f"{type(exc).__name__}: {exc}"})
@@ -560,7 +556,7 @@ def build_tool_call_bridge(tools_by_name: dict[str, StructuredTool]) -> Structur
     return StructuredTool.from_function(
         run,
         name=TOOL_CALL_NAME,
-        description="Execute a deferred MCP/plugin tool by name.",
+        description="Execute a deferred capability by name with its full arguments.",
         args_schema=ToolCallArgs,
     )
 

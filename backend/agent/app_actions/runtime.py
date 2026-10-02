@@ -600,6 +600,12 @@ class AppActionRuntime:
         submitted = submitted.rstrip(".!?")
         polite = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 
+        if self._plugin_contributions and self._plugin_contributions.action_available("spotify.playback.control"):
+            from agent.plugins.spotify_controls import match_spotify_command
+            music_action = match_spotify_command(submitted)
+            if music_action is not None:
+                return music_action
+
         agent_selection = re.fullmatch(
             polite
             + r"(?:open|use|select|switch(?:\s+over)?\s+to|change(?:\s+over)?\s+to|go\s+to)\s+"
@@ -1540,6 +1546,9 @@ class AppActionRuntime:
                     "arguments": dict(request.arguments),
                     "context": context,
                     "confirmed": confirmed,
+                    # Only the runtime's bound confirmation (or Google's consent
+                    # flow) authorizes an external plugin capability.
+                    "confirm": confirmed or definition.confirmation_rule == "oauth_consent",
                 },
                 agent_name=self._agent_name(context),
             )

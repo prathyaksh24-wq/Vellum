@@ -10,6 +10,12 @@ capabilities:
   - calendar.events
   - calendar.event
   - calendar.free_busy
+  - calendar.availability
   - calendar.create_event
   - calendar.update_event
   - calendar.delete_event
+  - calendar.connection.start
+  - calendar.connection.disconnect
+  - calendar.event.create
+  - calendar.event.update
+  - calendar.event.delete

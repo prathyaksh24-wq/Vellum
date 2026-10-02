@@ -12,6 +12,7 @@ provides_tools:
   - spotify_playlists
   - spotify_albums
   - spotify_library
+  - spotify_podcasts
 capabilities:
   - spotify.playback
   - spotify.devices
@@ -20,3 +21,4 @@ capabilities:
   - spotify.playlists
   - spotify.albums
   - spotify.library
+  - spotify.podcasts
