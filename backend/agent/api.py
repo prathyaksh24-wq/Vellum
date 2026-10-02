@@ -34,7 +34,8 @@ _LOGGER = logging.getLogger(__name__)
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import ToolMessage, HumanMessage, AIMessage
+from langgraph.errors import GraphRecursionError
 from pydantic import BaseModel, Field
 
 from agent.cli.project_commands import (
@@ -105,6 +106,7 @@ from agent.obsidian.wiki_api import router as knowledge_router
 from agent.obsidian.watcher import start_vault_watcher
 from agent.observability import ObservabilityService
 from agent.plugins.agent_reach import agent_reach_plugin_status
+from agent.tools.capabilities.agent_reach_x_provider import AgentReachError, AgentReachXProvider
 from agent.plugins.memory_orchestrator import memory_orchestrator_plugin_status
 from agent.plugins.registry import PluginRegistry, PluginRegistryError, get_plugin_registry
 from agent.mcp.plugin_runtime import PluginMcpRuntime, PluginMcpRuntimeError
@@ -121,7 +123,11 @@ from agent.plugins.spotify_runtime import (
     spotify_playback,
     spotify_store as runtime_spotify_store,
 )
-from agent.plugins.spotify_controls import SPOTIFY_REDIRECT_URI, spotify_plugin_contribution
+from agent.plugins.spotify_controls import (
+    SPOTIFY_REDIRECT_URI, SpotifyPlaybackDeviceRequest, SpotifyPlaybackSessionResponse,
+    SpotifyPlaybackTokenResponse, SpotifyPlaybackTokenRequest, spotify_plugin_contribution,
+    SpotifyPlayerActionRequest,
+)
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.google_calendar_api import (
@@ -132,6 +138,7 @@ from agent.plugins.google_calendar_api import (
 from agent.plugins.google_calendar_runtime import portable_google_calendar_status
 from agent.plugins.youtube_api import router as youtube_router, youtube_oauth_callback
 from agent.plugins.youtube_controls import youtube_plugin_contribution
+from agent.plugins.google_calendar_controls import google_calendar_plugin_contribution
 from agent.skills import SkillCatalog, SkillSurfaceService, SkillUsageIntelligence, create_skill_source_router
 from agent.skills.runtime import reset_skill_registry
 from agent.skills.manager import SkillMutationError
@@ -179,6 +186,7 @@ _app_action_runtime.set_automation_handler(_automation_actions.execute)
 _knowledge_source_actions = KnowledgeSourceActionService()
 _app_action_runtime.set_knowledge_source_handler(_knowledge_source_actions.execute)
 _app_action_runtime.register_plugin_contribution(youtube_plugin_contribution())
+_app_action_runtime.register_plugin_contribution(google_calendar_plugin_contribution())
 _app_action_runtime.register_plugin_contribution(spotify_plugin_contribution(invalidator=agent.invalidate))
 
 
@@ -345,7 +353,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     action_message: str | None = None  # raw submitted text; local App Action matching only
     thread_id: str | None = None
-    model: str | None = None  # OpenRouter model id for this turn
+    model: str | None = None  # Provider-qualified model id for this turn
     reasoning_mode: str | None = None  # light/medium/high/extra high/max/ultra
     voice: bool = False
     store: bool = True  # when False, answer the turn but do NOT persist it (FTS5/Honcho/vault); log an audit breadcrumb instead
@@ -477,7 +485,7 @@ class ReindexResponse(BaseModel):
 
 
 class SetActiveModelRequest(BaseModel):
-    model: str = Field(min_length=1)  # OpenRouter id or label (label resolved via registry.resolve)
+    model: str = Field(min_length=1)  # Model id or label (label resolved via registry.resolve)
 
 
 class ProviderKeyRequest(BaseModel):
@@ -497,6 +505,10 @@ class XOAuthStartResponse(BaseModel):
 
 
 class XOAuthStatusResponse(BaseModel):
+    agent_reach_connected: bool = False
+    agent_reach_status: str = "unknown"
+    agent_reach_notes: str = ""
+    twitter_cli_version: str = "unknown"
     xai_connected: bool
     x_api_connected: bool
     x_api_configured: bool
@@ -504,8 +516,18 @@ class XOAuthStatusResponse(BaseModel):
     posting_enabled: bool
 
 
+class XAgentReachConnectRequest(BaseModel):
+    cookie_export: str = Field(min_length=1, max_length=512_000)
+
+
+class XAgentReachConnectResponse(BaseModel):
+    connected: bool
+    status: str
+    account: dict[str, Any] = Field(default_factory=dict)
+
+
 class SpotifyOAuthStartRequest(BaseModel):
-    client_id: str = Field(min_length=1)
+    client_id: str = ""
 
 
 class SpotifyOAuthStartResponse(BaseModel):
@@ -519,27 +541,8 @@ class SpotifyStatusResponse(BaseModel):
     account_name: str = ""
     product: str = ""
     scopes: list[str] = Field(default_factory=list)
+    web_playback_ready: bool = False
     redirect_uri: str = SPOTIFY_REDIRECT_URI
-
-
-class SpotifyPlayerActionRequest(BaseModel):
-    action: Literal[
-        "play",
-        "pause",
-        "next",
-        "previous",
-        "seek",
-        "set_volume",
-        "set_shuffle",
-        "set_repeat",
-        "transfer",
-    ]
-    device_id: str | None = None
-    position_ms: int | None = Field(default=None, ge=0)
-    volume_percent: int | None = Field(default=None, ge=0, le=100)
-    shuffle: bool | None = None
-    state: Literal["track", "context", "off"] | None = None
-    play: bool = False
 
 
 class ConversationContextRequest(BaseModel):
@@ -562,6 +565,8 @@ class ActiveModelResponse(BaseModel):
     label: str
     provider: str
     open_weights: bool
+    capabilities: list[str] = Field(default_factory=list)
+    tool_calling_compatibility: str = "unknown"
 
 
 _UI_CONVERSATIONS_PATH = REPO_ROOT / "data" / "ui" / "conversations.json"
@@ -673,18 +678,127 @@ def _thread_user_messages(thread_id: str, *, limit: int = 6) -> list[str]:
     return []
 
 
+def _thread_messages(thread_id: str) -> list[dict[str, Any]]:
+    if not thread_id:
+        return []
+    conversation = _conversation_by_thread_id(thread_id)
+    if not isinstance(conversation, dict):
+        return []
+    messages = conversation.get("messages")
+    return [message for message in messages if isinstance(message, dict)] if isinstance(messages, list) else []
+
+
+def _previous_conversation_turn(thread_id: str, current_message: str) -> tuple[str, dict[str, Any] | None]:
+    messages = list(_thread_messages(thread_id))
+    current = current_message.strip().casefold()
+    if messages and _message_role(messages[-1]) == "user" and _message_text(messages[-1]).strip().casefold() == current:
+        messages.pop()
+    previous_assistant: dict[str, Any] | None = None
+    previous_user = ""
+    for message in reversed(messages):
+        role = _message_role(message)
+        text = _message_text(message).strip()
+        if not text:
+            continue
+        if previous_assistant is None and role == "assistant":
+            previous_assistant = message
+            continue
+        if previous_assistant is not None and role == "user":
+            previous_user = text
+            break
+    return previous_user, previous_assistant
+
+
+def _referenced_x_post_request(message: str, thread_id: str) -> str | None:
+    clean = str(message or "").strip()
+    lowered = " ".join(clean.casefold().split())
+    if not re.search(r"^\s*(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?(?:tweet|post|publish)\b", lowered):
+        return None
+    if re.search(r"https?://", lowered):
+        return None
+    if not re.search(
+        r"\b(?:this|that|it|the\s+exact\s+message|the\s+message\s+(?:you|u)\s+(?:said|sent|gave))\b",
+        lowered,
+    ):
+        return None
+    _previous_user, previous_assistant = _previous_conversation_turn(thread_id, clean)
+    if previous_assistant is None:
+        return None
+    text = _clean_answer_body(_message_text(previous_assistant))
+    if not text or re.search(r"\b(?:could not|couldn't|needs? the exact post text|no response)\b", text, re.IGNORECASE):
+        return None
+    return f"Post this to X exactly:\n[X post text]\n{text}\n[/X post text]"
+
+
 def _is_short_correction(message: str) -> bool:
     clean = message.strip()
     if not clean:
         return False
+    if re.fullmatch(r"[?!…]+", clean):
+        return True
     if clean.endswith("*"):
         return True
     terms = _text_terms(clean)
     return 0 < len(clean) <= 18 and 0 < len(terms) <= 3
 
 
+def _is_retry_followup(message: str) -> bool:
+    lowered = " ".join(str(message or "").casefold().split())
+    return bool(
+        re.fullmatch(r"[?!…]+", lowered)
+        or re.search(
+            r"\b(?:wrong|try again|answer (?:it|that|the previous question)|still (?:have not|haven't|did not|didn't) answer)\b",
+            lowered,
+        )
+    )
+
+
+def _is_explanation_followup(message: str) -> bool:
+    from agent.agents.base import user_query_text
+    return bool(re.fullmatch(r"(?:why(?:\s+does\s+(?:that|this|it)\s+(?:help|work))?|how\s+so|what\s+do\s+you\s+mean)[?!.]*", user_query_text(message), re.I))
+
+
+def _continuity_request(message: str, thread_id: str) -> str:
+    """Resolve terse retry messages to the preceding substantive user request."""
+    from agent.agents.base import user_query_text
+    clean = user_query_text(message)
+    state_store = getattr(_live_dispatcher, "state_store", None)
+    pending = state_store.get_pending_action(thread_id) if state_store is not None else None
+    if pending and (LiveAgentDispatcher._is_confirmation(clean, pending) or LiveAgentDispatcher._is_rejection(clean)):
+        return clean
+    referenced_post = _referenced_x_post_request(clean, thread_id)
+    if referenced_post:
+        return referenced_post
+    if _is_explanation_followup(clean):
+        previous_user, previous_assistant = _previous_conversation_turn(thread_id, clean)
+        if previous_assistant is not None:
+            previous_text = _message_text(previous_assistant)[:1800]
+            return (
+                f"{clean}\n\n[Current conversation follow-up]\n"
+                "The user is asking you to explain the reasoning behind your previous answer. "
+                "Keep the explanation tied to that answer and the user's task.\n"
+                f"Previous user request: {previous_user[:1000]}\nPrevious assistant answer: {previous_text}"
+            )
+    if not _is_retry_followup(clean):
+        return clean
+    # Keep explicit retries bound to the locally stored Calendar action;
+    # replaying a preceding "yes" would renew authorization accidentally.
+    pending = _live_dispatcher.state_store.get_pending_action(thread_id)
+    if pending and pending.get("agent") == "CalendarAgent":
+        return clean
+    recent = _thread_user_messages(thread_id, limit=12)
+    if recent and recent[-1].strip().casefold() == clean.casefold():
+        recent = recent[:-1]
+    for candidate in reversed(recent):
+        candidate = candidate.strip()
+        if candidate and not _is_retry_followup(candidate) and not re.fullmatch(r"(?:why|how\s+so|what\s+do\s+you\s+mean)[?!.]*", candidate, re.I):
+            return candidate
+    return clean
+
+
 def _has_memory_recall_language(message: str) -> bool:
-    lowered = message.casefold()
+    from agent.agents.base import user_query_text
+    lowered = user_query_text(message).casefold()
     phrases = (
         "from my chat",
         "from my chats",
@@ -717,8 +831,27 @@ def _has_memory_recall_language(message: str) -> bool:
         "search your memory",
         "search my vault",
         "from the vault",
+        "know about me",
+        "know about myself",
+        "tell me about me",
+        "tell me about myself",
+        "remember about me",
     )
     return any(phrase in lowered for phrase in phrases)
+
+
+def _is_user_profile_recall(message: str) -> bool:
+    lowered = " ".join(message.casefold().split())
+    return any(
+        phrase in lowered
+        for phrase in (
+            "know about me",
+            "know about myself",
+            "tell me about me",
+            "tell me about myself",
+            "remember about me",
+        )
+    )
 
 
 def _is_memory_recall_request(clean_message: str, thread_id: str) -> bool:
@@ -729,6 +862,440 @@ def _is_memory_recall_request(clean_message: str, thread_id: str) -> bool:
     recent = _thread_user_messages(thread_id, limit=4)
     previous = " ".join(recent[:-1] if recent and recent[-1].strip() == clean_message.strip() else recent)
     return _has_memory_recall_language(previous)
+
+
+def _conversation_by_thread_id(thread_id: str) -> dict[str, Any] | None:
+    for conversation in _read_ui_conversations():
+        candidate = str(conversation.get("thread_id") or conversation.get("id") or "")
+        if candidate == str(thread_id):
+            return conversation
+    return None
+
+
+def _conversation_datetime(conversation: dict[str, Any]) -> datetime | None:
+    for key in ("updated_at", "created_at", "updated", "created"):
+        raw = str(conversation.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _conversation_timestamp_value(conversation: dict[str, Any]) -> float:
+    value = _conversation_datetime(conversation)
+    return value.timestamp() if value is not None else 0.0
+
+
+def _conversation_recall_answer(
+    clean_message: str,
+    thread_id: str,
+    *,
+    now: datetime | None = None,
+) -> str | None:
+    """Answer simple conversation-history questions from the canonical UI store."""
+    lowered = " ".join(clean_message.casefold().split()).replace(" lat time", " last time")
+    conversations = _read_ui_conversations()
+    current = next(
+        (
+            conversation
+            for conversation in conversations
+            if str(conversation.get("thread_id") or conversation.get("id") or "") == str(thread_id)
+        ),
+        None,
+    )
+
+    asks_for_first_message = bool(
+        re.search(
+            r"\b(?:what|which)\s+(?:was|is)\s+(?:(?:the|my)\s+)?first\s+(?:message|thing|question)(?:\s+i\s+(?:sent|asked|said)|\s+in\s+(?:this|our)\s+chat|[?.!]*$)",
+            lowered,
+        )
+    )
+    if asks_for_first_message:
+        messages = current.get("messages", []) if isinstance(current, dict) else []
+        first_user = next(
+            (
+                _message_text(message)
+                for message in messages
+                if _message_role(message) == "user" and _message_text(message)
+            ),
+            "",
+        )
+        if first_user:
+            return f'Your first message in this chat was: “{first_user}”'
+        return "I can’t find an earlier user message in this chat."
+
+    # Whitespace is already normalized; topic tokenization ignores punctuation.
+    # Do not make a lazy topic compete with an unbounded punctuation suffix.
+    asked_about = re.search(r"\bwhat did i ask (?:you )?about (.+)$", lowered)
+    if asked_about:
+        topic_terms = [
+            term
+            for term in re.findall(r"[a-z0-9]+", asked_about.group(1))
+            if term not in {"and", "or", "the", "a", "an"}
+        ]
+        matches: list[str] = []
+        seen: set[str] = set()
+        for conversation in sorted(conversations, key=_conversation_timestamp_value, reverse=True):
+            cid = str(conversation.get("thread_id") or conversation.get("id") or "")
+            if cid == str(thread_id):
+                continue
+            messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+            for message in messages:
+                if _message_role(message) != "user":
+                    continue
+                text = " ".join(_message_text(message).split())
+                haystack = text.casefold()
+                if not text or _has_memory_recall_language(text):
+                    continue
+                if topic_terms and not any(re.search(rf"\b{re.escape(term)}\b", haystack) for term in topic_terms):
+                    continue
+                key = re.sub(r"\W+", " ", haystack).strip()
+                if key in seen:
+                    continue
+                seen.add(key)
+                matches.append(text)
+                if len(matches) >= 8:
+                    break
+            if len(matches) >= 8:
+                break
+        if matches:
+            return "You previously asked:\n" + "\n".join(f"- {item}" for item in matches)
+        return "I can’t find an earlier question about that in your saved chats."
+
+    has_last_marker = any(marker in lowered for marker in ("last", "previous", "other than today"))
+    has_conversation_marker = bool(
+        re.search(r"\b(?:spoke|spoek|speak|talk(?:ed)?|discuss(?:ed)?|conversation|chat)\b", lowered)
+    )
+    asks_for_last_chat = has_last_marker and has_conversation_marker
+    if not asks_for_last_chat:
+        return None
+
+    other_conversations = [
+        conversation
+        for conversation in conversations
+        if str(conversation.get("thread_id") or conversation.get("id") or "") != str(thread_id)
+    ]
+    user_zone = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
+    reference_now = now or datetime.now(user_zone)
+    if reference_now.tzinfo is None:
+        reference_now = reference_now.replace(tzinfo=user_zone)
+    if "other than today" in lowered or "before today" in lowered:
+        today = reference_now.astimezone(user_zone).date()
+        other_conversations = [
+            conversation
+            for conversation in other_conversations
+            if (stamp := _conversation_datetime(conversation)) is not None
+            and stamp.astimezone(user_zone).date() < today
+        ]
+    if not other_conversations:
+        return "I can’t find a previous conversation yet."
+    previous = max(
+        enumerate(other_conversations),
+        key=lambda item: (_conversation_timestamp_value(item[1]), -item[0]),
+    )[1]
+    title = str(previous.get("title") or "Untitled chat").strip()
+    previous_at = _conversation_datetime(previous)
+    user_messages = [
+        _message_text(message)
+        for message in previous.get("messages", [])
+        if _message_role(message) == "user" and _message_text(message)
+    ]
+    if not user_messages:
+        return f'Your previous chat was “{title},” but it has no saved user messages.'
+    topics = user_messages[-4:]
+    if len(topics) == 1:
+        detail = f'you asked: “{topics[0]}”'
+    else:
+        detail = "you asked about " + "; ".join(f'“{topic}”' for topic in topics)
+    when = ""
+    if previous_at is not None:
+        local_at = previous_at.astimezone(user_zone)
+        zone_label = local_at.tzname() or os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata")
+        when = (
+            f" on {local_at.strftime('%A, %B %d, %Y')} at "
+            f"{_format_clock_time(local_at)} {zone_label}"
+        )
+    return f'Your previous chat was “{title}”{when}. In it, {detail}.'
+
+
+_US_TIME_ZONES = {
+    "ET": "America/New_York",
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "CT": "America/Chicago",
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "MT": "America/Denver",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "PT": "America/Los_Angeles",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+}
+
+
+def _format_clock_time(value: datetime) -> str:
+    return value.strftime("%I:%M %p").lstrip("0")
+
+
+def _current_datetime_answer(clean_message: str, *, now: datetime | None = None) -> str | None:
+    lowered = " ".join(clean_message.casefold().split())
+    asks_for_tomorrow = bool(
+        re.search(r"\bwhat\s+(?:date|day)\s+is\s+(?:tomorrow|tom|tmrw)\b", lowered)
+        or re.search(r"\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:date|day)\s+(?:tomorrow|tom|tmrw)\b", lowered)
+    )
+    asks_for_current_datetime = bool(
+        re.search(
+            r"\b(?:what|which)\s+(?:is|'s)\s+(?:the\s+)?(?:current\s+)?(?:date|day|time|year)\b",
+            lowered,
+        )
+        or re.search(r"\bwhat\s+(?:date|day|time|year)\s+is\s+it\b", lowered)
+        or re.search(r"\bwhat'?s\s+(?:today'?s\s+)?(?:date|day|time|year)\b", lowered)
+        or re.search(r"\b(?:current|today'?s)\s+(?:date|day|time)\b", lowered)
+        or re.search(r"\bwhat\s+(?:date|day|time|year)\s+is\s+today\b", lowered)
+        or re.search(r"\b(?:date|day|time)(?:\s+and\s+(?:date|day|time))?\s*\??$", lowered)
+        or re.search(r"\bwhat\s+is\s+today(?:'s)?\s+(?:date|day|time)\b", lowered)
+    )
+    if not asks_for_current_datetime and not asks_for_tomorrow:
+        return None
+    user_zone = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
+    local_now = now or datetime.now(user_zone)
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=user_zone)
+    else:
+        local_now = local_now.astimezone(user_zone)
+    zone_label = local_now.tzname() or os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata")
+    if asks_for_tomorrow:
+        tomorrow = local_now + timedelta(days=1)
+        return f"Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}."
+    return (
+        f"Today is {local_now.strftime('%A, %B %d, %Y')}, and the time is "
+        f"{_format_clock_time(local_now)} {zone_label}."
+    )
+
+
+def _user_profile_recall_answer(clean_message: str, thread_id: str) -> str | None:
+    """Answer profile recall from local durable memory and the user's own messages."""
+    if not _is_user_profile_recall(clean_message):
+        return None
+
+    durable: list[str] = []
+    try:
+        store = getattr(_memory_orchestrator, "store", None)
+        rows = store.list_saved(scopes=["global", "user_profile"]) if store is not None else []
+        from agent.memory.orchestrator import _durable_memories
+        rows = _durable_memories(rows)
+        for row in rows:
+            text = " ".join(str(row.get("text") or "").split())
+            if text and text.casefold() not in {item.casefold() for item in durable}:
+                durable.append(text[:240])
+            if len(durable) >= 4:
+                break
+    except Exception:
+        durable = []
+
+    conversations = sorted(
+        _read_ui_conversations(),
+        key=_conversation_timestamp_value,
+        reverse=True,
+    )
+    recent_topics: list[str] = []
+    seen: set[str] = set()
+    generic = re.compile(
+        r"^(?:hi|hello|hey|thanks|thank you|how are you|good (?:morning|afternoon|evening))[.!? ]*$",
+        flags=re.IGNORECASE,
+    )
+    for conversation in conversations:
+        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
+        title = str(conversation.get("title") or "")
+        if cid == str(thread_id) or title.casefold().startswith("automation:"):
+            continue
+        messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
+        for message in messages:
+            if _message_role(message) != "user":
+                continue
+            text = " ".join(_message_text(message).split())
+            if (
+                len(text) < 5
+                or generic.fullmatch(text)
+                or _is_short_correction(text)
+                or _has_memory_recall_language(text)
+                or _current_datetime_answer(text) is not None
+                or re.search(r"\b(?:for this chat only|demonstration project)\b", text, flags=re.IGNORECASE)
+                or re.search(r"\bplease use\s+\w*agent\b", text, flags=re.IGNORECASE)
+                or re.search(
+                    r"\b(?:last time we (?:spoke|spoek|talked)|first message|did we d\w+s|what did we (?:speak|talk|discuss)|what can .{0,24}tell me .{0,24}myself|(?:answer|answered) (?:the )?previous question|(?:current|this|previous) thread)\b",
+                    text,
+                    flags=re.IGNORECASE,
+                )
+            ):
+                continue
+            key = re.sub(r"\W+", " ", text.casefold()).strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            recent_topics.append(text[:177] + ("..." if len(text) > 177 else ""))
+            break
+        if len(recent_topics) >= 5:
+            break
+
+    sections: list[str] = []
+    if durable:
+        sections.append("Saved in your local memory:\n" + "\n".join(f"- {item}" for item in durable))
+    else:
+        sections.append("I don’t currently have explicit personal facts saved about you.")
+    if recent_topics:
+        sections.append(
+            "From your recent saved chats, you have asked about:\n"
+            + "\n".join(f"- {item}" for item in recent_topics)
+        )
+    if not sections:
+        return "I don’t have any saved personal facts or earlier chat topics for you yet."
+    qualifier = (
+        "These recent chat topics are context; enduring preferences need stronger evidence."
+        if recent_topics
+        else "Those are the personal facts currently saved in memory."
+    )
+    return (
+        "\n\n".join(sections)
+        + f"\n\n{qualifier}"
+    )
+
+
+def _time_conversion_answer(clean_message: str, thread_id: str) -> str | None:
+    lowered = " ".join(clean_message.casefold().split())
+    if not re.search(r"\b(?:in|to)\s+(?:ist|india standard time)\b", lowered):
+        return None
+    if not any(marker in lowered for marker in ("that time", "this time", "it", "convert", "time")):
+        return None
+    explicit = re.search(
+        r"(?P<date>(?:20\d{2}-\d{2}-\d{2}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:,?\s+20\d{2})?))"
+        r"\s+(?:at\s+)?(?P<clock>\d{1,2}:\d{2}(?:\s*[AP]M)?)\s+(?P<zone>[A-Za-z_]+/[A-Za-z_]+(?:/[A-Za-z_]+)?)",
+        clean_message, re.I,
+    )
+    if explicit:
+        try:
+            date_text = explicit.group("date").replace(",", "")
+            if not re.search(r"20\d{2}", date_text):
+                date_text += " " + str(datetime.now(ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))).year)
+            day = datetime.strptime(date_text, "%Y-%m-%d" if "-" in date_text else "%B %d %Y")
+            clock_text = explicit.group("clock").strip().upper()
+            clock = datetime.strptime(clock_text, "%I:%M %p" if re.search(r"[AP]M", clock_text) else "%H:%M")
+            source = day.replace(hour=clock.hour, minute=clock.minute, tzinfo=ZoneInfo(explicit.group("zone")))
+            converted = source.astimezone(ZoneInfo("Asia/Kolkata"))
+        except (KeyError, ValueError):
+            return None
+        return f"{_format_clock_time(converted)} IST on {converted.strftime('%A, %B %d, %Y')} ({_format_clock_time(source)} {explicit.group('zone')})."
+    conversation = _conversation_by_thread_id(thread_id)
+    messages = conversation.get("messages", []) if isinstance(conversation, dict) else []
+    for message in reversed(messages):
+        if _message_role(message) != "assistant":
+            continue
+        local_match = re.search(
+            r"(?P<date>(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s*)?"
+            r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4})"
+            r".{0,40}?(?P<clock>\d{1,2}:\d{2}\s*[AP]M)\s+IST\b", _message_text(message), re.I,
+        )
+        if local_match:
+            return f"That is {local_match.group('clock')} IST on {local_match.group('date')}."
+        break
+    event_pattern = re.compile(
+        r"(?P<date>(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*)?"
+        r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+"
+        r"\d{1,2},\s+\d{4}).{0,40}?"
+        r"(?P<time>\d{1,2}:\d{2}\s*(?:AM|PM))\s*(?P<zone>EDT|EST|ET|CDT|CST|CT|MDT|MST|MT|PDT|PST|PT)\b",
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    match = next(
+        (
+            candidate
+            for message in reversed(messages)
+            if _message_role(message) == "assistant"
+            if (candidate := event_pattern.search(_message_text(message))) is not None
+        ),
+        None,
+    )
+    if not match:
+        return None
+    date_text = re.sub(
+        r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*",
+        "",
+        match.group("date"),
+        flags=re.IGNORECASE,
+    )
+    try:
+        naive = datetime.strptime(
+            f"{date_text} {match.group('time').upper()}",
+            "%B %d, %Y %I:%M %p",
+        )
+        source_label = match.group("zone").upper()
+        source_time = naive.replace(tzinfo=ZoneInfo(_US_TIME_ZONES[source_label]))
+        target_zone = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
+        converted = source_time.astimezone(target_zone)
+    except (KeyError, ValueError):
+        return None
+    return (
+        f"{_format_clock_time(source_time)} {source_label} on {source_time.strftime('%A, %B %d, %Y')} "
+        f"is {_format_clock_time(converted)} IST on {converted.strftime('%A, %B %d, %Y')}."
+    )
+
+
+def _direct_contextual_answer(clean_message: str, thread_id: str) -> str | None:
+    if any(marker in clean_message for marker in ("[Current conversation follow-up]", "[Conversation follow-up context]")):
+        return None
+    from agent.agents.base import user_query_text
+    clean_message = user_query_text(clean_message)
+    failure_answer = _failed_tool_followup_answer(clean_message, thread_id)
+    if failure_answer is not None:
+        return failure_answer
+    date_answer = _current_datetime_answer(clean_message)
+    if date_answer is None and re.fullmatch(
+        r"(?:and )?(?:also )?(?:what(?:'s| is) )?(?:the )?time\??",
+        " ".join(clean_message.split()),
+        flags=re.IGNORECASE,
+    ):
+        earlier = _thread_user_messages(thread_id, limit=4)
+        prior = [item for item in earlier if item.strip().casefold() != clean_message.strip().casefold()]
+        if any(_current_datetime_answer(item) is not None for item in prior[-2:]):
+            date_answer = _current_datetime_answer("what is the current time?")
+    return (
+        date_answer
+        or _user_profile_recall_answer(clean_message, thread_id)
+        or _conversation_recall_answer(clean_message, thread_id)
+        or _time_conversion_answer(clean_message, thread_id)
+    )
+
+
+def _failed_tool_followup_answer(clean_message: str, thread_id: str) -> str | None:
+    lowered = " ".join(str(clean_message or "").casefold().split())
+    if not re.fullmatch(r"why(?:\s+(?:did|does|is|was)\s+(?:that|it)(?:\s+(?:fail|failed|happen|happening|not\s+work(?:ing)?))?)?\??", lowered):
+        return None
+    previous_user, previous_assistant = _previous_conversation_turn(thread_id, clean_message)
+    if previous_assistant is None:
+        return None
+    assistant_text = _message_text(previous_assistant).strip()
+    tools = {str(item).casefold() for item in previous_assistant.get("tools", []) if str(item).strip()}
+    x_failure = "x_agent" in tools and re.search(
+        r"\b(?:could not|couldn't|failed|not working|needs? the exact post text)\b",
+        assistant_text,
+        flags=re.IGNORECASE,
+    )
+    if not x_failure:
+        return None
+    request_text = f' for “{previous_user}”' if previous_user else ""
+    if "exact post text" in assistant_text.casefold():
+        return (
+            "The X Agent treated your instruction as if you had to supply the final wording. "
+            "It should draft the post from your request and then show it for confirmation."
+        )
+    return (
+        f"Your request was understood, but the X connector failed while retrieving live X data{request_text}. "
+        "The failure was in the connector call, not in your wording."
+    )
 
 
 def _fts_recall_query(message: str) -> str:
@@ -1069,7 +1636,13 @@ def _x_oauth_callback_url(provider: str) -> str:
 
 def _x_oauth_status() -> XOAuthStatusResponse:
     settings = get_settings()
+    connector = AgentReachXProvider().health(probe_search=False)
+    twitter_cli = connector.get("twitter_cli") if isinstance(connector.get("twitter_cli"), dict) else {}
     return XOAuthStatusResponse(
+        agent_reach_connected=bool(connector.get("configured") and connector.get("status") == "ready"),
+        agent_reach_status=str(connector.get("status") or "unknown"),
+        agent_reach_notes=str(connector.get("notes") or ""),
+        twitter_cli_version=str(twitter_cli.get("version") or "unknown"),
         xai_connected=_x_oauth_file("xai").exists(),
         x_api_connected=_x_oauth_file("xapi").exists(),
         x_api_configured=bool(settings.x_api_client_id),
@@ -1080,7 +1653,23 @@ def _x_oauth_status() -> XOAuthStatusResponse:
 
 @router.get("/x/oauth/status", response_model=XOAuthStatusResponse)
 async def x_oauth_status() -> XOAuthStatusResponse:
-    return _x_oauth_status()
+    return await asyncio.to_thread(_x_oauth_status)
+
+
+@router.post("/x/agent-reach/connect", response_model=XAgentReachConnectResponse)
+async def x_agent_reach_connect(
+    request: XAgentReachConnectRequest,
+) -> XAgentReachConnectResponse:
+    provider = AgentReachXProvider(timeout_seconds=60.0)
+    try:
+        result = await asyncio.to_thread(provider.configure_cookie_export, request.cookie_export)
+    except AgentReachError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return XAgentReachConnectResponse(
+        connected=True,
+        status=str(result.get("status") or "ready"),
+        account=result.get("account") if isinstance(result.get("account"), dict) else {},
+    )
 
 
 @router.post("/x/oauth/start", response_model=XOAuthStartResponse)
@@ -1227,12 +1816,18 @@ async def spotify_oauth_status() -> SpotifyStatusResponse:
         account_name=str(profile.get("display_name") or profile.get("id") or ""),
         product=str(profile.get("product") or ""),
         scopes=scopes,
+        web_playback_ready={"streaming", "user-read-email", "user-read-private"}.issubset(set(scopes)),
     )
 
 
 @router.post("/plugins/spotify/oauth/start", response_model=SpotifyOAuthStartResponse)
 async def spotify_oauth_start(request: SpotifyOAuthStartRequest) -> SpotifyOAuthStartResponse:
     client_id = request.client_id.strip()
+    if not client_id:
+        try:
+            client_id = str(_spotify_store().load_tokens().get("client_id") or "")
+        except SpotifyAuthError:
+            pass
     if not client_id:
         raise HTTPException(status_code=422, detail="Spotify Client ID is required")
     verifier, challenge = spotify_pkce_pair()
@@ -1314,8 +1909,49 @@ async def spotify_oauth_callback(
 @router.post("/plugins/spotify/logout")
 async def spotify_logout() -> dict[str, bool]:
     _spotify_store().logout()
+    service = _spotify_client()
+    if hasattr(service, "release_web_player"):
+        service.release_web_player()
     agent.invalidate()
     return {"ok": True}
+
+
+def _trusted_spotify_playback_view(request: Request) -> None:
+    # CORS elsewhere allows arbitrary loopback tools. Credentials require the
+    # actual Vellum UI origin, a non-simple header, and a local client/Host.
+    allowed = {f"http://{host}:{port}" for host in ("127.0.0.1", "localhost") for port in (5173, 1420, 8000)}
+    if (request.headers.get("origin") not in allowed
+            or request.headers.get("x-vellum-spotify-playback") != "1"
+            or request.url.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or not request.client or request.client.host not in {"127.0.0.1", "::1"}):
+        raise HTTPException(status_code=403, detail="Spotify playback is available only to the local Vellum view")
+
+
+@router.post("/plugins/spotify/playback/token", response_model=SpotifyPlaybackTokenResponse)
+async def spotify_playback_token(request: Request, response: Response, body: SpotifyPlaybackTokenRequest | None = None) -> SpotifyPlaybackTokenResponse:
+    _trusted_spotify_playback_view(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    try:
+        payload = await asyncio.to_thread(_spotify_client().playback_token, force_refresh=bool(body and body.force_refresh))
+        return SpotifyPlaybackTokenResponse(**payload)
+    except SpotifyAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc), headers={"Cache-Control": "no-store"}) from exc
+    except SpotifyRateLimited as exc:
+        raise HTTPException(status_code=429, detail=str(exc), headers={"Cache-Control": "no-store", "Retry-After": str(exc.retry_after)}) from exc
+    except SpotifyError as exc:
+        raise HTTPException(status_code=503, detail="Spotify playback is temporarily unavailable") from exc
+
+
+@router.post("/plugins/spotify/playback/device", response_model=SpotifyPlaybackSessionResponse)
+async def spotify_playback_device(body: SpotifyPlaybackDeviceRequest, request: Request) -> SpotifyPlaybackSessionResponse:
+    _trusted_spotify_playback_view(request)
+    try:
+        result = _spotify_client().update_web_player(str(body.owner_id), body.device_id,
+            diagnostics=[event.model_dump(exclude_none=True) for event in body.diagnostics])
+        return SpotifyPlaybackSessionResponse(**result)
+    except SpotifyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _spotify_result_or_http(result_text: str) -> dict:
@@ -1347,6 +1983,8 @@ async def spotify_player(details: bool = False) -> dict:
     try:
         service = _spotify_client()
         player = await asyncio.to_thread(service.get_player)
+        if hasattr(service, "web_playback_status"):
+            player["web_playback"] = service.web_playback_status()
         if details:
             devices_result, queue_result = await asyncio.gather(
                 asyncio.to_thread(service.get_devices),
@@ -1376,9 +2014,9 @@ async def spotify_player_action(request: SpotifyPlayerActionRequest) -> dict:
         raise HTTPException(status_code=401, detail="Spotify is not connected")
     payload = request.model_dump(exclude_none=True)
     if request.action == "transfer":
-        result = spotify_devices(payload, service=_spotify_client())
+        result = await asyncio.to_thread(spotify_devices, payload, service=_spotify_client())
     else:
-        result = spotify_playback(payload, service=_spotify_client())
+        result = await asyncio.to_thread(spotify_playback, payload, service=_spotify_client())
     return _spotify_result_or_http(result)
 
 
@@ -1573,6 +2211,10 @@ async def _ensure_model(model: str | None) -> str:
     from agent.llm.providers import get_provider_registry
 
     registry = get_provider_registry()
+    if model is None:
+        # Refresh first so a stale configured default is reconciled with the
+        # currently available local/cloud catalog before it is captured.
+        registry.refresh_local_models()
     requested = model or registry.current_model().id
     entry = registry.resolve(requested)
     if entry is None:
@@ -1592,13 +2234,21 @@ def _resolve_reasoning_mode(reasoning_mode: str | None):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-async def _run_agent(
+async def _run_agent(*args, **kwargs):
+    from agent.llm.providers import request_model_scope
+
+    with request_model_scope(kwargs.get("model")):
+        return await _run_agent_scoped(*args, **kwargs)
+
+
+async def _run_agent_scoped(
     message: str,
     thread_id: str | None,
     model: str | None = None,
     attachments: list[ChatAttachment] | None = None,
     turn_audit: TurnAudit | None = None,
     reasoning_mode: str | None = None,
+    store: bool = True,
 ) -> ChatResponse:
     clean_message = message.strip()
     if not clean_message:
@@ -1611,6 +2261,12 @@ async def _run_agent(
         raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc
     if book_context:
         clean_message = f"{clean_message}\n\n{book_context}"
+
+    effective_message = _continuity_request(clean_message, active_thread_id)
+
+    direct_answer = _direct_contextual_answer(effective_message, active_thread_id)
+    if direct_answer is not None:
+        return ChatResponse(answer=direct_answer, thread_id=active_thread_id, tools=[])
 
     skill_command = _skill_surface().slash(clean_message)
     if skill_command["handled"]:
@@ -1642,35 +2298,44 @@ async def _run_agent(
         active_thread_id,
         vault_root=_context_vault_root(),
     )
-    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id) or (
-        bool(attached_context["context"]) and not _requests_fresh_public_data(clean_message)
+    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id) or (
+        bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message)
     )
-    live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    explanatory_followup = _is_explanation_followup(clean_message)
+    live_result = None if memory_recall_intent or explanatory_followup else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
     delegated_tools: list[str] = []
     delegated_sources: list[Source] = []
-    agent_input_message = _with_attached_conversation_context(clean_message, attached_context)
+    agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
     if live_result is not None and live_result.handled:
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
         delegated_sources = [Source(**source) for source in live_sources]
         if _should_passthrough_live_result(live_result):
-            answer = live_result.answer or "No response."
+            answer = _clean_answer_body(live_result.answer) or "No response."
             if answer and "blocked for privacy" not in answer.casefold():
-                asyncio.create_task(
-                    _background_learn(
-                        clean_message,
-                        answer,
+                await _checkpoint_specialist_exchange(clean_message, answer, active_thread_id, model)
+                (
+                    asyncio.create_task(
+                        _background_learn(
+                            clean_message,
+                            answer,
+                            active_thread_id,
+                            source=str(live_result.agent_name or "specialist").casefold(),
+                            tools=_memory_tools_from_names(delegated_tools),
+                            sources=_memory_source_urls(live_sources),
+                            confidence=_memory_confidence(delegated_tools, live_sources),
+                            agent_name=str(live_result.agent_name or "VellumAgent"),
+                        )
+                    )
+                    if store
+                    else _audit_memory_off(
                         active_thread_id,
-                        source=str(live_result.agent_name or "specialist").casefold(),
-                        tools=_memory_tools_from_names(delegated_tools),
-                        sources=_memory_source_urls(live_sources),
-                        confidence=_memory_confidence(delegated_tools, live_sources),
-                        agent_name=str(live_result.agent_name or "VellumAgent"),
+                        str(live_result.agent_name or "specialist").casefold(),
                     )
                 )
             return ChatResponse(answer=answer, thread_id=active_thread_id, tools=delegated_tools, sources=delegated_sources)
         agent_input_message = _with_attached_conversation_context(
-            _delegated_agent_message(clean_message, live_result, live_sources),
+            _delegated_agent_message(effective_message, live_result, live_sources),
             attached_context,
         )
 
@@ -1721,7 +2386,7 @@ async def _run_agent(
         turn_audit.observe_usage(usage_from_invoke_result(result))
 
     messages = result.get("messages", []) if isinstance(result, dict) else []
-    answer = _message_content(messages[-1] if messages else None) or "No response."
+    answer = _clean_answer_body(_message_content(messages[-1] if messages else None)) or "No response."
     tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
     skill_usage_scope.finish("completed", tool_count=len(tools))
     skill_usage_scope.__exit__(None, None, None)
@@ -1735,15 +2400,19 @@ async def _run_agent(
         sources.append(source)
 
     if answer and "blocked for privacy" not in answer.casefold():
-        asyncio.create_task(
-            _background_learn(
-                clean_message,
-                answer,
-                active_thread_id,
-                tools=_memory_tools_from_names(tools),
-                sources=_memory_source_urls(sources),
-                confidence=_memory_confidence(tools, sources),
+        (
+            asyncio.create_task(
+                _background_learn(
+                    clean_message,
+                    answer,
+                    active_thread_id,
+                    tools=_memory_tools_from_names(tools),
+                    sources=_memory_source_urls(sources),
+                    confidence=_memory_confidence(tools, sources),
+                )
             )
+            if store
+            else _audit_memory_off(active_thread_id, "agent")
         )
 
     return ChatResponse(answer=answer, thread_id=active_thread_id, tools=tools, sources=sources)
@@ -2024,12 +2693,14 @@ async def capabilities() -> dict[str, Any]:
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     from agent.skills.curator_runtime import get_curator_runtime
+    from agent.llm.routing.models import provider_for_model
 
     get_curator_runtime().mark_activity()
+    audit_model = request.model or get_settings().primary_model
     audit = TurnAudit(
         thread_id=request.thread_id or get_settings().thread_id,
-        model=request.model or get_settings().primary_model,
-        provider="openrouter",
+        model=audit_model,
+        provider=provider_for_model(audit_model),
         privacy_class=classify(request.message)[0].value,
         saved=request.store,
     )
@@ -2041,6 +2712,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             request.attachments,
             audit,
             reasoning_mode=request.reasoning_mode,
+            store=request.store,
         )
     except asyncio.CancelledError:
         audit.finalize("cancelled")
@@ -2389,15 +3061,20 @@ def _skill_history_window(message: str) -> tuple[str, str, str]:
 def _skill_system_answer(message: str) -> tuple[str, list[str]] | None:
     """Answer operational skill inventory/history questions from canonical state."""
     clean = " ".join(message.split())
+    # A Book skill belongs to the Book specialist, not the global tool catalog.
+    if re.search(r"\b(?:book|books|epub|chapter|author)\b", clean, re.I):
+        return None
     history_match = bool(_SKILL_HISTORY_RE.search(clean))
     inventory_match = bool(_SKILL_INVENTORY_RE.search(clean))
+    if inventory_match and not re.search(r"\b(?:today|yesterday|last|when|recently|changes?|added|removed|archived|updated|downloaded|did)\b", clean, re.I):
+        history_match = False
     if not history_match and not inventory_match:
         return None
 
     surface = _skill_surface()
-    catalog = SkillCatalog(surface.root)
-    catalog.reconcile(embed_semantics=False)
     if history_match:
+        catalog = SkillCatalog(surface.root)
+        catalog.reconcile(embed_semantics=False)
         catalog.backfill_events()
         since, until, label = _skill_history_window(clean)
         events = catalog.events(since=since, until=until, limit=200)
@@ -2434,10 +3111,17 @@ def _skill_system_answer(message: str) -> tuple[str, list[str]] | None:
     if not active:
         return "Vellum currently has no active skills installed.", ["skills_list"]
     lines = [f"Vellum currently has **{len(active)} active skills**:"]
-    for item in sorted(active, key=lambda value: str(value.get("name") or "").casefold()):
+    full_list = bool(re.search(r"\b(?:all|every|complete|full)\s+(?:the\s+)?(?:installed\s+|active\s+)?skills?\b|\b(?:complete|full)\s+list\b", clean, re.I))
+    if re.search(r"\b(?:brief|short|summari[sz]e|summary|concise)\b", clean, re.I):
+        full_list = False
+    shown = sorted(active, key=lambda value: str(value.get("name") or "").casefold())
+    for item in (shown if full_list else shown[:8]):
         description = " ".join(str(item.get("description") or item.get("summary") or "").split())
+        description = description[:160] if full_list else description[:90]
         suffix = f" — {description}" if description else ""
         lines.append(f"- **{item.get('name')}**{suffix}")
+    if not full_list and len(active) > 8:
+        lines.append(f"\nShowing 8 examples. Open Skills to browse the {len(active)} installed packages, or ask for the full list.")
     return "\n".join(lines), ["skills_list"]
 
 
@@ -2454,6 +3138,44 @@ def _skill_system_stream(answer: str, tools: list[str], thread_id: str):
         yield _sse("token", {"text": answer})
         response = ChatResponse(answer=answer, thread_id=thread_id, tools=tools)
         yield _sse("final", json.loads(response.model_dump_json()))
+
+    return events()
+
+
+def _direct_answer_stream(answer: str, thread_id: str):
+    async def events():
+        response_id = _stream_id("resp")
+        item_id = _stream_id("msg")
+        yield _response_created(response_id=response_id, thread_id=thread_id)
+        yield _response_in_progress(response_id=response_id, thread_id=thread_id)
+        yield _sse("meta", {"thread_id": thread_id})
+        yield _response_output_item_added(
+            response_id=response_id,
+            thread_id=thread_id,
+            item={"id": item_id, "type": "message", "role": "assistant", "status": "in_progress"},
+        )
+        for delta in _passthrough_text_deltas(answer):
+            yield _response_output_text_delta(
+                response_id=response_id,
+                thread_id=thread_id,
+                item_id=item_id,
+                delta=delta,
+            )
+            yield _sse("token", {"text": delta})
+        response = ChatResponse(answer=answer, thread_id=thread_id, tools=[], sources=[])
+        yield _sse("final", response.model_dump_json())
+        yield _response_output_item_done(
+            response_id=response_id,
+            thread_id=thread_id,
+            item={"id": item_id, "type": "message", "role": "assistant", "status": "completed"},
+        )
+        yield _response_completed(
+            response_id=response_id,
+            thread_id=thread_id,
+            answer=answer,
+            tools=[],
+            sources=[],
+        )
 
     return events()
 
@@ -3277,6 +3999,12 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
 
 def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
     lowered = clean_message.lower()
+    # Current-chat follow-ups use the current checkpoint, not a recall packet
+    # assembled from unrelated conversations containing words such as "chat".
+    if re.search(r"\b(?:this|current)\s+(?:chat|conversation|thread)\b", lowered) and not re.search(
+        r"\b(?:previous|older|other|past)\s+(?:chats?|conversations?|threads?)\b", lowered
+    ):
+        return ""
     markers = (
         "chat",
         "conversation",
@@ -3302,7 +4030,8 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
     if not recall_intent:
         return ""
     conversations = _read_ui_conversations()
-    query_terms = _text_terms(clean_message)
+    profile_recall = _is_user_profile_recall(clean_message)
+    query_terms = set() if profile_recall else _text_terms(clean_message)
     ranked: list[tuple[int, int, dict[str, Any]]] = []
     for position, conversation in enumerate(conversations):
         cid = str(conversation.get("thread_id") or conversation.get("id") or "")
@@ -3316,20 +4045,20 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
         ranked = [(0, position, conversation) for position, conversation in enumerate(conversations[:12])]
 
     ranked.sort(key=lambda item: (-item[0], item[1]))
-    selected_conversations = [conversation for _score, _position, conversation in ranked[:8]]
+    selected_conversations = [conversation for _score, _position, conversation in ranked[:6]]
     lines: list[str] = []
     for conversation in selected_conversations:
         title = str(conversation.get("title") or "Untitled chat")
         cid = str(conversation.get("thread_id") or conversation.get("id") or "")
         messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
-        selected = messages
+        selected = [message for message in messages if _message_role(message) == "user"] if profile_recall else messages
         if query_terms:
             selected = [
                 message
                 for message in messages
                 if query_terms.intersection(_text_terms(_message_text(message)))
             ] or messages[-12:]
-        selected = selected[-16:]
+        selected = selected[-8:]
         if not selected:
             continue
         lines.append(f"Conversation: {title} (thread: {cid})")
@@ -3337,7 +4066,7 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
             role = _message_role(message)
             text = _message_text(message)
             if text.strip():
-                lines.append(f"- {role}: {text.strip()[:700]}")
+                lines.append(f"- {role}: {text.strip()[:360]}")
 
     try:
         docs = [
@@ -3352,16 +4081,18 @@ def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
         for doc in docs[:6]:
             content = str(doc.get("content") or "").strip()
             if content:
-                lines.append(f"- {content[:900]}")
+                lines.append(f"- {content[:500]}")
     if not lines:
         return ""
-    return (
+    context = (
         "[Recent Vellum conversation context]\n"
         "This is private memory/chat-recall context. Use it before any public search. "
         "If the user asks what happened in previous chats, answer from this context and do not use web_search, SerpAPI, SportsAgent, or public web tools unless the user explicitly asks for fresh/live/current public updates. "
-        "Summarize it naturally; do not claim this context is long-term memory unless it was stored there.\n"
-        + "\n".join(lines[:80])
+        "Summarize it naturally; do not claim this context is long-term memory unless it was stored there. "
+        "For questions about the user, rely on their own messages, separate explicit facts from cautious inference, and do not treat old assistant claims as user facts.\n"
+        + "\n".join(lines[:48])
     )
+    return context[:6500].rstrip()
 
 
 def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str:
@@ -3463,9 +4194,39 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
 def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool:
     if live_result is None or not live_result.handled:
         return False
-    if live_result.agent_name not in {"BooksAgent", "DiscordAgent", "XAgent", "YoutubeAgent"}:
+    if live_result.agent_name not in {
+        "BooksAgent",
+        "CalendarAgent",
+        "DiscordAgent",
+        "MemoryAgent",
+        "MusicAgent",
+        "SportsAgent",
+        "XAgent",
+        "YoutubeAgent",
+    }:
         return False
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
+
+
+def _clean_answer_body(text: str | None) -> str:
+    """Keep structured sources out of the visible answer and normalize plain-text Markdown."""
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    value = re.split(
+        r"(?im)^\s{0,3}#{1,6}\s+(?:references|sources|sources checked|evidence)\s*$",
+        value,
+        maxsplit=1,
+    )[0]
+    value = re.sub(r"(?m)^\s*\[(?:\d+)\]\s+(@)", r"- \1", value)
+    value = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", value)
+    value = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", value)
+    value = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", value)
+    value = value.replace(r"\(", "").replace(r"\)", "")
+    value = value.replace(r"\-", "-").replace(r"\|", "|")
+    value = re.sub(r"[ \t]+\n", "\n", value)
+    value = re.sub(r"\n{3,}", "\n\n", value)
+    return value.strip()
 
 
 def _passthrough_text_deltas(text: str, max_chars: int = 160) -> list[str]:
@@ -3480,6 +4241,32 @@ def _passthrough_text_deltas(text: str, max_chars: int = 160) -> list[str]:
     return deltas or [text]
 
 
+def _is_specialist_deferral(text: str) -> bool:
+    """Recognize a model acknowledgement that never presents the completed tool result."""
+    normalized = " ".join(str(text or "").casefold().split())
+    if not normalized:
+        return True
+    if len(normalized) > 600:
+        return False
+    return any(
+        marker in normalized
+        for marker in (
+            "i'll check",
+            "i will check",
+            "let me check",
+            "check with the sportsagent",
+            "check with the xagent",
+            "ready to help. how can i assist",
+            "ready to help. how may i assist",
+            "how can i assist you today",
+            "how can i help you today",
+            "how may i help you today",
+            "i am vellum, your private",
+            "get the most current information for you",
+        )
+    )
+
+
 async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> dict[str, Any]:
     try:
         return await asyncio.wait_for(anext(stream_iterator), timeout=timeout_seconds)
@@ -3492,7 +4279,30 @@ async def _next_agent_stream_event(stream_iterator, timeout_seconds: float) -> d
         raise TimeoutError(f"Model stream timed out after {timeout_seconds:g} seconds.") from exc
 
 
-async def _stream_agent_turn(
+async def _checkpoint_specialist_exchange(message: str, answer: str, thread_id: str, model: str | None) -> None:
+    """Keep completed specialist turns in the existing LangGraph conversation history."""
+    update = getattr(agent, "aupdate_state", None)
+    if update is None:
+        return
+    prepare = getattr(agent, "prepare", None)
+    if prepare is not None:
+        await prepare(model)
+    await update(
+        _thread_config(thread_id),
+        {"messages": [HumanMessage(content=message), AIMessage(content=answer)]},
+        as_node="agent", model=model,
+    )
+
+
+async def _stream_agent_turn(**kwargs):
+    from agent.llm.providers import request_model_scope
+
+    with request_model_scope(kwargs.get("model")):
+        async for event in _stream_agent_turn_scoped(**kwargs):
+            yield event
+
+
+async def _stream_agent_turn_scoped(
     *,
     clean_message: str,
     active_thread_id: str,
@@ -3533,19 +4343,21 @@ async def _stream_agent_turn(
             status="completed",
             name="books_agent",
         )
+    effective_message = _continuity_request(clean_message, active_thread_id)
     attached_context = await asyncio.to_thread(
         _conversation_context_store.resolve,
         active_thread_id,
         vault_root=_context_vault_root(),
     )
-    memory_recall_intent = _is_memory_recall_request(clean_message, active_thread_id) or (
-        bool(attached_context["context"]) and not _requests_fresh_public_data(clean_message)
+    memory_recall_intent = _is_memory_recall_request(effective_message, active_thread_id) or (
+        bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message)
     )
-    live_result = None if memory_recall_intent else await asyncio.to_thread(_live_dispatcher.maybe_handle, clean_message, active_thread_id)
+    explanatory_followup = _is_explanation_followup(clean_message)
+    live_result = None if memory_recall_intent or explanatory_followup else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None
-    agent_input_message = _with_attached_conversation_context(clean_message, attached_context)
+    agent_input_message = _with_attached_conversation_context(effective_message, attached_context)
     for context_item in attached_context["attachments"]:
         if context_item.get("status") != "ready":
             continue
@@ -3565,7 +4377,7 @@ async def _stream_agent_turn(
         live_sources = _decorate_source_list(list(live_result.sources))
         delegated_tools = list(live_result.tools)
         agent_input_message = _with_attached_conversation_context(
-            _delegated_agent_message(clean_message, live_result, live_sources),
+            _delegated_agent_message(effective_message, live_result, live_sources),
             attached_context,
         )
         subagent_item = {
@@ -3696,7 +4508,8 @@ async def _stream_agent_turn(
             name=live_result.agent_name,
         )
         if _should_passthrough_live_result(live_result):
-            answer = live_result.answer or "No response."
+            answer = _clean_answer_body(live_result.answer) or "No response."
+            await _checkpoint_specialist_exchange(clean_message, answer, active_thread_id, model)
             message_item = {
                 "id": message_item_id,
                 "type": "message",
@@ -3794,6 +4607,9 @@ async def _stream_agent_turn(
         function_stream_items: dict[str, dict[str, Any]] = {}
         function_stream_args: dict[str, str] = {}
         last_chat_model_output: Any | None = None
+        specialist_gap = ""
+        specialist_summaries: list[str] = []
+        completed_specialists: set[str] = set()
         message_item = {
             "id": message_item_id,
             "type": "message",
@@ -3835,10 +4651,15 @@ async def _stream_agent_turn(
             stream_iterator = stream.__aiter__()
             timeout_seconds = float(get_settings().llm_stream_timeout_seconds)
             while True:
+                stop_after_specialist = False
                 try:
                     event = await _next_agent_stream_event(stream_iterator, timeout_seconds)
                 except StopAsyncIteration:
                     break
+                except GraphRecursionError:
+                    if specialist_summaries:
+                        break
+                    raise
                 kind = event.get("event")
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
@@ -3901,8 +4722,10 @@ async def _stream_agent_turn(
                                 name=str(item.get("name") or "function"),
                             )
                     text = _chunk_text(chunk)
-                    if text:
+                    if text and not (specialist_gap and not sources):
                         answer_parts.append(text)
+                        if specialist_summaries:
+                            continue
                         if not message_item_started:
                             yield _response_output_item_added(
                                 response_id=response_id,
@@ -3937,6 +4760,14 @@ async def _stream_agent_turn(
                 elif kind == "on_tool_start":
                     raw_name = event.get("name") or ""
                     if raw_name:
+                        raw_input = event.get("data", {}).get("input")
+                        if str(raw_name) == "delegate_to_agent" and isinstance(raw_input, dict):
+                            requested_agent = str(raw_input.get("agent_id") or "").strip()
+                            if requested_agent and requested_agent in completed_specialists:
+                                close = getattr(stream_iterator, "aclose", None)
+                                if close is not None:
+                                    await close()
+                                break
                         for call_id, item in list(function_stream_items.items()):
                             if item.get("status") == "in_progress" and (not item.get("name") or item.get("name") in {"function", str(raw_name)}):
                                 yield _response_function_call_arguments_done(
@@ -3994,7 +4825,8 @@ async def _stream_agent_turn(
                         yield _sse("tool", {"name": name})
                         yield _sse("activity", {"label": label, "detail": detail})
                 elif kind == "on_tool_end":
-                    if (event.get("name") or "") == "web_search":
+                    tool_name = str(event.get("name") or "")
+                    if tool_name == "web_search":
                         output_text = _tool_output_text(event.get("data", {}).get("output"))
                         for record in extract_web_sources(output_text):
                             if record["url"] in seen_urls:
@@ -4033,6 +4865,76 @@ async def _stream_agent_turn(
                             yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _response_output_item_done(response_id=response_id, thread_id=active_thread_id, item=source_item)
                             yield _sse("source", record)
+                    elif tool_name == "delegate_to_agent":
+                        output_text = _tool_output_text(event.get("data", {}).get("output"))
+                        try:
+                            specialist_result = json.loads(output_text)
+                        except (TypeError, ValueError):
+                            specialist_result = None
+                        if isinstance(specialist_result, dict):
+                            specialist_name = str(specialist_result.get("agent") or "specialist")
+                            specialist_status = str(specialist_result.get("status") or "")
+                            specialist_summary = _clean_answer_body(str(specialist_result.get("summary") or ""))
+                            completed_specialists.add(specialist_name)
+                            if specialist_status in {"answered", "blocked", "stale"} and specialist_summary:
+                                specialist_summaries.append(specialist_summary)
+                            raw_sources = specialist_result.get("sources")
+                            specialist_sources = raw_sources if isinstance(raw_sources, list) else []
+                            for raw_source in specialist_sources:
+                                if not isinstance(raw_source, dict):
+                                    continue
+                                url = str(raw_source.get("path_or_url") or raw_source.get("url") or "").strip()
+                                if not url or url in seen_urls:
+                                    continue
+                                seen_urls.add(url)
+                                record = _decorate_source_record(
+                                    {
+                                        "url": url,
+                                        "title": str(raw_source.get("title") or ""),
+                                        "snippet": str(raw_source.get("snippet") or ""),
+                                        "fetched_at": str(raw_source.get("captured_at") or _now_iso()),
+                                        "source_type": str(raw_source.get("kind") or "web"),
+                                        "provider": specialist_name,
+                                    },
+                                    source_index=len(sources) + 1,
+                                )
+                                sources.append(record)
+                                source_item = {
+                                    "id": _stream_id("item"),
+                                    "type": "source",
+                                    "status": "completed",
+                                    "source": record,
+                                }
+                                yield _agent_activity_event(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    activity_type="source_discovered",
+                                    label=f"Found {record.get('provider_label') or record.get('domain') or 'source'}",
+                                    status="completed",
+                                    item_id=str(source_item["id"]),
+                                    source=record,
+                                )
+                                yield _response_output_item_added(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item=source_item,
+                                )
+                                yield _response_output_item_done(
+                                    response_id=response_id,
+                                    thread_id=active_thread_id,
+                                    item=source_item,
+                                )
+                                yield _sse("source", record)
+                            stop_after_specialist = bool(
+                                specialist_status == "answered"
+                                and specialist_summary
+                                and specialist_sources
+                            )
+                            if (
+                                specialist_status in {"error", "needs_fetch", "stale"}
+                                and not sources
+                            ):
+                                specialist_gap = specialist_name
                     done_item = active_tool_items.pop(str(event.get("name") or ""), None)
                     if done_item:
                         yield _response_output_item_done(
@@ -4058,14 +4960,26 @@ async def _stream_agent_turn(
                 )
                 if turn_audit is not None:
                     turn_audit.observe_usage(usage_from_stream_event(event))
+                if stop_after_specialist:
+                    close = getattr(stream_iterator, "aclose", None)
+                    if close is not None:
+                        await close()
+                    break
 
             # RoutedChatModel currently completes some provider calls through
             # `invoke`, which emits a routed `on_chat_model_end` event without
             # token chunks. Preserve that answer instead of reporting "No response.".
-            if not "".join(answer_parts).strip() and last_chat_model_output is not None:
-                final_text = _message_content(last_chat_model_output)
+            if (
+                not "".join(answer_parts).strip()
+                and last_chat_model_output is not None
+                and not (specialist_gap and not sources)
+            ):
+                final_text = _clean_answer_body(_message_content(last_chat_model_output))
                 if final_text:
                     answer_parts.append(final_text)
+                    if specialist_summaries:
+                        final_text = ""
+                if final_text:
                     if not message_item_started:
                         yield _response_output_item_added(
                             response_id=response_id,
@@ -4121,7 +5035,92 @@ async def _stream_agent_turn(
                         name=str(item.get("name") or "function"),
                     )
                     item["status"] = "completed"
-            answer = "".join(answer_parts).strip() or "No response."
+            if specialist_gap and not sources:
+                specialist_domain = specialist_gap.removesuffix("Agent")
+                specialist_domain = {
+                    "Sports": "sports",
+                    "X": "X",
+                    "Books": "book",
+                    "Youtube": "YouTube",
+                    "Calendar": "calendar",
+                    "Discord": "Discord",
+                    "Memory": "memory",
+                }.get(specialist_domain, specialist_domain.replace("_", " "))
+                answer = f"I couldn't verify this request because the {specialist_domain} lookup returned no source evidence."
+                if not message_item_started:
+                    yield _response_output_item_added(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item=message_item,
+                    )
+                    message_item_started = True
+                if not final_answer_started:
+                    final_answer_started = True
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_started",
+                        label="Writing answer...",
+                        item_id=message_item_id,
+                    )
+                for delta in _passthrough_text_deltas(answer):
+                    yield _response_output_text_delta(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item_id=message_item_id,
+                        delta=delta,
+                    )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_delta",
+                        label="Writing answer...",
+                        detail=delta,
+                        item_id=message_item_id,
+                    )
+                    yield _sse("token", {"text": delta})
+            elif specialist_summaries:
+                model_answer = _clean_answer_body("".join(answer_parts))
+                specialist_answer = _clean_answer_body("\n\n".join(dict.fromkeys(specialist_summaries)))
+                answer = (
+                    specialist_answer
+                    if "XAgent" in completed_specialists or _is_specialist_deferral(model_answer)
+                    else model_answer or specialist_answer
+                )
+                if not message_item_started:
+                    yield _response_output_item_added(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item=message_item,
+                    )
+                    message_item_started = True
+                if not final_answer_started:
+                    final_answer_started = True
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_started",
+                        label="Writing answer...",
+                        item_id=message_item_id,
+                    )
+                for delta in _passthrough_text_deltas(answer):
+                    yield _response_output_text_delta(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        item_id=message_item_id,
+                        delta=delta,
+                    )
+                    yield _agent_activity_event(
+                        response_id=response_id,
+                        thread_id=active_thread_id,
+                        activity_type="final_answer_delta",
+                        label="Writing answer...",
+                        detail=delta,
+                        item_id=message_item_id,
+                    )
+                    yield _sse("token", {"text": delta})
+            else:
+                answer = _clean_answer_body("".join(answer_parts)) or "No response."
             stream_skill_usage.finish("completed", tool_count=len(set(tool_names)))
             stream_skill_usage.__exit__(None, None, None)
             source_models = [Source(**record) for record in sources]
@@ -4409,6 +5408,7 @@ async def computer_use_events() -> StreamingResponse:
 @router.post("/chat/stream")
 async def chat_stream(request: ChatRequest) -> StreamingResponse:
     from agent.skills.curator_runtime import get_curator_runtime
+    from agent.llm.routing.models import provider_for_model
 
     get_curator_runtime().mark_activity()
     clean_message = request.message.strip()
@@ -4435,7 +5435,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 *(attachment.digest for attachment in request.attachments if attachment.digest),
             ])),
         })
-        action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
+        # Spotify actions perform network I/O; keep heartbeats/token refresh responsive.
+        if any(action.action_id == "spotify.playback.control" for action in submitted_actions):
+            action_receipts = await asyncio.to_thread(_app_action_runtime.dispatch_many, submitted_actions, action_context)
+        else:
+            action_receipts = _app_action_runtime.dispatch_many(submitted_actions, action_context)
 
     thread_preferences = _session_control_service.state_store.get(active_thread_id)
     turn_overrides: dict[str, Any] = {}
@@ -4458,10 +5462,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         if "store" in turn_overrides
         else request.store and thread_preferences.store_to_memory
     )
+    audit_model = effective_model or get_settings().primary_model
     turn_audit = TurnAudit(
         thread_id=active_thread_id,
-        model=effective_model or get_settings().primary_model,
-        provider="openrouter",
+        model=audit_model,
+        provider=provider_for_model(audit_model),
         privacy_class=classify(clean_message)[0].value,
         saved=effective_store,
     )
@@ -4529,6 +5534,11 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             yield _response_created(response_id=response_id, thread_id=active_thread_id)
             async for event in action_events():
                 yield event
+            if any(action.action_id == "spotify.playback.control" for action in submitted_actions):
+                # Keep playback-only turns in the same conversation checkpoint
+                # as MusicAgent turns. This is chat history, not memory learning.
+                async with _agent_turns.hold(active_thread_id):
+                    await _checkpoint_specialist_exchange(action_message, response_text, active_thread_id, effective_model)
             yield _response_output_text_delta(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -4554,6 +5564,10 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
                 action_turn.conversation_message,
                 1,
             )
+
+    direct_answer = _direct_contextual_answer(clean_message, active_thread_id)
+    if direct_answer is not None:
+        return stream_response(_direct_answer_stream(direct_answer, active_thread_id))
 
     skill_command = _skill_surface().slash(clean_message)
     if skill_command["handled"]:
@@ -4891,15 +5905,22 @@ async def list_models() -> dict[str, Any]:
     from agent.llm.providers import configured_provider_keys, get_provider_registry
 
     registry = get_provider_registry()
-    active = registry.current_model()
+    inventory = await asyncio.to_thread(registry.refresh_local_models, force=True)
+    active = registry.current_available_model()
     provider_keys = configured_provider_keys()
+    if inventory.reachable:
+        local_status = "ready" if inventory.models else "no_models"
+    else:
+        local_status = "unreachable"
     return {
-        "active": {
+        "active": ({
             "id": active.id,
             "label": active.label,
             "provider": active.provider,
             "open_weights": active.open_weights,
-        },
+            "capabilities": list(active.capabilities),
+            "tool_calling_compatibility": active.tool_calling_compatibility,
+        } if active is not None else None),
         "groups": [
             {"key": g.key, "label": g.label, "default_id": g.default_id}
             for g in registry.list_groups()
@@ -4912,10 +5933,18 @@ async def list_models() -> dict[str, Any]:
                 "context": m.context,
                 "tier": m.tier,
                 "open_weights": m.open_weights,
+                "capabilities": list(m.capabilities),
+                "tool_calling_compatibility": m.tool_calling_compatibility,
             }
             for m in registry.list_models()
         ],
         "provider_keys": provider_keys,
+        "ollama": {
+            "reachable": inventory.reachable,
+            "status": local_status,
+            "installed_count": len(inventory.models),
+            "error": inventory.error,
+        },
     }
 
 
@@ -5054,9 +6083,9 @@ async def mcp_health(probe: bool = Query(default=False)) -> dict[str, Any]:
 
     honcho_reachable = False
     try:
-        req = urllib.request.Request(settings.honcho_base_url, method="HEAD")
-        with urllib.request.urlopen(req, timeout=1):
-            honcho_reachable = True
+        health_url = f"{settings.honcho_base_url.rstrip('/')}/health"
+        with urllib.request.urlopen(health_url, timeout=1) as response:
+            honcho_reachable = response.status == 200
     except Exception:
         honcho_reachable = False
 
@@ -5088,15 +6117,18 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
         mcp_servers=servers,
     )
     try:
+        connector_runtime = PluginMcpRuntime(_plugin_registry())
         declared_connectors = {
             (connector.plugin_id, connector.name): connector.public()
-            for connector in PluginMcpRuntime(_plugin_registry()).connectors()
+            for connector in connector_runtime.connectors(skip_invalid=True)
         }
+        invalid_connector_plugins = {item["plugin_id"] for item in connector_runtime.connector_diagnostics}
         connector_error = ""
     except PluginMcpRuntimeError:
         declared_connectors = {}
         _LOGGER.exception("Plugin connector discovery failed")
         connector_error = "unavailable"
+        invalid_connector_plugins = set()
     for plugin in plugins:
         plugin_id = str(plugin.get("id") or "")
         plugin.update(_app_action_runtime.plugin_contribution_summary(plugin_id))
@@ -5112,8 +6144,8 @@ def _plugin_catalog(servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 connector.setdefault("status", "disabled" if plugin.get("enabled") is False else "declared")
             enriched.append(connector)
         plugin["mcp_connectors"] = enriched
-        if connector_error:
-            plugin.setdefault("metadata", {})["connector_runtime_error"] = connector_error
+        if connector_error or plugin_id in invalid_connector_plugins:
+            plugin.setdefault("metadata", {})["connector_runtime_error"] = "unavailable"
     return plugins
 
 
@@ -5160,6 +6192,8 @@ async def set_active_model(request: SetActiveModelRequest) -> ActiveModelRespons
         label=entry["label"],
         provider=entry["provider"],
         open_weights=entry["open_weights"],
+        capabilities=entry["capabilities"],
+        tool_calling_compatibility=entry["tool_calling_compatibility"],
     )
 
 
@@ -5241,6 +6275,8 @@ def _setup_catalog() -> dict[str, Any]:
             "context": m.context,
             "tier": m.tier,
             "open_weights": m.open_weights,
+            "capabilities": list(m.capabilities),
+            "tool_calling_compatibility": m.tool_calling_compatibility,
         }
         for m in registry.list_models()
     ]

@@ -17,14 +17,15 @@ from agent.llm.providers import (
 def test_catalog_has_expected_provider_groups() -> None:
     registry = ProviderRegistry()
     groups = {group.key for group in registry.list_groups()}
-    assert groups == {"google", "qwen", "minimax", "anthropic", "openai", "deepseek", "moonshot"}
+    assert groups == {"ollama", "google", "qwen", "minimax", "anthropic", "openai", "deepseek", "moonshot"}
 
 
 def test_default_openrouter_allowlist_covers_curated_catalog() -> None:
     default = Settings.model_fields["openrouter_model_allowlist"].default
     allowlist = {item.strip() for item in str(default).split(",") if item.strip()}
 
-    assert {entry.id for entry in _CATALOG}.issubset(allowlist)
+    cloud_ids = {entry.id for entry in _CATALOG if entry.provider != "ollama"}
+    assert cloud_ids.issubset(allowlist)
 
 
 def test_available_models_hides_unapproved_openrouter_models(monkeypatch) -> None:
@@ -41,22 +42,119 @@ def test_available_models_hides_unapproved_openrouter_models(monkeypatch) -> Non
         ),
     )
 
-    models = providers.available_models()
+    local_model = ModelEntry(
+        "ollama/test-model:latest",
+        "Test Model",
+        "ollama",
+        32_768,
+        "flagship",
+        True,
+        capabilities=("completion", "tools"),
+        tool_calling_compatibility="compatible",
+    )
+    models = providers.available_models((local_model,))
 
-    assert [item.id for item in models] == ["openai/gpt-5.6-sol"]
+    assert [item.id for item in models] == [
+        "ollama/test-model:latest",
+        "openai/gpt-5.6-sol",
+    ]
 
 
-def test_each_group_has_at_least_one_model() -> None:
+def test_available_models_excludes_embedding_only_ollama_models(monkeypatch) -> None:
+    from agent.llm import providers
+
+    monkeypatch.setattr(
+        providers,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openrouter_api_key="",
+            openai_api_key="",
+            reviewed_openrouter_models=(),
+        ),
+    )
+    embedding = ModelEntry(
+        "ollama/nomic-embed-text:latest",
+        "nomic embed text (Local)",
+        "ollama",
+        2048,
+        "flagship",
+        True,
+        capabilities=("embedding",),
+        tool_calling_compatibility="unsupported",
+    )
+    chat = ModelEntry(
+        "ollama/gemma4:12b",
+        "Gemma 4 12B (Local)",
+        "ollama",
+        262_144,
+        "flagship",
+        True,
+        capabilities=("completion", "tools"),
+        tool_calling_compatibility="compatible",
+    )
+
+    assert [item.id for item in providers.available_models((embedding, chat))] == ["ollama/gemma4:12b"]
+
+
+def test_local_group_default_excludes_embedding_only_model(monkeypatch) -> None:
     registry = ProviderRegistry()
+    registry._local_models = (
+        ModelEntry(
+            "ollama/nomic-embed-text:latest",
+            "nomic embed text (Local)",
+            "ollama",
+            2048,
+            "flagship",
+            True,
+            capabilities=("embedding",),
+            tool_calling_compatibility="unsupported",
+        ),
+        ModelEntry(
+            "ollama/gemma4:12b",
+            "Gemma 4 12B (Local)",
+            "ollama",
+            262_144,
+            "flagship",
+            True,
+            capabilities=("completion", "tools"),
+            tool_calling_compatibility="compatible",
+        ),
+    )
+    monkeypatch.setattr(registry, "refresh_local_models", lambda **kwargs: registry._local_inventory)
+
+    local_group = next(group for group in registry.list_groups() if group.key == "ollama")
+
+    assert local_group.default_id == "ollama/gemma4:12b"
+
+
+@pytest.mark.parametrize("local_installed", [False, True])
+def test_each_group_exposes_only_installed_local_models(monkeypatch, local_installed) -> None:
+    registry = ProviderRegistry()
+    registry._local_models = (
+        ModelEntry("ollama/test:latest", "Test Local", "ollama", 32768, "flagship", True),
+    ) if local_installed else ()
+    monkeypatch.setattr(registry, "refresh_local_models", lambda **kwargs: registry._local_inventory)
     for group in registry.list_groups():
-        assert registry.list_models(group=group.key), f"no models in group {group.key}"
+        models = registry.list_models(group=group.key)
+        if group.key == "ollama":
+            assert [entry.id for entry in models] == (["ollama/test:latest"] if local_installed else [])
+        else:
+            assert models, f"no models in group {group.key}"
 
 
-def test_each_group_default_id_resolves_to_a_real_model() -> None:
+@pytest.mark.parametrize("local_installed", [False, True])
+def test_each_group_default_id_resolves_or_is_empty_without_local_models(monkeypatch, local_installed) -> None:
     registry = ProviderRegistry()
+    registry._local_models = (
+        ModelEntry("ollama/test:latest", "Test Local", "ollama", 32768, "flagship", True),
+    ) if local_installed else ()
+    monkeypatch.setattr(registry, "refresh_local_models", lambda **kwargs: registry._local_inventory)
     catalog_ids = {entry.id for entry in registry.list_models()}
     for group in registry.list_groups():
-        assert group.default_id in catalog_ids
+        if group.key == "ollama" and not local_installed:
+            assert group.default_id == ""
+        else:
+            assert group.default_id in catalog_ids
 
 
 def test_resolve_exact_id_wins() -> None:
@@ -159,6 +257,71 @@ def test_open_weights_flag_is_set_per_entry() -> None:
     assert by_id["google/gemma-4-31b-it"].open_weights is True
     assert by_id["qwen/qwen3.5-35b-a3b"].open_weights is True
     assert by_id["minimax/minimax-m2.7"].open_weights is True
+
+
+def test_ollama_inventory_reads_context_and_tool_compatibility(monkeypatch) -> None:
+    from agent.llm import providers
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    monkeypatch.setattr(
+        providers.httpx,
+        "get",
+        lambda *args, **kwargs: FakeResponse(
+            {"models": [{"name": "gemma4:12b", "details": {"parameter_size": "11.9B"}}]}
+        ),
+    )
+    monkeypatch.setattr(
+        providers.httpx,
+        "post",
+        lambda *args, **kwargs: FakeResponse(
+            {
+                "capabilities": ["completion", "tools", "thinking"],
+                "model_info": {"gemma4.context_length": 262144},
+            }
+        ),
+    )
+
+    inventory = providers.discover_ollama_models("http://127.0.0.1:11434/v1")
+
+    assert inventory.reachable is True
+    assert inventory.models[0].id == "ollama/gemma4:12b"
+    assert inventory.models[0].context == providers.get_settings().ollama_context_length
+    assert inventory.models[0].capabilities == ("completion", "thinking", "tools")
+    assert inventory.models[0].tool_calling_compatibility == "compatible"
+
+
+def test_ollama_inventory_marks_explicitly_unsupported_tool_calls(monkeypatch) -> None:
+    from agent.llm import providers
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"capabilities": ["completion"]}
+
+    monkeypatch.setattr(
+        providers.httpx,
+        "get",
+        lambda *args, **kwargs: type("Tags", (), {
+            "raise_for_status": lambda self: None,
+            "json": lambda self: {"models": [{"name": "plain:30b", "details": {}}]},
+        })(),
+    )
+    monkeypatch.setattr(providers.httpx, "post", lambda *args, **kwargs: FakeResponse())
+
+    inventory = providers.discover_ollama_models("http://127.0.0.1:11434")
+
+    assert inventory.models[0].tool_calling_compatibility == "unsupported"
 
 
 def test_provider_group_dataclass_is_frozen() -> None:

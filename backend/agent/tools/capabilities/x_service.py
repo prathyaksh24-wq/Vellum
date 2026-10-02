@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from agent.config import REPO_ROOT, get_settings
+from agent.knowledge.x_bookmark_categorizer import categorize_bookmarks
 from agent.tools.capabilities.agent_reach_x_provider import (
     AgentReachError,
     AgentReachUnavailableError,
@@ -54,6 +55,7 @@ class XCapabilityService:
         allow_xai_fallback: bool | None = None,
         allow_posts: bool | None = None,
     ) -> None:
+        self._custom_account_backend = account_backend is not None
         self._custom_search_backend = search_posts_backend is not None
         self._custom_post_backend = post_backend is not None
         self._custom_bookmarks_backend = bookmarks_backend is not None
@@ -157,6 +159,16 @@ class XCapabilityService:
         )
         registry.register(
             CapabilityRecord(
+                name="x.user_posts",
+                namespace="x",
+                access=CapabilityAccess.READ,
+                allowed_agents=frozenset({"XAgent", "VellumAgent"}),
+                stream_label="Read X account posts",
+                adapter=self.user_posts,
+            )
+        )
+        registry.register(
+            CapabilityRecord(
                 name="x.read_tweet",
                 namespace="x",
                 access=CapabilityAccess.READ,
@@ -211,6 +223,8 @@ class XCapabilityService:
                     adapter=adapter,
                 )
             )
+        registry.register(CapabilityRecord(name="x.replies", namespace="x", access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"XAgent"}), stream_label="Read X replies", adapter=self.replies))
         return registry
 
     def status(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -229,20 +243,23 @@ class XCapabilityService:
         query = str(payload.get("query", "")).strip()
         max_results = self._normalize_max_results(payload.get("max_results", 10))
         fallback_reason = ""
+        agent_reach_error: AgentReachError | None = None
         if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_search_backend):
             try:
                 items = [self._normalize_post(item) for item in self.agent_reach_provider.search(query, max_results)]
                 return {"action": "x.search_posts", "items": items, "provider": "agent-reach"}
             except AgentReachError as exc:
+                agent_reach_error = exc
                 fallback_reason = self._safe_reason(exc)
-                if not self.allow_xai_fallback:
-                    raise
-        if not self.allow_xai_fallback:
+        if self.allow_xai_fallback:
+            items = [self._normalize_post(item) for item in self.search_posts_backend(query, max_results)]
+            result = {"action": "x.search_posts", "items": items, "provider": "xai"}
+        else:
+            if agent_reach_error is not None:
+                raise agent_reach_error
             raise AgentReachUnavailableError(
-                "Agent-Reach X search is unavailable and the xAI fallback is disabled."
+                "Agent-Reach X search is unavailable and no approved fallback is configured."
             )
-        items = [self._normalize_post(item) for item in self.search_posts_backend(query, max_results)]
-        result = {"action": "x.search_posts", "items": items, "provider": "xai"}
         if fallback_reason:
             result["fallback_reason"] = fallback_reason
         return result
@@ -250,6 +267,17 @@ class XCapabilityService:
     def account(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_private_reads:
             raise ToolPermissionError("X private reads require X_TOOL_ALLOW_PRIVATE_READS=true.")
+        if self._agent_reach_available():
+            try:
+                return {
+                    "action": "x.account",
+                    "account": self.agent_reach_provider.account(),
+                    "provider": "agent-reach",
+                }
+            except AgentReachError:
+                raise
+        if not self._custom_account_backend and not self._oauth_file().is_file():
+            raise AgentReachUnavailableError("Agent-Reach X session is unavailable. Reconnect with fresh X cookies.")
         return {"action": "x.account", "account": self.account_backend()}
 
     def bookmarks(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -259,19 +287,29 @@ class XCapabilityService:
         if self._agent_reach_available() and (self._explicit_agent_reach_provider or not self._custom_bookmarks_backend):
             try:
                 items = [self._normalize_post(item) for item in self.agent_reach_provider.bookmarks(max_results)]
-                return {"action": "x.bookmarks", "items": items, "provider": "agent-reach"}
+                return {
+                    "action": "x.bookmarks",
+                    "items": categorize_bookmarks(items),
+                    "provider": "agent-reach",
+                    "categorizer": "siftly-inspired-v1",
+                }
             except AgentReachError:
-                pass
+                raise
+        if not self._custom_bookmarks_backend and not self._oauth_file().is_file():
+            raise AgentReachUnavailableError("Agent-Reach X bookmarks are unavailable. Reconnect with fresh X cookies.")
         account = self.account_backend()
         user_id = str(account.get("id") or "").strip()
         if not user_id:
             raise ToolPermissionError("X bookmarks require an authenticated user id.")
         result = self.bookmarks_backend(user_id, max_results)
+        items = [self._normalize_post(item) for item in result.get("data", [])]
         return {
             "action": "x.bookmarks",
             "account": account,
-            "items": result.get("data", []),
+            "items": categorize_bookmarks(items),
             "meta": result.get("meta", {}),
+            "provider": "x-api",
+            "categorizer": "siftly-inspired-v1",
         }
 
     def timeline(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -296,10 +334,31 @@ class XCapabilityService:
         self._require_agent_reach()
         return {"action": "x.profile", "profile": self.agent_reach_provider.profile(handle), "provider": "agent-reach"}
 
+    def user_posts(self, payload: dict[str, Any]) -> dict[str, Any]:
+        handle = str(payload.get("handle") or payload.get("username") or "").strip().lstrip("@")
+        if not handle:
+            raise ToolPermissionError("X account posts require a handle.")
+        max_results = self._normalize_max_results(payload.get("max_results", 10))
+        self._require_agent_reach()
+        items = [
+            self._normalize_post(item)
+            for item in self.agent_reach_provider.user_posts(handle, max_results)
+        ]
+        return {
+            "action": "x.user_posts",
+            "items": items,
+            "provider": "agent-reach",
+        }
+
     def read_tweet(self, payload: dict[str, Any]) -> dict[str, Any]:
         tweet_id = self._tweet_id(payload)
         self._require_agent_reach()
         return {"action": "x.read_tweet", "tweet": self.agent_reach_provider.read_tweet(tweet_id), "provider": "agent-reach"}
+
+    def replies(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._require_agent_reach()
+        return {"action":"x.replies", "provider":"agent-reach", "items":[self._normalize_post(p)
+            for p in self.agent_reach_provider.replies(self._tweet_id(payload), self._normalize_max_results(payload.get("max_results",5)))]}
 
     def publish_post(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_posts:
@@ -313,6 +372,8 @@ class XCapabilityService:
                 "tweet": self.agent_reach_provider.post_tweet(text),
                 "provider": "agent-reach",
             }
+        if not self._custom_post_backend and not self._oauth_file().is_file():
+            raise AgentReachUnavailableError("Agent-Reach X posting is unavailable. Reconnect with fresh X cookies.")
         return {"action": "x.publish_post", "tweet": self.post_backend(text)}
 
     def publish_post_with_media(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -475,7 +536,7 @@ class XCapabilityService:
             max_results = int(value)
         except (TypeError, ValueError):
             return 10
-        return max(1, max_results)
+        return max(1, min(max_results, 100))
 
     @staticmethod
     def _normalize_post(item: dict[str, Any]) -> dict[str, str]:
@@ -483,6 +544,7 @@ class XCapabilityService:
         author_username = author.get("username") if isinstance(author, dict) else None
         handle = author_username or item.get("handle")
         return {
+            "id": XCapabilityService._string(item.get("id") or item.get("tweet_id")),
             "text": XCapabilityService._string(item.get("text") or item.get("body")),
             "url": XCapabilityService._string(item.get("url") or item.get("x_url") or item.get("tweet_url")),
             "handle": XCapabilityService._string(handle),

@@ -28,6 +28,9 @@ class KnowledgeToolObserver:
         self.core = core
 
     def __call__(self, invocation: ToolInvocation) -> None:
+        if invocation.namespace == "spotify":
+            # Music searches and playback are not automatic Knowledge Core learning sources.
+            return
         if invocation.access != CapabilityAccess.READ:
             return
         if invocation.name in {"books.discover", "books.verify_candidate"}:
@@ -53,7 +56,15 @@ class KnowledgeToolObserver:
         )
 
     def _record_x(self, invocation: ToolInvocation) -> list[str]:
-        if invocation.name not in {"x.search_posts", "x.bookmarks", "x.timeline", "x.likes", "x.read_tweet"}:
+        if invocation.name not in {
+            "x.search_posts",
+            "x.bookmarks",
+            "x.timeline",
+            "x.likes",
+            "x.profile",
+            "x.user_posts",
+            "x.read_tweet",
+        }:
             return []
         items = invocation.result.get("items")
         if not isinstance(items, list):
@@ -85,10 +96,15 @@ class KnowledgeToolObserver:
                 )
             )
             source_ids.append(str(result["source_id"]))
-            self._annotate_x_observation(str(result["source_id"]), invocation)
+            self._annotate_x_observation(str(result["source_id"]), invocation, item)
         return source_ids
 
-    def _annotate_x_observation(self, source_id: str, invocation: ToolInvocation) -> None:
+    def _annotate_x_observation(
+        self,
+        source_id: str,
+        invocation: ToolInvocation,
+        item: dict[str, Any],
+    ) -> None:
         if invocation.name in {"x.likes", "x.bookmarks", "x.timeline"}:
             labels = ["ambiguous_engagement"]
             context = invocation.name.removeprefix("x.")
@@ -107,6 +123,40 @@ class KnowledgeToolObserver:
                 eligible_for_preference=False,
                 eligible_for_style=False,
                 metadata={"observed_via": invocation.name},
+            )
+        )
+        if invocation.name != "x.bookmarks":
+            return
+        intelligence = item.get("bookmark_intelligence")
+        if not isinstance(intelligence, dict):
+            return
+        assignments = intelligence.get("assignments")
+        if not isinstance(assignments, list):
+            return
+        valid = [entry for entry in assignments if isinstance(entry, dict) and entry.get("category")]
+        if not valid:
+            return
+        confidence = max(float(entry.get("confidence") or 0.0) for entry in valid)
+        self.core.store.upsert_content_annotation(
+            ContentAnnotationInput(
+                target_type="source",
+                target_id=source_id,
+                labels=[f"x_bookmark:{entry['category']}" for entry in valid],
+                context="x_bookmark_category",
+                stance="unknown",
+                intent="organize_saved_content",
+                confidence=confidence,
+                eligible_for_preference=False,
+                eligible_for_style=False,
+                taxonomy_version=str(
+                    intelligence.get("taxonomy_version") or "siftly-inspired-v1"
+                ),
+                metadata={
+                    "observed_via": invocation.name,
+                    "assignments": valid,
+                    "entities": intelligence.get("entities") or {},
+                    "origin": "siftly-inspired-local-categorizer",
+                },
             )
         )
 

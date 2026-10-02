@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
+
+def user_query_text(message: str) -> str:
+    """Read user intent without UI annotations being treated as user requests."""
+    text = re.sub(r"^\[Vellum UI context:[^\n]*\]\s*", "", str(message or ""))
+    return re.split(r"\n\n\[(?:Conversation source context|Attachment context|Conversation follow-up context|Current conversation follow-up)\]", text, maxsplit=1)[0].strip()
 
 SpecialistStatus = Literal["answered", "needs_fetch", "stale", "blocked", "error"]
 SourceKind = Literal["vault", "web", "api", "memory", "book"]

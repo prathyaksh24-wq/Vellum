@@ -567,10 +567,23 @@ class DelegationRuntime:
                 )
             approval = approved.fingerprint()
             approval_key = str(action_request["approval_id"])
+        source_egress = profile.source_egress
+        if profile.id == "BooksAgent" and book_discovery is None and action_request is None:
+            from agent.llm.providers import get_provider_registry
+            from agent.llm.routing.models import provider_for_model
+            model_id = profile.model or get_provider_registry().current_model().id
+            if provider_for_model(model_id) == "ollama":
+                source_egress = "local"
+            elif source_egress != "external":
+                return _runtime_response(
+                    profile=profile, status="blocked",
+                    summary="Book processing is local only. Select a local model before asking about Book content.",
+                    analysis="book_external_processing_not_approved",
+                )
         with profile_policy(
             profile_id=profile.id,
             user_id=user_id,
-            source_egress=profile.source_egress,
+            source_egress=source_egress,
             allowed_tools=frozenset(profile.tools.allow),
             allowed_skills=frozenset(profile.skills.allow),
             require_confirmation=frozenset(profile.tools.require_confirmation),
@@ -585,10 +598,17 @@ class DelegationRuntime:
             if profile.executor == "deterministic":
                 if executor is None:
                     raise ValueError(f"{profile.id} requires a deterministic executor")
+                scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id) if self.pending_action_store is not None else {}
                 if action_request is not None:
                     execute = getattr(executor, "execute_action_request")
-                    return execute(action_request)
-                return executor.answer(goal)
+                    response = execute(action_request)
+                elif callable(getattr(executor, "answer_with_context", None)):
+                    response = executor.answer_with_context(goal, scoped)
+                else:
+                    response = executor.answer(goal)
+                if self.pending_action_store is not None and callable(getattr(executor, "thread_context", None)):
+                    self.pending_action_store.set_specialist_context(parent_thread_id, profile.id, executor.thread_context(response, scoped))
+                return response
             if action_request is not None:
                 raise ValueError("LLM profiles cannot execute confirmed actions")
             return self._execute_llm(

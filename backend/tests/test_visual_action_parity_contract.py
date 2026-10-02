@@ -12,9 +12,11 @@ ROOT = Path(__file__).resolve().parents[2]
 INVENTORY = ROOT / "frontend" / "ui" / "action-parity.inventory.json"
 
 
-def test_covered_visual_controls_reference_registered_app_actions() -> None:
+def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, tmp_path) -> None:
     inventory = json.loads(INVENTORY.read_text(encoding="utf-8"))
+    from agent.plugins.registry import PluginRegistry
     runtime = AppActionRuntime(
+        plugin_registry=PluginRegistry(ROOT / "plugins", state_path=tmp_path / "plugins.json"),
         session_control_handler=lambda *_args: {},
         settings_runtime_handler=lambda *_args: {},
         lifecycle_control_handler=lambda *_args: {},
@@ -23,6 +25,10 @@ def test_covered_visual_controls_reference_registered_app_actions() -> None:
         automation_handler=lambda *_args: {},
         knowledge_source_handler=lambda *_args: {},
     )
+    from agent.plugins import google_calendar_controls, spotify_controls
+    monkeypatch.setattr(google_calendar_controls, "google_calendar_status", lambda: {"connected": True, "configured": True})
+    runtime.register_plugin_contribution(google_calendar_controls.google_calendar_plugin_contribution())
+    runtime.register_plugin_contribution(spotify_controls.spotify_plugin_contribution(authenticated=lambda: True))
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

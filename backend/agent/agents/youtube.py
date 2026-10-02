@@ -35,6 +35,8 @@ class YoutubeAgent:
         r"\bsubscriptions?\s+(?:on|from)\s+youtube\b",
     )
     _ACCOUNT_PATTERNS = (
+        r"\b(?:do|does)\s+(?:you|vellum)\s+have\s+access\s+to\s+(?:my|our)\s+youtube\s+(?:data|account|history)\b",
+        r"\b(?:can|could)\s+(?:you|vellum)\s+(?:read|access|see)\s+(?:my|our)\s+youtube\s+data\b",
         r"\b(?:are|is)\s+(?:you|vellum)\s+connected\s+to\s+youtube\b",
         r"\byoutube\s+(?:connection|account|oauth)\s+(?:status|connected)\b",
         r"\b(?:my|our)\s+youtube\s+(?:account|channel)\b",
@@ -45,6 +47,8 @@ class YoutubeAgent:
         r"\bvideos?\s+(?:i|we)\s+(?:have\s+)?liked\s+on\s+youtube\b",
     )
     _TAKEOUT_PATTERNS = (
+        r"\bwhat\s+(?:did|have)\s+(?:i|we)\s+(?:watch|watched|search|searched)(?:\s+(?:recently|lately|last))?\b",
+        r"\b(?:my|our)\s+(?:recent\s+)?(?:watch|search|viewing)\s+history\b",
         r"\byoutube\s+takeout\b",
         r"\b(?:my|our)\s+youtube\s+(?:watch|search)\s+history\b",
         r"\bwhat\s+did\s+(?:i|we)\s+recently\s+watch\b",
@@ -79,12 +83,16 @@ class YoutubeAgent:
             return False
         return (
             self._is_intelligence_query(lowered)
+            or self._is_account_query(lowered)
+            or self._is_takeout_query(lowered)
             or any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
             or any(re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS)
         )
 
     def answer(self, query: str) -> SpecialistResponse:
         lowered = query.lower()
+        if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
+            return self._answer_takeout_library(lowered)
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
         if self._is_liked_query(lowered):
@@ -216,6 +224,10 @@ class YoutubeAgent:
             summary = f"Vellum is connected to YouTube as {channel}." if channel else "Vellum is connected to YouTube."
             status = "answered"
             confidence = 1.0
+        if account.get("takeout_available"):
+            summary = f"I can read your imported YouTube history locally ({int(account.get('takeout_watch_count') or 0):,} watch records). " + (
+                "Live YouTube OAuth is connected." if account.get("connected") else "Live YouTube OAuth is not connected; the import is a snapshot.")
+            status = "answered"
         return SpecialistResponse(
             agent=self.name,
             status=status,
@@ -229,7 +241,7 @@ class YoutubeAgent:
             result = self._subscriptions()
         except Exception as exc:
             return self._official_error("YoutubeAgent could not read YouTube subscriptions.", exc)
-        if not result.get("connected"):
+        if not result.get("connected") and not result.get("available"):
             return SpecialistResponse(
                 agent=self.name,
                 status="needs_fetch",
@@ -245,7 +257,8 @@ class YoutubeAgent:
             lines = [f"[{index}] {str(item.get('title') or item.get('channel_id') or 'Unknown channel')}" for index, item in enumerate(visible, start=1)]
             if len(items) > len(visible):
                 lines.append(f"...and {len(items) - len(visible)} more.")
-            summary = f"Your YouTube account is subscribed to {len(items)} channels:\n" + "\n".join(lines)
+            label = "Your Takeout snapshot contains" if result.get("provider") == "takeout" else "Your YouTube account is subscribed to"
+            summary = f"{label} {int(result.get('total') or len(items))} channels:\n" + "\n".join(lines)
         return SpecialistResponse(
             agent=self.name,
             status="answered",
@@ -272,7 +285,7 @@ class YoutubeAgent:
             summary = "The connected YouTube account has no accessible liked videos."
         else:
             lines = []
-            for index, item in enumerate(items[:20], start=1):
+            for index, item in enumerate(items[:5], start=1):
                 title = str(item.get("title") or item.get("video_id") or "Unknown video")
                 channel = str(item.get("channel") or "")
                 lines.append(f"[{index}] {title}" + (f" by {channel}" if channel else ""))
@@ -302,7 +315,7 @@ class YoutubeAgent:
         items = list(result.get("items") or [])
         label = "searches" if kind == "search" else "watched videos"
         lines = []
-        for index, item in enumerate(items[:20], start=1):
+        for index, item in enumerate(items[:5], start=1):
             title = str(item.get("query") or item.get("title") or item.get("video_id") or "Unknown item")
             channel = str(item.get("channel_title") or "")
             occurred_at = str(item.get("occurred_at") or "")
@@ -318,6 +331,23 @@ class YoutubeAgent:
             analysis="Used youtube.takeout_history from the local Knowledge Core.",
             confidence=1.0,
         )
+
+    def _answer_takeout_library(self, query: str) -> SpecialistResponse:
+        kind = "music" if "music" in query else "watch_later" if "watch later" in query else "playlists"
+        payload = {"kind": kind, "limit": 10}
+        try:
+            result = (self.tool_registry.invoke("youtube.takeout_library", payload, agent_name=self.name)
+                if self.tool_registry is not None else self.youtube_service.takeout_library(payload))
+        except Exception as exc:
+            return self._official_error("I could not read your imported YouTube library.", exc)
+        lines = []
+        for item in result.get("items", []):
+            artists = ", ".join(item.get("artists") or [])
+            lines.append("- " + str(item.get("title") or item.get("video_id") or "Unknown item") + (f" — {artists}" if artists else ""))
+        summary = (f"Your Takeout snapshot contains {result.get('total', 0)} {kind.replace('_', ' ')} items.\n" + "\n".join(lines)
+            if result.get("available") else "There are no imported items for that YouTube library yet.")
+        return SpecialistResponse(agent=self.name, status="answered" if result.get("available") else "needs_fetch", summary=summary,
+            analysis="Used local YouTube Takeout library metadata; no live account access or public search.", confidence=1.0)
 
     def _answer_subscription_feed(self) -> SpecialistResponse:
         self._subscription_feed()
@@ -350,6 +380,15 @@ class YoutubeAgent:
         channels = list(result.get("channels") or [])
         themes = list(result.get("search_themes") or [])
 
+        if (channels or themes) and re.search(r"\b(?:discover|recommend|suggest)\b", query, re.I):
+            ideas = []
+            for item in channels[:3]:
+                ideas.append(f"- Explore more from {item.get('label') or 'a recently watched channel'} — {int(item.get('evidence_count') or 0)} recorded watches.")
+            for item in themes:
+                if len(ideas) >= 3:
+                    break
+                ideas.append(f"- Explore {item.get('label') or 'a repeated search topic'} — {int(item.get('evidence_count') or 0)} recorded searches.")
+            return SpecialistResponse(agent=self.name, status="answered", summary="From your imported YouTube snapshot, here are three starting points:\n" + "\n".join(ideas) + "\n\nThese suggestions reflect your recorded viewing and search history.", analysis="Used local YouTube interest evidence for discovery directions; no live recommendation feed was queried.", confidence=0.8)
         lines = []
         for item in channels[:10]:
             lines.append(

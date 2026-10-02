@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from agent.llm.routing.adapters import (
+    OllamaAdapter,
     OpenAIAdapter,
     OpenRouterAdapter,
     classify_provider_exception,
@@ -59,6 +60,63 @@ def test_openai_adapter_strips_vendor_prefix_and_has_no_openrouter_body() -> Non
 
     assert model.model_name == "gpt-test"
     assert not model.extra_body
+
+
+def test_ollama_adapter_strips_local_prefix_and_uses_local_endpoint() -> None:
+    model = OllamaAdapter(base_url="http://127.0.0.1:11434/").build_model(
+        target=FallbackTarget(provider="ollama", model="ollama/qwen3.5:9b"),
+        thread_id="local-chat",
+        secret="unused",
+        temperature=0.3,
+    )
+
+    assert model.model == "qwen3.5:9b"
+    assert model.base_url == "http://127.0.0.1:11434"
+    assert model.reasoning is False
+    assert model.num_ctx == 16384
+    assert model.num_batch == 1024
+
+
+def test_ollama_adapter_respects_configured_batch_size() -> None:
+    model = OllamaAdapter(base_url="http://127.0.0.1:11434", batch_size=128).build_model(
+        target=FallbackTarget(provider="ollama", model="ollama/gemma4:12b"),
+        secret="", temperature=0,
+    )
+    assert model.num_batch == 128
+    from langchain_core.messages import HumanMessage
+    params = model._chat_params([HumanMessage(content="Hello")])
+    assert params["options"]["num_batch"] == 128
+    assert params["options"]["num_ctx"] == 16384
+    assert model._chat_params([], options={"num_batch": 64})["options"]["num_batch"] == 64
+
+
+def test_ollama_adapter_maps_explicit_reasoning_mode() -> None:
+    from agent.llm.reasoning import ReasoningMode
+
+    model = OllamaAdapter(base_url="http://127.0.0.1:11434").build_model(
+        target=FallbackTarget(provider="ollama", model="ollama/qwen3.5:9b"),
+        secret="unused",
+        temperature=0.3,
+        reasoning_mode=ReasoningMode.high,
+    )
+
+    assert model.reasoning is True
+
+def test_ollama_keeps_local_attachment_content_on_device() -> None:
+    from langchain_core.messages import HumanMessage
+    model = OllamaAdapter(base_url="http://127.0.0.1:11434").build_model(
+        target=FallbackTarget(provider="ollama",model="ollama/gemma4:12b"),secret="",temperature=0,
+    )
+    message=HumanMessage(content=[
+        {"type":"text","text":"Read this"},
+        {"type":"vellum_attachment_text","name":"Notes.txt","text":"Private local notes","egress_scope":"local_only"},
+        {"type":"vellum_attachment_image","data_url":"data:image/png;base64,aGVsbG8="},
+    ])
+    converted=model._convert_messages_to_ollama_messages([message])
+    assert "Private local notes" in converted[0]["content"]
+    assert "untrusted data" in converted[0]["content"]
+    assert converted[0]["images"] == ["aGVsbG8="]
+    assert message.content[1]["type"] == "vellum_attachment_text"
 
 
 def test_openrouter_adapter_applies_reasoning_mode_body() -> None:

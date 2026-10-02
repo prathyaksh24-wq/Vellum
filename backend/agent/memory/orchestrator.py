@@ -563,6 +563,7 @@ class MemoryOrchestrator:
         active_project: str | None = None,
         cloud_safe: bool = False,
         read_scopes: list[str] | None = None,
+        live_honcho: bool = True,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
@@ -594,7 +595,7 @@ class MemoryOrchestrator:
             else []
         )
         honcho_context = ""
-        if self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
+        if live_honcho and self.honcho is not None and (not strict_profile_scope or "user_profile" in scopes):
             try:
                 honcho_context = str(self.honcho.chat(session_id=thread_id, query=clean_query) or "")
             except Exception:
@@ -933,7 +934,7 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
         return []
     candidates: list[dict[str, Any]] = []
     explicit = re.search(
-        r"\b(?:remember|memorize|note|keep in mind)\b(?:\s+that)?\s+(?P<fact>.+)",
+        r"(?:^|[.!?]\s+)(?:please\s+)?(?:remember|memorize|note|keep in mind)\b(?:\s+that)?\s+(?P<fact>.+)",
         text,
         flags=re.IGNORECASE | re.DOTALL,
     )
@@ -952,6 +953,9 @@ def _extract_candidates(user_message: str, assistant_message: str) -> list[dict[
 
 _MEMORY_NOISE_RE = re.compile(
     r"(?:\[vellum ui context:|recency_hunger|stochastic_kick|curiosity[_ -]score|"
+    r"\bplease use\b.{0,60}\bagent\b|\banswer (?:this|the)\b.{0,30}\bquestion\b|"
+    r"\bdo not include any personal context\b|"
+    r"\b(?:for this chat only|demonstration project|reply with (?:its|the) label)\b|"
     r"\b(?:install|download|archive|delete|remove|uninstall|list|show)\b.{0,40}\bskills?\b|"
     r"\bskills?\b.{0,40}\b(?:install|download|archive|delete|remove|uninstall)\b|"
     r"\b(?:tool_call|system prompt|developer message|use the following instructions)\b)",
@@ -959,7 +963,7 @@ _MEMORY_NOISE_RE = re.compile(
 )
 _GREETING_RE = re.compile(r"^(?:hi|hey|hello|sup|yo|thanks|thank you|good job|great job)[.!\s]*$", re.IGNORECASE)
 _QUESTION_START_RE = re.compile(
-    r"^(?:what|when|where|why|who|which|how|can|could|would|should|do|does|did|is|are|was|were|have|has)\b",
+    r"^(?:(?:so\s+)?(?:tell me|explain|give|summari[sz]e)|what|when|where|why|who|which|how|can|could|would|should|do|does|did|is|are|was|were|have|has)\b",
     re.IGNORECASE,
 )
 
@@ -974,6 +978,8 @@ def _is_durable_memory_text(text: str, *, explicit: bool = False) -> bool:
     if len(clean) < 12 or _GREETING_RE.fullmatch(clean) or _MEMORY_NOISE_RE.search(clean):
         return False
     if not explicit and (clean.endswith("?") or _QUESTION_START_RE.match(clean)):
+        return False
+    if not explicit and re.match(r"^(?:please\s+)?(?:post|publish|tweet|reply|repost|retweet|unrepost|unretweet|like|unlike|bookmark|unbookmark)\b", clean, re.I):
         return False
     if len(re.findall(r"[A-Za-z0-9]+", clean)) < 3:
         return False
@@ -1059,7 +1065,7 @@ def _memory_text_from_markdown(path: Path) -> str:
 
 
 def _explicit_remember(text: str) -> bool:
-    return bool(re.search(r"\b(?:remember|memorize|note|keep in mind)\b", text, re.I))
+    return bool(re.search(r"(?:^|[.!?]\s+)(?:please\s+)?(?:remember|memorize|note|keep in mind)\b", text, re.I))
 
 
 def _sentence(text: str) -> str:

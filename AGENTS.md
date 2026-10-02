@@ -50,6 +50,11 @@ and completion checks are explicit.
 - Keep the main Vellum agent capable and user-facing. Specialists use the shared
   catalog, typed delegation, and permissioned capabilities; they do not own raw
   integrations or silently become a second orchestration runtime.
+- Runtime instructions live in `backend/agent/graph/agent.py`; `AGENTS.md` guides
+  repository development. Keep the runtime contract provider-neutral. Learning
+  uses the existing memory, skill, and profile owners with provenance and their
+  approval policies; prompt wording must not imply unimplemented evaluation,
+  automatic architecture mutation, or model weight updates.
 - Frontend availability comes from `GET /api/capabilities` and App Action catalog
   discovery. Views use adapter modules and dispatched actions rather than raw
   endpoint calls or duplicated feature assumptions.

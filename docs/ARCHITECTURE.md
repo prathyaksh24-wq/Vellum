@@ -181,7 +181,7 @@ Important local storage locations:
 - `.skills/` for canonical skill packages and snapshots.
 - `Vault/` for Obsidian content, Knowledge Wiki pages, and agent projections.
 - `data/embeddings/chroma` for embedded ChromaDB vector storage when enabled.
-- Docker `honcho_data` volume for Honcho's PostgreSQL database.
+- Docker `honcho_data` and `honcho_cache` volumes for Honcho's PostgreSQL and Redis data.
 
 ## Privacy Boundaries
 
@@ -197,7 +197,7 @@ Audit logs store metadata, not prompt or response content. Skills, memory, and k
 
 ## Local Versus Cloud Processing
 
-Local processing includes privacy classification, scrubbing, Obsidian IO, SQLite/FTS5 storage, ChromaDB storage, Honcho, package/catalog operations, conversation exports, and audit logs.
+Local processing includes privacy classification, scrubbing, Obsidian IO, SQLite/FTS5 storage, ChromaDB storage, Honcho storage and reasoning through Ollama, package/catalog operations, conversation exports, and audit logs.
 
 Cloud or external calls occur only when configured features require them:
 

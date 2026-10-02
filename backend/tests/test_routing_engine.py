@@ -138,6 +138,19 @@ def test_catalog_openai_model_uses_openrouter_when_no_native_route_is_configured
     assert plan.targets[0].provider == "openrouter"
 
 
+def test_local_primary_does_not_silently_fallback_to_cloud(tmp_path) -> None:
+    store, engine, _, _ = build_engine(tmp_path, openrouter_outcomes=[])
+    store.replace_fallbacks(
+        [FallbackTarget(provider="openai", model="openai/fallback")]
+    )
+
+    plan = engine.build_plan("ollama/qwen3.5:9b")
+
+    assert [(target.provider, target.model) for target in plan.targets] == [
+        ("ollama", "ollama/qwen3.5:9b")
+    ]
+
+
 def test_model_unavailable_uses_fallback_and_next_call_restores_primary(tmp_path) -> None:
     async def scenario() -> None:
         store, engine, openrouter, openai = build_engine(

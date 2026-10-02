@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import codecs
+import csv
+import io
 from datetime import UTC, datetime
 from hashlib import sha256
 from html.parser import HTMLParser
@@ -120,10 +122,63 @@ class YouTubeTakeoutImporter:
             items.append(payload)
         return {"available": total > 0, "kind": normalized, "total": total, "items": items}
 
+    def library(self, *, kind: str = "music", limit: int = 20) -> dict[str, Any]:
+        if kind not in {"music", "subscriptions", "playlists", "watch_later", "account"}:
+            raise ValueError("Unsupported Takeout library kind")
+        rows = []
+        for offset in range(0, 100_000, 500):
+            page = self.store.list_sources(kind=f"youtube_takeout_{kind}", limit=500, offset=offset)
+            rows.extend(row for row in page if row.get("account_id") == self.account_id and row.get("status") == "active")
+            if len(page) < 500:
+                break
+        items = [dict((self.store.get_source(str(row["id"])) or {}).get("metadata", {}).get("item") or {}) for row in rows]
+        items.sort(key=lambda item: str(item.get("saved_at") or item.get("title") or ""), reverse=kind == "watch_later")
+        return {"available": bool(items), "kind": kind, "total": len(items), "items": items[:limit],
+                "provider": "takeout", "local_only": True, "freshness": "archive_snapshot"}
+
+    def _parse_library(self, archive, info, stats):
+        path = info.filename.casefold()
+        kind = ("subscriptions" if path.endswith("/subscriptions/subscriptions.csv") else
+                "music" if path.endswith("/music library songs.csv") else
+                "account" if path.endswith("/channels/channel.csv") else
+                "playlists" if path.endswith("/playlists/playlists.csv") else
+                "watch_later" if path.endswith("/playlists/watch later videos.csv") else "")
+        if not kind:
+            return
+        if info.file_size > 32 * 1024 * 1024:
+            raise ValueError("Takeout library metadata exceeds the local import limit")
+        with archive.open(info) as source:
+            for row in csv.DictReader(io.TextIOWrapper(source, encoding="utf-8-sig")):
+                if kind in {"subscriptions", "account"}:
+                    identity = str(row.get("Channel ID") or "").strip()
+                    item = {"channel_id": identity, "title": row.get("Channel title") or row.get("Channel title (Original)") or identity,
+                            "channel_url": f"https://www.youtube.com/channel/{identity}"}
+                elif kind == "playlists":
+                    identity = str(row.get("Playlist ID") or "").strip()
+                    item = {"playlist_id": identity, "title": row.get("Playlist title (original)") or identity}
+                else:
+                    identity = str(row.get("Video ID") or "").strip()
+                    item = {"video_id": identity, "title": row.get("Song Title") or identity,
+                            "url": f"https://www.youtube.com/watch?v={identity}"}
+                    if kind == "music":
+                        item.update(album=row.get("Album Title") or "", artists=[str(v) for k,v in row.items() if k.startswith("Artist Name") and v])
+                    else:
+                        item["saved_at"] = row.get("Playlist video creation timestamp") or ""
+                if not identity:
+                    continue
+                self.store.upsert_source(SourceItemInput(
+                    kind=f"youtube_takeout_{kind}", external_id=f"youtube:takeout:{self.account_id}:{kind}:{identity}",
+                    account_id=self.account_id, title=str(item["title"]), content=json.dumps(item, ensure_ascii=False, sort_keys=True),
+                    sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY, external_policy=ExternalPolicy.DENY_RAW,
+                    trust="official_takeout", metadata={"connector": "youtube_takeout", "archive_entry": info.filename, "item": item},
+                ))
+                stats["library_rows"] += 1
+
     def _import_archive(self, path: Path) -> IngestionResult:
         archive_hash = _file_sha256(path)
         observations: list[ObservationInput] = []
         stats = {
+            "library_rows": 0,
             "watch_events": 0,
             "search_events": 0,
             "other_events": 0,
@@ -161,6 +216,7 @@ class YouTubeTakeoutImporter:
             )
             source_id = str(manifest_source["source_id"])
             for info in infos:
+                self._parse_library(archive, info, stats)
                 lowered = info.filename.casefold()
                 if lowered.endswith("/history/watch-history.html"):
                     self._parse_history(archive, info, source_id, archive_hash, observations, stats)

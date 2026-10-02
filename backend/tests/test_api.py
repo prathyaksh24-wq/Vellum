@@ -1,9 +1,11 @@
 from types import SimpleNamespace
 import asyncio
+from datetime import datetime
 import json
 import sqlite3
 import threading
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 from langchain_core.messages import ToolMessage
@@ -13,6 +15,32 @@ from agent import api
 from agent.agents.live_dispatcher import LiveAgentResult
 from agent.computer_use_runtime import ComputerUseRuntime
 from agent.profiles import AgentCatalog, AgentProfile
+
+
+def test_ensure_model_refreshes_availability_before_using_the_configured_default(monkeypatch):
+    from agent.llm import providers
+
+    class Registry:
+        selected = "ollama/qwen3.5:9b"
+        refreshed = False
+
+        def refresh_local_models(self):
+            self.refreshed = True
+            self.selected = "ollama/gemma4:12b"
+
+        def current_model(self):
+            return SimpleNamespace(id=self.selected)
+
+        def resolve(self, model_id):
+            return SimpleNamespace(id=model_id) if model_id == self.selected else None
+
+    registry = Registry()
+    monkeypatch.setattr(providers, "get_provider_registry", lambda: registry)
+
+    resolved = asyncio.run(api._ensure_model(None))
+
+    assert registry.refreshed is True
+    assert resolved == "ollama/gemma4:12b"
 
 
 @pytest.fixture(autouse=True)
@@ -555,6 +583,299 @@ def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatc
     content = fake_agent.calls[0][0]["messages"][0]["content"]
     assert "Recent Vellum conversation context" in content
     assert "We fixed Vellum streaming and X OAuth today" in content
+
+
+def test_conversation_recall_answers_first_message_from_current_chat(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "thread-current",
+                        "thread_id": "thread-current",
+                        "title": "NBA chat",
+                        "messages": [
+                            {"role": "user", "text": "live NBA score"},
+                            {"role": "assistant", "text": "Here are the latest scores."},
+                            {"role": "user", "text": "what was the first message i sent u?"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    answer = api._conversation_recall_answer("what was the first message i sent u?", "thread-current")
+
+    assert answer == "Your first message in this chat was: “live NBA score”"
+
+
+def test_conversation_recall_uses_most_recent_other_chat(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "current",
+                        "thread_id": "current",
+                        "title": "Recall",
+                        "updated_at": "2026-09-25T14:04:00+05:30",
+                        "messages": [{"role": "user", "text": "what did we speak about the last time?"}],
+                    },
+                    {
+                        "id": "latest",
+                        "thread_id": "latest",
+                        "title": "live NBA score",
+                        "updated_at": "2026-09-25T14:03:26+05:30",
+                        "messages": [
+                            {"role": "user", "text": "live NBA score"},
+                            {"role": "user", "text": "what is happening on X?"},
+                        ],
+                    },
+                    {
+                        "id": "older",
+                        "thread_id": "older",
+                        "title": "Chiefs",
+                        "updated_at": "2026-09-25T13:57:42+05:30",
+                        "messages": [{"role": "user", "text": "When is the next Chiefs game?"}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    answer = api._conversation_recall_answer("what did we speak about the last time?", "current")
+
+    assert answer is not None
+    assert "live NBA score" in answer
+    assert "what is happening on X?" in answer
+    assert "Chiefs" not in answer
+
+
+def test_conversation_recall_answers_when_we_last_spoke_before_today(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "current",
+                        "thread_id": "current",
+                        "title": "Memory check",
+                        "updated_at": "2026-09-28T09:30:00+05:30",
+                        "messages": [{"role": "user", "text": "when was the last time we spoke other than today?"}],
+                    },
+                    {
+                        "id": "same-day",
+                        "thread_id": "same-day",
+                        "title": "Morning chat",
+                        "updated_at": "2026-09-28T08:00:00+05:30",
+                        "messages": [{"role": "user", "text": "good morning"}],
+                    },
+                    {
+                        "id": "previous-day",
+                        "thread_id": "previous-day",
+                        "title": "Vellum architecture",
+                        "updated_at": "2026-09-27T17:30:09+05:30",
+                        "messages": [{"role": "user", "text": "finish the architecture work"}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    answer = api._conversation_recall_answer(
+        "when was the last time we spoke other than today?",
+        "current",
+        now=datetime(2026, 9, 28, 12, 0, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+
+    assert answer is not None
+    assert "Vellum architecture" in answer
+    assert "September 27, 2026" in answer
+    assert "5:30 PM IST" in answer
+    assert "Morning chat" not in answer
+
+
+def test_current_datetime_question_is_answered_without_model_call():
+    answer = api._current_datetime_answer(
+        "what is the current date and time?",
+        now=datetime(2026, 9, 28, 14, 5, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+
+    assert answer == "Today is Monday, September 28, 2026, and the time is 2:05 PM IST."
+
+
+def test_tweet_this_resolves_to_previous_assistant_message(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "x-thread",
+                        "thread_id": "x-thread",
+                        "messages": [
+                            {"role": "user", "text": "say something funny"},
+                            {"role": "assistant", "text": "My keyboard and I need some space."},
+                            {"role": "user", "text": "please tweet this"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    resolved = api._continuity_request("please tweet this", "x-thread")
+
+    assert "[X post text]" in resolved
+    assert "My keyboard and I need some space." in resolved
+
+
+def test_why_after_x_failure_explains_the_failed_turn(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "x-thread",
+                        "thread_id": "x-thread",
+                        "messages": [
+                            {"role": "user", "text": "what did ESPN post on X?"},
+                            {
+                                "role": "assistant",
+                                "text": "XAgent could not fetch X posts right now.",
+                                "tools": ["x_agent"],
+                            },
+                            {"role": "user", "text": "why?"},
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+
+    answer = api._direct_contextual_answer("why?", "x-thread")
+
+    assert answer is not None
+    assert "what did ESPN post on X?" in answer
+    assert "connector failed" in answer
+
+
+@pytest.mark.parametrize("question", ["what time is it?", "what day is it?", "what's today's date?"])
+def test_current_datetime_understands_natural_phrasings(question):
+    answer = api._current_datetime_answer(
+        question,
+        now=datetime(2026, 9, 28, 14, 5, tzinfo=ZoneInfo("Asia/Kolkata")),
+    )
+
+    assert answer is not None
+    assert "Monday, September 28, 2026" in answer
+
+
+def test_user_profile_question_is_memory_recall_intent():
+    assert api._is_memory_recall_request("what can you tell me about myself?", "new-thread") is True
+
+
+def test_user_profile_recall_uses_saved_facts_and_user_messages_only(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "current",
+                        "thread_id": "current",
+                        "title": "Profile recall",
+                        "updated_at": "2026-09-28T09:00:00+05:30",
+                        "messages": [{"role": "user", "text": "what do you know about me?"}],
+                    },
+                    {
+                        "id": "sports",
+                        "thread_id": "sports",
+                        "title": "Chiefs",
+                        "updated_at": "2026-09-27T17:00:00+05:30",
+                        "messages": [
+                            {"role": "user", "text": "When is the next Chiefs game?"},
+                            {"role": "assistant", "text": "You are definitely a lifelong Chiefs fan."},
+                        ],
+                    },
+                    {
+                        "id": "memory-test",
+                        "thread_id": "memory-test",
+                        "title": "Memory",
+                        "updated_at": "2026-09-27T18:00:00+05:30",
+                        "messages": [{"role": "user", "text": "when was the last time we spoke?"}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeStore:
+        def list_saved(self, *, scopes):
+            assert scopes == ["global", "user_profile"]
+            return [{"text": "The user prefers times in IST."}]
+
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+    monkeypatch.setattr(api._memory_orchestrator, "store", FakeStore())
+
+    answer = api._user_profile_recall_answer("what can you tell me about myself?", "current")
+
+    assert answer is not None
+    assert "prefers times in IST" in answer
+    assert "When is the next Chiefs game?" in answer
+    assert "lifelong Chiefs fan" not in answer
+    assert "when was the last time we spoke" not in answer
+
+
+def test_time_conversion_uses_previous_assistant_event_time(monkeypatch, tmp_path):
+    conversations_path = tmp_path / "conversations.json"
+    conversations_path.write_text(
+        json.dumps(
+            {
+                "conversations": [
+                    {
+                        "id": "chiefs",
+                        "thread_id": "chiefs",
+                        "messages": [
+                            {"role": "user", "text": "When is the next Chiefs game?"},
+                            {
+                                "role": "assistant",
+                                "text": "The next game is Sunday, September 27, 2026, at 12:00 PM CDT.",
+                            },
+                            {"role": "user", "text": "what is that time in ist?"},
+                            {
+                                "role": "assistant",
+                                "text": "The time you are referring to is already in IST: 11:00 AM.",
+                            },
+                        ],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", conversations_path)
+    monkeypatch.setenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata")
+
+    answer = api._time_conversion_answer("what is that time in IST?", "chiefs")
+
+    assert answer == "12:00 PM CDT on Sunday, September 27, 2026 is 10:30 PM IST on Sunday, September 27, 2026."
 
 
 def test_memory_summary_saved_archived_and_dreaming_endpoints(monkeypatch, tmp_path):
@@ -1380,6 +1701,42 @@ def test_x_oauth_callback_uses_persisted_flow_after_external_browser_return(monk
     assert saved["exchange"]["client_id"] == "client-id"
     assert saved["exchange"]["code_verifier"] == "verifier-token"
     assert (tmp_path / "xapi.json").exists()
+
+
+def test_x_agent_reach_connection_uses_cookie_import_and_reports_primary_status(monkeypatch):
+    captured = {}
+
+    class FakeAgentReachProvider:
+        def __init__(self, **kwargs):
+            captured["init"] = kwargs
+
+        def health(self, *, probe_search=False):
+            return {
+                "status": "ready",
+                "configured": True,
+                "notes": "Agent-Reach X connector is ready.",
+                "twitter_cli": {"version": "0.8.6"},
+            }
+
+        def configure_cookie_export(self, value):
+            captured["cookie_export"] = value
+            return {"status": "ready", "account": {"username": "vellum"}}
+
+    monkeypatch.setattr(api, "AgentReachXProvider", FakeAgentReachProvider)
+
+    with TestClient(api.app) as client:
+        status = client.get("/api/x/oauth/status")
+        connected = client.post(
+            "/api/x/agent-reach/connect",
+            json={"cookie_export": "auth_token=private; ct0=private"},
+        )
+
+    assert status.status_code == 200
+    assert status.json()["agent_reach_connected"] is True
+    assert status.json()["twitter_cli_version"] == "0.8.6"
+    assert connected.status_code == 200
+    assert connected.json()["account"]["username"] == "vellum"
+    assert captured["cookie_export"] == "auth_token=private; ct0=private"
 
 
 def test_computer_use_mode_endpoints_toggle_state(monkeypatch, tmp_path):

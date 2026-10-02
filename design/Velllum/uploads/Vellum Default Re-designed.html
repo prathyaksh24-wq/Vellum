@@ -14,11 +14,13 @@
 <script src="api/app-actions.js"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
+<script src="components/spotify-playback.js"></script>
 <script src="api/automations.js"></script>
 <script src="api/settings.js?v=20260710-backend-routing"></script>
 <script src="api/knowledge.js?v=20260710-wiki"></script>
 <script src="api/books.js"></script>
 <script src="components/books-state.js"></script>
+<script src="components/answer-markdown.js"></script>
 <script src="components/app-action-runtime.js"></script>
 <script src="components/coding-action-runtime.js"></script>
 <script src="components/observability-action-runtime.js"></script>
@@ -26,6 +28,7 @@
 <script src="components/attachment-runtime.js"></script>
 <script src="components/agent-catalog.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/calendar-workspace.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
 <script src="api/runtimes.js"></script>
@@ -1056,7 +1059,7 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .plugin-detail-head{display:flex;align-items:flex-start;gap:12px}.plugin-detail-title{font-family:var(--font-d);font-size:24px;color:var(--txt);font-weight:650}.plugin-detail-sub{color:var(--dim);line-height:1.5;margin-top:4px}.plugin-detail-actions{margin-left:auto;display:flex;gap:7px}
 .plugin-section{margin-top:26px}.plugin-section-h{font-size:12px;color:var(--txt2);padding-bottom:9px;border-bottom:1px solid var(--line)}.plugin-child{display:flex;align-items:center;gap:9px;padding:9px 2px;border-bottom:1px solid var(--line)}.plugin-child-copy{min-width:0;flex:1}.plugin-child-name{color:var(--txt2);font-size:12.5px}.plugin-child-desc{color:var(--dim);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .discord-workspace{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}.discord-workspace-head{display:flex;align-items:center;gap:9px}.discord-workspace-head strong{font-size:12px;color:var(--txt2);font-weight:600}.discord-workspace-head span{font:10px var(--font-m);color:var(--dim);margin-left:auto}.discord-icon-btn{width:28px;height:28px;display:grid;place-items:center;border:1px solid var(--line2);background:transparent;color:var(--dim);border-radius:6px;cursor:pointer;flex:0 0 auto}.discord-icon-btn:hover{color:var(--txt);border-color:var(--dim2)}.discord-icon-btn:disabled{opacity:.45;cursor:default}.discord-archive{display:flex;align-items:center;gap:8px;margin-top:12px;padding:9px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.discord-archive-copy{min-width:0;flex:1}.discord-archive-copy strong{display:block;color:var(--txt2);font-size:11px;font-weight:600}.discord-archive-copy span{display:block;margin-top:2px;color:var(--dim);font:9.5px var(--font-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.discord-archive .btn{flex:0 0 auto}.discord-pickers{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px}.discord-pickers select,.discord-compose textarea{width:100%;border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 88%,transparent);color:var(--txt2);border-radius:6px;font:11px var(--font-m);outline:none}.discord-pickers select{height:34px;padding:0 9px}.discord-messages{margin-top:12px;max-height:280px;overflow:auto;border-top:1px solid var(--line)}.discord-message{padding:10px 2px;border-bottom:1px solid var(--line)}.discord-message-meta{display:flex;align-items:center;gap:7px;color:var(--dim);font:9.5px var(--font-m)}.discord-message-meta strong{color:var(--txt2);font-weight:600}.discord-message-copy{margin-top:5px;color:var(--txt2);font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}.discord-message-actions{display:flex;align-items:center;gap:5px;margin-top:7px;flex-wrap:wrap}.discord-message-actions button{border:0;background:transparent;color:var(--dim);font:10px var(--font-m);padding:3px 5px;cursor:pointer}.discord-message-actions button:hover{color:var(--txt)}.discord-compose{margin-top:12px}.discord-compose-mode{display:flex;align-items:center;gap:8px;min-height:20px;color:var(--dim);font:10px var(--font-m)}.discord-compose-mode button{border:0;background:transparent;color:var(--accent);cursor:pointer}.discord-compose textarea{min-height:70px;resize:vertical;padding:9px;line-height:1.4}.discord-compose-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:7px}.discord-file{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim);font:10px var(--font-m)}.discord-confirm{margin-top:9px;padding:9px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;color:var(--txt2);font-size:11px}.discord-confirm span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.discord-empty{padding:18px 2px;color:var(--faint);font-size:11px}.discord-error{margin-top:9px;color:var(--danger);font-size:11px}@media(max-width:620px){.discord-pickers{grid-template-columns:1fr}.discord-archive{align-items:flex-start;flex-wrap:wrap}.discord-archive-copy{flex-basis:100%}}
-.calendar-workspace{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}.calendar-head{display:flex;align-items:center;gap:8px}.calendar-head strong{font-size:12px;color:var(--txt2)}.calendar-head span{margin-left:auto;color:var(--dim);font:10px var(--font-m)}.calendar-head-actions{display:flex;gap:6px}.calendar-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px}.calendar-toolbar select,.calendar-editor input{height:34px;border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 88%,transparent);color:var(--txt2);border-radius:6px;padding:0 9px;font:11px var(--font-m);outline:none}.calendar-events{margin-top:12px;max-height:280px;overflow:auto;border-top:1px solid var(--line)}.calendar-event{display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px 2px;border-bottom:1px solid var(--line)}.calendar-event-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:5px}.calendar-event-copy strong{display:block;color:var(--txt2);font-size:12px;font-weight:600}.calendar-event-copy span{display:block;color:var(--dim);font:9.5px var(--font-m);margin-top:3px}.calendar-event-actions{display:flex;gap:4px}.calendar-event-actions button{border:0;background:transparent;color:var(--dim);font:10px var(--font-m);padding:3px;cursor:pointer}.calendar-event-actions button:hover{color:var(--txt)}.calendar-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px}.calendar-editor input:first-child{grid-column:1/-1}.calendar-editor-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:7px}.calendar-connect{padding:18px 0;color:var(--dim);font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:12px}.calendar-error{margin-top:9px;color:var(--danger);font-size:11px}@media(max-width:620px){.calendar-toolbar,.calendar-editor{grid-template-columns:1fr}.calendar-editor input:first-child{grid-column:auto}.calendar-editor-actions{grid-column:auto}}
+.calendar-workspace{margin-top:24px;border-top:1px solid var(--line);padding-top:18px}.calendar-head{display:flex;align-items:center;gap:8px}.calendar-head strong{font-size:12px;color:var(--txt2)}.calendar-head span{margin-left:auto;color:var(--dim);font:10px var(--font-m)}.calendar-head-actions{display:flex;gap:6px}.calendar-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:12px}.calendar-toolbar select,.calendar-toolbar input,.calendar-editor input{min-width:0;height:34px;border:1px solid var(--line2);background:color-mix(in srgb,var(--glass) 88%,transparent);color:var(--txt2);border-radius:6px;padding:0 9px;font:11px var(--font-m);outline:none}.calendar-events{margin-top:12px;max-height:280px;overflow:auto;border-top:1px solid var(--line)}.calendar-event{display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:9px;align-items:start;padding:10px 2px;border-bottom:1px solid var(--line)}.calendar-event-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:5px}.calendar-event-copy strong{display:block;color:var(--txt2);font-size:12px;font-weight:600}.calendar-event-copy span{display:block;color:var(--dim);font:9.5px var(--font-m);margin-top:3px}.calendar-event-actions{display:flex;gap:4px}.calendar-event-actions button{border:0;background:transparent;color:var(--dim);font:10px var(--font-m);padding:3px;cursor:pointer}.calendar-event-actions button:hover{color:var(--txt)}.calendar-editor{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px}.calendar-editor input:first-child{grid-column:1/-1}.calendar-editor-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:7px}.calendar-connect{padding:18px 0;color:var(--dim);font-size:11px;display:flex;align-items:center;justify-content:space-between;gap:12px}.calendar-error{margin-top:9px;color:var(--danger);font-size:11px}@media(max-width:620px){.calendar-toolbar,.calendar-editor{grid-template-columns:1fr}.calendar-editor input:first-child{grid-column:auto}.calendar-editor-actions{grid-column:auto}}
 @media(max-width:840px){.plugin-manage{grid-template-columns:1fr}.plugin-list{border-right:0;padding-right:0}.plugin-detail{display:none}}
 .conn-name{display:flex;align-items:center;gap:7px;min-width:0;color:var(--txt2);font-family:var(--font-d);font-size:14px;font-weight:600;line-height:1.3}
 .conn-meta{margin-top:4px;color:var(--dim2);font:9.5px var(--font-m);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;letter-spacing:.035em}
@@ -1496,6 +1499,8 @@ body{font-size:14px}
 .xc-note b{color:#e7e9ea;font-weight:600}
 [data-theme="light"] .xc-note b{color:#0f1419}
 .xc-note-sm{margin-top:14px;font-size:11px}
+.xc-cookie{width:100%;min-height:92px;margin-top:14px;box-sizing:border-box;resize:vertical;border:1px solid #536471;border-radius:10px;background:var(--input);color:var(--txt2);padding:10px 12px;font:11px/1.45 var(--font-m);outline:none}
+.xc-cookie:focus{border-color:#1d9bf0}
 .xc-acct{display:flex;align-items:center;gap:11px;width:100%;padding:12px;margin-top:18px;border:1px solid #333639;border-radius:12px;text-align:left}
 [data-theme="light"] .xc-acct{border-color:#cfd9de}
 .xc-acct-ava{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#1d9bf0,#0a6cb0);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0}
@@ -1706,6 +1711,7 @@ body{font-size:14px}
 .spotify-now{min-width:0;width:132px}.spotify-now b,.spotify-now span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spotify-now b{font-size:11.5px;color:var(--txt2);font-weight:500}.spotify-now span{font-size:10px;color:var(--dim);margin-top:1px}
 .spotify-mini-btn,.spotify-control{border:0;background:transparent;color:var(--txt);display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex-shrink:0}.spotify-mini-btn{width:28px;height:28px}.spotify-mini-btn:hover,.spotify-control:hover{background:var(--hover);color:var(--txt2)}.spotify-mini-btn.primary,.spotify-control.primary{background:#1ed760;color:#07140b}.spotify-mini-btn.primary:hover,.spotify-control.primary:hover{filter:brightness(1.08)}
 .spotify-player-panel{pointer-events:auto;width:330px;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--menu-solid) 94%,transparent);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 22px 60px rgba(0,0,0,.46);padding:14px;color:var(--txt)}
+.spotify-playback-session{display:flex;flex-direction:column;gap:8px;padding-bottom:12px;min-width:0}.spotify-playback-session .btn{width:100%;flex-shrink:0;white-space:normal;text-align:center}.spotify-playback-session [role=status]{font-size:11px;line-height:1.5;color:var(--dim);overflow-wrap:anywhere}
 .spotify-panel-track{display:flex;gap:11px;align-items:center}.spotify-panel-track .spotify-art{width:52px;height:52px;border-radius:10px}.spotify-panel-copy{min-width:0}.spotify-panel-copy b,.spotify-panel-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spotify-panel-copy b{color:var(--txt2);font-size:13px;font-weight:500}.spotify-panel-copy span{color:var(--dim);font-size:11px;margin-top:3px}
 .spotify-progress{margin:13px 0 4px}.spotify-range{width:100%;height:3px;accent-color:#1ed760;cursor:pointer}.spotify-times{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim2);font-family:var(--font-m);margin-top:3px}
 .spotify-controls{display:flex;align-items:center;justify-content:center;gap:9px;margin:8px 0 13px}.spotify-control{width:32px;height:32px}.spotify-control.primary{width:38px;height:38px}.spotify-control.on{color:#1ed760;background:rgba(30,215,96,.09)}
@@ -1817,11 +1823,11 @@ body{font-size:14px}
 const {useState, useRef, useEffect, useMemo} = React;
 const API = window.VellumApi;
 const SpotifyAPI = {
-  status: () => API.client.request('/api/plugins/spotify/status'),
-  start: clientId => API.client.request('/api/plugins/spotify/oauth/start', API.client.jsonOptions('POST', {client_id: clientId})),
-  logout: () => API.client.request('/api/plugins/spotify/logout', API.client.jsonOptions('POST')),
-  player: (details=false) => API.client.request('/api/plugins/spotify/player' + (details ? '?details=true' : '')),
-  action: body => API.client.request('/api/plugins/spotify/player/action', API.client.jsonOptions('POST', body)),
+  status: () => API.plugins.spotifyStatus(),
+  start: clientId => API.plugins.spotifyStart(clientId),
+  logout: () => API.plugins.spotifyLogout(),
+  player: (details=false) => API.plugins.spotifyPlayer(details),
+  action: body => API.plugins.spotifyAction(body),
 };
 const YouTubeAPI = {
   status: () => API.plugins.youtubeStatus(),
@@ -3421,6 +3427,7 @@ const vellumReply = (text, exclude) => {
 
 const MODEL_PROVIDER_FILTERS = [
   {id: 'all', label: 'All'},
+  {id: 'ollama', label: 'Local'},
   {id: 'openai', label: 'OpenAI'},
   {id: 'anthropic', label: 'Claude'},
   {id: 'google', label: 'Google'},
@@ -3429,6 +3436,7 @@ const MODEL_PROVIDER_FILTERS = [
 ];
 const modelFamily = model => {
   const vendor = String(model.provider || model.id || '').split('/')[0].toLowerCase();
+  if (vendor === 'ollama') return 'ollama';
   if (vendor === 'anthropic') return 'anthropic';
   if (vendor === 'openai') return 'openai';
   if (vendor === 'google') return 'google';
@@ -3483,7 +3491,7 @@ const ModelDrop = ({model, models = MODELS, drop, onPick, onClose}) => {
             {model === m.id && <span className="drop-check"><IcCheck size={13}/></span>}
           </div>
         ))}
-        {hits.length === 0 && <div className="s-none">No matches.</div>}
+        {hits.length === 0 && <div className="s-none">{models.length ? 'No matches.' : 'No models installed or connected.'}</div>}
       </div>
     </Popover>
   );
@@ -3492,6 +3500,7 @@ const PLACEHOLDERS = ['Ask anything?', 'Search your library?', 'Draft something 
 
 /* models â€” backend-canonical fallback list. Live /api/models replaces this on boot. */
 let MODELS = [
+  { id: 'ollama/qwen3.5:9b',              label: 'Qwen 3.5 9B (Local)' },
   { id: 'google/gemma-4-31b-it',          label: 'Gemma 4 31B' },
   { id: 'google/gemma-4-26b-a4b-it',      label: 'Gemma 4 26B A4B' },
   { id: 'qwen/qwen3.5-35b-a3b',           label: 'Qwen 3.5 35B A3B' },
@@ -3515,11 +3524,11 @@ let MODELS = [
   { id: 'moonshotai/kimi-k3',             label: 'Kimi K3' },
   { id: 'moonshotai/kimi-k2.6',           label: 'Kimi K2.6' },
 ];
-const DEFAULT_MODEL = 'google/gemma-4-31b-it';
+const DEFAULT_MODEL = 'ollama/qwen3.5:9b';
 const AttachmentRuntime = window.VellumUI && window.VellumUI.Attachments;
 let APPLICATION_DEFAULT_MODEL = DEFAULT_MODEL;
 const readDefaultModel = () => APPLICATION_DEFAULT_MODEL;
-const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : id; };
+const modelLabel = (id, models = MODELS) => { const m = models.find(x => x.id === id); return m ? m.label : (id || 'Choose a model'); };
 const PROVIDERS = [
   { id: 'anthropic',  name: 'Anthropic',  note: 'Claude Opus 5 / Sonnet 4.5' },
   { id: 'openai',     name: 'OpenAI',     note: 'GPT-5.6 Sol / Terra / Luna' },
@@ -3922,12 +3931,12 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
     if (ta) { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'; }
   }, [text]);
   const send = () => {
-    if (busy) {
+    if (busy && !text.trim()) {
       if (onStop) onStop();
       return;
     }
     if (!text.trim()) return;
-    onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope});
+    onSend(text.trim(), attach, {forceWebSearch: searchMode, searchScope, deliveryMode: busy ? 'steer' : 'send'});
     setText(''); setAttach([]);
     setAttachError('');
     setSearchMode(false);
@@ -4057,10 +4066,10 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             : <button className={'model-pill' + (modelOpen ? ' select-open' : '')} onClick={() => setModelOpen(true)}><span className="model-num">{modelLabel(model, models)}</span><IcChevD size={12}/></button>}
           {onMemoryChange && <button className={'cbtn' + (memoryEnabled ? '' : ' muted')} title={memoryEnabled ? 'Memory is on for this chat' : 'Memory is off for this chat'} aria-label={memoryEnabled ? 'Turn memory off for this chat' : 'Turn memory on for this chat'} onClick={() => onMemoryChange(!memoryEnabled)}><IcBrain size={15}/></button>}
           <button className={'cbtn' + (mic ? ' mic-on' : '')} title={mic ? 'Stop dictation (Ctrl+Shift+D)' : 'Dictation (Ctrl+Shift+D)'} onClick={() => setMic(m => !m)}><IcMic/></button>
-          {voiceState === 'idle' && (busy
+          {voiceState === 'idle' && (busy && !text.trim()
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
             : text.trim()
-              ? <button className={'csend send-size-' + sendSize + (showSendLabel ? ' has-label' : '')} title={sendLabel} aria-label={sendLabel} data-ui-reference="composer.send" onClick={send}><IcSend size={15}/>{showSendLabel && <span className="csend-label">{sendLabel}</span>}</button>
+              ? <button className={'csend send-size-' + sendSize + (showSendLabel ? ' has-label' : '')} title={busy ? 'Queue message' : sendLabel} aria-label={sendLabel} data-ui-reference="composer.send" onClick={send}><IcSend size={15}/>{showSendLabel && <span className="csend-label">{busy ? 'Queue' : sendLabel}</span>}</button>
               : <button className="csend voice-btn" title="Use Voice  ?  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
           {voiceState === 'connecting' && (
             <button className="voice-pill voice-pill-cancel" onClick={endVoice} title="Cancel"><span className="voice-spin"/>Cancel</button>)}
@@ -4556,7 +4565,7 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
             <span className="proj-name">{agent.name}</span>
             <span className="proj-mem">{agent.tag}</span>
             <div className="agent-head-acts">
-              {agent.id === 'x' && xConnected && <button className="x-connpill" onClick={onDisconnectX} title="Disconnect X account"><span className="x-connpill-dot"/>{xHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
+              {agent.id === 'x' && xConnected && <button className="x-connpill" onClick={onDisconnectX} title="X connection settings"><span className="x-connpill-dot"/>{xHandle}<span className="x-connpill-x"><IcSettings size={11}/></span></button>}
               {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onDisconnectYT} title="Disconnect YouTube account"><span className="x-connpill-dot yt-dot"/>{ytHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
               <button className={'agent-status' + (enabled ? ' on' : '')} onClick={onToggleEnabled} title={enabled ? 'Turn agent off' : 'Turn agent on'}><span className="agent-status-dot"/>{enabled ? 'On' : 'Off'}</button>
               <button className="tbtn" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
@@ -4572,7 +4581,7 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
             ) : (
             <div className="xgate">
               <div className="xgate-ic"><XLogo size={20}/></div>
-              <div className="xgate-txt"><div className="xgate-t">Connect your X account</div><div className="xgate-s">Sign in with X to activate the {agent.name}. Requires an active <b>SuperGrok</b> or <b>X Premium+</b> subscription ? no API key needed.</div></div>
+              <div className="xgate-txt"><div className="xgate-t">Connect your X account</div><div className="xgate-s">Use your existing X browser session through <b>Agent Reach</b>. No X API or paid X subscription is required.</div></div>
               <button className="btn primary xgate-btn" onClick={onConnectX}><XLogo size={14}/>Connect X account</button>
             </div>
             )
@@ -4698,14 +4707,15 @@ const XConnectModal = ({onClose, onConnected}) => {
   const [status, setStatus] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const [cookieExport, setCookieExport] = useState('');
   const oauthStarted = useRef(false);
   const api = window.VellumApi;
   const loadStatus = async () => {
     try {
       const next = await api.client.request('/api/x/oauth/status');
       setStatus(next);
-      if (oauthStarted.current && (next.x_api_connected || next.xai_connected)) {
-        onConnected(next.x_api_connected ? 'X account connected' : 'SuperGrok connected');
+      if (oauthStarted.current && (next.agent_reach_connected || next.x_api_connected || next.xai_connected)) {
+        onConnected(next.agent_reach_connected ? 'Agent Reach' : next.x_api_connected ? 'X API' : 'SuperGrok');
       }
       return next;
     } catch (err) {
@@ -4715,7 +4725,6 @@ const XConnectModal = ({onClose, onConnected}) => {
   };
   useEffect(() => {
     loadStatus();
-    const id = setInterval(loadStatus, 2200);
     const wake = () => loadStatus();
     const onMessage = e => {
       if (e.data && e.data.type === 'vellum:x-oauth-complete') loadStatus();
@@ -4727,12 +4736,26 @@ const XConnectModal = ({onClose, onConnected}) => {
     window.addEventListener('message', onMessage);
     window.addEventListener('storage', onStorage);
     return () => {
-      clearInterval(id);
       window.removeEventListener('focus', wake);
       window.removeEventListener('message', onMessage);
       window.removeEventListener('storage', onStorage);
     };
   }, []);
+  const connectAgentReach = async () => {
+    setBusy('agent-reach');
+    setError('');
+    try {
+      const out = await api.client.request('/api/x/agent-reach/connect', api.client.jsonOptions('POST', {cookie_export: cookieExport}));
+      setCookieExport('');
+      await loadStatus();
+      const account = out && out.account || {};
+      onConnected(account.username ? '@' + account.username : 'Agent Reach');
+    } catch (err) {
+      setError(err.message || 'Could not connect Agent Reach.');
+    } finally {
+      setBusy('');
+    }
+  };
   const start = async (provider) => {
     setBusy(provider);
     setError('');
@@ -4756,6 +4779,7 @@ const XConnectModal = ({onClose, onConnected}) => {
   };
   const xaiOk = status && status.xai_connected;
   const xapiOk = status && status.x_api_connected;
+  const agentReachOk = status && status.agent_reach_connected;
   const xapiConfigured = status && status.x_api_configured;
   return (
     <React.Fragment>
@@ -4763,26 +4787,30 @@ const XConnectModal = ({onClose, onConnected}) => {
       <div className="xc-win" role="dialog" aria-label="Connect X">
         <div className="xc-bar">
           <div className="xc-dots"><span className="xc-dot r" onClick={onClose} title="Close"/><span className="xc-dot y"/><span className="xc-dot g"/></div>
-          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>accounts.x.ai<span className="xc-url-path">/oauth</span></div>
+          <div className="xc-url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>local.vellum<span className="xc-url-path">/agent-reach</span></div>
           <button className="xc-close" onClick={onClose} aria-label="Close"><IcX size={15}/></button>
         </div>
         <div className="xc-body">
           <div className="xc-page">
             <div className="xc-logo"><XLogo size={30}/></div>
             <div className="xc-h">Connect X Agent</div>
-            <div className="xc-sub">Use the real browser OAuth popup. Vellum saves refreshable tokens locally and never asks for your X password.</div>
+            <div className="xc-sub">Agent Reach uses your existing X session locally. No X API subscription is required.</div>
             <div className="xc-perms" style={{marginTop:18}}>
-              <div className="xc-perm"><IcCheck size={14}/>{xaiOk ? 'SuperGrok / xAI search connected' : 'Connect SuperGrok / xAI search for live X search'}</div>
-              <div className="xc-perm"><IcCheck size={14}/>{xapiOk ? 'X API account actions connected' : 'Connect X API for posting, bookmarks, account reads, and media upload'}</div>
+              <div className="xc-perm"><IcCheck size={14}/>{agentReachOk ? 'Agent Reach connected for reads and account actions' : 'Connect Agent Reach for search, bookmarks, posts, replies, reposts, and likes'}</div>
+              <div className="xc-perm"><IcCheck size={14}/>Bookmarks are categorized locally in Knowledge Core</div>
             </div>
-            <button className="xc-btn" disabled={busy === 'xai' || xaiOk} onClick={() => start('xai')}>{xaiOk ? 'SuperGrok connected' : busy === 'xai' ? 'Opening SuperGrok OAuth...' : 'Connect SuperGrok'}</button>
-            <button className="xc-cancel" disabled={!xapiConfigured || busy === 'xapi' || xapiOk} onClick={() => start('xapi')}>{xapiOk ? 'X account actions connected' : busy === 'xapi' ? 'Opening X OAuth...' : 'Connect X account actions'}</button>
-            {!xapiConfigured && <div className="xc-note xc-note-sm">Set <b>X_API_CLIENT_ID</b> in .env to enable posting, bookmarks, and account actions. SuperGrok search can still connect above.</div>}
+            {!agentReachOk && <textarea className="xc-cookie" value={cookieExport} onChange={e => setCookieExport(e.target.value)} aria-label="X Cookie Editor export" placeholder="Paste the Cookie-Editor JSON export from x.com. It must include auth_token and ct0."/>}
+            <button className="xc-btn" disabled={busy === 'agent-reach' || agentReachOk || !cookieExport.trim()} onClick={connectAgentReach}>{agentReachOk ? 'Agent Reach connected' : busy === 'agent-reach' ? 'Connecting locally...' : 'Connect with Agent Reach'}</button>
+            {!agentReachOk && <div className="xc-note xc-note-sm">While signed into <b>x.com</b> in Brave, use Cookie-Editor to export that site's cookies as JSON, then paste them above. Vellum passes the export to Agent Reach through standard input and does not save it in the project.</div>}
+            <div className="xc-note xc-note-sm">Optional services</div>
+            <button className="xc-cancel" disabled={busy === 'xai' || xaiOk} onClick={() => start('xai')}>{xaiOk ? 'SuperGrok connected' : busy === 'xai' ? 'Opening SuperGrok OAuth...' : 'Connect SuperGrok search (optional)'}</button>
+            <button className="xc-cancel" disabled={!xapiConfigured || busy === 'xapi' || xapiOk} onClick={() => start('xapi')}>{xapiOk ? 'Official X API connected' : busy === 'xapi' ? 'Opening X OAuth...' : 'Connect official X API (optional)'}</button>
+            {!xapiConfigured && <div className="xc-note xc-note-sm">Official X OAuth is unavailable because <b>X_API_CLIENT_ID</b> is not configured. Agent Reach remains the primary connector.</div>}
             {status && !status.private_reads_enabled && <div className="xc-note xc-note-sm">Private reads also require <b>X_TOOL_ALLOW_PRIVATE_READS=true</b>.</div>}
             {status && !status.posting_enabled && <div className="xc-note xc-note-sm">Posting also requires <b>X_TOOL_ALLOW_POSTS=true</b> plus per-action confirmation.</div>}
             {error && <div className="xc-note xc-note-sm" style={{color:'#ff7b72'}}>{error}</div>}
             <button className="xc-btn" style={{marginTop:12}} onClick={loadStatus}>Refresh status</button>
-            {(xaiOk || xapiOk) && <button className="xc-cancel" onClick={() => onConnected(xapiOk ? 'X account connected' : 'SuperGrok connected')}>Use connected account</button>}
+            {(agentReachOk || xaiOk || xapiOk) && <button className="xc-cancel" onClick={() => onConnected(agentReachOk ? 'Agent Reach' : xapiOk ? 'X API' : 'SuperGrok')}>Use connected account</button>}
           </div>
         </div>
       </div>
@@ -5069,12 +5097,27 @@ const ActivityTimeline = ({msg}) => {
   );
 };
 
+const cleanVisibleAnswer = value => {
+  let text = String(value || '').trim();
+  if (!text) return '';
+  text = text.split(/^\s{0,3}#{1,6}\s+(?:references|sources|sources checked|evidence)\s*$/im, 1)[0];
+  text = text.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+  text = text.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1');
+  text = text.replace(/(^|\s)\[(?:\d+)\](?=\s|$|[.,;:!?])/g, '$1');
+  text = text.replace(/\\([()|\-])/g, '$1');
+  return text.replace(/\n{3,}/g, '\n\n').trim();
+};
+
 const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity, onFork, onShare}) => {
   const [openWork, setOpenWork] = useState(false);
+  const visibleText = cleanVisibleAnswer(msg.text);
   const rawPhase = msg.phase || (msg.streaming ? 'answering' : 'done');
   const phase = rawPhase === 'thinking' && !msg.streaming ? 'done' : rawPhase;
   const refs = msg.refLines || [];
   const shown = refs.slice(0, msg.refShown || 0);
+  if (phase === 'queued') {
+    return <div className="turn"><div className="ref-line shimmer"><span className="ref-ic"><IcChat size={14}/></span><span className="ref-txt">Queued — this message will run after the current response.</span></div></div>;
+  }
   if (phase === 'thinking') {
     return <div className="turn"><ActivityTimeline msg={msg}/></div>;
   }
@@ -5104,7 +5147,7 @@ const AssistantTurn = ({msg, onRegen, onAnswerNow, onOpenActivity, onFork, onSha
       )}
       {openWork && <div className="ref-list inset">{refs.map((r,i) => (<div key={i} className="ref-line done"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{r}</span></div>))}</div>}
       {msg.leadIn && <div className="turn-lead">{msg.leadIn}</div>}
-      <div className="areply">{msg.text || '\u2026'}</div>
+      <div className="areply"><window.VellumUI.AnswerMarkdown text={visibleText || '\u2026'}/></div>
       {!msg.streaming && refs[0] && <div className="ref-line under"><span className="ref-ic"><IcGlobe size={14}/></span><span className="ref-txt">{refs[0]}</span></div>}
       {!msg.streaming && (
         <div className="turn-foot">
@@ -6321,32 +6364,8 @@ const DiscordWorkspace = () => {
     {error&&<div className="discord-error" role="alert">{error}</div>}
   </section>;
 };
-const CalendarWorkspace = () => {
-  const blank=()=>({summary:'',start:'',end:''});
-  const [status,setStatus]=useState(null),[calendars,setCalendars]=useState([]),[calendarId,setCalendarId]=useState('primary'),[events,setEvents]=useState([]);
-  const [draft,setDraft]=useState(blank()),[editing,setEditing]=useState(null),[pending,setPending]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
-  const inputValue=value=>{if(!value)return '';const date=new Date(value);if(Number.isNaN(date.getTime()))return '';const local=new Date(date.getTime()-date.getTimezoneOffset()*60000);return local.toISOString().slice(0,16);};
-  const loadEvents=async id=>{const from=new Date(),to=new Date(from.getTime()+7*24*60*60*1000);const result=await API.plugins.calendarEvents({time_min:from.toISOString(),time_max:to.toISOString(),calendar_id:id||'primary',max_results:'50'});setEvents(result.items||[]);};
-  const load=async probe=>{setBusy(true);setError('');try{const next=await API.plugins.calendarStatus(probe===true);setStatus(next);if(next.connected){const result=await API.plugins.calendarCalendars();const visible=result.items||[];setCalendars(visible);const selected=visible.some(item=>item.id===calendarId)?calendarId:(visible.find(item=>item.primary)?.id||'primary');setCalendarId(selected);await loadEvents(selected);}else{setCalendars([]);setEvents([]);}}catch(e){setError(e?.message||'Google Calendar is unavailable.');}finally{setBusy(false);}};
-  useEffect(()=>{load(false);const complete=event=>{if(event.data?.type==='vellum:google-calendar-oauth-complete')load(true);};const stored=event=>{if(event.key==='vellum:google-calendar-oauth-complete')load(true);};window.addEventListener('message',complete);window.addEventListener('storage',stored);return()=>{window.removeEventListener('message',complete);window.removeEventListener('storage',stored);};},[]);
-  const connect=async()=>{setBusy(true);setError('');const popup=window.open('about:blank','vellum-google-calendar-oauth','popup,width=620,height=760');try{const result=await API.plugins.calendarOAuthStart();if(popup)popup.location.href=result.authorization_url;else window.open(result.authorization_url,'_blank','noopener,noreferrer');}catch(e){if(popup)popup.close();setError(e?.message||'Google Calendar connection could not be started.');}finally{setBusy(false);}};
-  const disconnect=async()=>{setBusy(true);try{await API.plugins.calendarDisconnect();setStatus({configured:true,connected:false,status:'not_connected'});setCalendars([]);setEvents([]);}catch(e){setError(e?.message||'Google Calendar disconnect failed.');}finally{setBusy(false);}};
-  const choose=async id=>{setCalendarId(id);setBusy(true);setError('');try{await loadEvents(id);}catch(e){setError(e?.message||'Calendar events are unavailable.');}finally{setBusy(false);}};
-  const submit=()=>{if(!draft.summary.trim()||!draft.start||!draft.end)return setError('Title, start, and end are required.');const start=new Date(draft.start),end=new Date(draft.end);if(Number.isNaN(start.getTime())||Number.isNaN(end.getTime())||end<=start)return setError('End must be after start.');setError('');const targetCalendar=editing?.calendar_id||calendarId;setPending({kind:editing?'update':'create',eventId:editing?.id||'',calendarId:targetCalendar,body:{calendar_id:targetCalendar,summary:draft.summary.trim(),start:start.toISOString(),end:end.toISOString(),time_zone:status?.time_zone||'',confirm:true}});};
-  const edit=event=>{setEditing({...event,calendar_id:calendarId});setDraft({summary:event.summary||'',start:inputValue(event.start),end:inputValue(event.end)});};
-  const confirm=async()=>{if(!pending||busy)return;setBusy(true);setError('');try{if(pending.kind==='create')await API.plugins.calendarCreateEvent(pending.body);if(pending.kind==='update')await API.plugins.calendarUpdateEvent(pending.eventId,pending.body);if(pending.kind==='delete')await API.plugins.calendarDeleteEvent(pending.eventId,pending.calendarId,true);setPending(null);setEditing(null);setDraft(blank());await loadEvents(calendarId);}catch(e){setError(e?.message||'Calendar change failed.');}finally{setBusy(false);}};
-  return <section className="calendar-workspace" aria-label="Google Calendar workspace">
-    <div className="calendar-head"><strong>Google Calendar</strong><span>{status?.connected?`Connected · ${status.time_zone||'calendar time zone'}`:'Not connected'}</span><div className="calendar-head-actions"><button className="discord-icon-btn" title="Refresh Calendar" aria-label="Refresh Calendar" disabled={busy} onClick={()=>load(true)}><IcRefresh size={13}/></button>{status?.connected&&<button className="btn" disabled={busy} onClick={disconnect}>Disconnect</button>}</div></div>
-    {!status?.connected?<div className="calendar-connect"><span>{status?.configured===false?'Configure Google OAuth credentials, then restart Vellum.':'Connect the primary Google account to view and manage events.'}</span><button className="btn" disabled={busy||status?.configured===false} onClick={connect}>Connect</button></div>:<React.Fragment>
-      <div className="calendar-toolbar"><select aria-label="Google Calendar" value={calendarId} disabled={busy||!!editing||!!pending} onChange={e=>choose(e.target.value)}>{calendars.map(item=><option key={item.id} value={item.id}>{item.summary||item.id}</option>)}</select><button className="btn" disabled={busy} onClick={()=>choose(calendarId)}>Next 7 days</button></div>
-      <div className="calendar-events">{events.length?events.map(event=><article className="calendar-event" key={event.id}><span className="calendar-event-dot"/><div className="calendar-event-copy"><strong>{event.summary||'Untitled event'}</strong><span>{event.start?new Date(event.start).toLocaleString():''}{event.location?` · ${event.location}`:''}</span></div><div className="calendar-event-actions"><button disabled={!!pending} onClick={()=>edit(event)}>Edit</button><button disabled={!!pending||!!editing} onClick={()=>setPending({kind:'delete',eventId:event.id,calendarId})}>Delete</button></div></article>):<div className="discord-empty">No events in the next seven days.</div>}</div>
-      <div className="calendar-editor"><input aria-label="Event title" maxLength="1024" placeholder="Event title" value={draft.summary} onChange={e=>setDraft({...draft,summary:e.target.value})}/><input aria-label="Event start" type="datetime-local" value={draft.start} onChange={e=>setDraft({...draft,start:e.target.value})}/><input aria-label="Event end" type="datetime-local" value={draft.end} onChange={e=>setDraft({...draft,end:e.target.value})}/><div className="calendar-editor-actions">{editing&&<button className="btn" onClick={()=>{setEditing(null);setDraft(blank());}}>Cancel edit</button>}<button className="btn" disabled={busy} onClick={submit}>{editing?'Update event':'Create event'}</button></div></div>
-      {pending&&<div className="discord-confirm"><span>Confirm Google Calendar {pending.kind}: {pending.body?.summary||pending.eventId}</span><button className="btn" onClick={()=>setPending(null)}>Cancel</button><button className="btn" disabled={busy} onClick={confirm}>Confirm</button></div>}
-    </React.Fragment>}
-    {error&&<div className="calendar-error" role="alert">{error}</div>}
-  </section>;
-};
-const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, youtubeIntelligence}) => {
+const CalendarWorkspace = window.VellumUI.CalendarWorkspace;
+const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, onCalendarAction, youtubeIntelligence}) => {
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState('plugins');
   const [selected, setSelected] = useState(null);
@@ -6407,7 +6426,7 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, youtubeI
     return (rowName(row) + ' ' + rowDescription(row) + ' ' + (row.parent ? row.parent.name : '')).toLowerCase().includes(q);
   });
   const ready = plugins.filter(a => connectorStatus(a) === 'ready').length;
-  const detailPlugin = selected && (selected.kind === 'plugin' ? selected.item : selected.parent);
+  const detailPlugin = selected && plugins.find(item => item.id === (selected.kind === 'plugin' ? selected.item.id : selected.parent.id));
   const count = key => (allRows[key] || []).length;
   return (
     <div className="page">
@@ -6435,18 +6454,18 @@ const BackendConnectorsView = ({apps = [], onOpenSkills, onPluginState, youtubeI
               return <button key={row.kind+':'+(owner&&owner.id)+':'+name} className={'plugin-row'+(active?' active':'')} onClick={() => setSelected(row)}>
                 <span className="conn-ic"><ConnLogo c={owner || row.item} size={18}/></span>
                 <span className="plugin-row-copy"><div className="plugin-row-name">{name}</div><div className="plugin-row-desc">{rowDescription(row)}</div></span>
-                <span className={'conn-trust '+(connectorStatus(owner)==='ready'?'verified':'community')}>{owner && owner.enabled===false?'Disabled':'Active'}</span>
+                <span className={'conn-trust '+(connectorStatus(owner)==='ready'?'verified':'community')}>{owner && owner.enabled===false?'Disabled':owner?.id==='google-calendar'?(owner.status==='ready'?'Connected':'Not connected'):'Active'}</span>
               </button>;
             }) : <div className="apps-empty">No {tab} match this search.</div>}
           </section>
           <section className="plugin-detail">
             {!selected ? <div className="plugin-detail-empty">Select an item to inspect its apps, MCPs, skills, and status.</div> : <React.Fragment>
               <div className="plugin-detail-head"><span className="conn-ic"><ConnLogo c={detailPlugin || selected.item} size={22}/></span><div style={{minWidth:0}}><div className="plugin-detail-title">{rowName(selected)}</div><div className="plugin-detail-sub">{rowDescription(selected) || connectorSetupNote(detailPlugin)}</div></div>
-                <div className="plugin-detail-actions">{detailPlugin && detailPlugin.id === 'discord' && <button className="btn" disabled={!!busyPlugin} onClick={installDiscord}>Install bot</button>}{selected.kind === 'plugin' && selected.item.manageable && <button className="btn" disabled={selected.item.required || busyPlugin === selected.item.id} onClick={() => togglePlugin(selected.item)}>{selected.item.required ? 'Required' : selected.item.enabled === false ? 'Enable' : 'Disable'}</button>}</div>
+                <div className="plugin-detail-actions">{detailPlugin && detailPlugin.id === 'discord' && <button className="btn" disabled={!!busyPlugin} onClick={installDiscord}>Install bot</button>}{selected.kind === 'plugin' && selected.item.manageable && <button className="btn" disabled={detailPlugin.required || busyPlugin === detailPlugin.id} onClick={() => togglePlugin(detailPlugin)}>{detailPlugin.required ? 'Required' : detailPlugin.enabled === false ? 'Enable' : 'Disable'}</button>}</div>
               </div>
               {detailPlugin && <React.Fragment>
                 {detailPlugin.id === 'discord' && <DiscordWorkspace/>}
-                {detailPlugin.id === 'google-calendar' && <CalendarWorkspace/>}
+                {detailPlugin.id === 'google-calendar' && <CalendarWorkspace onAction={onCalendarAction} enabled={detailPlugin.enabled!==false} onStatus={next=>{const app=apps.find(item=>item.id==='google-calendar');if(app){const status=next.enabled===false?'disabled':next.connected?'ready':next.status;if(app.status!==status){Object.assign(app,{status,enabled:next.enabled!==false});setRevision(value=>value+1);}}}}/>}
                 <div className="plugin-section"><div className="plugin-section-h">Apps {detailPlugin.apps.length}</div>{detailPlugin.apps.map(item => <div className="plugin-child" key={item.id||item.name}><span className="conn-ic"><IcGrid size={14}/></span><span className="plugin-child-copy"><div className="plugin-child-name">{item.name||item.id}</div><div className="plugin-child-desc">{item.description||'Included app'}</div></span></div>)}</div>
                 <div className="plugin-section"><div className="plugin-section-h">MCPs {detailPlugin.mcp_connectors.length}</div>{detailPlugin.mcp_connectors.map(item => <div className="plugin-child" key={item.id||item.name}><span className="conn-ic"><IcMcp size={14}/></span><span className="plugin-child-copy"><div className="plugin-child-name">{item.name||item.id}</div><div className="plugin-child-desc">{item.description||item.transport||item.command||'Included connector'}</div></span></div>)}</div>
                 <div className="plugin-section"><div className="plugin-section-h">Skills {detailPlugin.skills.length}</div>{detailPlugin.skills.map(item => <div className="plugin-child" key={item.id||item.name}><span className="conn-ic"><IcSparkle size={14}/></span><span className="plugin-child-copy"><div className="plugin-child-name">{item.name||item.id}</div><div className="plugin-child-desc">{item.description||'Included skill'}</div></span></div>)}</div>
@@ -7236,7 +7255,7 @@ function applyAccent(id){
   syncBackgroundTheme();
 }
 
-const SpotifyConnectModal = ({onClose, onConnected, onStart}) => {
+const SpotifyConnectModal = ({onClose, onConnected, onStart, reconnecting=false}) => {
   const [clientId, setClientId] = useState('');
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -7246,14 +7265,14 @@ const SpotifyConnectModal = ({onClose, onConnected, onStart}) => {
     const timer = setInterval(async () => {
       try {
         const status = await SpotifyAPI.status();
-        if (status && status.connected) onConnected(status);
+        if (status && status.connected && status.web_playback_ready) onConnected(status);
       } catch (_) {}
     }, 1800);
     return () => clearInterval(timer);
   }, [waiting, onConnected]);
   const begin = async () => {
     const value = clientId.trim();
-    if (!value || busy) return;
+    if ((!value && !reconnecting) || busy) return;
     setBusy(true); setError('');
     const popup = window.open('about:blank', 'vellum-spotify-oauth', 'width=520,height=720');
     try {
@@ -7275,13 +7294,13 @@ const SpotifyConnectModal = ({onClose, onConnected, onStart}) => {
         <button className="set-close" title="Close" onClick={onClose}><I d="M6 6l12 12M18 6L6 18" size={16}/></button>
         <div style={{display:'flex',alignItems:'center',gap:11}}><span className="spotify-mark">S</span><div><div className="m-title">Connect Spotify</div><div className="agent-bar-tag">One-time PKCE setup. No client secret required.</div></div></div>
         <div className="spotify-steps">
-          <div className="spotify-step"><span className="spotify-step-n">1</span><div className="spotify-step-copy"><b>Create a Spotify developer app</b>Enable Web API, then add the callback below.<div className="spotify-uri">http://127.0.0.1:8000/api/plugins/spotify/oauth/callback</div><button className="btn" style={{marginTop:8}} onClick={() => window.open('https://developer.spotify.com/dashboard','_blank','noopener,noreferrer')}>Open Spotify dashboard</button></div></div>
+          <div className="spotify-step"><span className="spotify-step-n">1</span><div className="spotify-step-copy"><b>{reconnecting ? 'Update your Spotify app permissions' : 'Create a Spotify developer app'}</b>Enable Web API and Web Playback SDK, then add the callback below.<div className="spotify-uri">http://127.0.0.1:8000/api/plugins/spotify/oauth/callback</div><button className="btn" style={{marginTop:8}} onClick={() => window.open('https://developer.spotify.com/dashboard','_blank','noopener,noreferrer')}>Open Spotify dashboard</button></div></div>
           <div className="spotify-step"><span className="spotify-step-n">2</span><div className="spotify-step-copy" style={{width:'100%'}}><b>Paste the public Client ID</b>Vellum stores it with your local refresh token. It is never sent to the model.<div className="spotify-client-field"><label htmlFor="spotify-client-id">Spotify Client ID</label><input id="spotify-client-id" value={clientId} onChange={e => setClientId(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') begin(); }} autoComplete="off" spellCheck="false" placeholder="Your Spotify Client ID"/></div></div></div>
         </div>
-        <div className="hintcard"><span className="sb-ic"><IcShield size={15}/></span><span>Spotify Premium is required for play, pause, skip, volume, queue additions, and device transfer. Keep Spotify open on at least one Connect device.</span></div>
+        <div className="hintcard"><span className="sb-ic"><IcShield size={15}/></span><span>Spotify Premium is required. Vellum can play music here with Spotify closed. Audio streams directly from Spotify. {reconnecting && 'Leave Client ID blank to reuse your existing app, then approve the additional playback permissions.'}</span></div>
         {error && <div className="spotify-error">{error}</div>}
         {waiting && <div className="spotify-wait">Waiting for Spotify authorizationâ€¦</div>}
-        <div className="m-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={!clientId.trim() || busy || waiting} onClick={begin}>{waiting ? 'Authorization opened' : busy ? 'Startingâ€¦' : 'Continue to Spotify'}</button></div>
+        <div className="m-actions"><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={(!clientId.trim() && !reconnecting) || busy || waiting} onClick={begin}>{waiting ? 'Authorization opened' : busy ? 'Startingâ€¦' : 'Continue to Spotify'}</button></div>
       </div>
     </React.Fragment>
   );
@@ -7299,10 +7318,41 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   const [error, setError] = useState('');
   const timerRef = useRef(null);
   const stoppedRef = useRef(false);
+  const openRef = useRef(false);
+  const playerRevisionRef = useRef(0);
+  const refreshRequestRef = useRef(0);
+  openRef.current = open;
+  const playbackRef = useRef(null);
+  const [playback, setPlayback] = useState({status:'loading',enabled:false,ready:false,message:''});
+  useEffect(() => {
+    if (!connected || !spotify.web_playback_ready) return;
+    let stopped = false;
+    API.plugins.capabilities().then(contract => {
+      if (stopped) return;
+      if (!contract.features?.spotify?.enabled || !contract.features.spotify.endpoints?.playback_token) {
+        setPlayback({status:'unavailable',enabled:false,ready:false,message:'This backend does not support playback inside Vellum yet.'}); return;
+      }
+      const controller = window.VellumSpotifyPlayback.create({onChange:setPlayback,
+        onPlayer:state => {
+          playerRevisionRef.current++;
+          setPlayer(prev => ({...(prev || {}),...state,device:{...(prev?.device || {}),...state.device}}));
+        }});
+      playbackRef.current = controller; controller.prepare();
+    }).catch(() => { if (!stopped) setPlayback({status:'error',enabled:false,ready:false,message:'Could not check Spotify playback availability.'}); });
+    return () => { stopped = true; playbackRef.current?.dispose(); playbackRef.current = null; };
+  }, [connected, spotify && spotify.web_playback_ready]);
   const refresh = async details => {
+    const revision = playerRevisionRef.current;
+    const requestId = ++refreshRequestRef.current;
     try {
       const next = await SpotifyAPI.player(!!details);
-      setPlayer(prev => ({...(prev || {}),...next,devices:next.devices || (prev && prev.devices) || [],queue:next.queue || (prev && prev.queue) || []}));
+      if (revision === playerRevisionRef.current && requestId === refreshRequestRef.current) {
+        setPlayer(prev => {
+          const changed = prev?.track?.uri !== next.track?.uri;
+          return {...(prev || {}),...next,devices:next.devices || prev?.devices || [],
+            queue:Array.isArray(next.queue) ? next.queue : changed ? [] : prev?.queue || []};
+        });
+      }
       setError('');
       return next;
     } catch (err) {
@@ -7320,7 +7370,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
       if (stoppedRef.current) return;
       if (document.visibilityState !== 'visible') { schedule(5000); return; }
       try {
-        const next = await refresh(false);
+        const next = await refresh(openRef.current);
         schedule(next && next.is_playing ? 5000 : 15000);
       } catch (err) {
         schedule(/rate|429/i.test(err && err.message || '') ? 30000 : 15000);
@@ -7341,6 +7391,12 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   if (!connected) return null;
   const isPlaying = !!(player && player.is_playing);
   const track = player && player.track;
+  const queuedUris = new Set([track?.uri || track?.id]);
+  const upcoming = (player?.queue || []).filter(item => {
+    const key = item.uri || item.id;
+    if (!key || queuedUris.has(key)) return false;
+    queuedUris.add(key); return true;
+  });
   const artists = player && Array.isArray(player.artists) ? player.artists.join(', ') : '';
   const run = async body => {
     try { await SpotifyAPI.action(body); await refresh(open); }
@@ -7352,11 +7408,16 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
     <div className={'spotify-player-shell side-' + dockSide}>
       <div className="spotify-player-pill" role="button" tabIndex="0" aria-label="Open Spotify player" onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}>
         {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6" size={17}/></span>}
-        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (player && player.device && player.device.name) || 'Open Spotify on a device'}</span></span>
+        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (playback.ready ? 'Playing inside Vellum' : playback.enabled ? 'Vellum player reconnecting' : 'Enable playback inside Vellum')}</span></span>
         <button className="spotify-mini-btn primary" aria-label={isPlaying ? 'Pause Spotify' : 'Play Spotify'} title={isPlaying ? 'Pause' : 'Play'} onClick={toggle}>{isPlaying ? <I d="M9 6v12M15 6v12" size={14}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
         <button className="spotify-mini-btn" aria-label="Next Spotify track" title="Next" onClick={e => { e.stopPropagation(); run({action:'next'}); }}><I d="M6 5l9 7-9 7V5zM18 5v14" size={14}/></button>
       </div>
       {open && <div className="spotify-player-panel">
+        <div className="spotify-playback-session">
+          {playback.status === 'file_preview' || playback.status === 'origin_error' ? <a className="btn primary" href={window.VellumSpotifyPlayback.playerUrl}>Open Vellum player</a> : !spotify.web_playback_ready || playback.status === 'reauth_required' ? <button className="btn primary" onClick={onReconnect}>Allow playback in Vellum</button> : <button className="btn primary" disabled={playback.status === 'loading' || playback.status === 'connecting' || playback.status === 'unavailable' || playback.status === 'unsupported' || playback.status === 'account_error'} onClick={() => playbackRef.current?.enable()}>{playback.ready ? 'Vellum player ready' : playback.status === 'autoplay_required' ? 'Enable audio' : playback.status === 'loading' ? 'Loading player...' : 'Enable playback in Vellum'}</button>}
+          {playback.enabled && <button className="btn" onClick={() => playbackRef.current?.disable().catch(err => setError(err.message))}>Disable Vellum player</button>}
+          <span role="status">{playback.message || (playback.ready ? 'Ask Vellum to play a song. Spotify can stay closed.' : 'Keep this Vellum window open while listening.')}</span>
+        </div>
         <div className="spotify-panel-track">
           {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M6 21a3 3 0 1 0 0-6" size={20}/></span>}
           <div className="spotify-panel-copy"><b>{track ? track.name : 'Nothing playing'}</b><span>{artists || 'Choose music in Spotify or ask Vellum'}</span></div>
@@ -7370,8 +7431,8 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
           <button className={'spotify-control' + (player && player.repeat !== 'off' ? ' on' : '')} aria-label="Change repeat mode" title={'Repeat: ' + (player && player.repeat || 'off')} onClick={() => run({action:'set_repeat',state:repeatNext})}><I d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" size={15}/></button>
         </div>
         <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})}/></div>
-        <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>
-        {(player && player.queue || []).length > 0 && <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{player.queue.slice(0,5).map((item,index) => <div className="spotify-queue-row" key={(item.uri || item.id || '') + index}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>)}</div>}
+        {!playback.enabled && <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>}
+        <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{upcoming.length ? upcoming.slice(0,5).map(item => <div className="spotify-queue-row" key={item.uri || item.id}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>) : <span style={{fontSize:10.5,color:'var(--dim2)'}}>No upcoming tracks in Spotify's queue.</span>}</div>
         {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
       </div>}
     </div>
@@ -8402,6 +8463,14 @@ const NotFoundView = ({onBack}) => {
 const SIDEBAR_SECTION_DEFAULTS = {now: true, spaces: true, smartViews: true, projects: true};
 const SIDEBAR_SECTION_STORAGE_KEY = 'vellum-sidebar-sections';
 
+const mergeConversationUpdate = (localChat, serverChat) => {
+  if (!localChat) return serverChat;
+  const hasActiveTurn = (localChat.messages || []).some(message => message && message.streaming);
+  return hasActiveTurn
+    ? {...localChat, ...serverChat, messages: localChat.messages}
+    : {...localChat, ...serverChat};
+};
+
 const mergeConversationRecords = (current, serverConversations) => {
   const localById = new Map(current.map(chat => [chat.id, chat]));
   const serverIds = new Set(serverConversations.map(chat => chat.id));
@@ -8424,6 +8493,7 @@ const mergeConversationRecords = (current, serverConversations) => {
 };
 
 const App = () => {
+  const navigationEpochRef = useRef(0);
   const petdexStateRef = useRef({
     revision: pxLsGet(PETDEX_LS.revision, 0),
     installed: pxLsGet(PETDEX_LS.installed, ['boba']),
@@ -8564,8 +8634,11 @@ const App = () => {
   useEffect(() => {
     if (!activeChatId) return;
     const chat = chats.find(item => item.id === activeChatId);
-    if (chat) setSelModel(chat.model || readDefaultModel());
-  }, [activeChatId, chats.length]);
+    if (!chat) return;
+    const requested = chat.model || readDefaultModel();
+    const availableIds = new Set(models.map(model => model.id));
+    setSelModel(availableIds.has(requested) ? requested : (models[0] ? models[0].id : ''));
+  }, [activeChatId, chats.length, models]);
   const [backendSettings, setBackendSettings] = useState(null);
   const [memoryData, setMemoryData] = useState({facts: [], entries: [], saved: [], archived: [], summary: null, settings: null, loading: true, error: ''});
 const [apps, setApps] = useState(SEED_APPS);
@@ -8833,6 +8906,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     let alive = true;
     (async () => {
       try {
+        const startupNavigationEpoch = navigationEpochRef.current;
         const [organized, conv, modelData, settingsData, pluginData, skillData, automationData, subagentData] = await Promise.all([
           API.conversations.library().catch(() => null),
           API.conversations.list(),
@@ -8852,7 +8926,9 @@ const [slashSkills, setSlashSkills] = useState([]);
           try {
             const requestedChatId = new URLSearchParams(window.location.search).get('conversation_id');
             const lastChatId = localStorage.getItem('vellum-active-chat-id');
-            if (requestedChatId && conversationData.conversations.some(c => c.id === requestedChatId)) {
+            if (navigationEpochRef.current !== startupNavigationEpoch) {
+              // A user started or opened a chat while startup data was loading.
+            } else if (requestedChatId && conversationData.conversations.some(c => c.id === requestedChatId)) {
               setView('chat');
               setActiveChatId(requestedChatId);
             } else if (lastChatId && conversationData.conversations.some(c => c.id === lastChatId)) setActiveChatId(lastChatId);
@@ -8860,14 +8936,15 @@ const [slashSkills, setSlashSkills] = useState([]);
         }
         if (modelData && Array.isArray(modelData.models)) {
           const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
-          if (liveModels.length) {
-            MODELS = liveModels;
-            setModels(liveModels);
-          }
-          if (modelData.active && modelData.active.id) {
-            APPLICATION_DEFAULT_MODEL = modelData.active.id;
-            setDefaultModel(modelData.active.id);
-            if (!activeChatId) setSelModel(modelData.active.id);
+          MODELS = liveModels;
+          setModels(liveModels);
+          const availableIds = new Set(liveModels.map(model => model.id));
+          const backendActive = modelData.active && modelData.active.id;
+          const nextDefault = backendActive && availableIds.has(backendActive) ? backendActive : (liveModels[0] ? liveModels[0].id : '');
+          APPLICATION_DEFAULT_MODEL = nextDefault;
+          setDefaultModel(nextDefault);
+          if (!activeChatId) {
+            setSelModel(nextDefault);
           }
         }
         if (settingsData) setBackendSettings(settingsData);
@@ -8890,6 +8967,42 @@ const [slashSkills, setSlashSkills] = useState([]);
       }
     })();
     return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let refreshing = false;
+    const refreshModels = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const modelData = await API.settings.models();
+        if (!modelData || !Array.isArray(modelData.models)) return;
+        const liveModels = modelData.models.map(m => ({id: m.id, label: m.label || m.id, provider: m.provider || String(m.id).split('/')[0]}));
+        MODELS = liveModels;
+        setModels(liveModels);
+        const availableIds = new Set(liveModels.map(model => model.id));
+        const backendActive = modelData.active && modelData.active.id;
+        APPLICATION_DEFAULT_MODEL = backendActive && availableIds.has(backendActive) ? backendActive : (liveModels[0] ? liveModels[0].id : '');
+        setDefaultModel(APPLICATION_DEFAULT_MODEL);
+        setSelModel(current => {
+          if (availableIds.has(current)) return current;
+          const backendActive = modelData.active && modelData.active.id;
+          const nextModel = backendActive && availableIds.has(backendActive) ? backendActive : (liveModels[0] ? liveModels[0].id : '');
+          return nextModel;
+        });
+      } catch (err) {
+        console.warn('Vellum model refresh failed', err);
+      } finally {
+        refreshing = false;
+      }
+    };
+    const onVisibility = () => { if (document.visibilityState === 'visible') refreshModels(); };
+    window.addEventListener('focus', refreshModels);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', refreshModels);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   const refreshConversationLibrary = async () => {
@@ -8920,10 +9033,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const applyNewChatNavigation = () => { setView('chat'); setActiveChatId(null); setSelModel(readDefaultModel()); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
+  const applyNewChatNavigation = () => { const saved = readDefaultModel(); const nextModel = models.some(model => model.id === saved) ? saved : (models[0] ? models[0].id : ''); setView('chat'); setActiveChatId(null); setSelModel(nextModel); try { localStorage.removeItem('vellum-active-chat-id'); } catch {} setMenu(null); setActivityMsg(null); };
   const newChat = () => {
-    if (FEATURE_FLAGS.realConversations) return dispatchConversationAction('conversation.new');
+    navigationEpochRef.current += 1;
     applyNewChatNavigation();
+    if (FEATURE_FLAGS.realConversations) return dispatchConversationAction('conversation.new', {}, {applyNavigation:false});
     return null;
   };
   const startAutomationChat = async () => {
@@ -8948,6 +9062,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     newChat();
   };
   const applyOpenChatNavigation = (id, messageId) => {
+    navigationEpochRef.current += 1;
     const chat = chats.find(item => item.id === id);
     setView('chat'); setActiveChatId(id); setSelModel((chat && chat.model) || readDefaultModel());
     try { localStorage.setItem('vellum-active-chat-id', id); } catch {}
@@ -9049,13 +9164,14 @@ const [slashSkills, setSlashSkills] = useState([]);
               tools: trace.tools || m.tools || [],
               phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
               refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
-              streaming: true,
+              trace,
+              streaming: trace.status !== 'done' && trace.status !== 'error',
             }));
           },
           activity: (activity, tools) => {
             activity.forEach(item => {
               const key = item && (item.id || item.name);
-              if (key && String(item.name || '').startsWith('spotify_') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
+              if (key && (String(item.name || '').startsWith('spotify_') || item.name === 'music_agent') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
                 completedSpotifyTools.add(key);
                 window.dispatchEvent(new CustomEvent('vellum:spotify-player-refresh'));
               }
@@ -9087,7 +9203,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (request.action_id !== 'spotify.playback.control' && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           actionReceipt: (receipt, turn) => {
             applyAppActionReceipt(receipt, {notify:true, turn});
@@ -9103,7 +9219,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             }
           },
           delta: text => {
-            finishTurn(assistantId);
+            clearTurnTimers(assistantId);
             updateAgentTurn(agent.id, convoId, assistantId, m => ({
               ...m,
               text,
@@ -9129,6 +9245,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
               tools: final.tools || m.tools || [],
               activity: final.activity || m.activity || [],
+              trace: final.trace || m.trace,
               phase: 'done',
               refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
               leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
@@ -9147,12 +9264,18 @@ const [slashSkills, setSlashSkills] = useState([]);
     const ag = availableAgents.find(a => a.id === activeAgentId)
       || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle);
     if (!ag) return;
+    if (!selModel || !models.some(model => model.id === selModel)) {
+      pushToast('Choose a model or connect a cloud provider before sending.');
+      return;
+    }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = agentReply(ag, text);
     const act = activitySeedForMode(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     let cid = activeConvo[ag.id];
     const createdForTurn = !cid;
+    const existingConvo = cid ? (agentConvos[ag.id] || []).find(c => c.id === cid) : null;
+    const queuedBehindTurn = !!(existingConvo && existingConvo.messages.some(m => m.streaming));
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, queued:queuedBehindTurn, activity: [], sources: act.sources, tools: [], phase:queuedBehindTurn ? 'queued' : 'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     if (!cid) {
       cid = uid();
       const title = (text.trim().replace(/\s+/g, ' ').slice(0, 42)) || 'New conversation';
@@ -9174,7 +9297,10 @@ const [slashSkills, setSlashSkills] = useState([]);
         }));
         if (createdForTurn) setActiveConvo(current => ({...current, [ag.id]:null}));
       };
-      streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, null), attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn});
+      enqueueTurn('agent:' + ag.id + ':' + cid, () => {
+        updateAgentTurn(ag.id, cid, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
+        return streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, existingConvo), attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn});
+      });
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
     }
@@ -9308,6 +9434,16 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const timers = useRef({});
   const turnCtl = useRef({});
+  const turnQueueRef = useRef({});
+  const enqueueTurn = (queueKey, task) => {
+    const previous = turnQueueRef.current[queueKey] || Promise.resolve();
+    const queued = previous.catch(() => {}).then(task);
+    const tracked = queued.finally(() => {
+      if (turnQueueRef.current[queueKey] === tracked) delete turnQueueRef.current[queueKey];
+    });
+    turnQueueRef.current[queueKey] = tracked;
+    return tracked;
+  };
   useEffect(() => () => {
     Object.values(timers.current).forEach(clearTimeout);
     Object.values(turnCtl.current).forEach(c => (c.timers || []).forEach(clearTimeout));
@@ -9445,8 +9581,23 @@ const [slashSkills, setSlashSkills] = useState([]);
       ...lines,
     ].join('\n');
   };
+  const priorFollowUpContext = (text, chat) => {
+    const clean = String(text || '').trim().toLowerCase();
+    const ambiguous = /^[?!.,/\\-]{1,8}$/.test(clean)
+      || /^(?:try again|answer it|answer that|you still haven'?t answered|so tell me|what about that)$/.test(clean);
+    if (!ambiguous || !chat || !Array.isArray(chat.messages)) return '';
+    const priorUser = [...chat.messages].reverse().find(message => message.role === 'user' && String(message.text || '').trim());
+    const priorAssistant = [...chat.messages].reverse().find(message => message.role === 'assistant' && String(message.text || '').trim());
+    if (!priorUser) return '';
+    return [
+      '[Conversation follow-up context]',
+      'The current message is a short reaction to the previous turn. Continue that turn instead of greeting the user or changing topics.',
+      'Previous user request: ' + String(priorUser.text || '').slice(0, 1200),
+      priorAssistant ? 'Previous assistant response: ' + String(priorAssistant.text || '').slice(0, 1200) : '',
+    ].filter(Boolean).join('\n');
+  };
   const messageForBackend = (text, attachments, chat) => {
-    const extra = [priorSourceContext(text, chat), attachmentContext(attachments)].filter(Boolean).join('\n\n');
+    const extra = [priorFollowUpContext(text, chat), priorSourceContext(text, chat), attachmentContext(attachments)].filter(Boolean).join('\n\n');
     return extra ? text + '\n\n' + extra : text;
   };
   const updateTurn = (chatId, msgId, mapper, persist = false) => updateChat(chatId, c => ({
@@ -9497,7 +9648,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const stopActiveTurn = (chatId = activeChatId) => {
     const chat = chats.find(c => c.id === chatId);
-    const msg = chat && [...chat.messages].reverse().find(m => m.role === 'assistant' && m.streaming);
+    const msg = chat && [...chat.messages].reverse().find(m => m.role === 'assistant' && m.streaming && !m.queued);
     if (!chat || !msg) return;
     const ctl = turnCtl.current[msg.id];
     if (ctl && ctl.controller) {
@@ -9514,7 +9665,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const stopActiveAgentTurn = (agentId = activeAgentId) => {
     const convoId = activeConvo[agentId];
     const convo = ((agentConvos[agentId] || []).find(c => c.id === convoId));
-    const msg = convo && [...convo.messages].reverse().find(m => m.role === 'assistant' && m.streaming);
+    const msg = convo && [...convo.messages].reverse().find(m => m.role === 'assistant' && m.streaming && !m.queued);
     if (!convo || !msg) return;
     const ctl = turnCtl.current[msg.id];
     if (ctl && ctl.controller) {
@@ -9582,13 +9733,14 @@ const [slashSkills, setSlashSkills] = useState([]);
               tools: trace.tools || m.tools || [],
               phase: FEATURE_FLAGS.realChat ? m.phase : (m.phase === 'thinking' ? 'refs' : m.phase),
               refShown: FEATURE_FLAGS.realChat ? 0 : Math.max(m.refShown || 0, liveSources.length ? 2 : 1),
-              streaming: true,
+              trace,
+              streaming: trace.status !== 'done' && trace.status !== 'error',
             }));
           },
           activity: (activity, tools) => {
             activity.forEach(item => {
               const key = item && (item.id || item.name);
-              if (key && String(item.name || '').startsWith('spotify_') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
+              if (key && (String(item.name || '').startsWith('spotify_') || item.name === 'music_agent') && item.status === 'completed' && !completedSpotifyTools.has(key)) {
                 completedSpotifyTools.add(key);
                 window.dispatchEvent(new CustomEvent('vellum:spotify-player-refresh'));
               }
@@ -9625,7 +9777,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (request.action_id !== 'spotify.playback.control' && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           sources: sources => {
             const liveSources = normalizeSources(sources);
@@ -9640,7 +9792,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             }));
           },
           delta: text => {
-            finishTurn(assistantId);
+            clearTurnTimers(assistantId);
             updateTurn(chatId, assistantId, m => ({
               ...m,
               text,
@@ -9669,6 +9821,7 @@ const [slashSkills, setSlashSkills] = useState([]);
                 refLines: FEATURE_FLAGS.realChat ? [] : (liveSources.length ? refLinesFromSources(liveSources, m.refLines) : m.refLines),
                 tools: final.tools || m.tools || [],
                 activity: final.activity || m.activity || [],
+                trace: final.trace || m.trace,
                 phase: 'done',
                 refShown: FEATURE_FLAGS.realChat ? 0 : (m.refLines || []).length,
                 leadIn: FEATURE_FLAGS.realChat ? '' : m.leadIn,
@@ -9686,14 +9839,21 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
 
   const sendMessage = (text, attach, opts = {}) => {
+    navigationEpochRef.current += 1;
     let chatId = opts.forceNew ? null : activeChatId;
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
     const createdForTurn = !chatId;
-    const turnModel = (existingChat && existingChat.model) || selModel;
+    const requestedModel = (existingChat && existingChat.model) || selModel;
+    const turnModel = models.some(model => model.id === requestedModel) ? requestedModel : selModel;
+    if (!turnModel || !models.some(model => model.id === turnModel)) {
+      pushToast('Choose a model or connect a cloud provider before sending.');
+      return;
+    }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const reply = vellumReply(text);
     const act = activitySeedForMode(text);
-    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, activity: [], sources: act.sources, tools: [], phase:'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
+    const queuedBehindTurn = !!(existingChat && existingChat.messages.some(m => m.streaming));
+    const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, queued:queuedBehindTurn, activity: [], sources: act.sources, tools: [], phase:queuedBehindTurn ? 'queued' : 'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
     const backendMessage = messageForBackend(text, attach, existingChat);
     const freshAttach = (attach || []).filter(a => a.fresh);
     if (freshAttach.length) {
@@ -9707,13 +9867,16 @@ const [slashSkills, setSlashSkills] = useState([]);
       const title = text.length > 28 ? text.slice(0, 28).trimEnd() + '?' : text;
       const record = {id: chatId, thread_id: chatId, model: turnModel, title, pinned: false, archived: false, projectId: opts.projectId || null, created: 'Today', appIds: [...draftApps], messages: [userMsg, aMsg]};
       setChats(cs => [record, ...cs]);
+      if (FEATURE_FLAGS.realConversations) saveConversation({...record, messages:[userMsg]});
       setDraftApps([]);
       setActiveChatId(chatId);
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     } else {
       setChats(cs => cs.map(c => {
         if (c.id !== chatId) return c;
-        return {...c, model: turnModel, messages: [...c.messages, userMsg, aMsg]};
+        const persisted = {...c, model: turnModel, messages: [...c.messages, userMsg]};
+        if (FEATURE_FLAGS.realConversations) setTimeout(() => saveConversation(persisted), 0);
+        return {...persisted, messages: [...persisted.messages, aMsg]};
       }));
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
@@ -9731,7 +9894,10 @@ const [slashSkills, setSlashSkills] = useState([]);
           try { localStorage.removeItem('vellum-active-chat-id'); } catch {}
         }
       };
-      streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
+      enqueueTurn('chat:' + chatId, () => {
+        updateTurn(chatId, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
+        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
+      });
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
     }
@@ -9779,7 +9945,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     upsertConversation: conversation => {
       if (conversation.id && conversation.thread_id) threadRef.current[conversation.id] = conversation.thread_id;
       setChats(current => current.some(chat => chat.id === conversation.id)
-        ? current.map(chat => chat.id === conversation.id ? {...chat, ...conversation} : chat)
+        ? current.map(chat => chat.id === conversation.id ? mergeConversationUpdate(chat, conversation) : chat)
         : [conversation, ...current]);
       scheduleConversationLibraryRefresh();
     },
@@ -9974,7 +10140,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       const receipt = await conversationActionRuntimeRef.current.dispatch(
         actionId,
         args,
-        {conversationId: options.conversationId === undefined ? defaultConversationId : options.conversationId},
+        {conversationId: options.conversationId === undefined ? defaultConversationId : options.conversationId, applyNavigation:options.applyNavigation},
       );
       showAppActionReceipt(receipt, options);
       return receipt;
@@ -10140,7 +10306,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const selectModel = async id => {
     const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
-    if (!activeChatId && !agentConversationId) { applyModelSelection(id, null); return; }
+    if (!activeChatId && !agentConversationId) {
+      applyModelSelection(id, null);
+      return;
+    }
     await dispatchConversationAction('model.select', {model_id:id});
   };
   const selectDefaultModel = async id => {
@@ -10297,11 +10466,11 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
-            {view === 'apps' && <BackendConnectorsView apps={apps} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {view === 'apps' && <BackendConnectorsView apps={apps} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => { setXConn({connected:false, handle:''}); pushToast('X account disconnected'); }} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
@@ -10352,8 +10521,9 @@ const [slashSkills, setSlashSkills] = useState([]);
           onClose={() => dispatchSurfacePresentation('settings', {visible:false})}/>}
         {spotifyConnectOpen && (
           <SpotifyConnectModal
+            reconnecting={!!spotify.connected}
             onClose={() => setSpotifyConnectOpen(false)}
-            onStart={clientId => dispatchConversationAction('spotify.connection.start', {client_id:clientId})}
+            onStart={clientId => dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})}
             onConnected={status => {
               setSpotify(status);
               setSpotifyConnectOpen(false);

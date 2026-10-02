@@ -25,13 +25,16 @@
     var response = await fetch(backendBase() + path, options || {});
     if (!response.ok) {
       var detail = "HTTP " + response.status;
+      var errorDetail = null;
       try {
         var body = await response.json();
-        detail = body.detail || body.message || detail;
+        errorDetail = body.detail || body.message || null;
+        detail = errorDetail || detail;
         if (detail && typeof detail === "object") detail = detail.message || detail.code || JSON.stringify(detail);
       } catch (_) {}
       var error = new Error(detail);
       error.status = response.status;
+      error.detail = errorDetail;
       throw error;
     }
     if (response.status === 204) return null;

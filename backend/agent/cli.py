@@ -193,10 +193,12 @@ async def chat_loop(
                 "thread_id",
                 settings.thread_id,
             )
+            from agent.llm.routing.models import provider_for_model
+
             turn_audit = TurnAudit(
                 thread_id=thread_id,
                 model=settings.primary_model,
-                provider="openrouter",
+                provider=provider_for_model(settings.primary_model),
                 privacy_class=classify(user_input)[0].value,
                 saved=True,
             )

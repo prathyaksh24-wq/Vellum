@@ -51,3 +51,14 @@ and a checksummed manifest. Restore is an offline maintenance operation: stop
 Vellum, verify the archive, and use the explicit `RESTORE_KNOWLEDGE_CORE`
 confirmation token. A verified pre-restore rollback archive is always created
 before the live database and blob generation are replaced.
+
+## Honcho portrait scope
+
+Honcho dialectic retrieval uses an explicit session allowlist from the canonical
+conversation lifecycle. Chats removed locally cannot re-enter the portrait through
+a stale Honcho representation. Chats explicitly introduced as a temporary
+demonstration or limited to that chat are excluded from the portrait; their ordinary
+conversation context remains available through the existing history owners. Empty
+or unavailable canonical history fails closed. The allowlist returns directly stated
+conclusions from those sessions, rather than unrestricted cross-session derivations.
+Posting and other one-off X commands are not durable user-profile facts.

@@ -84,3 +84,24 @@ Run Vite on port 5175, then run the browser script. `PLAYWRIGHT_MODULE_PATH` can
 point to an existing Playwright `index.mjs`; `BOOKS_QA_OUTPUT` controls screenshots.
 `BOOKS_QA_EPUB` optionally exercises the import dialog with one fixture EPUB.
 Screenshots and fixture databases are test artifacts, not repository content.
+
+## Local OCR and synthesis (2026-10)
+
+The Windows document pipeline transcribes interior image-only sections through local
+Windows.Media.Ocr, bounded by size, pixels and a 45-second deadline. Leading cover
+images stay frontmatter. OCR blocks retain image hash/resource/version and the
+`ocr_transcription_unverified` role; the transcription is not a verified quotation.
+Parser upgrades re-enter canonical ingestion with a fresh scan/versioned run while
+preserving library identity and old immutable documents. Compiler
+`book-to-skill-v1.3.0-vellum.2` retains the evidence-indexed package, exact chunks,
+local BGE-M3 embeddings and citations. Older citation maps accept additive defaults
+without rewriting their artifacts. Framework synthesis is on demand; this does not
+create a separate global skill install or prewritten chapter framework packages.
+
+Display/retrieval follows the EPUB navigation across separate chapter-title/body
+files. Overview requests sample body chapters instead of a table of contents.
+Synthesis retains strict claim/evidence validation; invalid optional personal
+observations are omitted. UI annotations cannot become memory or inventory intent.
+First local CPU compilation can take minutes and requires public embedding weights.
+No book text is uploaded. The launcher preserves operator overrides while defaulting
+to resumable HTTP model downloads and four CPU threads for local indexing.

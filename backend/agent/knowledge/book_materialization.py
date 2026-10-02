@@ -13,7 +13,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 import yaml
 
-from agent.knowledge.book_documents import BookBlock, BookDocument
+from agent.knowledge.book_documents import BookBlock, BookDocument, section_display_title
 from agent.knowledge.book_quality import BookQualityPipeline
 from agent.knowledge.models import (
     BookMaterializationRequest,
@@ -26,7 +26,7 @@ from agent.skills.models import SkillMetadata
 
 BOOK_MATERIALIZATION_SCHEMA_VERSION = "book-materialization-v1"
 BOOK_TO_SKILL_VERSION = "1.3.0"
-BOOK_MATERIALIZATION_COMPILER_VERSION = f"book-to-skill-v{BOOK_TO_SKILL_VERSION}-vellum.1"
+BOOK_MATERIALIZATION_COMPILER_VERSION = f"book-to-skill-v{BOOK_TO_SKILL_VERSION}-vellum.2"
 BOOK_SKILL_TEMPLATE_VERSION = "book-to-skill-hermes-v1"
 BOOK_SKILL_MODEL_VERSION = "none"
 BOOK_EMBEDDING_MODEL_REVISION = "default"
@@ -198,6 +198,10 @@ class BookCitationRecord(MaterializationModel):
     source_start: int
     source_end: int
     offset_map: list[tuple[int, int, int, int]]
+    extraction_method: Literal["native", "windows_ocr"] = "native"
+    image_resource_path: str = ""
+    image_sha256: str = ""
+    ocr_version: str = ""
 
 
 class BookCitationManifest(MaterializationModel):
@@ -646,6 +650,8 @@ class BookMaterializationPipeline:
             )
             for record in compatible
         }
+        documents = {key: self.quality.documents.load(user_id=request.user_id, document_id=bundle.document_id)
+                     for key, bundle in bundles.items()}
         query_vectors = _normalize_vectors(
             self.embedding_provider.embed_batch([request.query])
         )
@@ -663,6 +669,30 @@ class BookMaterializationPipeline:
             key=lambda hit: _hybrid_book_hit_score(request.query, hit),
             reverse=True,
         )
+
+        # A whole-book overview needs representative body sections; semantic
+        # similarity to a title alone often retrieves the table of contents.
+        # All selections still pass the same active-bundle/hash/citation checks.
+        if re.search(r"\b(?:summari[sz]e|summary|overview)\b", request.query, re.I) and not re.search(
+            r"\b(?:chapter|book)\s+\d+\b", request.query, re.I):
+            overview_hits = []
+            for key, bundle in bundles.items():
+                document = documents[key]
+                if document.metadata.title.casefold() not in request.query.casefold():
+                    continue
+                sections = [section for section in document.sections
+                    if len(section.blocks) > 3 and re.match(r"(?:book|chapter)\s+\d+\b", section_display_title(document, section), re.I)]
+                if not sections:
+                    continue
+                selected = [sections[index] for index in sorted({0, len(sections)//2, len(sections)-1})]
+                for section in selected:
+                    chunk = next((chunk for chunk in bundle.exact_text.chunks if chunk.section_id == section.id), None)
+                    if chunk:
+                        overview_hits.append({"score": 1.0, "text": self.store.blobs.read_book_artifact(chunk.blob_path).decode("utf-8"),
+                            "metadata": {"user_id":request.user_id, "materialization_id":key,
+                                "edition_id":bundle.edition_id, "document_id":bundle.document_id, "chunk_id":chunk.chunk_id}})
+            if overview_hits:
+                hits = overview_hits
 
         evidence: list[dict[str, Any]] = []
         tokens_used = 0
@@ -711,6 +741,9 @@ class BookMaterializationPipeline:
                     "document_id": bundle.document_id,
                     "chunk_id": chunk_id,
                     "section_id": chunk.section_id,
+                    "title": documents[materialization_id].metadata.title,
+                    "section_title": section_display_title(documents[materialization_id], next(
+                        section for section in documents[materialization_id].sections if section.id == chunk.section_id)),
                     "text": text,
                     "text_hash": chunk.digest,
                     "score": _hybrid_book_hit_score(request.query, hit),
@@ -811,6 +844,15 @@ class BookMaterializationPipeline:
                 citation.model_dump(mode="json") for citation in bundle.citations.citations
             ],
         }
+        # Older immutable source maps predate OCR provenance. Validate their
+        # citation records with additive defaults without rewriting the artifact.
+        try:
+            source_map["citations"] = [
+                BookCitationRecord.model_validate(item).model_dump(mode="json")
+                for item in source_map["citations"]
+            ]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("BOOK_SKILL_REFERENCE_INVALID") from exc
         if book_reference != expected_book_reference or source_map != expected_source_map:
             raise ValueError("BOOK_SKILL_REFERENCE_INVALID")
         try:
@@ -1211,7 +1253,8 @@ def _compile_citations(
                     normalized_end=anchor.normalized_end,
                     source_start=anchor.source_start,
                     source_end=anchor.source_end,
-                    offset_map=list(anchor.offset_map),
+                    offset_map=list(anchor.offset_map), extraction_method=anchor.extraction_method,
+                    image_resource_path=anchor.image_resource_path, image_sha256=anchor.image_sha256, ocr_version=anchor.ocr_version,
                 )
             )
     return BookCitationManifest(

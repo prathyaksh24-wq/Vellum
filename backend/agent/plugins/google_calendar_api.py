@@ -24,6 +24,8 @@ from agent.plugins.google_calendar_runtime import (
     google_calendar_store,
 )
 from agent.tools.registry import ToolPermissionError
+from agent.tools.capabilities.calendar_service import CalendarConflictError
+from agent.plugins.registry import get_plugin_registry
 
 
 GOOGLE_CALENDAR_REDIRECT_URI = "http://127.0.0.1:8000"
@@ -66,6 +68,14 @@ class CalendarConfirmBody(BaseModel):
     confirm: bool = False
 
 
+class CalendarAvailabilityBody(BaseModel):
+    calendar_id: str = Field(default="primary", max_length=1024)
+    start: str
+    end: str
+    time_zone: str = Field(default="", max_length=100)
+    event_id: str = Field(default="", max_length=1024)
+
+
 class CalendarFreeBusyBody(BaseModel):
     time_min: str
     time_max: str
@@ -79,6 +89,12 @@ async def status(probe: bool = Query(default=False)) -> dict[str, Any]:
 
 @router.post("/oauth/start", response_model=CalendarOAuthStartResponse)
 async def start_oauth() -> CalendarOAuthStartResponse:
+    return await asyncio.to_thread(start_connection)
+
+
+def start_connection() -> CalendarOAuthStartResponse:
+    if not get_plugin_registry().is_enabled("google-calendar"):
+        raise HTTPException(status_code=403, detail="Enable Google Calendar in Plugins before connecting.")
     settings = get_settings()
     client_id = settings.google_calendar_oauth_client_id or settings.youtube_oauth_client_id
     if not client_id:
@@ -136,7 +152,7 @@ async def oauth_callback(code: str = "", state: str = "", error: str = "") -> HT
 @router.delete("/connection")
 async def disconnect() -> dict[str, bool]:
     try:
-        await asyncio.to_thread(google_calendar_client().disconnect)
+        await asyncio.to_thread(google_calendar_store().clear)
     except GoogleCalendarAuthError as exc:
         raise HTTPException(status_code=502, detail="Google Calendar disconnection failed.") from exc
     return {"disconnected": True}
@@ -174,6 +190,11 @@ async def free_busy(request: CalendarFreeBusyBody) -> dict[str, Any]:
     return await _invoke("free_busy", request.model_dump())
 
 
+@router.post("/availability")
+async def availability(request: CalendarAvailabilityBody) -> dict[str, Any]:
+    return await _invoke("availability", request.model_dump())
+
+
 @router.post("/events")
 async def create_event(request: CalendarEventBody) -> dict[str, Any]:
     return await _invoke("create_event", request.model_dump())
@@ -193,6 +214,8 @@ async def _invoke(method: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         handler = getattr(google_calendar_service(), method)
         return await asyncio.to_thread(handler, payload)
+    except CalendarConflictError as exc:
+        raise HTTPException(status_code=409, detail={"message": str(exc), "availability": exc.availability}) from exc
     except (GoogleCalendarAuthError, GoogleCalendarAPIError, ToolPermissionError, ValueError) as exc:
         if isinstance(exc, ToolPermissionError):
             status_code = 403

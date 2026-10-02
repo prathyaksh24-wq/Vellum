@@ -204,6 +204,7 @@ class SettingsRuntimeActionService:
         if not requested:
             raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "model is required")
         registry = self._provider_registry_provider()
+        registry.refresh_local_models(force=True)
         previous = registry.current_model()
         try:
             selected = registry.set_active(requested)
@@ -784,6 +785,8 @@ class SettingsRuntimeActionService:
             "label": entry.label,
             "provider": entry.provider,
             "open_weights": bool(entry.open_weights),
+            "capabilities": list(getattr(entry, "capabilities", ())),
+            "tool_calling_compatibility": getattr(entry, "tool_calling_compatibility", "unknown"),
         }
 
     @staticmethod

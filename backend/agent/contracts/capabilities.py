@@ -94,6 +94,8 @@ def build_capability_contract() -> CapabilityContract:
                     "logout": "/api/plugins/spotify/logout",
                     "player": "/api/plugins/spotify/player",
                     "player_action": "/api/plugins/spotify/player/action",
+                    "playback_token": "/api/plugins/spotify/playback/token",
+                    "playback_device": "/api/plugins/spotify/playback/device",
                 },
             ),
             "youtube": FeatureContract(
@@ -156,6 +158,7 @@ def build_capability_contract() -> CapabilityContract:
                     "calendars": "/api/plugins/google-calendar/calendars",
                     "events": "/api/plugins/google-calendar/events",
                     "free_busy": "/api/plugins/google-calendar/free-busy",
+                    "availability": "/api/plugins/google-calendar/availability",
                     "disconnect": "/api/plugins/google-calendar/connection",
                 },
                 notes="Private reads and confirmation-controlled event changes through CalendarAgent.",

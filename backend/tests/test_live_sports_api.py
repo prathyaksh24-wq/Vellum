@@ -5,7 +5,7 @@ from agent import api
 from agent.agents.live_dispatcher import LiveAgentResult
 
 
-def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
+def test_run_agent_uses_live_dispatcher_as_context_when_synthesis_is_required(monkeypatch):
     calls = []
 
     async def _natural_answer(payload, config=None, model=None, reasoning_mode=None):
@@ -34,8 +34,10 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
 
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
     monkeypatch.setattr(api.agent, "ainvoke", _natural_answer)
+    monkeypatch.setattr(api, "_should_passthrough_live_result", lambda result: False)
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     response = asyncio.run(api._run_agent("NBA Finals update", "thread-1", None))
@@ -47,7 +49,7 @@ def test_run_agent_uses_live_dispatcher_as_context_for_main_agent(monkeypatch):
     assert "Sports agent answer" in calls[0][0]["messages"][0]["content"]
 
 
-def test_run_agent_includes_specialist_snippets_and_fact_priority(monkeypatch):
+def test_run_agent_includes_specialist_snippets_when_synthesis_is_required(monkeypatch):
     calls = []
 
     async def _natural_answer(payload, config=None, model=None, reasoning_mode=None):
@@ -76,8 +78,10 @@ def test_run_agent_includes_specialist_snippets_and_fact_priority(monkeypatch):
 
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
     monkeypatch.setattr(api.agent, "ainvoke", _natural_answer)
+    monkeypatch.setattr(api, "_should_passthrough_live_result", lambda result: False)
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
 
     response = asyncio.run(api._run_agent("What is the next F1 race?", "thread-1", None))
@@ -102,7 +106,7 @@ def _parse_sse(chunks):
     return events
 
 
-def test_stream_agent_turn_emits_sports_dispatch_then_main_agent_answer(monkeypatch):
+def test_stream_agent_turn_preserves_sports_answer_without_model_rewrite(monkeypatch):
     class FakeDispatcher:
         def maybe_handle(self, message, thread_id):
             return LiveAgentResult(
@@ -125,16 +129,17 @@ def test_stream_agent_turn_emits_sports_dispatch_then_main_agent_answer(monkeypa
 
     class FakeAgent:
         async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
-            assert "Live sports answer" in payload["messages"][0]["content"]
+            raise AssertionError("Completed sports answers must not be rewritten by the model")
             yield {
                 "event": "on_chat_model_stream",
-                "data": {"chunk": type("Chunk", (), {"content": "Natural streamed answer."})()},
+                "data": {"chunk": type("Chunk", (), {"content": "Live sports answer"})()},
             }
 
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
     monkeypatch.setattr(api, "agent", FakeAgent())
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
     monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
@@ -157,7 +162,8 @@ def test_stream_agent_turn_emits_sports_dispatch_then_main_agent_answer(monkeypa
     source_payload = next(json.loads(data) for name, data in events if name == "source")
     assert source_payload["domain"] == "formula1.com"
     final = json.loads(next(data for name, data in events if name == "final"))
-    assert final["answer"] == "Natural streamed answer."
+    assert final["answer"] == "Live sports answer"
+    assert "".join(json.loads(data)["text"] for name, data in events if name == "token") == final["answer"]
 
 
 def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monkeypatch):
@@ -183,15 +189,17 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
 
     class FakeAgent:
         async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            raise AssertionError("Completed specialist answers must not be rewritten by the model")
             yield {
                 "event": "on_chat_model_stream",
-                "data": {"chunk": type("Chunk", (), {"content": "Natural streamed answer."})()},
+                "data": {"chunk": type("Chunk", (), {"content": "Live sports answer"})()},
             }
 
     monkeypatch.setattr(api, "_live_dispatcher", FakeDispatcher())
     monkeypatch.setattr(api, "agent", FakeAgent())
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
     monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
@@ -226,12 +234,12 @@ def test_stream_agent_turn_emits_responses_style_events_for_sports_dispatch(monk
 
     delta = json.loads(next(data for name, data in events if name == "response.output_text.delta"))
     assert delta["type"] == "response.output_text.delta"
-    assert delta["delta"] == "Natural streamed answer."
+    assert delta["delta"] == "Live sports answer"
 
     completed = json.loads(next(data for name, data in events if name == "response.completed"))
     assert completed["type"] == "response.completed"
     assert completed["response"]["status"] == "completed"
-    assert completed["response"]["output_text"] == "Natural streamed answer."
+    assert completed["response"]["output_text"] == "Live sports answer"
     assert completed["response"]["tools"] == ["sports_agent", "web_search"]
     assert completed["response"]["sources"][0]["domain"] == "formula1.com"
 
@@ -252,6 +260,7 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
 
     class FakeAgent:
         async def astream_events(self, payload, config=None, version=None, model=None, reasoning_mode=None):
+            raise AssertionError("Completed specialist answers must not be rewritten by the model")
             yield {
                 "event": "on_chat_model_stream",
                 "data": {"chunk": type("Chunk", (), {"content": "I could not complete the X lookup, but I can keep helping."})()},
@@ -261,6 +270,7 @@ def test_stream_agent_turn_marks_subagent_error_status(monkeypatch):
     monkeypatch.setattr(api, "agent", FakeAgent())
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api, "_background_learn", _async_noop)
     monkeypatch.setattr(api, "capture_from_stream_event", lambda *a, **k: None)
     monkeypatch.setattr(api.asyncio, "create_task", lambda coro: coro.close())
@@ -300,6 +310,7 @@ def test_stream_agent_turn_times_out_silent_model_stream(monkeypatch):
     monkeypatch.setattr(api._live_dispatcher, "maybe_handle", lambda message, thread_id: None)
     monkeypatch.setattr(api, "_ensure_model", _async_noop)
     monkeypatch.setattr(api, "_repair_incomplete_tool_history", _async_noop)
+    monkeypatch.setattr(api, "_checkpoint_specialist_exchange", _async_noop)
     monkeypatch.setattr(api, "get_settings", lambda: Settings())
 
     async def _collect():

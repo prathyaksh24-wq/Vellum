@@ -56,3 +56,15 @@ def test_named_query_is_filtered_before_snapshot_limit(tmp_path: Path) -> None:
 
     assert unfiltered["channels"][0]["label"] == "Popular Channel"
     assert filtered["channels"][0]["label"] == "Sidemen"
+
+
+def test_broad_discovery_uses_imported_interests_without_literal_request_filter(tmp_path):
+    store = KnowledgeStore(tmp_path / "knowledge.db", tmp_path / "blobs")
+    now = datetime(2026, 10, 2, tzinfo=UTC)
+    _watch(store, event="one", channel_id="UC-learning", channel_title="Learning Channel", observed_at=now - timedelta(days=1))
+    service = YouTubeIntelligenceService(store)
+    service.rebuild(now=now)
+    result = service.snapshot(now=now, query="Discover something for me based on my interests.")
+    assert result["channels"][0]["label"] == "Learning Channel"
+    assert result["local_only"]
+    assert not service.snapshot(now=now, query="interests in UnmatchedTopic")["channels"]

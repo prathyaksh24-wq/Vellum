@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from agent.knowledge.book_ingestion import MalwareScanResult
 from agent.knowledge.api import router as knowledge_core_router
-from agent.knowledge.book_documents import BookDocumentError
+from agent.knowledge.book_documents import BookDocumentError, BookDocumentPipeline, section_display_title
 from agent.knowledge.book_quality import BookQualityPipeline, EpubParseQualityPolicy
 from agent.knowledge.models import (
     BookDocumentRequest,
@@ -583,7 +583,7 @@ def test_passed_document_compiles_one_compatible_active_materialization(
             "tags": ["book", "installed", "book-to-skill"],
             "materialization_id": bundle.materialization_id,
             "edition_id": bundle.edition_id,
-            "compiler": "book-to-skill-v1.3.0-vellum.1",
+            "compiler": "book-to-skill-v1.3.0-vellum.2",
         }
     ]
     assert "Truth needs evidence" not in skill_text
@@ -2072,3 +2072,60 @@ def test_publication_failure_rolls_back_all_visible_document_state(
         "quarantined",
         "validated",
     ]
+
+
+def test_local_ocr_preserves_image_provenance_in_document_and_citations(tmp_path: Path) -> None:
+    content = rewrite_zip_entries(structured_epub_bytes(), replacements={
+        "OPS/chapter-two.xhtml": '<html xmlns="http://www.w3.org/1999/xhtml"><body id="second"><img src="lamp.jpg" alt=""/></body></html>'})
+    class OCR:
+        version = "test-local-ocr"
+        def __call__(self, raw):
+            assert raw
+            return "Chronology table transcription"
+    core = build_core(tmp_path)
+    core.book_documents = BookDocumentPipeline(core.store, ocr_provider=OCR())
+    core.book_quality = BookQualityPipeline(core.store, core.book_documents, policy=EpubParseQualityPolicy(approved_alternate_parser_versions=(core.book_documents.parser_version,)))
+    core.book_materializations.quality = core.book_quality
+    imported, structured = import_and_construct(core, content)
+    document = core.get_book_document(user_id="user-1", document_id=structured.document_id)
+    block = document.sections[1].blocks[0]
+    assert block.anchor.extraction_method == "windows_ocr"
+    assert block.anchor.image_resource_path == "OPS/lamp.jpg"
+    assert block.anchor.image_sha256
+    assert block.role == "ocr_transcription_unverified"
+    assert block.anchor.source_element == "img"
+    assessed = core.evaluate_book_document_quality(BookQualityRequest(user_id="user-1", import_id=imported.import_id, run_id=imported.run_id, document_id=structured.document_id))
+    assert assessed.quality_outcome == "PASS"
+    compiled = core.materialize_book_document(BookMaterializationRequest(
+        user_id="user-1", import_id=imported.import_id, run_id=imported.run_id,
+        document_id=structured.document_id))
+    bundle = core.book_materializations.load(user_id="user-1", materialization_id=compiled.materialization_id)
+    assert any(citation.extraction_method == "windows_ocr" and citation.image_sha256 == block.anchor.image_sha256
+               for citation in bundle.citations.citations)
+
+
+def test_chapter_body_inherits_epub_navigation_label_without_mutating_document(tmp_path):
+    core = build_core(tmp_path)
+    _, status = import_and_construct(core, structured_epub_bytes())
+    document = core.get_book_document(user_id="user-1", document_id=status.document_id)
+    original_title = document.sections[1].title
+    original = document
+    document = document.model_copy(update={
+        "sections": [document.sections[0], document.sections[1].model_copy(update={"title": ""}), *document.sections[2:]],
+        "navigation": [document.navigation[0].model_copy(update={"label": "Book 1: Lessons"})],
+    })
+    assert section_display_title(document, document.sections[1]) == "Book 1: Lessons (continued)"
+    assert document.sections[1].title == ""
+    assert original.sections[1].title == original_title
+
+
+def test_local_ocr_exception_is_retryable_and_does_not_publish_partial_text(tmp_path):
+    class OCR:
+        def __call__(self, raw): raise OSError("local OCR unavailable")
+    core = build_core(tmp_path)
+    core.book_documents = BookDocumentPipeline(core.store, ocr_provider=OCR())
+    content = rewrite_zip_entries(structured_epub_bytes(), replacements={"OPS/chapter-two.xhtml":'<html xmlns="http://www.w3.org/1999/xhtml"><body id="second"><img src="lamp.jpg"/></body></html>'})
+    imported = core.import_book_epub(BookImportRequest(user_id="user-1", rights_attestation_version="local-epub-v1", scan_approved=True), content)
+    result = core.construct_book_document(BookDocumentRequest(user_id="user-1", import_id=imported.import_id, run_id=imported.run_id))
+    assert result.status == "failed_retryable"
+    assert not result.document_id

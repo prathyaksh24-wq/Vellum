@@ -22,10 +22,23 @@ agent can receive the work and whether the requested depth is allowed, applies
 the profile tool boundary, and records a content-free audit result. A returned
 response must identify the selected profile.
 
-Deterministic executors keep their existing `answer(query)` behavior during the
-migration. LLM executors receive only their instructions, the explicit task and
-context, and a bounded memory packet permitted by their profile. They do not
-inherit the main conversation checkpoint or unrestricted chat history.
+The main model delegates through one typed `delegate_to_agent` tool. Its input is
+limited to a catalog profile ID, a bounded task, and optional task-specific
+context. The runtime configuration carries the parent thread and user ID into
+`DelegationRequest`; specialists do not inherit the main conversation checkpoint
+or unrestricted chat history. Deterministic executors keep their existing
+`answer(query)` behavior. LLM executors receive only their instructions, task,
+context, and a bounded memory packet permitted by their profile.
+
+The main model receives a compact specialist directory containing only profile
+IDs and descriptions. It routes from user intent expressed in natural language;
+users do not have to name a specialist or issue a routing command. Profile
+descriptions identify the domains in everyday terms, including shorthand and
+indirect requests. Tool and skill allowlists remain runtime policy and are not
+copied into that directory. Specialist-owned skills are excluded from main-agent
+activation and are exposed only through the active specialist profile policy.
+General capabilities remain available through progressive `tool_search` and
+`tool_call` discovery.
 
 Deterministic external capabilities pass through the shared `ToolRegistry`, where
 profile allowlists can only narrow capability permissions and require additional
@@ -40,11 +53,17 @@ possible without collapsing ownership or allowing one agent to silently rewrite
 another agent's memory.
 
 The old `PupilRegistry`, `ProfileRegistry`, and `DelegationManager` owners are
-removed. Existing X, YouTube, Sports, and Memory behavior remains available
-through a temporary `LiveAgentDispatcher` adapter backed by the same catalog and
-runtime. The adapter may be removed after the main Vellum agent can invoke typed
-delegation as a tool with equivalent confirmation, streaming, fallback, and audit
-behavior.
+removed. X, YouTube, Sports, Memory, Books, Discord, and Calendar behavior is
+available through the shared catalog and runtime. `LiveAgentDispatcher` remains
+only for explicit specialist selection and pending-action confirmation or
+cancellation; implicit skill and deterministic matcher routes no longer
+preempt the main model. Confirmation state stays in the shared local pending
+action store, and each delegated run retains its content-free audit record.
+
+The delegation result preserves each profile's privacy boundary. Profiles marked
+summary-only return a sanitized summary to the main model while retaining the
+full pending action locally for the confirmation path. Books learning candidates
+and wisdom proposals are withheld from the main model response.
 
 The reward database uses `agent_id`. Existing local databases with a legacy
 `pupil` column are migrated in place and retain their rows. The legacy column is
@@ -53,3 +72,14 @@ read only for migration compatibility and is not part of the new runtime model.
 Profiles are application policy boundaries, not process, filesystem, or operating
 system sandboxes. Capability-level authorization and confirmation checks remain
 mandatory and a profile can only narrow those permissions.
+
+MusicAgent uses the same catalog, typed delegation, profile policy, and shared
+ToolRegistry. Its normalized MusicPlan is provider-neutral; each installed music
+integration adapts that plan to its own approved capabilities. Spotify is the
+first adapter and its raw tools and existing Hermes skill are reserved for
+MusicAgent. Clear music intent may be dispatched as a bounded delegation even
+when another specialist is explicitly selected; the selection itself is
+preserved. UI playback controls remain typed App Actions. Mutation results are
+not cached, and successful music acknowledgements bypass another model rewrite.
+Less direct requests use the current local model only to generate a validated
+plan, rather than enabling an unrestricted LLM tool loop.

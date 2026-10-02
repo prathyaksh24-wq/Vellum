@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from html import unescape
+
 import re
+from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.tools.capabilities.x_service import XCapabilityService
@@ -24,6 +29,7 @@ class XAgent:
         "retweet",
         "unlike",
         "unretweet",
+        "unrepost",
         "follow",
         "unfollow",
         "quote",
@@ -46,10 +52,14 @@ class XAgent:
         vault_root: Path,
         x_service: XCapabilityService | None = None,
         tool_registry: ToolRegistry | None = None,
+        post_summarizer: Callable[[str, list[dict[str, Any]]], str] | None = None,
+        post_drafter: Callable[[str], str] | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
         self.x_service = x_service or (None if tool_registry is not None else XCapabilityService())
+        self.post_summarizer = post_summarizer
+        self.post_drafter = post_drafter
 
     def can_handle(self, query: str) -> bool:
         lowered = query.lower()
@@ -57,24 +67,61 @@ class XAgent:
             re.search(pattern, lowered) is not None for pattern in self._X_CONTEXT_PATTERNS
         )
 
+    def answer_with_context(self, query: str, context: dict) -> SpecialistResponse:
+        action = self._write_action_from_query(query.lower())
+        read_replies = bool(re.search(r"\b(?:show|read|get|summari[sz]e|what)\b.*\breplies\b", query, re.I))
+        read_post = bool(re.search(r"^\s*(?:please\s+)?(?:read|show|open|get|summari[sz]e)\s+(?:this|that|it|the\s+(?:first|second|third)\s+(?:post|tweet))\b", query, re.I))
+        if (action or read_replies or read_post) and not self._extract_tweet_id(query) and re.search(r"\b(?:that|this|it|second|first|third)\b", query, re.I):
+            posts = context.get("posts") or []
+            ordinal = next((n for word,n in {"first":0,"second":1,"third":2}.items() if re.search(rf"\b{word}\b", query, re.I)), None)
+            target = posts[ordinal] if ordinal is not None and ordinal < len(posts) else posts[0] if len(posts)==1 else None
+            if not target or not target.get("tweet_id"):
+                return SpecialistResponse(agent=self.name, status="blocked", summary="Which post do you mean? Choose a post number or give its X link.", confidence=1.0)
+            query = query + " " + str(target.get("url") or f"https://x.com/i/status/{target['tweet_id']}")
+        return self.answer(query)
+
+    @staticmethod
+    def thread_context(response: SpecialistResponse, previous: dict) -> dict:
+        result = dict(previous)
+        posts = []
+        for source in response.sources[:20]:
+            match = re.search(r"https?://(?:www\.)?(?:x|twitter)\.com/[^/]+/status/(\d+)", source.path_or_url)
+            if match:
+                posts.append({"tweet_id":match.group(1), "url":source.path_or_url, "text":source.snippet[:1200]})
+        if posts:
+            result["posts"] = posts
+        return result
+
     def answer(self, query: str) -> SpecialistResponse:
         lowered = query.lower()
+        if re.search(r"\b(?:show|read|get|summari[sz]e|what)\b.*\breplies\b", lowered) and self._extract_tweet_id(query):
+            return self._answer_replies(query)
+        if self._extract_tweet_id(query) and re.search(r"^\s*(?:please\s+)?(?:read|show|open|get|summari[sz]e)\b|\bwhat\s+(?:does|is)\s+(?:this|that)\s+(?:post|tweet)\b", lowered) and not self._is_write_action_query(lowered):
+            return self._answer_read_post(query)
+        if re.search(r"\b(?:my|own)\s+(?:recent\s+|latest\s+)?(?:tweets|posts)\b", lowered) and not self._is_post_query(lowered):
+            return self._answer_own_posts(query)
         if self._is_status_query(lowered):
             return self._answer_status()
-        if self._is_write_action_query(lowered):
-            return self._answer_write_action(query, lowered)
-        if self._is_bookmarks_query(lowered):
-            return self._answer_bookmarks()
-        if self._is_timeline_query(lowered):
-            return self._answer_timeline()
-        if self._is_likes_query(lowered):
-            return self._answer_likes()
-        if self._is_account_query(lowered):
-            return self._answer_account()
         if self._is_image_post_query(lowered):
             return self._answer_image_post(query)
         if self._is_post_query(lowered):
             return self._answer_post(query)
+        if self._is_write_action_query(lowered):
+            return self._answer_write_action(query, lowered)
+        if self._is_topic_summary_query(lowered):
+            return self._answer_topic_summary(query)
+        if self._is_trending_query(lowered):
+            return self._answer_trending()
+        if self._is_bookmarks_query(lowered):
+            return self._answer_bookmarks(query, grouped=self._is_bookmark_category_query(lowered))
+        if self._is_timeline_query(lowered):
+            return self._answer_timeline()
+        if self._is_likes_query(lowered):
+            return self._answer_likes(lowered)
+        if self._is_latest_account_post_query(lowered):
+            return self._answer_latest_account_post(query, lowered)
+        if self._is_account_query(lowered):
+            return self._answer_account()
         try:
             max_results = self._requested_result_limit(query)
             result = self._search_posts({"query": query, "max_results": max_results})
@@ -107,11 +154,11 @@ class XAgent:
         )
         lines = []
         sources = []
-        for index, item in enumerate(items[:max_results], start=1):
-            text = str(item.get("text") or "").strip()
+        for item in items[:max_results]:
+            text = self._display_text(item.get("text"))
             handle = str(item.get("handle") or "x").strip()
             url = str(item.get("url") or "").strip()
-            lines.append(f"[{index}] @{handle}: {text}")
+            lines.append(f"- @{handle}: {text}")
             if url:
                 sources.append(
                     SpecialistSource(
@@ -174,6 +221,11 @@ class XAgent:
             return self.tool_registry.invoke("x.likes", payload, agent_name=self.name)
         return self.x_service.likes(payload)
 
+    def _user_posts(self, payload: dict) -> dict:
+        if self.tool_registry is not None:
+            return self.tool_registry.invoke("x.user_posts", payload, agent_name=self.name)
+        return self.x_service.user_posts(payload)
+
     def _publish_post(self, payload: dict) -> dict:
         if self.tool_registry is not None:
             return self.tool_registry.invoke("x.publish_post", payload, agent_name=self.name)
@@ -189,6 +241,23 @@ class XAgent:
             return self.tool_registry.invoke(action, payload, agent_name=self.name)
         method = action.split(".", 1)[-1]
         return getattr(self.x_service, method)(payload)
+
+    def _answer_read_post(self, query: str) -> SpecialistResponse:
+        target = self._extract_tweet_id(query)
+        try:
+            payload = {"tweet_id": target}
+            result = (self.tool_registry.invoke("x.read_tweet", payload, agent_name=self.name)
+                      if self.tool_registry is not None else self.x_service.read_tweet(payload))
+        except Exception as exc:
+            return self._error("I could not read that X post.", exc)
+        item = result.get("tweet") or {}
+        text = self._display_text(item.get("text"))
+        if not text:
+            return SpecialistResponse(agent=self.name, status="needs_fetch", summary="That post has no readable text or is unavailable.", confidence=0.4)
+        handle = str(item.get("handle") or "x").lstrip("@")
+        return SpecialistResponse(agent=self.name, status="answered", summary=f"@{handle}: {text}",
+            analysis="Used x.read_tweet through Agent Reach.", sources=self._sources_for_posts([item]), confidence=0.9,
+            activity_events=self._read_activity_events("read_tweet", str(result.get("provider") or "")))
 
     def _answer_status(self) -> SpecialistResponse:
         try:
@@ -230,15 +299,64 @@ class XAgent:
         summary = f"Authenticated X account: @{username}" if username else "Authenticated X account was found."
         return SpecialistResponse(agent=self.name, status="answered", summary=summary, analysis="Used x.account.", confidence=0.75)
 
-    def _answer_bookmarks(self) -> SpecialistResponse:
+    def _answer_bookmarks(self, query: str, *, grouped: bool = False) -> SpecialistResponse:
+        ordinal = self._bookmark_ordinal(query)
+        summarize = self._is_bookmark_summary_query(query.lower())
+        max_results = ordinal or (20 if grouped or summarize else 5)
         try:
-            result = self._bookmarks({"max_results": 5})
+            result = self._bookmarks({"max_results": max_results})
         except Exception as exc:
             return self._error("XAgent could not read X bookmarks right now.", exc)
         items = result.get("items", [])
         if not items:
             return SpecialistResponse(agent=self.name, status="needs_fetch", summary="XAgent did not find X bookmarks.", confidence=0.35)
+        if ordinal:
+            if len(items) < ordinal:
+                return SpecialistResponse(
+                    agent=self.name,
+                    status="needs_fetch",
+                    summary=f"I found only {len(items)} recent X bookmarks, so there is no {self._ordinal_label(ordinal)} item.",
+                    confidence=0.6,
+                    activity_events=self._read_activity_events("bookmarks", str(result.get("provider") or "")),
+                )
+            item = items[ordinal - 1]
+            text = self._display_text(item.get("text"))
+            handle = str(item.get("handle") or "x").strip()
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary=f"Your {self._ordinal_label(ordinal)} bookmark is from @{handle}:\n\n{text}",
+                analysis="Used x.bookmarks and selected the requested saved-post position.",
+                sources=self._sources_for_posts([item]),
+                confidence=0.85,
+                activity_events=self._read_activity_events("bookmarks", str(result.get("provider") or "")),
+            )
+        if summarize:
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary=self._bookmark_summary(items),
+                analysis="Summarized recent bookmarks returned by x.bookmarks.",
+                sources=self._sources_for_posts(items[:5]),
+                confidence=0.8,
+                activity_events=self._read_activity_events("bookmarks", str(result.get("provider") or "")),
+            )
         lines, sources = self._format_posts(items)
+        if grouped:
+            groups: dict[str, list[str]] = {}
+            for item in items:
+                intelligence = item.get("bookmark_intelligence")
+                assignments = intelligence.get("assignments") if isinstance(intelligence, dict) else []
+                primary = assignments[0] if isinstance(assignments, list) and assignments else {}
+                category = str(primary.get("name") or "General") if isinstance(primary, dict) else "General"
+                text = self._display_text(item.get("text"))
+                handle = str(item.get("handle") or "x").strip()
+                entry = f"@{handle}: {text}"
+                groups.setdefault(category, []).append(entry)
+            lines = []
+            for category in sorted(groups):
+                lines.append(f"{category}")
+                lines.extend(f"- {entry}" for entry in groups[category])
         return SpecialistResponse(
             agent=self.name,
             status="answered",
@@ -248,6 +366,104 @@ class XAgent:
             confidence=0.75,
             activity_events=self._read_activity_events("bookmarks", str(result.get("provider") or "")),
         )
+
+    def _answer_trending(self) -> SpecialistResponse:
+        try:
+            result = self._timeline({"max_results": 20})
+        except Exception as exc:
+            return self._error(
+                "XAgent needs an authenticated Agent Reach session to read what is happening on X.",
+                exc,
+            )
+        items = result.get("items", [])
+        if not items:
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="XAgent did not find current timeline posts.",
+                confidence=0.35,
+            )
+        lines, sources = self._format_posts(items)
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary="Current posts from your X timeline:\n" + "\n".join(lines),
+            analysis="Used the authenticated Agent Reach X timeline.",
+            sources=sources,
+            confidence=0.8,
+            activity_events=self._read_activity_events("timeline", str(result.get("provider") or "")),
+        )
+
+    def _answer_topic_summary(self, query: str) -> SpecialistResponse:
+        topic = self._topic_from_summary_query(query)
+        try:
+            if topic:
+                result = self._search_posts({"query": topic, "max_results": 20})
+                read_type = "search"
+            else:
+                result = self._timeline({"max_results": 20})
+                read_type = "timeline"
+        except Exception as exc:
+            return self._error("XAgent could not gather live X posts for that summary.", exc)
+        items = result.get("items", [])
+        provider = str(result.get("provider") or "")
+        if not items:
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary="I did not find enough live X posts to summarize that topic.",
+                confidence=0.35,
+                activity_events=(
+                    self._search_activity_events(provider)
+                    if read_type == "search"
+                    else self._read_activity_events("timeline", provider)
+                ),
+            )
+        try:
+            summary = self._synthesize_posts(query, items)
+            analysis = "Synthesized live Agent Reach X evidence with the active Vellum model."
+        except Exception:
+            summary = self._compact_topic_digest(items)
+            analysis = "Used a compact deterministic digest because model synthesis was unavailable."
+        events = (
+            self._search_activity_events(provider)
+            if read_type == "search"
+            else self._read_activity_events("timeline", provider)
+        )
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=summary,
+            analysis=analysis,
+            sources=self._sources_for_posts(items[:8]),
+            confidence=0.8,
+            activity_events=events,
+        )
+
+    def _synthesize_posts(self, query: str, items: list[dict[str, Any]]) -> str:
+        summarizer = self.post_summarizer
+        if summarizer is None:
+            from agent.agents.x_synthesis import RoutedXPostSynthesizer
+
+            summarizer = RoutedXPostSynthesizer()
+        summary = str(summarizer(query, items) or "").strip()
+        summary = re.sub(r"(?m)^#{1,6}\s*", "", summary)
+        summary = re.sub(r"(?m)^\s*[-*]\s+", "", summary)
+        return summary
+
+    @classmethod
+    def _compact_topic_digest(cls, items: list[dict[str, Any]]) -> str:
+        highlights = []
+        for item in items[:3]:
+            text = cls._display_text(item.get("text"))
+            if len(text) > 180:
+                text = text[:177].rstrip() + "…"
+            handle = str(item.get("handle") or "x").strip().lstrip("@")
+            if text:
+                highlights.append(f"@{handle} says {text}")
+        if not highlights:
+            return "I found live X posts, but they did not contain enough text to summarize."
+        return f"Across {len(items)} relevant X posts, " + " ".join(highlights)
 
     def _answer_timeline(self) -> SpecialistResponse:
         try:
@@ -268,9 +484,10 @@ class XAgent:
             activity_events=self._read_activity_events("timeline", str(result.get("provider") or "")),
         )
 
-    def _answer_likes(self) -> SpecialistResponse:
+    def _answer_likes(self, lowered_query: str) -> SpecialistResponse:
+        latest_only = bool(re.search(r"(?<!\w)(?:latest|newest|last|most\s+recent)\b", lowered_query))
         try:
-            result = self._likes({"handle": "me", "max_results": 5})
+            result = self._likes({"handle": "me", "max_results": 1 if latest_only else 5})
         except Exception as exc:
             return self._error("XAgent could not read X likes right now.", exc)
         items = result.get("items", [])
@@ -281,6 +498,19 @@ class XAgent:
                 status="needs_fetch",
                 summary="XAgent did not find X likes.",
                 confidence=0.35,
+                activity_events=self._read_activity_events("likes", provider),
+            )
+        if latest_only:
+            item = items[0]
+            text = self._display_text(item.get("text"))
+            handle = str(item.get("handle") or "x").strip()
+            return SpecialistResponse(
+                agent=self.name,
+                status="answered",
+                summary=f"Your latest liked post is from @{handle}:\n\n{text}",
+                analysis="Used x.likes and returned only the newest liked post.",
+                sources=self._sources_for_posts([item]),
+                confidence=0.85,
                 activity_events=self._read_activity_events("likes", provider),
             )
         lines, sources = self._format_posts(items)
@@ -294,8 +524,104 @@ class XAgent:
             activity_events=self._read_activity_events("likes", provider),
         )
 
+    def _answer_own_posts(self, query: str) -> SpecialistResponse:
+        try:
+            account = self._account({}).get("account") or {}
+            handle = str(account.get("username") or account.get("screenName") or account.get("screen_name") or "").lstrip("@")
+            if not handle:
+                raise ValueError("The X session did not identify your account")
+            result = self._user_posts({"handle":handle, "max_results":20})
+            items = [p for p in result.get("items",[]) if str(p.get("handle") or "").lstrip("@").casefold() == handle.casefold()]
+            count = self._requested_result_limit(query)
+            items = sorted(items, key=lambda p:int(str(p.get("id") or "0")) if str(p.get("id") or "0").isdigit() else 0, reverse=True)[:count]
+            lines, sources = self._format_posts(items)
+            return SpecialistResponse(agent=self.name, status="answered" if items else "needs_fetch",
+                summary="Your recent posts:\n"+"\n".join(lines) if items else "No recent posts from your account were returned.",
+                sources=sources, analysis="Used Agent-Reach authenticated account and user posts.", confidence=.9)
+        except Exception as exc:
+            return self._error("I could not read your own X posts.", exc)
+
+    def _answer_replies(self, query: str) -> SpecialistResponse:
+        payload = {"tweet_id":self._extract_tweet_id(query), "max_results":5}
+        try:
+            result = self.tool_registry.invoke("x.replies", payload, agent_name=self.name) if self.tool_registry else self.x_service.replies(payload)
+            items = result.get("items", [])
+            lines,sources = self._format_posts(items)
+            return SpecialistResponse(agent=self.name, status="answered", summary="\n".join(lines) if lines else "No visible replies were returned for that post.",
+                sources=sources, analysis="Used Agent-Reach post conversation; only visible replies in this sample.", confidence=.9)
+        except Exception as exc:
+            return self._error("I could not read those X replies.", exc)
+
+    def _answer_latest_account_post(self, query: str, lowered_query: str) -> SpecialistResponse:
+        handle = self._latest_account_handle(query)
+        own_account = self._is_self_account_reference(lowered_query)
+        if own_account:
+            try:
+                account_result = self._account({})
+            except Exception as exc:
+                return self._error("XAgent could not identify your X account right now.", exc)
+            account = account_result.get("account", {})
+            handle = str(
+                account.get("username")
+                or account.get("screenName")
+                or account.get("screen_name")
+                or ""
+            ).strip().lstrip("@")
+        if not handle:
+            return SpecialistResponse(
+                agent=self.name,
+                status="blocked",
+                summary="Tell me the X @handle whose latest post you want.",
+                confidence=0.5,
+            )
+        try:
+            result = self._user_posts({"handle": handle, "max_results": 20})
+        except Exception as exc:
+            return self._error(f"XAgent could not read the latest post from @{handle}.", exc)
+        items = result.get("items", [])
+        if own_account:
+            # X's user-posts timeline includes reposts authored by other accounts.
+            items = [item for item in items if str(item.get("handle") or "").lstrip("@").casefold() == handle.casefold()]
+        if not items:
+            return SpecialistResponse(
+                agent=self.name,
+                status="needs_fetch",
+                summary=f"I did not find a recent post from @{handle}.",
+                confidence=0.4,
+                activity_events=self._read_activity_events("user_posts", str(result.get("provider") or "")),
+            )
+        items = sorted(items, key=lambda p:int(str(p.get("id") or "0")) if str(p.get("id") or "0").isdigit() else 0, reverse=True)
+        item = items[0]
+        text = self._display_text(item.get("text"))
+        returned_handle = str(item.get("handle") or handle).strip().lstrip("@")
+        return SpecialistResponse(
+            agent=self.name,
+            status="answered",
+            summary=f"Latest post from @{returned_handle}:\n\n{text}",
+            analysis="Used x.user_posts and returned one newest account post.",
+            sources=self._sources_for_posts([item]),
+            confidence=0.85,
+            activity_events=self._read_activity_events("user_posts", str(result.get("provider") or "")),
+        )
+
     def _answer_post(self, query: str) -> SpecialistResponse:
-        text = self._extract_quoted_text(query)
+        text = self._extract_exact_post_envelope(query)
+        if not text:
+            text = self._extract_quoted_text(query)
+        if not text:
+            instruction = self._extract_unquoted_post_instruction(query)
+            if instruction and self._should_draft_post(instruction):
+                try:
+                    text = self._draft_post(query)
+                except Exception:
+                    return SpecialistResponse(
+                        agent=self.name,
+                        status="blocked",
+                        summary="I could not draft the X post right now. Tell me the tone or topic and I’ll try again.",
+                        confidence=0.35,
+                    )
+            elif instruction:
+                text = instruction
         if not text:
             return SpecialistResponse(
                 agent=self.name,
@@ -318,6 +644,14 @@ class XAgent:
                 {"type": "tool_call_started", "label": "Preparing post...", "name": "agent_reach_x_prepare_post"},
             ],
         )
+
+    def _draft_post(self, request: str) -> str:
+        drafter = self.post_drafter
+        if drafter is None:
+            from agent.agents.x_synthesis import RoutedXPostDrafter
+
+            drafter = RoutedXPostDrafter()
+        return str(drafter(request) or "").strip()
 
     def execute_action_request(self, action_request: dict) -> SpecialistResponse:
         action = str(action_request.get("action") or "")
@@ -424,6 +758,12 @@ class XAgent:
             )
         follows_account = action in {"x.follow", "x.unfollow"}
         target = self._extract_handle(query) if follows_account else self._extract_tweet_id(query)
+        if not target and not follows_account and self._is_latest_account_post_query(lowered_query):
+            read = self._answer_latest_account_post(query, lowered_query)
+            if read.status != "answered":
+                return read
+            if len(read.sources) == 1:
+                target = read.sources[0].path_or_url
         if not target:
             return SpecialistResponse(
                 agent=self.name,
@@ -437,12 +777,11 @@ class XAgent:
             )
         text = self._extract_quoted_text(query) if action in {"x.reply", "x.quote"} else ""
         if action in {"x.reply", "x.quote"} and not text:
-            return SpecialistResponse(
-                agent=self.name,
-                status="blocked",
-                summary=f"XAgent needs the exact {action.split('.')[-1]} text in quotes.",
-                confidence=0.4,
-            )
+            instruction = re.sub(r"https?://\S+", "", query).strip()
+            try:
+                text = self._draft_post(instruction)
+            except Exception as exc:
+                return self._error("I could not draft that X reply right now.", exc)
         verb = action.split(".")[-1]
         payload = {"handle": target} if follows_account else {"tweet_id": target}
         if text:
@@ -450,10 +789,10 @@ class XAgent:
         return SpecialistResponse(
             agent=self.name,
             status="blocked",
-            summary=f"Confirm before I {self._write_action_label(verb)} this X target:\n\n{target}",
+            summary=f"Confirm before I {self._write_action_label(verb)} this X target:\n\n{target}" + (f"\n\n{text}" if text else ""),
             analysis=f"Prepared {action} and is waiting for explicit confirmation.",
             confidence=0.65,
-            action_request={"action": action, "payload": payload, "preview": target},
+            action_request={"action": action, "payload": payload, "preview": target + (f"\n{text}" if text else "")},
             activity_events=[
                 {
                     "type": "tool_call_started",
@@ -539,15 +878,20 @@ class XAgent:
 
     def _format_posts(self, items: list[dict]) -> tuple[list[str], list[SpecialistSource]]:
         lines = []
-        sources = []
-        for index, item in enumerate(items[:5], start=1):
-            text = str(item.get("text") or "").strip()
+        sources = self._sources_for_posts(items[:5])
+        for item in items[:5]:
+            text = self._display_text(item.get("text"))
             handle = str(item.get("handle") or "x").strip()
-            url = str(item.get("url") or "").strip()
-            line = f"[{index}] @{handle}: {text}" if handle else f"[{index}] {text}"
-            if url:
-                line = f"{line}\n    {url}"
+            line = f"- @{handle}: {text}" if handle else f"- {text}"
             lines.append(line)
+        return lines, sources
+
+    def _sources_for_posts(self, items: list[dict]) -> list[SpecialistSource]:
+        sources = []
+        for item in items:
+            text = str(item.get("text") or "").strip()
+            handle = str(item.get("handle") or "x").strip().lstrip("@")
+            url = str(item.get("url") or "").strip()
             if url:
                 sources.append(
                     SpecialistSource(
@@ -555,10 +899,41 @@ class XAgent:
                         title=f"@{handle} on X",
                         path_or_url=url,
                         snippet=text[:500],
+                        captured_at=str(item.get("created_at") or ""),
                         freshness="live",
                     )
                 )
-        return lines, sources
+        return sources
+
+    def _bookmark_summary(self, items: list[dict]) -> str:
+        category_counts: Counter[str] = Counter()
+        for item in items:
+            intelligence = item.get("bookmark_intelligence")
+            assignments = intelligence.get("assignments") if isinstance(intelligence, dict) else []
+            primary = assignments[0] if isinstance(assignments, list) and assignments else {}
+            category = str(primary.get("name") or "General") if isinstance(primary, dict) else "General"
+            category_counts[category] += 1
+        ranked = category_counts.most_common(4)
+        topic_text = self._human_join([f"{name} ({count})" for name, count in ranked])
+        highlights = []
+        for item in items[:3]:
+            text = self._display_text(item.get("text"))
+            if len(text) > 150:
+                text = text[:147].rstrip() + "…"
+            handle = str(item.get("handle") or "x").strip().lstrip("@")
+            if text:
+                highlights.append(f"@{handle}: {text}")
+        summary = f"You have {len(items)} recent bookmarks."
+        if topic_text:
+            summary += f" Main topics: {topic_text}."
+        if highlights:
+            summary += "\n\nHighlights: " + " ".join(highlights)
+        return summary
+
+    @staticmethod
+    def _display_text(value: Any) -> str:
+        text = re.sub(r"https?://\S+", "", unescape(str(value or "")), flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", text).strip()
 
     def _search_activity_events(self, provider: str) -> list[dict]:
         if provider == "agent-reach":
@@ -599,6 +974,7 @@ class XAgent:
             "bookmarks": "Fetching X bookmarks with Agent-Reach...",
             "timeline": "Fetching X timeline with Agent-Reach...",
             "likes": "Fetching X likes with Agent-Reach...",
+            "user_posts": "Fetching latest X account post with Agent-Reach...",
         }.get(read_type, "Reading X with Agent-Reach...")
         return [
             {"type": "tool_call_started", "label": label, "name": f"agent_reach_x_{read_type}", "metadata": metadata},
@@ -612,16 +988,99 @@ class XAgent:
         ]
 
     def _error(self, summary: str, exc: Exception) -> SpecialistResponse:
+        detail = self._sanitize_error(exc)
+        if "daily limit" in str(exc).casefold():
+            return SpecialistResponse(agent=self.name, status="error", summary="X refused this action because your account has reached its daily posting limit. Try again after X resets the limit.", analysis=detail, confidence=1.0)
         return SpecialistResponse(
             agent=self.name,
             status="error",
-            summary=summary,
-            analysis=self._sanitize_error(exc),
+            summary=summary + (" " + detail[:240] if detail else ""),
+            analysis=detail,
             confidence=0.2,
         )
 
     def _is_bookmarks_query(self, lowered_query: str) -> bool:
         return "bookmark" in lowered_query or "saved posts" in lowered_query
+
+    def _is_bookmark_category_query(self, lowered_query: str) -> bool:
+        return self._is_bookmarks_query(lowered_query) and bool(
+            re.search(r"(?<!\w)(?:categor(?:y|ies|ize|ise)|organize|organise|group|sort|topics?)\b", lowered_query)
+        )
+
+    def _is_bookmark_summary_query(self, lowered_query: str) -> bool:
+        return self._is_bookmarks_query(lowered_query) and bool(
+            re.search(r"(?<!\w)(?:summari[sz]e|summary|overview|recap|digest)\b", lowered_query)
+        )
+
+    @staticmethod
+    def _bookmark_ordinal(query: str) -> int | None:
+        word_ordinals = {
+            "first": 1,
+            "second": 2,
+            "third": 3,
+            "fourth": 4,
+            "fifth": 5,
+            "sixth": 6,
+            "seventh": 7,
+            "eighth": 8,
+            "ninth": 9,
+            "tenth": 10,
+        }
+        match = re.search(
+            r"\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d{1,2}(?:st|nd|rd|th))\b",
+            query,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        token = match.group(1).casefold()
+        if token in word_ordinals:
+            return word_ordinals[token]
+        return max(1, min(int(re.match(r"\d+", token).group(0)), 20))
+
+    @staticmethod
+    def _ordinal_label(value: int) -> str:
+        if 10 <= value % 100 <= 20:
+            suffix = "th"
+        else:
+            suffix = {1: "st", 2: "nd", 3: "rd"}.get(value % 10, "th")
+        return f"{value}{suffix}"
+
+    def _is_trending_query(self, lowered_query: str) -> bool:
+        return bool(
+            re.search(
+                r"(?<!\w)(?:what(?:'s|\s+is)\s+happening|what(?:'s|\s+is)\s+go(?:ing|ign)\s+on|trending|trends?|current\s+conversation)\b.*\b(?:on\s+)?(?:x|twitter)(?!\w)",
+                lowered_query,
+            )
+            or re.search(
+                r"(?<!\w)(?:x|twitter)\b.*\b(?:what(?:'s|\s+is)\s+happening|trending|trends?)(?!\w)",
+                lowered_query,
+            )
+        )
+
+    @staticmethod
+    def _is_topic_summary_query(lowered_query: str) -> bool:
+        asks_for_synthesis = bool(
+            re.search(
+                r"(?<!\w)(?:summari[sz]e|summary|overview|recap|catch\s+me\s+up|latest\s+news|what(?:'s|\s+is)\s+(?:go(?:ing|ign)\s+on|happening)|trending|trends?|current\s+conversation)\b",
+                lowered_query,
+            )
+        )
+        return asks_for_synthesis and bool(
+            re.search(r"(?<!\w)(?:x|twitter)\b", lowered_query)
+            or re.search(r"(?<!\w)(?:about|regarding)\s+\S+", lowered_query)
+        )
+
+    @staticmethod
+    def _topic_from_summary_query(query: str) -> str:
+        match = re.search(
+            r"\b(?:about|regarding)\s+(.+?)(?:\s+on\s+(?:x|twitter)\b|[?.!,]|$)",
+            query,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return ""
+        return match.group(1).strip()
 
     def _is_timeline_query(self, lowered_query: str) -> bool:
         return bool(re.search(r"(?<!\w)(timeline|feed|home feed|following feed)\b", lowered_query))
@@ -634,6 +1093,10 @@ class XAgent:
             )
             or re.search(
                 r"(?<!\w)(?:posts?|tweets?)\s+(?:did|have)\s+i\s+like(?:d)?\s+(?:on\s+)?x(?!\w)", lowered_query
+            )
+            or re.search(
+                r"(?<!\w)(?:latest|newest|last|most\s+recent)?\s*(?:post|tweet)\s+i\s+(?:liked|favorited)\b",
+                lowered_query,
             )
         ) and not re.search(r"(?<!\w)(?:like|favorite)\s+(?:this|that|the)\b", lowered_query)
 
@@ -677,7 +1140,61 @@ class XAgent:
         return bool(re.search(r"(?<!\w)(me|account|profile)\s+(?:on\s+)?x(?!\w)", lowered_query))
 
     def _is_post_query(self, lowered_query: str) -> bool:
-        return bool(re.search(r"^\s*(?:please\s+)?(?:post|publish|tweet)\s+(?:this\s+)?(?:to|on)\s+x(?!\w)", lowered_query))
+        return bool(
+            re.search(
+                r"^\s*(?:please\s+)?(?:can|could|would|will)\s+you\s+(?:please\s+)?(?:post|publish|tweet)\b",
+                lowered_query,
+            )
+            or re.search(
+                r"^\s*(?:please\s+)?(?:using\s+(?:the\s+)?x\s+agent\s+)?(?:post|publish|tweet)\b",
+                lowered_query,
+            )
+            or re.search(
+                r"^\s*(?:please\s+)?(?:using\s+(?:the\s+)?x\s+agent\s+)?create\s+(?:a\s+)?(?:post|tweet)\b",
+                lowered_query,
+            )
+            or re.search(r"\bnot\s+(?:find|search)\b.*\bcreate\s+(?:a\s+)?(?:post|tweet)\b", lowered_query)
+        )
+
+    def _is_latest_account_post_query(self, lowered_query: str) -> bool:
+        return bool(
+            re.search(r"(?<!\w)(?:latest|newest|last|most\s+recent)\b", lowered_query)
+            and re.search(r"(?<!\w)(?:post|tweet)\b", lowered_query)
+            and (re.search(r"(?<!\w)(?:from|by|of)\b", lowered_query)
+                 or self._is_self_account_reference(lowered_query))
+        )
+
+    @staticmethod
+    def _is_self_account_reference(lowered_query: str) -> bool:
+        return bool(
+            re.search(r"\bmy\s+(?:(?:latest|newest|last|most\s+recent|x|twitter)\s+)*(?:post|tweet)\b", lowered_query)
+            or
+            re.search(
+                r"\b(?:from|by|of)\s+(?:my(?:\s+x)?\s+account|myself|me)\b",
+                lowered_query,
+            )
+        )
+
+    def _latest_account_handle(self, query: str) -> str:
+        handle = self._extract_handle(query)
+        if handle:
+            return handle
+        match = re.search(
+            r"\b(?:from|by|of)\s+(.+?)(?:\s+on\s+(?:x|twitter)\b|[?.!,]|$)",
+            query,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return ""
+        candidate = match.group(1).strip()
+        if re.fullmatch(r"(?:my(?:\s+x)?\s+account|myself|me)", candidate, flags=re.IGNORECASE):
+            return ""
+        words = re.findall(r"[A-Za-z0-9_]+", candidate)
+        if not words:
+            return ""
+        if len(words) == 1:
+            return words[0]
+        return "".join(word[:1].upper() + word[1:] for word in words)
 
     def _is_image_post_query(self, lowered_query: str) -> bool:
         if self._is_post_query(lowered_query) and any(word in lowered_query for word in ("image", "photo", "picture", "generate")):
@@ -697,6 +1214,37 @@ class XAgent:
         if match:
             return match.group(1).strip()
         return ""
+
+    @staticmethod
+    def _extract_exact_post_envelope(query: str) -> str:
+        match = re.search(
+            r"\[X post text\]\s*(.*?)\s*\[/X post text\]",
+            query,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        return match.group(1).strip() if match else ""
+
+    @staticmethod
+    def _extract_unquoted_post_instruction(query: str) -> str:
+        match = re.search(
+            r"^\s*(?:(?:please|plese)\s+)?(?:(?:can|could|would|will)\s+you\s+)?"
+            r"(?:using\s+(?:the\s+)?x\s+agent\s+)?(?:post|publish|tweet)\b\s*(.*)$",
+            query,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if not match:
+            return ""
+        instruction = match.group(1).strip(" :.-")
+        instruction = re.sub(r"^(?:a\s+)?tweet\b\s*", "", instruction, flags=re.IGNORECASE)
+        return instruction.strip()
+
+    @staticmethod
+    def _should_draft_post(instruction: str) -> bool:
+        lowered = " ".join(instruction.casefold().split())
+        return bool(
+            re.search(r"\b(?:something|anything|random|funny|joke|witty|clever|interesting)\b", lowered)
+            or re.search(r"^(?:about|on)\s+\S+", lowered)
+        )
 
     def _extract_tweet_id(self, query: str) -> str:
         url_match = re.search(r"https?://(?:www\.)?(?:x|twitter)\.com/[^\s]+/status/\d+", query)
@@ -742,6 +1290,15 @@ class XAgent:
             "follow": "Following X account...",
             "unfollow": "Unfollowing X account...",
         }.get(verb, "Running X action...")
+
+    @staticmethod
+    def _human_join(values: list[str]) -> str:
+        cleaned = [value for value in values if value]
+        if len(cleaned) < 2:
+            return cleaned[0] if cleaned else ""
+        if len(cleaned) == 2:
+            return f"{cleaned[0]} and {cleaned[1]}"
+        return f"{', '.join(cleaned[:-1])}, and {cleaned[-1]}"
 
     def _extract_image_prompt(self, query: str) -> str:
         patterns = (

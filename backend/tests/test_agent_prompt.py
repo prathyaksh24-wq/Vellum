@@ -24,6 +24,44 @@ def test_vellum_prompt_includes_identity(tmp_path: Path, monkeypatch):
     assert any("<PROTECTED>" in m.content for m in messages)
 
 
+def test_memory_query_excludes_injected_conversation_context():
+    query = agent_graph._memory_query_from_user_message(
+        "what do you know about me?\n\n[Recent Vellum conversation context]\n" + ("old chat " * 3000)
+    )
+
+    assert query == "what do you know about me?"
+
+
+def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(monkeypatch):
+    class FakeProjectContext:
+        def build(self, thread_id):
+            return "<PROTECTED>Older profile: prefer long answers.</PROTECTED>"
+
+    monkeypatch.setattr(agent_graph, "_prompt_project_ctx", FakeProjectContext())
+    monkeypatch.setattr(agent_graph, "_get_skill_registry", lambda: object())
+    monkeypatch.setattr(agent_graph, "build_skill_activation_block", lambda *args, **kwargs: "")
+    monkeypatch.setattr(agent_graph, "_specialist_directory_block", lambda: "")
+    monkeypatch.setattr(
+        "agent.memory.memory_context.build_memory_block",
+        lambda *args, **kwargs: "Older inferred preference: likes every saved post.",
+    )
+    correction = HumanMessage(content="Keep answers short. Saving a post doesn't mean I agree.")
+
+    messages = vellum_prompt(
+        {"messages": [correction]}, {"configurable": {"thread_id": "test-learning"}}
+    )
+
+    system = messages[0].content
+    assert system.startswith(agent_graph.VELLUM_SYSTEM_PROMPT)
+    boundary = system.index("## Personal context boundary")
+    assert boundary < system.index("Older profile:")
+    assert boundary < system.index("Older inferred preference:")
+    assert "Current explicit statements and corrections take precedence" in system
+    assert "default ambiguous stance to unknown" in system
+    assert "report the proposal as pending" in system
+    assert messages[1] is correction
+
+
 def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "agent.graph.agent._prompt_project_ctx",
@@ -64,61 +102,54 @@ def test_vellum_prompt_reports_request_scoped_runtime_model(tmp_path: Path, monk
     assert "Runtime selected model: openai/gpt-5.6-sol" in messages[0].content
 
 
-def test_vellum_prompt_delegates_x_work_to_x_agent():
-    assert "x_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Delegate all X interactions to XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "x_action" not in agent_graph.VELLUM_SYSTEM_PROMPT
+def test_vellum_prompt_uses_one_typed_specialist_surface():
+    assert "delegate_to_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Use only profile IDs from the directory" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "never copy the whole conversation" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "x_agent" not in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "books_agent" not in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "discord_agent" not in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
-def test_vellum_prompt_delegates_book_reasoning_to_books_agent():
-    assert "books_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Delegate Book reasoning to BooksAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Do not activate Book skills directly" in agent_graph.VELLUM_SYSTEM_PROMPT
+def test_prompt_routes_natural_and_vague_requests_without_agent_names():
+    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
 
-
-def test_vellum_prompt_delegates_discord_work_to_discord_agent():
-    assert "discord_agent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Delegate all Discord interactions to DiscordAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Never use a user token" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "everyday, indirect, shorthand, or slightly vague language" in prompt
+    assert "they need not name an agent" in prompt
+    assert '"live NBA score"' in prompt
+    assert '"what did Naval tweet about AI?"' in prompt
+    assert "Apply the same routing to books, YouTube, Discord, calendars, and personal memory" in prompt
+    assert "If evidence is inadequate, report the gap" in prompt
+    assert "if relevant specialists and authorized searches return no evidence, say you could not verify the answer" in prompt
+    assert "Never substitute the runtime date, stale knowledge, a greeting, or a guess" in prompt
 
 
 def test_agent_prompt_documents_workspace_mode():
-    assert "mode='workspace'" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "visible workspace" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "Observe before computer or browser actions and verify the result" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
 def test_agent_prompt_documents_native_desktop_routing():
     prompt = agent_graph.VELLUM_SYSTEM_PROMPT
 
-    assert "list_windows" in prompt
-    assert "action='observe'" in prompt
-    assert "target window IDs" in prompt
-    assert "accessibility element indexes" in prompt
-    assert "blue edge-glow/status-pill Esc overlay" in prompt
-    assert "action='open_app'" in prompt
-    assert "action='launch_app'" in prompt
-    assert "Installed-app, visible-terminal, and OS tab/window switching desktop actions were removed" not in prompt
+    assert "Observe before computer or browser actions" in prompt
+    assert "computer_use_route" in {tool.name for tool in agent_graph.core_tools()}
 
 
 def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():
-    assert "youtube.com/results?search_query=" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Do not stop after opening Chrome" in agent_graph.VELLUM_SYSTEM_PROMPT
+    names = {tool.name for tool in agent_graph.core_tools()}
+    assert "browser_navigate" in names
+    assert "web_search" in names
 
 
 def test_agent_prompt_documents_computer_use_routing_policy():
-    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
-
-    assert "computer_use_route" in prompt
-    assert "browser first, workspace second, desktop last" in prompt
-    assert "CUA driver and cloud VM control are coming soon" in prompt
+    assert "computer_use_route" in {tool.name for tool in agent_graph.core_tools()}
 
 
 def test_agent_prompt_checks_permissions_before_asking_again():
-    assert "action='permissions'" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "Do not ask again for a permission that is already true" in agent_graph.VELLUM_SYSTEM_PROMPT
+    assert "permission and confirmation requirements" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
-def test_agent_tool_list_includes_x_agent(monkeypatch):
+def test_agent_tool_list_has_one_delegation_tool_and_no_domain_wrappers(monkeypatch):
     captured = {}
 
     def fake_build_agent_runtime(**kwargs):
@@ -133,14 +164,14 @@ def test_agent_tool_list_includes_x_agent(monkeypatch):
 
     agent_graph.build_agent()
 
-    assert any(getattr(tool, "name", "") == "x_agent" for tool in captured["tools"])
-    assert any(getattr(tool, "name", "") == "discord_agent" for tool in captured["tools"])
+    assert any(getattr(tool, "name", "") == "delegate_to_agent" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") in {"books_agent", "calendar_agent", "discord_agent", "x_agent"} for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "x_action" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "computer_use_route" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
-    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "fetch_sports_if_curious" for tool in captured["tools"])
     assert not any(getattr(tool, "name", "") == "should_fetch_sports" for tool in captured["tools"])
 
@@ -169,63 +200,55 @@ def test_async_agent_tool_list_includes_computer_use_route(monkeypatch):
     assert any(getattr(tool, "name", "") == "web_research" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "web_extract" for tool in captured["tools"])
     assert any(getattr(tool, "name", "") == "memory_orchestrator" for tool in captured["tools"])
-    assert any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
+    assert not any(getattr(tool, "name", "") == "spotify_playback" for tool in captured["tools"])
 
 
 def test_agent_prompt_documents_tavily_and_firecrawl_tools():
-    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
-
-    assert "web_research" in prompt
-    assert "Tavily" in prompt
-    assert "web_extract" in prompt
-    assert "Firecrawl" in prompt
+    names = {tool.name for tool in agent_graph.core_tools()}
+    assert {"web_research", "web_extract"} <= names
 
 
 def test_prompt_describes_main_agent_as_router_with_specialists():
-    assert "Specialist agents advise; Vellum decides" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "SportsAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "XAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "YoutubeAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "DiscordAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "on-demand public sports research" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "transcript-backed summaries" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "durable memory lookup" in agent_graph.VELLUM_SYSTEM_PROMPT
-    assert "contract-compatible stubs" not in agent_graph.VELLUM_SYSTEM_PROMPT
+    block = agent_graph._specialist_directory_block()
+    assert "SportsAgent" in block
+    assert "XAgent" in block
+    assert "YoutubeAgent" in block
+    assert "DiscordAgent" in block
+    assert "tools" not in block
+    assert "allowed_skills" not in block
+    assert "skill_ids" not in block
 
 
 def test_agent_prompt_forbids_live_access_refusal_when_tools_exist():
-    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
-
-    assert "Do not tell the user you lack live information access" in prompt
-    assert "use web_search" in prompt
+    assert "web_search" in {tool.name for tool in agent_graph.core_tools()}
 
 
 def test_agent_prompt_documents_memory_orchestrator_tool():
-    prompt = agent_graph.VELLUM_SYSTEM_PROMPT
-
-    assert "memory_orchestrator" in prompt
-    assert "Dreaming status" in prompt
-    assert "Do not infer Dreaming" in prompt
+    assert "memory_orchestrator" in {tool.name for tool in agent_graph.core_tools()}
 
 
-def test_vellum_prompt_includes_compact_skill_index_without_skill_body(tmp_path: Path, monkeypatch):
+def test_vellum_prompt_keeps_skill_context_relevant_and_hides_specialist_catalog(tmp_path: Path, monkeypatch):
     class FakeRegistry:
-        def list_skills(self):
-            from agent.skills import SkillIndexEntry
+        pass
 
-            return [
-                SkillIndexEntry(
-                    name="sports-brief",
-                    description="Prepare sports briefs",
-                    category="research",
-                    state="active",
-                    available=True,
-                    package_root="C:/private/path",
-                    is_external=False,
-                )
-            ]
+    class FakeCatalog:
+        def delegation_manifest(self):
+            return [{"id": "BooksAgent", "description": "Installed Book evidence."}]
+
+        def specialist_skill_ids(self):
+            return frozenset({"book-to-skill"})
+
+    seen = {}
+
+    def activate(query, registry, *, excluded_skills):
+        seen["query"] = query
+        seen["registry"] = registry
+        seen["excluded_skills"] = excluded_skills
+        return "## Relevant skills\n\n### code-review\nInspect the current diff."
 
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", FakeRegistry(), raising=False)
+    monkeypatch.setattr(agent_graph, "get_agent_catalog", lambda: FakeCatalog())
+    monkeypatch.setattr(agent_graph, "build_skill_activation_block", activate)
     monkeypatch.setattr(
         agent_graph,
         "_prompt_project_ctx",
@@ -233,11 +256,18 @@ def test_vellum_prompt_includes_compact_skill_index_without_skill_body(tmp_path:
         raising=False,
     )
 
-    messages = agent_graph.vellum_prompt({"messages": [HumanMessage(content="sports update")]}, {})
+    messages = agent_graph.vellum_prompt({"messages": [HumanMessage(content="Review this diff")]}, {})
 
-    assert "## Available Skills" in messages[0].content
-    assert "sports-brief" in messages[0].content
-    assert "C:/private/path" not in messages[0].content
+    assert seen == {
+        "query": "Review this diff",
+        "registry": agent_graph._prompt_skill_registry,
+        "excluded_skills": frozenset({"book-to-skill"}),
+    }
+    assert "## Specialist directory" in messages[0].content
+    assert "BooksAgent" in messages[0].content
+    assert "## Available Skills" not in messages[0].content
+    assert "book-to-skill" not in messages[0].content
+    assert "Inspect the current diff." in messages[0].content
 
 
 def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path, monkeypatch):
@@ -245,15 +275,21 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
         def list_skills(self):
             return []
 
+    class FakeCatalog:
+        def specialist_skill_ids(self):
+            return frozenset()
+
     registry = FakeRegistry()
     seen = {}
 
-    def activate(query, active_registry):
+    def activate(query, active_registry, *, excluded_skills):
         seen["query"] = query
         seen["registry"] = active_registry
+        seen["excluded_skills"] = excluded_skills
         return "## Activated Vellum Skills\n\n### code-review\nInspect the diff first."
 
     monkeypatch.setattr(agent_graph, "_prompt_skill_registry", registry, raising=False)
+    monkeypatch.setattr(agent_graph, "get_agent_catalog", lambda: FakeCatalog())
     monkeypatch.setattr(agent_graph, "build_skill_activation_block", activate, raising=False)
     monkeypatch.setattr(
         agent_graph,
@@ -267,7 +303,11 @@ def test_vellum_prompt_activates_matching_skill_for_current_task(tmp_path: Path,
         {},
     )
 
-    assert seen == {"query": "Review this pull request", "registry": registry}
+    assert seen == {
+        "query": "Review this pull request",
+        "registry": registry,
+        "excluded_skills": frozenset(),
+    }
     assert "### code-review" in messages[0].content
     assert "Inspect the diff first." in messages[0].content
 
@@ -301,18 +341,10 @@ def test_agent_tool_list_includes_progressive_skill_tools(monkeypatch):
 def test_agent_prompt_documents_skill_mutation_safety():
     prompt = agent_graph.VELLUM_SYSTEM_PROMPT
 
-    assert "skill_manage" in prompt
-    assert "confirm=true" in prompt
-    assert "background_review" in prompt
-    assert "foreground" in prompt
-    assert "blueprint" in prompt
-    assert "suggestion" in prompt
-    assert "never schedules" in prompt
-    assert "quarantine" in prompt
-    assert "dangerous" in prompt
-    assert "force" in prompt
-    assert "never auto-deletes" in prompt
-    assert "rollback" in prompt
+    assert "tool_search" in prompt
+    assert "permission and confirmation requirements" in prompt
+    assert "skill_manage" not in prompt
+    assert len(prompt) < 7500
 
 
 def test_lazy_agent_caches_async_runtimes_by_model(monkeypatch):

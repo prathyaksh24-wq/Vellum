@@ -55,7 +55,58 @@ already exist.
 
 ## Frontend Contract
 
-The plugin detail view uses `/api/plugins/google-calendar/*` for status, OAuth,
-calendar lists, event lists, free/busy checks, and confirmed event changes. The
-frontend can change its layout without changing those endpoints. Backend changes
-must preserve the capability contract or introduce a new contract version.
+The Plugins page shows Google Calendar as Connected, Not connected, or Disabled.
+Connect opens the existing Google OAuth flow and polls account status, updating
+the page automatically after consent. Disable uses `plugin.state.set`, prevents
+CalendarAgent and connector reads/writes, and preserves the saved keyring
+connection. Re-enabling restores access. Disconnect removes the local tokens.
+
+The frontend uses the existing API adapters for status, calendar lists, event
+search, and `calendar.availability`. The default All calendars view merges
+visible calendars, includes their source labels and IDs, and disables event
+changes for calendars with read-only access. A specific calendar can also be
+selected. Event search and Upcoming events cover the
+next seven days in the plugin view. CalendarAgent can handle natural requests
+for other dates. Calendar changes and connection controls dispatch these plugin
+contributions through AppActionRuntime:
+
+- `calendar.connection.start` (Google consent)
+- `calendar.connection.disconnect` (operation-bound confirmation)
+- `calendar.event.create`, `calendar.event.update`, `calendar.event.delete`
+  (operation-bound confirmation)
+
+The typed `/api/plugins/google-calendar/*` endpoints remain compatible. Both
+surfaces use the same CalendarCapabilityService and connector/token store.
+
+## Scheduling Conflicts
+
+Before creating or moving an event, availability checks busy events across the
+visible connected calendars, including synced F1 events. Cancelled, transparent, and self-declined events are ignored;
+all-day busy events are included. Updates exclude only the event being moved.
+The service checks again immediately before sending a write to Google.
+
+An overlap returns a proposed slot of the same duration, searched in 15-minute
+steps between 9 AM and 6 PM in the requested/calendar time zone for the next
+seven days. The frontend asks whether that time works and requires confirmation
+before writing. Chat also waits for confirmation. A late collision returns a
+new proposal instead of silently changing the event time. If no slot is found
+or the bounded event inventory is too large, the user must choose another time.
+This checks visible connected calendars, not attendee calendars. Google does not offer an atomic check-and-book operation,
+so another client could still write between the final check and event creation.
+
+## Contextual Deletion
+
+CalendarAgent stores a bounded event reference packet in the existing local
+MasterThreadStateStore, scoped to the chat and specialist. It contains real
+calendar/event IDs, titles, times, and access roles; it does not copy a whole
+conversation or write Calendar content into Knowledge Core. Deleting the chat
+clears its specialist references and pending authorization. "Delete that"
+resolves a unique event from the last read or completed mutation. Multiple
+possible targets require clarification. Calendar reads search all visible
+calendars by default; explicit calendar names narrow the search.
+
+One confirmation is bound to the exact target. "Yes delete it" completes that
+pending deletion. Failed Calendar actions retain the exact pending target so
+an explicit retry can reuse its authorization for five minutes. A different
+target requires a new preview/confirmation, and cancellation clears the pending
+action. No background retries or blanket deletion permission are granted.

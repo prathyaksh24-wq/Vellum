@@ -81,6 +81,7 @@ Requirements:
 - Python 3.11 or newer.
 - Node.js and npm.
 - Docker, for the self-hosted Honcho service.
+- Ollama with `gemma4:12b` and `nomic-embed-text`, for local Honcho reasoning and embeddings.
 - An Obsidian vault path configured in `.env`.
 - Provider credentials for any cloud model or external connector you enable.
 
@@ -90,7 +91,13 @@ Typical Windows startup:
 .\scripts\start.ps1
 ```
 
-This starts the API through `scripts/start-api.ps1`, then starts the Vite UI and prints the local UI/API URLs.
+This starts the local Honcho stack, the API through `scripts/start-api.ps1`, then the Vite UI. Use `-SkipHoncho` only when intentionally running with SQLite/FTS5 fallback memory.
+
+Honcho-only startup:
+
+```powershell
+.\scripts\start-honcho.ps1
+```
 
 Backend-only startup:
 
@@ -143,11 +150,17 @@ Configuration is read from `.env` at the repository root. Important settings inc
 - `FILESYSTEM_MCP_PATH`
 - `HONCHO_BASE_URL`
 - `CHROMA_PATH`
+- `OLLAMA_CONTEXT_LENGTH=16384` sets the local inference context window, including chat history and tools. Ollama uses the native `langchain-ollama` adapter for streaming and attachments.
+- `OLLAMA_BATCH_SIZE=1024` matches the OpenAI-compatible Ollama transport used by local Honcho, avoiding reloads between native chat and background inference. It remains configurable for other setups. On this 12 GB GPU, the 16K Gemma configuration uses Ollama's `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_FLASH_ATTENTION=1`, and a single inference slot. These are Ollama server settings; restart Ollama after changing them. Cache quantization can affect precision, so recheck your own tasks after changing it.
 - `ZDR_ONLY=true`
 - `ENABLE_PII_SCRUBBING=true`
 - provider and MCP keys for optional integrations
 
-`docker-compose.yml` currently defines the local Honcho API and PostgreSQL database. Embedded vector storage is configured through ChromaDB.
+`docker-compose.yml` pins Honcho server 3.0.12 and defines its localhost API, background deriver, pgvector database, and Redis cache. Honcho uses local Ollama models; Vellum does not pass a cloud model key into these containers. Embedded Vellum retrieval remains configured through ChromaDB separately.
+
+The local Honcho configuration bounds derivation and dialectic input to 8K tokens and dialectic output to 512 tokens. Derivation, summaries, and minimal user-model refreshes request non-thinking generation; explicit higher dialectic reasoning levels remain available. User-model refreshes coalesce after a five-minute pause in saved turns; background derivation batches up to 4K input tokens or five minutes of age to reduce contention with interactive inference. Local chat recall remains immediate, while derived Honcho observations can lag. Background derivation still shares the local GPU.
+
+On Windows, Book imports use the registered Windows AMSI antivirus provider (including McAfee) to scan the EPUB and its validated members. Defender is a fallback when AMSI is unavailable. Image-only content remains blocked from skill compilation with `OCR_REQUIRED` until its text is extracted and validated; a successful malware scan does not make a scanned page readable.
 
 ## Privacy Model
 

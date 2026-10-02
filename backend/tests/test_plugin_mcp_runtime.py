@@ -75,6 +75,37 @@ def test_runtime_does_not_expose_disabled_plugin_connectors(tmp_path: Path) -> N
     assert PluginMcpRuntime(registry).connectors() == []
 
 
+def test_catalog_can_isolate_invalid_connector_without_weakening_path_validation(tmp_path: Path) -> None:
+    registry, _ = _plugin(tmp_path, {"command": "node", "args": ["../../../../outside.mjs"]})
+    runtime = PluginMcpRuntime(registry)
+    assert runtime.connectors(skip_invalid=True) == []
+    assert runtime.connector_diagnostics == [{"plugin_id":"demo", "status":"unavailable"}]
+    with pytest.raises(PluginMcpRuntimeError):
+        runtime.connectors()
+
+
+@pytest.mark.asyncio
+async def test_invalid_connector_does_not_block_valid_tool_discovery(tmp_path: Path) -> None:
+    registry, root = _plugin(tmp_path, {"url": "https://mcp.example.test/mcp"})
+    (root / ".mcp.json").write_text(json.dumps({"mcpServers": {
+        "demo-server": {"url": "https://mcp.example.test/mcp"},
+        "invalid-server": {"command": "node", "args": ["../../../../outside.mjs"]},
+    }}), encoding="utf-8")
+
+    class FakeTransport:
+        async def list_tools(self, connector):
+            assert connector.name == "demo-server"
+            return [{"name": "lookup", "read_only": True}]
+
+    runtime = PluginMcpRuntime(registry, transport=FakeTransport(),
+                               audit_log=McpAuditLog(tmp_path / "mcp-audit.jsonl"))
+    assert (await runtime.list_tools("demo", "demo-server"))[0]["name"] == "lookup"
+    with pytest.raises(PluginMcpRuntimeError, match="unavailable"):
+        runtime.connector("demo", "invalid-server")
+    with pytest.raises(PluginMcpRuntimeError, match="outside its plugin root"):
+        runtime.connectors()
+
+
 @pytest.mark.asyncio
 async def test_runtime_allows_annotated_read_only_tool_without_confirmation(tmp_path: Path) -> None:
     registry, _ = _plugin(tmp_path, {"url": "https://mcp.example.test/mcp"})

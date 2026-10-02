@@ -26,6 +26,21 @@ XAgent
 
 The portable Agent-Reach plugin exposes this adapter. It is not a second runtime or data store.
 
+## Local setup
+
+Install the connector executables into Vellum's project environment:
+
+```powershell
+.\.venv\Scripts\pip.exe install "agent-reach @ git+https://github.com/Panniantong/agent-reach.git@a19a171fa980a0785849596492e0af4db800c82f" "twitter-cli @ git+https://github.com/public-clis/twitter-cli.git@57b91c03d85ef7b76328807af2a40cc9741f039e"
+.\.venv\Scripts\agent-reach.exe doctor --json
+```
+
+The API launcher prepends `.venv\Scripts` to its child process `PATH`, so provider
+discovery uses these project-local executables. Connect from Vellum's X modal by
+pasting an explicit Cookie-Editor JSON export from `x.com`; the backend passes it to
+Agent Reach over standard input and does not write it to the repository. Never print
+or commit cookie values.
+
 ## Provider Policy
 
 Agent-Reach is the primary local connector. The xAI search fallback is disabled by default because it is a paid external dependency and may not be available for the active account. Enable it explicitly with `X_TOOL_ALLOW_XAI_FALLBACK=true` only when working xAI credentials and billing are present.
@@ -74,7 +89,11 @@ Likes, bookmarks, follows, views, and reposts are observations. They are not pre
 - route future scheduled ingestion through the shared connector and Knowledge Core
 - generate vault notes from canonical records after normalization
 
-No Siftly code or store is part of this phase. Reassess its local bookmark UI and graph ideas only after the canonical X pipeline is operating and measured.
+Bookmark categorization adapts the taxonomy, entity extraction, and specific-category preference from
+[Siftly](https://github.com/viperrcrypto/Siftly), Copyright (c) 2025 Siftly Contributors,
+under the MIT License. Vellum runs this logic locally after the shared X connector returns bookmarks
+and writes the annotations to Knowledge Core. It does not add Siftly's Prisma/SQLite store, provider
+client, or a second ingestion runtime.
 
 ## Delivery Order
 
@@ -87,3 +106,18 @@ No Siftly code or store is part of this phase. Reassess its local bookmark UI an
 7. Add export to chat and coding agents through bounded context packs.
 
 Each step requires focused contract tests, replay tests for duplicate input, privacy checks, and a canary run before enabling scheduled writes.
+
+## Natural actions (2026-10)
+
+The existing MasterThreadStateStore retains bounded real post IDs for dependent
+repost/reply requests. Ambiguous targets require selection. Natural reply copy is
+model-drafted, previewed with its target and executed after one operation-bound
+confirmation. Confirmation text is not treated as a new post draft. Uncertain writes
+are never automatically retried. `x.replies` reads a bounded sample through Agent Reach.
+Latest requests sort real post IDs and return one post. Expired private reads request
+fresh cookies without silently switching to official API or web search. Bookmark
+summaries cover the fetched sample rather than claiming exhaustive archive coverage.
+
+Read requests with a post link invoke `x.read_tweet`, including after a public write.
+Inverse actions share the XAgent tool allowlist. Structured CLI API failures are
+preferred over startup warnings; X daily-limit failures are surfaced as failures.

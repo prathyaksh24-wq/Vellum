@@ -423,6 +423,7 @@ def test_x_service_registers_capabilities_with_tool_registry():
     assert "x.timeline" in registry.names()
     assert "x.likes" in registry.names()
     assert "x.profile" in registry.names()
+    assert "x.user_posts" in registry.names()
     assert "x.read_tweet" in registry.names()
     assert "x.reply" in registry.names()
     assert "x.like" in registry.names()
@@ -441,6 +442,33 @@ def test_x_service_registers_capabilities_with_tool_registry():
     assert "x.bookmarks" in registry.names()
     assert "x.status" in registry.names()
     assert registry.get("x.search_posts").stream_label == "Searched X"
+
+
+def test_x_service_reads_named_account_posts_through_agent_reach():
+    calls = []
+
+    class FakeAgentReach:
+        def available(self):
+            return True
+
+        def user_posts(self, handle, max_results):
+            calls.append((handle, max_results))
+            return [
+                {
+                    "text": "Newest account post",
+                    "handle": handle,
+                    "url": f"https://x.com/{handle}/status/1",
+                }
+            ]
+
+    service = XCapabilityService(agent_reach_provider=FakeAgentReach())
+
+    result = service.user_posts({"handle": "AlexHormozi", "max_results": 1})
+
+    assert calls == [("AlexHormozi", 1)]
+    assert result["provider"] == "agent-reach"
+    assert result["action"] == "x.user_posts"
+    assert result["items"][0]["text"] == "Newest account post"
 
 
 def test_x_service_routes_extended_confirmed_actions_to_agent_reach():
@@ -520,3 +548,31 @@ def test_x_service_does_not_fallback_after_ambiguous_agent_reach_post_failure():
         pass
     else:
         raise AssertionError("ambiguous Agent-Reach write failures must propagate")
+
+
+def test_expired_agent_reach_private_reads_do_not_switch_providers():
+    fallback_calls = []
+    class Expired:
+        def available(self): return True
+        def account(self): raise AgentReachCommandError("expired session")
+        def bookmarks(self, limit): raise AgentReachCommandError("expired session")
+    service = XCapabilityService(agent_reach_provider=Expired(), allow_private_reads=True,
+        account_backend=lambda: fallback_calls.append("account") or {"id":"1"},
+        bookmarks_backend=lambda *args: fallback_calls.append("bookmarks") or {"data":[]})
+    import pytest
+    for read in (service.account, service.bookmarks):
+        with pytest.raises(AgentReachCommandError): read({})
+    assert fallback_calls == []
+
+
+def test_x_normalized_posts_keep_identity_for_latest_selection():
+    class Provider:
+        def available(self): return True
+        def user_posts(self, handle, max_results):
+            return [{"id":"42", "text":"new", "handle":handle, "url":f"https://x.com/{handle}/status/42"}]
+        def replies(self, target, limit):
+            assert target == "42" and limit == 5
+            return [{"id":"43", "text":"reply", "url":"https://x.com/a/status/43"}]
+    service = XCapabilityService(agent_reach_provider=Provider())
+    assert service.user_posts({"handle":"a"})["items"][0]["id"] == "42"
+    assert service.replies({"tweet_id":"42"})["items"][0]["id"] == "43"

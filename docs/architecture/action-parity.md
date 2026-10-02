@@ -7,7 +7,7 @@ parity.
 
 The frontend contract test parses the JSX actually served by the main and
 coding workspace HTML pages, including their external React components. It
-locks the tag/event/handler-expression multiset for 1,068 reviewed handlers.
+locks the tag/event/handler-expression multiset for 1,080 reviewed handlers.
 An added, removed, or rewired handler fails the test until its Action mapping
 or narrow exemption is reviewed and the fingerprint is updated. Covered
 controls also have source probes; the backend contract test checks that each
@@ -20,6 +20,27 @@ Action, a non-committing gesture, or a specifically named deferral. Do not
 refresh a fingerprint alone to make the test pass. If a deferral acquires an
 Action, move it into `covered` and add a behavior test. If a new React script
 is served, add it to the scanner first.
+
+## PR #200 merge reconciliation
+
+The merged inventory covers 74 controls. Calendar moved from the inline page
+to the served `calendar-workspace.jsx`, which is now scanned. Calendar connection
+and confirmed event mutations, Spotify connection/consent upgrade, playback
+controls, and embedded-player session controls have canonical App Action mappings.
+Backend catalog checks compose both plugin contributions; existing dispatcher,
+confirmation, SDK lifecycle, and Calendar UI tests cover those boundaries.
+
+| Changed handlers | Reviewed classification |
+| --- | --- |
+| Calendar component callbacks, create/update/delete and confirmation | Typed Calendar actions; source calendar identity is preserved. |
+| Calendar refresh, selection, search, proposed slots and cancellation | Provider reads or staged form choices; no committed event mutation. |
+| Spotify connect/reconnect, audio enable/disable and player controls | Existing connection, playback and session App Actions; reconnect can explicitly reuse the saved public client ID. |
+| Plugin detail toggle | Existing `plugin.state.set` dispatch, with the selected plugin resolved before rendering. |
+| X connection setup, session-cookie draft and connection badge | Existing named third-party connector deferral; typing is a draft and opening setup is transient presentation. |
+| New chat | Existing `conversation.new` action with delayed navigation handling; probe updated to its complete invocation. |
+
+This reconciliation preserves the validation limits below. Automated merge
+checks do not constitute a new live provider or browser acceptance run.
 
 ## Browser validation (disposable fixture)
 

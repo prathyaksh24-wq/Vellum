@@ -76,3 +76,21 @@ def test_skill_activation_loads_matching_procedure_only(tmp_path: Path) -> None:
     assert "Inspect the diff before reporting findings." in block
     assert "sports-brief" not in block
     assert str(tmp_path) not in block
+
+
+def test_skill_activation_respects_specialist_exclusions(tmp_path: Path) -> None:
+    root = tmp_path / "packages"
+    write_skill(
+        root / "research" / "sports-brief",
+        "sports-brief",
+        "Prepare sports briefs",
+        "# Sports Brief\n\n## Procedure\nCheck live scores.",
+    )
+
+    block = build_skill_activation_block(
+        "Prepare a sports brief",
+        SkillRegistry(local_root=root),
+        excluded_skills={"sports-brief"},
+    )
+
+    assert block == ""

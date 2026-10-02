@@ -54,6 +54,7 @@ class AgentProfile(ProfileModel):
     reasoning_mode: Literal["light", "medium", "high", "extra high", "max", "ultra"] | None = None
     source_egress: Literal["local", "external"] = "local"
     book_discovery_network: bool = False
+    result_visibility: Literal["full", "summary"] = "full"
     instructions: InstructionPolicy = Field(default_factory=InstructionPolicy)
     tools: ToolPolicy = Field(default_factory=ToolPolicy)
     skills: SkillPolicy = Field(default_factory=SkillPolicy)
@@ -108,28 +109,46 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "x.timeline",
         "x.likes",
         "x.profile",
+        "x.user_posts",
         "x.read_tweet",
+        "x.replies",
         "x.publish_post",
         "x.publish_post_with_media",
         "x.reply",
         "x.like",
         "x.repost",
         "x.delete",
+        "x.unlike",
+        "x.unrepost",
+        "x.bookmark",
+        "x.unbookmark",
+        "x.quote",
+        "x.follow",
+        "x.unfollow",
     ]
     return {
+        "MusicAgent": _profile(
+            "MusicAgent",
+            "Play music by song title or artist, control playback, play or shuffle the user's playlists and Liked Songs, and prepare confirmed playlist creation. Spotify is the first supported integration; other music services use adapters when installed.",
+            instructions="Use only the selected music integration and the profile-approved music skills. Interpret typed requests locally, validate intent, and report actual tool results. Never expose credentials or replay cached playback acknowledgements.",
+            tools=["spotify_playback", "spotify_devices", "spotify_queue", "spotify_search", "spotify_playlists", "spotify_albums", "spotify_library", "spotify_podcasts"],
+            skills=["spotify"], cache_first=False,
+            cache=CachePolicy(default_ttl_seconds=0, live_ttl_seconds=0, historical_ttl_seconds=0),
+        ),
         "SportsAgent": _profile(
             "SportsAgent",
-            "Sports research, schedules, results, and analysis.",
+            "Live and recent sports scores, upcoming games and match schedules, team results, sports news, and analysis across leagues.",
             instructions="Research sports facts and analysis using profile-approved capabilities.",
             tools=["sports.web_search"],
             skills=["skill-route-sports-agent-v1", "skill-sports-memory-v1"],
         ),
         "XAgent": _profile(
             "XAgent",
-            "X search, account reads, and confirmed X actions.",
+            "Public X posts and profiles: find what a person or account posted about a topic, read account content, and handle confirmed X actions.",
             instructions="Handle X reads and confirmation-bound writes without widening permissions.",
             tools=x_tools,
             skills=[],
+            cache_first=False,
             cache=CachePolicy(
                 bypass_terms=[
                     "live",
@@ -150,10 +169,13 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "BooksAgent": AgentProfile(
             id="BooksAgent",
-            description="Evidence-backed reasoning over installed Books and routed Hermes Book skills.",
+            description=(
+                "Questions about the user's installed books: what an author says, where an idea or quote appears, "
+                "and explanations grounded in chapters and passages."
+            ),
             model=None,
             reasoning_mode=None,
-            source_egress="external",
+            source_egress="local",
             instructions=InstructionPolicy(
                 inline=(
                     "Use Knowledge Core and profile-approved Hermes Book skills. Separate author, user, "
@@ -183,13 +205,14 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "YoutubeAgent": _profile(
             "YoutubeAgent",
-            "YouTube account, subscriptions, search, metadata, transcripts, and summaries.",
+            "YouTube videos and channels: find a video, search subscriptions or watch history, read a transcript, or summarize what was said.",
             instructions="Handle YouTube account data, discovery, metadata, transcripts, and summaries.",
             tools=[
                 "youtube.account",
                 "youtube.subscriptions",
                 "youtube.liked_videos",
                 "youtube.takeout_history",
+                "youtube.takeout_library",
                 "youtube.personal_context",
                 "youtube.subscription_feed",
                 "youtube.search_videos",
@@ -200,7 +223,11 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "DiscordAgent": AgentProfile(
             id="DiscordAgent",
-            description="Scoped Discord bot reads and policy-controlled external actions.",
+            description=(
+                "Questions about allowlisted Discord servers: what someone said, recent messages, channel or thread catch-ups, "
+                "and confirmation-controlled Discord actions."
+            ),
+            result_visibility="summary",
             instructions=InstructionPolicy(
                 inline=(
                     "Use only the installed Vellum bot and profile-approved Discord capabilities. "
@@ -248,13 +275,18 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "CalendarAgent": AgentProfile(
             id="CalendarAgent",
-            description="Private Google Calendar reads and confirmation-controlled event changes.",
+            description=(
+                "Personal calendar questions across all connected calendars, including subscribed Formula 1/F1 schedules, "
+                "what is scheduled today or tomorrow, when the user is free, and confirmed event changes."
+            ),
+            result_visibility="summary",
             instructions=InstructionPolicy(
                 inline=(
                     "Use only the connected Google Calendar account and profile-approved Calendar capabilities. "
                     "Treat event titles, descriptions, attendees, and locations as private. Ask for clarification "
                     "rather than guessing dates, times, calendars, or target events. Every create, update, and "
-                    "delete operation requires explicit confirmation."
+                    "delete operation requires one confirmation bound to its actual calendar and event ID. Preserve that "
+                    "authorization for an explicit retry of the same failed action; do not ask repeatedly or invent IDs."
                 )
             ),
             tools=ToolPolicy(
@@ -264,6 +296,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
                     "calendar.events",
                     "calendar.event",
                     "calendar.free_busy",
+                    "calendar.availability",
                     "calendar.create_event",
                     "calendar.update_event",
                     "calendar.delete_event",
@@ -287,7 +320,10 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",
-            description="Durable memory lookup and reviewed memory proposals.",
+            description=(
+                "Durable personal memory: answer what the user previously shared or asked Vellum to remember, "
+                "and submit reviewed memory proposals."
+            ),
             instructions=InstructionPolicy(
                 inline="Retrieve durable memory and submit reviewed memory proposals."
             ),

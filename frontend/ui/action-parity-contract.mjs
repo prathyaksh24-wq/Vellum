@@ -24,6 +24,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/vellum-workspace.html",
   "design/Velllum/uploads/components/v-select.jsx",
   "design/Velllum/uploads/components/books-view.jsx",
+  "design/Velllum/uploads/components/calendar-workspace.jsx",
 ];
 
 function reactScripts(content) {

@@ -39,6 +39,7 @@ class YoutubeCapabilityService:
         subscriptions_backend: SubscriptionsBackend | None = None,
         liked_videos_backend: LikedVideosBackend | None = None,
         takeout_history_backend: TakeoutHistoryBackend | None = None,
+        takeout_library_backend: Callable[[str, int], dict[str, Any]] | None = None,
         personal_context_backend: PersonalContextBackend | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
@@ -51,6 +52,7 @@ class YoutubeCapabilityService:
         self.subscriptions_backend = subscriptions_backend or self._default_subscriptions
         self.liked_videos_backend = liked_videos_backend or self._default_liked_videos
         self.takeout_history_backend = takeout_history_backend or self._default_takeout_history
+        self.takeout_library_backend = takeout_library_backend or self._default_takeout_library
         self.personal_context_backend = personal_context_backend or self._default_personal_context
 
     def build_registry(self) -> ToolRegistry:
@@ -136,6 +138,8 @@ class YoutubeCapabilityService:
                 adapter=self.personal_context,
             )
         )
+        registry.register(CapabilityRecord(name="youtube.takeout_library", namespace="youtube", access=CapabilityAccess.READ,
+            allowed_agents=frozenset({"YoutubeAgent"}), stream_label="Read local YouTube library", adapter=self.takeout_library))
         return registry
 
     def account(self, _payload: dict[str, Any]) -> dict[str, Any]:
@@ -144,6 +148,9 @@ class YoutubeCapabilityService:
     def subscriptions(self, _payload: dict[str, Any]) -> dict[str, Any]:
         account = dict(self.account_backend())
         if not account.get("connected"):
+            archive = self.takeout_library_backend("subscriptions", 100)
+            if archive.get("available"):
+                return {"action": "youtube.subscriptions", "connected": False, **archive}
             return {
                 "action": "youtube.subscriptions",
                 "connected": False,
@@ -176,6 +183,18 @@ class YoutubeCapabilityService:
         limit = min(_positive_int(payload.get("limit"), default=20), 100)
         result = dict(self.takeout_history_backend(kind, limit))
         return {"action": "youtube.takeout_history", **result}
+
+    def takeout_library(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return {"action": "youtube.takeout_library", **self.takeout_library_backend(str(payload.get("kind") or "music"),
+            min(_positive_int(payload.get("limit"), default=10), 100))}
+
+    def _default_takeout_library(self, kind: str, limit: int) -> dict[str, Any]:
+        from agent.knowledge.runtime import get_knowledge_core
+        from agent.plugins.youtube_runtime import youtube_status
+        from agent.plugins.youtube_takeout import YouTubeTakeoutImporter
+        status = youtube_status()
+        account = str(status.get("channel_id") or status.get("account_label") or "primary")
+        return YouTubeTakeoutImporter(store=get_knowledge_core().store, account_id=account).library(kind=kind, limit=limit)
 
     def personal_context(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or "").strip()
@@ -259,7 +278,11 @@ class YoutubeCapabilityService:
     def _default_account(self) -> dict[str, Any]:
         from agent.plugins.youtube_runtime import youtube_status
 
-        return youtube_status()
+        account = youtube_status()
+        history = self._default_takeout_history("watch", 1)
+        account["takeout_available"] = bool(history.get("available"))
+        account["takeout_watch_count"] = int(history.get("total") or 0)
+        return account
 
     def _default_subscriptions(self) -> list[dict[str, Any]]:
         from agent.plugins.youtube_runtime import youtube_client

@@ -534,7 +534,7 @@
       return request;
     }
 
-    function applyReceipt(receipt) {
+    function applyReceipt(receipt, receiptOptions) {
       if (!receipt) return receipt;
       if (receipt.status === "confirmation_required") {
         var confirmation = receipt.confirmation || {};
@@ -551,7 +551,7 @@
       } else if (result.conversation && result.conversation.id) {
         upsertConversation(result.conversation);
       }
-      if (result.navigation) navigate(result.navigation);
+      if (result.navigation && (!receiptOptions || receiptOptions.applyNavigation !== false)) navigate(result.navigation);
       if (result.native_window) {
         try { Promise.resolve(openNativeWindow(result.native_window)).catch(sideEffectError); }
         catch (error) { sideEffectError(error); }
@@ -580,7 +580,7 @@
       if (receipt && receipt.status === "confirmation_required" && receipt.confirmation && receipt.confirmation.token) {
         pendingConfirmations.set(receipt.confirmation.token, request);
       }
-      return applyReceipt(receipt);
+      return applyReceipt(receipt, dispatchOptions);
     }
 
     async function confirm(receipt, confirmOptions) {

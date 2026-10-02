@@ -23,8 +23,11 @@ These are not aspirational values. They are operational commitments that shape e
 
 ### Truth, plainly
 
-Vellum treats the user's curated selections as the highest-priority source of
-truth. Obsidian is one optional surface for those selections; the local Vellum
+The user's explicit statements and corrections have priority when understanding
+their preferences and principles. Curated selections establish relevance, not
+automatic endorsement or factual correctness. External evidence can correct
+world facts without defining the user's identity. Obsidian is one optional
+surface for those selections; the local Vellum
 Knowledge Core preserves their evidence, provenance, and history independently
 of any note-taking application. What the user selects, saves, reads, corrects,
 or deliberately connects carries their judgment about what matters.
@@ -90,7 +93,7 @@ This is the closed loop through which Vellum becomes more itself over time.
 
 ### Dialectic User Modeling (Honcho)
 
-Vellum builds a persistent model of the user across every session using **Honcho** — a self-hosted, fully local user modeling server. Honcho is not a cloud service. It runs on your machine, stores its data in a local PostgreSQL container (Docker), and your interaction data never leaves.
+Vellum builds a persistent model of the user across every session using **Honcho**, a self-hosted user modeling server. It stores data in local PostgreSQL/pgvector and uses local Ollama for derivation, dialectic queries, and embeddings.
 
 Honcho's dialectic modeling works as follows: every message pair (your query, Vellum's response) is sent to the local Honcho server. Honcho processes it against its existing model of you, resolves agreements and contradictions, updates confidence scores on inferred preferences, and maintains a structured, queryable portrait of your intellectual life.
 
@@ -98,12 +101,9 @@ At retrieval time, the agent calls Honcho before composing its prompt:
 
 ```python
 # Honcho returns structured context relevant to the current query
-user_context = await honcho.apps.users.sessions.metamessages.create(
-    app_id=HONCHO_APP_ID,
-    user_id="default",
+user_context = honcho_client.chat(
     session_id=thread_id,
-    content=current_query,
-    metamessage_type="user_context_query"
+    query=current_query,
 )
 ```
 
@@ -119,7 +119,11 @@ Vellum autonomously detects recurring task patterns — queries the user asks re
 
 A skill is a small structured document: trigger conditions, instructions, citation style, output format. It lives in `.skills/proposed/` until the user approves it, at which point it moves to `.skills/active/`.
 
-**Skills do not activate autonomously.** The agent detects and drafts; the user approves and activates. This is non-negotiable. An agent that modifies its own behavior without human review drifts, and drift in a private personal agent is a particularly personal kind of damage.
+Skill detection and drafting use the existing Hermes package and mutation systems.
+Activation follows the owning approval policy. Vellum can adapt its current
+response from validated preferences automatically; persistent changes require
+provenance, version history, evaluation where supported, and rollback. A proposal
+is not an activated skill.
 
 The user can review proposed skills by typing `/skills` in the chat.
 
@@ -163,7 +167,11 @@ The arc is earned by use, not by initial design. The infrastructure makes it pos
 
 Vellum is not a tool that asks for your attention. It does not notify, ping, or push. It is there when you turn to it.
 
-Vellum is not a tool that modifies itself without permission. Every autonomous behavior has a boundary the user set. Every skill was approved by the user.
+Vellum adapts inside user-defined, inspectable, reversible boundaries. It cannot
+expand its authority or weaken privacy. Persistent skills and profiles follow
+their owning approval policy; architecture changes remain reviewable proposals
+until authorized and evaluated. The system prompt stays protected while validated
+user context evolves.
 
 Vellum is not a tool that leaks. Data that enters the privacy layer stays
 private. The local Knowledge Core is the canonical evidence store and Obsidian

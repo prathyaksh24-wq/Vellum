@@ -108,6 +108,9 @@ class FakeProviderRegistry:
     def current_model(self):
         return self.active
 
+    def refresh_local_models(self, *, force=False):
+        self.refreshed = force
+
     def set_active(self, query):
         normalized = str(query).casefold()
         entry = next(
@@ -285,6 +288,9 @@ def test_default_model_uses_process_registry_not_chat_state() -> None:
     assert receipt.status == "applied"
     assert receipt.target.kind == "application_setting"
     assert receipt.result["model"]["id"] == "openai/gpt-5.6-sol"
+    assert providers.refreshed is True
+    assert "capabilities" in receipt.result["model"]
+    assert "tool_calling_compatibility" in receipt.result["model"]
     assert providers.current_model().id == "openai/gpt-5.6-sol"
 
 

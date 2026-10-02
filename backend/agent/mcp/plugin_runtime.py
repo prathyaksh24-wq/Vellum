@@ -138,29 +138,34 @@ class PluginMcpRuntime:
         self.transport = transport or SdkPluginMcpTransport()
         self.approval_store = approval_store or get_plugin_mcp_approval_store()
         self.audit_log = audit_log or McpAuditLog()
+        self.connector_diagnostics: list[dict[str, str]] = []
 
-    def connectors(self) -> list[PluginMcpConnector]:
+    def connectors(self, *, skip_invalid: bool = False) -> list[PluginMcpConnector]:
         connectors: list[PluginMcpConnector] = []
+        self.connector_diagnostics = []
+        def append_connector(plugin_id, root, item):
+            try:
+                connectors.append(_connector(plugin_id, root, item))
+            except PluginMcpRuntimeError:
+                if not skip_invalid:
+                    raise
+                self.connector_diagnostics.append({"plugin_id": plugin_id, "status": "unavailable"})
         for manifest in self.registry.manifests():
             if not self.registry.is_enabled(manifest.id):
                 continue
-            connectors.extend(
-                _connector(manifest.id, manifest.path.resolve(), item)
-                for item in manifest.mcp_connectors
-            )
+            for item in manifest.mcp_connectors:
+                append_connector(manifest.id, manifest.path.resolve(), item)
         for record in self.registry.source_records():
             if not self.registry.is_enabled(record.id):
                 continue
-            connectors.extend(
-                _connector(record.id, record.root.resolve(), item)
-                for item in record.mcp_connectors
-            )
+            for item in record.mcp_connectors:
+                append_connector(record.id, record.root.resolve(), item)
         return sorted(connectors, key=lambda item: (item.plugin_id, item.name))
 
     def connector(self, plugin_id: str, connector_name: str) -> PluginMcpConnector:
         normalized_plugin = plugin_id.strip()
         normalized_name = connector_name.strip()
-        for item in self.connectors():
+        for item in self.connectors(skip_invalid=True):
             if item.plugin_id == normalized_plugin and item.name == normalized_name:
                 return item
         raise PluginMcpRuntimeError("Plugin MCP connector is unavailable or disabled.")

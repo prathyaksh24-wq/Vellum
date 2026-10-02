@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
   "APScheduler>=3.10.4",
   "apify-client>=1.10.0",
+  "agent-reach @ git+https://github.com/Panniantong/agent-reach.git@a19a171fa980a0785849596492e0af4db800c82f",
+  "twitter-cli @ git+https://github.com/public-clis/twitter-cli.git@57b91c03d85ef7b76328807af2a40cc9741f039e",
   "aiosqlite>=0.20.0",
   "httpx>=0.28.0",
   "honcho-ai>=2.1.1",
@@ -17,6 +19,7 @@ dependencies = [
   "uvicorn[standard]>=0.30.0",
   "websockets>=13.0",
   "langchain-openai>=0.1.22",
+  "langchain-ollama>=1.1,<2",
   "langchain-core>=0.3.0",
   "langgraph>=0.2.0",
   "langgraph-checkpoint-sqlite>=2.0.0",
@@ -59,6 +62,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["agent*", "evals*"]
+
+[tool.setuptools.package-data]
+"agent.knowledge" = ["*.ps1"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

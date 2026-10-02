@@ -367,6 +367,7 @@ def _book_error_message(code: str) -> str:
         "BOOK_UPLOAD_INVALID": "The EPUB upload is invalid.",
         "BOOK_PROCESS_NOT_ELIGIBLE": "This Book is not eligible for local processing.",
         "BOOK_COMPILE_NOT_ELIGIBLE": "This Book is not eligible for Book skill compilation.",
+        "BOOK_OCR_REQUIRED": "The EPUB was imported and scanned, but some pages contain image-only text. Local OCR is required before Vellum can build a verified Book skill.",
         "BOOK_PROCESS_FAILED": "The EPUB could not be processed.",
         "BOOK_COMPILE_FAILED": "Book skill knowledge could not be built.",
     }.get(code, code.replace("_", " ").title())

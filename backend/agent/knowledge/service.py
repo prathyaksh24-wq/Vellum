@@ -11,6 +11,7 @@ from agent.knowledge.book_discovery import BookDiscoveryRuntime
 from agent.knowledge.book_ingestion import BookIngestionPipeline, MalwareScanner
 from agent.knowledge.book_documents import BookDocument, BookDocumentPipeline
 from agent.knowledge.book_quality import (
+    EpubParseQualityPolicy,
     BookQualityAssessment,
     BookQualityPipeline,
 )
@@ -64,6 +65,7 @@ class KnowledgeCore:
         shadow_write: bool = True,
         read_enabled: bool = False,
         tool_learning_enabled: bool = False,
+        book_ocr_provider=None,
         book_malware_scanner: MalwareScanner | None = None,
         book_embedding_provider: BookEmbeddingProvider | None = None,
         book_materialization_compiler_version: str = BOOK_MATERIALIZATION_COMPILER_VERSION,
@@ -89,9 +91,10 @@ class KnowledgeCore:
             store,
             scanner=book_malware_scanner,
         )
-        self.book_documents = BookDocumentPipeline(store)
+        self.book_documents = BookDocumentPipeline(store, ocr_provider=book_ocr_provider)
         self.book_discovery = BookDiscoveryRuntime(store, self.book_documents, catalog=book_catalog)
-        self.book_quality = BookQualityPipeline(store, self.book_documents)
+        self.book_quality = BookQualityPipeline(store, self.book_documents, policy=EpubParseQualityPolicy(
+            approved_alternate_parser_versions=(self.book_documents.parser_version,) if book_ocr_provider else ()))
         if book_embedding_provider is None:
             from agent.rag.embedder import get_embedder
 

@@ -278,7 +278,7 @@ def test_react_agent_wiring_uses_system_prompt_and_tools(monkeypatch):
     }
     # plugin_mcp is the deferrable surface of the tool-search bridge
     assert "plugin_mcp" in captured["deferred_names"]
-    assert "Always search the vault first" in react_agent.VELLUM_SYSTEM_PROMPT
+    assert "Use local vault and memory evidence when a request depends on the user's notes" in react_agent.VELLUM_SYSTEM_PROMPT
 
 
 def test_react_agent_uses_exact_selected_model_without_cross_model_fallback(monkeypatch):

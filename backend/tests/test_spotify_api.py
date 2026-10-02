@@ -1,5 +1,7 @@
+import asyncio
 import json
 import time
+from threading import Event
 from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
@@ -209,6 +211,30 @@ def test_plugins_catalog_includes_spotify(monkeypatch):
         "spotify.playlists",
         "spotify.albums",
         "spotify.library",
+        "spotify.podcasts",
         "spotify.connection.start",
         "spotify.connection.disconnect",
     ]
+
+
+@pytest.mark.parametrize("action,handler_name", [("pause", "spotify_playback"), ("transfer", "spotify_devices")])
+def test_slow_spotify_action_keeps_api_event_loop_responsive(monkeypatch, action, handler_name):
+    continued = Event()
+    blocked = []
+
+    def slow_action(*args, **kwargs):
+        blocked.append(not continued.wait(timeout=0.25))
+        return json.dumps({"ok": True, "data": {}})
+
+    monkeypatch.setattr(api, "_spotify_has_credentials", lambda: True)
+    monkeypatch.setattr(api, "_spotify_client", lambda: object())
+    monkeypatch.setattr(api, handler_name, slow_action)
+
+    async def exercise():
+        task = asyncio.create_task(api.spotify_player_action(api.SpotifyPlayerActionRequest(action=action, device_id="device-1")))
+        await asyncio.sleep(0)
+        continued.set()
+        return await task
+
+    assert asyncio.run(exercise()) == {}
+    assert blocked == [False]

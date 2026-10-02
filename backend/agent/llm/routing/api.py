@@ -11,6 +11,7 @@ from agent.llm.routing.models import (
     CredentialStrategy,
     FallbackTarget,
     ProviderRoutingPolicy,
+    provider_for_model,
 )
 from agent.llm.routing.runtime import get_routing_runtime
 from agent.app_actions.settings_runtime import (
@@ -87,9 +88,7 @@ def routing_status() -> dict:
         }
     attempts = runtime.store.list_attempts(limit=50, offset=0)
     latest = attempts[-1].model_dump(mode="json") if attempts else None
-    # Catalog IDs use vendor namespaces inside OpenRouter; they are not
-    # native-provider selections. Native routes must be explicitly configured.
-    primary_provider = "openrouter"
+    primary_provider = provider_for_model(active)
     return {
         "active_model": active,
         "primary_provider": primary_provider,
