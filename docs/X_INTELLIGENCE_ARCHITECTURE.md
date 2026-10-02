@@ -31,7 +31,7 @@ The portable Agent-Reach plugin exposes this adapter. It is not a second runtime
 Install the connector executables into Vellum's project environment:
 
 ```powershell
-.\.venv\Scripts\pip.exe install "agent-reach==1.5.0" "git+https://github.com/public-clis/twitter-cli.git@57b91c03d85ef7b76328807af2a40cc9741f039e"
+.\.venv\Scripts\pip.exe install "agent-reach @ git+https://github.com/Panniantong/agent-reach.git@a19a171fa980a0785849596492e0af4db800c82f" "twitter-cli @ git+https://github.com/public-clis/twitter-cli.git@57b91c03d85ef7b76328807af2a40cc9741f039e"
 .\.venv\Scripts\agent-reach.exe doctor --json
 ```
 

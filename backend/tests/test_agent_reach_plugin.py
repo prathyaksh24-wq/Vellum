@@ -9,7 +9,7 @@ def test_agent_reach_dependencies_are_in_both_install_manifests():
     backend = Path(__file__).resolve().parents[1]
     dependencies = tomllib.loads((backend / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
     requirements = (backend / "requirements.txt").read_text(encoding="utf-8").splitlines()
-    for prefix in ("agent-reach==", "twitter-cli @"):
+    for prefix in ("agent-reach @", "twitter-cli @"):
         matching = [entry for entry in requirements if entry.startswith(prefix)]
         assert len(matching) == 1
         assert matching[0] in dependencies
