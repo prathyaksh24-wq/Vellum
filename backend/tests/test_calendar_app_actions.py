@@ -65,7 +65,7 @@ def test_connection_start_reuses_oauth_flow(runtime, monkeypatch):
         authorization_url="https://accounts.google.com/oauth", redirect_uri="http://127.0.0.1:8000", scopes=[]))
     receipt = app.dispatch(AppActionRequest(action_id="calendar.connection.start"), AppActionContext(source="ui"))
     assert receipt.status == "applied"
-    assert receipt.result["connection"]["authorization_url"].startswith("https://accounts.google.com")
+    assert receipt.result["connection"]["authorization_url"] == "https://accounts.google.com/oauth"
 
 
 def test_disconnect_requires_confirmation(runtime, monkeypatch):

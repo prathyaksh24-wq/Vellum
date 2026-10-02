@@ -7,6 +7,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Fixed
+- Chat recall and playback-control matching avoid regex backtracking on long punctuation or whitespace inputs; clock follow-ups retain normalized whitespace handling. Calendar OAuth forwarding tests check the exact authorization URL.
 - Broad Discover requests read imported YouTube interests. Operational X commands are excluded from durable profile facts; Honcho portraits use extant canonical chats and exclude explicit temporary demonstrations.
 - X confirmations execute the original pending payload rather than republishing its preview. Read requests retain their read intent. Natural follow-ups retain real targets; newest posts are ordered by identity and private failures require Agent Reach reconnection.
 - Book queries follow EPUB chapter boundaries across separate title/body files. UI annotations no longer trigger unrelated memory/inventory requests; invalid optional personal observations do not discard a validated answer.

@@ -228,6 +228,24 @@ def test_bare_pause_is_music_only_for_a_selected_vellum_player(service):
     assert spotify_controls.match_spotify_command("play from my Hindi playlist on Spotify") is None
 
 
+@pytest.mark.parametrize("separator", [" ", "\t", "\u2003"])
+def test_spotify_control_with_long_whitespace_runs_promptly(service, separator):
+    start = time.perf_counter()
+    assert spotify_controls.match_spotify_command("pause" + separator * 20_000 + "unrelated") is None
+    assert time.perf_counter() - start < 0.5
+
+
+@pytest.mark.parametrize("message", [
+    "Please could you please pause on Spotify!",
+    "PLEASE\tCOULD\nYOU PLEASE\u2003PAUSE ON\tSPOTIFY?",
+    "skip\u2003this\tsong spotify.",
+])
+def test_spotify_control_preserves_polite_case_and_whitespace_support(service, message):
+    request = spotify_controls.match_spotify_command(message)
+    assert request.action_id == "spotify.playback.control"
+    assert request.arguments == {"action": "next" if message.startswith("skip") else "pause"}
+
+
 def test_compound_pause_and_play_stays_in_the_same_ordered_action_turn(service, tmp_path):
     client, _ = service
     client.claim_web_player(str(uuid4()))

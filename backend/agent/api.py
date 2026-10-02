@@ -915,7 +915,9 @@ def _conversation_recall_answer(
             return f'Your first message in this chat was: “{first_user}”'
         return "I can’t find an earlier user message in this chat."
 
-    asked_about = re.search(r"\bwhat\s+did\s+i\s+ask\s+(?:you\s+)?about\s+(.+?)[?.!]*$", lowered)
+    # Whitespace is already normalized; topic tokenization ignores punctuation.
+    # Do not make a lazy topic compete with an unbounded punctuation suffix.
+    asked_about = re.search(r"\bwhat did i ask (?:you )?about (.+)$", lowered)
     if asked_about:
         topic_terms = [
             term
@@ -1239,8 +1241,8 @@ def _direct_contextual_answer(clean_message: str, thread_id: str) -> str | None:
         return failure_answer
     date_answer = _current_datetime_answer(clean_message)
     if date_answer is None and re.fullmatch(
-        r"\s*(?:and\s+)?(?:also\s+)?(?:what(?:'s|\s+is)\s+)?(?:the\s+)?time\??\s*",
-        clean_message,
+        r"(?:and )?(?:also )?(?:what(?:'s| is) )?(?:the )?time\??",
+        " ".join(clean_message.split()),
         flags=re.IGNORECASE,
     ):
         earlier = _thread_user_messages(thread_id, limit=4)

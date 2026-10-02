@@ -2,7 +2,57 @@ from pathlib import Path
 from types import SimpleNamespace
 import json
 import pytest
+from time import perf_counter
 from agent import api
+
+
+@pytest.mark.parametrize("punctuation", ["!", "?."])
+def test_recall_topic_with_long_punctuation_runs_promptly(monkeypatch, punctuation):
+    monkeypatch.setattr(api, "_read_ui_conversations", lambda: [])
+    question = "what did i ask about " + punctuation * 20_000 + "topic"
+    start = perf_counter()
+    answer = api._conversation_recall_answer(question, "current")
+    elapsed = perf_counter() - start
+    assert answer == "I can’t find an earlier question about that in your saved chats."
+    assert elapsed < 0.5
+
+
+@pytest.mark.parametrize("question", [
+    "what did i ask about calendar?!",
+    "WHAT\tDID I ASK YOU\nABOUT\u2003calendar!!!",
+])
+def test_recall_topic_keeps_case_whitespace_and_punctuation_support(monkeypatch, question):
+    monkeypatch.setattr(api, "_read_ui_conversations", lambda: [{
+        "thread_id": "earlier",
+        "messages": [{"role": "user", "text": "Show my calendar events"}],
+    }])
+    assert api._conversation_recall_answer(question, "current") == "You previously asked:\n- Show my calendar events"
+
+
+@pytest.mark.parametrize("question", [
+    "and also the time?",
+    "AND\tALSO\u2003WHAT IS\nTHE TIME?",
+    "  also what's the time?  ",
+])
+def test_time_followup_preserves_whitespace_and_case_support(monkeypatch, question):
+    monkeypatch.setattr(api, "_failed_tool_followup_answer", lambda *a: None)
+    monkeypatch.setattr(api, "_thread_user_messages", lambda *a, **k: ["today?", question])
+    monkeypatch.setattr(api, "_current_datetime_answer", lambda text: "Current time" if text in {"today?", "what is the current time?"} else None)
+    assert api._direct_contextual_answer(question, "current") == "Current time"
+
+
+@pytest.mark.parametrize("ending, expected", [("time?", "Current time"), ("time later?", None)])
+def test_time_followup_with_long_whitespace_runs_promptly(monkeypatch, ending, expected):
+    monkeypatch.setattr(api, "_failed_tool_followup_answer", lambda *a: None)
+    monkeypatch.setattr(api, "_thread_user_messages", lambda *a, **k: ["today?"])
+    monkeypatch.setattr(api, "_current_datetime_answer", lambda text: "Current time" if text in {"today?", "what is the current time?"} else None)
+    for helper in ("_user_profile_recall_answer", "_conversation_recall_answer", "_time_conversion_answer"):
+        monkeypatch.setattr(api, helper, lambda *a: None)
+    question = "and" + " \t\u2003" * 20_000 + "also " + ending
+    start = perf_counter()
+    assert api._direct_contextual_answer(question, "current") == expected
+    assert perf_counter() - start < 0.5
+
 
 def test_local_honcho_background_options_do_not_enable_unbounded_thinking():
     import yaml

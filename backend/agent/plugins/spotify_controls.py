@@ -31,9 +31,14 @@ class SpotifyPlaybackControlRequest(SpotifyPlayerActionRequest):
 
 def match_spotify_command(message: str) -> AppActionRequest | None:
     """Complete playback instructions only; discussion stays with the agent."""
-    text = message.strip().rstrip(".!?")
-    polite = r"(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?"
-    command = re.sub(r"\s+(?:on\s+)?spotify$", "", re.sub("^" + polite, "", text, flags=re.I), flags=re.I)
+    text = " ".join(message.split()).rstrip(".!?")
+    polite = r"(?:please )?(?:(?:can|could|would) you )?(?:please )?"
+    command = re.sub("^" + polite, "", text, flags=re.I)
+    # Literal suffix checks avoid scanning/backtracking over unbounded whitespace.
+    for suffix in (" on spotify", " spotify"):
+        if command.casefold().endswith(suffix):
+            command = command[:-len(suffix)]
+            break
     control = match_music_control(command)
     if control:
         # A bare 'pause' has a music meaning only while this Vellum device is selected.
