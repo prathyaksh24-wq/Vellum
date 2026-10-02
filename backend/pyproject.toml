@@ -6,6 +6,8 @@ requires-python = ">=3.11"
 dependencies = [
   "APScheduler>=3.10.4",
   "apify-client>=1.10.0",
+  "agent-reach==1.5.0",
+  "twitter-cli @ git+https://github.com/public-clis/twitter-cli.git@57b91c03d85ef7b76328807af2a40cc9741f039e",
   "aiosqlite>=0.20.0",
   "httpx>=0.28.0",
   "honcho-ai>=2.1.1",

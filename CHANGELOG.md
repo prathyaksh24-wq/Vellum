@@ -7,6 +7,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Fixed
+- Editable backend installs include the pinned Agent Reach and X CLI dependencies, matching the launcher requirements and allowing clean CI runners to import the X provider.
 - Reconciled settings, Adaptive UI and action-parity changes with local model discovery, Calendar and Spotify workflows; connection upgrades retain saved public client IDs and plugin contributions expose both connection and playback actions.
 - Chat recall and playback-control matching avoid regex backtracking on long punctuation or whitespace inputs; clock follow-ups retain normalized whitespace handling. Calendar OAuth forwarding tests check the exact authorization URL.
 - Broad Discover requests read imported YouTube interests. Operational X commands are excluded from durable profile facts; Honcho portraits use extant canonical chats and exclude explicit temporary demonstrations.

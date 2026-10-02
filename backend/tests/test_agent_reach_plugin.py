@@ -1,6 +1,18 @@
 import subprocess
+import tomllib
+from pathlib import Path
 
 from agent.plugins.agent_reach import agent_reach_plugin_status
+
+
+def test_agent_reach_dependencies_are_in_both_install_manifests():
+    backend = Path(__file__).resolve().parents[1]
+    dependencies = tomllib.loads((backend / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    requirements = (backend / "requirements.txt").read_text(encoding="utf-8").splitlines()
+    for prefix in ("agent-reach==", "twitter-cli @"):
+        matching = [entry for entry in requirements if entry.startswith(prefix)]
+        assert len(matching) == 1
+        assert matching[0] in dependencies
 
 
 def test_agent_reach_plugin_status_ready_when_bins_exist_and_twitter_authenticated(monkeypatch):
