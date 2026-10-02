@@ -212,6 +212,8 @@ def test_plugins_catalog_includes_spotify(monkeypatch):
         "spotify.albums",
         "spotify.library",
         "spotify.podcasts",
+        "spotify.connection.start",
+        "spotify.connection.disconnect",
     ]
 
 

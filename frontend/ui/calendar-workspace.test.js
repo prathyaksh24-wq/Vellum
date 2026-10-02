@@ -65,3 +65,10 @@ test('delete from aggregate view uses source calendar not all',async()=>{
   api.calendarEvents.mockResolvedValue({items:[{id:'secondary-event',calendar_id:'secondary',calendar_label:'Work',access_role:'owner',summary:'Review',start:'2026-10-02T13:30:00+05:30',end:'2026-10-02T14:30:00+05:30'}]});
   await mount();await click('Delete');await click('Confirm');expect(onAction).toHaveBeenCalledWith('calendar.event.delete',{calendar_id:'secondary',event_id:'secondary-event'},{confirmedFromUi:true});
 });
+
+test('edit from aggregate view confirms an update on the source calendar',async()=>{
+  api.calendarEvents.mockResolvedValue({items:[{id:'secondary-event',calendar_id:'secondary',calendar_label:'Work',access_role:'owner',summary:'Review',start:'2026-10-02T13:30:00+05:30',end:'2026-10-02T14:30:00+05:30'}]});
+  await mount();await click('Edit');await fill('Event title','Updated review');await click('Update event');
+  expect(onAction).not.toHaveBeenCalled();await click('Confirm');
+  expect(onAction).toHaveBeenCalledWith('calendar.event.update',expect.objectContaining({event_id:'secondary-event',calendar_id:'secondary',summary:'Updated review'}),{confirmedFromUi:true});
+});

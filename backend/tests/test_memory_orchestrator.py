@@ -22,6 +22,31 @@ class FakeHoncho:
         return "- User follows Vellum memory architecture closely."
 
 
+def test_explicit_memory_uses_store_and_search_projection(tmp_path: Path) -> None:
+    store = SQLiteMemoryStore(tmp_path / "memory.db")
+    fts = FTS5Memory(tmp_path / "fts5.db")
+    orchestrator = MemoryOrchestrator(
+        fts5=fts,
+        resolved_cache=ResolvedQuestionsCache(tmp_path / "resolved.db"),
+        memory_service=MemoryCapabilityService(
+            vault_root=tmp_path / "Vault",
+            sessions_db=tmp_path / "sessions.db",
+        ),
+        store=store,
+        memory_dir=tmp_path / "memory-files",
+    )
+
+    memory = orchestrator.save_explicit_memory(
+        kind="preference",
+        text="Prefer concise implementation updates.",
+        source_thread_id="chat-174",
+        confidence=1.0,
+    )
+
+    assert store.get_memory(memory["id"])["text"] == "Prefer concise implementation updates."
+    assert fts.search("concise implementation", limit=5)[0]["thread_id"] == "chat-174"
+
+
 def test_memory_packet_uses_saved_honcho_project_and_recent_context(tmp_path: Path) -> None:
     vault = tmp_path / "Vault"
     store = SQLiteMemoryStore(tmp_path / "memory.db")

@@ -30,6 +30,11 @@ describe("Vellum default redesigned frontend", () => {
       expect(() => babel.parse(script.textContent, {sourceType:'script',plugins:['jsx']})).not.toThrow();
     }
   });
+  test("binds every React hook used at application startup", () => {
+    expect(html).toContain("const {useState, useRef, useEffect, useMemo} = React;");
+    expect(html).toContain("const availableAgents = useMemo(");
+  });
+
   test("connects the Books view through separate API, state, presentation and bundled graphics", () => {
     expect(html).toContain('<script src="api/books.js"></script>');
     expect(html).toContain('<script src="components/books-state.js"></script>');
@@ -83,9 +88,11 @@ describe("Vellum default redesigned frontend", () => {
     expect(html).toContain("action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)");
     expect(html).toContain("actionReceipt: (receipt, turn) =>");
     expect(html).toContain("workspaceActionRuntimeRef.current.applyReceipt(receipt)");
-    expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned)}");
-    expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true)}");
+    expect(html).toContain("onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}");
+    expect(html).toContain("onExpand={() => dispatchSidebarVisibility(true, {learn:true})}");
     expect(html).toContain("className=\"toast-action\"");
+    expect(html).toContain("adaptiveRuleReceipt");
+    expect(html).toContain("Don't learn this");
     expect(html).not.toContain("setSidebarPinned");
   });
 

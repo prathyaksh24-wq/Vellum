@@ -93,7 +93,9 @@ def test_ui_and_nlp_dispatch_cross_the_same_runtime_interface() -> None:
 
     assert ui_receipt.status == nlp_receipt.status == "applied"
     assert ui_receipt.action_id == nlp_receipt.action_id == SIDEBAR_ACTION_ID
-    assert ui_receipt.result == nlp_receipt.result
+    assert ui_receipt.result["workspace_layout_patch"] == nlp_receipt.result["workspace_layout_patch"]
+    assert "adaptive_ui_patch" not in ui_receipt.result
+    assert "adaptive_ui_patch" in nlp_receipt.result
     assert ui_receipt.target == nlp_receipt.target
     assert ui_receipt.authorization.agent_name == "VellumUI"
     assert nlp_receipt.authorization.agent_name == "VellumAgent"

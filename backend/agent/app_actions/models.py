@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ActionSource = Literal["nlp", "ui"]
@@ -46,16 +46,92 @@ def _default_surfaces() -> dict[str, SurfacePresentation]:
     }
 
 
+AdaptiveScope = Literal["global", "device", "agent", "project", "window"]
+
+
+class AdaptiveUIRule(BaseModel):
+    id: str
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    origin: Literal["explicit", "inferred"]
+    evidence_count: int = Field(default=1, ge=1)
+    enabled: bool = True
+    suppressed: bool = False
+    explained: bool = False
+
+
+class AdaptiveUISignal(BaseModel):
+    signature: str
+    arguments: dict[str, Any]
+    scope: AdaptiveScope
+    scope_id: str = ""
+    count: int = Field(default=1, ge=1)
+
+
+class AdaptiveUIState(BaseModel):
+    revision: int = Field(default=0, ge=0)
+    rules: list[AdaptiveUIRule] = Field(default_factory=list)
+    signals: list[AdaptiveUISignal] = Field(default_factory=list)
+    suppressions: list[str] = Field(default_factory=list)
+    last_rule_id: str = ""
+
+
 class WorkspaceLayoutSnapshot(BaseModel):
     version: int = Field(default=1, ge=1)
     revision: int = Field(default=0, ge=0)
     surfaces: dict[str, SurfacePresentation] = Field(default_factory=_default_surfaces)
+    adaptive_ui: AdaptiveUIState = Field(default_factory=AdaptiveUIState)
+
+
+class DevicePersonalizationSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom: str = ""
+    nickname: str = ""
+    occupation: str = ""
+    about: str = ""
+    fastAnswers: bool = False
+    recordHist: bool = False
+    webSearch: bool = False
+    canvas: bool = False
+    voice: bool = False
+    advVoice: bool = False
+    connector: bool = False
+    baseStyle: str = "default"
+    warm: str = "default"
+    enthusiastic: str = "default"
+    headers: str = "default"
+    emoji: str = "default"
+
+
+class DeviceSettingsValues(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    background: str | None = None
+    accent: str | None = None
+    dock_position: str | None = None
+    dock_locked: bool | None = None
+    computer_use_preview: bool | None = None
+    personalization: DevicePersonalizationSettings = Field(default_factory=DevicePersonalizationSettings)
+
+
+class DeviceSettingsSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version: int = Field(default=1, ge=1)
+    revision: int = Field(default=0, ge=0)
+    values: DeviceSettingsValues = Field(default_factory=DeviceSettingsValues)
 
 
 class AppActionContext(BaseModel):
     source: ActionSource
+    adaptive_learning_signal: bool = False
     invocation_conversation_id: str = ""
     device_id: str = "local-device"
+    project_id: str = ""
+    window_id: str = ""
     workspace_layout: WorkspaceLayoutSnapshot = Field(default_factory=WorkspaceLayoutSnapshot)
     focused_ui_reference: str = ""
     selected_ui_reference: str = ""
@@ -66,6 +142,7 @@ class AppActionContext(BaseModel):
     reasoning_mode: str = ""
     store_to_memory: bool = True
     petdex: dict[str, Any] = Field(default_factory=dict)
+    device_settings: DeviceSettingsSnapshot = Field(default_factory=DeviceSettingsSnapshot)
 
 
 class AppActionRequest(BaseModel):

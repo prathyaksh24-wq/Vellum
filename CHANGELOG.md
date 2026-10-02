@@ -7,6 +7,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Fixed
+- Reconciled settings, Adaptive UI and action-parity changes with local model discovery, Calendar and Spotify workflows; connection upgrades retain saved public client IDs and plugin contributions expose both connection and playback actions.
 - Chat recall and playback-control matching avoid regex backtracking on long punctuation or whitespace inputs; clock follow-ups retain normalized whitespace handling. Calendar OAuth forwarding tests check the exact authorization URL.
 - Broad Discover requests read imported YouTube interests. Operational X commands are excluded from durable profile facts; Honcho portraits use extant canonical chats and exclude explicit temporary demonstrations.
 - X confirmations execute the original pending payload rather than republishing its preview. Read requests retain their read intent. Natural follow-ups retain real targets; newest posts are ordered by identity and private failures require Agent Reach reconnection.
@@ -36,6 +37,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Ollama capability and context discovery so local models expose their native tool-call support accurately.
 - Local Ollama inference through the existing routed chat runtime, with Qwen 3.5 9B as the default primary model.
 - Live Ollama model discovery for the model picker, including automatic replacement when the selected local model is removed.
+- Action Parity inventory and served-JSX contract gate for visual controls, with explicit non-state exemptions, deferrals, and disposable browser validation.
+- Adaptive UI rules for reversible presentation preferences, with three-signal learning, context scoping, explanations, Undo suppression, and local rule controls.
 - Capability-discovery contract for the frontend/backend boundary through `/api/capabilities`.
 - Stable API adapter pattern for the Vellum web UI.
 - Memory Orchestrator surfaces for summaries, saved memories, archived memories, settings, dreaming runs, and conversation imports.
@@ -71,6 +74,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Preserve active chat navigation during delayed New Chat receipts and startup hydration.
 - Render answer Markdown safely, bound skill summaries, use authenticated X authorship for own-post requests, and show the next sports event with IST first when its source date and timezone are available.
 - Expanded the provider-neutral runtime instructions with evidence-based personal intelligence, user-correction precedence, task-dependent context balance, and bounded self-improvement through existing memory, skill, and profile policies.
+- Migrated remaining settings, memory, Spotify connection, and LLM-routing mutations to typed App Actions with catalog-aware UI dispatch and compatibility adapters.
+- Unified explicit memory creation with the canonical FTS-backed memory writer and made credential-pool reset receipts report actual state changes.
 - Consolidated chat history ownership around `data/ui/conversations.json` and `/api/conversations`, with Obsidian conversation notes as projections.
 - Clarified that Knowledge Wiki pages are maintained synthesis and raw Library material requires explicit approved ingestion.
 - Shifted procedural memory from legacy JSON skill records toward Hermes-compatible `SKILL.md` packages.
@@ -96,6 +101,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Completed X specialist results take precedence over stale main-model text from an earlier topic in the same chat.
 - Agent-Reach accepts the published `twitter-cli` 0.8.5 release instead of requiring a nonexistent 0.8.6 package.
 - Completed specialist results survive local-model greetings, deferred answers, duplicate delegation loops, and graph recursion limits.
+- Restored the served Vellum interface by importing React's `useMemo` hook used during startup.
 - Knowledge health checks now use the App Actions boundary, source imports require maintained synthesis, and local YouTube intelligence rebuilds remain available without OAuth.
 - Spotify playback recovery on inactive devices.
 - Provider routing and 404 handling.
@@ -105,6 +111,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Security
 
+- Added confirmation-bound, redacted credential and destructive-setting changes with rollback-safe provider-key persistence.
 - Enforced zero-data-retention OpenRouter routing controls.
 - Added privacy scrubbing for skill authoring and learning flows.
 - Added security checks for remote skill packages and marketplace sources.

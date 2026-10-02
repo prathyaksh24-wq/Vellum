@@ -108,6 +108,7 @@ describe("Workspace Layout App Action adapter", () => {
     );
     expect(uiRuntime.snapshot()).toEqual(nlpRuntime.snapshot());
     expect(uiRuntime.snapshot()).toMatchObject({ revision: 1, surfaces: { sidebar: { visible: false } } });
+    expect(client.dispatch.mock.calls[0][1].adaptive_learning_signal).toBe(false);
 
     const reloaded = AppActions.createWorkspaceLayoutRuntime({ storage: uiStorage, client: {} });
     expect(reloaded.snapshot()).toMatchObject({ revision: 1, surfaces: { sidebar: { visible: false } } });
@@ -209,9 +210,15 @@ describe("Workspace Layout App Action adapter", () => {
       surfaces: AppActions.SURFACE_DEFAULTS,
     }));
 
-    expect(runtime.snapshot()).toEqual({ version: 1, revision: 2, surfaces: AppActions.SURFACE_DEFAULTS });
+    const expected = {
+      version: 1,
+      revision: 2,
+      surfaces: AppActions.SURFACE_DEFAULTS,
+      adaptive_ui: { revision: 0, rules: [], signals: [], suppressions: [], last_rule_id: "" },
+    };
+    expect(runtime.snapshot()).toEqual(expected);
     const reloaded = AppActions.createWorkspaceLayoutRuntime({ storage, client: {} });
-    expect(reloaded.snapshot()).toEqual({ version: 1, revision: 2, surfaces: AppActions.SURFACE_DEFAULTS });
+    expect(reloaded.snapshot()).toEqual(expected);
   });
 
   test("migrates the legacy theme preference into the workspace surface", async () => {
@@ -268,6 +275,92 @@ describe("Workspace Layout App Action adapter", () => {
     expect(context.visible_ui_references).toEqual(expect.arrayContaining(["workspace", "composer", "composer.send"]));
     expect(context.visible_ui_references).not.toContain("right-panel");
   });
+
+  test("marks deliberate presentation controls as learning signals", async () => {
+    const AppActions = await loadRuntime();
+    const client = { dispatch: vi.fn(async () => receipt({
+      source: "ui", visible: false, previous: true, baseRevision: 0, revision: 1,
+    })) };
+    const runtime = AppActions.createWorkspaceLayoutRuntime({ storage: memoryStorage(), client });
+
+    await runtime.dispatchSidebar(false, { learn: true });
+
+    expect(client.dispatch.mock.calls[0][1].adaptive_learning_signal).toBe(true);
+  });
+
+  test("persists learned rules and applies only in the matching live context", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage();
+    let projectId = "project-other";
+    const rule = {
+      id: "adaptive_project", signature: "sig-hidden", arguments: { reference: "sidebar", visible: false },
+      scope: "project", scope_id: "project-match", origin: "inferred", evidence_count: 3,
+      enabled: true, suppressed: false, explained: false,
+    };
+    const initial = { revision: 1, rules: [rule], signals: [], suppressions: [], last_rule_id: "" };
+    const applied = receipt({ source: "ui", visible: false, previous: true, baseRevision: 0, revision: 1 });
+    applied.action_id = "ui.adaptive.apply";
+    applied.result.adaptive_ui_patch = {
+      base_revision: 1, revision: 2,
+      state: { ...initial, revision: 2, last_rule_id: rule.id, rules: [{ ...rule, explained: true }] },
+    };
+    applied.result.adaptive_rule = { id: rule.id, first_use: true, explanation: "Learned from 3 changes." };
+    const client = { dispatch: vi.fn(async () => applied) };
+    const runtime = AppActions.createWorkspaceLayoutRuntime({ storage, client, contextResolver: () => ({ project_id: projectId }) });
+    runtime.applyReceipt({ status: "applied", result: { adaptive_ui_patch: { base_revision: 0, revision: 1, state: initial } } });
+
+    await runtime.maybeApply();
+    expect(client.dispatch).not.toHaveBeenCalled();
+
+    projectId = "project-match";
+    const onReceipt = vi.fn();
+    await runtime.maybeApply({ onReceipt });
+    expect(client.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ action_id: "ui.adaptive.apply", arguments: { rule_id: rule.id } }),
+      expect.objectContaining({ project_id: "project-match" }),
+    );
+    expect(onReceipt).toHaveBeenCalledWith(applied);
+    expect(runtime.snapshot().surfaces.sidebar.visible).toBe(false);
+    expect(runtime.snapshot().adaptive_ui.rules[0].explained).toBe(true);
+    const reloaded = AppActions.createWorkspaceLayoutRuntime({ storage, client: {} });
+    expect(reloaded.snapshot().adaptive_ui).toEqual(runtime.snapshot().adaptive_ui);
+    await runtime.maybeApply();
+    expect(client.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  test("does not override a temporary presentation choice with an adaptive rule", async () => {
+    const AppActions = await loadRuntime();
+    const client = { dispatch: vi.fn() };
+    const runtime = AppActions.createWorkspaceLayoutRuntime({ storage: memoryStorage(), client, windowId: "window-a" });
+    const rule = {
+      id: "adaptive_window", signature: "sig-hidden", arguments: { reference: "sidebar", visible: false },
+      scope: "window", scope_id: "window-a", origin: "inferred", evidence_count: 3,
+      enabled: true, suppressed: false, explained: false,
+    };
+    runtime.applyReceipt({ status: "applied", result: { adaptive_ui_patch: {
+      base_revision: 0, revision: 1,
+      state: { revision: 1, rules: [rule], signals: [], suppressions: [], last_rule_id: "" },
+    } } });
+    runtime.applyReceipt(surfaceReceipt({
+      reference: "sidebar", presentation: { visible: true, location: "left", properties: {} },
+      baseRevision: 0, revision: 1, persistence: "session",
+    }));
+
+    await runtime.maybeApply();
+
+    expect(client.dispatch).not.toHaveBeenCalled();
+  });
+
+  test("rejects stale adaptive rule receipts", async () => {
+    const AppActions = await loadRuntime();
+    const runtime = AppActions.createWorkspaceLayoutRuntime({ storage: memoryStorage(), client: {} });
+    const state = { revision: 1, rules: [], signals: [], suppressions: [], last_rule_id: "" };
+    runtime.applyReceipt({ status: "applied", result: { adaptive_ui_patch: { base_revision: 0, revision: 1, state } } });
+
+    expect(() => runtime.applyReceipt({ status: "applied", result: {
+      adaptive_ui_patch: { base_revision: 0, revision: 2, state: { ...state, revision: 2 } },
+    } })).toThrow("STALE_ADAPTIVE_UI_RECEIPT");
+  });
 });
 
 describe("Conversation session-control receipts", () => {
@@ -310,5 +403,112 @@ describe("Conversation session-control receipts", () => {
       { patch: { model_id: "google/gemma-4-31b-it" }, target: "chat-1" },
       { patch: { store_to_memory: false }, target: "chat-1" },
     ]);
+  });
+});
+
+describe("Device Settings App Action adapter", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  test("migrates existing device preferences into one revisioned owner", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage({
+      "vellum-background": "aurora",
+      "vellum-accent": "blue-eclipse",
+      "vellum-dock-position": "left",
+      "vellum-dock-locked": "1",
+      "vellum-pers": JSON.stringify({ warm: "more", memory: false }),
+    });
+
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage, client: {} });
+
+    expect(runtime.snapshot()).toMatchObject({
+      version: 1,
+      revision: 0,
+      values: {
+        background: "aurora",
+        accent: "blue-eclipse",
+        dock_position: "left",
+        dock_locked: true,
+        personalization: { warm: "more" },
+      },
+    });
+    expect(runtime.snapshot().values.personalization).not.toHaveProperty("memory");
+    expect(storage.value("vellum-background")).toBeUndefined();
+    expect(JSON.parse(storage.value(AppActions.DEVICE_SETTINGS_STORAGE_KEY)).values.accent).toBe("blue-eclipse");
+  });
+
+  test("visible controls and NLP receipts converge on the same persisted state", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage();
+    const applied = {
+      request_id: "device-1",
+      action_id: "settings.device.update",
+      status: "applied",
+      result: {
+        changed: true,
+        device_settings_patch: {
+          version: 1,
+          base_revision: 0,
+          revision: 1,
+          values: { accent: "matrix", personalization: { webSearch: false } },
+        },
+      },
+    };
+    const client = { dispatch: vi.fn(async () => applied) };
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage, client, requestIdFactory: () => "device-1" });
+
+    await runtime.dispatch({ accent: "matrix", personalization: { webSearch: false } }, { conversationId: "chat-1" });
+
+    expect(client.dispatch).toHaveBeenCalledWith(
+      {
+        request_id: "device-1",
+        action_id: "settings.device.update",
+        action_version: "1",
+        arguments: { patch: { accent: "matrix", personalization: { webSearch: false } } },
+      },
+      expect.objectContaining({
+        source: "ui",
+        invocation_conversation_id: "chat-1",
+        device_settings: expect.objectContaining({ revision: 0 }),
+      }),
+    );
+    expect(runtime.snapshot()).toMatchObject({
+      revision: 1,
+      values: { accent: "matrix", personalization: { webSearch: false } },
+    });
+    const reloaded = AppActions.createDeviceSettingsRuntime({ storage, client: {} });
+    expect(reloaded.snapshot()).toEqual(runtime.snapshot());
+  });
+
+  test("rejects stale device receipts instead of overwriting newer choices", async () => {
+    const AppActions = await loadRuntime();
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage: memoryStorage(), client: {} });
+
+    expect(() => runtime.applyReceipt({
+      status: "applied",
+      result: { device_settings_patch: { version: 1, base_revision: 7, revision: 8, values: { accent: "matrix" } } },
+    })).toThrow("STALE_DEVICE_SETTINGS_RECEIPT");
+    expect(runtime.snapshot().values.accent).toBe("default");
+  });
+
+  test("keeps the previous device state when an action fails", async () => {
+    const AppActions = await loadRuntime();
+    const client = {
+      dispatch: vi.fn(async () => ({
+        action_id: "settings.device.update",
+        status: "failed",
+        error_code: "INVALID_ACTION_ARGUMENTS",
+        result: {},
+      })),
+    };
+    const runtime = AppActions.createDeviceSettingsRuntime({ storage: memoryStorage(), client });
+
+    const receipt = await runtime.dispatch({ accent: "not-a-palette" });
+
+    expect(receipt.status).toBe("failed");
+    expect(runtime.snapshot()).toMatchObject({ revision: 0, values: { accent: "default" } });
   });
 });

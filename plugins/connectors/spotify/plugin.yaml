@@ -22,3 +22,5 @@ capabilities:
   - spotify.albums
   - spotify.library
   - spotify.podcasts
+  - spotify.connection.start
+  - spotify.connection.disconnect

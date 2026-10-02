@@ -100,6 +100,9 @@ def test_spotify_manifest_declares_full_hermes_toolset():
         "spotify.playlists",
         "spotify.albums",
         "spotify.library",
+        "spotify.podcasts",
+        "spotify.connection.start",
+        "spotify.connection.disconnect",
     ]
 
 
@@ -115,6 +118,7 @@ def test_spotify_schemas_cover_expected_tools_and_playback_actions():
         "spotify_playlists",
         "spotify_albums",
         "spotify_library",
+        "spotify_podcasts",
     ]
     assert namespace["SPOTIFY_PLAYBACK"]["parameters"]["properties"]["action"]["enum"] == [
         "get_state",

@@ -10,6 +10,7 @@ from threading import Lock
 from typing import Any, Callable
 from uuid import uuid4
 
+from agent.app_actions import adaptive_ui
 from agent.app_actions.models import (
     ActionConfirmation,
     ActionAuthorization,
@@ -20,6 +21,7 @@ from agent.app_actions.models import (
     AppActionContext,
     AppActionDefinition,
     AppActionRequest,
+    DeviceSettingsSnapshot,
     SurfacePresentation,
     UISurfaceDefinition,
     WorkspaceLayoutSnapshot,
@@ -51,6 +53,31 @@ from agent.app_actions.session_controls import (
     MODEL_SELECT_ACTION_ID,
     REASONING_SET_ACTION_ID,
     SessionControlError,
+)
+from agent.app_actions.settings_runtime import (
+    CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS,
+    DEFAULT_MODEL_SET_ACTION_ID,
+    DEVICE_SETTINGS_UPDATE_ACTION_ID,
+    MEMORY_SETTINGS_UPDATE_ACTION_ID,
+    MEMORY_ENTRY_ARCHIVE_ACTION_ID,
+    MEMORY_ENTRY_CREATE_ACTION_ID,
+    MEMORY_ENTRY_DELETE_ACTION_ID,
+    MEMORY_ENTRY_PIN_ACTION_ID,
+    MEMORY_ENTRY_UPDATE_ACTION_ID,
+    MEMORY_DREAMING_RUN_ACTION_ID,
+    MEMORY_CONVERSATIONS_IMPORT_ACTION_ID,
+    MEMORY_OBSIDIAN_IMPORT_ACTION_ID,
+    PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
+    ROUTING_CREDENTIAL_ADD_ACTION_ID,
+    ROUTING_CREDENTIAL_REMOVE_ACTION_ID,
+    ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
+    ROUTING_FALLBACKS_SET_ACTION_ID,
+    ROUTING_POLICY_SET_ACTION_ID,
+    ROUTING_MODEL_POLICY_REMOVE_ACTION_ID,
+    ROUTING_POOL_RESET_ACTION_ID,
+    SETTINGS_RUNTIME_ACTION_IDS,
+    SettingsRuntimeActionError,
+    settings_runtime_action_definitions,
 )
 from agent.app_actions.lifecycle_controls import (
     LIFECYCLE_CONTROL_ACTION_IDS,
@@ -146,6 +173,7 @@ class _UndoRecord:
     expected_presentation: dict[str, Any]
     expected_revision: int
     expires_at: datetime
+    adaptive_signature: str = ""
 
 
 @dataclass(frozen=True)
@@ -239,6 +267,7 @@ class AppActionRuntime:
         conversation_sharing: ConversationShareService | Callable[[], ConversationShareService] | None = None,
         attachment_importer: Callable[[dict[str, Any], tuple[str, ...]], dict[str, Any]] | None = None,
         session_control_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
+        settings_runtime_handler: Callable[..., dict[str, Any]] | None = None,
         lifecycle_control_handler: Callable[[str, dict[str, Any], AppActionContext, bool], dict[str, Any]] | None = None,
         observability_handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]] | None = None,
         coding_github_handler: Callable[..., dict[str, Any]] | None = None,
@@ -256,6 +285,7 @@ class AppActionRuntime:
         self._conversation_sharing = conversation_sharing
         self._attachment_importer = attachment_importer
         self._session_control_handler = session_control_handler
+        self._settings_runtime_handler = settings_runtime_handler
         self._lifecycle_control_handler = lifecycle_control_handler
         self._observability_handler = observability_handler
         self._coding_github_handler = coding_github_handler
@@ -271,8 +301,10 @@ class AppActionRuntime:
                 self._sidebar_definition(),
                 self._surface_action_definition(),
                 self._reset_definition(),
+                *adaptive_ui.action_definitions(),
                 self._attachment_definition(),
                 *self._session_control_definitions(),
+                *settings_runtime_action_definitions(),
                 *self._conversation_definitions(),
                 *lifecycle_action_definitions(),
                 *observability_action_definitions(),
@@ -300,12 +332,31 @@ class AppActionRuntime:
         self._register(SIDEBAR_ACTION_ID, "Change sidebar visibility", self._set_sidebar)
         self._register(SURFACE_ACTION_ID, "Customize interface presentation", self._configure_surface)
         self._register(WORKSPACE_RESET_ACTION_ID, "Reset interface presentation", self._reset_workspace)
+        for action_id in adaptive_ui.ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._adaptive_action(registered_action_id, payload),
+                access=CapabilityAccess(definition.access_class),
+            )
         for action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             definition = self._definitions[action_id]
             self._register(
                 action_id,
                 definition.title,
                 lambda payload, registered_action_id=action_id: self._invoke_lifecycle_control(
+                    registered_action_id,
+                    payload,
+                ),
+                access=CapabilityAccess(definition.access_class),
+            )
+        for action_id in SETTINGS_RUNTIME_ACTION_IDS:
+            definition = self._definitions[action_id]
+            self._register(
+                action_id,
+                definition.title,
+                lambda payload, registered_action_id=action_id: self._invoke_settings_runtime(
                     registered_action_id,
                     payload,
                 ),
@@ -369,6 +420,12 @@ class AppActionRuntime:
         handler: Callable[[str, dict[str, Any], AppActionContext], dict[str, Any]],
     ) -> None:
         self._session_control_handler = handler
+
+    def set_settings_runtime_handler(
+        self,
+        handler: Callable[..., dict[str, Any]],
+    ) -> None:
+        self._settings_runtime_handler = handler
 
     def set_lifecycle_control_handler(
         self,
@@ -544,6 +601,8 @@ class AppActionRuntime:
             return self._plugin_contributions.action_available(definition.id, context)
         if definition.id in SESSION_CONTROL_ACTION_IDS and self._session_control_handler is None:
             return False
+        if definition.id in SETTINGS_RUNTIME_ACTION_IDS and self._settings_runtime_handler is None:
+            return False
         if definition.id in LIFECYCLE_CONTROL_ACTION_IDS and self._lifecycle_control_handler is None:
             return False
         if definition.id in OBSERVABILITY_ACTION_IDS and self._observability_handler is None:
@@ -605,6 +664,330 @@ class AppActionRuntime:
             music_action = match_spotify_command(submitted)
             if music_action is not None:
                 return music_action
+        if normalized in {"list adaptive ui rules", "show adaptive ui rules", "list interface rules", "show interface rules"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_LIST)
+        if normalized in {"why did my interface change", "why did the interface change", "explain the last ui change"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_EXPLAIN)
+        if normalized in {"don't learn this", "do not learn this", "don't learn this ui change"}:
+            return AppActionRequest(action_id=adaptive_ui.RULE_SUPPRESS)
+        rule_control = re.fullmatch(
+            r"(?:please\s+)?(enable|disable|remove|explain)\s+(?:adaptive\s+ui\s+|interface\s+)?rule\s+(adaptive_[a-f0-9]+)",
+            normalized,
+        )
+        if rule_control:
+            verb, rule_id = rule_control.groups()
+            action_id = {
+                "enable": adaptive_ui.RULE_SET_ENABLED,
+                "disable": adaptive_ui.RULE_SET_ENABLED,
+                "remove": adaptive_ui.RULE_REMOVE,
+                "explain": adaptive_ui.RULE_EXPLAIN,
+            }[verb]
+            arguments = {"rule_id": rule_id}
+            if verb in {"enable", "disable"}:
+                arguments["enabled"] = verb == "enable"
+            return AppActionRequest(action_id=action_id, arguments=arguments)
+        always = re.fullmatch(r"(?:please\s+)?always\s+(.+)", submitted, flags=re.IGNORECASE)
+        if always:
+            instruction = always.group(1)
+            scope = "global"
+            for suffix, candidate in (
+                (" in this project", "project"),
+                (" for this agent", "agent"),
+                (" in this window", "window"),
+                (" on this device", "device"),
+            ):
+                if instruction.casefold().endswith(suffix):
+                    instruction = instruction[: -len(suffix)].rstrip()
+                    scope = candidate
+                    break
+            inner = self.match_submission(instruction)
+            if inner and inner.action_id in {SIDEBAR_ACTION_ID, SURFACE_ACTION_ID}:
+                return AppActionRequest(
+                    action_id=adaptive_ui.RULE_CREATE,
+                    arguments={"rule_action_id": inner.action_id, "rule_arguments": inner.arguments, "scope": scope},
+                )
+
+        device_appearance = re.fullmatch(
+            polite + r"(?:change|set|switch)\s+(?:the\s+|my\s+)?(background|accent(?:\s+palette)?|dock\s+position)\s+to\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if device_appearance:
+            kind = device_appearance.group(1).casefold()
+            key = "background" if kind == "background" else "accent" if kind.startswith("accent") else "dock_position"
+            value = self._spoken_value(device_appearance.group(2)).casefold().replace(" ", "-")
+            if key == "background":
+                value = {"gold-rays": "god-rays"}.get(value, value)
+            elif key == "accent":
+                value = {
+                    "vellum": "default",
+                    "eucalyptus-grove": "eucalyptus",
+                    "under-the-moonlight": "moonlight",
+                    "the-matrix": "matrix",
+                }.get(value, value)
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {key: value}},
+            )
+
+        dock_visibility = re.fullmatch(
+            polite + r"(?:keep|make)\s+(?:the\s+)?dock\s+(always\s+)?visible|(?:unlock|hide)\s+(?:the\s+)?dock",
+            normalized,
+        )
+        if dock_visibility:
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {"dock_locked": not normalized.startswith(("unlock", "hide"))}},
+            )
+
+        personalization_choice = re.fullmatch(
+            polite
+            + r"set\s+(?:my\s+)?(base style|warmth|enthusiasm|headers|emoji)\s+to\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if personalization_choice:
+            key = {
+                "base style": "baseStyle",
+                "warmth": "warm",
+                "enthusiasm": "enthusiastic",
+                "headers": "headers",
+                "emoji": "emoji",
+            }[personalization_choice.group(1).casefold()]
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={
+                    "patch": {
+                        "personalization": {
+                            key: self._spoken_value(personalization_choice.group(2)).casefold()
+                        }
+                    }
+                },
+            )
+
+        personalization_toggle = re.fullmatch(
+            polite
+            + r"(?:turn|switch|set)\s+(fast answers|record history|web search|canvas|voice|advanced voice|connector search)\s+(on|off)",
+            normalized,
+        )
+        if personalization_toggle:
+            key = {
+                "fast answers": "fastAnswers",
+                "record history": "recordHist",
+                "web search": "webSearch",
+                "canvas": "canvas",
+                "voice": "voice",
+                "advanced voice": "advVoice",
+                "connector search": "connector",
+            }[personalization_toggle.group(1)]
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {"personalization": {key: personalization_toggle.group(2) == "on"}}},
+            )
+
+        personalization_text = re.fullmatch(
+            polite + r"set\s+(?:my\s+)?(nickname|occupation|about me|custom instructions)\s+to\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if personalization_text:
+            key = {
+                "nickname": "nickname",
+                "occupation": "occupation",
+                "about me": "about",
+                "custom instructions": "custom",
+            }[personalization_text.group(1).casefold()]
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {"personalization": {key: self._spoken_value(personalization_text.group(2))}}},
+            )
+
+        computer_preview = re.fullmatch(
+            polite + r"(?:enable|disable|turn\s+(on|off))\s+(?:the\s+)?computer use preview",
+            normalized,
+        )
+        if computer_preview:
+            enabled = normalized.startswith("enable") or computer_preview.group(1) == "on"
+            return AppActionRequest(
+                action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {"computer_use_preview": enabled}},
+            )
+
+        default_model = re.fullmatch(
+            polite + r"(?:use|select|switch(?:\s+over)?\s+to|change|set)\s+(?:the\s+)?default\s+model(?:\s+to)?\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if default_model:
+            model = self._spoken_value(default_model.group(1))
+            if model:
+                return AppActionRequest(action_id=DEFAULT_MODEL_SET_ACTION_ID, arguments={"model": model})
+
+        global_memory = re.fullmatch(
+            polite
+            + r"(?:turn|switch|set)\s+(?:the\s+)?(?:global\s+|all\s+)?memory\s+(on|off)"
+            + r"(?:\s+(?:globally|everywhere|for\s+all\s+(?:chats|conversations)))?",
+            normalized,
+        )
+        if global_memory and any(marker in normalized for marker in ("global", "everywhere", "all chat", "all conversation")):
+            return AppActionRequest(
+                action_id=MEMORY_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {"memory_enabled": global_memory.group(1) == "on"}},
+            )
+
+        memory_setting = re.fullmatch(
+            polite
+            + r"(?:turn|switch|set)\s+(?:the\s+)?"
+            + r"(reference history|dreaming|saving new memories|auto archive|using archived memories)\s+(on|off)",
+            normalized,
+        )
+        if memory_setting:
+            key = {
+                "reference history": "reference_history_enabled",
+                "dreaming": "dreaming_enabled",
+                "saving new memories": "save_new_memories",
+                "auto archive": "auto_archive_enabled",
+                "using archived memories": "use_archived_memories",
+            }[memory_setting.group(1)]
+            return AppActionRequest(
+                action_id=MEMORY_SETTINGS_UPDATE_ACTION_ID,
+                arguments={"patch": {key: memory_setting.group(2) == "on"}},
+            )
+
+        remember_explicit = re.fullmatch(
+            polite + r"(?:remember|save as (?:a )?memory)(?:\s+that)?\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if remember_explicit:
+            return AppActionRequest(
+                action_id=MEMORY_ENTRY_CREATE_ACTION_ID,
+                arguments={"text": self._spoken_value(remember_explicit.group(1)), "kind": "manual", "scope": "global"},
+            )
+
+        memory_update = re.fullmatch(
+            polite + r"update\s+memory\s+#?(\d+)\s+to\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if memory_update:
+            return AppActionRequest(
+                action_id=MEMORY_ENTRY_UPDATE_ACTION_ID,
+                arguments={"memory_id": int(memory_update.group(1)), "text": self._spoken_value(memory_update.group(2))},
+            )
+
+        memory_pin = re.fullmatch(
+            polite + r"(pin|unpin)\s+memory\s+#?(\d+)",
+            normalized,
+        )
+        if memory_pin:
+            return AppActionRequest(
+                action_id=MEMORY_ENTRY_PIN_ACTION_ID,
+                arguments={"memory_id": int(memory_pin.group(2)), "pinned": memory_pin.group(1) == "pin"},
+            )
+
+        memory_archive = re.fullmatch(polite + r"archive\s+memory\s+#?(\d+)", normalized)
+        if memory_archive:
+            return AppActionRequest(
+                action_id=MEMORY_ENTRY_ARCHIVE_ACTION_ID,
+                arguments={"memory_id": int(memory_archive.group(1))},
+            )
+
+        memory_delete = re.fullmatch(polite + r"delete\s+memory\s+#?(\d+)", normalized)
+        if memory_delete:
+            return AppActionRequest(
+                action_id=MEMORY_ENTRY_DELETE_ACTION_ID,
+                arguments={"memory_id": int(memory_delete.group(1))},
+            )
+
+        if re.fullmatch(
+            polite
+            + r"(?:(?:run|start)\s+(?:memory\s+)?dreaming|dream\s+(?:about\s+)?(?:my\s+)?(?:chats|memories)\s+now)",
+            normalized,
+        ):
+            return AppActionRequest(action_id=MEMORY_DREAMING_RUN_ACTION_ID)
+
+        memory_import = re.fullmatch(
+            polite
+            + r"import\s+(?:my\s+)?(?:old\s+|existing\s+|past\s+)?(?:chats|conversations)\s+(?:into|to)\s+memory"
+            + r"(?:\s+limit\s+(\d+))?",
+            normalized,
+        )
+        if memory_import:
+            arguments = {"limit": int(memory_import.group(1))} if memory_import.group(1) else {}
+            return AppActionRequest(action_id=MEMORY_CONVERSATIONS_IMPORT_ACTION_ID, arguments=arguments)
+
+        provider_credential = re.fullmatch(
+            polite
+            + r"(?:configure|connect|set|update|change|replace)\s+(?:my\s+|the\s+)?"
+            + r"(openrouter|openai|anthropic|google)(?:\s+api)?\s+key(?:\s+to\s+.+)?",
+            normalized,
+        )
+        if provider_credential:
+            return AppActionRequest(
+                action_id=PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID,
+                arguments={"provider": provider_credential.group(1)},
+            )
+
+        routing_sort = re.fullmatch(
+            polite + r"(?:sort|route)\s+(?:llm\s+|model\s+|inference\s+)?providers?\s+by\s+(price|latency|throughput)",
+            normalized,
+        )
+        if routing_sort:
+            return AppActionRequest(
+                action_id=ROUTING_POLICY_SET_ACTION_ID,
+                arguments={"sort": routing_sort.group(1)},
+            )
+
+        routing_fallback_toggle = re.fullmatch(
+            polite + r"(?:turn|set|switch)\s+(?:provider\s+|model\s+)?fallbacks\s+(on|off)",
+            normalized,
+        )
+        if routing_fallback_toggle:
+            return AppActionRequest(
+                action_id=ROUTING_POLICY_SET_ACTION_ID,
+                arguments={"allow_fallbacks": routing_fallback_toggle.group(1) == "on"},
+            )
+
+        if re.fullmatch(polite + r"(?:clear|remove)\s+(?:all\s+)?(?:model\s+)?fallbacks", normalized):
+            return AppActionRequest(action_id=ROUTING_FALLBACKS_SET_ACTION_ID, arguments={"models": []})
+
+        routing_fallbacks = re.fullmatch(
+            polite + r"(?:set|replace)\s+(?:the\s+)?(?:model\s+)?fallbacks(?:\s+to|\s+with)\s+(.+)",
+            submitted,
+            flags=re.IGNORECASE,
+        )
+        if routing_fallbacks:
+            models = [self._spoken_value(value) for value in self._split_spoken_list(routing_fallbacks.group(1))]
+            return AppActionRequest(
+                action_id=ROUTING_FALLBACKS_SET_ACTION_ID,
+                arguments={"models": [model for model in models if model]},
+            )
+
+        credential_strategy = re.fullmatch(
+            polite
+            + r"set\s+(?:(openrouter|openai)\s+)?credential\s+strategy\s+to\s+"
+            + r"(fill[ _-]?first|round[ _-]?robin|least[ _-]?used|random)",
+            normalized,
+        )
+        if credential_strategy:
+            return AppActionRequest(
+                action_id=ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID,
+                arguments={
+                    "provider": credential_strategy.group(1) or "openrouter",
+                    "strategy": credential_strategy.group(2).replace("-", "_").replace(" ", "_"),
+                },
+            )
+
+        credential_pool_reset = re.fullmatch(
+            polite + r"reset\s+(?:(openrouter|openai)\s+)?credential\s+pool",
+            normalized,
+        )
+        if credential_pool_reset:
+            return AppActionRequest(
+                action_id=ROUTING_POOL_RESET_ACTION_ID,
+                arguments={"provider": credential_pool_reset.group(1) or "openrouter"},
+            )
 
         agent_selection = re.fullmatch(
             polite
@@ -1287,6 +1670,22 @@ class AppActionRuntime:
         return " ".join(str(value or "").strip().strip("\"'").split())
 
     @staticmethod
+    def _split_spoken_list(value: str) -> list[str]:
+        items: list[str] = []
+        for comma_segment in str(value or "").split(","):
+            current: list[str] = []
+            for token in comma_segment.split():
+                if token.casefold() == "and":
+                    if current:
+                        items.append(" ".join(current))
+                        current = []
+                else:
+                    current.append(token)
+            if current:
+                items.append(" ".join(current))
+        return items
+
+    @staticmethod
     def _split_mixed_clauses(submitted: str) -> list[str]:
         separators = (
             ", and then ",
@@ -1396,6 +1795,52 @@ class AppActionRuntime:
             ):
                 return self._control_confirmation_receipt(request, context, definition)
             return self._dispatch_session_control(request, context, definition)
+        if request.action_id in SETTINGS_RUNTIME_ACTION_IDS:
+            requires_confirmation = request.action_id in CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS and (
+                request.action_id != PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID
+                or bool(str(request.arguments.get("secret") or request.arguments.get("api_key") or "").strip())
+            )
+            if requires_confirmation:
+                if request.action_id == MEMORY_SETTINGS_UPDATE_ACTION_ID:
+                    target_kind, target_reference = "user_setting", "memory"
+                    confirmation_message = "Confirm changing user-wide memory privacy settings."
+                elif request.action_id == MEMORY_ENTRY_DELETE_ACTION_ID:
+                    target_kind = "memory_entry"
+                    target_reference = str(request.arguments.get("memory_id") or request.arguments.get("id") or "memory")
+                    confirmation_message = "Confirm permanently deleting this memory."
+                elif request.action_id == MEMORY_DREAMING_RUN_ACTION_ID:
+                    target_kind, target_reference = "memory_runtime", "dreaming"
+                    confirmation_message = "Confirm consolidating recent chats into durable memories."
+                elif request.action_id == MEMORY_CONVERSATIONS_IMPORT_ACTION_ID:
+                    target_kind, target_reference = "memory_runtime", "conversation-import"
+                    confirmation_message = "Confirm importing existing chats into memory."
+                elif request.action_id == MEMORY_OBSIDIAN_IMPORT_ACTION_ID:
+                    target_kind, target_reference = "memory_runtime", "obsidian-import"
+                    confirmation_message = "Confirm importing reviewed local memory notes."
+                elif request.action_id == ROUTING_MODEL_POLICY_REMOVE_ACTION_ID:
+                    target_kind = "llm_routing"
+                    target_reference = f"model-policy:{str(request.arguments.get('model_id') or '').strip()}"
+                    confirmation_message = "Confirm removing this model routing policy."
+                elif request.action_id == ROUTING_CREDENTIAL_ADD_ACTION_ID:
+                    target_kind, target_reference = "llm_credential", "new"
+                    confirmation_message = "Confirm adding this provider credential. The secret will not appear in the receipt."
+                elif request.action_id == ROUTING_CREDENTIAL_REMOVE_ACTION_ID:
+                    target_kind = "llm_credential"
+                    target_reference = str(request.arguments.get("credential_id") or "credential")
+                    confirmation_message = "Confirm removing this provider credential."
+                else:
+                    target_kind = "application_credential"
+                    target_reference = f"provider-credential:{str(request.arguments.get('provider') or '').strip().casefold()}"
+                    confirmation_message = "Confirm saving this provider credential. The secret will not appear in the receipt."
+                return self._domain_confirmation_receipt(
+                    request,
+                    context,
+                    definition,
+                    target_kind=target_kind,
+                    target_reference=target_reference,
+                    message=confirmation_message,
+                )
+            return self._dispatch_settings_runtime(request, context, definition)
         if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             if definition.confirmation_rule == "operation_bound":
                 return self._lifecycle_confirmation_receipt(request, context, definition)
@@ -1471,6 +1916,16 @@ class AppActionRuntime:
                 result=exc.details,
                 authorized=True,
             )
+        except adaptive_ui.AdaptiveUIError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=True,
+            )
         except (TypeError, ValueError) as exc:
             return self._error_receipt(
                 request=request,
@@ -1482,7 +1937,15 @@ class AppActionRuntime:
                 authorized=True,
             )
 
+        if request.action_id in {SIDEBAR_ACTION_ID, SURFACE_ACTION_ID}:
+            adaptive_patch, key = adaptive_ui.observation(context, result)
+            if adaptive_patch is not None:
+                result["adaptive_ui_patch"] = adaptive_patch
+            if key:
+                result["_adaptive_signature"] = key
         undo_arguments = result.pop("_undo_arguments", None)
+        adaptive_signature = str(result.pop("_adaptive_signature", ""))
+        message = str(result.pop("_message", "")) or self._result_message(result)
         created_at = self._now()
         undo = None
         if result["changed"] and definition.supports_undo and undo_arguments:
@@ -1500,6 +1963,7 @@ class AppActionRuntime:
                     expected_presentation=expected_presentation,
                     expected_revision=target_revision,
                     expires_at=expires_at,
+                    adaptive_signature=adaptive_signature,
                 )
             )
             undo = ActionUndo(
@@ -1511,6 +1975,7 @@ class AppActionRuntime:
             )
 
         target_reference = str(result.get("target_reference") or "workspace")
+        target_revision = int(result["workspace_layout_patch"]["revision"])
         return ActionReceipt(
             receipt_id=self._receipt_id_factory(),
             request_id=request.request_id,
@@ -1520,13 +1985,13 @@ class AppActionRuntime:
             status="applied",
             authorization=self._authorization(definition.access_class, context, allowed=True),
             target=ActionTarget(
-                kind="ui_surface" if target_reference != "workspace-layout" else "workspace_layout",
+                kind=str(result.get("target_kind") or ("ui_surface" if target_reference != "workspace-layout" else "workspace_layout")),
                 id=target_reference,
-                revision=result["workspace_layout_patch"]["revision"],
+                revision=target_revision,
             ),
             result=result,
             undo=undo,
-            message=self._result_message(result),
+            message=message,
             audit_label=definition.audit_label,
             created_at=created_at,
         )
@@ -1707,6 +2172,72 @@ class AppActionRuntime:
             message=message,
             audit_label=definition.audit_label,
             created_at=self._now(),
+        )
+
+    def _dispatch_settings_runtime(
+        self,
+        request: AppActionRequest,
+        context: AppActionContext,
+        definition: AppActionDefinition,
+        *,
+        confirmed: bool = False,
+    ) -> ActionReceipt:
+        if self._settings_runtime_handler is None:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="SETTINGS_RUNTIME_UNAVAILABLE",
+                message="Settings and runtime controls are unavailable.",
+            )
+        try:
+            result = self._registry.invoke(
+                request.action_id,
+                {
+                    "arguments": dict(request.arguments),
+                    "context": context,
+                    "confirmed": confirmed,
+                },
+                agent_name=self._agent_name(context),
+            )
+        except ToolPermissionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable",
+                access_class=definition.access_class,
+                error_code="ACTION_NOT_AUTHORIZED",
+                message=str(exc),
+            )
+        except SettingsRuntimeActionError as exc:
+            return self._error_receipt(
+                request=request,
+                context=context,
+                status="unavailable" if exc.unavailable else "failed",
+                access_class=definition.access_class,
+                error_code=exc.code,
+                message=str(exc),
+                authorized=not exc.unavailable,
+            )
+        return self._domain_action_receipt(request, context, definition, result)
+
+    def _invoke_settings_runtime(
+        self,
+        action_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self._settings_runtime_handler is None:
+            raise SettingsRuntimeActionError(
+                "SETTINGS_RUNTIME_UNAVAILABLE",
+                "Settings and runtime controls are unavailable.",
+                unavailable=True,
+            )
+        return self._settings_runtime_handler(
+            action_id,
+            dict(payload.get("arguments") or {}),
+            payload["context"],
+            confirmed=payload.get("confirmed") is True,
         )
 
     def _dispatch_lifecycle_control(
@@ -2399,20 +2930,42 @@ class AppActionRuntime:
                 updates["store_to_memory"] = bool(control_patch["store_to_memory"])
             if updates:
                 context = context.model_copy(update=updates)
+        device_patch = receipt.result.get("device_settings_patch")
+        if isinstance(device_patch, dict) and isinstance(device_patch.get("values"), dict):
+            snapshot = DeviceSettingsSnapshot.model_validate(context.device_settings).model_dump(
+                exclude_none=True,
+                exclude_defaults=True,
+            )
+            values = dict(snapshot.get("values") or {})
+            for key, value in device_patch["values"].items():
+                if key == "personalization" and isinstance(value, dict):
+                    values[key] = {**dict(values.get(key) or {}), **value}
+                else:
+                    values[key] = value
+            context = context.model_copy(update={
+                "device_settings": {
+                    "version": int(device_patch.get("version") or snapshot.get("version") or 1),
+                    "revision": int(device_patch.get("revision") or snapshot.get("revision") or 0),
+                    "values": values,
+                }
+            })
         patch = receipt.result.get("workspace_layout_patch")
-        if not isinstance(patch, dict) or not isinstance(patch.get("surfaces"), dict):
+        adaptive_patch = receipt.result.get("adaptive_ui_patch")
+        if not isinstance(patch, dict) and not isinstance(adaptive_patch, dict):
             return context
-        surfaces = {} if patch.get("replace") else {
-            reference: presentation.model_copy(deep=True)
-            for reference, presentation in context.workspace_layout.surfaces.items()
-        }
-        for reference, presentation in patch["surfaces"].items():
-            surfaces[str(reference)] = SurfacePresentation.model_validate(presentation)
-        layout = WorkspaceLayoutSnapshot(
-            version=int(patch.get("version", context.workspace_layout.version)),
-            revision=int(patch.get("revision", context.workspace_layout.revision)),
-            surfaces=surfaces,
-        )
+        layout = context.workspace_layout.model_copy(deep=True)
+        if isinstance(patch, dict) and isinstance(patch.get("surfaces"), dict):
+            surfaces = {} if patch.get("replace") else dict(layout.surfaces)
+            for reference, presentation in patch["surfaces"].items():
+                surfaces[str(reference)] = SurfacePresentation.model_validate(presentation)
+            layout = WorkspaceLayoutSnapshot(
+                version=int(patch.get("version", layout.version)),
+                revision=int(patch.get("revision", layout.revision)),
+                surfaces=surfaces,
+                adaptive_ui=layout.adaptive_ui,
+            )
+        if isinstance(adaptive_patch, dict) and isinstance(adaptive_patch.get("state"), dict):
+            layout.adaptive_ui = adaptive_ui.AdaptiveUIState.model_validate(adaptive_patch["state"])
         return context.model_copy(update={"workspace_layout": layout})
 
     def undo(self, token: str, context: AppActionContext) -> ActionReceipt:
@@ -2461,11 +3014,17 @@ class AppActionRuntime:
             )
 
         try:
-            result = self._registry.invoke(
-                record.action_id,
-                {"arguments": dict(record.previous_arguments), "context": context},
-                agent_name=self._agent_name(context),
-            )
+            if record.action_id == adaptive_ui.RULE_APPLY:
+                result = self._configure_surface({
+                    "arguments": dict(record.previous_arguments["revert"]),
+                    "context": context,
+                })
+            else:
+                result = self._registry.invoke(
+                    record.action_id,
+                    {"arguments": dict(record.previous_arguments), "context": context},
+                    agent_name=self._agent_name(context),
+                )
         except (ToolPermissionError, SurfaceActionError, TypeError, ValueError) as exc:
             return self._error_receipt(
                 request=request,
@@ -2478,6 +3037,14 @@ class AppActionRuntime:
             )
 
         result.pop("_undo_arguments", None)
+        result.pop("_adaptive_signature", None)
+        result.pop("_message", None)
+        if record.adaptive_signature:
+            suppression = adaptive_ui.suppress_signature(
+                context.workspace_layout.adaptive_ui, record.adaptive_signature,
+            )
+            if suppression is not None:
+                result["adaptive_ui_patch"] = suppression
         self._receipt_store.remove(token)
         return ActionReceipt(
             receipt_id=self._receipt_id_factory(),
@@ -2741,6 +3308,9 @@ class AppActionRuntime:
                 )
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_session_control(request, context, definition)
+        if request.action_id in CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS:
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_settings_runtime(request, context, definition, confirmed=True)
         if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_lifecycle_control(request, context, definition, confirmed=True)
@@ -3375,8 +3945,13 @@ class AppActionRuntime:
             reference: self._current_presentation(reference, context).model_dump(mode="json")
             for reference in surfaces
         }
-        changed = current != defaults
-        return {
+        adaptive_state = snapshot.adaptive_ui
+        adaptive_changed = bool(
+            adaptive_state.rules or adaptive_state.signals
+            or adaptive_state.suppressions or adaptive_state.last_rule_id
+        )
+        changed = current != defaults or adaptive_changed
+        result = {
             "changed": changed,
             "target_reference": "workspace-layout",
             "presentation": {},
@@ -3391,6 +3966,109 @@ class AppActionRuntime:
                 "surfaces": defaults,
             },
         }
+        if adaptive_changed:
+            result["adaptive_ui_patch"] = adaptive_ui.state_patch(
+                adaptive_state, adaptive_ui.AdaptiveUIState(),
+            )
+        return result
+
+    def _adaptive_action(self, action_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(payload.get("arguments") or {})
+        context = AppActionContext.model_validate(payload.get("context"))
+        state = context.workspace_layout.adaptive_ui
+
+        def no_layout_change() -> dict[str, Any]:
+            return {
+                "changed": False,
+                "target_kind": "adaptive_rule",
+                "target_reference": "adaptive-ui",
+                "presentation": {},
+                "previous_presentation": {},
+                "workspace_layout_patch": {
+                    "version": context.workspace_layout.version,
+                    "base_revision": context.workspace_layout.revision,
+                    "revision": context.workspace_layout.revision,
+                    "persistence": "device",
+                    "replace": False,
+                    "surfaces": {},
+                },
+            }
+
+        if action_id == adaptive_ui.RULE_CREATE:
+            rule_action_id = str(arguments.get("rule_action_id") or "")
+            raw = arguments.get("rule_arguments")
+            if not isinstance(raw, dict):
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Rule arguments are required.")
+            canonical = adaptive_ui.canonical_arguments(rule_action_id, raw)
+            configured = self._configure_surface({"arguments": canonical, "context": context})
+            scope = str(arguments.get("scope") or "global")
+            if scope not in {"global", "device", "agent", "project", "window"}:
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Unsupported Adaptive UI scope.")
+            rule, patch = adaptive_ui.create_rule(context, rule_action_id, raw, scope=scope)
+            configured.pop("_undo_arguments", None)
+            configured["changed"] = bool(configured["changed"] or patch)
+            configured["target_kind"] = "adaptive_rule"
+            configured["rule"] = rule.model_dump(mode="json")
+            if patch is not None:
+                configured["adaptive_ui_patch"] = patch
+            configured["_message"] = "Adaptive UI rule saved. " + adaptive_ui.explain(rule)
+            return configured
+
+        if action_id == adaptive_ui.RULE_APPLY:
+            if set(arguments) != {"rule_id"}:
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "Only a rule ID can be applied.")
+            rule = adaptive_ui.find_rule(state, str(arguments.get("rule_id") or ""))
+            if not rule.enabled or rule.suppressed or rule.signature in state.suppressions:
+                raise adaptive_ui.AdaptiveUIError("ADAPTIVE_RULE_UNAVAILABLE", "This Adaptive UI rule is disabled.")
+            if not adaptive_ui.matches(rule, context):
+                raise adaptive_ui.AdaptiveUIError("ADAPTIVE_CONTEXT_MISMATCH", "This rule does not apply in the current context.")
+            canonical = adaptive_ui.canonical_arguments("ui.surface.configure", rule.arguments)
+            configured = self._configure_surface({"arguments": canonical, "context": context})
+            if not configured["changed"]:
+                configured["_message"] = "The learned presentation is already set."
+                return configured
+            first_use, patch = adaptive_ui.mark_applied(state, rule.id)
+            inverse = configured.pop("_undo_arguments")
+            configured["_undo_arguments"] = {"rule_id": rule.id, "revert": inverse}
+            configured["_adaptive_signature"] = rule.signature
+            configured["adaptive_ui_patch"] = patch
+            configured["adaptive_rule"] = {"id": rule.id, "first_use": first_use, "explanation": adaptive_ui.explain(rule)}
+            configured["_message"] = (
+                f"Adaptive UI applied a learned rule: {adaptive_ui.explain(rule)}"
+                if first_use else "Adaptive UI applied a learned presentation rule."
+            )
+            return configured
+
+        result = no_layout_change()
+        if action_id == adaptive_ui.RULE_LIST:
+            result["rules"] = [rule.model_dump(mode="json") for rule in state.rules]
+            result["_message"] = f"{len(state.rules)} Adaptive UI rules on this device."
+            return result
+        if action_id == adaptive_ui.RULE_EXPLAIN:
+            rule = adaptive_ui.find_rule(state, str(arguments.get("rule_id") or ""))
+            result["rule"] = rule.model_dump(mode="json")
+            result["_message"] = adaptive_ui.explain(rule)
+            return result
+        if action_id == adaptive_ui.RULE_SET_ENABLED:
+            enabled = arguments.get("enabled")
+            if not isinstance(enabled, bool):
+                raise adaptive_ui.AdaptiveUIError("INVALID_ACTION_ARGUMENTS", "enabled must be true or false.")
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), enabled=enabled)
+            result["_message"] = f"Adaptive UI rule {'enabled' if enabled else 'disabled'}."
+        elif action_id == adaptive_ui.RULE_REMOVE:
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), remove=True)
+            result["_message"] = "Adaptive UI rule removed."
+        elif action_id == adaptive_ui.RULE_SUPPRESS:
+            rule, patch = adaptive_ui.update_rule(state, str(arguments.get("rule_id") or ""), suppress=True)
+            result["_message"] = "Vellum will not learn or apply that interface preference."
+        else:
+            raise adaptive_ui.AdaptiveUIError("ACTION_UNAVAILABLE", "That Adaptive UI action is unavailable.")
+        result["changed"] = patch is not None
+        result["target_reference"] = rule.id
+        result["rule"] = rule.model_dump(mode="json")
+        if patch is not None:
+            result["adaptive_ui_patch"] = patch
+        return result
 
     def _resolve_surface(self, reference: str, context: AppActionContext) -> UISurfaceDefinition:
         normalized = self._normalize_reference(reference)

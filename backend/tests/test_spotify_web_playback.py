@@ -78,6 +78,33 @@ def test_old_authorization_requires_new_consent(service):
         assert client.auth_store.consume_flow(client.auth_store._read_json(client.auth_store.flow_path)["state"])["client_id"] == "public-client"
 
 
+def test_typed_connection_reuses_saved_app_and_retains_playback_actions(service, tmp_path):
+    client, _ = service
+    saved = client.auth_store.load_tokens()
+    saved["client_id"] = "savedpublicclient"
+    client.auth_store.save_tokens(saved)
+    controls = spotify_controls.SpotifyConnectionService(
+        store_provider=lambda: client.auth_store,
+        pkce_provider=lambda: ("verifier", "challenge"),
+        state_factory=lambda: "typed-reconnect",
+        authorization_url_provider=lambda **kwargs: "https://accounts.spotify.com/authorize",
+    )
+    contribution = spotify_controls.spotify_plugin_contribution(controls, authenticated=lambda: True)
+    assert {action.definition.id for action in contribution.actions} == {
+        "spotify.connection.start", "spotify.connection.disconnect",
+        "spotify.playback.control", "spotify.playback.session",
+    }
+    runtime = AppActionRuntime(plugin_registry=PluginRegistry(
+        Path(__file__).resolve().parents[2] / "plugins", state_path=tmp_path / "plugin-state.json"))
+    runtime.register_plugin_contribution(contribution)
+    receipt = runtime.dispatch(AppActionRequest(
+        action_id="spotify.connection.start", arguments={"reuse_existing_client": True}),
+        AppActionContext(source="ui"))
+    assert receipt.status == "applied"
+    assert receipt.result["changed"] is True
+    assert client.auth_store.consume_flow("typed-reconnect")["client_id"] == "savedpublicclient"
+
+
 def test_sdk_rejected_token_refresh_is_coalesced_and_keeps_scopes(service):
     client, _ = service
     calls = []
