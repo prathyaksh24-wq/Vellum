@@ -84,7 +84,7 @@ def test_current_first_message_never_uses_another_chat(monkeypatch, question):
 
 
 def test_failed_import_error_is_passed_to_dialog():
-    source=Path("design/Velllum/uploads/components/books-view.jsx").read_text(encoding="utf-8")
+    source=(Path(__file__).resolve().parents[2] / "design/Velllum/uploads/components/books-view.jsx").read_text(encoding="utf-8")
     assert "error={state.error}" in source
 
 

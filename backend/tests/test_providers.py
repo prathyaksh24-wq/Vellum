@@ -127,17 +127,34 @@ def test_local_group_default_excludes_embedding_only_model(monkeypatch) -> None:
     assert local_group.default_id == "ollama/gemma4:12b"
 
 
-def test_each_group_has_at_least_one_model() -> None:
+@pytest.mark.parametrize("local_installed", [False, True])
+def test_each_group_exposes_only_installed_local_models(monkeypatch, local_installed) -> None:
     registry = ProviderRegistry()
+    registry._local_models = (
+        ModelEntry("ollama/test:latest", "Test Local", "ollama", 32768, "flagship", True),
+    ) if local_installed else ()
+    monkeypatch.setattr(registry, "refresh_local_models", lambda **kwargs: registry._local_inventory)
     for group in registry.list_groups():
-        assert registry.list_models(group=group.key), f"no models in group {group.key}"
+        models = registry.list_models(group=group.key)
+        if group.key == "ollama":
+            assert [entry.id for entry in models] == (["ollama/test:latest"] if local_installed else [])
+        else:
+            assert models, f"no models in group {group.key}"
 
 
-def test_each_group_default_id_resolves_to_a_real_model() -> None:
+@pytest.mark.parametrize("local_installed", [False, True])
+def test_each_group_default_id_resolves_or_is_empty_without_local_models(monkeypatch, local_installed) -> None:
     registry = ProviderRegistry()
+    registry._local_models = (
+        ModelEntry("ollama/test:latest", "Test Local", "ollama", 32768, "flagship", True),
+    ) if local_installed else ()
+    monkeypatch.setattr(registry, "refresh_local_models", lambda **kwargs: registry._local_inventory)
     catalog_ids = {entry.id for entry in registry.list_models()}
     for group in registry.list_groups():
-        assert group.default_id in catalog_ids
+        if group.key == "ollama" and not local_installed:
+            assert group.default_id == ""
+        else:
+            assert group.default_id in catalog_ids
 
 
 def test_resolve_exact_id_wins() -> None:

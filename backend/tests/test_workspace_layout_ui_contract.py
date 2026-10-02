@@ -72,7 +72,7 @@ def test_visible_answer_hides_raw_reference_sections_and_heading_markers() -> No
     assert "const cleanVisibleAnswer = value =>" in ui_source
     assert "references|sources|sources checked|evidence" in ui_source
     assert "const visibleText = cleanVisibleAnswer(msg.text);" in ui_source
-    assert '<div className="areply">{visibleText' in ui_source
+    assert '<div className="areply"><window.VellumUI.AnswerMarkdown text={visibleText' in ui_source
 
 
 def test_api_launcher_exposes_project_cli_dependencies_to_provider_discovery() -> None:
