@@ -506,6 +506,30 @@ def test_stream_agent_turn_emits_chat_model_end_answer(monkeypatch):
     assert final["answer"] == "OK"
 
 
+def test_model_parallel_delegations_emit_each_result_and_keep_failed_task(monkeypatch):
+    emitted=[]
+    original_sse=api._sse
+    def sse(name,data):
+        if name=='token': emitted.append(data['text'])
+        return original_sse(name,data)
+    monkeypatch.setattr(api,'_sse',sse)
+    class ParallelAgent:
+        async def astream_events(self,*args,**kwargs):
+            yield {'event':'on_chat_model_end','name':'RoutedChatModel','data':{'output':SimpleNamespace(content='',tool_calls=[
+                {'name':'delegate_to_agent'},{'name':'delegate_to_agent'}])}}
+            yield {'event':'on_tool_end','name':'delegate_to_agent','data':{'output':json.dumps({
+                'agent':'YoutubeAgent','status':'answered','summary':'Fast answer',
+                'sources':[{'kind':'api','path_or_url':'local-history','title':'History'}]})}}
+            assert emitted==['Fast answer']
+            yield {'event':'on_tool_end','name':'delegate_to_agent','data':{'output':json.dumps({
+                'agent':'CalendarAgent','status':'error','summary':'Calendar is disconnected','sources':[]})}}
+            raise AssertionError('Do not wait for another model rewrite or replay the finished tasks')
+    events=_parse_sse(_run_stream(monkeypatch,ParallelAgent()))
+    tokens=[json.loads(data)['text'] for name,data in events if name=='token']
+    final=json.loads(next(data for name,data in events if name=='final'))
+    assert ''.join(tokens)==final['answer']=='Fast answer\n\nCalendar is disconnected'
+
+
 def test_stream_agent_turn_prepares_runtime_before_event_watchdog(monkeypatch):
     calls = []
 

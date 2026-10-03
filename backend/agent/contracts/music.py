@@ -27,7 +27,7 @@ class MusicSongRequest(BaseModel):
 
 class MusicPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["play_song", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "current", "clarify"]
+    operation: Literal["play_song", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "curate_playlist", "seek", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "current", "clarify"]
     provider: str = Field(default="spotify", max_length=80, pattern=r"^[a-z][a-z0-9_\-]*$")
     query: str = Field(default="", max_length=500)
     artist: str = Field(default="", max_length=200)
@@ -38,6 +38,7 @@ class MusicPlan(BaseModel):
     position: int | None = Field(default=None, ge=1, le=100000)
     source_uri: str = Field(default="", max_length=200)
     volume_percent: int | None = Field(default=None, ge=0, le=100)
+    seek_delta_ms: int | None = Field(default=None, ge=-86400000, le=86400000)
 
     @model_validator(mode="after")
     def required_arguments(self):
@@ -49,6 +50,8 @@ class MusicPlan(BaseModel):
             raise ValueError("Choose whether shuffle is on or off")
         if self.operation == "set_volume" and self.volume_percent is None:
             raise ValueError("A volume from 0 to 100 is required")
+        if self.operation == "seek" and self.seek_delta_ms is None:
+            raise ValueError("A seek interval is required")
         return self
 
 

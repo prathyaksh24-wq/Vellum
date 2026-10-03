@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
 from threading import Lock
@@ -422,15 +423,11 @@ class AutomationActionService:
 
     @staticmethod
     def _binding(record: dict[str, Any]) -> dict[str, Any]:
-        values = (
-            str(record.get("id") or ""),
-            str(record.get("updated_at") or ""),
-            str(record.get("state") or ""),
-            str(len(record.get("run_history") or [])),
-        )
+        # Clock resolution cannot establish whether reviewed content changed.
+        snapshot = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
         return {
-            "automation_id": values[0],
-            "fingerprint": sha256("\n".join(values).encode("utf-8")).hexdigest(),
+            "automation_id": str(record.get("id") or ""),
+            "fingerprint": sha256(snapshot.encode("utf-8")).hexdigest(),
         }
 
     @staticmethod

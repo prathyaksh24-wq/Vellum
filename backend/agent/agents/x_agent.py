@@ -63,12 +63,13 @@ class XAgent:
         self.post_drafter = post_drafter
 
     def can_handle(self, query: str) -> bool:
-        lowered = query.lower()
+        lowered = self._clean_post_request(query).lower()
         return any(self._has_phrase(lowered, keyword) for keyword in self._KEYWORDS) or any(
             re.search(pattern, lowered) is not None for pattern in self._X_CONTEXT_PATTERNS
         )
 
     def answer_with_context(self, query: str, context: dict) -> SpecialistResponse:
+        query = self._clean_post_request(query)
         action = self._write_action_from_query(query.lower())
         read_replies = bool(re.search(r"\b(?:show|read|get|summari[sz]e|what)\b.*\breplies\b", query, re.I))
         read_post = bool(re.search(r"^\s*(?:please\s+)?(?:read|show|open|get|summari[sz]e)\s+(?:this|that|it|the\s+(?:first|second|third)\s+(?:post|tweet))\b", query, re.I))
@@ -94,6 +95,7 @@ class XAgent:
         return result
 
     def answer(self, query: str) -> SpecialistResponse:
+        query = self._clean_post_request(query)
         lowered = query.lower()
         if re.search(r"\b(?:show|read|get|summari[sz]e|what)\b.*\breplies\b", lowered) and self._extract_tweet_id(query):
             return self._answer_replies(query)
@@ -604,6 +606,11 @@ class XAgent:
             confidence=0.85,
             activity_events=self._read_activity_events("user_posts", str(result.get("provider") or "")),
         )
+
+    @staticmethod
+    def _clean_post_request(query: str) -> str:
+        text = re.sub(r"^\s*(?:i\s+meant\s+|no[, ]+)", "", query, flags=re.I)
+        return re.sub(r"^\s*(?:please\s+)?(?:can|could|would|will)\s+(?:(?:you|u)\s+)?(?=(?:post|publish|tweet)\b)", "", text, flags=re.I)
 
     def _answer_post(self, query: str) -> SpecialistResponse:
         text = self._extract_exact_post_envelope(query)

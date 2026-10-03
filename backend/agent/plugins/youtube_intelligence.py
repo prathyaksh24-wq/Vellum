@@ -509,6 +509,7 @@ def _query_terms(value: str) -> set[str]:
         "suggestions", "please", "ideas", "recommendations", "show", "find",
         "data", "activity", "profile", "tell", "know", "learned", "learnt",
         "vellum", "could", "your", "our", "taste", "habits", "patterns",
+        "explain", "summarize", "summarise", "summary", "understand", "read",
     }
     return {
         term

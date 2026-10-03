@@ -94,7 +94,7 @@ SPOTIFY_PLAYLISTS = _tool(
     "spotify_playlists",
     "List, read, create, or update the user's Spotify playlists and their items.",
     {
-        "action": {"type": "string", "enum": ["list", "get", "create", "add_items", "remove_items", "update_details"]},
+        "action": {"type": "string", "enum": ["list", "get", "tracks", "get_tracks", "create", "add_items", "remove_items", "update_details"]},
         "playlist_id": {"type": "string"},
         "name": {"type": "string"},
         "description": {"type": "string"},

@@ -223,7 +223,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             ],
             skills=["skill-youtube-transcript-memory-v1"],
             cache_first=False,
-            version=3,
+            version=4,
         ),
         "DiscordAgent": AgentProfile(
             id="DiscordAgent",

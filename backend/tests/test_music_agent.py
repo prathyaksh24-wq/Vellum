@@ -13,6 +13,8 @@ from agent.tools.registry import ToolPermissionError
 
 def fixture_agent(planner=None, tracks=None, playlists=None, library=None, shows=None, episodes=None, public_playlists=None):
     calls = []
+    created_playlist = {}
+    saved_uris = []
     def handler(name):
         def run(args, **kwargs):
             calls.append((name, args))
@@ -23,9 +25,15 @@ def fixture_agent(planner=None, tracks=None, playlists=None, library=None, shows
                 data = {"items":episodes or []} if args.get("action") == "episodes" else next((s for s in shows or [] if s["id"] == args.get("show_id")), {})
             elif name == "spotify_playlists":
                 if args.get("action") == "create":
-                    data = {"id":"created"}
+                    created_playlist.update(id="created", name=args["name"])
+                    data = dict(created_playlist)
                 elif args.get("action") == "add_items":
+                    saved_uris[:] = args["uris"]
                     data = {"snapshot_id":"added"}
+                elif args.get("action") == "get" and args.get("playlist_id") == "created":
+                    data = dict(created_playlist)
+                elif args.get("action") == "tracks":
+                    data = {"items":[{"track":{"uri":uri}} for uri in saved_uris]}
                 else:
                     choices = (playlists if playlists is not None else [{"id":"hindi", "name":"Hindi", "uri":"spotify:playlist:hindi"}]) + (public_playlists or [])
                     data = (next(({**p,"items":{"total":4}} for p in choices if p["id"] == args.get("playlist_id")), {"items":{"total":4}}) if args.get("action") == "get" else
@@ -455,7 +463,9 @@ def test_playlist_creation_uses_the_same_pending_action_authority(tmp_path, conf
     else:
         assert result.status == "answered" and "Created private playlist Night Drive" in result.answer
         assert writes == [{"action":"create", "name":"Night Drive", "description":"", "public":False, "confirm":True},
-                          {"action":"add_items", "playlist_id":"created", "uris":["spotify:track:original"], "confirm":True}]
+                          {"action":"add_items", "playlist_id":"created", "uris":["spotify:track:original"], "confirm":True},
+                          {"action":"get", "playlist_id":"created"},
+                          {"action":"tracks", "playlist_id":"created", "limit":50}]
     repeated = dispatcher.delegation_runtime.delegate(DelegationRequest(agent_id="MusicAgent", task="confirm", parent_thread_id="music", confirm_pending_action=True))
     assert repeated.response.status == "blocked"
     assert [args for name,args in calls if name == "spotify_playlists"] == writes

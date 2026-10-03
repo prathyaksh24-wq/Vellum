@@ -50,6 +50,7 @@ class AgentCatalog:
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
         from agent.agents.youtube import YoutubeAgent
+        from agent.agents.youtube_synthesis import LocalYoutubeSynthesizer
         from agent.tools.capabilities.registry import build_shared_tool_registry
         from agent.plugins.discord_runtime import discord_service
 
@@ -61,7 +62,7 @@ class AgentCatalog:
         agents = [
             MusicAgent(tool_registry=tools),
             XAgent(vault_root=root, tool_registry=tools),
-            YoutubeAgent(vault_root=root, tool_registry=tools),
+            YoutubeAgent(vault_root=root, tool_registry=tools, synthesizer=LocalYoutubeSynthesizer()),
             MemoryAgent(vault_root=root, tool_registry=tools),
             DiscordAgent(tool_registry=tools, discord_service=discord_runtime_service, summarizer=LocalDiscordSummarizer()),
             CalendarAgent(tool_registry=tools),
