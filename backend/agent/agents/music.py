@@ -85,7 +85,7 @@ class MusicAgent:
             return True
         if re.fullmatch(r"by\s+a\s+song\s+(?:inside|from)\s+my\s+liked\s+songs\s+playlist", text):
             return True
-        if re.match(r"(?:create|make)\b", text) and re.search(r"\bplaylist\b", text):
+        if re.match(r"(?:create?|make)\b", text) and re.search(r"\bplaylist\b", text):
             return True
         if re.match(r"(?:please\s+)?(?:play|put on|pause|resume|stop|skip|next|previous|shuffle)\b", text):
             return True
@@ -93,7 +93,7 @@ class MusicAgent:
             return True
         if re.fullmatch(r"(?:something|soemthing|a\s+(?:random\s+)?song)\s+from\s+(?:my\s+)?(?:liked\s+songs|.+?\s+playlist)", text):
             return True
-        if re.match(r"(?:what(?:'s| is|\s+(?:song|track)\s+is)\s+(?:currently\s+)?playing|set\s+(?:the\s+)?volume)\b", text):
+        if re.search(r"\b(?:what|which)\b.*\b(?:playing|listening)\b", text) or re.match(r"set\s+(?:the\s+)?volume\b", text):
             return True
         return bool(re.search(r"\b(?:on|using|in|through)\s+(?:spotify|apple music|youtube music)$", text)
                     and not re.match(r"(?:what|why|how|explain|search|find posts|research)\b", text))
@@ -117,6 +117,10 @@ class MusicAgent:
         context = self._fresh_context(context)
         clean = self._clean(query)
         operation = (context.get("last_plan") or {}).get("operation")
+        if context.get("choices") and re.fullmatch(r"(?:yes|yeah|yep|okay|ok)(?:\s+please)?", clean, re.I):
+            return True
+        if context.get("playlist_request") and re.search(r"\b(?:songs|name|trendy|viral|hits|playlist)\b", clean, re.I):
+            return True
         if self._original_version_request(clean) and (operation == "play_song" or context.get("last_song_plan")):
             return True
         if operation == "play_playlist" and re.fullmatch(r"(?:https://open\.spotify\.com/playlist/|spotify:playlist:)[A-Za-z0-9]+(?:\?\S*)?", clean):
@@ -134,6 +138,8 @@ class MusicAgent:
     @staticmethod
     def _source_choice(text: str, context: dict) -> dict | None:
         choices = context.get("choices") or []
+        if len(choices) == 1 and re.fullmatch(r"(?:yes|yeah|yep|okay|ok)(?:\s+please)?", text, re.I):
+            return choices[0]
         ordinal = re.fullmatch(r"(?:the\s+)?(\d+)(?:st|nd|rd|th)?(?:\s+one)?", text, re.I)
         if ordinal and 0 < int(ordinal[1]) <= len(choices):
             return choices[int(ordinal[1])-1]
@@ -147,6 +153,12 @@ class MusicAgent:
 
     @staticmethod
     def _artist_choice(artist: str, context: dict) -> dict | None:
+        choices = context.get("choices") or []
+        ordinal = re.fullmatch(r"(?:the\s+)?(\d+)(?:st|nd|rd|th)?(?:\s+one)?", artist, re.I)
+        if ordinal and 0 < int(ordinal[1]) <= len(choices):
+            return choices[int(ordinal[1])-1]
+        if len(choices) == 1 and re.fullmatch(r"(?:yes|yeah|yep|okay|ok)(?:\s+please)?", artist, re.I):
+            return choices[0]
         def score(choice):
             names = choice.get("artists") or choice.get("artist", "").split(",")
             names = [choice.get("artist", ""), *names]
@@ -170,7 +182,7 @@ class MusicAgent:
         last_song = previous.get("last_song_plan") or (previous.get("last_plan") if (previous.get("last_plan") or {}).get("operation") == "play_song" else None)
         if plan.get("operation") == "play_song" and response.status == "answered":
             last_song = plan
-        return {"last_plan":plan, "last_song_plan":last_song, "playlist_links":links[-5:], "choices":response.structured_payload.get("choices", [])[:5],
+        return {"last_plan":plan, "last_song_plan":last_song, "playlist_request":response.structured_payload.get("playlist_request", False), "playlist_links":links[-5:], "choices":response.structured_payload.get("choices", [])[:5],
                 "song_index":response.structured_payload.get("song_index"), "at":time.time()}
 
     @staticmethod
@@ -190,6 +202,16 @@ class MusicAgent:
         if suffix:
             provider = PROVIDER_NAMES[suffix[1].casefold()]
             text = text[:suffix.start()].strip()
+        seek = re.fullmatch(r"(?:skip(?:\s+(?:ahead|forward))?|forward|go\s+forward|rewind|go\s+back|back)\s+(\d+)\s*(seconds?|secs?|s|minutes?|mins?|m)", text, re.I)
+        if seek:
+            delta = int(seek[1]) * (60000 if seek[2].casefold().startswith('m') else 1000)
+            if re.match(r"(?:rewind|go\s+back|back)\b", text, re.I):
+                delta = -delta
+            return MusicPlan(operation="seek", provider=provider, seek_delta_ms=delta)
+        if re.search(r"\b(?:what|which)\b.*\b(?:playing|listening)\b", text, re.I):
+            return MusicPlan(operation="current", provider=provider)
+        if re.match(r"(?:create?|make|come\s+up)\b", text, re.I) and re.search(r"\b(?:trendy|trending|viral|reel)\b", text, re.I):
+            return MusicPlan(operation="curate_playlist", provider=provider, query=text)
         create = re.fullmatch(r"(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?playlist\s+(?:called|named)\s+(.+?)\s+(?:with|containing)\s+(.+)", text, re.I)
         if create:
             songs = []
@@ -197,8 +219,8 @@ class MusicAgent:
                 parts = re.split(r"\s+by\s+", item, maxsplit=1, flags=re.I)
                 songs.append({"title":parts[0].strip(' \"\u201c\u201d'), "artist":parts[1].strip() if len(parts)>1 else ""})
             return MusicPlan(operation="create_playlist", provider=provider, query=create[1].strip(' \"\u201c\u201d'), songs=songs)
-        if re.match(r"(?:create|make)\b", text) and re.search(r"\bplaylist\b", text):
-            return None
+        if re.fullmatch(r"(?:create?|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?playlist", text, re.I):
+            return MusicPlan(operation="clarify", provider=provider)
         if text.casefold() == "play":
             return MusicPlan(operation="resume", provider=provider)
         if re.fullmatch(r"what(?:'s| is|\s+(?:song|track)\s+is)\s+(?:currently\s+)?playing", text, re.I):
@@ -274,6 +296,10 @@ class MusicAgent:
             return result.get("data") or {}
         try:
             context = self._fresh_context(context)
+            if len(context.get("choices") or []) > 1 and re.fullmatch(r"(?:yes|yeah|yep|okay|ok)(?:\s+please)?", clean, re.I):
+                return SpecialistResponse(agent=self.name, status="needs_fetch",
+                    summary="Choose one: " + "; ".join(f"{i}. {c.get('title', '')} by {c.get('artist', '')}" for i,c in enumerate(context['choices'],1)) + ". Reply with its number or artist.",
+                    structured_payload={"music_plan":context.get("last_plan"), "choices":context["choices"]})
             artist = self._artist_correction(clean) or (clean if self._artist_choice(clean, context) else None)
             last_plan = context.get("last_plan") or {}
             source_choice = self._source_choice(clean, context) if last_plan.get("operation") in {"play_playlist", "play_podcast"} else None
@@ -321,14 +347,16 @@ class MusicAgent:
             if re.search(r"\b(?:podcasts?|podacts?|podcats?|episodes?)\b", clean, re.I) and plan.operation not in {"play_podcast", "play_episode", "clarify"}:
                 return SpecialistResponse(agent=self.name, status="needs_fetch", summary="Which podcast show or episode would you like me to play?")
             if plan.operation == "clarify":
-                message = "What should I name the playlist, and which songs should it contain?" if re.search(r"\b(?:create|make)\b", clean, re.I) else "Which song or playlist would you like me to play?"
-                return SpecialistResponse(agent=self.name, status="needs_fetch", summary=message)
+                creating = bool(context.get("playlist_request") or re.search(r"\b(?:create?|make)\b.*\bplaylist\b", clean, re.I))
+                message = "What songs or style should the playlist contain? I can suggest a name." if creating else "Which song or playlist would you like me to play?"
+                return SpecialistResponse(agent=self.name, status="needs_fetch", summary=message,
+                    structured_payload={"music_plan":plan.model_dump(), "playlist_request":creating})
             integration = self.integrations.get(plan.provider)
             if integration is None:
                 return SpecialistResponse(agent=self.name, status="needs_fetch", summary=f"{plan.provider.replace('_', ' ').title()} is not connected to Vellum yet.")
             self.skill_loader(integration.skill_id)
-            if plan.operation == "create_playlist":
-                prepare = getattr(integration, "prepare_playlist", None)
+            if plan.operation in {"create_playlist", "curate_playlist"}:
+                prepare = getattr(integration, "curate_playlist" if plan.operation == "curate_playlist" else "prepare_playlist", None)
                 if not callable(prepare):
                     return SpecialistResponse(agent=self.name, status="needs_fetch", summary="This music integration does not support playlist creation yet.")
                 proposal = prepare(plan, invoke)

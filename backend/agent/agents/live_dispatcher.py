@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from dataclasses import replace
+import threading
 from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
@@ -69,7 +71,7 @@ class LiveAgentDispatcher:
             pending_action_store=self.state_store,
         )
 
-    def maybe_handle(self, message: str, thread_id: str) -> LiveAgentResult | None:
+    def maybe_handle(self, message: str, thread_id: str, *, on_result=None) -> LiveAgentResult | None:
         message = self._clean_surface_prefix(message)
         state = self.state_store.get(thread_id)
         active_agent = state.active_agent
@@ -92,11 +94,17 @@ class LiveAgentDispatcher:
                         )
                     )
                     if run.response.action_request:
-                        self.state_store.set_pending_action(thread_id, {"agent": agent_name, **run.response.action_request})
+                        self.state_store.set_pending_action(thread_id, {"agent": agent_name, **run.response.action_request,
+                            "batch_id":pending_action.get("batch_id"), "queued_actions":pending_action.get("queued_actions", [])})
                     elif agent_name=="CalendarAgent" and run.response.status=="error":
                         # Retain the exact authorized target for an explicit retry;
                         # never authorize another event or a background retry.
                         self.state_store.set_pending_action(thread_id,{**pending_action,"confirmed_until":(datetime.now(UTC)+timedelta(minutes=5)).isoformat()})
+                    elif pending_action.get("queued_actions"):
+                        queued = pending_action["queued_actions"]
+                        self.state_store.set_pending_action(thread_id, {**queued[0], "batch_id":pending_action.get("batch_id"), "queued_actions":queued[1:]})
+                        run = replace(run, response=run.response.model_copy(update={
+                            "summary":run.response.summary + "\n\nNext change awaiting confirmation: " + str(queued[0].get("preview") or "the next proposed action")}))
                     return self._result_from_response(
                         run.response,
                         run=run,
@@ -120,6 +128,27 @@ class LiveAgentDispatcher:
                     answer=f"Canceled the pending {str(pending_action.get('agent') or 'specialist')} action.",
                     tools=[self._tool_name(str(pending_action.get("agent") or "XAgent"))],
                 )
+        batch = self._independent_tasks(message, thread_id)
+        if batch:
+            completed = []
+            lock = threading.Lock()
+            def emit(run):
+                part = self._result_from_response(run.response, run=run, route_source="parallel")
+                with lock:
+                    completed.append(part)
+                    if on_result is not None:
+                        on_result(part)
+            runs = self.delegation_runtime.delegate_many(batch, on_complete=emit if on_result else None)
+            parts = completed if on_result else [self._result_from_response(run.response, run=run, route_source="parallel") for run in runs]
+            if not state.agent_selected:
+                self.state_store.set_active_agent(thread_id, "VellumAgent")
+                self.state_store.clear_pending_reroute(thread_id)
+            return LiveAgentResult(handled=True, agent_name="VellumAgent",
+                answer="\n\n".join(part.answer for part in parts),
+                status="answered" if all(part.status == "answered" for part in parts) else "partial",
+                tools=list(dict.fromkeys(tool for part in parts for tool in part.tools)),
+                sources=[source for part in parts for source in part.sources],
+                activity_events=[event for part in parts for event in part.activity_events], route_source="parallel")
         matched_binding = None
         profile_only_id = ""
         route_source = "deterministic"
@@ -134,6 +163,11 @@ class LiveAgentDispatcher:
         if music_binding is not None and music_binding.executor is not None and (music_binding.executor.can_handle(message) or contextual_music):
             matched_binding = music_binding
             route_source = "music_intent"
+        if matched_binding is None and state.agent_selected:
+            natural_binding = self.agent_catalog.match(message)
+            if natural_binding is not None and natural_binding.profile.id != active_agent:
+                matched_binding = natural_binding
+                route_source = "natural_intent"
         if matched_binding is None and state.agent_selected and active_agent != "VellumAgent":
             selected = self.agent_catalog.try_resolve(active_agent)
             if selected is not None and selected.executor is not None:
@@ -193,7 +227,7 @@ class LiveAgentDispatcher:
                 route_source = "contextual"
         if matched_binding is not None or profile_only_id:
             agent_name = matched_binding.profile.id if matched_binding is not None else profile_only_id
-            if active_agent != agent_name and not (route_source == "music_intent" and state.agent_selected):
+            if active_agent != agent_name and not (route_source in {"music_intent", "natural_intent"} and state.agent_selected):
                 self.state_store.set_active_agent(thread_id, agent_name)
                 self.state_store.clear_pending_reroute(thread_id)
             try:
@@ -229,6 +263,27 @@ class LiveAgentDispatcher:
             return None
 
         return None
+
+    def _independent_tasks(self, message: str, thread_id: str) -> list[DelegationRequest]:
+        from agent.app_actions.runtime import AppActionRuntime
+        # Dependencies and references require main-agent planning with prior results.
+        if re.search(r"\b(?:then|after|based on|using that|use (?:that|those|the result))\b", message, re.I):
+            return []
+        clauses = AppActionRuntime._split_mixed_clauses(message)
+        if not 2 <= len(clauses) <= 8:
+            return []
+        requests = []
+        for clause in clauses:
+            clause = re.sub(r"^(?:also\s+)", "", clause, flags=re.I)
+            if not re.match(r"(?:please\s+)?(?:what|which|when|who|how|can|could|show|tell|summari[sz]e|find|search|read|play|skip|pause|post|tweet|create|make|list|get)\b", clause, re.I):
+                return []
+            if re.search(r"\b(?:it|that|those|them|he|she|him|her)\b", clause, re.I):
+                return []
+            binding = self.agent_catalog.match(clause)
+            if binding is None:
+                return []
+            requests.append(DelegationRequest(agent_id=binding.profile.id, task=clause, parent_thread_id=thread_id))
+        return requests if len({request.agent_id for request in requests}) > 1 else []
 
     def _is_contextual_followup(self, message: str, agent_name: str) -> bool:
         """Keep a natural specialist active for a clearly dependent follow-up."""

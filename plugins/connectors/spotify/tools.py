@@ -270,6 +270,12 @@ def spotify_playlists(args: dict, **kwargs) -> str:
         if missing:
             return _invalid(*missing)
         return _result(lambda: service.request("GET", f"/playlists/{args['playlist_id']}"))
+    if action in {"tracks", "get_tracks"}:
+        missing = _missing(args, "playlist_id")
+        if missing:
+            return _invalid(*missing)
+        return _result(lambda: service.request("GET", f"/playlists/{args['playlist_id']}/items",
+            params=_params(args, "limit", "offset") or None))
     if action == "create":
         missing = _missing(args, "name")
         if missing:

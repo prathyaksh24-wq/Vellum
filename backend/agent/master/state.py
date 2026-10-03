@@ -179,6 +179,24 @@ class MasterThreadStateStore:
             )
         return result.rowcount == 1
 
+    def queue_pending_action(self, thread_id: str, action: dict[str, Any], *, batch_id: str) -> bool:
+        """Append only to this batch's confirmation queue, under one local transaction."""
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT action_json FROM master_pending_actions WHERE thread_id = ?", (thread_id,)).fetchone()
+            pending = json.loads(row["action_json"]) if row else None
+            if pending is not None and pending.get("batch_id") != batch_id:
+                return False
+            if pending is None:
+                pending = {**action, "batch_id":batch_id, "queued_actions":[]}
+            else:
+                pending.setdefault("queued_actions", []).append(action)
+            conn.execute("""INSERT INTO master_pending_actions(thread_id, action_json, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(thread_id) DO UPDATE
+                SET action_json = excluded.action_json, updated_at = excluded.updated_at""",
+                (thread_id, json.dumps(pending, ensure_ascii=False)))
+            return True
+
     def get_pending_action(self, thread_id: str) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute(

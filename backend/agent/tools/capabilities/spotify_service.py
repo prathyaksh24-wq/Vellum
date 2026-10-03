@@ -70,8 +70,9 @@ class SpotifyCapabilityService:
         if not matching:
             choices = [{"title":t.get("name", ""), "artist":", ".join(a.get("name", "") for a in t.get("artists", []))}
                        for t in tracks if SequenceMatcher(None, title_key(plan.query), title_key(t.get("name", ""))).ratio() >= .65]
+            choices = list({(title_key(c["title"]), normalized_name(c["artist"])):c for c in choices}.values())
             raise MusicChoiceRequired("No exact song title matched " + plan.query + "." +
-                                      (" Did you mean " + "; ".join(c["title"] + " by " + c["artist"] for c in choices[:5]) + "? Reply with the artist." if choices else " Try its title and artist."), choices)
+                                      (" Did you mean " + "; ".join(c["title"] + " by " + c["artist"] for c in choices[:5]) + ("? Reply yes to play it." if len(choices)==1 else "? Reply with the artist.") if choices else " Try its title and artist."), choices)
         candidates = matching
         if plan.artist:
             def artist_matches(track):
@@ -181,6 +182,31 @@ class SpotifyCapabilityService:
                                  "artist":", ".join(a.get("name", "") for a in track.get("artists", [])), "uri":track["uri"]})
         return MusicPlaylistCreateProposal(provider="spotify", name=plan.query, description=plan.description, songs=resolved)
 
+    def curate_playlist(self, plan: MusicPlan, invoke) -> MusicPlaylistCreateProposal:
+        year = re.search(r"\b20\d{2}\b", plan.query)
+        query = "viral hits" + (" " + year[0] if year else "")
+        found = invoke("spotify_search", {"query":query, "types":["playlist"], "limit":10})
+        lists = [p for p in found.get("playlists", {}).get("items", []) if p and p.get("id")
+                 and (not year or year[0] in str(p.get("name") or ""))]
+        if not lists:
+            raise ValueError("Spotify did not return a matching current playlist. Give me song titles or a source playlist link; I have not created anything.")
+        requested = re.search(r"\b(\d{1,2})\s+songs\b", plan.query, re.I)
+        count = min(50, int(requested[1])) if requested else 20
+        items = invoke("spotify_playlists", {"action":"tracks", "playlist_id":lists[0]["id"], "limit":50})
+        songs, seen = [], set()
+        for entry in items.get("items", []):
+            track = entry.get("track") or entry.get("item") or {}
+            uri = str(track.get("uri") or "")
+            if re.fullmatch(r"spotify:track:[A-Za-z0-9]+", uri) and uri not in seen and track.get("is_playable") is not False:
+                seen.add(uri)
+                songs.append({"title":track.get("name") or "Untitled track", "artist":", ".join(a.get("name", "") for a in track.get("artists", [])), "uri":uri})
+            if len(songs) == count:
+                break
+        if not songs:
+            raise ValueError("Spotify did not expose playable songs for that source playlist. No playlist was created.")
+        return MusicPlaylistCreateProposal(provider="spotify", name="Viral Picks" + (" " + year[0] if year else ""),
+            description="Selected from " + str(lists[0].get("name") or "a Spotify playlist")[:250] + "; playlist labels are not verified chart rankings.", songs=songs)
+
     def create_playlist(self, proposal: MusicPlaylistCreateProposal, invoke) -> str:
         if proposal.provider != "spotify" or any(not re.fullmatch(r"spotify:track:[A-Za-z0-9]+", song.uri) for song in proposal.songs):
             raise ValueError("The pending Spotify playlist contains an invalid song.")
@@ -197,10 +223,29 @@ class SpotifyCapabilityService:
                                          "uris":[song.uri for song in proposal.songs], "confirm":True})
         except Exception as exc:
             raise ValueError(f"Created {proposal.name}, but Spotify did not confirm adding its songs. Check https://open.spotify.com/playlist/{playlist_id} before retrying.") from exc
+        try:
+            saved = invoke("spotify_playlists", {"action":"get", "playlist_id":playlist_id})
+            entries = invoke("spotify_playlists", {"action":"tracks", "playlist_id":playlist_id, "limit":50})
+            actual = [str((entry.get("track") or entry.get("item") or {}).get("uri") or "") for entry in entries.get("items", [])]
+            wanted = [song.uri for song in proposal.songs]
+            if saved.get("id") != playlist_id or saved.get("name") != proposal.name or actual[:len(wanted)] != wanted:
+                raise ValueError("Playlist read-back did not match the requested name and songs")
+        except Exception as exc:
+            raise ValueError(f"Spotify has not verified the playlist name and songs. Check https://open.spotify.com/playlist/{playlist_id} before retrying; I will not create a duplicate automatically.") from exc
         count = len(proposal.songs)
         return f"Created private playlist {proposal.name} with {count} {'song' if count == 1 else 'songs'}. https://open.spotify.com/playlist/{playlist_id}"
 
     def execute(self, plan: MusicPlan, invoke) -> str:
+        if plan.operation == "seek":
+            state = invoke("spotify_playback", {"action":"get_state"})
+            if not (state.get("track") or state.get("item")):
+                return "Nothing is playing on Spotify to seek within."
+            position = max(0, int(state.get("progress_ms") or 0) + plan.seek_delta_ms)
+            duration = int(state.get("duration_ms") or (state.get("item") or {}).get("duration_ms") or 0)
+            if duration:
+                position = min(position, max(0, duration - 1000))
+            invoke("spotify_playback", {"action":"seek", "position_ms":position})
+            return f"Moved {'forward' if plan.seek_delta_ms >= 0 else 'back'} {abs(plan.seek_delta_ms)//1000} seconds within the current audio."
         if plan.operation == "play_podcast":
             show, episode = self.resolve_podcast(plan, invoke)
             invoke("spotify_playback", {"action":"play", "uris":[episode["uri"]]})
@@ -260,8 +305,10 @@ class SpotifyCapabilityService:
         if plan.operation == "current":
             state = invoke("spotify_playback", {"action":"get_state"})
             track = state.get("item") or state.get("track") or {}
-            artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
-            return "Currently playing " + track.get("name", "an unknown track") + (" by " + artists if artists else "") + "." if track else "Nothing is playing on Spotify."
+            names = track.get("artists") or state.get("artists") or []
+            artists = ", ".join(a.get("name", "") if isinstance(a, dict) else str(a) for a in names)
+            label = "Currently playing " if state.get("is_playing", True) else "Paused on "
+            return label + track.get("name", "an unknown track") + (" by " + artists if artists else "") + "." if track else "Nothing is playing on Spotify."
         action = {"resume":"play"}.get(plan.operation, plan.operation)
         args = {"action":action}
         if plan.operation == "set_shuffle":

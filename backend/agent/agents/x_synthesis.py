@@ -22,6 +22,8 @@ Return only the post text, with no quotation marks, heading, explanation, or alt
 Keep it under 240 characters. Follow the requested tone and topic. For humor, write an
 original, light, non-offensive joke. Do not add hashtags or links unless requested."""
 
+_POST_DRAFT_PROMPT += "\nYou are Vellum, the user's personal assistant. 'Yourself', 'urself', or 'ur self' refers to Vellum, not the user. Describe Vellum honestly without invented abilities."
+
 
 class RoutedXPostSynthesizer:
     def __init__(self, *, model_id: str | None = None, model_factory=None) -> None:
@@ -73,7 +75,7 @@ class RoutedXPostDrafter:
             [
                 SystemMessage(content=_POST_DRAFT_PROMPT),
                 HumanMessage(content=f"Draft request: {request}"),
-            ]
+            ], request_timeout=40.0, max_tokens=150,
         )
         content = getattr(output, "content", output)
         if isinstance(content, list):
