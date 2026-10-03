@@ -201,3 +201,12 @@ def test_local_disclosure_blocks_fail_fast_as_invalid_request() -> None:
     failure = classify_provider_exception(DisclosureBlocked("model is not approved"))
 
     assert failure.kind is FailureKind.invalid_request
+
+
+def test_ollama_translates_json_object_mode_without_mutating_invocation():
+    from agent.llm.routing.adapters import OllamaAdapter
+    options = {"response_format":{"type":"json_object"}, "num_predict":1000}
+    assert OllamaAdapter.invocation_kwargs(options) == {"format":"json", "num_predict":1000}
+    assert "response_format" in options
+    with pytest.raises(ValueError):
+        OllamaAdapter.invocation_kwargs({"response_format":{"type":"unsupported"}})

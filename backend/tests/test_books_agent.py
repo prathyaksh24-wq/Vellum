@@ -338,7 +338,9 @@ def test_routed_books_synthesizer_inherits_active_model_and_standard_reasoning()
     calls = []
 
     class FakeModel:
-        def invoke(self, messages):
+        def invoke(self, messages, **kwargs):
+            assert kwargs["response_format"] == {"type":"json_object"}
+            assert kwargs["request_timeout"] == 60.0
             calls.append(messages)
             return SimpleNamespace(
                 content=(

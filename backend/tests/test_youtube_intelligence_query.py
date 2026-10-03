@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+import pytest
 
 from agent.knowledge.models import ObservationActor, ObservationInput, Sensitivity
 from agent.knowledge.store import KnowledgeStore
@@ -58,13 +59,14 @@ def test_named_query_is_filtered_before_snapshot_limit(tmp_path: Path) -> None:
     assert filtered["channels"][0]["label"] == "Sidemen"
 
 
-def test_broad_discovery_uses_imported_interests_without_literal_request_filter(tmp_path):
+@pytest.mark.parametrize("query", ["Discover something for me based on my interests.", "what can u tell me about my youtube data", "what have you learned about my YouTube activity?"])
+def test_broad_discovery_uses_imported_interests_without_literal_request_filter(tmp_path, query):
     store = KnowledgeStore(tmp_path / "knowledge.db", tmp_path / "blobs")
     now = datetime(2026, 10, 2, tzinfo=UTC)
     _watch(store, event="one", channel_id="UC-learning", channel_title="Learning Channel", observed_at=now - timedelta(days=1))
     service = YouTubeIntelligenceService(store)
     service.rebuild(now=now)
-    result = service.snapshot(now=now, query="Discover something for me based on my interests.")
+    result = service.snapshot(now=now, query=query)
     assert result["channels"][0]["label"] == "Learning Channel"
     assert result["local_only"]
     assert not service.snapshot(now=now, query="interests in UnmatchedTopic")["channels"]

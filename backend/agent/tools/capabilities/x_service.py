@@ -13,6 +13,7 @@ from agent.knowledge.x_bookmark_categorizer import categorize_bookmarks
 from agent.tools.capabilities.agent_reach_x_provider import (
     AgentReachError,
     AgentReachUnavailableError,
+    AgentReachUnconfirmedWriteError,
     AgentReachXProvider,
 )
 from agent.tools.registry import (
@@ -374,7 +375,13 @@ class XCapabilityService:
             }
         if not self._custom_post_backend and not self._oauth_file().is_file():
             raise AgentReachUnavailableError("Agent-Reach X posting is unavailable. Reconnect with fresh X cookies.")
-        return {"action": "x.publish_post", "tweet": self.post_backend(text)}
+        return {"action": "x.publish_post", "tweet": self._require_post_receipt(self.post_backend(text))}
+
+    @staticmethod
+    def _require_post_receipt(tweet: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(tweet, dict) or not str(tweet.get("id") or tweet.get("tweet_id") or "").strip():
+            raise AgentReachUnconfirmedWriteError("X did not confirm publication. Check your profile before retrying; the post may already exist.")
+        return tweet
 
     def publish_post_with_media(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not self.allow_posts:
@@ -396,7 +403,7 @@ class XCapabilityService:
         media_id = self._extract_media_id(uploaded)
         if not media_id:
             raise ToolPermissionError("X media upload did not return a media id.")
-        tweet = self.post_backend(text, media_ids=[media_id], made_with_ai=not bool(payload.get("image_path")))
+        tweet = self._require_post_receipt(self.post_backend(text, media_ids=[media_id], made_with_ai=not bool(payload.get("image_path"))))
         return {
             "action": "x.publish_post_with_media",
             "tweet": tweet,

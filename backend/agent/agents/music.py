@@ -48,7 +48,7 @@ class LocalMusicPlanner:
                 "Never infer a mood from listening history or claim playback happened.\n"
                 + json.dumps(MusicPlan.model_json_schema()) + "\nSpotify procedure when applicable:\n" + skill[:12000])),
             HumanMessage(content=query[:4000]),
-        ])
+        ], response_format={"type":"json_object"}, request_timeout=40.0, max_tokens=1000)
         content = getattr(output, "content", output)
         if isinstance(content, list):
             content = "".join(str(block.get("text") or "") for block in content if isinstance(block, dict))
@@ -76,10 +76,14 @@ class MusicAgent:
         return text.split("\n\n[", 1)[0].strip().rstrip(".!?")
 
     def can_handle(self, query: str) -> bool:
-        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?", "", self._clean(query), flags=re.I).casefold()
+        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", self._clean(query), flags=re.I).casefold()
         if re.search(r"\b(?:chess|games?|videos?|youtube(?!\s+music))\b", text):
             return False
         if match_music_control(text):
+            return True
+        if self._original_version_request(text):
+            return True
+        if re.fullmatch(r"by\s+a\s+song\s+(?:inside|from)\s+my\s+liked\s+songs\s+playlist", text):
             return True
         if re.match(r"(?:create|make)\b", text) and re.search(r"\bplaylist\b", text):
             return True
@@ -89,7 +93,7 @@ class MusicAgent:
             return True
         if re.fullmatch(r"(?:something|soemthing|a\s+(?:random\s+)?song)\s+from\s+(?:my\s+)?(?:liked\s+songs|.+?\s+playlist)", text):
             return True
-        if re.match(r"(?:what(?:'s| is)\s+(?:currently\s+)?playing|set\s+(?:the\s+)?volume)\b", text):
+        if re.match(r"(?:what(?:'s| is|\s+(?:song|track)\s+is)\s+(?:currently\s+)?playing|set\s+(?:the\s+)?volume)\b", text):
             return True
         return bool(re.search(r"\b(?:on|using|in|through)\s+(?:spotify|apple music|youtube music)$", text)
                     and not re.match(r"(?:what|why|how|explain|search|find posts|research)\b", text))
@@ -104,6 +108,8 @@ class MusicAgent:
 
     @staticmethod
     def _artist_correction(query: str) -> str | None:
+        if re.search(r"\b(?:songs?|tracks?|playlists?|liked)\b", query, re.I):
+            return None
         match = re.fullmatch(r"(?:(?:no[, ]+|i meant\s+))?(?:from|by)\s+(.+)", query, re.I)
         return match[1].strip() if match else None
 
@@ -111,12 +117,19 @@ class MusicAgent:
         context = self._fresh_context(context)
         clean = self._clean(query)
         operation = (context.get("last_plan") or {}).get("operation")
+        if self._original_version_request(clean) and (operation == "play_song" or context.get("last_song_plan")):
+            return True
         if operation == "play_playlist" and re.fullmatch(r"(?:https://open\.spotify\.com/playlist/|spotify:playlist:)[A-Za-z0-9]+(?:\?\S*)?", clean):
             return True
         if operation in {"play_playlist", "play_podcast"} and context.get("choices"):
             return self._source_choice(clean, context) is not None
         return bool((self._artist_correction(clean) or self._artist_choice(clean, context))
                     and (operation == "play_song" or operation == "create_playlist" and context.get("choices")))
+
+    @staticmethod
+    def _original_version_request(query: str) -> bool:
+        text = re.sub(r"^(?:nah|no|nope)[, ]+", "", query, flags=re.I)
+        return bool(re.fullmatch(r"(?:please\s+)?(?:play\s+)?(?:that\s+(?:song|track)\s+(?:by|nby)\s+)?(?:the\s+)?original(?:\s+(?:song|track|version|artist))?", text, re.I))
 
     @staticmethod
     def _source_choice(text: str, context: dict) -> dict | None:
@@ -134,7 +147,11 @@ class MusicAgent:
 
     @staticmethod
     def _artist_choice(artist: str, context: dict) -> dict | None:
-        ranked = sorted(((SequenceMatcher(None, artist.casefold(), c.get("artist", "").casefold()).ratio(), c)
+        def score(choice):
+            names = choice.get("artists") or choice.get("artist", "").split(",")
+            names = [choice.get("artist", ""), *names]
+            return max((SequenceMatcher(None, artist.casefold(), name.strip().casefold()).ratio() for name in names), default=0)
+        ranked = sorted(((score(c), c)
                          for c in context.get("choices", [])), key=lambda pair:pair[0], reverse=True)
         if ranked and ranked[0][0] >= .55 and (len(ranked)==1 or ranked[0][0]-ranked[1][0] >= .15):
             return ranked[0][1]
@@ -142,6 +159,7 @@ class MusicAgent:
 
     @staticmethod
     def thread_context(response: SpecialistResponse, previous: dict) -> dict:
+        previous = MusicAgent._fresh_context(previous)
         plan = response.structured_payload.get("music_plan")
         if plan is None:
             return MusicAgent._fresh_context(previous)
@@ -149,7 +167,10 @@ class MusicAgent:
         if plan.get("operation") == "play_playlist" and plan.get("source_uri") and not re.match(r"(?:spotify:|https://)", plan.get("query", "")):
             links = [link for link in links if (link.get("provider"),link.get("query")) != (plan["provider"],plan["query"])]
             links.append({"provider":plan["provider"], "query":plan["query"], "source_uri":plan["source_uri"]})
-        return {"last_plan":plan, "playlist_links":links[-5:], "choices":response.structured_payload.get("choices", [])[:5],
+        last_song = previous.get("last_song_plan") or (previous.get("last_plan") if (previous.get("last_plan") or {}).get("operation") == "play_song" else None)
+        if plan.get("operation") == "play_song" and response.status == "answered":
+            last_song = plan
+        return {"last_plan":plan, "last_song_plan":last_song, "playlist_links":links[-5:], "choices":response.structured_payload.get("choices", [])[:5],
                 "song_index":response.structured_payload.get("song_index"), "at":time.time()}
 
     @staticmethod
@@ -162,7 +183,7 @@ class MusicAgent:
 
     @staticmethod
     def _fast_plan(query: str) -> MusicPlan | None:
-        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?", "", query, flags=re.I)
+        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", query, flags=re.I)
         provider = "spotify"
         suffix = re.search(r"\s+(?:on|using|in|through)\s+(spotify|apple music|youtube music)$", text, re.I)
         explicit_provider = suffix is not None
@@ -180,7 +201,7 @@ class MusicAgent:
             return None
         if text.casefold() == "play":
             return MusicPlan(operation="resume", provider=provider)
-        if re.fullmatch(r"what(?:'s| is)\s+(?:currently\s+)?playing", text, re.I):
+        if re.fullmatch(r"what(?:'s| is|\s+(?:song|track)\s+is)\s+(?:currently\s+)?playing", text, re.I):
             return MusicPlan(operation="current", provider=provider)
         volume = re.fullmatch(r"set\s+(?:the\s+)?volume\s+(?:to\s+)?(\d{1,3})\s*(?:%|percent)?", text, re.I)
         if volume:
@@ -206,7 +227,7 @@ class MusicAgent:
             if position is None:
                 position = int(re.match(r"\d+", label)[0])
         shuffle = True if re.search(r"\b(?:shuffle|something|soemthing|random)\b", text, re.I) else False if position else None
-        liked = re.search(r"\b(?:liked\s+songs?(?:\s+playlist)?|liked\s+playlist)\s*$", text, re.I)
+        liked = re.search(r"\b(?:liked\s+songs?(?:\s+playlist)?|liked\s+playlist)(?:\s+(?:on\s+shuffle|in\s+shuffle\s+order))?\s*$", text, re.I)
         if liked:
             return MusicPlan(operation="play_liked", provider=provider, shuffle=shuffle if shuffle is not None else True, position=position)
         if re.fullmatch(r"(?:(?:play|shuffle|put on)\s+)?(?:(?:something|soemthing|a\s+(?:random\s+)?song)\s+from\s+)?(?:my\s+)?liked\s+songs", text, re.I):
@@ -256,7 +277,16 @@ class MusicAgent:
             artist = self._artist_correction(clean) or (clean if self._artist_choice(clean, context) else None)
             last_plan = context.get("last_plan") or {}
             source_choice = self._source_choice(clean, context) if last_plan.get("operation") in {"play_playlist", "play_podcast"} else None
-            if source_choice:
+            fresh_plan = self._fast_plan(clean)
+            original = self._original_version_request(clean)
+            if fresh_plan is not None and fresh_plan.operation == "play_liked":
+                plan = fresh_plan
+            elif original and (last_plan.get("operation") == "play_song" or context.get("last_song_plan")):
+                song = context.get("last_song_plan") or last_plan
+                plan = MusicPlan.model_validate({**song, "artist":"", "version":"original"})
+            elif original:
+                return SpecialistResponse(agent=self.name, status="needs_fetch", summary="Which song do you mean? Send its title or artist so I can find the original version.")
+            elif source_choice:
                 plan = MusicPlan.model_validate({**last_plan, "query":source_choice["title"], "source_uri":source_choice["uri"]})
             elif last_plan.get("operation") == "play_playlist" and re.fullmatch(r"(?:https://open\.spotify\.com/playlist/|spotify:playlist:)[A-Za-z0-9]+(?:\?\S*)?", clean):
                 playlist_id = re.search(r"(?:playlist/|playlist:)([A-Za-z0-9]+)", clean)[1]
@@ -316,6 +346,8 @@ class MusicAgent:
                                       structured_payload={"music_plan":plan.model_dump(), "choices":exc.choices, "song_index":exc.song_index})
         except Exception as exc:
             message = str(exc) if isinstance(exc, ValueError) else "MusicAgent could not complete that request."
+            if "no available spotify device" in message.casefold():
+                message = "Spotify has no active playback device. Open Spotify or activate Vellum's player, then try again."
             return SpecialistResponse(agent=self.name, status="error", summary=message[:300], activity_events=events)
 
     def execute_action_request(self, action_request: dict) -> SpecialistResponse:
