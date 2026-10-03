@@ -85,9 +85,11 @@ def _profile(
     skills: list[str],
     cache: CachePolicy | None = None,
     cache_first: bool = True,
+    version: int = 2,
 ) -> AgentProfile:
     return AgentProfile(
         id=profile_id,
+        version=version,
         description=description,
         instructions=InstructionPolicy(inline=instructions),
         tools=ToolPolicy(allow=tools),
@@ -169,6 +171,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "BooksAgent": AgentProfile(
             id="BooksAgent",
+            version=3,
             description=(
                 "Questions about the user's installed books: what an author says, where an idea or quote appears, "
                 "and explanations grounded in chapters and passages."
@@ -220,6 +223,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             ],
             skills=["skill-youtube-transcript-memory-v1"],
             cache_first=False,
+            version=3,
         ),
         "DiscordAgent": AgentProfile(
             id="DiscordAgent",

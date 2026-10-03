@@ -87,12 +87,13 @@ class RoutedChatModel(BaseChatModel):
         invoke_kwargs.update(kwargs)
         if stop is not None:
             invoke_kwargs["stop"] = stop
+        max_tokens = invoke_kwargs.pop("max_tokens", self.max_tokens)
         message = await self.engine.ainvoke(
             messages=messages,
             primary_model=self.primary_model_resolver(),
             tools=self.bound_tools,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             reasoning_mode=self.reasoning_mode,
             **invoke_kwargs,
         )

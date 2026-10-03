@@ -59,6 +59,8 @@ class YoutubeAgent:
         r"\bwhat(?:'s|\s+is)\s+new\s+in\s+(?:my|our)\s+youtube\s+subscriptions?\b",
     )
     _INTELLIGENCE_PATTERNS = (
+        r"\b(?:my|our)\s+(?:youtube|yt)\s+(?:data|activity|profile)\b",
+        r"\bwhat\s+(?:have\s+)?(?:you|u|vellum)\s+(?:learned|learnt|know)\b.*\b(?:my|our)\s+(?:youtube|yt)\b",
         r"\b(?:my|our)\s+(?:youtube\s+)?(?:interests?|taste|habits|patterns)\b",
         r"\binterest\s+in\s+.+\s+(?:changed|change|declining|falling|waning|rising)\b",
         r"\bwhich\s+(?:youtube\s+)?channels?\s+.+\b(?:losing|gaining)\s+interest\b",
@@ -93,6 +95,8 @@ class YoutubeAgent:
         lowered = query.lower()
         if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
             return self._answer_takeout_library(lowered)
+        if self._is_account_query(lowered):
+            return self._answer_account()
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
         if self._is_liked_query(lowered):
@@ -420,7 +424,7 @@ class YoutubeAgent:
         return SpecialistResponse(
             agent=self.name,
             status="answered",
-            summary="\n".join(lines),
+            summary="From your imported YouTube snapshot:\n" + "\n".join(lines),
             analysis="Used youtube.personal_context from the local Knowledge Core.",
             confidence=confidence,
         )

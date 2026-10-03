@@ -31,6 +31,10 @@ class AgentReachCommandError(AgentReachError):
     pass
 
 
+class AgentReachUnconfirmedWriteError(AgentReachCommandError):
+    """A write may have happened; the caller must not silently replay it."""
+
+
 class AgentReachTimeoutError(AgentReachError):
     pass
 
@@ -318,10 +322,10 @@ class AgentReachXProvider:
         return self._normalize_posts(output)
 
     def post_tweet(self, text: str) -> dict[str, Any]:
-        return self._normalize_object(self._exec("post", text, "--json"))
+        return self._verify_created_post(self._exec("post", text, "--json"))
 
     def reply(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        return self._normalize_object(
+        return self._verify_created_post(
             self._exec("reply", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
         )
 
@@ -344,9 +348,23 @@ class AgentReachXProvider:
         return self._tweet_mutation("unbookmark", tweet_id_or_url)
 
     def quote(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        return self._normalize_object(
+        return self._verify_created_post(
             self._exec("quote", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
         )
+
+    def _verify_created_post(self, output: Any) -> dict[str, Any]:
+        receipt = self._normalize_object(output)
+        post_id = str(receipt.get("id") or receipt.get("tweet_id") or "").strip()
+        if not post_id.isascii() or not post_id.isdigit():
+            raise AgentReachUnconfirmedWriteError("X did not return a valid post receipt. Publication is unconfirmed; check your profile before retrying.")
+        url = f"https://x.com/i/status/{post_id}"
+        try:
+            post = self.read_tweet(post_id)
+        except AgentReachError as exc:
+            raise AgentReachUnconfirmedWriteError(f"X returned a post receipt, but read-back verification failed. Check {url} before retrying; the post may already exist.") from exc
+        if str(post.get("id") or "") != post_id or not str(post.get("text") or "").strip():
+            raise AgentReachUnconfirmedWriteError(f"X did not return the created post when checked. Publication is unconfirmed; check {url} before retrying.")
+        return {**post, "id":post_id, "url":url, "verification":"read_back"}
 
     def follow(self, handle: str) -> dict[str, Any]:
         return self._normalize_object(self._exec("follow", handle.strip().lstrip("@"), "--json"))
@@ -404,7 +422,12 @@ class AgentReachXProvider:
             except (ValueError, TypeError):
                 pass
             raise AgentReachCommandError(self._sanitize_error(detail))
-        return self._parse_output(completed.stdout)
+        output = self._parse_output(completed.stdout)
+        if isinstance(output, dict) and (output.get("ok") is False or output.get("success") is False):
+            error = output.get("error") or {}
+            message = error.get("message") if isinstance(error, dict) else str(error)
+            raise AgentReachCommandError(self._sanitize_error(message or "X did not confirm this command."))
+        return output
 
     def _twitter_status(self, *, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
         args = [self.twitter_cli_bin, "status", "--yaml"]

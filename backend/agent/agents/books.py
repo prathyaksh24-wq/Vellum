@@ -35,6 +35,7 @@ class BooksAgent:
         return bool(
             self._inventory_kind(lowered)
             or re.search(r"\b(?:about|from|in)\s+the\s+book\s+", lowered)
+            or re.search(r"\b(?:about|from|in)\s+(?:the\s+)?[\w][\w '\-]{1,100}\s+book\b", lowered)
             or
             re.search(r"\b(?:my|installed|uploaded|imported)\s+(?:book|books|library)\b", lowered)
             or re.search(r"\b(?:book|books)\s+(?:in|from)\s+my\s+library\b", lowered)

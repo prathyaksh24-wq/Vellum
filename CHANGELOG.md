@@ -7,6 +7,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Fixed
+- Music follow-ups retain the requested song across current-track questions, distinguish original-version selection from a new title, and prioritize fresh Liked Songs requests over failed searches. Spotify title matching accepts featured-artist credits while preserving version qualifiers.
+- Personal YouTube data questions use local Takeout evidence instead of public how-to search results; broad questions no longer accidentally filter out the imported history.
+- X publication requires a valid receipt and Agent Reach read-back before reporting success. Unconfirmed writes retain a check-before-retry warning and are never automatically reposted.
+- Local book and music synthesis request JSON output with bounded model-call deadlines. Book synthesis uses exact short source labels mapped back to canonical evidence, with strict claim validation and refreshed Book/YouTube cache versions.
 - Backend CI contracts cover empty or populated Ollama discovery, specialist answer passthrough and stream alignment, the podcast tool catalog and Markdown renderer; book UI paths and mocked Windows scan timeouts run independently of runner platform.
 - Editable backend installs include the pinned Agent Reach and X CLI dependencies, matching the launcher requirements and allowing clean CI runners to import the X provider.
 - Reconciled settings, Adaptive UI and action-parity changes with local model discovery, Calendar and Spotify workflows; connection upgrades retain saved public client IDs and plugin contributions expose both connection and playback actions.

@@ -172,6 +172,16 @@ class OllamaAdapter:
 
     provider = "ollama"
 
+    @staticmethod
+    def invocation_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+        options = dict(kwargs)
+        response_format = options.pop("response_format", None)
+        if response_format is not None:
+            if response_format != {"type":"json_object"}:
+                raise ValueError("Unsupported local response format")
+            options["format"] = "json"
+        return options
+
     def __init__(self, *, base_url: str, request_timeout: float = 300.0, context_length: int = 16384, batch_size: int = 1024) -> None:
         self.base_url = base_url.rstrip("/")
         self.request_timeout = request_timeout

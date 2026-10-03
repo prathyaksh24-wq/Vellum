@@ -17,7 +17,11 @@ def normalized_name(value: str) -> str:
 
 
 def title_key(value: str) -> str:
-    return re.sub(r"^(?:the|a)\s+", "", normalized_name(value))
+    title = normalized_name(value)
+    # Featured-artist credits are catalog metadata, not a different song title.
+    # Preserve remix, live, cover and other version qualifiers.
+    title = re.sub(r"\s*[\(\[]\s*(?:feat\.?|ft\.?|featuring)\s+[^\)\]]+[\)\]]\s*$", "", title)
+    return re.sub(r"^(?:the|a)\s+", "", title)
 
 
 def playlist_key(value: str) -> str:
@@ -54,7 +58,8 @@ class SpotifyCapabilityService:
         return json.loads(record.handler(payload, privacy_gate=spotify_catalog_query_gate))
 
     def resolve_song(self, plan: MusicPlan, invoke) -> dict:
-        query = plan.query + (" " + plan.artist if plan.artist else "")
+        title = plan.query.replace('"', ' ').replace('\\', ' ').strip()
+        query = 'track:"' + title + '"' + (" " + plan.artist if plan.artist else "")
         found = invoke("spotify_search", {"query":query, "types":["track"], "limit":10})
         tracks = [track for track in found.get("tracks", {}).get("items", []) if track.get("uri") and track.get("is_playable") is not False]
         if not tracks:
@@ -71,7 +76,8 @@ class SpotifyCapabilityService:
         if plan.artist:
             def artist_matches(track):
                 requested = normalized_name(plan.artist)
-                return any(requested in normalized_name(a.get("name", "")) or
+                collaboration = normalized_name(", ".join(a.get("name", "") for a in track.get("artists", [])))
+                return requested == collaboration or any(requested in normalized_name(a.get("name", "")) or
                            SequenceMatcher(None, requested, normalized_name(a.get("name", ""))).ratio() >= .65
                            for a in track.get("artists", []))
             candidates = [t for t in candidates if artist_matches(t)]
@@ -80,8 +86,9 @@ class SpotifyCapabilityService:
         artists = {}
         for candidate in candidates:
             label = ", ".join(a.get("name", "") for a in candidate.get("artists", []))
-            artists.setdefault(normalized_name(label), {"title":candidate.get("name", ""), "artist":label})
-        if not plan.artist and matching and len(artists) > 1:
+            artists.setdefault(normalized_name(label), {"title":candidate.get("name", ""), "artist":label,
+                "artists":[a.get("name", "") for a in candidate.get("artists", [])]})
+        if not plan.artist and matching and (len(artists) > 1 or plan.version == "original"):
             choices = list(artists.values())[:5]
             raise MusicChoiceRequired("Which version did you mean? " + "; ".join(c["title"] + " by " + c["artist"] for c in choices) + ". Reply with the artist.", choices)
         return candidates[0]
@@ -253,7 +260,8 @@ class SpotifyCapabilityService:
         if plan.operation == "current":
             state = invoke("spotify_playback", {"action":"get_state"})
             track = state.get("item") or state.get("track") or {}
-            return "Currently playing " + track.get("name", "an unknown track") + "." if track else "Nothing is playing on Spotify."
+            artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
+            return "Currently playing " + track.get("name", "an unknown track") + (" by " + artists if artists else "") + "." if track else "Nothing is playing on Spotify."
         action = {"resume":"play"}.get(plan.operation, plan.operation)
         args = {"action":action}
         if plan.operation == "set_shuffle":

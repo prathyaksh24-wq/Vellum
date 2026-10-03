@@ -107,6 +107,20 @@ class RoutingEngine:
     async def ainvoke(
         self,
         *,
+        request_timeout: float | None = None,
+        **kwargs: Any,
+    ):
+        if request_timeout is None:
+            return await self._ainvoke(**kwargs)
+        timeout = float(request_timeout)
+        if not 0 < timeout <= 300:
+            raise ValueError("Request timeout must be between zero and 300 seconds")
+        # One deadline covers credential waits, all retries and fallbacks.
+        return await asyncio.wait_for(self._ainvoke(**kwargs), timeout=timeout)
+
+    async def _ainvoke(
+        self,
+        *,
         messages: Sequence[Any],
         primary_model: str,
         primary_provider: str | None = None,
@@ -192,7 +206,8 @@ class RoutingEngine:
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
-                    result = await model.ainvoke(list(messages), **kwargs)
+                    options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
+                    result = await model.ainvoke(list(messages), **options)
                     has_content = bool(getattr(result, "content", None))
                     has_tool_calls = bool(getattr(result, "tool_calls", None))
                     if not has_content and not has_tool_calls:
@@ -217,6 +232,9 @@ class RoutingEngine:
                             )
                         )
                         return result
+                except asyncio.CancelledError:
+                    await self.pool.release(lease)
+                    raise
                 except Exception as exc:
                     failure = classify_provider_exception(exc)
 

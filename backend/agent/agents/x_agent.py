@@ -10,6 +10,7 @@ from typing import Any
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.tools.capabilities.x_service import XCapabilityService
+from agent.tools.capabilities.agent_reach_x_provider import AgentReachUnconfirmedWriteError
 from agent.tools.registry import ToolRegistry
 
 
@@ -684,16 +685,20 @@ class XAgent:
         try:
             result = self._publish_post({"text": text, "confirm": True})
         except Exception as exc:
-            return self._error("XAgent could not publish to X right now.", exc)
+            return self._error(str(exc) if isinstance(exc, AgentReachUnconfirmedWriteError) else "XAgent could not publish to X right now.", exc)
         tweet = result.get("tweet", {})
         tweet_id = str(tweet.get("id") or "").strip()
-        summary = f"Posted to X: {tweet_id}" if tweet_id else "Posted to X."
+        if not tweet_id:
+            return self._error("X did not confirm publication. Check your profile before retrying.", ValueError("Missing post receipt"))
+        url = str(tweet.get("url") or f"https://x.com/i/status/{tweet_id}")
+        summary = f"Posted to X: {url}"
         return SpecialistResponse(
             agent=self.name,
             status="answered",
             summary=summary,
             analysis="Used x.publish_post.",
             confidence=0.8,
+            sources=self._sources_for_posts([tweet]),
             activity_events=[
                 {
                     "type": "tool_call_started",
@@ -740,7 +745,9 @@ class XAgent:
             return self._error("XAgent could not publish the image post to X right now.", exc)
         tweet = result.get("tweet", {})
         tweet_id = str(tweet.get("id") or "").strip()
-        summary = f"Posted image to X: {tweet_id}" if tweet_id else "Posted image to X."
+        if not tweet_id:
+            return self._error("X did not confirm image publication. Check your profile before retrying.", ValueError("Missing post receipt"))
+        summary = f"Posted image to X: https://x.com/i/status/{tweet_id}"
         return SpecialistResponse(
             agent=self.name, status="answered", summary=summary,
             analysis="Used x.publish_post_with_media.", confidence=0.8,
@@ -814,7 +821,7 @@ class XAgent:
         try:
             result = self._x_write_action(action, {**normalized_payload, "confirm": True})
         except Exception as exc:
-            return self._error(f"XAgent could not complete {action}.", exc)
+            return self._error(str(exc) if isinstance(exc, AgentReachUnconfirmedWriteError) else f"XAgent could not complete {action}.", exc)
         verb = action.split(".")[-1]
         return SpecialistResponse(
             agent=self.name,
@@ -994,7 +1001,7 @@ class XAgent:
         return SpecialistResponse(
             agent=self.name,
             status="error",
-            summary=summary + (" " + detail[:240] if detail else ""),
+            summary=summary + (" " + detail[:240] if detail and not isinstance(exc, AgentReachUnconfirmedWriteError) else ""),
             analysis=detail,
             confidence=0.2,
         )

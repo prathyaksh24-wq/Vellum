@@ -122,14 +122,16 @@ def test_agent_reach_provider_write_methods_use_agent_reach_commands():
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"id":"tweet-1","text":"hello"}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"id":"123","text":"hello"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
 
     result = provider.post_tweet("hello")
 
     assert calls[0] == ["twitter", "post", "hello", "--json"]
-    assert result["id"] == "tweet-1"
+    assert result["id"] == "123"
+    assert result["verification"] == "read_back"
+    assert calls[1] == ["twitter", "tweet", "123", "--json"]
 
 
 def test_agent_reach_provider_read_private_and_timeline_commands():
@@ -190,7 +192,7 @@ def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_fl
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"123"}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"123","text":"reply text"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
 
@@ -200,9 +202,10 @@ def test_agent_reach_provider_write_action_commands_use_confirmation_safe_cli_fl
     provider.delete("123")
 
     assert calls[0] == ["twitter", "reply", "123", "reply text", "--json"]
-    assert calls[1] == ["twitter", "like", "123", "--json"]
-    assert calls[2] == ["twitter", "retweet", "123", "--json"]
-    assert calls[3] == ["twitter", "delete", "123", "--yes", "--json"]
+    assert calls[1] == ["twitter", "tweet", "123", "--json"]
+    assert calls[2] == ["twitter", "like", "123", "--json"]
+    assert calls[3] == ["twitter", "retweet", "123", "--json"]
+    assert calls[4] == ["twitter", "delete", "123", "--yes", "--json"]
 
 
 def test_agent_reach_provider_normalizes_status_urls_for_write_commands():
@@ -311,7 +314,7 @@ def test_agent_reach_provider_exposes_supported_confirmation_safe_commands():
 
     def fake_runner(args, **_kwargs):
         calls.append(args)
-        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true}', stderr="")
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true,"id":"456","text":"comment"}', stderr="")
 
     provider = AgentReachXProvider(runner=fake_runner)
     provider.bookmark("123")
@@ -328,6 +331,7 @@ def test_agent_reach_provider_exposes_supported_confirmation_safe_commands():
         ["twitter", "unlike", "123", "--json"],
         ["twitter", "unretweet", "123", "--json"],
         ["twitter", "quote", "123", "comment", "--json"],
+        ["twitter", "tweet", "456", "--json"],
         ["twitter", "follow", "openai", "--json"],
         ["twitter", "unfollow", "openai", "--json"],
     ]

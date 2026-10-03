@@ -32,6 +32,7 @@ class MusicPlan(BaseModel):
     query: str = Field(default="", max_length=500)
     artist: str = Field(default="", max_length=200)
     songs: list[MusicSongRequest] = Field(default_factory=list, max_length=50)
+    version: Literal["unspecified", "original"] = "unspecified"
     description: str = Field(default="", max_length=300)
     shuffle: bool | None = None
     position: int | None = Field(default=None, ge=1, le=100000)

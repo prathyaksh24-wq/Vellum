@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -23,8 +24,11 @@ answer_claim_ids, claims, judgment, user_learning_events, wisdom_proposals, unce
 and status. status
 must be complete, partial, or abstained. Use abstained with no claims when the supplied
 passages cannot support the question. Every claim must follow the BooksAgent claim contract and
-reference only supplied evidence_id values. A user_learning_event is optional, proposal-only,
-and must remain separate from the answer. Return at most two only when the user's own words
+reference only supplied evidence_id values.
+Evidence IDs are short passage-N labels. Copy them exactly from evidence_id; section_id
+is a locator, never an evidence ID. Never use the example placeholder as an evidence ID.
+A user_learning_event is optional, proposal-only, and must remain separate from the answer.
+Return at most two only when the user's own words
 support a useful Book-related observation; qualify inferred observations, reference supplied
 evidence_id values, set lifecycle to proposed, and never return sensitive learning. A question,
 Book import, source inspection, or page interaction does not prove agreement, endorsement,
@@ -45,8 +49,9 @@ valid_to, expires_at. Never include proactive as a permitted use. Use an empty a
 bounded connection is justified. Do not return evidence anchors.
 Image OCR transcriptions are identified in supplied evidence. They are inferred text,
 not verified quotations; preserve that uncertainty and do not silently correct names or dates.
-Keep the answer concise and match the requested number of points. Never invent chapters,
-printed page numbers, quotations, or evidence IDs. Give the source section alongside each
+Keep the answer concise and match the requested number of points.
+Keep passage-N labels inside structured evidence_ids only, never in the user-facing answer.
+Never invent chapters, printed page numbers, quotations, or evidence IDs. Give the source section alongside each
 point when useful. Return at most three claims, using this exact claim shape:
 {"id":"claim-1","text":"A supported statement","origin":"book","form":"summary",
 "speaker":"author","epistemic_status":"asserted","evidence_ids":["SUPPLIED_EVIDENCE_ID"],
@@ -79,9 +84,13 @@ class RoutedBooksSynthesizer:
         query: str,
         evidence: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        evidence_ids = {
+            f"passage-{index}": str(item.get("evidence_id") or "")
+            for index, item in enumerate(evidence, 1)
+        }
         evidence_packet = [
             {
-                "evidence_id": str(item.get("evidence_id") or ""),
+                "evidence_id": f"passage-{index}",
                 "section_id": str(item.get("section_id") or ""),
                 "section_title": str(item.get("section_title") or ""),
                 "score": float(item.get("score") or 0.0),
@@ -92,7 +101,7 @@ class RoutedBooksSynthesizer:
                     if isinstance(citation, dict)
                 ),
             }
-            for item in evidence
+            for index, item in enumerate(evidence, 1)
         ]
         # Pin the verified destination for this call. A concurrent model-picker
         # change cannot send evidence retrieved as local to an external model.
@@ -115,7 +124,10 @@ class RoutedBooksSynthesizer:
                         + "\n</UNTRUSTED_BOOK_EVIDENCE>"
                     )
                 ),
-            ]
+            ],
+            response_format={"type": "json_object"},
+            request_timeout=60.0,
+            max_tokens=2000,
         )
         content = getattr(output, "content", output)
         if isinstance(content, list):
@@ -126,6 +138,28 @@ class RoutedBooksSynthesizer:
         parsed = json.loads(_json_object_text(str(content or "")))
         if not isinstance(parsed, dict):
             raise ValueError("Books synthesis must return a JSON object")
+        if isinstance(parsed.get("answer"), str):
+            def remove_internal_references(match):
+                labels = re.findall(r"passage-\d+", match[0])
+                return "" if all(label in evidence_ids for label in labels) else match[0]
+            parsed["answer"] = re.sub(
+                r"\((?:passage-\d+)(?:,\s*passage-\d+)*\)",
+                remove_internal_references,
+                parsed["answer"],
+            )
+            parsed["answer"] = re.sub(r" +([.,;!?])", r"\1", parsed["answer"])
+        # Resolve exact, invocation-local labels back to canonical provenance.
+        # Unknown labels remain unknown and fail the normal claim validator.
+        for collection in ("claims", "user_learning_events", "wisdom_proposals"):
+            for item in parsed.get(collection) or []:
+                if not isinstance(item, dict):
+                    continue
+                for field in ("evidence_ids", "conflicting_evidence_ids"):
+                    if isinstance(item.get(field), list):
+                        item[field] = [
+                            evidence_ids.get(value, value) if isinstance(value, str) else value
+                            for value in item[field]
+                        ]
         # Harmless JSON shape differences belong in the model adapter. Claims,
         # evidence IDs, authority, and provenance still pass strict validation.
         if isinstance(parsed.get("uncertainty"), str):
