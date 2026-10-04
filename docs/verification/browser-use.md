@@ -30,7 +30,32 @@ was reproduced with the unmodified baseline App Action runtime: a same-second
 description edit can keep the automation confirmation binding unchanged. The
 final 204-test App Action run includes this test and passed. Browser code does
 not modify that automation binding; the earlier baseline behavior is recorded
-separately from the passing final checks. The entire repository suite was not run.
+separately from the passing initial checks. The initial implementation did not
+run the entire repository suite locally.
+
+## CI follow-up
+
+The first Linux CI run reported 20 failures: three prompt contracts and 17
+legacy MCP tests. Worker shutdown retained the dedicated transport selection,
+so later calls in the same process could not start a fresh legacy session.
+The new regression failed before the fix and passed afterward. Session close
+still keeps dedicated ownership; worker shutdown now releases that selection.
+
+Prompt tests now enforce BrowserAgent delegation and the compact manifest's
+actual fields instead of expecting direct main-agent browser access or banning
+the word `tools` from descriptions. The system prompt stays below its existing
+7,500-character budget. CodeQL's incomplete-URL-substring alert was on a test
+assertion; checking the complete delegated goal/context strengthens that test
+and removes the ambiguous substring operation.
+
+- Prompt, BrowserAgent and MCP suites after the fix: **94 passed**.
+- Installed Brave followed by legacy MCP tests in one process: **51 passed**.
+- A Windows full-suite reproduction before the fix also encountered book/document
+  storage, backup-path and coding-fixture failures absent from the original
+  Linux CI run; that local run was not a passing full-suite check.
+- CI supports manual dispatch of the existing checks against a selected branch
+  when an update does not automatically produce a run. Latest Linux CI and
+  CodeQL status are recorded on the draft PR.
 
 Human/live-site gates remain for real sign-in, CAPTCHA, sites that detect
 headless automation, DRM and native webview behavior. Chrome/Edge executable
