@@ -11,6 +11,16 @@ const backend = 'http://127.0.0.1:8020';
 const browser = await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
 const context = await browser.newContext({viewport:{width:1536,height:1024},ignoreHTTPSErrors:true});
 const page = await context.newPage(), errors = [], actions = [];
+let releaseInitialStatus;
+const initialStatusGate = new Promise(resolve => { releaseInitialStatus = resolve; });
+let initialStatusHeld = false;
+await page.route('**/api/browser/status', async route => {
+  if (!initialStatusHeld) {
+    initialStatusHeld = true;
+    await initialStatusGate;
+  }
+  await route.continue();
+});
 page.on('pageerror',error=>errors.push(error.message));
 page.on('request',request=> {
   if (request.url().endsWith('/api/app-actions/dispatch')) {
@@ -28,6 +38,10 @@ try {
   await page.goto('http://127.0.0.1:5180/design-uploads/Vellum%20Default%20Re-designed.html?conversation_id=browser-fixture&backend='+encodeURIComponent(backend));
   const sidebar=page.locator('.sidebar');
   await sidebar.getByRole('button',{name:'Browser',exact:true}).waitFor({timeout:30000});
+  // One click must launch even while the initial readiness response is pending.
+  await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
+  await wait(async () => (await status()).running);
+  releaseInitialStatus();
   assert.equal(await sidebar.getByRole('button',{name:'Scheduled',exact:true}).count(),0);
   await sidebar.getByRole('button',{name:'More',exact:true}).click();
   await sidebar.getByRole('button',{name:'Scheduled',exact:true}).waitFor();
@@ -36,6 +50,22 @@ try {
   await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
   const panel=page.getByRole('complementary',{name:'Vellum browser'});
   await panel.waitFor();
+  await panel.getByRole('button',{name:'Close session',exact:true}).click();
+  await wait(async()=> !(await status()).running);
+  const rejectLaunch = route => {
+    const body = route.request().postDataJSON();
+    if (body.request?.action_id === 'browser.session.control' && body.request.arguments.operation === 'open') {
+      return route.fulfill({json:{status:'failed',message:'Browser launch rejected for regression.'}});
+    }
+    return route.continue();
+  };
+  await page.route('**/api/app-actions/dispatch', rejectLaunch);
+  await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
+  await page.getByText('Browser launch rejected for regression.',{exact:true}).waitFor();
+  assert.deepEqual(errors,[]);
+  await page.unroute('**/api/app-actions/dispatch', rejectLaunch);
+  await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
+  await wait(async()=> (await status()).running);
   const address=panel.getByRole('textbox',{name:'Browser address'});
   await address.fill(backend+'/fixture/page'); await address.press('Enter');
   await panel.getByAltText('Live view of the dedicated browser tab').waitFor();
@@ -92,10 +122,10 @@ try {
   await panel.getByRole('button',{name:'Close session',exact:true}).click();
   await wait(async()=> !(await status()).running);
   assert.deepEqual(errors,[]);
-  const report={passed:true,checks:['real separate Brave launch','More disclosure','scaled manual click and keyboard input','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
+  const report={passed:true,checks:['sidebar launch before initial readiness response','visible rejected-launch message','real separate Brave launch','More disclosure','scaled manual click and keyboard input','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
   writeFileSync(resolve(output,'browser-smoke.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 } catch (error) {
   console.log(JSON.stringify({actions,state:await status(),alerts:await page.getByRole('alert').allTextContents()}));
   throw error;
-} finally { await browser.close(); }
+} finally { releaseInitialStatus(); await browser.close(); }

@@ -61,3 +61,20 @@ Human/live-site gates remain for real sign-in, CAPTCHA, sites that detect
 headless automation, DRM and native webview behavior. Chrome/Edge executable
 overrides are configurable but only installed Brave was exercised here.
 Full computer control is deferred.
+
+## Sidebar startup regression
+
+The Browser entry could appear before the initial browser status response.
+Its handler used the initial `available: false` state, so the first click
+showed a closed panel without launching. It now reads fresh status through the
+existing adapter before deciding whether to open the session.
+
+The real Brave UI smoke holds the first status response while clicking Browser.
+The regression failed on the original handler with no open action dispatched.
+Follow-up validation checks one-click launch and the existing controls, downloads
+and desktop/mobile layout against disposable fixtures, separately from local
+server activation. Latest results are recorded on the follow-up PR.
+
+The sidebar failure path also called the toast state as a function. A rejected
+launch now uses the existing `pushToast` helper. The smoke rejects an open receipt
+and checks that its message appears without a page error, then retries normally.

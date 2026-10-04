@@ -10478,10 +10478,11 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectRename={renameProject} onOpenProject={openProject}
                 browserAvailable={browserFeature} onBrowser={async () => {
                   try {
-                    if (!browserState.running && browserState.available) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
+                    const status = await refreshBrowser();
+                    if (!status.running && status.available) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
                     await refreshBrowser();
                     dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
-                  } catch (error) { toast(error.message); }
+                  } catch (error) { pushToast(error.message); }
                 }}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
