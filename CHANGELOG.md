@@ -6,7 +6,18 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Music requests activate Vellum's existing Spotify player before playback; an explicit stop releases it after Spotify confirms it is paused. Pause leaves the player ready to resume, and connection or audio-policy failures remain visible.
+- Relative seeking, volume changes, repeat and shuffle use direct typed MusicAgent plans with bounded Spotify calls and state read-back before reporting success. Current or named songs can be checked, added or removed from Liked Songs and playlists through exact-target confirmations.
+- Curated playlist creation handles Spotify's public-playlist contents restriction by previewing real catalog songs with an explicit source/ranking limitation; requested names and song counts are preserved.
+- Agent Reach publication has a shared write/read-back deadline including command-lock waits. Uncertain writes are never repeated automatically; explicit X targets and confirmed-action follow-ups stay with XAgent.
+- Credential registration order remains stable when creation timestamps tie, avoiding random key selection in provider pools on Windows.
+
+- Independent specialist tasks run concurrently through the shared delegation runtime and appear in chat as each finishes. Dependent tasks stay ordered; partial failures and operation-bound confirmations retain their own results and targets.
+- Personal YouTube summaries use bounded local synthesis with readable evidence-based fallback. Creator watch queries filter the full imported history, preserve channel renames, and support follow-ups without substituting public search results.
+- X posting intent recognizes omitted pronouns, shorthand, and corrections; self-introduction drafts identify Vellum and stay short. Music deduplicates song suggestions, accepts a clear single-choice yes, seeks within current audio, reads live podcast/song state, and verifies playlist names and songs before reporting success.
+
 ### Fixed
+- Automation approvals compare the reviewed record's content, so changes made within the same timestamp cannot reuse an old confirmation.
 - Music follow-ups retain the requested song across current-track questions, distinguish original-version selection from a new title, and prioritize fresh Liked Songs requests over failed searches. Spotify title matching accepts featured-artist credits while preserving version qualifiers.
 - Personal YouTube data questions use local Takeout evidence instead of public how-to search results; broad questions no longer accidentally filter out the imported history.
 - X publication requires a valid receipt and Agent Reach read-back before reporting success. Unconfirmed writes retain a check-before-retry warning and are never automatically reposted.

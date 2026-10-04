@@ -111,6 +111,8 @@
   async function stream(payload, handlers) {
     var controller = new AbortController();
     if (handlers && handlers.controller) handlers.controller(controller);
+    if (handlers && handlers.playbackRequest) await handlers.playbackRequest.ready;
+    if (controller.signal.aborted) throw new DOMException('Stopped.', 'AbortError');
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
     if (!response.ok || !response.body) throw new Error("Backend stream failed: HTTP " + response.status);
     var reader = response.body.getReader();
@@ -284,6 +286,7 @@
             upsertStep({ id: "answering", status: "completed" });
             completed = true;
             emitTrace("done");
+            if (handlers.playbackRequest) handlers.playbackRequest.complete(finalResponse).catch(() => {});
             if (handlers.done) handlers.done({ text: text, sources: sources, tools: tools, activity: activity, trace: trace, thread_id: finalResponse.thread_id });
           } else if (ev === "response.output_item.done") {
             var doneItem = data.item || {};

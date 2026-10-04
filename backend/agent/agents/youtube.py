@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
@@ -47,6 +48,7 @@ class YoutubeAgent:
         r"\bvideos?\s+(?:i|we)\s+(?:have\s+)?liked\s+on\s+youtube\b",
     )
     _TAKEOUT_PATTERNS = (
+        r"\b(?:videos?|what|which)\b.*\b(?:i|we)\s+(?:have\s+)?(?:watched|seen)\b",
         r"\bwhat\s+(?:did|have)\s+(?:i|we)\s+(?:watch|watched|search|searched)(?:\s+(?:recently|lately|last))?\b",
         r"\b(?:my|our)\s+(?:recent\s+)?(?:watch|search|viewing)\s+history\b",
         r"\byoutube\s+takeout\b",
@@ -72,9 +74,11 @@ class YoutubeAgent:
         vault_root: Path,
         youtube_service: YoutubeCapabilityService | None = None,
         tool_registry: ToolRegistry | None = None,
+        synthesizer=None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
+        self.synthesizer = synthesizer
         self.youtube_service = youtube_service or (
             None if tool_registry is not None else YoutubeCapabilityService(vault_root=self.vault_root)
         )
@@ -90,6 +94,23 @@ class YoutubeAgent:
             or any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
             or any(re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS)
         )
+
+    def answer_with_context(self, query: str, context: dict) -> SpecialistResponse:
+        previous = str(context.get("query") or "")
+        if time.time() - float(context.get("at") or 0) <= 1800:
+            if re.fullmatch(r"(?:please\s+)?(?:give me a summary|summari[sz]e(?:\s+(?:it|that|my data))?|explain (?:it|that))\??", query.strip(), re.I) and self._is_intelligence_query(previous.lower()):
+                query = previous
+            elif re.search(r"\b(?:watched|seen)\b.*\b(?:him|her|them)\b", query, re.I):
+                creator = re.search(r"\b(?:from|by)\s+(.+?)(?:[?.!]|$)", previous, re.I)
+                if creator:
+                    query = "what videos have I watched from " + creator[1]
+        response = self.answer(query)
+        return response.model_copy(update={"structured_payload":{**response.structured_payload,"youtube_query":query}})
+
+    @staticmethod
+    def thread_context(response: SpecialistResponse, previous: dict) -> dict:
+        query = response.structured_payload.get("youtube_query")
+        return {"query":query, "at":time.time()} if query else previous
 
     def answer(self, query: str) -> SpecialistResponse:
         lowered = query.lower()
@@ -192,8 +213,10 @@ class YoutubeAgent:
             return self.tool_registry.invoke("youtube.liked_videos", {"max_results": 20}, agent_name=self.name)
         return self.youtube_service.liked_videos({"max_results": 20})
 
-    def _takeout_history(self, kind: str) -> dict:
+    def _takeout_history(self, kind: str, channel: str = "") -> dict:
         payload = {"kind": kind, "limit": 20}
+        if channel:
+            payload["channel"] = channel
         if self.tool_registry is not None:
             return self.tool_registry.invoke("youtube.takeout_history", payload, agent_name=self.name)
         return self.youtube_service.takeout_history(payload)
@@ -304,8 +327,10 @@ class YoutubeAgent:
 
     def _answer_takeout_history(self, lowered_query: str) -> SpecialistResponse:
         kind = "search" if "search" in lowered_query else "watch"
+        match = re.search(r"\b(?:from|by)\s+(.+?)(?:[?.!]|$)", lowered_query)
+        requested_channel = match[1].strip() if match else ""
         try:
-            result = self._takeout_history(kind)
+            result = self._takeout_history(kind, requested_channel)
         except Exception as exc:
             return self._official_error("YoutubeAgent could not read local YouTube Takeout history.", exc)
         if not result.get("available"):
@@ -323,11 +348,15 @@ class YoutubeAgent:
             title = str(item.get("query") or item.get("title") or item.get("video_id") or "Unknown item")
             channel = str(item.get("channel_title") or "")
             occurred_at = str(item.get("occurred_at") or "")
-            line = f"[{index}] {title}" + (f" by {channel}" if channel else "")
+            url = str(item.get("url") or item.get("video_url") or "")
+            if not url and item.get("video_id"):
+                url = f"https://www.youtube.com/watch?v={item['video_id']}"
+            line = "- " + (f"[{title}]({url})" if self._is_youtube_url(url) else title) + (f" — {channel}" if channel else "")
             if occurred_at:
-                line += f" ({occurred_at})"
+                line += f" (watched {occurred_at[:10]})"
             lines.append(line)
-        summary = f"Your Takeout contains {int(result.get('total') or 0):,} YouTube {label}. Most recent:\n" + "\n".join(lines)
+        total = int(result.get('total') or 0)
+        summary = (f"Your imported history contains {total:,} recorded {'watches from ' + requested_channel if requested_channel else label}. Here are the most recent:\n\n" + "\n".join(lines)) if lines else f"I found no recorded watches{' from ' + requested_channel if requested_channel else ''} in your imported history. This snapshot may not include newer activity."
         return SpecialistResponse(
             agent=self.name,
             status="answered",
@@ -394,21 +423,21 @@ class YoutubeAgent:
                 ideas.append(f"- Explore {item.get('label') or 'a repeated search topic'} — {int(item.get('evidence_count') or 0)} recorded searches.")
             return SpecialistResponse(agent=self.name, status="answered", summary="From your imported YouTube snapshot, here are three starting points:\n" + "\n".join(ideas) + "\n\nThese suggestions reflect your recorded viewing and search history.", analysis="Used local YouTube interest evidence for discovery directions; no live recommendation feed was queried.", confidence=0.8)
         lines = []
-        for item in channels[:10]:
-            lines.append(
-                f"{item.get('label') or 'Unknown channel'}: {item.get('trend')}, "
-                f"{item.get('lifecycle')}; {int(item.get('evidence_count') or 0)} watch events; "
-                f"confidence {float(item.get('confidence') or 0):.0%}; "
-                f"last observed {item.get('latest_observation_at') or 'unknown'}."
-            )
-        for item in themes:
-            if len(lines) >= 10:
-                break
-            lines.append(
-                f"Search theme \"{item.get('label') or 'Unknown query'}\": {item.get('trend')}; "
-                f"{int(item.get('evidence_count') or 0)} search events; "
-                f"confidence {float(item.get('confidence') or 0):.0%}."
-            )
+        frequent = sorted(channels, key=lambda c:int(c.get('evidence_count') or 0), reverse=True)[:5]
+        if frequent:
+            lines.append("Among the channels in this snapshot, you return most often to " + ", ".join(
+                f"{c.get('label') or 'an unnamed channel'} ({int(c.get('evidence_count') or 0):,} recorded watches)" for c in frequent) + ".")
+        rising = [str(c.get('label')) for c in channels if c.get('trend') == 'rising' and float(c.get('confidence') or 0) >= .5][:3]
+        falling = [str(c.get('label')) for c in channels if c.get('trend') == 'falling' and float(c.get('confidence') or 0) >= .5][:3]
+        if rising:
+            lines.append("Your recorded viewing has increased for " + ", ".join(rising) + ".")
+        if falling:
+            lines.append("You have watched less from " + ", ".join(falling) + " recently compared with the earlier part of the import.")
+        if themes:
+            lines.append("Repeated searches include " + ", ".join(str(t.get('label') or '') for t in themes[:3]) + ".")
+        if lines:
+            dates = [str(c.get('latest_observation_at') or '')[:10] for c in channels if c.get('latest_observation_at')]
+            lines.append("This describes recorded activity" + (" through " + max(dates) if dates else " in your import") + "; it does not prove your motivations or show live activity.")
         if not lines:
             return SpecialistResponse(
                 agent=self.name,
@@ -421,10 +450,19 @@ class YoutubeAgent:
             [float(item.get("confidence") or 0) for item in channels[:20] + themes[:20]],
             default=0.0,
         )
+        summary = "From your imported YouTube snapshot:\n\n" + "\n\n".join(lines)
+        if self.synthesizer is not None:
+            try:
+                natural = str(self.synthesizer(query, result)).strip()
+                if natural:
+                    summary = natural + "\n\nThis reflects your imported watch and search history" + (" through " + max(dates) if dates else "") + "."
+            except Exception:
+                # Retain readable grounded facts when inference is unavailable.
+                pass
         return SpecialistResponse(
             agent=self.name,
             status="answered",
-            summary="From your imported YouTube snapshot:\n" + "\n".join(lines),
+            summary=summary,
             analysis="Used youtube.personal_context from the local Knowledge Core.",
             confidence=confidence,
         )

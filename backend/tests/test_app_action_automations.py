@@ -189,7 +189,8 @@ def test_run_and_remove_require_bound_confirmation(tmp_path):
     assert store.list() == []
 
 
-def test_confirmation_rejects_an_automation_that_changed_after_review(tmp_path):
+def test_confirmation_rejects_an_automation_that_changed_after_review(tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.automations.store.utc_now", lambda: "2026-10-03T12:00:00+00:00")
     runtime, store, _notifications = _runtime(tmp_path)
     automation_id = _create(runtime).result["automation"]["id"]
     request = AppActionRequest(action_id=AUTOMATION_REMOVE_ACTION_ID, arguments={"automation_id": automation_id})

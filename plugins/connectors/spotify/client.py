@@ -52,7 +52,17 @@ class SpotifyClient:
         with self._device_lock:
             current = self._web_player
             if current and current["owner_id"] != owner_id and current["expires_at"] > time.monotonic():
-                raise SpotifyNoActiveDevice("Vellum playback is already running in another window")
+                unavailable = False
+                # Heartbeats alone cannot keep a disconnected SDK device alive.
+                # Preserve newly connecting owners and every verified live device.
+                if current.get('device_id') and time.monotonic()-current.get('device_registered_at',time.monotonic()) >= 30:
+                    try:
+                        devices = self.get_devices().get('devices')
+                        unavailable = isinstance(devices,list) and not any(d.get('id')==current['device_id'] for d in devices if isinstance(d,dict))
+                    except Exception:
+                        pass  # An unavailable read grants no ownership transfer.
+                if not unavailable:
+                    raise SpotifyNoActiveDevice("Vellum playback is already running in another window")
             self._web_player = {"owner_id": owner_id, "device_id": "", "expires_at": time.monotonic() + 90}
             return {"status": "connecting"}
 
@@ -60,6 +70,8 @@ class SpotifyClient:
         with self._device_lock:
             if not self._web_player or self._web_player["owner_id"] != owner_id:
                 raise SpotifyNoActiveDevice("This window no longer owns Vellum playback. Enable playback again.")
+            if self._web_player['device_id'] != device_id:
+                self._web_player['device_registered_at'] = time.monotonic()
             self._web_player.update(device_id=device_id, expires_at=time.monotonic() + 90)
             if diagnostics:
                 self._web_player["diagnostics"] = [*self._web_player.get("diagnostics", []), *diagnostics][-32:]
@@ -86,6 +98,7 @@ class SpotifyClient:
             current = self._web_player
             live = current["expires_at"] > time.monotonic()
             return {"status": "ready" if live and current["device_id"] else "reconnecting",
+                    "device_id": current['device_id'] if live else '',
                     "diagnostics": list(current.get("diagnostics", [])),
                     "commands": dict(current.get("commands", {}))}
 
@@ -124,7 +137,8 @@ class SpotifyClient:
         retried: bool,
     ) -> dict:
         token = self._get_access_token()
-        with httpx.Client(transport=self.transport, timeout=self.timeout) as client:
+        timeout = min(self.timeout, 4.0) if path.startswith('/me/player') else self.timeout
+        with httpx.Client(transport=self.transport, timeout=timeout) as client:
             response = client.request(
                 method.upper(),
                 self.API_BASE + "/" + path.lstrip("/"),

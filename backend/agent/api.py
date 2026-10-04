@@ -4194,6 +4194,8 @@ def _delegated_agent_message(clean_message: str, live_result: LiveAgentResult, l
 def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool:
     if live_result is None or not live_result.handled:
         return False
+    if live_result.route_source == "parallel":
+        return True
     if live_result.agent_name not in {
         "BooksAgent",
         "CalendarAgent",
@@ -4353,7 +4355,44 @@ async def _stream_agent_turn_scoped(
         bool(attached_context["context"]) and not _requests_fresh_public_data(effective_message)
     )
     explanatory_followup = _is_explanation_followup(clean_message)
-    live_result = None if memory_recall_intent or explanatory_followup else await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
+    early_parts = []
+    live_result = None
+    if not memory_recall_intent and not explanatory_followup:
+        planner = getattr(_live_dispatcher, "_independent_tasks", None)
+        if callable(planner) and planner(effective_message, active_thread_id):
+            queue = asyncio.Queue()
+            loop = asyncio.get_running_loop()
+            def deliver(part):
+                loop.call_soon_threadsafe(queue.put_nowait, part)
+            dispatch = asyncio.create_task(asyncio.to_thread(_live_dispatcher.maybe_handle,
+                effective_message, active_thread_id, on_result=deliver))
+            yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id,
+                item={"id":message_item_id,"type":"message","role":"assistant","status":"in_progress"})
+            while not dispatch.done() or not queue.empty():
+                if dispatch.done():
+                    part = queue.get_nowait()
+                else:
+                    take = asyncio.create_task(queue.get())
+                    done, _ = await asyncio.wait({take, dispatch}, return_when=asyncio.FIRST_COMPLETED)
+                    if take not in done:
+                        take.cancel()
+                        await asyncio.gather(take, return_exceptions=True)
+                        continue
+                    part = take.result()
+                text = _clean_answer_body(part.answer)
+                delta = ("\n\n" if early_parts else "") + text
+                early_parts.append(text)
+                yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
+                    activity_type="sub_agent_completed", label=f"{part.agent_name} finished",
+                    name=part.agent_name, status="failed" if part.status == "error" else "completed")
+                yield _response_output_text_delta(response_id=response_id, thread_id=active_thread_id,
+                    item_id=message_item_id, delta=delta)
+                yield _sse("token", {"text":delta})
+            live_result = await dispatch
+            live_result.answer = "\n\n".join(early_parts)
+        else:
+            live_result = await asyncio.to_thread(_live_dispatcher.maybe_handle, effective_message, active_thread_id)
+
     live_sources: list[dict[str, Any]] = []
     delegated_tools: list[str] = []
     subagent_item: dict[str, Any] | None = None
@@ -4516,11 +4555,12 @@ async def _stream_agent_turn_scoped(
                 "role": "assistant",
                 "status": "in_progress",
             }
-            yield _response_output_item_added(
-                response_id=response_id,
-                thread_id=active_thread_id,
-                item=message_item,
-            )
+            if not early_parts:
+                yield _response_output_item_added(
+                    response_id=response_id,
+                    thread_id=active_thread_id,
+                    item=message_item,
+                )
             yield _agent_activity_event(
                 response_id=response_id,
                 thread_id=active_thread_id,
@@ -4528,7 +4568,7 @@ async def _stream_agent_turn_scoped(
                 label="Writing answer...",
                 item_id=message_item_id,
             )
-            if answer:
+            if answer and not early_parts:
                 for delta in _passthrough_text_deltas(answer):
                     yield _response_output_text_delta(
                         response_id=response_id,
@@ -4610,6 +4650,9 @@ async def _stream_agent_turn_scoped(
         specialist_gap = ""
         specialist_summaries: list[str] = []
         completed_specialists: set[str] = set()
+        expected_specialist_results = 0
+        received_specialist_results = 0
+        streamed_specialist_results = False
         message_item = {
             "id": message_item_id,
             "type": "message",
@@ -4664,6 +4707,9 @@ async def _stream_agent_turn_scoped(
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
                         last_chat_model_output = event.get("data", {}).get("output")
+                        calls = _message_tool_calls(last_chat_model_output)
+                        expected_specialist_results = sum(1 for call in calls if _tool_call_field(call, "name") == "delegate_to_agent")
+
                 elif kind == "on_chat_model_stream":
                     if not _is_primary_chat_model_stream_event(event):
                         continue
@@ -4876,7 +4922,17 @@ async def _stream_agent_turn_scoped(
                             specialist_status = str(specialist_result.get("status") or "")
                             specialist_summary = _clean_answer_body(str(specialist_result.get("summary") or ""))
                             completed_specialists.add(specialist_name)
-                            if specialist_status in {"answered", "blocked", "stale"} and specialist_summary:
+                            received_specialist_results += 1
+                            if expected_specialist_results > 1 and specialist_summary:
+                                if not message_item_started:
+                                    yield _response_output_item_added(response_id=response_id, thread_id=active_thread_id, item=message_item)
+                                    message_item_started = True
+                                delta = ("\n\n" if streamed_specialist_results else "") + specialist_summary
+                                streamed_specialist_results = True
+                                yield _response_output_text_delta(response_id=response_id, thread_id=active_thread_id, item_id=message_item_id, delta=delta)
+                                yield _sse("token", {"text":delta})
+
+                            if (specialist_status in {"answered", "blocked", "stale"} or expected_specialist_results > 1) and specialist_summary:
                                 specialist_summaries.append(specialist_summary)
                             raw_sources = specialist_result.get("sources")
                             specialist_sources = raw_sources if isinstance(raw_sources, list) else []
@@ -4926,9 +4982,11 @@ async def _stream_agent_turn_scoped(
                                 )
                                 yield _sse("source", record)
                             stop_after_specialist = bool(
-                                specialist_status == "answered"
+                                expected_specialist_results > 1 and received_specialist_results >= expected_specialist_results
+                                or specialist_status == "answered"
                                 and specialist_summary
                                 and specialist_sources
+                                and received_specialist_results >= expected_specialist_results
                             )
                             if (
                                 specialist_status in {"error", "needs_fetch", "stale"}
@@ -5035,7 +5093,7 @@ async def _stream_agent_turn_scoped(
                         name=str(item.get("name") or "function"),
                     )
                     item["status"] = "completed"
-            if specialist_gap and not sources:
+            if specialist_gap and not sources and not streamed_specialist_results:
                 specialist_domain = specialist_gap.removesuffix("Agent")
                 specialist_domain = {
                     "Sports": "sports",
@@ -5063,7 +5121,7 @@ async def _stream_agent_turn_scoped(
                         label="Writing answer...",
                         item_id=message_item_id,
                     )
-                for delta in _passthrough_text_deltas(answer):
+                for delta in ([] if streamed_specialist_results else _passthrough_text_deltas(answer)):
                     yield _response_output_text_delta(
                         response_id=response_id,
                         thread_id=active_thread_id,
@@ -5084,7 +5142,7 @@ async def _stream_agent_turn_scoped(
                 specialist_answer = _clean_answer_body("\n\n".join(dict.fromkeys(specialist_summaries)))
                 answer = (
                     specialist_answer
-                    if "XAgent" in completed_specialists or _is_specialist_deferral(model_answer)
+                    if streamed_specialist_results or "XAgent" in completed_specialists or _is_specialist_deferral(model_answer)
                     else model_answer or specialist_answer
                 )
                 if not message_item_started:
@@ -5103,7 +5161,7 @@ async def _stream_agent_turn_scoped(
                         label="Writing answer...",
                         item_id=message_item_id,
                     )
-                for delta in _passthrough_text_deltas(answer):
+                for delta in ([] if streamed_specialist_results else _passthrough_text_deltas(answer)):
                     yield _response_output_text_delta(
                         response_id=response_id,
                         thread_id=active_thread_id,
@@ -5505,11 +5563,29 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     async def with_action_events(events):
         emitted_actions = False
+        playback_text = "\n".join(receipt.message for action, receipt in zip(submitted_actions, action_receipts)
+            if action.action_id == "spotify.playback.control" and receipt.message)
+        prefix = playback_text + "\n\n" if playback_text else ""
         async for event in events:
+            # Preserve the real playback receipt in the same visible answer as
+            # the independent conversational result, without model rewriting.
+            if prefix and event.startswith(("event: final\n", "event: response.completed\n")):
+                name = event.splitlines()[0].removeprefix("event: ")
+                payload = json.loads(next(line[6:] for line in event.splitlines() if line.startswith("data: ")))
+                if name == "final":
+                    payload["answer"] = prefix + str(payload.get("answer") or "")
+                else:
+                    payload["response"]["output_text"] = prefix + str(payload["response"].get("output_text") or "")
+                event = _sse(name, payload)
             yield event
             if not emitted_actions:
                 async for action_event in action_events():
                     yield action_event
+                if prefix:
+                    created = json.loads(next(line[6:] for line in event.splitlines() if line.startswith("data: ")))
+                    yield _response_output_text_delta(response_id=str(created.get("response_id") or ""),
+                        thread_id=active_thread_id, item_id="playback-receipt", delta=prefix)
+                    yield _sse("token", {"text":prefix})
                 emitted_actions = True
         if not emitted_actions:
             async for action_event in action_events():

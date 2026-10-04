@@ -52,6 +52,7 @@ class YoutubeCapabilityService:
         self.subscriptions_backend = subscriptions_backend or self._default_subscriptions
         self.liked_videos_backend = liked_videos_backend or self._default_liked_videos
         self.takeout_history_backend = takeout_history_backend or self._default_takeout_history
+        self._custom_history_backend = takeout_history_backend is not None
         self.takeout_library_backend = takeout_library_backend or self._default_takeout_library
         self.personal_context_backend = personal_context_backend or self._default_personal_context
 
@@ -181,7 +182,15 @@ class YoutubeCapabilityService:
     def takeout_history(self, payload: dict[str, Any]) -> dict[str, Any]:
         kind = "search" if str(payload.get("kind") or "").casefold() == "search" else "watch"
         limit = min(_positive_int(payload.get("limit"), default=20), 100)
-        result = dict(self.takeout_history_backend(kind, limit))
+        channel = str(payload.get("channel") or "").strip()[:200]
+        if channel and not self._custom_history_backend:
+            result = dict(self._default_takeout_history(kind, limit, channel=channel))
+        else:
+            result = dict(self.takeout_history_backend(kind, limit))
+            if channel:
+                from agent.plugins.youtube_takeout import filter_channel_history
+                items = filter_channel_history(list(result.get("items") or []), channel)
+                result.update(items=items[:limit], total=len(items))
         return {"action": "youtube.takeout_history", **result}
 
     def takeout_library(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -294,7 +303,7 @@ class YoutubeCapabilityService:
 
         return youtube_client().list_liked_videos(max_results=max_results)
 
-    def _default_takeout_history(self, kind: str, limit: int) -> dict[str, Any]:
+    def _default_takeout_history(self, kind: str, limit: int, channel: str = "") -> dict[str, Any]:
         from agent.knowledge.runtime import get_knowledge_core
         from agent.plugins.youtube_runtime import youtube_status
         from agent.plugins.youtube_takeout import YouTubeTakeoutImporter
@@ -304,6 +313,7 @@ class YoutubeCapabilityService:
         return YouTubeTakeoutImporter(store=get_knowledge_core().store, account_id=account_id).history(
             kind=kind,
             limit=limit,
+            channel=channel,
         )
 
     def _default_personal_context(self, query: str, limit: int) -> dict[str, Any]:
