@@ -12,6 +12,9 @@
 <script src="api/client.js?v=20260710-routing-actions"></script>
 <script src="api/chat.js"></script>
 <script src="api/app-actions.js"></script>
+<script src="api/browser.js"></script>
+<link rel="stylesheet" href="components/browser-panel.css"/>
+<script type="text/babel" data-presets="react" src="components/browser-panel.jsx"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="components/spotify-playback.js"></script>
@@ -3149,10 +3152,11 @@ const SidebarSection = ({id, label, count, open, onToggle, children}) => {
   );
 };
 
-const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject}) => {
+const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, renamingId, projRenamingId, profile, secOpen, expandedProj, onToggleSec, onToggleProj, onTogglePin, onNewChat, onSearch, onSmartView, onNav, onOpenChat, onChatMenu, onRename, onProfile, onNewProject, onProjectMenu, onProjectRename, onOpenProject, onBrowser, browserAvailable}) => {
   const sorted = visibleChats(chats);
   const spaces = (conversationLibrary && conversationLibrary.spaces) || [];
   const [expandedSpace, setExpandedSpace] = useState(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const organizedChats = ((conversationLibrary && conversationLibrary.conversations) || chats).filter(chat => !chat.archived);
   const serverSmartViews = (conversationLibrary && conversationLibrary.smart_views) || [];
   const smartById = new Map(serverSmartViews.map(item => [item.id, item]));
@@ -3178,11 +3182,18 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className="sb-row" onClick={onSearch}><span className="sb-ic"><IcSearch/></span>Search chats<span className="sb-kbd"><kbd>Ctrl K</kbd></span></button>
         </div>
         <div className="sb-tools">
+          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
+          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
+          {browserAvailable && <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>}
+          <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
+        </div>
+        {!moreOpen && <section className="sidebar-recent" aria-label="Recent chats"><h2>Recent</h2>{sorted.slice(0,8).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
+          renaming={renamingId === chat.id} onOpen={() => onOpenChat(chat.id)} onMenu={e => onChatMenu(chat.id, e)} onRename={title => onRename(chat.id, title)}/>)}</section>}
+        {moreOpen && <div id="sidebar-more">
+        <div className="sb-tools">
           <button className={'sb-row' + (view === 'scheduled' ? ' active' : '')} onClick={() => onNav('scheduled')}><span className="sb-ic"><IcGCal/></span>Scheduled</button>
           <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Observability</button>
-          <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
           <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
-          <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
           <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcPlugins/></span>Plugins</button>
           <button className={'sb-row' + (view === 'archive' ? ' active' : '')} onClick={() => onNav('archive')}><span className="sb-ic"><IcArchive/></span>Archive</button>
         </div>
@@ -3267,6 +3278,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
               </React.Fragment>
             ))}
         </SidebarSection>
+        </div>}
       </div>
       <div className="profile-row" onClick={onProfile}>
         <div className="avatar">{initials(profile.displayName)}</div>
@@ -5198,7 +5210,7 @@ const ActivityPanel = ({msg, onClose}) => (
   </div>
 );
 
-const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity}) => {
+const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onStop, onRegen, onFork, onShare, composerExtras, onViewImage, filesOpen, onCloseFiles, onHeadMenu, onAnswerNow, onOpenActivity, activity, onCloseActivity, browserMode}) => {
   const [text, setText] = useState('');
   const endRef = useRef(null);
   const msgs = chat ? chat.messages : [];
@@ -5229,6 +5241,7 @@ const ChatView = ({chat, project, model, setModel, models = MODELS, onSend, onSt
       <div className="thread-col">
       {project && <div className="crumb"><IcFolder size={13}/>{project.name}</div>}
       <div className="chat-head">
+        {browserMode && <span className="browser-chat-title">{chat.title || 'New chat'}</span>}
         <button className="ch-share" title="Review and share this chat" onClick={onShare}><IcShare size={14}/>Share</button>
         <button className="tbtn" title="Chat options" onClick={e => onHeadMenu(e)}><IcDots size={16}/></button>
       </div>
@@ -8494,6 +8507,31 @@ const mergeConversationRecords = (current, serverConversations) => {
 
 const App = () => {
   const navigationEpochRef = useRef(0);
+  const [browserFeature, setBrowserFeature] = useState(false);
+  const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
+  const browserSeenSession = useRef('');
+  const refreshBrowser = async () => {
+    const status = await API.browser.status();
+    setBrowserState(status);
+    if (status.running && status.session_id !== browserSeenSession.current) {
+      browserSeenSession.current = status.session_id;
+      dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+    }
+    return status;
+  };
+  useEffect(() => {
+    let alive = true, timer;
+    API.plugins.capabilities().then(contract => {
+      if (!alive || !contract.features?.browser?.enabled) return;
+      setBrowserFeature(true);
+      const poll = async () => {
+        try { if (!document.hidden) await refreshBrowser(); } catch (_) {}
+        if (alive) timer = setTimeout(poll, 1500);
+      };
+      poll();
+    }).catch(() => {});
+    return () => { alive = false; clearTimeout(timer); };
+  }, []);
   const petdexStateRef = useRef({
     revision: pxLsGet(PETDEX_LS.revision, 0),
     installed: pxLsGet(PETDEX_LS.installed, ['boba']),
@@ -8559,6 +8597,7 @@ const App = () => {
   const sidebarPinned = workspaceLayout.surfaces.sidebar.visible;
   const settingsOpen = workspaceLayout.surfaces.settings.visible;
   const rightPanelVisible = workspaceLayout.surfaces['right-panel'].visible;
+  const browserPanelVisible = browserFeature && rightPanelVisible && workspaceLayout.surfaces['right-panel'].properties.content === 'browser';
   const composerPresentation = {
     size: workspaceLayout.surfaces.composer.properties.size,
     sendLabel: workspaceLayout.surfaces['composer.send'].properties.label,
@@ -10425,7 +10464,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
-        <div className="body">
+        <div className={'body' + (browserPanelVisible ? ' browser-active' : '')}>
           {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
@@ -10436,7 +10475,14 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onRename={renameChat} onProfile={openProfileMenu}
                 onNewProject={newProject}
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
-                onProjectRename={renameProject} onOpenProject={openProject}/>}
+                onProjectRename={renameProject} onOpenProject={openProject}
+                browserAvailable={browserFeature} onBrowser={async () => {
+                  try {
+                    if (!browserState.running && browserState.available) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
+                    await refreshBrowser();
+                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+                  } catch (error) { toast(error.message); }
+                }}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
             onExpand={() => dispatchSidebarVisibility(true, {learn:true})} onNewChat={newChat} onSearch={() => openSearch()}
@@ -10450,10 +10496,10 @@ const [slashSkills, setSlashSkills] = useState([]);
               onFork={messageId => dispatchConversationAction('conversation.fork', {conversation_id:activeChatId, through_message_id:messageId})}
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
-              filesOpen={rightPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false}, {learn:true})}
+              browserMode={browserPanelVisible} filesOpen={rightPanelVisible && !browserPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false}, {learn:true})}
               onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }}
               onAnswerNow={answerNow}
-              activity={rightPanelVisible ? activityMsg : null}
+              activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
               composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
@@ -10474,8 +10520,11 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
+          {browserPanelVisible && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+            onHide={() => dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false})}
+            context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => applyAppActionReceipt(receipt, {notify:false})}/>}
         </div>
         <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
           onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}

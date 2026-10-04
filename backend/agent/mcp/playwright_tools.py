@@ -650,6 +650,7 @@ class _PlaywrightMcpClient:
         self._server_signature: tuple[str, tuple[str, ...]] | None = None
         self._last_activity = time.monotonic()
         self._busy = False
+        self._dedicated: Any | None = None
 
     def _lock_for_current_loop(self) -> asyncio.Lock:
         loop = asyncio.get_running_loop()
@@ -660,16 +661,35 @@ class _PlaywrightMcpClient:
 
     async def reap_if_idle(self) -> None:
         """Close the browser session after BROWSER_INACTIVITY_TIMEOUT idle."""
-        if self._session is None or self._busy:
+        if (self._session is None and (self._dedicated is None or self._dedicated.context is None)) or self._busy:
             return
         idle = time.monotonic() - self._last_activity
         timeout = float(get_settings().browser_inactivity_timeout)
         if idle >= timeout:
-            logger.info("[PLAYWRIGHT_MCP] Closing idle browser session after %.0fs idle.", idle)
-            await self.close()
+            async with self._lock_for_current_loop():
+                # UI controls and frame reads share this lock. Recheck after
+                # waiting so cleanup cannot race a session being reopened.
+                if time.monotonic() - self._last_activity >= timeout:
+                    logger.info("[PLAYWRIGHT_MCP] Closing idle browser session after %.0fs idle.", idle)
+                    await self.close()
 
     async def call(self, params: dict[str, Any]) -> str:
         action = _action_name(params)
+
+        if self._dedicated is not None:
+            if action in MUTATING_ACTIONS and not _mutations_allowed():
+                return f"Playwright action '{action}' requires PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true."
+            async with self._lock_for_current_loop():
+                self._busy = True
+                self._last_activity = time.monotonic()
+                try:
+                    text = await self._dedicated.tool(params)
+                    return _decorate_snapshot(text) if action == "snapshot" else text
+                except Exception as exc:
+                    logger.debug("[BROWSER] Dedicated action failed: %s", type(exc).__name__)
+                    return "Browser action unavailable. Review the browser panel or take over before retrying."
+                finally:
+                    self._busy = False
 
         if action in EVALUATE_ACTIONS:
             call_params = _tool_params(action, params)
@@ -928,6 +948,8 @@ class _PlaywrightMcpClient:
             raise
 
     async def close(self) -> None:
+        if self._dedicated is not None:
+            await self._dedicated.close()
         session_context = self._session_context
         stdio_context = self._stdio_context
         self._session = None
@@ -947,6 +969,44 @@ class _PlaywrightMcpClient:
                 await stdio_context.__aexit__(None, None, None)
             except Exception as exc:
                 logger.debug("[PLAYWRIGHT_MCP] Stdio close failed: %s", exc)
+
+    async def shutdown(self) -> None:
+        """Release transport selection when its owning worker ends, not on UI close."""
+        try:
+            await self.close()
+        finally:
+            self._dedicated = None
+
+    async def session(self, operation: str, arguments: dict[str, Any] | None = None) -> Any:
+        from agent.contracts.browser import BrowserControl, BrowserStatus
+        from agent.mcp.dedicated_browser import DedicatedBrowser, browser_readiness
+
+        async with self._lock_for_current_loop():
+            if operation == "status" and self._dedicated is None:
+                ready, reason = browser_readiness()
+                return BrowserStatus(available=ready, reason=reason)
+            if self._dedicated is None:
+                if operation != "control" or (arguments or {}).get("operation") != "open":
+                    raise ValueError("Open the dedicated browser first.")
+                await self.close()
+                self._dedicated = DedicatedBrowser()
+            self._last_activity = time.monotonic()
+            if operation == "status":
+                return await self._dedicated.status()
+            if operation == "frame":
+                return await self._dedicated.frame()
+            if operation == "confirmed":
+                payload = arguments or {}
+                if not _mutations_allowed():
+                    raise ValueError("Enable PLAYWRIGHT_MCP_ALLOW_MUTATIONS for confirmed browser interactions.")
+                if not payload.get("snapshot_id") or payload["snapshot_id"] != self._dedicated.snapshot_id:
+                    raise ValueError("The browser page changed since confirmation was prepared. Ask BrowserAgent to review it again.")
+                params = dict(payload.get("params") or {})
+                if params.get("action") not in {"click", "type", "press_key"}:
+                    raise ValueError("Unsupported confirmed browser interaction.")
+                await self._dedicated.verify_snapshot()
+                return await self._dedicated.tool(params)
+            return await self._dedicated.ui_control(BrowserControl.model_validate(arguments or {}))
 
 
 _client = _PlaywrightMcpClient()
@@ -1029,10 +1089,10 @@ class _PlaywrightWorker:
                 self._reaper.cancel()
             if self._reaper is not None:
                 loop.run_until_complete(
-                    asyncio.gather(self._reaper, _client.close(), return_exceptions=True)
+                    asyncio.gather(self._reaper, _client.shutdown(), return_exceptions=True)
                 )
             else:
-                loop.run_until_complete(_client.close())
+                loop.run_until_complete(_client.shutdown())
             loop.close()
 
 
@@ -1085,3 +1145,13 @@ async def shutdown_async() -> None:
 
 def shutdown() -> None:
     _worker.shutdown()
+
+
+def browser_session(operation: str, arguments: dict[str, Any] | None = None) -> Any:
+    """Read/control the same session used by browser tools, never a second worker."""
+    future = _worker.submit(_client.session(operation, arguments))
+    try:
+        return future.result(timeout=get_settings().mcp_timeout_seconds)
+    except concurrent.futures.TimeoutError:
+        future.cancel()
+        raise ValueError("Browser operation timed out. Refresh the panel before retrying.") from None

@@ -44,6 +44,8 @@ from agent.cli.project_commands import (
     handle_project_command,
 )
 from agent.app_actions.api import router as app_actions_router
+from agent.mcp.browser_api import router as browser_router
+from agent.mcp.playwright_tools import shutdown_async as browser_shutdown_async
 from agent.app_actions.attachments import ConversationAttachment, get_attachment_import_service
 from agent.app_actions.automations import AutomationActionService
 from agent.app_actions.coding_github import CodingGitHubActionService
@@ -1443,6 +1445,7 @@ async def lifespan(app: FastAPI):
         close = getattr(agent, "aclose", None)
         if close is not None:
             await close()
+        await browser_shutdown_async()
 
 
 app = FastAPI(title="Personal Agent API", version="0.1.0", lifespan=lifespan)
@@ -6476,6 +6479,7 @@ router.include_router(
     )
 )
 router.include_router(app_actions_router)
+router.include_router(browser_router)
 router.include_router(llm_routing_router)
 router.include_router(knowledge_router)
 router.include_router(automations_router)

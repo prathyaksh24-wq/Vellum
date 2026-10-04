@@ -55,6 +55,38 @@ class FakeSession:
         return SimpleNamespace(content=[SimpleNamespace(text=self.text)])
 
 
+def test_worker_shutdown_resets_dedicated_transport_before_restart(monkeypatch):
+    class ClosedDedicatedBrowser:
+        async def tool(self, _params):
+            return "Dedicated browser is closed."
+
+        async def close(self):
+            return None
+
+    client = playwright_tools._PlaywrightMcpClient()
+    client._dedicated = ClosedDedicatedBrowser()
+    worker = playwright_tools._PlaywrightWorker()
+    monkeypatch.setattr(playwright_tools, "_client", client)
+    monkeypatch.setattr(playwright_tools, "_worker", worker)
+    monkeypatch.setattr(playwright_tools, "_mutations_allowed", lambda: True)
+    monkeypatch.setattr(playwright_tools, "stdio_client", lambda _params: AsyncPairContext())
+    fake_session = FakeSession(tools=["browser_navigate"], text="Fresh legacy session")
+    monkeypatch.setattr(playwright_tools, "ClientSession", lambda _read, _write: fake_session)
+
+    async def exercise():
+        try:
+            # Closing a session keeps dedicated ownership until worker shutdown.
+            assert await playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}) == "Dedicated browser is closed."
+            assert fake_session.calls == []
+            await playwright_tools.shutdown_async()
+            assert await playwright_tools.run_tool_async({"action": "navigate", "url": "https://example.com"}) == "Fresh legacy session"
+            assert len(fake_session.calls) == 1
+        finally:
+            await playwright_tools.shutdown_async()
+
+    asyncio.run(exercise())
+
+
 def test_apify_sanitizes_urls_asins_and_pii():
     raw = "Product ASIN B0ABCDEF12 link https://amazon.com/dp/B0ABCDEF12 contact me@example.com"
 

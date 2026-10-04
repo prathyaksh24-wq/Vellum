@@ -47,6 +47,7 @@ class AgentCatalog:
         from agent.agents.discord import DiscordAgent, LocalDiscordSummarizer
         from agent.agents.memory_agent import MemoryAgent
         from agent.agents.music import MusicAgent
+        from agent.agents.browser import BrowserAgent
         from agent.agents.sports import SportsAgent
         from agent.agents.x_agent import XAgent
         from agent.agents.youtube import YoutubeAgent
@@ -60,6 +61,7 @@ class AgentCatalog:
         catalog = cls(profile_dir=profile_dir)
         books_profile = catalog.get("BooksAgent")
         agents = [
+            BrowserAgent(tool_registry=tools),
             MusicAgent(tool_registry=tools),
             XAgent(vault_root=root, tool_registry=tools),
             YoutubeAgent(vault_root=root, tool_registry=tools, synthesizer=LocalYoutubeSynthesizer()),

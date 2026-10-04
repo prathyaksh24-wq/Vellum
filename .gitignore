@@ -24,6 +24,9 @@ data/computer-use/events.jsonl
 data/computer-use/mode.json
 data/computer-use/permissions.json
 data/computer-use/screenshots/
+data/browser-session/
+data/browser-downloads/
+data/browser-cache/
 data/x-api-oauth.json
 data/xai-oauth.json
 data/plugins/spotify/auth.json
@@ -66,6 +69,7 @@ desktop/src-tauri/target/
 .playwright-mcp/
 .codex-activity-qa-profile/
 .test-data/
+.impeccable/review/
 .DS_Store
 
 # Personal data — never commit

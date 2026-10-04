@@ -135,10 +135,12 @@ def test_agent_prompt_documents_native_desktop_routing():
     assert "computer_use_route" in {tool.name for tool in agent_graph.core_tools()}
 
 
-def test_agent_prompt_prefers_direct_browser_search_for_youtube_tasks():
+def test_main_agent_delegates_browser_tasks_and_keeps_general_web_search():
     names = {tool.name for tool in agent_graph.core_tools()}
-    assert "browser_navigate" in names
+    assert "delegate_to_agent" in names
+    assert not any(name.startswith(("browser_", "browser.")) for name in names)
     assert "web_search" in names
+    assert "Delegate websites, tabs and downloads to BrowserAgent" in agent_graph.VELLUM_SYSTEM_PROMPT
 
 
 def test_agent_prompt_documents_computer_use_routing_policy():
@@ -214,7 +216,10 @@ def test_prompt_describes_main_agent_as_router_with_specialists():
     assert "XAgent" in block
     assert "YoutubeAgent" in block
     assert "DiscordAgent" in block
-    assert "tools" not in block
+    assert "BrowserAgent" in block
+    manifest = agent_graph.get_agent_catalog().delegation_manifest()
+    assert all(set(entry) == {"id", "description"} for entry in manifest)
+    assert not any(name in block for name in ("browser_navigate", "browser_click", "browser.confirmed_action"))
     assert "allowed_skills" not in block
     assert "skill_ids" not in block
 
