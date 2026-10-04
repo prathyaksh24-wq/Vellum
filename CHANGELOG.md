@@ -7,6 +7,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 ## [Unreleased]
 
 ### Fixed
+- Browser worker shutdown clears dedicated transport ownership before restart; closing the in-app session keeps its ownership until shutdown. Browser delegation prompt contracts retain the compact prompt budget and specialist-only browser capabilities.
 - Music follow-ups retain the requested song across current-track questions, distinguish original-version selection from a new title, and prioritize fresh Liked Songs requests over failed searches. Spotify title matching accepts featured-artist credits while preserving version qualifiers.
 - Personal YouTube data questions use local Takeout evidence instead of public how-to search results; broad questions no longer accidentally filter out the imported history.
 - X publication requires a valid receipt and Agent Reach read-back before reporting success. Unconfirmed writes retain a check-before-retry warning and are never automatically reposted.

@@ -970,6 +970,13 @@ class _PlaywrightMcpClient:
             except Exception as exc:
                 logger.debug("[PLAYWRIGHT_MCP] Stdio close failed: %s", exc)
 
+    async def shutdown(self) -> None:
+        """Release transport selection when its owning worker ends, not on UI close."""
+        try:
+            await self.close()
+        finally:
+            self._dedicated = None
+
     async def session(self, operation: str, arguments: dict[str, Any] | None = None) -> Any:
         from agent.contracts.browser import BrowserControl, BrowserStatus
         from agent.mcp.dedicated_browser import DedicatedBrowser, browser_readiness
@@ -1082,10 +1089,10 @@ class _PlaywrightWorker:
                 self._reaper.cancel()
             if self._reaper is not None:
                 loop.run_until_complete(
-                    asyncio.gather(self._reaper, _client.close(), return_exceptions=True)
+                    asyncio.gather(self._reaper, _client.shutdown(), return_exceptions=True)
                 )
             else:
-                loop.run_until_complete(_client.close())
+                loop.run_until_complete(_client.shutdown())
             loop.close()
 
 

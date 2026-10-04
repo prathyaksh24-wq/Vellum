@@ -120,7 +120,7 @@ def test_main_delegation_routes_bounded_context_to_browser_profile(tmp_path):
     runtime.agent_catalog = AgentCatalog(profile_dir=tmp_path/'browser-profiles', builtins={'BrowserAgent':profile}, executors={'BrowserAgent':agent})
     result = runtime.delegate(DelegationRequest(agent_id='BrowserAgent', task='Read the requested page.', context='User-selected URL: https://example.com', parent_thread_id='main-chat'))
     assert result.profile_id == 'BrowserAgent' and result.response.status == 'answered'
-    assert 'https://example.com' in observed[0]
+    assert observed == ['Read the requested page.\n\nUser-provided task context:\nUser-selected URL: https://example.com']
     assert result.cache_status != 'hit'
     assert all(owner == 'BrowserAgent' for _, _, owner in tools.calls)
 
