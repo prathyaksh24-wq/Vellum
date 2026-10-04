@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import logging
 from pathlib import Path
 import re
+from uuid import uuid4
 
 from agent.agents.base import SpecialistResponse, user_query_text
 from agent.agents.skill_router import SkillRouteResolver
@@ -135,13 +136,23 @@ class LiveAgentDispatcher:
             completed = []
             lock = threading.Lock()
             def emit(run):
+                if pending_action and any(r.confirm_pending_action and r.task_id == run.task_id for r in batch):
+                    if run.response.action_request:
+                        self.state_store.set_pending_action(thread_id, {'agent':run.profile_id, **run.response.action_request,
+                            'batch_id':pending_action.get('batch_id'), 'queued_actions':pending_action.get('queued_actions', [])})
+                    elif run.profile_id == 'CalendarAgent' and run.response.status == 'error':
+                        self.state_store.set_pending_action(thread_id, {**pending_action, 'confirmed_until':(datetime.now(UTC)+timedelta(minutes=5)).isoformat()})
+                    elif pending_action.get('queued_actions'):
+                        queued = pending_action['queued_actions']
+                        self.state_store.set_pending_action(thread_id, {**queued[0], 'batch_id':pending_action.get('batch_id'), 'queued_actions':queued[1:]})
+                        run = replace(run, response=run.response.model_copy(update={'summary':run.response.summary + '\n\nNext change awaiting confirmation: ' + str(queued[0].get('preview') or 'the next proposed action')}))
                 part = self._result_from_response(run.response, run=run, route_source="parallel")
                 with lock:
                     completed.append(part)
                     if on_result is not None:
                         on_result(part)
-            runs = self.delegation_runtime.delegate_many(batch, on_complete=emit if on_result else None)
-            parts = completed if on_result else [self._result_from_response(run.response, run=run, route_source="parallel") for run in runs]
+            self.delegation_runtime.delegate_many(batch, on_complete=emit)
+            parts = completed
             if not state.agent_selected:
                 self.state_store.set_active_agent(thread_id, "VellumAgent")
                 self.state_store.clear_pending_reroute(thread_id)
@@ -229,6 +240,21 @@ class LiveAgentDispatcher:
                 route_source = "contextual"
         if matched_binding is not None or profile_only_id:
             agent_name = matched_binding.profile.id if matched_binding is not None else profile_only_id
+            retained_preview = ''
+            if agent_name == 'MusicAgent' and pending_action and pending_action.get('agent') == 'MusicAgent' and pending_action.get('action') == 'music.change_collection':
+                # A new explicit collection edit supersedes the older preview.
+                # Do not leave stale authority for a later unrelated yes.
+                executor = matched_binding.executor if matched_binding else None
+                fast_plan = executor._fast_plan(message) if callable(getattr(executor, '_fast_plan', None)) else None
+                if fast_plan is None and callable(getattr(executor, '_collection_followup', None)):
+                    fast_plan = executor._collection_followup(message, music_context)
+                if fast_plan and fast_plan.operation in {'save_current', 'remove_current'}:
+                    retained = [a for a in pending_action.get('queued_actions', []) if a.get('action') != 'music.change_collection']
+                    if retained:
+                        self.state_store.set_pending_action(thread_id, {**retained[0], 'batch_id':pending_action.get('batch_id'), 'queued_actions':retained[1:]})
+                        retained_preview = str(retained[0].get('preview') or 'the next proposed action')
+                    else:
+                        self.state_store.clear_pending_action(thread_id)
             if active_agent != agent_name and not (route_source in {"music_intent", "natural_intent"} and state.agent_selected):
                 self.state_store.set_active_agent(thread_id, agent_name)
                 self.state_store.clear_pending_reroute(thread_id)
@@ -242,6 +268,8 @@ class LiveAgentDispatcher:
                 )
                 response = run.response
                 result = self._result_from_response(response, run=run, route_source=route_source)
+                if retained_preview:
+                    result.answer += '\n\nNext change awaiting confirmation: ' + retained_preview
                 response_action = response.action_request
                 if response_action:
                     self.state_store.set_pending_action(thread_id, {"agent": agent_name, **response_action})
@@ -275,15 +303,29 @@ class LiveAgentDispatcher:
         if not 2 <= len(clauses) <= 8:
             return []
         requests = []
+        pending = self.state_store.get_pending_action(thread_id)
+        confirmations = [c for c in clauses if pending and self._is_confirmation(c, pending)]
+        if len(confirmations) > 1:
+            return []
         for clause in clauses:
             clause = re.sub(r"^(?:also\s+)", "", clause, flags=re.I)
-            if not re.match(r"(?:please\s+)?(?:what|which|when|who|how|can|could|show|tell|summari[sz]e|find|search|read|play|skip|pause|post|tweet|create|make|list|get)\b", clause, re.I):
+            if pending and self._is_confirmation(clause, pending):
+                requests.append(DelegationRequest(agent_id=str(pending['agent']), task='Execute the confirmed pending action.',
+                    parent_thread_id=thread_id, task_id=str(uuid4()), confirm_pending_action=True))
+                continue
+            if confirmations and not re.match(r'(?:please\s+)?(?:what|which|when|who|how|show|tell|summari[sz]e|find|search|read|list|get)\b', clause, re.I):
                 return []
-            if re.search(r"\b(?:it|that|those|them|he|she|him|her)\b", clause, re.I):
+            if not re.match(r"(?:please\s+)?(?:what|which|when|who|how|can|could|show|tell|summari[sz]e|find|search|read|play|skip|pause|post|tweet|create|make|list|get|add|save|remove|delete|like|unlike|dislike)\b", clause, re.I):
                 return []
             binding = self.agent_catalog.match(clause)
             if binding is None:
                 return []
+            if re.search(r"\b(?:it|that|those|them|he|she|him|her)\b", clause, re.I):
+                # A current-song reference reads live playback, not the result
+                # of a sibling task. Other references remain dependent.
+                fast = binding.executor._fast_plan(clause) if binding.profile.id == 'MusicAgent' and callable(getattr(binding.executor, '_fast_plan', None)) else None
+                if not fast or fast.operation not in {'save_current','remove_current','check_current'}:
+                    return []
             requests.append(DelegationRequest(agent_id=binding.profile.id, task=clause, parent_thread_id=thread_id))
         return requests if len({request.agent_id for request in requests}) > 1 else []
 

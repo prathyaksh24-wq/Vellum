@@ -6,8 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Clear MusicAgent song additions and removals execute without a second confirmation, with captured targets, single writes and membership read-back. Liked playlist aliases, misspelled saved-song titles, version selections and destination-preserving corrections stay in the music workflow.
+- Mixed confirmations such as “NBA news and yes” separate the exact pending action from the independent specialist question and stream each result on completion. A single yes cannot authorize queued changes.
+- Album requests use typed MusicAgent plans; the latest album comes from the artist’s paginated Spotify catalog and release dates, with context playback verification instead of a song search.
+- Skill curator backups reserve unique, ordered folders when Windows clock timestamps tie, preserving backup retention and rollback checks.
+- Knowledge Core ingestion jobs retain newest-first order when creation timestamps tie, so a later failure remains visible in connector health.
+
 - Music requests activate Vellum's existing Spotify player before playback; an explicit stop releases it after Spotify confirms it is paused. Pause leaves the player ready to resume, and connection or audio-policy failures remain visible.
-- Relative seeking, volume changes, repeat and shuffle use direct typed MusicAgent plans with bounded Spotify calls and state read-back before reporting success. Current or named songs can be checked, added or removed from Liked Songs and playlists through exact-target confirmations.
+- Relative seeking, volume changes, repeat and shuffle use direct typed MusicAgent plans with bounded Spotify calls and state read-back before reporting success. Current or named songs can be checked, added or removed from Liked Songs and playlists with exact targets.
 - Curated playlist creation handles Spotify's public-playlist contents restriction by previewing real catalog songs with an explicit source/ranking limitation; requested names and song counts are preserved.
 - Agent Reach publication has a shared write/read-back deadline including command-lock waits. Uncertain writes are never repeated automatically; explicit X targets and confirmed-action follow-ups stay with XAgent.
 - Credential registration order remains stable when creation timestamps tie, avoiding random key selection in provider pools on Windows.

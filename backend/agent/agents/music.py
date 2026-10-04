@@ -45,6 +45,7 @@ class LocalMusicPlanner:
                 "use collection liked for Liked Songs or playlist with query as the destination playlist. "
                 "An omitted song or it/this song refers to live playback; track_query is only for an explicit song title. "
                 "Membership questions use check_current. Relative volume changes use adjust_volume, not set_volume. "
+                "Albums use play_album, never play_song. For an artist's latest album set latest true and artist; do not invent an album title. "
                 "For create_playlist, query is the new playlist name "
                 "Treat liked playlist and liked song playlist as Liked Songs. Podcasts use play_podcast for a show "
                 "or play_episode for an episode title, never play_song. Position is a one-based requested track number. "
@@ -77,7 +78,8 @@ class MusicAgent:
     @staticmethod
     def _clean(query: str) -> str:
         text = re.sub(r"^\[Vellum UI context:[^\n]*\]\s*", "", str(query or ""))
-        return text.split("\n\n[", 1)[0].strip().rstrip(".!?")
+        text = ' '.join(text.split("\n\n[", 1)[0].split()).rstrip(".!?")
+        return re.sub(r'^(?:no+[, ]+|i meant\s+)(?=(?:remove|delete|add|save|play)\b)', '', text, flags=re.I)
 
     def can_handle(self, query: str) -> bool:
         text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", self._clean(query), flags=re.I).casefold()
@@ -130,8 +132,13 @@ class MusicAgent:
         context = self._fresh_context(context)
         clean = self._clean(query)
         operation = (context.get("last_plan") or {}).get("operation")
-        fast = self._fast_plan(clean) if operation else None
+        try:
+            fast = self._fast_plan(clean) if operation else None
+        except ValueError:
+            fast = None
         if fast and fast.operation in {'save_current','remove_current'}:
+            return True
+        if operation in {'save_current', 'remove_current', 'check_current'} and self._collection_followup(clean, context):
             return True
         if context.get('last_volume_delta') and re.fullmatch(r'(?:increase|raise|reduce|decrease|lower)\s+(?:(?:the\s+)?volume\s+)?by\s+(?:the\s+)?same\s+amount',clean,re.I):
             return True
@@ -149,6 +156,18 @@ class MusicAgent:
                     and (operation == "play_song" or operation == "create_playlist" and context.get("choices")))
 
     @staticmethod
+    def _collection_followup(text: str, context: dict) -> MusicPlan | None:
+        last = context.get('last_plan') or {}
+        if last.get('operation') not in {'save_current', 'remove_current', 'check_current'}:
+            return None
+        match = re.fullmatch(r'(add|save|remove|delete)\s+(?:(?:the|a)\s+)?(?:song|track)(?:\s+(?:called|named))?\s+(.+)', text, re.I)
+        if match:
+            return MusicPlan.model_validate({**last,
+                'operation': 'remove_current' if match[1].casefold() in {'remove', 'delete'} else 'save_current',
+                'track_query': match[2].strip(' "'), 'track_uri': ''})
+        return None
+
+    @staticmethod
     def _original_version_request(query: str) -> bool:
         text = re.sub(r"^(?:nah|no|nope)[, ]+", "", query, flags=re.I)
         return bool(re.fullmatch(r"(?:please\s+)?(?:play\s+)?(?:that\s+(?:song|track)\s+(?:by|nby)\s+)?(?:the\s+)?original(?:\s+(?:song|track|version|artist))?", text, re.I))
@@ -162,9 +181,13 @@ class MusicAgent:
         if ordinal and 0 < int(ordinal[1]) <= len(choices):
             return choices[int(ordinal[1])-1]
         text = re.sub(r"^(?:from|by)\s+", "", text, flags=re.I).casefold()
-        ranked = sorted(((max(SequenceMatcher(None, text, c.get("title", "").casefold()).ratio(),
-                              1.0 if text and text in c.get("title", "").casefold() else 0), c)
-                         for c in choices), key=lambda pair:pair[0], reverse=True)
+        def score(choice):
+            labels = [choice.get('title', '')]
+            if choice.get('kind') == 'track':
+                labels += [choice.get('artist',''), *choice.get('artist','').split(',')]
+            return max((max(SequenceMatcher(None, text, label.strip().casefold()).ratio(),
+                            1.0 if text and (text == label.strip().casefold() if choice.get('kind') == 'track' else text in label.strip().casefold()) else 0) for label in labels), default=0)
+        ranked = sorted(((score(c), c) for c in choices), key=lambda pair:pair[0], reverse=True)
         if ranked and ranked[0][0] >= .65 and (len(ranked)==1 or ranked[0][0]-ranked[1][0] >= .15):
             return ranked[0][1]
         return None
@@ -213,7 +236,7 @@ class MusicAgent:
 
     @staticmethod
     def _fast_plan(query: str) -> MusicPlan | None:
-        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", query, flags=re.I)
+        text = re.sub(r"^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?", "", MusicAgent._clean(query), flags=re.I)
         provider = "spotify"
         suffix = re.search(r"\s+(?:on|using|in|through)\s+(spotify|apple music|youtube music)$", text, re.I)
         explicit_provider = suffix is not None
@@ -223,20 +246,21 @@ class MusicAgent:
         collection_change = re.fullmatch(r"(add|save|remove|delete)\s+(.+?)\s+(?:to|from)\s+(?:my\s+|the\s+)?(.+)", text, re.I)
         if collection_change:
             target = collection_change[3].strip(' \"')
-            liked = bool(re.fullmatch(r'liked\s+songs?(?:\s+playlist)?', target, re.I))
+            liked = bool(re.fullmatch(r'liked\s+(?:songs?(?:\s+playlist)?|playlist)', target, re.I))
             song = collection_change[2]
             current = bool(re.fullmatch(r'it|(?:this|the\s+current|the)\s+(?:song|track)',song,re.I))
-            if liked or re.search(r'\bplaylist$',target,re.I) or current:
+            named_song = bool(re.match(r'(?:(?:the|a)\s+)?(?:song|track)\s+', song, re.I))
+            if liked or re.search(r'\bplaylist$',target,re.I) or current or named_song:
                 return MusicPlan(operation='remove_current' if collection_change[1].casefold() in {'remove','delete'} else 'save_current', provider=provider,
                     collection='liked' if liked else 'playlist', query='' if liked else re.sub(r'\s+playlist$','',target,flags=re.I),
-                    track_query='' if current else song.strip(' \"'))
-        like = re.fullmatch(r'(like|unlike|save)\s+(?:(?:this|the\s+current|the)\s+)?(?:song|track)',text,re.I)
+                    track_query='' if current else re.sub(r'^(?:(?:the|a)\s+)?(?:(?:song|track)(?:\s+(?:called|named))?\s+)?', '', song, flags=re.I).strip(' \"'))
+        like = re.fullmatch(r'(like|unlike|dislike|disklike|save)\s+(?:(?:this|current|the\s+current|the)\s+)?(?:song|track)',text,re.I)
         if like:
-            return MusicPlan(operation='remove_current' if like[1].casefold()=='unlike' else 'save_current',provider=provider)
+            return MusicPlan(operation='remove_current' if like[1].casefold() in {'unlike','dislike','disklike'} else 'save_current',provider=provider)
         check = re.fullmatch(r'is\s+(?:this|the\s+current|the)\s+(?:song|track)\s+(?:already\s+)?in\s+(?:(?:any(?:\s+of)?(?:\s+my)?|my|a)\s+)?(.+)',text,re.I)
         if check:
             target=check[1].strip(' \"')
-            liked=bool(re.fullmatch(r'liked\s+songs?(?:\s+playlist)?',target,re.I))
+            liked=bool(re.fullmatch(r'liked\s+(?:songs?(?:\s+playlist)?|playlist)',target,re.I))
             if liked or re.search(r'playlists?$',target,re.I):
                 return MusicPlan(operation='check_current',provider=provider,collection='liked' if liked else 'playlist',
                     query='' if liked else re.sub(r'\s*playlists?$','',target,flags=re.I).strip())
@@ -319,6 +343,15 @@ class MusicAgent:
         mix = re.fullmatch(r"(?:play|shuffle)\s+(?:something\s+from\s+)?(?:my\s+|the\s+)?(.+?\s+mix(?:\s+\d+)?)", text, re.I)
         if mix:
             return MusicPlan(operation="play_playlist", provider=provider, query=mix[1], shuffle=shuffle)
+        album = re.fullmatch(r"(?:play|put on)\s+(?:the\s+)?(?:latest|newest|most recent)\s+(?:album\s+(?:by|from)\s+(.+)|(.+?)(?:['’]s)?\s+album)", text, re.I)
+        if album:
+            return MusicPlan(operation='play_album', provider=provider, artist=(album[1] or album[2]).strip(), latest=True)
+        album = re.fullmatch(r"(?:play|put on)\s+(.+?)(?:['’]s)?\s+(?:latest|newest|most recent)\s+album", text, re.I)
+        if album:
+            return MusicPlan(operation='play_album',provider=provider,artist=album[1].strip(),latest=True)
+        album = re.fullmatch(r"(?:play|put on)\s+(?:the\s+)?album\s+(.+?)(?:\s+by\s+(.+))?", text, re.I)
+        if album:
+            return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
         song = re.fullmatch(r"(?:play|put on)\s+(?:the\s+song\s+)?(.+)", text, re.I)
         if song or (explicit_provider and " by " in text.casefold()):
             title = song[1] if song else text
@@ -369,7 +402,10 @@ class MusicAgent:
             elif original:
                 return SpecialistResponse(agent=self.name, status="needs_fetch", summary="Which song do you mean? Send its title or artist so I can find the original version.")
             elif source_choice:
-                plan = MusicPlan.model_validate({**last_plan, "query":source_choice["title"], "source_uri":source_choice["uri"]})
+                if source_choice.get('kind') == 'track':
+                    plan = MusicPlan.model_validate({**last_plan, 'track_query':source_choice['title'], 'track_uri':source_choice['uri']})
+                else:
+                    plan = MusicPlan.model_validate({**last_plan, "query":source_choice["title"], "source_uri":source_choice["uri"]})
             elif last_plan.get("operation") == "play_playlist" and re.fullmatch(r"(?:https://open\.spotify\.com/playlist/|spotify:playlist:)[A-Za-z0-9]+(?:\?\S*)?", clean):
                 playlist_id = re.search(r"(?:playlist/|playlist:)([A-Za-z0-9]+)", clean)[1]
                 plan = MusicPlan.model_validate({**last_plan, "source_uri":"spotify:playlist:" + playlist_id})
@@ -390,10 +426,13 @@ class MusicAgent:
                     plan = MusicPlan.model_validate({**last_plan, "query":candidate["title"] if candidate else last_plan["query"],
                                                     "artist":candidate["artist"] if candidate else artist})
             else:
-                plan = self._fast_plan(clean)
+                plan = self._fast_plan(clean) or self._collection_followup(clean, context)
             if plan is None:
                 # No credentials, listening history, or unrelated chat enters the model.
                 plan = MusicPlan.model_validate(self.planner(clean, self.skill_loader("spotify")))
+                # Stable song IDs come from playback or a stored catalog choice,
+                # never from the planner's generated JSON.
+                plan = plan.model_copy(update={'track_uri':''})
             if plan.operation == "play_playlist" and not plan.source_uri:
                 key = " ".join(plan.query.casefold().split())
                 linked = next((link for link in context.get("playlist_links", []) if link.get("provider") == plan.provider and
@@ -414,12 +453,14 @@ class MusicAgent:
             if plan.operation in {'save_current','remove_current'}:
                 proposal = integration.prepare_collection_change(plan, invoke)
                 if isinstance(proposal,str):
-                    return SpecialistResponse(agent=self.name,status='answered',summary=proposal,activity_events=events)
-                target = 'Liked Songs' if proposal.collection=='liked' else proposal.playlist_name
-                preview = f"{'Add' if proposal.action=='save' else 'Remove'} {proposal.track_title} {'to' if proposal.action=='save' else 'from'} {target}?"
-                return SpecialistResponse(agent=self.name,status='needs_fetch',summary=preview,
-                    action_request={'action':'music.change_collection','payload':proposal.model_dump(),'preview':preview},
-                    activity_events=events,structured_payload={'music_plan':plan.model_dump()})
+                    summary = proposal
+                else:
+                    # The user's clear add/remove instruction authorizes this
+                    # captured song and destination. The adapter still checks
+                    # membership and reads back the single write before success.
+                    summary = integration.change_collection(proposal, invoke)
+                return SpecialistResponse(agent=self.name,status='answered',summary=summary,
+                    activity_events=events,structured_payload={'music_plan':plan.model_dump()},confidence=1.0)
             if plan.operation in {"create_playlist", "curate_playlist"}:
                 prepare = getattr(integration, "curate_playlist" if plan.operation == "curate_playlist" else "prepare_playlist", None)
                 if not callable(prepare):

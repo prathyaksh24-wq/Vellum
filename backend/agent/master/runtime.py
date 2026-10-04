@@ -112,8 +112,8 @@ class DelegationRuntime:
         """Run independent agent tasks concurrently; serialize each owner's context."""
         if not 1 <= len(requests) <= 8:
             raise ValueError("Delegate between one and eight independent tasks")
-        if any(r.confirm_pending_action for r in requests):
-            raise ValueError("Confirm pending actions individually")
+        if sum(r.confirm_pending_action for r in requests) > 1:
+            raise ValueError("Confirm only one pending action per turn")
         if len({(r.parent_thread_id, r.user_id) for r in requests}) != 1:
             raise ValueError("A delegation batch must have one conversation and user")
         groups: dict[str, list[tuple[int, DelegationRequest]]] = {}

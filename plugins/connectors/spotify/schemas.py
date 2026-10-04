@@ -111,15 +111,17 @@ SPOTIFY_PLAYLISTS = _tool(
 
 SPOTIFY_ALBUMS = _tool(
     "spotify_albums",
-    "Get Spotify album metadata or list an album's tracks.",
+    "Get album metadata, tracks, or artist albums with release dates. artist_albums requires artist_id; get/tracks require album_id.",
     {
-        "action": {"type": "string", "enum": ["get", "tracks"]},
+        "action": {"type": "string", "enum": ["get", "tracks", "artist_albums"]},
         "album_id": {"type": "string"},
+        "artist_id": {"type": "string"},
+        "include_groups": {"type": "string", "enum": ["album", "single", "appears_on", "compilation"]},
         "market": {"type": "string"},
         "limit": {"type": "integer", "minimum": 1, "maximum": 50},
         "offset": {"type": "integer", "minimum": 0},
     },
-    ["action", "album_id"],
+    ["action"],
 )
 
 SPOTIFY_LIBRARY = _tool(
