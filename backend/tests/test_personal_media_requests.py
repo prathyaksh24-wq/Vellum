@@ -81,11 +81,15 @@ def test_current_audio_always_reads_live_state(text):
 
 def test_seek_is_relative_and_clamped_before_episode_end():
     calls=[]
+    progress=90000
     def invoke(name, args):
+        nonlocal progress
         calls.append(args)
-        return {'track':{'name':'episode'},'progress_ms':90000,'duration_ms':100000}
+        if args['action']=='seek':
+            progress=args['position_ms']
+        return {'track':{'name':'episode'},'progress_ms':progress,'duration_ms':100000}
     SpotifyCapabilityService().execute(MusicPlan(operation='seek',seek_delta_ms=30000), invoke)
-    assert calls == [{'action':'get_state'}, {'action':'seek','position_ms':99000}]
+    assert calls == [{'action':'get_state'}, {'action':'seek','position_ms':99000}, {'action':'get_state'}]
 
 
 @pytest.mark.parametrize('text', ['can post something abput ur self on X', 'i meant post something about ur self on x'])

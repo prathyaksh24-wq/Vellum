@@ -3,10 +3,11 @@
 import json
 import random
 import re
+import time
 import unicodedata
 from difflib import SequenceMatcher
 
-from agent.contracts.music import MusicChoiceRequired, MusicPlan, MusicPlaylistCreateProposal
+from agent.contracts.music import MusicChoiceRequired, MusicPlan, MusicPlaylistCreateProposal, MusicCollectionChangeProposal
 from agent.plugins.registry import get_plugin_registry
 from agent.plugins.spotify_runtime import registered_spotify_context, spotify_catalog_query_gate
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -190,9 +191,24 @@ class SpotifyCapabilityService:
                  and (not year or year[0] in str(p.get("name") or ""))]
         if not lists:
             raise ValueError("Spotify did not return a matching current playlist. Give me song titles or a source playlist link; I have not created anything.")
-        requested = re.search(r"\b(\d{1,2})\s+songs\b", plan.query, re.I)
+        requested = re.search(r"\b(\d{1,2})\s+(?:(?:trendy|trending|viral|popular|current)\s+)?songs\b", plan.query, re.I)
         count = min(50, int(requested[1])) if requested else 20
-        items = invoke("spotify_playlists", {"action":"tracks", "playlist_id":lists[0]["id"], "limit":50})
+        if count<1:
+            raise ValueError('Choose at least one song for the playlist.')
+        fallback = False
+        try:
+            items = invoke("spotify_playlists", {"action":"tracks", "playlist_id":lists[0]["id"], "limit":50})
+        except ValueError as exc:
+            if '403' not in str(exc) and 'forbidden' not in str(exc).casefold():
+                raise
+            fallback = True
+            items = {'items':[]}
+            for offset in range(0, count, 10):
+                found = invoke('spotify_search', {'query':'year:'+year[0] if year else 'viral', 'types':['track'], 'limit':10, 'offset':offset})
+                tracks = found.get('tracks',{}).get('items') or []
+                items['items'].extend({'track':track} for track in tracks if track)
+                if not tracks:
+                    break
         songs, seen = [], set()
         for entry in items.get("items", []):
             track = entry.get("track") or entry.get("item") or {}
@@ -204,8 +220,12 @@ class SpotifyCapabilityService:
                 break
         if not songs:
             raise ValueError("Spotify did not expose playable songs for that source playlist. No playlist was created.")
-        return MusicPlaylistCreateProposal(provider="spotify", name="Viral Picks" + (" " + year[0] if year else ""),
-            description="Selected from " + str(lists[0].get("name") or "a Spotify playlist")[:250] + "; playlist labels are not verified chart rankings.", songs=songs)
+        description = ('Spotify blocked the public playlist contents; selected from catalog search, not verified trends.' if fallback else
+            "Selected from " + str(lists[0].get("name") or "a Spotify playlist")[:200] + "; playlist labels are not verified chart rankings.")
+        named = re.search(r'\b(?:named|called)\s+(.+?)(?:\s+with\b|$)',plan.query,re.I)
+        name = named[1].strip(' \"') if named else ("Current Picks" if fallback else "Viral Picks") + (" " + year[0] if year else "")
+        return MusicPlaylistCreateProposal(provider="spotify", name=name,
+            description=description, songs=songs)
 
     def create_playlist(self, proposal: MusicPlaylistCreateProposal, invoke) -> str:
         if proposal.provider != "spotify" or any(not re.fullmatch(r"spotify:track:[A-Za-z0-9]+", song.uri) for song in proposal.songs):
@@ -236,16 +256,59 @@ class SpotifyCapabilityService:
         return f"Created private playlist {proposal.name} with {count} {'song' if count == 1 else 'songs'}. https://open.spotify.com/playlist/{playlist_id}"
 
     def execute(self, plan: MusicPlan, invoke) -> str:
+        if plan.operation=='check_current':
+            return self.check_collection(plan,invoke)
         if plan.operation == "seek":
             state = invoke("spotify_playback", {"action":"get_state"})
             if not (state.get("track") or state.get("item")):
                 return "Nothing is playing on Spotify to seek within."
-            position = max(0, int(state.get("progress_ms") or 0) + plan.seek_delta_ms)
+            before = int(state.get("progress_ms") or 0)
+            position = max(0, before + plan.seek_delta_ms)
             duration = int(state.get("duration_ms") or (state.get("item") or {}).get("duration_ms") or 0)
             if duration:
                 position = min(position, max(0, duration - 1000))
-            invoke("spotify_playback", {"action":"seek", "position_ms":position})
-            return f"Moved {'forward' if plan.seek_delta_ms >= 0 else 'back'} {abs(plan.seek_delta_ms)//1000} seconds within the current audio."
+            if position == before:
+                return "Already at the requested playback boundary."
+            started = time.monotonic()
+            invoke("spotify_playback", {"action":"seek", "position_ms":position, **self._device_args(state)})
+            track = state.get('track') or state.get('item') or {}
+            def changed(after):
+                current = after.get('track') or after.get('item') or {}
+                same_track = bool(current) and (not track.get('uri') or current.get('uri') == track['uri'])
+                elapsed = int((time.monotonic()-started)*1000) if after.get('is_playing') else 0
+                observed = int(after.get('progress_ms') or 0)
+                # Spotify can report the new position before it advances by
+                # the complete request round-trip. Accept that bounded range,
+                # while excluding the trajectory of an unchanged player.
+                reached = position-250 <= observed <= position+elapsed+250
+                changed_position = abs(observed-before-elapsed) > min(750,abs(position-before)/2)
+                return same_track and self._same_device(state, after) and reached and changed_position
+            self._verify_control(invoke, changed, "seek")
+            return f"Moved {'forward' if position >= before else 'back'} {abs(position-before)/1000:g} seconds within the current audio."
+        if plan.operation in {"set_volume", "adjust_volume", "set_repeat", "set_shuffle"}:
+            state = invoke("spotify_playback", {"action":"get_state"})
+            device = state.get('device') or {}
+            if not (state.get('track') or state.get('item') or device):
+                return "No active Spotify playback device is available. Open Spotify or enable Vellum's player."
+            args = self._device_args(state)
+            if plan.operation in {"set_volume", "adjust_volume"}:
+                before = device.get('volume_percent')
+                if device.get('supports_volume') is False or not isinstance(before, int):
+                    return "This Spotify device does not expose volume control. Adjust its volume directly."
+                target = plan.volume_percent if plan.operation == 'set_volume' else max(0, min(100, before + plan.volume_delta_percent))
+                if target == before:
+                    return f"Volume is already {target}%."
+                invoke('spotify_playback', {'action':'set_volume', 'volume_percent':target, **args})
+                self._verify_control(invoke, lambda after:self._same_device(state,after) and (after.get('device') or {}).get('volume_percent')==target, 'volume change')
+                return f"Volume changed from {before}% to {target}%."
+            if plan.operation == 'set_repeat':
+                target = plan.repeat_state
+                invoke('spotify_playback', {'action':'set_repeat', 'state':target, **args})
+                self._verify_control(invoke, lambda after:self._same_device(state,after) and after.get('repeat')==target, 'repeat change')
+                return {'track':'This song is now on repeat.', 'context':'The current collection is now on repeat.', 'off':'Repeat is off.'}[target]
+            invoke('spotify_playback', {'action':'set_shuffle', 'shuffle':plan.shuffle, **args})
+            self._verify_control(invoke, lambda after:self._same_device(state,after) and after.get('shuffle')==plan.shuffle, 'shuffle change')
+            return 'Shuffle is on.' if plan.shuffle else 'Shuffle is off.'
         if plan.operation == "play_podcast":
             show, episode = self.resolve_podcast(plan, invoke)
             invoke("spotify_playback", {"action":"play", "uris":[episode["uri"]]})
@@ -318,3 +381,122 @@ class SpotifyCapabilityService:
         invoke("spotify_playback", args)
         return {"pause":"Spotify paused.", "resume":"Spotify resumed.", "next":"Skipped to the next track.",
                 "previous":"Previous track requested."}.get(plan.operation, "Spotify playback setting applied.")
+
+    @staticmethod
+    def _device_args(state):
+        device_id = (state.get('device') or {}).get('id')
+        return {'device_id':device_id} if device_id else {}
+
+    @staticmethod
+    def _same_device(before, after):
+        expected = (before.get('device') or {}).get('id')
+        return not expected or (after.get('device') or {}).get('id') == expected
+
+    @staticmethod
+    def _verify_control(invoke, matches, label):
+        deadline = time.monotonic()+4
+        try:
+            for attempt in range(5):
+                if attempt:
+                    time.sleep(.2)
+                if time.monotonic()>=deadline:
+                    break
+                if matches(invoke('spotify_playback', {'action':'get_state'})):
+                    return
+        except Exception as exc:
+            raise ValueError(f"Spotify accepted the {label}, but I could not verify it. I have not repeated the command.") from exc
+        raise ValueError(f"Spotify accepted the {label}, but playback did not confirm the change. I have not repeated the command.")
+
+    def _collection_track(self,plan,invoke):
+        if plan.track_query:
+            track=self.resolve_song(MusicPlan(operation='play_song',query=plan.track_query),invoke)
+        else:
+            state=invoke('spotify_playback',{'action':'get_state'})
+            track=state.get('track') or state.get('item') or {}
+        if not re.fullmatch(r'spotify:track:[A-Za-z0-9]+',str(track.get('uri') or '')):
+            raise ValueError('No current Spotify song is available. Play a song or give its title.')
+        return track
+
+    @staticmethod
+    def _liked_contains(uri,invoke):
+        data=invoke('spotify_library',{'action':'contains','kind':'tracks','uris':[uri]})
+        values=data.get('items')
+        if not isinstance(values,list) or len(values)!=1 or not isinstance(values[0],bool):
+            raise ValueError('Spotify did not return a verified Liked Songs membership result.')
+        return values[0]
+
+    @staticmethod
+    def _playlist_contains(playlist_id,uri,invoke,*,deadline=None):
+        for offset in range(0,10000,50):
+            if deadline is not None and time.monotonic()>=deadline:
+                raise ValueError('Playlist lookup reached its time limit.')
+            data=invoke('spotify_playlists',{'action':'tracks','playlist_id':playlist_id,'limit':50,'offset':offset})
+            entries=data.get('items')
+            if not isinstance(entries,list):
+                raise ValueError('Spotify did not expose this playlist’s contents.')
+            if any((entry.get('item') or entry.get('track') or {}).get('uri')==uri for entry in entries if isinstance(entry,dict)):
+                return True
+            if not data.get('next') or not entries:
+                return False
+        raise ValueError('This playlist is too large to verify completely in one request.')
+
+    def prepare_collection_change(self,plan,invoke):
+        track=self._collection_track(plan,invoke)
+        action='save' if plan.operation=='save_current' else 'remove'
+        playlist=self.resolve_playlist(plan,invoke) if plan.collection=='playlist' else {}
+        exists=(self._playlist_contains(playlist['id'],track['uri'],invoke,deadline=time.monotonic()+12) if playlist else self._liked_contains(track['uri'],invoke))
+        name=playlist.get('name') or 'Liked Songs'
+        if exists==(action=='save'):
+            return f"{track.get('name') or 'This song'} is {'already in' if exists else 'not in'} {name}."
+        return MusicCollectionChangeProposal(action=action,collection=plan.collection,track_uri=track['uri'],
+            track_title=track.get('name') or 'This song',playlist_id=playlist.get('id',''),playlist_name=playlist.get('name',''))
+
+    def change_collection(self,proposal,invoke):
+        # The proposal's captured URI survives a song change before confirmation.
+        expected=proposal.action=='save'
+        if proposal.collection=='liked':
+            contains=lambda:self._liked_contains(proposal.track_uri,invoke)
+            args={'action':proposal.action,'kind':'tracks','uris':[proposal.track_uri],'confirm':True}
+            name='Liked Songs'; tool='spotify_library'
+        else:
+            contains=lambda:self._playlist_contains(proposal.playlist_id,proposal.track_uri,invoke,deadline=time.monotonic()+12)
+            args={'action':'add_items' if expected else 'remove_items','playlist_id':proposal.playlist_id,'uris':[proposal.track_uri],'confirm':True}
+            name=proposal.playlist_name; tool='spotify_playlists'
+        if contains()==expected:
+            return f"{proposal.track_title} is {'already in' if expected else 'not in'} {name}."
+        invoke(tool,args)
+        try:
+            if contains()!=expected:
+                raise ValueError('Membership did not change')
+        except Exception as exc:
+            raise ValueError('Spotify accepted the change, but I could not verify it. Check the collection before retrying; I have not repeated the write.') from exc
+        return f"{'Added' if expected else 'Removed'} {proposal.track_title} {'to' if expected else 'from'} {name}."
+
+    def check_collection(self,plan,invoke):
+        track=self._collection_track(plan,invoke)
+        title=track.get('name') or 'This song'
+        if plan.collection=='liked':
+            return f"{title} is {'in' if self._liked_contains(track['uri'],invoke) else 'not in'} your Liked Songs."
+        if plan.query:
+            playlist=self.resolve_playlist(plan,invoke)
+            exists=self._playlist_contains(playlist['id'],track['uri'],invoke,deadline=time.monotonic()+12)
+            return f"{title} is {'in' if exists else 'not in'} {playlist.get('name') or 'that playlist'}."
+        from concurrent.futures import ThreadPoolExecutor
+        from contextvars import copy_context
+        page=invoke('spotify_playlists',{'action':'list','limit':50,'offset':0})
+        playlists=[p for p in page.get('items',[]) if p and p.get('id')]
+        deadline=time.monotonic()+12
+        def lookup(playlist):
+            try:
+                return playlist.get('name') or 'Untitled playlist',self._playlist_contains(playlist['id'],track['uri'],invoke,deadline=deadline)
+            except ValueError:
+                return playlist.get('name') or 'Untitled playlist',None
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures=[pool.submit(copy_context().run,lookup,p) for p in playlists[:20]]
+            results=[future.result() for future in futures]
+        names=[name for name,found in results if found]
+        incomplete=bool(page.get('next') or len(playlists)>20 or any(found is None for _,found in results))
+        answer=f"{title} is in: " + ', '.join(names) + '.' if names else f"{title} was not found in the {sum(found is not None for _,found in results)} playlists I could check."
+        if incomplete:
+            answer+=' Some playlists could not be checked; name one for a complete lookup.'
+        return answer

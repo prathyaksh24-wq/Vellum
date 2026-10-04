@@ -74,6 +74,59 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     expect(localStorage.getItem('spotify-access-token')).toBeNull();
   });
 
+  test('a natural play request activates immediately and waits for the registered device', async () => {
+    const f = await fixture();
+    const request = window.VellumSpotifyPlayback.beginRequest('play Rain Over Me');
+    expect(f.order).toEqual(['activate']);
+    let done = false; request.ready.then(() => { done = true; });
+    await flush(); expect(done).toBe(false);
+    await f.player.listeners.ready({device_id:'vellum-device'});
+    await request.ready; expect(done).toBe(true);
+    expect(f.actions.dispatch).toHaveBeenCalledWith(expect.objectContaining({action_id:'spotify.playback.session'}), {source:'ui'});
+  });
+
+  test('mixed requests activate music while unrelated play requests leave the player alone', async () => {
+    const f = await fixture();
+    expect(window.VellumSpotifyPlayback.beginRequest('play chess')).toBeUndefined();
+    expect(window.VellumSpotifyPlayback.beginRequest('what videos have I watched')).toBeUndefined();
+    const request = window.VellumSpotifyPlayback.beginRequest('what videos have I watched and play a song');
+    await flush(); await f.player.listeners.ready({device_id:'vellum-device'}); await request.ready;
+    expect(f.player.activateElement).toHaveBeenCalledTimes(1);
+  });
+
+  test('explicit stop releases local playback only after Spotify verifies it is paused', async () => {
+    const f = await fixture({api:{spotifyPlayer:vi.fn(async () => ({is_playing:false,device:{id:'vellum-device'}}))}});
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    const request = window.VellumSpotifyPlayback.beginRequest('stop the music'); await request.ready;
+    expect(f.controller.getSnapshot().enabled).toBe(true);
+    await request.complete({tools:['music_agent']});
+    expect(f.controller.getSnapshot().enabled).toBe(false);
+    expect(f.actions.dispatch).toHaveBeenLastCalledWith(expect.objectContaining({arguments:{owner_id:'test-owner',operation:'disable'}}), {source:'ui'});
+  });
+
+  test('pause keeps the player ready and a failed stop cannot disable ongoing music', async () => {
+    const f = await fixture({api:{spotifyPlayer:vi.fn(async () => ({is_playing:true,device:{id:'vellum-device'}}))}});
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    expect(window.VellumSpotifyPlayback.beginRequest('pause')).toBeUndefined();
+    await window.VellumSpotifyPlayback.beginRequest('stop').complete({tools:['music_agent']});
+    expect(f.controller.getSnapshot().ready).toBe(true);
+  });
+
+  test('automatic activation has a total time limit even when SDK connect stalls', async () => {
+    const f = await fixture(); f.player.connect.mockImplementation(() => new Promise(() => {}));
+    const request = window.VellumSpotifyPlayback.beginRequest('play a song');
+    const failed = expect(request.ready).rejects.toMatchObject({vellumPlaybackError:true});
+    await vi.advanceTimersByTimeAsync(12000); await failed;
+  });
+
+  test('a play request waits for initial component registration rather than using a phone', async () => {
+    await import('../../design/Velllum/uploads/components/spotify-playback.js');
+    const request = window.VellumSpotifyPlayback.beginRequest('play a song');
+    const f = await fixture(); await flush();
+    await f.player.listeners.ready({device_id:'vellum-device'}); await request.ready;
+    expect(f.controller.getSnapshot().ready).toBe(true);
+  });
+
   test('podcast episode states without track artists or album do not crash the player', async () => {
     const f = await fixture(); await f.controller.enable(); await flush();
     const emit = () => f.player.listeners.player_state_changed({paused:false, position:0, duration:1000,
@@ -162,6 +215,28 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     await f.player.listeners.ready({device_id:'vellum-device'});
     expect(f.actions.dispatch).toHaveBeenCalledTimes(2);
     expect(f.controller.getSnapshot().ready).toBe(true);
+  });
+
+  test('a natural play request reuses a ready player in another window', async () => {
+    const f = await fixture({
+      api:{spotifyPlayer:vi.fn(async () => ({web_playback:{status:'ready',device_id:'other-device'},devices:[{id:'other-device',is_restricted:false}]}))},
+      actions:{dispatch:vi.fn(async () => ({status:'failed',message:'Vellum playback is already running in another window'}))},
+    });
+    await window.VellumSpotifyPlayback.beginRequest('play a song').ready;
+    expect(f.controller.getSnapshot()).toMatchObject({status:'shared',enabled:false,ready:false});
+    expect(f.player.connect).not.toHaveBeenCalled();
+    expect(f.api.spotifyPlayer).toHaveBeenCalledWith(true);
+    expect(f.actions.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  test('an unready owner in another window is not reported as usable playback', async () => {
+    const f = await fixture({
+      api:{spotifyPlayer:vi.fn(async () => ({web_playback:{status:'reconnecting'}}))},
+      actions:{dispatch:vi.fn(async () => ({status:'failed',message:'Vellum playback is already running in another window'}))},
+    });
+    await expect(window.VellumSpotifyPlayback.beginRequest('play a song').ready).rejects.toMatchObject({vellumPlaybackError:true});
+    expect(f.controller.getSnapshot().status).toBe('busy');
+    expect(f.player.connect).not.toHaveBeenCalled();
   });
 
   test('a delayed SDK token is discarded when the player is disabled', async () => {

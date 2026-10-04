@@ -75,7 +75,7 @@ class RoutedXPostDrafter:
             [
                 SystemMessage(content=_POST_DRAFT_PROMPT),
                 HumanMessage(content=f"Draft request: {request}"),
-            ], request_timeout=40.0, max_tokens=150,
+            ], request_timeout=20.0, max_tokens=100,
         )
         content = getattr(output, "content", output)
         if isinstance(content, list):

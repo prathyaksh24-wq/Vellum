@@ -93,6 +93,8 @@ class LiveAgentDispatcher:
                             confirm_pending_action=True,
                         )
                     )
+                    if not state.agent_selected:
+                        self.state_store.set_active_agent(thread_id, agent_name)
                     if run.response.action_request:
                         self.state_store.set_pending_action(thread_id, {"agent": agent_name, **run.response.action_request,
                             "batch_id":pending_action.get("batch_id"), "queued_actions":pending_action.get("queued_actions", [])})
@@ -317,6 +319,7 @@ class LiveAgentDispatcher:
                 r"\b(?:live|latest|next|last)\b",
             ),
             "XAgent": (
+                r"\b(?:delete|remove)\s+(?:it|that|this|the\s+(?:post|tweet))\b",
                 r"\b(?:post|posts|tweet|tweets|timeline|feed|bookmark|like|repost|retweet|unrepost|unretweet|reply|replies)\b",
                 r"\bwhat\s+did\s+(?:he|she|they)\s+(?:say|post)\b",
             ),

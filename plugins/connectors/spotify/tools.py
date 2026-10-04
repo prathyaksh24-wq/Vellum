@@ -357,6 +357,11 @@ def spotify_library(args: dict, **kwargs) -> str:
     if kind not in {"tracks", "albums"}:
         return _invalid("kind")
     path = f"/me/{kind}"
+    if action == 'contains':
+        uris = args.get('uris') or []
+        if not uris:
+            return _invalid('uris')
+        return _result(lambda:service.request('GET', '/me/library/contains', params={'uris':','.join(uris)}))
     if action == "list":
         return _result(
             lambda: service.request(

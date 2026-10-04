@@ -23,6 +23,15 @@ class FakeClock:
         self.current += timedelta(**kwargs)
 
 
+def test_timestamp_ties_preserve_credential_registration_order(tmp_path):
+    store=RoutingStore(tmp_path/'routing.db')
+    created=datetime(2026,1,1,tzinfo=UTC)
+    for identity in ['zz-first','aa-second']:
+        store.upsert_credential(CredentialRecord(id=identity,provider='openrouter',label=identity,
+            source='keyring:'+identity,fingerprint='fp:'+identity,created_at=created))
+    assert [item.id for item in store.list_credentials('openrouter')]==['zz-first','aa-second']
+
+
 def add_credential(
     store: RoutingStore,
     label: str,

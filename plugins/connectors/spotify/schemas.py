@@ -127,7 +127,7 @@ SPOTIFY_LIBRARY = _tool(
     "List, save, or remove tracks or albums in the user's Spotify library. Liked Songs is the track library, not a playlist. For 'like/save this song', use save_current so no separate playback lookup is needed.",
     {
         "kind": {"type": "string", "enum": ["tracks", "albums"]},
-        "action": {"type": "string", "enum": ["list", "save", "remove", "save_current", "remove_current"]},
+        "action": {"type": "string", "enum": ["list", "contains", "save", "remove", "save_current", "remove_current"]},
         "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "uris": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "market": {"type": "string"},

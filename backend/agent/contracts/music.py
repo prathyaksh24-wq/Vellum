@@ -27,7 +27,7 @@ class MusicSongRequest(BaseModel):
 
 class MusicPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["play_song", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "curate_playlist", "seek", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "current", "clarify"]
+    operation: Literal["play_song", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "curate_playlist", "seek", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "adjust_volume", "set_repeat", "save_current", "remove_current", "check_current", "current", "clarify"]
     provider: str = Field(default="spotify", max_length=80, pattern=r"^[a-z][a-z0-9_\-]*$")
     query: str = Field(default="", max_length=500)
     artist: str = Field(default="", max_length=200)
@@ -39,6 +39,10 @@ class MusicPlan(BaseModel):
     source_uri: str = Field(default="", max_length=200)
     volume_percent: int | None = Field(default=None, ge=0, le=100)
     seek_delta_ms: int | None = Field(default=None, ge=-86400000, le=86400000)
+    volume_delta_percent: int | None = Field(default=None, ge=-100, le=100)
+    repeat_state: Literal["track", "context", "off"] | None = None
+    collection: Literal['liked', 'playlist'] = 'liked'
+    track_query: str = Field(default='', max_length=200)
 
     @model_validator(mode="after")
     def required_arguments(self):
@@ -52,6 +56,10 @@ class MusicPlan(BaseModel):
             raise ValueError("A volume from 0 to 100 is required")
         if self.operation == "seek" and self.seek_delta_ms is None:
             raise ValueError("A seek interval is required")
+        if self.operation == "adjust_volume" and self.volume_delta_percent is None:
+            raise ValueError("A volume change is required")
+        if self.operation == "set_repeat" and self.repeat_state is None:
+            raise ValueError("A repeat mode is required")
         return self
 
 
@@ -65,6 +73,22 @@ class MusicPlaylistCreateProposal(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=300)
     songs: list[ResolvedMusicSong] = Field(min_length=1, max_length=50)
+
+
+class MusicCollectionChangeProposal(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    action: Literal['save', 'remove']
+    collection: Literal['liked', 'playlist']
+    track_uri: str = Field(pattern=r'^spotify:track:[A-Za-z0-9]+$')
+    track_title: str = Field(min_length=1, max_length=200)
+    playlist_id: str = Field(default='', max_length=160, pattern=r'^[A-Za-z0-9]*$')
+    playlist_name: str = Field(default='', max_length=200)
+
+    @model_validator(mode='after')
+    def playlist_target(self):
+        if self.collection=='playlist' and (not self.playlist_id or not self.playlist_name):
+            raise ValueError('An exact playlist is required')
+        return self
 
 
 class MusicIntegration(Protocol):

@@ -42,6 +42,8 @@ class XAgent:
         r"(?<!\w)x\s+feed(?:s)?(?!\w)",
         r"(?<!\w)x\s+post(?:s)?(?!\w)",
         r"(?<!\w)on\s+x(?!\w)",
+        r"^\s*(?:please\s+)?(?:post|publish|tweet)\b.*\bto\s+x(?!\w)",
+        r"https?://(?:www\.)?(?:x|twitter)\.com/[^/]+/status/\d+",
         r"(?<!\w)(?:my\s+)?(?:latest|recent|last)?\s*(?:liked\s+posts?|x\s+likes?)(?!\w)",
         r"(?<!\w)(?:posts?|tweets?)\s+(?:did|have)\s+i\s+like(?:d)?\s+(?:on\s+)?x(?!\w)",
         r"^\s*(?:please\s+)?(?:post|publish|tweet)\s+(?:this\s+)?(?:to|on)\s+x(?!\w)",
@@ -609,7 +611,7 @@ class XAgent:
 
     @staticmethod
     def _clean_post_request(query: str) -> str:
-        text = re.sub(r"^\s*(?:i\s+meant\s+|no[, ]+)", "", query, flags=re.I)
+        text = re.sub(r"^\s*(?:i\s+meant\s+|no+[, ]+(?:i\s+meant\s+)?)", "", query, flags=re.I)
         return re.sub(r"^\s*(?:please\s+)?(?:can|could|would|will)\s+(?:(?:you|u)\s+)?(?=(?:post|publish|tweet)\b)", "", text, flags=re.I)
 
     def _answer_post(self, query: str) -> SpecialistResponse:
@@ -1256,7 +1258,7 @@ class XAgent:
     def _should_draft_post(instruction: str) -> bool:
         lowered = " ".join(instruction.casefold().split())
         return bool(
-            re.search(r"\b(?:something|anything|random|funny|joke|witty|clever|interesting)\b", lowered)
+            re.search(r"\b(?:something|simething|somethign|somthing|soemthing|anything|random|rsndom|funny|joke|witty|clever|interesting)\b", lowered)
             or re.search(r"^(?:about|on)\s+\S+", lowered)
         )
 
