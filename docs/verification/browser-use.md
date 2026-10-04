@@ -74,3 +74,7 @@ The regression failed on the original handler with no open action dispatched.
 Follow-up validation checks one-click launch and the existing controls, downloads
 and desktop/mobile layout against disposable fixtures, separately from local
 server activation. Latest results are recorded on the follow-up PR.
+
+The sidebar failure path also called the toast state as a function. A rejected
+launch now uses the existing `pushToast` helper. The smoke rejects an open receipt
+and checks that its message appears without a page error, then retries normally.

@@ -50,6 +50,22 @@ try {
   await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
   const panel=page.getByRole('complementary',{name:'Vellum browser'});
   await panel.waitFor();
+  await panel.getByRole('button',{name:'Close session',exact:true}).click();
+  await wait(async()=> !(await status()).running);
+  const rejectLaunch = route => {
+    const body = route.request().postDataJSON();
+    if (body.request?.action_id === 'browser.session.control' && body.request.arguments.operation === 'open') {
+      return route.fulfill({json:{status:'failed',message:'Browser launch rejected for regression.'}});
+    }
+    return route.continue();
+  };
+  await page.route('**/api/app-actions/dispatch', rejectLaunch);
+  await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
+  await page.getByText('Browser launch rejected for regression.',{exact:true}).waitFor();
+  assert.deepEqual(errors,[]);
+  await page.unroute('**/api/app-actions/dispatch', rejectLaunch);
+  await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
+  await wait(async()=> (await status()).running);
   const address=panel.getByRole('textbox',{name:'Browser address'});
   await address.fill(backend+'/fixture/page'); await address.press('Enter');
   await panel.getByAltText('Live view of the dedicated browser tab').waitFor();
@@ -106,7 +122,7 @@ try {
   await panel.getByRole('button',{name:'Close session',exact:true}).click();
   await wait(async()=> !(await status()).running);
   assert.deepEqual(errors,[]);
-  const report={passed:true,checks:['sidebar launch before initial readiness response','real separate Brave launch','More disclosure','scaled manual click and keyboard input','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
+  const report={passed:true,checks:['sidebar launch before initial readiness response','visible rejected-launch message','real separate Brave launch','More disclosure','scaled manual click and keyboard input','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
   writeFileSync(resolve(output,'browser-smoke.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 } catch (error) {
