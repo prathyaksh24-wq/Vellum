@@ -673,7 +673,10 @@ def test_ingestion_coordinator_is_resumable_and_idempotent_per_account(tmp_path:
     assert cursor["state"] == {"etag": "abc"}
 
 
-def test_failed_ingestion_records_health_without_advancing_cursor(tmp_path: Path) -> None:
+def test_failed_ingestion_records_health_without_advancing_cursor(tmp_path: Path, monkeypatch) -> None:
+    # Windows can assign both jobs the same clock tick. The newest insertion
+    # must still report its failure, regardless of timestamp equality.
+    monkeypatch.setattr('agent.knowledge.store._now', lambda:'2026-10-04T00:00:00+00:00')
     core = build_core(tmp_path)
     coordinator = IngestionCoordinator(core.store)
     initial = IngestionJobInput(

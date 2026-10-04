@@ -5,6 +5,7 @@ import random
 import re
 import time
 import unicodedata
+from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
 from agent.contracts.music import MusicChoiceRequired, MusicPlan, MusicPlaylistCreateProposal, MusicCollectionChangeProposal
@@ -29,6 +30,13 @@ def playlist_key(value: str) -> str:
     # Preserve emoji symbols and joiners; presentation selectors do not change identity.
     return " ".join("".join(" " if unicodedata.category(c).startswith("P") else c
                             for c in normalized_name(value) if c not in "\ufe0e\ufe0f").split())
+
+
+def song_key(value: str) -> str:
+    """Comparison only: never change the provider's title or stable URI."""
+    value = title_key(value)
+    value = re.sub(r'\bu\b', 'you', value)
+    return ' '.join(re.sub(r'[^\w\s]', ' ', value).split())
 
 
 class SpotifyCapabilityService:
@@ -63,9 +71,22 @@ class SpotifyCapabilityService:
         query = 'track:"' + title + '"' + (" " + plan.artist if plan.artist else "")
         found = invoke("spotify_search", {"query":query, "types":["track"], "limit":10})
         tracks = [track for track in found.get("tracks", {}).get("items", []) if track.get("uri") and track.get("is_playable") is not False]
+        matching = [t for t in tracks if title_key(t.get("name", "")) == title_key(plan.query)]
+        if not matching:
+            # The exact track filter often returns no results for a typo. One
+            # bounded broad catalog query supplies candidates; ranking below
+            # remains deterministic and never selects an unrelated popular hit.
+            broad = invoke('spotify_search', {'query':title + (' ' + plan.artist if plan.artist else ''), 'types':['track'], 'limit':10})
+            additional = [t for t in broad.get('tracks', {}).get('items', []) if t and t.get('uri') and t.get('is_playable') is not False]
+            tracks = list({t['uri']:t for t in tracks + additional}.values())
+            matching = [t for t in tracks if title_key(t.get('name', '')) == title_key(plan.query)]
+            if not matching:
+                scores = {song_key(t.get('name','')):SequenceMatcher(None, song_key(plan.query), song_key(t.get('name',''))).ratio() for t in tracks}
+                ranked = sorted(scores.items(), key=lambda pair:(-pair[1], pair[0]))
+                if plan.artist and ranked and ranked[0][1] >= .9 and (len(ranked)==1 or ranked[0][1]-ranked[1][1] >= .08):
+                    matching = [t for t in tracks if song_key(t.get('name','')) == ranked[0][0]]
         if not tracks:
             raise MusicChoiceRequired("No playable song matched " + plan.query + " on Spotify.", [])
-        matching = [t for t in tracks if title_key(t.get("name", "")) == title_key(plan.query)]
         # A catalog search can return unrelated popular tracks. Ask about near
         # matches instead of silently starting the first search result.
         if not matching:
@@ -100,7 +121,7 @@ class SpotifyCapabilityService:
         match = re.fullmatch(r"(?:spotify:" + kind + r":|https://open\.spotify\.com/" + kind + r"/)([A-Za-z0-9]+)(?:\?\S*)?", value)
         return match[1] if match else None
 
-    def resolve_playlist(self, plan: MusicPlan, invoke) -> dict:
+    def resolve_playlist(self, plan: MusicPlan, invoke, *, saved_only=False) -> dict:
         direct = self._spotify_id(plan.source_uri or plan.query, "playlist")
         if direct:
             # Personalized mixes may play successfully while metadata returns
@@ -130,6 +151,8 @@ class SpotifyCapabilityService:
         if not matches and re.search(r"\bdaily\s+mix\b", plan.query, re.I):
             raise MusicChoiceRequired("Spotify did not expose your " + plan.query + " in the saved-playlist list. Paste that playlist's Spotify link so I can try it directly.", [])
         if not matches:
+            if saved_only:
+                raise MusicChoiceRequired('No saved playlist matched ' + plan.query + '. Give its exact name or Spotify link.', [])
             public = invoke("spotify_search", {"query":plan.query, "types":["playlist"], "limit":10})
             matches = [p for p in public.get("playlists", {}).get("items", []) if p and p.get("uri") and
                        wanted and re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", playlist_key(p.get("name", "")))]
@@ -140,6 +163,46 @@ class SpotifyCapabilityService:
         if choices:
             raise MusicChoiceRequired(message + "; ".join(str(i+1) + ". " + c["title"] for i,c in enumerate(choices)) + ". Reply with its number or Spotify link.", choices)
         raise MusicChoiceRequired("Spotify did not return a playlist named " + plan.query + ". Paste its Spotify link to try it directly.", [])
+
+    def resolve_album(self, plan: MusicPlan, invoke) -> dict:
+        if not plan.latest:
+            found = invoke('spotify_search', {'query':'album:"' + plan.query.replace('"', ' ') + '" ' + plan.artist, 'types':['album'], 'limit':10})
+            albums = [a for a in found.get('albums', {}).get('items', []) if a and a.get('uri') and
+                      normalized_name(a.get('name', '')) == normalized_name(plan.query) and
+                      (not plan.artist or any(normalized_name(x.get('name','')) == normalized_name(plan.artist) for x in a.get('artists', [])))]
+            identities = {(normalized_name(a['name']), tuple(x.get('id') or x.get('name') for x in a.get('artists', []))) for a in albums}
+            if len(identities) != 1:
+                raise MusicChoiceRequired('Give the album title and artist so I can select the right album.', [])
+            return sorted(albums, key=lambda a:a['uri'])[0]
+        found = invoke('spotify_search', {'query':plan.artist, 'types':['artist'], 'limit':10})
+        artists = {a['id']:a for a in found.get('artists', {}).get('items', []) if a and a.get('id') and
+                   normalized_name(a.get('name', '')) == normalized_name(plan.artist)}
+        if len(artists) != 1:
+            raise MusicChoiceRequired('Spotify did not identify one artist named ' + plan.artist + '. Give the artist’s exact name.', [])
+        artist = next(iter(artists.values()))
+        albums = []
+        deadline = time.monotonic() + 12
+        for offset in range(0, 1000, 10):
+            if time.monotonic() >= deadline:
+                raise ValueError('Album lookup reached its time limit; I have not started an older release.')
+            page = invoke('spotify_albums', {'action':'artist_albums', 'artist_id':artist['id'], 'include_groups':'album', 'limit':10, 'offset':offset})
+            if not isinstance(page.get('items'), list):
+                raise ValueError('Spotify did not expose the artist’s album catalog.')
+            albums.extend(a for a in page['items'] if a and a.get('album_type') == 'album' and a.get('uri') and
+                          any(x.get('id') == artist['id'] for x in a.get('artists', [])))
+            if not page.get('next'):
+                break
+        else:
+            raise ValueError('The artist’s catalog exceeded the lookup limit; I cannot verify the latest album.')
+        today = datetime.now(UTC).date().isoformat()
+        dated = [a for a in albums if re.fullmatch(r'\d{4}(?:-\d{2}(?:-\d{2})?)?', str(a.get('release_date') or '')) and a['release_date'] <= today]
+        if not dated:
+            raise MusicChoiceRequired('Spotify returned no released album for ' + artist['name'] + '.', [])
+        newest = max(a['release_date'] for a in dated)
+        candidates = [a for a in dated if a['release_date'] == newest]
+        if len({normalized_name(a['name']) for a in candidates}) > 1:
+            raise MusicChoiceRequired('Multiple albums share the latest release date: ' + '; '.join(sorted({a['name'] for a in candidates})) + '. Give the album title.', [])
+        return sorted(candidates, key=lambda a:a['uri'])[0]
 
     def resolve_podcast(self, plan: MusicPlan, invoke) -> tuple[dict, dict]:
         show_id = self._spotify_id(plan.source_uri or plan.query, "show")
@@ -258,6 +321,12 @@ class SpotifyCapabilityService:
     def execute(self, plan: MusicPlan, invoke) -> str:
         if plan.operation=='check_current':
             return self.check_collection(plan,invoke)
+        if plan.operation == 'play_album':
+            album = self.resolve_album(plan, invoke)
+            invoke('spotify_playback', {'action':'play', 'context_uri':album['uri']})
+            self._verify_control(invoke, lambda state:state.get('is_playing') and
+                (state.get('context') or {}).get('uri') == album['uri'], 'album playback', state_action='get_currently_playing')
+            return 'Playing ' + album['name'] + (' by ' + plan.artist if plan.artist else '') + '.'
         if plan.operation == "seek":
             state = invoke("spotify_playback", {"action":"get_state"})
             if not (state.get("track") or state.get("item")):
@@ -393,7 +462,7 @@ class SpotifyCapabilityService:
         return not expected or (after.get('device') or {}).get('id') == expected
 
     @staticmethod
-    def _verify_control(invoke, matches, label):
+    def _verify_control(invoke, matches, label, *, state_action='get_state'):
         deadline = time.monotonic()+4
         try:
             for attempt in range(5):
@@ -401,15 +470,18 @@ class SpotifyCapabilityService:
                     time.sleep(.2)
                 if time.monotonic()>=deadline:
                     break
-                if matches(invoke('spotify_playback', {'action':'get_state'})):
+                if matches(invoke('spotify_playback', {'action':state_action})):
                     return
         except Exception as exc:
             raise ValueError(f"Spotify accepted the {label}, but I could not verify it. I have not repeated the command.") from exc
         raise ValueError(f"Spotify accepted the {label}, but playback did not confirm the change. I have not repeated the command.")
 
     def _collection_track(self,plan,invoke):
+        if plan.track_uri:
+            return {'uri':plan.track_uri, 'name':plan.track_query}
         if plan.track_query:
-            track=self.resolve_song(MusicPlan(operation='play_song',query=plan.track_query),invoke)
+            parts = re.split(r'\s+by\s+', plan.track_query, maxsplit=1, flags=re.I)
+            track=self.resolve_song(MusicPlan(operation='play_song',query=parts[0],artist=parts[1] if len(parts)>1 else ''),invoke)
         else:
             state=invoke('spotify_playback',{'action':'get_state'})
             track=state.get('track') or state.get('item') or {}
@@ -441,15 +513,60 @@ class SpotifyCapabilityService:
         raise ValueError('This playlist is too large to verify completely in one request.')
 
     def prepare_collection_change(self,plan,invoke):
-        track=self._collection_track(plan,invoke)
         action='save' if plan.operation=='save_current' else 'remove'
-        playlist=self.resolve_playlist(plan,invoke) if plan.collection=='playlist' else {}
+        playlist=self.resolve_playlist(plan,invoke,saved_only=True) if plan.collection=='playlist' else {}
+        track=(self._resolve_collection_song(plan, playlist, invoke) if action=='remove' and plan.track_query and not plan.track_uri
+               else self._collection_track(plan,invoke))
         exists=(self._playlist_contains(playlist['id'],track['uri'],invoke,deadline=time.monotonic()+12) if playlist else self._liked_contains(track['uri'],invoke))
         name=playlist.get('name') or 'Liked Songs'
         if exists==(action=='save'):
             return f"{track.get('name') or 'This song'} is {'already in' if exists else 'not in'} {name}."
         return MusicCollectionChangeProposal(action=action,collection=plan.collection,track_uri=track['uri'],
             track_title=track.get('name') or 'This song',playlist_id=playlist.get('id',''),playlist_name=playlist.get('name',''))
+
+    def _resolve_collection_song(self, plan, playlist, invoke):
+        """Remove from the requested collection, including typos, without web search."""
+        tracks = {}
+        deadline = time.monotonic() + 12
+        for offset in range(0, 10000, 50):
+            if time.monotonic() >= deadline:
+                raise ValueError('Song lookup reached its time limit. Give the song’s exact title and artist; nothing was removed.')
+            name = 'spotify_playlists' if playlist else 'spotify_library'
+            args = {'action':'tracks', 'playlist_id':playlist['id']} if playlist else {'action':'list', 'kind':'tracks'}
+            page = invoke(name, {**args, 'limit':50, 'offset':offset})
+            if not isinstance(page.get('items'), list):
+                raise ValueError('Spotify did not expose this collection’s songs; nothing was removed.')
+            for entry in page['items']:
+                track = (entry.get('item') or entry.get('track') or {}) if isinstance(entry, dict) else {}
+                if re.fullmatch(r'spotify:track:[A-Za-z0-9]+', str(track.get('uri') or '')) and track.get('name'):
+                    tracks[track['uri']] = track
+            if not page.get('next'):
+                break
+        else:
+            raise ValueError('The collection exceeded the lookup limit; nothing was removed.')
+        parts = re.split(r'\s+by\s+', plan.track_query, maxsplit=1, flags=re.I)
+        title, artist = parts[0], parts[1] if len(parts)>1 else ''
+        wanted = song_key(title)
+        candidates = list(tracks.values())
+        if artist:
+            candidates = [t for t in candidates if any(normalized_name(artist) == normalized_name(a.get('name','')) for a in t.get('artists', []))]
+        exact = [t for t in candidates if song_key(t['name']) == wanted]
+        if exact:
+            matches = exact
+        else:
+            def score(track):
+                # Versions still retain their own URIs. Multiple editions with
+                # the same base title need a selection, never an arbitrary write.
+                base = re.split(r'\s*[\(\[]|\s+-\s+', track['name'], maxsplit=1)[0]
+                return SequenceMatcher(None, wanted, song_key(base)).ratio()
+            ranked = sorted(((score(t), t) for t in candidates), key=lambda pair:(-pair[0], pair[1]['uri']))
+            matches = [t for similarity, t in ranked if similarity >= .84 and ranked[0][0]-similarity < .08]
+        if len(matches) == 1:
+            return matches[0]
+        choices = [{'title':t['name'], 'artist':', '.join(a.get('name','') for a in t.get('artists', [])), 'uri':t['uri'], 'kind':'track'} for t in matches[:5]]
+        if choices:
+            raise MusicChoiceRequired('Which saved version? ' + '; '.join(f"{i}. {c['title']} by {c['artist']}" for i,c in enumerate(choices,1)) + '. Reply with its number or artist.', choices)
+        raise MusicChoiceRequired('No saved song matched ' + plan.track_query + ' in ' + (playlist.get('name') or 'Liked Songs') + '. Give its title and artist; nothing was removed.', [])
 
     def change_collection(self,proposal,invoke):
         # The proposal's captured URI survives a song change before confirmation.
