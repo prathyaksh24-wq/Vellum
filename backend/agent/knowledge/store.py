@@ -4425,7 +4425,7 @@ class KnowledgeStore:
         params.append(max(1, min(int(limit), 500)))
         with closing(self._connect()) as connection, connection:
             rows = connection.execute(
-                f"SELECT * FROM ingestion_jobs {where} ORDER BY created_at DESC LIMIT ?",
+                f"SELECT * FROM ingestion_jobs {where} ORDER BY created_at DESC, rowid DESC LIMIT ?",
                 params,
             ).fetchall()
         return [self._job_row(row) for row in rows]

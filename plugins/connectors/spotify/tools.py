@@ -313,6 +313,15 @@ def spotify_playlists(args: dict, **kwargs) -> str:
 
 
 def spotify_albums(args: dict, **kwargs) -> str:
+    if args.get('action') == 'artist_albums':
+        artist_id = str(args.get('artist_id') or '')
+        if not artist_id.isascii() or not artist_id.isalnum():
+            return _invalid('artist_id')
+        # Artist-album pagination currently accepts at most ten items. Album
+        # track pagination retains its separate limit below.
+        limit = max(1, min(10, int(args.get('limit') or 10)))
+        return _result(lambda: _service(kwargs).request('GET', f'/artists/{artist_id}/albums',
+            params={**_params(args, 'include_groups', 'market', 'offset'), 'limit':limit}))
     missing = _missing(args, "album_id")
     if missing:
         return _invalid(*missing)

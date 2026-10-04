@@ -27,7 +27,7 @@ class MusicSongRequest(BaseModel):
 
 class MusicPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["play_song", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "curate_playlist", "seek", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "adjust_volume", "set_repeat", "save_current", "remove_current", "check_current", "current", "clarify"]
+    operation: Literal["play_song", "play_album", "play_playlist", "play_liked", "play_podcast", "play_episode", "create_playlist", "curate_playlist", "seek", "pause", "resume", "next", "previous", "set_shuffle", "set_volume", "adjust_volume", "set_repeat", "save_current", "remove_current", "check_current", "current", "clarify"]
     provider: str = Field(default="spotify", max_length=80, pattern=r"^[a-z][a-z0-9_\-]*$")
     query: str = Field(default="", max_length=500)
     artist: str = Field(default="", max_length=200)
@@ -37,6 +37,8 @@ class MusicPlan(BaseModel):
     shuffle: bool | None = None
     position: int | None = Field(default=None, ge=1, le=100000)
     source_uri: str = Field(default="", max_length=200)
+    latest: bool = False
+    track_uri: str = Field(default='', max_length=200, pattern=r'^(?:spotify:track:[A-Za-z0-9]+)?$')
     volume_percent: int | None = Field(default=None, ge=0, le=100)
     seek_delta_ms: int | None = Field(default=None, ge=-86400000, le=86400000)
     volume_delta_percent: int | None = Field(default=None, ge=-100, le=100)
@@ -46,6 +48,8 @@ class MusicPlan(BaseModel):
 
     @model_validator(mode="after")
     def required_arguments(self):
+        if self.operation == 'play_album' and not (self.artist.strip() if self.latest else self.query.strip()):
+            raise ValueError('An artist is required for the latest album, or supply an album title')
         if self.operation in {"play_song", "play_playlist", "play_podcast", "play_episode", "create_playlist"} and not self.query.strip():
             raise ValueError("A song or playlist name is required")
         if self.operation == "create_playlist" and not self.songs:
