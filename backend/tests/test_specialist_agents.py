@@ -1501,6 +1501,7 @@ def test_live_dispatcher_executes_pending_x_post_only_after_confirmation(tmp_pat
     assert confirmed.status == "answered"
     assert "Posted to X" in confirmed.answer
     assert state_store.get_pending_action("thread-x") is None
+    assert state_store.get('thread-x').active_agent == 'XAgent'
     assert any(event["label"] == "Posting to X..." for event in confirmed.activity_events)
     assert any(event["label"] == "X action completed" for event in confirmed.activity_events)
     assert any(event.get("metadata", {}).get("suppress_generic_tool") is True for event in confirmed.activity_events)

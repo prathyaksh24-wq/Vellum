@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import json
 import logging
@@ -104,6 +107,50 @@ class DelegationRuntime:
         self.wisdom_sink = wisdom_sink
         self._now = now or (lambda: datetime.now(UTC))
         self.audit_path = Path(audit_path)
+
+    def delegate_many(self, requests: list[DelegationRequest], *, on_complete=None) -> list[DelegationRunResult]:
+        """Run independent agent tasks concurrently; serialize each owner's context."""
+        if not 1 <= len(requests) <= 8:
+            raise ValueError("Delegate between one and eight independent tasks")
+        if any(r.confirm_pending_action for r in requests):
+            raise ValueError("Confirm pending actions individually")
+        if len({(r.parent_thread_id, r.user_id) for r in requests}) != 1:
+            raise ValueError("A delegation batch must have one conversation and user")
+        groups: dict[str, list[tuple[int, DelegationRequest]]] = {}
+        for index, request in enumerate(requests):
+            self.agent_catalog.resolve(request.agent_id)
+            groups.setdefault(request.agent_id, []).append((index, request))
+        results = {}
+        batch_id = str(uuid4())
+        def run_group(group):
+            completed = []
+            for index, request in group:
+                try:
+                    completed.append((index, self.delegate(request)))
+                except Exception:
+                    logger.exception("Independent delegation failed for %s", request.agent_id)
+                    profile = self.agent_catalog.resolve(request.agent_id).profile
+                    completed.append((index, self._complete(profile=profile,
+                        response=_runtime_response(profile=profile, status="error", summary=f"{request.agent_id} could not complete this task.", analysis="independent_delegation_failed"),
+                        parent_thread_id=request.parent_thread_id, task_id=request.task_id or str(uuid4()),
+                        started=self._utc_now(), cache_status="bypass", cache_reason="execution_error", goal=request.task, context=request.context)))
+                run = completed[-1][1]
+                if run.response.action_request and self.pending_action_store is not None:
+                    stored = self.pending_action_store.queue_pending_action(request.parent_thread_id,
+                        {"agent":run.response.agent, **run.response.action_request}, batch_id=batch_id)
+                    if not stored:
+                        run = replace(run, response=run.response.model_copy(update={"status":"blocked",
+                            "summary":"Resolve the existing pending change before preparing this action.", "action_request":{}}))
+                        completed[-1] = (index, run)
+                if on_complete is not None:
+                    on_complete(run)
+            return completed
+        with ThreadPoolExecutor(max_workers=min(4, len(groups))) as pool:
+            futures = [pool.submit(copy_context().run, run_group, group) for group in groups.values()]
+            for future in futures:
+                results.update(future.result())
+        ordered = [results[index] for index in range(len(requests))]
+        return ordered
 
     def delegate(
         self,

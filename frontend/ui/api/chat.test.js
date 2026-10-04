@@ -33,6 +33,25 @@ describe("Vellum default chat stream trace", () => {
     vi.restoreAllMocks();
   });
 
+  test('does not submit music until its existing player device is ready', async () => {
+    const fetchImpl = vi.fn(async () => ({ok:true,body:sseStream([
+      'event: response.completed\ndata: {"response":{"output_text":"Playing","tools":["music_agent"]}}\n\n',
+    ])}));
+    const api = await loadChatApi(fetchImpl);
+    let release;
+    const playbackRequest = {ready:new Promise(resolve => {release=resolve;}),complete:vi.fn(async () => {})};
+    const pending = api.stream({message:'play a song'}, {playbackRequest});
+    expect(fetchImpl).not.toHaveBeenCalled(); release(); await pending;
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(playbackRequest.complete).toHaveBeenCalledWith(expect.objectContaining({tools:['music_agent']}));
+  });
+
+  test('failed player readiness cannot send a request that silently uses another device', async () => {
+    const fetchImpl=vi.fn(); const api=await loadChatApi(fetchImpl);
+    await expect(api.stream({message:'play a song'}, {playbackRequest:{ready:Promise.reject(new Error('player unavailable'))}})).rejects.toThrow('player unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   test("emits visible activity trace updates from semantic SSE events", async () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,

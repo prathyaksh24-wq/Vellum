@@ -7421,7 +7421,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
     <div className={'spotify-player-shell side-' + dockSide}>
       <div className="spotify-player-pill" role="button" tabIndex="0" aria-label="Open Spotify player" onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}>
         {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6" size={17}/></span>}
-        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (playback.ready ? 'Playing inside Vellum' : playback.enabled ? 'Vellum player reconnecting' : 'Enable playback inside Vellum')}</span></span>
+        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (playback.status === 'shared' ? playback.message : playback.ready ? 'Playing inside Vellum' : playback.enabled ? 'Vellum player reconnecting' : 'Enable playback inside Vellum')}</span></span>
         <button className="spotify-mini-btn primary" aria-label={isPlaying ? 'Pause Spotify' : 'Play Spotify'} title={isPlaying ? 'Pause' : 'Play'} onClick={toggle}>{isPlaying ? <I d="M9 6v12M15 6v12" size={14}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
         <button className="spotify-mini-btn" aria-label="Next Spotify track" title="Next" onClick={e => { e.stopPropagation(); run({action:'next'}); }}><I d="M6 5l9 7-9 7V5zM18 5v14" size={14}/></button>
       </div>
@@ -9186,6 +9186,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       await API.chat.stream(
         {message: routedMessage, action_message: opts.submittedText || message, thread_id: convoId, model: selModel, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', convoId)},
         {
+          playbackRequest: opts.playbackRequest,
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {agentId: agent.id, convoId, timers: []};
             ctl.agentId = agent.id;
@@ -9296,7 +9297,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
-      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : err?.vellumPlaybackError ? err.message : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach, opts = {}) => {
@@ -9308,6 +9309,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       return;
     }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
+    const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = agentReply(ag, text);
     const act = activitySeedForMode(text);
     let cid = activeConvo[ag.id];
@@ -9338,7 +9340,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       };
       enqueueTurn('agent:' + ag.id + ':' + cid, () => {
         updateAgentTurn(ag.id, cid, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
-        return streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, existingConvo), attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn});
+        return streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, existingConvo), attach, {...opts, playbackRequest, submittedText:text, onAppAction:rollbackAppActionTurn});
       });
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
@@ -9750,6 +9752,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       await API.chat.stream(
         {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
         {
+          playbackRequest: opts.playbackRequest,
           controller: controller => {
             const ctl = turnCtl.current[assistantId] || {chatId, timers: []};
             ctl.chatId = chatId;
@@ -9873,7 +9876,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
-      updateTurn(chatId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
+      updateTurn(chatId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : err?.vellumPlaybackError ? err.message : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
     }
   };
 
@@ -9889,6 +9892,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       return;
     }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
+    const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = vellumReply(text);
     const act = activitySeedForMode(text);
     const queuedBehindTurn = !!(existingChat && existingChat.messages.some(m => m.streaming));
@@ -9935,7 +9939,7 @@ const [slashSkills, setSlashSkills] = useState([]);
       };
       enqueueTurn('chat:' + chatId, () => {
         updateTurn(chatId, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
-        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
+        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, playbackRequest, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
       });
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});

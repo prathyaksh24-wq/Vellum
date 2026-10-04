@@ -88,6 +88,27 @@ class _ActivityParser(HTMLParser):
             self.current_link["text"].append(data)
 
 
+def filter_channel_history(items: list[dict], channel: str) -> list[dict]:
+    """Match creator wording against local labels, never against video titles."""
+    from difflib import SequenceMatcher
+    wanted = ' '.join(channel.casefold().split())
+    labels = {str(item.get('channel_title') or '').casefold() for item in items}
+    exact = {label for label in labels if label == wanted or label.startswith(wanted + ' ')}
+    if not exact:
+        ranked = sorted(((max(SequenceMatcher(None, wanted, label).ratio(),
+                              SequenceMatcher(None, wanted, label.split(' ')[0]).ratio()), label)
+                         for label in labels if label), reverse=True)
+        if ranked and ranked[0][0] >= .8:
+            stem = ranked[0][1].split(' ')[0]
+            contenders = [pair for pair in ranked if pair[1].split(' ')[0] != stem]
+            if not contenders or ranked[0][0] - contenders[0][0] >= .15:
+                exact = {label for label in labels if label.split(' ')[0] == stem}
+    ids = {str(item.get('channel_id')) for item in items if item.get('channel_id')
+           and str(item.get('channel_title') or '').casefold() in exact}
+    return [item for item in items if str(item.get('channel_title') or '').casefold() in exact
+            or str(item.get('channel_id') or '') in ids]
+
+
 class YouTubeTakeoutImporter:
     def __init__(self, *, store: KnowledgeStore, account_id: str) -> None:
         self.store = store
@@ -110,17 +131,29 @@ class YouTubeTakeoutImporter:
             operation=lambda _cursor: self._import_archive(path),
         )
 
-    def history(self, *, kind: str = "watch", limit: int = 20) -> dict[str, Any]:
+    def history(self, *, kind: str = "watch", limit: int = 20, channel: str = "") -> dict[str, Any]:
         normalized = "search" if kind.casefold() == "search" else "watch"
         action = SEARCH_ACTION if normalized == "search" else WATCH_ACTION
         total = self.store.count_observations(origin=ORIGIN, action=action)
-        rows = self.store.list_observation_details(origin=ORIGIN, action=action, limit=limit)
+        rows = []
+        if channel:
+            # Filter the complete import before applying the display limit.
+            for offset in range(0, total, 500):
+                page = self.store.list_observation_details(origin=ORIGIN, action=action, limit=500, offset=offset)
+                rows.extend(page)
+                if len(page) < 500:
+                    break
+        else:
+            rows = self.store.list_observation_details(origin=ORIGIN, action=action, limit=limit)
         items = []
         for row in rows:
             payload = dict(row.get("payload") or {})
             payload["occurred_at"] = str(row.get("observed_at") or "")
             items.append(payload)
-        return {"available": total > 0, "kind": normalized, "total": total, "items": items}
+        if channel:
+            items = filter_channel_history(items, channel)
+        return {"available": total > 0, "kind": normalized, "total": len(items) if channel else total, "items":items[:limit]}
+
 
     def library(self, *, kind: str = "music", limit: int = 20) -> dict[str, Any]:
         if kind not in {"music", "subscriptions", "playlists", "watch_later", "account"}:

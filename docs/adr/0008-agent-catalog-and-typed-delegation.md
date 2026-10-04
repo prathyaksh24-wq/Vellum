@@ -83,3 +83,23 @@ preserved. UI playback controls remain typed App Actions. Mutation results are
 not cached, and successful music acknowledgements bypass another model rewrite.
 Less direct requests use the current local model only to generate a validated
 plan, rather than enabling an unrestricted LLM tool loop.
+
+Independent tasks may use `DelegationRuntime.delegate_many`, bounded to eight
+requests and four concurrent agent owners. Requests for the same agent execute
+in order so its conversation context is preserved. Each worker inherits the
+request's model scope and enters the existing profile policy. Completion
+callbacks surface results immediately through the existing chat stream; one
+failed task does not replace another task's answer. Main-model parallel tool
+calls also surface each completed specialist result without stopping after the
+first result or repeating the combined answer.
+
+Explicitly independent natural-language clauses are resolved through the existing
+catalog and App Action clause parser. Dependencies and ambiguous clauses remain
+with main-agent planning. Clear requests for another domain may delegate to its
+owner while preserving the user's selected agent. This extends the bounded music
+delegation rule to other specialists.
+
+Write proposals remain in `MasterThreadStateStore`. A batch queues distinct
+operation-bound confirmations transactionally; a confirmation claims one target,
+then exposes the next proposal. It cannot replace an unrelated pending action.
+Transient playback App Actions retain their receipts in combined chat answers.

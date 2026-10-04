@@ -321,7 +321,9 @@ class RoutingStore:
         if provider is not None:
             query += " WHERE provider = ?"
             parameters = (provider,)
-        query += " ORDER BY created_at, id"
+        # Timestamps can tie on Windows. Preserve registration order rather
+        # than letting random UUID ordering choose the first credential.
+        query += " ORDER BY created_at, rowid"
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return [self._credential_from_row(row) for row in rows]

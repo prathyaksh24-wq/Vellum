@@ -68,7 +68,7 @@ def test_youtube_agent_answers_interest_change_from_local_intelligence(tmp_path:
 
     assert response.status == "answered"
     assert "Sidemen" in response.summary
-    assert "falling" in response.summary
-    assert "24 watch events" in response.summary
+    assert "watched less" in response.summary
+    assert "24 recorded watches" in response.summary
     assert response.confidence == 0.91
     assert response.analysis == "Used youtube.personal_context from the local Knowledge Core."

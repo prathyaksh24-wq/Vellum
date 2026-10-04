@@ -94,7 +94,7 @@ SPOTIFY_PLAYLISTS = _tool(
     "spotify_playlists",
     "List, read, create, or update the user's Spotify playlists and their items.",
     {
-        "action": {"type": "string", "enum": ["list", "get", "create", "add_items", "remove_items", "update_details"]},
+        "action": {"type": "string", "enum": ["list", "get", "tracks", "get_tracks", "create", "add_items", "remove_items", "update_details"]},
         "playlist_id": {"type": "string"},
         "name": {"type": "string"},
         "description": {"type": "string"},
@@ -127,7 +127,7 @@ SPOTIFY_LIBRARY = _tool(
     "List, save, or remove tracks or albums in the user's Spotify library. Liked Songs is the track library, not a playlist. For 'like/save this song', use save_current so no separate playback lookup is needed.",
     {
         "kind": {"type": "string", "enum": ["tracks", "albums"]},
-        "action": {"type": "string", "enum": ["list", "save", "remove", "save_current", "remove_current"]},
+        "action": {"type": "string", "enum": ["list", "contains", "save", "remove", "save_current", "remove_current"]},
         "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "uris": {"type": "array", "items": {"type": "string"}, "maxItems": 40},
         "market": {"type": "string"},

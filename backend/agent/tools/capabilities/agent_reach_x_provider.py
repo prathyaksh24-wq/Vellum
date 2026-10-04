@@ -9,6 +9,8 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextvars import ContextVar
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +23,7 @@ from agent.plugins.models import PluginStatus
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
 Sleeper = Callable[[float], None]
+_WRITE_DEADLINE = ContextVar('x_write_deadline', default=None)
 
 
 class AgentReachError(RuntimeError):
@@ -322,12 +325,14 @@ class AgentReachXProvider:
         return self._normalize_posts(output)
 
     def post_tweet(self, text: str) -> dict[str, Any]:
-        return self._verify_created_post(self._exec("post", text, "--json"))
+        with self._write_budget():
+            return self._verify_created_post(self._exec("post", text, "--json"))
 
     def reply(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        return self._verify_created_post(
-            self._exec("reply", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
-        )
+        with self._write_budget():
+            return self._verify_created_post(
+                self._exec("reply", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
+            )
 
     def like(self, tweet_id_or_url: str) -> dict[str, Any]:
         return self._tweet_mutation("like", tweet_id_or_url)
@@ -348,9 +353,33 @@ class AgentReachXProvider:
         return self._tweet_mutation("unbookmark", tweet_id_or_url)
 
     def quote(self, tweet_id_or_url: str, text: str) -> dict[str, Any]:
-        return self._verify_created_post(
-            self._exec("quote", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
-        )
+        with self._write_budget():
+            return self._verify_created_post(
+                self._exec("quote", self._normalize_tweet_id(tweet_id_or_url), text, "--json")
+            )
+
+    @contextmanager
+    def _write_budget(self):
+        token = _WRITE_DEADLINE.set(time.monotonic()+min(self.timeout_seconds,25.0))
+        try:
+            yield
+        except AgentReachTimeoutError as exc:
+            raise AgentReachUnconfirmedWriteError('X publication timed out. It may already exist; check your profile before retrying. I have not repeated the write.') from exc
+        finally:
+            _WRITE_DEADLINE.reset(token)
+
+    def _run_serialized(self, args, *, timeout_seconds, **kwargs):
+        deadline = min(time.monotonic()+timeout_seconds, _WRITE_DEADLINE.get() or float('inf'))
+        remaining=max(0,deadline-time.monotonic())
+        if not self._CLI_LOCK.acquire(timeout=remaining):
+            raise AgentReachTimeoutError('Agent Reach is busy with another request; the command was not started.')
+        try:
+            remaining=deadline-time.monotonic()
+            if remaining<=0:
+                raise AgentReachTimeoutError('Agent Reach reached its time limit before starting the command.')
+            return self.runner(args,timeout=remaining,**kwargs)
+        finally:
+            self._CLI_LOCK.release()
 
     def _verify_created_post(self, output: Any) -> dict[str, Any]:
         receipt = self._normalize_object(output)
@@ -395,17 +424,16 @@ class AgentReachXProvider:
             raise AgentReachUnavailableError("Install twitter-cli before using the X connector.")
         command_args = [self.twitter_cli_bin, command, *[str(arg) for arg in args if str(arg)]]
         try:
-            with self._CLI_LOCK:
-                completed = self.runner(
+            completed = self._run_serialized(
                     command_args,
                     env=self._twitter_subprocess_env(),
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=self.timeout_seconds,
+                    timeout_seconds=self.timeout_seconds,
                     check=False,
-                )
+            )
         except subprocess.TimeoutExpired as exc:
             raise AgentReachTimeoutError(
                 f"Agent-Reach command timed out after {self.timeout_seconds:g} seconds."
@@ -432,18 +460,17 @@ class AgentReachXProvider:
     def _twitter_status(self, *, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
         args = [self.twitter_cli_bin, "status", "--yaml"]
         try:
-            with self._CLI_LOCK:
-                return self.runner(
+            return self._run_serialized(
                     args,
                     env=self._twitter_subprocess_env(),
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=timeout_seconds,
+                    timeout_seconds=timeout_seconds,
                     check=False,
-                )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+            )
+        except (OSError, subprocess.TimeoutExpired, AgentReachTimeoutError) as exc:
             return subprocess.CompletedProcess(args, 1, stdout="", stderr=str(exc))
 
     @staticmethod
@@ -461,17 +488,16 @@ class AgentReachXProvider:
             return "missing"
         args = [self.twitter_cli_bin, "--version"]
         try:
-            with self._CLI_LOCK:
-                completed = self.runner(
+            completed = self._run_serialized(
                     args,
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
-                    timeout=min(self.timeout_seconds, 8.0),
+                    timeout_seconds=min(self.timeout_seconds, 8.0),
                     check=False,
-                )
-        except (OSError, subprocess.TimeoutExpired):
+            )
+        except (OSError, subprocess.TimeoutExpired, AgentReachTimeoutError):
             return "unknown"
         if completed.returncode != 0:
             return "unknown"

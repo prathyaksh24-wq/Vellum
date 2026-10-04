@@ -52,7 +52,7 @@ def match_spotify_command(message: str) -> AppActionRequest | None:
     control = match_music_control(command)
     if control:
         # A bare 'pause' has a music meaning only while this Vellum device is selected.
-        if "spotify" not in text.casefold() and spotify_client().web_playback_status()["status"] == "disabled":
+        if not re.search(r"\b(?:spotify|song|track|music|episode|podcast)\b", text, re.I) and spotify_client().web_playback_status()["status"] == "disabled":
             return None
         action = "play" if control == "resume" else control
         return AppActionRequest(action_id="spotify.playback.control", arguments={"action": action})

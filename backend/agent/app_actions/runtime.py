@@ -1690,6 +1690,7 @@ class AppActionRuntime:
     @staticmethod
     def _split_mixed_clauses(submitted: str) -> list[str]:
         separators = (
+            " and also ",
             ", and then ",
             " and then ",
             ", then ",
