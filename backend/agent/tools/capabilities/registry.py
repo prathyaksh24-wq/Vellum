@@ -10,6 +10,7 @@ from agent.tools.capabilities.memory_service import MemoryCapabilityService
 from agent.tools.capabilities.x_service import XCapabilityService
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
+from agent.tools.capabilities.browser_service import BrowserCapabilityService
 from agent.tools.registry import ToolInvocationObserver, ToolRegistry
 
 
@@ -37,6 +38,7 @@ def build_shared_tool_registry(
         calendar_service or CalendarCapabilityService(),
         discord_service or _default_discord_service(),
         SpotifyCapabilityService(),
+        BrowserCapabilityService(),
     )
     if tool_observer is None:
         tool_observer = _default_tool_observer()

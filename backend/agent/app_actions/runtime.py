@@ -124,6 +124,7 @@ from agent.app_actions.petdex import (
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
+from agent.app_actions.browser import BROWSER_CONTROL_ACTION, browser_action_definitions, execute_browser_control
 from agent.plugins.contributions import (
     PluginContribution,
     PluginContributionActionError,
@@ -312,6 +313,7 @@ class AppActionRuntime:
                 *automation_action_definitions(),
                 *knowledge_source_action_definitions(),
                 *petdex_action_definitions(),
+                *browser_action_definitions(),
             )
         }
         self._plugin_contributions = (
@@ -1878,6 +1880,14 @@ class AppActionRuntime:
             return self._dispatch_knowledge_source(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
+        if request.action_id == BROWSER_CONTROL_ACTION:
+            try:
+                result = execute_browser_control(dict(request.arguments), context)
+                return self._domain_action_receipt(request, context, definition, result)
+            except (ValueError, RuntimeError) as exc:
+                return self._error_receipt(request=request, context=context, status="failed",
+                    access_class=definition.access_class, error_code="BROWSER_CONTROL_FAILED",
+                    message=str(exc), authorized=True)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             if definition.confirmation_rule == "operation_bound":
                 return self._domain_confirmation_receipt(
@@ -4212,6 +4222,7 @@ class AppActionRuntime:
                 aliases=["right panel", "details panel", "panel"],
                 default_presentation=SurfacePresentation(visible=False, location="right"),
                 supported_locations=["right"],
+                configurable_properties={"content":{"type":"string", "enum":["files", "browser"]}},
             ),
             UISurfaceDefinition(
                 reference="composer", owner="control-kernel", title="Composer",

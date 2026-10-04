@@ -164,6 +164,7 @@ class Settings(BaseSettings):
     browser_headed: bool = Field(default=False, alias="BROWSER_HEADED")
     browser_snapshot_budget: int = Field(default=15000, alias="BROWSER_SNAPSHOT_BUDGET")
     browser_cache_dir: Path = Field(default=Path("data/browser-cache"), alias="BROWSER_CACHE_DIR")
+    browser_executable_path: str = Field(default="", alias="BROWSER_EXECUTABLE_PATH")
     browser_cdp_url: str = Field(default="", alias="BROWSER_CDP_URL")
     browser_dialog_policy: Literal["must_respond", "auto_dismiss", "auto_accept"] = Field(
         default="must_respond",

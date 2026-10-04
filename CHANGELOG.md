@@ -24,6 +24,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Calendar reads include synced calendars such as F1; contextual deletion keeps real event/calendar IDs and accepts one confirmation or an explicit retry of the same failed action.
 
 ### Added
+- BrowserAgent delegation to a separate local Brave session, with an in-app live view, tabs, navigation, downloads, pause/resume and manual takeover. Browser interactions use existing confirmation and App Action owners; the sidebar keeps secondary destinations under More.
 - Local Takeout libraries for YouTube Music songs, subscriptions, Watch Later, playlists and channel metadata through the existing Knowledge Core, with idempotent replay and explicit snapshot freshness.
 - Local Windows EPUB OCR with image provenance and uncertainty labels, versioned parser upgrades and compatible citation maps; canonical Book-to-Skill retains local embeddings and grounded Gemma synthesis.
 - Agent Reach reply reads and bounded X follow-up context, with operation-bound confirmation and no automatic retry of uncertain writes.

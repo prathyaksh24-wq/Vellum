@@ -93,6 +93,18 @@ def browser_back() -> str:
 
 
 @tool
+def browser_forward() -> str:
+    """Navigate forward in the dedicated browser tab's history."""
+    return _run_browser({"action":"forward"})
+
+
+@tool
+def browser_reload() -> str:
+    """Reload the current browser tab."""
+    return _run_browser({"action":"reload"})
+
+
+@tool
 def browser_get_images() -> str:
     """List all images on the current page with their URLs and alt text.
 

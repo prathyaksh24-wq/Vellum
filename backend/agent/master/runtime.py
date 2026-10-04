@@ -604,6 +604,8 @@ class DelegationRuntime:
                     response = execute(action_request)
                 elif callable(getattr(executor, "answer_with_context", None)):
                     response = executor.answer_with_context(goal, scoped)
+                elif callable(getattr(executor, "answer_delegated", None)):
+                    response = executor.answer_delegated(goal, context)
                 else:
                     response = executor.answer(goal)
                 if self.pending_action_store is not None and callable(getattr(executor, "thread_context", None)):

@@ -1,0 +1,55 @@
+.browser-panel{display:flex;flex-direction:column;flex:1 1 62%;min-width:360px;margin:16px 16px 16px 0;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--bg) 94%,transparent);color:var(--txt);overflow:hidden;position:relative}
+.browser-heading{display:flex;align-items:center;gap:16px;padding:14px 16px;min-height:60px}
+.browser-brand{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;white-space:nowrap}
+.browser-brand svg{color:var(--ember)}
+.browser-status{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--txt);white-space:nowrap}
+.browser-status i{width:6px;height:6px;border-radius:50%;background:var(--dim)}
+.browser-status i.live{background:#58c98b}
+.browser-heading-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+.browser-button,.browser-icon,.browser-link,.browser-tab button{font:inherit;color:inherit;cursor:pointer;border:0}
+.browser-button{display:flex;gap:6px;align-items:center;background:var(--active);padding:8px 12px;border-radius:9px;font-size:12px;white-space:nowrap}
+.browser-button.secondary{background:var(--hover)}
+.browser-button:disabled,.browser-icon:disabled,.browser-link:disabled{opacity:.45;cursor:default}
+.browser-icon{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;background:transparent;border-radius:7px;color:var(--txt)}
+.browser-icon:hover,.browser-button:hover:not(:disabled){background:var(--active)}
+.browser-panel :focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+.browser-tabs{display:flex;gap:4px;align-items:center;padding:0 10px;overflow-x:auto;border-bottom:1px solid var(--line);flex-shrink:0}
+.browser-tab{display:flex;align-items:center;max-width:220px;min-width:100px;padding:4px 4px 4px 12px;border-radius:9px 9px 0 0;background:transparent}
+.browser-tab.active{background:var(--hover)}
+.browser-tab>button:first-child{background:transparent;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;text-align:left;padding:7px 12px 7px 0;font-size:12px}
+.browser-address-row{display:flex;gap:6px;align-items:center;padding:10px 12px;flex-shrink:0}
+.browser-address-row input{flex:1;min-width:0;border:1px solid var(--line);border-radius:9px;background:var(--input);padding:8px 12px;color:var(--txt);font:inherit;font-size:12px}
+.browser-screen{flex:1;min-height:0;background:#151515;display:flex;align-items:center;justify-content:center;overflow:hidden;outline-offset:-3px!important}
+.browser-screen img{width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}
+.browser-screen.manual{cursor:crosshair}
+.browser-empty{text-align:center;max-width:340px;padding:40px 24px;color:var(--txt)}
+.browser-empty>svg{color:var(--ember);margin-bottom:16px}
+.browser-empty h2{font-size:18px;margin:0 0 12px;font-weight:500}
+.browser-empty p{font-size:13px;line-height:1.7;color:var(--dim);margin:0}
+.browser-footer{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;font-size:11px;color:var(--dim);gap:16px;flex-shrink:0}
+.browser-link{background:transparent;padding:0;text-decoration:underline;text-underline-offset:3px;font-size:11px;color:var(--txt)}
+.browser-downloads{position:absolute;right:12px;top:142px;width:min(380px,calc(100% - 24px));z-index:5;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:0 12px 32px #0005}
+.browser-downloads-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;font-size:13px}
+.browser-download{display:flex;align-items:center;gap:12px;padding:12px 0;font-size:12px}
+.browser-download>div{flex:1;min-width:0}
+.browser-download span{display:block;overflow-wrap:anywhere}
+.browser-download small{display:block;margin-top:5px;color:var(--dim)}
+.browser-downloads p{font-size:12px;color:var(--dim)}
+.browser-error{padding:10px 16px;display:flex;gap:16px;align-items:center;font-size:12px;line-height:1.5;background:var(--active);flex-shrink:0}
+.body.browser-active .sidebar{width:208px;background:color-mix(in srgb,var(--bg) 92%,transparent)}
+.body.browser-active>.main{flex:1 1 38%;min-width:340px;margin:16px 20px 16px 14px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
+.body.browser-active .msgs-inner{padding:24px 24px 32px;max-width:none}
+.body.browser-active .composer-dock{padding:12px 16px 16px}
+.body.browser-active .chat-head{padding:16px 20px}
+.browser-chat-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px;line-height:1.4;margin-right:auto;font-weight:600}
+.sidebar-recent{padding:12px 0}
+.sidebar-recent>h2{font-size:11px;font-weight:400;color:var(--dim);padding:0 10px 8px;margin:0}
+.browser-more-arrow{margin-left:auto;transition:transform .15s ease}
+.browser-more-arrow.open{transform:rotate(90deg)}
+.browser-expanded{position:absolute;inset:16px 16px 16px 224px;margin:0;z-index:130}
+@media(max-width:1100px){.body.browser-active>.main{min-width:300px;margin-right:12px}.browser-panel{min-width:330px}.browser-status{display:none}.browser-heading{gap:8px;padding:12px}.browser-heading-actions{gap:4px}}
+/* The companion stays outside the controlled surface while browsing. */
+.win:has(.browser-active) .px-floater{left:20px!important;right:auto!important;top:auto!important;bottom:80px!important;transform:none!important}
+@media(max-width:900px){.browser-panel{position:absolute;inset:12px;margin:0;z-index:125;min-width:0;background:var(--bg)}.body.browser-active>.main{margin:0;border:0;border-radius:0}.browser-heading{flex-wrap:wrap}.browser-heading-actions{margin-left:auto}.browser-screen{min-height:200px}.win:has(.browser-active) .px-floater{display:none}}
+@media(prefers-reduced-motion:reduce){.browser-more-arrow{transition:none}}
+@media(max-width:900px){body:has(.browser-active) .shared-layout-pill{display:none}}
