@@ -17,3 +17,12 @@ channels and identify a longer list explicitly. Recent liked-video replies show
 all fetched entries (20 by default) with links; this recent batch is not an
 all-time liked-video total. Imported subscription counts are labeled as Takeout
 snapshots when the live account is disconnected.
+
+The YouTube agent uses the selected local model to interpret the requested
+entity, quantity, creator filter, and format, then executes a validated read-only
+plan. Channel lists derived from likes deduplicate channel IDs and cover up to
+50 recent liked videos; fewer available channels are reported without padding.
+The existing specialist chat context retains the actual displayed order for
+follow-ups such as “link to the second video.” Missing lists, unavailable data,
+and connector failures explain the limitation instead of substituting a public
+search. Lists shown before this retention was added must be requested again.

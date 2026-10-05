@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
+from agent.contracts.youtube_requests import YoutubeReadRequest, clear_read_request
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
 from agent.tools.registry import ToolRegistry
 
@@ -79,10 +80,12 @@ class YoutubeAgent:
         youtube_service: YoutubeCapabilityService | None = None,
         tool_registry: ToolRegistry | None = None,
         synthesizer=None,
+        planner=None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.tool_registry = tool_registry
         self.synthesizer = synthesizer
+        self.planner = planner
         self.youtube_service = youtube_service or (
             None if tool_registry is not None else YoutubeCapabilityService(vault_root=self.vault_root)
         )
@@ -93,6 +96,7 @@ class YoutubeAgent:
             return False
         return (
             self._is_intelligence_query(lowered)
+            or clear_read_request(query) is not None
             or self._is_account_query(lowered)
             or self._is_liked_query(lowered)
             or self._is_subscriptions_query(lowered)
@@ -110,15 +114,23 @@ class YoutubeAgent:
                 creator = re.search(r"\b(?:from|by)\s+(.+?)(?:[?.!]|$)", previous, re.I)
                 if creator:
                     query = "what videos have I watched from " + creator[1]
-        response = self.answer(query)
+        if time.time() - float(context.get("at") or 0) > 1800:
+            context = {}
+        response = self.answer(query, context=context)
         return response.model_copy(update={"structured_payload":{**response.structured_payload,"youtube_query":query}})
 
     @staticmethod
     def thread_context(response: SpecialistResponse, previous: dict) -> dict:
         query = response.structured_payload.get("youtube_query")
-        return {"query":query, "at":time.time()} if query else previous
+        if not query:
+            return previous
+        account = response.structured_payload.get("youtube_account")
+        if account is not None:
+            return {"query":query, "at":time.time(), "account_request":account["request"],
+                "account_items":account["items"]}
+        return {"query":query, "at":time.time()}
 
-    def answer(self, query: str) -> SpecialistResponse:
+    def answer(self, query: str, *, context: dict | None = None) -> SpecialistResponse:
         lowered = query.lower()
         if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
             return self._answer_takeout_library(lowered)
@@ -126,12 +138,30 @@ class YoutubeAgent:
             return self._answer_account()
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
-        if self._is_liked_query(lowered):
-            return self._answer_liked_videos()
         if self._is_takeout_query(lowered):
             return self._answer_takeout_history(lowered)
         if self._is_subscription_feed_query(lowered):
             return self._answer_subscription_feed()
+        read_request = clear_read_request(query)
+        if self.planner is not None:
+            try:
+                planned = self.planner(query, context or {})
+                planned = planned if isinstance(planned, YoutubeReadRequest) else YoutubeReadRequest.model_validate(planned)
+            except Exception as exc:
+                return SpecialistResponse(agent=self.name, status="error",
+                    summary="I couldn't reliably interpret this YouTube request. " +
+                        ("Select a local model and try again." if isinstance(exc, ValueError) and "local model" in str(exc)
+                         else "The local request interpreter failed. Please rephrase or try again."),
+                    analysis="YouTube request interpretation failed: " + type(exc).__name__, confidence=1.0)
+            if planned.source == "public" and read_request is not None:
+                planned = YoutubeReadRequest(source="clarify", view="clarify")
+            if planned.source == "previous" and read_request is not None and read_request.source == "previous":
+                planned = planned.model_copy(update={"reference_kind":read_request.reference_kind, "index":read_request.index})
+            read_request = planned
+        if read_request is not None and read_request.source != "public":
+            return self._answer_read_request(read_request, context or {})
+        if self._is_liked_query(lowered):
+            return self._answer_liked_videos()
         if self._is_subscriptions_query(lowered):
             return self._answer_subscriptions(lowered)
         if self._is_account_query(lowered):
@@ -214,10 +244,112 @@ class YoutubeAgent:
             return self.tool_registry.invoke("youtube.subscriptions", {}, agent_name=self.name)
         return self.youtube_service.subscriptions({})
 
-    def _liked_videos(self) -> dict:
+    def _liked_videos(self, limit: int = 20) -> dict:
         if self.tool_registry is not None:
-            return self.tool_registry.invoke("youtube.liked_videos", {"max_results": 20}, agent_name=self.name)
-        return self.youtube_service.liked_videos({"max_results": 20})
+            return self.tool_registry.invoke("youtube.liked_videos", {"max_results": limit}, agent_name=self.name)
+        return self.youtube_service.liked_videos({"max_results": limit})
+
+    def _answer_read_request(self, request: YoutubeReadRequest, context: dict) -> SpecialistResponse:
+        def reply(summary, items=(), *, status="answered", analysis="Read verified YouTube account records."):
+            return SpecialistResponse(agent=self.name, status=status, summary=summary, analysis=analysis, confidence=1.0,
+                structured_payload={"youtube_account":{"request":request.model_dump(), "items":list(items)[:50]}})
+
+        if request.source == "clarify" or request.view == "clarify":
+            return reply("I couldn't determine a supported YouTube read for that request. "
+                "Tell me whether you want videos, channel names, a count, or a link to an item I showed you.", status="needs_fetch")
+        if request.source == "previous":
+            items = list(context.get("account_items") or [])
+            previous = context.get("account_request") or {}
+            if not items:
+                return reply("I don't have the displayed video or channel list in this chat. "
+                    "Ask me to list it again, then I can link the item you choose.", status="needs_fetch")
+            if request.index is None or request.index > len(items):
+                return reply(f"The previous list has {len(items)} items, so I can't link item {request.index}. "
+                    "Choose an item from that list.", items, status="needs_fetch")
+            item = items[request.index - 1]
+            if request.reference_kind == "video" and "video_id" not in item:
+                return reply("The previous list contains channels. I need a displayed video list to link that video.",
+                    items, status="needs_fetch")
+            if request.reference_kind == "channel" and "video_id" in item:
+                return reply("The previous list contains videos. Ask for channels from those videos first.",
+                    items, status="needs_fetch")
+            id_key = "video_id" if previous.get("view") == "videos" or "video_id" in item else "channel_id"
+            if not item.get(id_key):
+                return reply("That item has no verified YouTube link in the saved list.", items, status="needs_fetch")
+            # Keep the complete displayed order for another ordinal follow-up.
+            response = reply(self._account_item_label(item, id_key, "video" if id_key == "video_id" else "channel"), items)
+            response.structured_payload["youtube_account"]["request"] = previous
+            return response
+        try:
+            result = self._liked_videos(50 if request.view in {"channels", "count", "summary"} or request.creator else request.limit) \
+                if request.source == "liked" else self._subscriptions()
+        except Exception as exc:
+            detail = str(exc).casefold()
+            reason = ("YouTube's API quota is temporarily exhausted." if "quota" in detail else
+                "YouTube authorization is invalid or lacks the required read permission." if any(
+                    word in detail for word in ("auth", "permission", "token")) else
+                "The YouTube API could not be reached." if any(word in detail for word in ("unreachable", "timeout", "network"))
+                else "The YouTube account read failed.")
+            return SpecialistResponse(agent=self.name, status="error",
+                summary="I couldn't read your " + ("liked videos" if request.source == "liked" else "subscriptions") + ". " + reason,
+                analysis="YouTube account read failed: " + type(exc).__name__, confidence=1.0)
+        if not result.get("connected") and not result.get("available"):
+            return reply("Vellum isn't connected to a YouTube account, so I can't read that list.", status="needs_fetch")
+        items = list(result.get("items") or [])
+        inspected = len(items)
+        snapshot = result.get("provider") == "takeout"
+        if request.creator:
+            items = [item for item in items if request.creator.casefold() in str(
+                item.get("channel") if request.source == "liked" else item.get("title") or "").casefold()]
+        if request.source == "liked" and (request.view == "channels" or request.view == "count" and request.count_kind == "channels"):
+            channels = {}
+            for item in items:
+                name = str(item.get("channel") or "").strip()
+                identity = str(item.get("channel_id") or "").strip() or name.casefold()
+                if name and identity not in channels:
+                    channels[identity] = {"title":name, "channel_id":item.get("channel_id") or ""}
+            items = list(channels.values())
+        if request.view == "count":
+            if request.source == "subscriptions":
+                total = len(items) if request.creator else int(result.get("total", len(items)))
+                return reply(f"Your imported YouTube snapshot lists {total:,} subscribed channels." if snapshot else
+                    f"You're subscribed to {total:,} YouTube channels.")
+            if request.count_kind == "channels":
+                return reply(f"I found {len(items)} distinct channels in the {inspected} recent liked videos I read.")
+            return reply(f"I read {len(items)} recent liked videos. This is a bounded recent sample; "
+                "the connector hasn't supplied your full liked-video total.")
+        if request.view == "summary":
+            names = list(dict.fromkeys(str(item.get("channel") or item.get("title") or "") for item in items))
+            return reply(f"This {'imported snapshot' if snapshot else 'account read'} contains {len(items)} "
+                f"{'recent liked videos' if request.source == 'liked' else 'subscribed channels'}. "
+                + ("Channels include " + ", ".join(names[:5]) + "." if names else "No channel names were available."))
+        visible = items[:request.limit]
+        if not visible:
+            return reply("I found no " + ("matching " if request.creator else "accessible ") +
+                ("channels" if request.view == "channels" else "liked videos") + " in this account read.")
+        if request.source == "liked" and request.view == "channels":
+            intro = f"Here are {len(visible)} channels from your {inspected} recent liked videos:"
+            if len(visible) < request.limit:
+                intro = f"I found only {len(visible)} distinct channels in your {inspected} recent liked videos:"
+        elif request.source == "liked":
+            intro = f"Here are your {len(visible)} most recent liked videos:"
+        else:
+            total = int(result.get("total", len(items)))
+            intro = (f"Your imported YouTube snapshot lists {total:,} subscribed channels." if snapshot else
+                f"You're subscribed to {total:,} YouTube channels.")
+            if total > len(visible):
+                intro += f" Showing the first {len(visible)}."
+        id_key = "video_id" if request.view == "videos" else "channel_id"
+        lines = []
+        for index, item in enumerate(visible, 1):
+            label = self._markdown_label(str(item.get("title") or item.get(id_key) or "Unknown")) \
+                if request.names_only else self._account_item_label(item, id_key, "video" if id_key == "video_id" else "channel")
+            if request.view == "videos" and not request.names_only and item.get("channel"):
+                label += " — " + self._markdown_label(str(item["channel"]))
+            lines.append(f"{index}. {label}")
+        return reply(intro + "\n\n" + "\n".join(lines), visible,
+            analysis="Used youtube." + ("liked_videos" if request.source == "liked" else "subscriptions") +
+                (" from the imported Takeout snapshot." if snapshot else " through the official OAuth connector."))
 
     def _takeout_history(self, kind: str, channel: str = "") -> dict:
         payload = {"kind": kind, "limit": 20}
@@ -270,73 +402,11 @@ class YoutubeAgent:
         )
 
     def _answer_subscriptions(self, query: str = "") -> SpecialistResponse:
-        try:
-            result = self._subscriptions()
-        except Exception as exc:
-            return self._official_error("YoutubeAgent could not read YouTube subscriptions.", exc)
-        if not result.get("connected") and not result.get("available"):
-            return SpecialistResponse(
-                agent=self.name,
-                status="needs_fetch",
-                summary="Vellum is not connected to a YouTube account.",
-                analysis="Used youtube.subscriptions through the official OAuth connector.",
-                confidence=0.95,
-            )
-        items = list(result.get("items") or [])
-        total = int(result.get("total", len(items)))
-        snapshot = result.get("provider") == "takeout"
-        intro = (f"Your imported YouTube snapshot lists {total:,} subscribed channels."
-            if snapshot else f"You're subscribed to {total:,} YouTube channels.")
-        if re.search(r"\b(?:how\s+many|number\s+of|count)\b", query):
-            summary = intro
-        elif not items:
-            summary = intro
-        else:
-            visible = items[:50]
-            lines = [f"{index}. {self._account_item_label(item, 'channel_id', 'channel')}"
-                for index, item in enumerate(visible, start=1)]
-            if total > len(visible):
-                intro += f" Showing the first {len(visible)}."
-            summary = intro + "\n\n" + "\n".join(lines)
-        return SpecialistResponse(
-            agent=self.name,
-            status="answered",
-            summary=summary,
-            analysis=("Used youtube.subscriptions from the imported Takeout snapshot." if snapshot
-                else "Used youtube.subscriptions through the official OAuth connector."),
-            confidence=1.0,
-        )
+        request = clear_read_request(query) or YoutubeReadRequest(source="subscriptions", view="channels", limit=50)
+        return self._answer_read_request(request, {})
 
     def _answer_liked_videos(self) -> SpecialistResponse:
-        try:
-            result = self._liked_videos()
-        except Exception as exc:
-            return self._official_error("YoutubeAgent could not read liked YouTube videos.", exc)
-        if not result.get("connected"):
-            return SpecialistResponse(
-                agent=self.name,
-                status="needs_fetch",
-                summary="Vellum is not connected to a YouTube account.",
-                analysis="Used youtube.liked_videos through the official OAuth connector.",
-                confidence=0.95,
-            )
-        items = list(result.get("items") or [])
-        if not items:
-            summary = "The connected YouTube account has no accessible liked videos."
-        else:
-            lines = []
-            for index, item in enumerate(items, start=1):
-                title = self._account_item_label(item, "video_id", "video")
-                channel = self._markdown_label(str(item.get("channel") or ""))
-                lines.append(f"{index}. {title}" + (f" — {channel}" if channel else ""))
-            summary = f"Here are your {len(items)} most recent liked videos:\n\n" + "\n".join(lines)
-        return SpecialistResponse(
-            agent=self.name,
-            status="answered",
-            summary=summary,
-            analysis="Used youtube.liked_videos through the official OAuth connector.",
-            confidence=1.0,
-        )
+        return self._answer_read_request(YoutubeReadRequest(source="liked", view="videos"), {})
 
     def _answer_takeout_history(self, lowered_query: str) -> SpecialistResponse:
         kind = "search" if "search" in lowered_query else "watch"

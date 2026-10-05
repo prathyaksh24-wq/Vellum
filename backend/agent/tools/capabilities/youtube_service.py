@@ -271,6 +271,9 @@ class YoutubeCapabilityService:
             "transcript": _string(item.get("transcript") or item.get("transcriptText")),
         }
         provider = _string(item.get("provider"))
+        channel_id = _string(item.get("channel_id") or item.get("channelId") or item.get("videoOwnerChannelId"))
+        if channel_id:
+            record["channel_id"] = channel_id
         if not record["channel"]:
             record["channel"] = _string(item.get("channel_title") or item.get("videoOwnerChannelTitle"))
         if provider:
