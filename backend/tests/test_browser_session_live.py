@@ -11,6 +11,28 @@ from agent.mcp import dedicated_browser, playwright_tools
 pytestmark = pytest.mark.skipif(os.environ.get('VELLUM_BROWSER_SMOKE') != '1', reason='Set VELLUM_BROWSER_SMOKE=1 for installed Brave')
 
 
+@pytest.mark.skipif(os.name != 'nt', reason='Owned CDP process transport is Windows-specific')
+def test_real_brave_cancelled_disconnect_cleanup_can_reopen(monkeypatch, tmp_path):
+    monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', lambda path: tmp_path / path.name)
+    async def check():
+        browser = dedicated_browser.DedicatedBrowser()
+        try:
+            await browser.open()
+            process = browser._process
+            await browser._cdp_browser.close()
+            closing = asyncio.create_task(browser.close())
+            await asyncio.sleep(.2)
+            closing.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await closing
+            assert process.returncode is not None
+            await browser.open()
+            assert (await browser.status()).running
+        finally:
+            await browser.close()
+    asyncio.run(check())
+
+
 def test_real_brave_session_tabs_preview_takeover_download_and_shutdown(monkeypatch, tmp_path):
     class Pages(BaseHTTPRequestHandler):
         def do_GET(self):

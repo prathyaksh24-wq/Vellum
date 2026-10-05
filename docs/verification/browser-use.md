@@ -78,3 +78,17 @@ server activation. Latest results are recorded on the follow-up PR.
 The sidebar failure path also called the toast state as a function. A rejected
 launch now uses the existing `pushToast` helper. The smoke rejects an open receipt
 and checks that its message appears without a page error, then retries normally.
+
+## Interrupted cleanup regression
+
+Cancelling cleanup after a CDP disconnection could leave the owned Brave process
+alive while losing its handle. A subsequent launch then failed because that
+process still held the dedicated profile. Overlapping close calls could also
+return before the first cleanup finished.
+
+The existing transport now keeps one shielded cleanup task. Close and reopen
+callers wait for that task to finish releasing the process and Playwright driver.
+The original failure was reproduced with a disposable real Brave profile, and
+the same interruption/reopen probe passed after the fix. Verification passed
+78 browser/worker tests and both opt-in real Brave lifecycle tests. No default
+browser profile or user downloads were used by these regression tests.

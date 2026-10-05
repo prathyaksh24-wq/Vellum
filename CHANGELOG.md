@@ -24,6 +24,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ### Fixed
 - Opening the UI server's base address now redirects to Vellum instead of returning 404; entry redirects retain view and conversation query parameters.
+- Interrupted or overlapping browser cleanup finishes closing the owned Brave process before reopening, preventing a stranded process from locking Vellum's browser profile.
 - The Browser sidebar entry reads current readiness before opening, so a first click during startup launches the dedicated session instead of leaving it closed. Launch failures use the existing toast helper to show the error without crashing the handler.
 - Browser worker shutdown clears dedicated transport ownership before restart; closing the in-app session keeps its ownership until shutdown. Browser delegation prompt contracts retain the compact prompt budget and specialist-only browser capabilities.
 - Automation approvals compare the reviewed record's content, so changes made within the same timestamp cannot reuse an old confirmation.
