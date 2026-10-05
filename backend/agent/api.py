@@ -2314,7 +2314,8 @@ async def _run_agent_scoped(
         delegated_tools = list(live_result.tools)
         delegated_sources = [Source(**source) for source in live_sources]
         if _should_passthrough_live_result(live_result):
-            answer = _clean_answer_body(live_result.answer) or "No response."
+            answer = _clean_answer_body(live_result.answer,
+                preserve_youtube_links=live_result.agent_name == "YoutubeAgent" or "youtube_agent" in live_result.tools) or "No response."
             if answer and "blocked for privacy" not in answer.casefold():
                 await _checkpoint_specialist_exchange(clean_message, answer, active_thread_id, model)
                 (
@@ -4213,7 +4214,7 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
     return live_result.status in {"answered", "needs_fetch", "blocked", "error"}
 
 
-def _clean_answer_body(text: str | None) -> str:
+def _clean_answer_body(text: str | None, *, preserve_youtube_links: bool = False) -> str:
     """Keep structured sources out of the visible answer and normalize plain-text Markdown."""
     value = str(text or "").strip()
     if not value:
@@ -4225,7 +4226,14 @@ def _clean_answer_body(text: str | None) -> str:
     )[0]
     value = re.sub(r"(?m)^\s*\[(?:\d+)\]\s+(@)", r"- \1", value)
     value = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", value)
-    value = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", value)
+    def clean_link(match):
+        if preserve_youtube_links and re.fullmatch(
+            r"https://www\.youtube\.com/(?:watch\?v=[A-Za-z0-9_-]+|channel/[A-Za-z0-9_-]+)", match[2]
+        ):
+            return match[0]
+        return match[1]
+
+    value = re.sub(r"\[((?:\\.|[^\]\\])+)\]\((https?://[^)]+)\)", clean_link, value)
     value = re.sub(r"(?<!\w)\[(?:\d+)\](?!\w)", "", value)
     value = value.replace(r"\(", "").replace(r"\)", "")
     value = value.replace(r"\-", "-").replace(r"\|", "|")
@@ -4382,7 +4390,7 @@ async def _stream_agent_turn_scoped(
                         await asyncio.gather(take, return_exceptions=True)
                         continue
                     part = take.result()
-                text = _clean_answer_body(part.answer)
+                text = _clean_answer_body(part.answer, preserve_youtube_links=part.agent_name == "YoutubeAgent")
                 delta = ("\n\n" if early_parts else "") + text
                 early_parts.append(text)
                 yield _agent_activity_event(response_id=response_id, thread_id=active_thread_id,
@@ -4550,7 +4558,8 @@ async def _stream_agent_turn_scoped(
             name=live_result.agent_name,
         )
         if _should_passthrough_live_result(live_result):
-            answer = _clean_answer_body(live_result.answer) or "No response."
+            answer = _clean_answer_body(live_result.answer,
+                preserve_youtube_links=live_result.agent_name == "YoutubeAgent" or "youtube_agent" in live_result.tools) or "No response."
             await _checkpoint_specialist_exchange(clean_message, answer, active_thread_id, model)
             message_item = {
                 "id": message_item_id,
@@ -4923,7 +4932,8 @@ async def _stream_agent_turn_scoped(
                         if isinstance(specialist_result, dict):
                             specialist_name = str(specialist_result.get("agent") or "specialist")
                             specialist_status = str(specialist_result.get("status") or "")
-                            specialist_summary = _clean_answer_body(str(specialist_result.get("summary") or ""))
+                            specialist_summary = _clean_answer_body(str(specialist_result.get("summary") or ""),
+                                preserve_youtube_links=specialist_name == "YoutubeAgent")
                             completed_specialists.add(specialist_name)
                             received_specialist_results += 1
                             if expected_specialist_results > 1 and specialist_summary:
@@ -5142,7 +5152,8 @@ async def _stream_agent_turn_scoped(
                     yield _sse("token", {"text": delta})
             elif specialist_summaries:
                 model_answer = _clean_answer_body("".join(answer_parts))
-                specialist_answer = _clean_answer_body("\n\n".join(dict.fromkeys(specialist_summaries)))
+                specialist_answer = _clean_answer_body("\n\n".join(dict.fromkeys(specialist_summaries)),
+                    preserve_youtube_links="YoutubeAgent" in completed_specialists)
                 answer = (
                     specialist_answer
                     if streamed_specialist_results or "XAgent" in completed_specialists or _is_specialist_deferral(model_answer)

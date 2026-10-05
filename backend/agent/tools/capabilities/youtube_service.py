@@ -159,11 +159,13 @@ class YoutubeCapabilityService:
                 "items": [],
             }
         items = [self._normalize_subscription(item) for item in self.subscriptions_backend()]
+        items = [item for item in items if item["channel_id"]]
         return {
             "action": "youtube.subscriptions",
             "connected": True,
             "account": account,
-            "items": [item for item in items if item["channel_id"]],
+            "items": items,
+            "total": len(items),
         }
 
     def liked_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
