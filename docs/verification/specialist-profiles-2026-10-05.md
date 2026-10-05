@@ -78,3 +78,18 @@ checkout with per-file three-way merges and concurrent-edit hash checks. Existin
 browser, YouTube and music work was preserved. Original file backups are local,
 ignored runtime artifacts. The API was restarted and its loaded profile catalog
 was checked through `/api/agent-profiles`.
+
+## Merge compatibility
+
+Merged `origin/main` at `a77fd87305289c4a329c659a1b8f45fd9932db00`
+into the specialist branch without rewriting history. Changelog conflicts kept
+both the specialist-profile entries and the existing YouTube history/browser
+entries. The existing runtime and new YouTube history changes merged cleanly.
+
+Checks on this merged branch: 2,509 backend tests passed, six skipped;
+248 frontend tests passed across 33 files; frontend production build passed;
+focused merge checks passed (116 tests, one skipped); no unresolved conflict
+entries or whitespace errors. The live Honcho client remains disabled in the
+backend regression harness. Existing Vite classic-script and Starlette
+deprecation warnings remain. This branch check is separate from the earlier
+combined-working-checkout run recorded above.

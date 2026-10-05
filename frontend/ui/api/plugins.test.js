@@ -13,6 +13,12 @@ async function loadPluginsApi(fetchImpl) {
 }
 
 describe("Vellum plugins API adapter", () => {
+  test("reads local browser-history status without caching", async () => {
+    const fetchImpl = vi.fn(async (path, options) => ({path, options}));
+    const api = await loadPluginsApi(fetchImpl);
+    await api.youtubeHistoryStatus();
+    expect(fetchImpl).toHaveBeenCalledWith('/api/plugins/youtube/history/status', {cache:'no-store'});
+  });
   test("coalesces overlapping Next clicks into one receipt-backed command", async () => {
     const api = await loadPluginsApi(vi.fn());
     let finish;

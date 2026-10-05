@@ -356,8 +356,20 @@ class YoutubeAgent:
             line = "- " + (f"[{title}]({url})" if self._is_youtube_url(url) else title) + (f" — {channel}" if channel else "")
             if occurred_at:
                 line += f" (watched {occurred_at[:10]})"
+            elif item.get("history_day"):
+                line += f" (listed in history for {item['history_day']}; exact time unavailable)"
+            elif item.get("day_label"):
+                line += f" (history page label: {item['day_label']}; date unverified)"
             lines.append(line)
         total = int(result.get('total') or 0)
+        if result.get("browser_history"):
+            freshness = result["browser_history"].get("freshness") or {}
+            return SpecialistResponse(agent=self.name, status="answered",
+                summary="Your locally saved YouTube history includes these recent entries:\n\n" + "\n".join(lines)
+                    + "\n\nBrowser history has day-level or unknown dates; repeat plays and watch duration are unavailable."
+                    + (" Last successful browser refresh: " + freshness["last_success_at"] if freshness.get("last_success_at") else "")
+                    + (" Latest refresh status: " + freshness.get("message", "unavailable") if freshness.get("status") != "ready" else ""),
+                analysis="Read local Takeout and browser history evidence with separate provenance.", confidence=1.0)
         summary = (f"Your imported history contains {total:,} recorded {'watches from ' + requested_channel if requested_channel else label}. Here are the most recent:\n\n" + "\n".join(lines)) if lines else f"I found no recorded watches{' from ' + requested_channel if requested_channel else ''} in your imported history. This snapshot may not include newer activity."
         return SpecialistResponse(
             agent=self.name,
@@ -437,6 +449,20 @@ class YoutubeAgent:
             lines.append("You have watched less from " + ", ".join(falling) + " recently compared with the earlier part of the import.")
         if themes:
             lines.append("Repeated searches include " + ", ".join(str(t.get('label') or '') for t in themes[:3]) + ".")
+        browser_history = result.get("browser_history") or {}
+        browser_summary = ""
+        if browser_history.get("available"):
+            browser_summary = "Recent browser history lists " + ", ".join(
+                str(item.get("title") or item.get("video_id")) for item in browser_history.get("items", [])[:5])
+            browser_summary += ". These are history-page entries; exact watch times, repeat plays, and watch duration are unavailable."
+            freshness = browser_history.get("freshness") or {}
+            if freshness.get("last_success_at"):
+                browser_summary += " Last successful refresh: " + freshness["last_success_at"] + "."
+            if freshness.get("status") != "ready":
+                browser_summary += " " + freshness.get("message", "The latest refresh was unavailable.")
+        if not lines and browser_summary:
+            return SpecialistResponse(agent=self.name, status="answered", summary=browser_summary,
+                analysis="Read local browser history evidence; no precise watch-event trend was inferred.", confidence=1.0)
         if lines:
             dates = [str(c.get('latest_observation_at') or '')[:10] for c in channels if c.get('latest_observation_at')]
             lines.append("This describes recorded activity" + (" through " + max(dates) if dates else " in your import") + "; it does not prove your motivations or show live activity.")
@@ -464,7 +490,7 @@ class YoutubeAgent:
         return SpecialistResponse(
             agent=self.name,
             status="answered",
-            summary=summary,
+            summary=summary + ("\n\n" + browser_summary if browser_summary else ""),
             analysis="Used youtube.personal_context from the local Knowledge Core.",
             confidence=confidence,
         )

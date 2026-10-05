@@ -6,9 +6,10 @@ import asyncio
 import secrets
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
+from agent.contracts.youtube_history import YouTubeHistoryStatus
 
 from agent.config import get_settings
 from agent.knowledge.runtime import get_knowledge_core
@@ -28,6 +29,13 @@ from agent.plugins.youtube_runtime import (
 
 
 router = APIRouter(prefix="/plugins/youtube", tags=["youtube"])
+
+
+@router.get("/history/status", response_model=YouTubeHistoryStatus)
+async def get_youtube_history_status(response: Response) -> YouTubeHistoryStatus:
+    from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+    response.headers["Cache-Control"] = "no-store"
+    return YouTubeHistoryStatus(**await asyncio.to_thread(YouTubeBrowserHistory().status))
 
 
 def _controls() -> Any:

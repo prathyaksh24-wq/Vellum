@@ -310,17 +310,36 @@ class YoutubeCapabilityService:
 
         status = youtube_status()
         account_id = str(status.get("channel_id") or status.get("account_label") or "primary")
-        return YouTubeTakeoutImporter(store=get_knowledge_core().store, account_id=account_id).history(
+        store = get_knowledge_core().store
+        archive = YouTubeTakeoutImporter(store=store, account_id=account_id).history(
             kind=kind,
             limit=limit,
             channel=channel,
         )
+        if kind != "watch":
+            return archive
+        from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+        browser = YouTubeBrowserHistory(store=store).history(limit=limit, channel=channel)
+        if not browser["available"]:
+            return archive
+        # Prefer exact Takeout records over day-level browser presence. This
+        # reconciles displayed evidence without rewriting either source's records.
+        precise = {(item.get("video_id"), item.get("occurred_at", "")[:10]) for item in archive["items"]}
+        entries = list(archive["items"]) + [item for item in browser["items"]
+            if (item.get("video_id"), item.get("history_day")) not in precise]
+        entries.sort(key=lambda item: item.get("history_day") or item.get("occurred_at", "")[:10], reverse=True)
+        return {**archive, "available": True, "items": entries[:limit], "local_only": True,
+            "browser_history": {key: value for key, value in browser.items() if key != "items"}}
 
     def _default_personal_context(self, query: str, limit: int) -> dict[str, Any]:
         from agent.knowledge.runtime import get_knowledge_core
         from agent.plugins.youtube_intelligence import YouTubeIntelligenceService
 
-        return YouTubeIntelligenceService(get_knowledge_core().store).snapshot(limit=limit, query=query)
+        store = get_knowledge_core().store
+        result = YouTubeIntelligenceService(store).snapshot(limit=limit, query=query)
+        from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+        result["browser_history"] = YouTubeBrowserHistory(store=store).history(limit=5)
+        return result
 
     def _default_search_videos(self, query: str, max_results: int) -> list[dict[str, Any]]:
         try:
