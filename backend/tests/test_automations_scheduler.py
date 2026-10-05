@@ -277,7 +277,9 @@ def test_install_automation_jobs_wires_mutation_hook(tmp_path) -> None:
     automations_api.set_store(store)
     try:
         automation_scheduler = install_automation_jobs(scheduler)
-        builtin_ids = {r["id"] for r in store.list() if r.get("builtin")}
+        builtin_ids = {r["id"] for r in store.list() if r.get("builtin") and r["state"] == "active"}
+        history_job = next(r for r in store.list() if r.get("builtin_key") == "youtube_browser_history")
+        assert history_job["state"] == "paused"
         assert len(scheduler.jobs) == 1 + len(builtin_ids)
         assert automations_api._MUTATION_HOOK is not None
         created = _create(store, name="after-hook")
