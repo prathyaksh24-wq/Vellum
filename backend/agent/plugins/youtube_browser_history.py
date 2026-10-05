@@ -1,0 +1,170 @@
+"""Browser history adapter over the existing browser worker and Knowledge Core."""
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+import json
+import re
+from threading import Lock
+from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
+from zoneinfo import ZoneInfo
+
+from agent.contracts.youtube_history import YouTubeHistoryConfig, YouTubeHistoryStatus
+from agent.knowledge.ingestion import IngestionCoordinator, IngestionResult
+from agent.knowledge.models import (ExternalPolicy, IngestionJobInput, ObservationActor,
+    ObservationInput, Sensitivity, SourceItemInput, SyncCursorInput)
+from agent.knowledge.runtime import get_knowledge_core
+from agent.mcp.playwright_tools import browser_session
+
+ORIGIN = "youtube_browser_history"
+ACTION = "youtube.history_presence"
+MESSAGES = {
+    "ready": "Recent loaded history was saved locally. Exact watch times and repeat plays are unavailable.",
+    "browser_closed": "Open History in Vellum's browser first.",
+    "browser_busy": "Refresh skipped while the browser is paused or under your control. Resume agent control for background updates.",
+    "history_page_required": "Keep the configured History page active in Vellum's browser for refresh.",
+    "sign_in_required": "Sign into YouTube manually in Vellum's browser, then refresh.",
+    "account_unavailable": "The reader could not identify the browser account. No history was imported.",
+    "account_changed": "The browser account changed. Return to the account used for the first refresh.",
+    "page_changed": "The History page layout was not recognized. No history was imported.",
+    "history_empty_or_paused": "YouTube shows an empty or paused history. Previously imported records remain available.",
+    "unavailable": "History refresh failed. Your previous successful import remains available.",
+}
+
+
+def history_day(label: str, *, now: datetime, timezone: str) -> str:
+    reference = now.astimezone(ZoneInfo(timezone)).date()
+    normalized = label.strip().casefold()
+    if normalized in {"today", "yesterday"}:
+        return (reference - timedelta(days=normalized == "yesterday")).isoformat()
+    for pattern in ("%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(label.strip(), pattern).date().isoformat()
+        except ValueError:
+            pass
+    # Weekday/relative/localized labels do not establish an unambiguous date.
+    return ""
+
+
+class YouTubeBrowserHistory:
+    _lock = Lock()
+
+    def __init__(self, *, store=None, browser=browser_session, clock=None):
+        self.store = store or get_knowledge_core().store
+        self.browser = browser
+        self.clock = clock or (lambda: datetime.now(UTC))
+
+    def _state(self):
+        return dict((self.store.get_sync_cursor(ORIGIN, "settings") or {}).get("state") or {})
+
+    def _save(self, state):
+        self.store.save_sync_cursor(SyncCursorInput(connector=ORIGIN, account_id="settings", state=state))
+
+    def status(self):
+        state = self._state()
+        return YouTubeHistoryStatus(config=state.get("config") or {},
+            status=state.get("status", "not_refreshed"), last_success_at=state.get("last_success_at", ""),
+            last_attempt_at=state.get("last_attempt_at", ""), message=state.get("message", MESSAGES["browser_closed"]),
+            records=self.store.count_observations(origin=ORIGIN, action=ACTION),
+            account_bound=bool(state.get("account_fingerprint"))).model_dump()
+
+    def configure(self, arguments):
+        config = YouTubeHistoryConfig.model_validate(arguments)
+        with self._lock:
+            state = self._state()
+            state["config"] = config.model_dump()
+            self._save(state)
+        return self.status()
+
+    def refresh(self, *, automatic=False):
+        if not self._lock.acquire(blocking=False):
+            return {"status": "browser_busy", "message": "A history refresh is already running."}
+        try:
+            state = self._state()
+            config = YouTubeHistoryConfig.model_validate(state.get("config") or {})
+            now = self.clock()
+            state["last_attempt_at"] = now.isoformat()
+            try:
+                result = self.browser("youtube_history", {"url": config.url, "automatic": automatic})
+                code = result["status"]
+                if code == "ready":
+                    fingerprint = result["account_fingerprint"]
+                    if state.get("account_fingerprint") not in {None, "", fingerprint}:
+                        code = "account_changed"
+                    else:
+                        records = self._normalize(result["entries"], config=config, now=now)
+                        if not records:
+                            code = "page_changed"
+                        else:
+                            job = IngestionCoordinator(self.store).run(IngestionJobInput(
+                                connector=ORIGIN, account_id=fingerprint, job_type="recent_history",
+                                idempotency_key=uuid4().hex, requested_by="scheduler" if automatic else "user"),
+                                operation=lambda _cursor: self._import(records, fingerprint, now))
+                            if job.get("status") != "completed":
+                                raise ValueError("History ingestion did not complete")
+                            state["account_fingerprint"] = fingerprint
+                            state["last_success_at"] = now.isoformat()
+            except Exception:
+                code = "unavailable"
+            state["status"] = code
+            state["message"] = MESSAGES.get(code, MESSAGES["unavailable"])
+            self._save(state)
+            return self.status()
+        finally:
+            self._lock.release()
+
+    @staticmethod
+    def _normalize(entries, *, config, now):
+        records = {}
+        for entry in entries[:100]:
+            parsed = urlsplit(str(entry.get("url", "")))
+            video_id = parse_qs(parsed.query).get("v", [""])[0]
+            if parsed.hostname not in {"www.youtube.com", "youtube.com"} or parsed.path != "/watch" or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+                continue
+            label = str(entry.get("day_label", ""))[:100]
+            day = history_day(label, now=now, timezone=config.timezone)
+            # Unknown relative dates cannot form durable event identities. Keep them
+            # in the current source snapshot only, not as new daily observations.
+            key = video_id + ":" + day
+            records[key] = {"video_id": video_id, "url": "https://www.youtube.com/watch?v=" + video_id,
+                "title": str(entry.get("title", ""))[:500], "channel_title": str(entry.get("channel_title", ""))[:500],
+                "history_day": day, "day_label": label, "occurred_at": "", "time_precision": "day" if day else "unknown",
+                "captured_at": now.isoformat(), "provider": ORIGIN}
+        return list(records.values())
+
+    def _import(self, records, account, now):
+        source = self.store.upsert_source(SourceItemInput(kind=ORIGIN, external_id=account,
+            account_id=account, title="YouTube browser history", observed_at=now,
+            content=json.dumps([{key: value for key, value in item.items() if key != "captured_at"}
+                for item in records], ensure_ascii=False, sort_keys=True),
+            sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY, external_policy=ExternalPolicy.DENY_RAW,
+            trust="browser_page", metadata={"coverage": "recent_loaded_history", "items": records}))
+        observations = []
+        for item in records:
+            if not item["history_day"]:
+                continue
+            key = sha256((account + ":" + item["video_id"] + ":" + item["history_day"]).encode()).hexdigest()
+            observations.append(ObservationInput(origin=ORIGIN, action=ACTION, actor=ObservationActor.IMPORTED,
+                trigger="youtube_history_page", source_id=source["source_id"], event_key=ORIGIN + ":" + key,
+                payload=item, sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY, confidence=1.0, observed_at=now))
+        inserted = self.store.record_observations(observations)
+        return IngestionResult(stats={"records": len(records), **inserted}, cursor=now.isoformat())
+
+    def history(self, *, limit=20, channel=""):
+        rows = self.store.list_observation_details(origin=ORIGIN, action=ACTION, limit=500)
+        items = [dict(row["payload"]) for row in rows]
+        # Entries with unrecognized dates remain useful evidence in the latest
+        # snapshot, without fabricated watch timestamps or accumulating duplicates.
+        account = self._state().get("account_fingerprint", "")
+        if account:
+            for source in self.store.list_sources(kind=ORIGIN, limit=100):
+                if source.get("account_id") == account:
+                    detail = self.store.get_source(source["id"]) or {}
+                    items.extend(item for item in detail.get("metadata", {}).get("items", []) if not item.get("history_day"))
+        if channel:
+            from agent.plugins.youtube_takeout import filter_channel_history
+            items = filter_channel_history(items, channel)
+        items.sort(key=lambda item: item["history_day"], reverse=True)
+        return {"available": bool(items), "items": items[:limit], "total": len(items),
+            "provider": ORIGIN, "freshness": self.status(), "coverage": "recent_loaded_history",
+            "local_only": True,
+            "timing_note": "Dates have day precision; repeat plays and watch duration are unavailable."}
