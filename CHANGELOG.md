@@ -23,6 +23,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - X posting intent recognizes omitted pronouns, shorthand, and corrections; self-introduction drafts identify Vellum and stay short. Music deduplicates song suggestions, accepts a clear single-choice yes, seeks within current audio, reads live podcast/song state, and verifies playlist names and songs before reporting success.
 
 ### Fixed
+- Personal liked-video requests, including “liked vidoes” and “what videos have I liked?”, read the connected YouTube account instead of searching public tutorials.
+- The browser address field searches ordinary words and accepts website addresses and local development URLs without turning search text into an invalid hostname.
 - Opening the UI server's base address now redirects to Vellum instead of returning 404; entry redirects retain view and conversation query parameters.
 - Interrupted or overlapping browser cleanup finishes closing the owned Brave process before reopening, preventing a stranded process from locking Vellum's browser profile.
 - The Browser sidebar entry reads current readiness before opening, so a first click during startup launches the dedicated session instead of leaving it closed. Launch failures use the existing toast helper to show the error without crashing the handler.

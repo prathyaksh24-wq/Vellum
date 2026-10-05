@@ -1,5 +1,33 @@
 # Browser use verification — 2026-10-04
 
+## Local recovery and address regression — 2026-10-05
+
+The running backend returned failed receipts for both opening and closing its
+stuck session. Its dedicated Brave process was still alive while status reported
+the session closed. Recovery stopped only the verified application-owned process
+and restarted the backend, preserving the saved profile. This operational
+recovery does not establish a new cause beyond the existing lifecycle fixes.
+
+Against the restarted backend, a real Brave UI probe closed the session, clicked
+the served Vellum sidebar's Browser entry, and verified the visible panel, Ready
+status and address field. A separate regression reproduced search text being
+converted to `https://google`; the real address form now dispatches a Google
+search URL through the existing App Action adapter.
+
+- Affected browser, worker, YouTube OAuth/capability, API and visual-action
+  suites: **182 passed**, two unrelated book tests deselected. This includes
+  opt-in real Brave lifecycle and session checks.
+- Complete frontend suite: **33 files, 247 tests passed**. Production build
+  passed with the existing classic-script warnings.
+- A live request through the selected YouTube agent returned connected-account
+  liked-video titles for the original misspelled request, with memory storage
+  disabled. The temporary QA conversation state was removed.
+- PR #211's separate backend fixture corrections passed all six GitHub CI jobs.
+  A local full-suite Windows run had unrelated book/storage/coding failures;
+  it is not recorded as a passing full-suite run.
+
+## Initial implementation verification
+
 Baseline: `4b63bbe` (`origin/main` at implementation time).
 
 - Core affected backend suites: **162 passed**, covering browser permissions,

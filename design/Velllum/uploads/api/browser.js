@@ -1,6 +1,17 @@
 (function () {
   var client = window.VellumApi.client;
   window.VellumApi.browser = {
+    addressUrl: function (input) {
+      var value = String(input || '').trim();
+      if (!value || /^https?:\/\//i.test(value) || value === 'about:blank') return value;
+      var host = value.split(/[/?#]/)[0];
+      var local = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?$/i.test(host);
+      var website = /^(?:[a-z0-9-]+\.)+[a-z0-9-]+(?::\d+)?$/i.test(host) || /^\[[a-f0-9:]+\](?::\d+)?$/i.test(host);
+      if (!/\s/.test(value) && (local || website)) return (local ? 'http://' : 'https://') + value;
+      // Unsupported schemes remain subject to the canonical server validator.
+      if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
+      return 'https://www.google.com/search?q=' + encodeURIComponent(value);
+    },
     status: function () { return client.request('/api/browser/status', {cache:'no-store'}); },
     frame: function () { return client.request('/api/browser/frame', {cache:'no-store'}); },
     control: function (arguments_, context) {
