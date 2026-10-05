@@ -48,6 +48,7 @@ class DelegationRequest:
     depth: int = 0
     confirm_pending_action: bool = False
     book_discovery: BooksDiscoveryTask | None = None
+    memory_from: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.agent_id.strip():
@@ -60,6 +61,10 @@ class DelegationRequest:
             raise ValueError("user_id is required")
         if self.depth < 0:
             raise ValueError("depth must be non-negative")
+        if len(self.memory_from) > 4 or any(not isinstance(peer, str) or not peer.strip() for peer in self.memory_from):
+            raise ValueError("Request at most four named memory sources")
+        if len(self.task) > 4000 or len(self.context) > 8000:
+            raise ValueError("Delegation task or context exceeds its budget")
         if self.book_discovery is not None:
             if self.agent_id != "BooksAgent" or self.confirm_pending_action:
                 raise ValueError("Book Discovery intent cannot override an agent or pending confirmation")
@@ -132,7 +137,7 @@ class DelegationRuntime:
                     profile = self.agent_catalog.resolve(request.agent_id).profile
                     completed.append((index, self._complete(profile=profile,
                         response=_runtime_response(profile=profile, status="error", summary=f"{request.agent_id} could not complete this task.", analysis="independent_delegation_failed"),
-                        parent_thread_id=request.parent_thread_id, task_id=request.task_id or str(uuid4()),
+                        parent_thread_id=request.parent_thread_id, user_id=request.user_id, task_id=request.task_id or str(uuid4()),
                         started=self._utc_now(), cache_status="bypass", cache_reason="execution_error", goal=request.task, context=request.context)))
                 run = completed[-1][1]
                 if run.response.action_request and self.pending_action_store is not None:
@@ -182,6 +187,7 @@ class DelegationRuntime:
                     profile=profile,
                     response=response,
                     parent_thread_id=parent_thread_id,
+                    user_id=request.user_id,
                     task_id=task_id,
                     started=started,
                     cache_status="bypass",
@@ -200,6 +206,7 @@ class DelegationRuntime:
                 profile=profile,
                 response=response,
                 parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
                 task_id=task_id,
                 started=started,
                 cache_status="bypass",
@@ -213,7 +220,7 @@ class DelegationRuntime:
             else CacheDecision(status="bypass", reason="confirmed_action")
             if action_request is not None
             else CacheDecision(status="bypass", reason="explicit_context")
-            if context.strip()
+            if context.strip() or request.memory_from
             else self._lookup(profile, goal)
         )
         if decision.status == "hit" and decision.response is not None:
@@ -221,6 +228,7 @@ class DelegationRuntime:
                 profile=profile,
                 response=decision.response,
                 parent_thread_id=parent_thread_id,
+                user_id=request.user_id,
                 task_id=task_id,
                 started=started,
                 cache_status="hit",
@@ -239,6 +247,7 @@ class DelegationRuntime:
                 user_id=request.user_id,
                 action_request=action_request,
                 book_discovery=request.book_discovery,
+                memory_from=request.memory_from,
             )
             _validate_response_schema(profile, response)
             if response.agent != profile.id:
@@ -279,6 +288,7 @@ class DelegationRuntime:
                     profile=profile,
                     response=stale,
                     parent_thread_id=parent_thread_id,
+                    user_id=request.user_id,
                     task_id=task_id,
                     started=started,
                     cache_status="stale_fallback",
@@ -310,6 +320,8 @@ class DelegationRuntime:
                     and action_request is None
                     and request.book_discovery is None
                     and not context.strip()
+                    and not request.memory_from
+                    and not any(event.get("tool") == "specialist_memory" for event in response.activity_events)
                     and not _has_private_books_state(response)
                 ):
                     self.memory_orchestrator.store_specialist_response(profile=profile, query=goal, response=response)
@@ -320,6 +332,7 @@ class DelegationRuntime:
             profile=profile,
             response=response,
             parent_thread_id=parent_thread_id,
+            user_id=request.user_id,
             task_id=task_id,
             started=started,
             cache_status=cache_status,
@@ -588,6 +601,7 @@ class DelegationRuntime:
         user_id: str,
         action_request: dict[str, Any] | None,
         book_discovery: BooksDiscoveryTask | None = None,
+        memory_from: tuple[str, ...] = (),
     ) -> SpecialistResponse:
         approval = ""
         approval_key = ""
@@ -637,15 +651,24 @@ class DelegationRuntime:
             book_discovery_network=profile.book_discovery_network,
             book_discovery_approval=approval,
             book_discovery_request_key=approval_key,
-        ):
+        ), self._execution_scope(profile=profile, goal=goal, context=context,
+                                 thread_id=parent_thread_id, user_id=user_id, memory_from=memory_from,
+                                 read_memory=book_discovery is None and action_request is None):
             if book_discovery is not None:
                 return self._prepare_book_discovery(
                     profile=profile, task=book_discovery, user_id=user_id, thread_id=parent_thread_id,
                 )
-            if profile.executor == "deterministic":
+            scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id) if self.pending_action_store is not None else {}
+            use_handler = profile.executor == "deterministic" or (
+                profile.executor == "hybrid" and executor is not None and (
+                    action_request is not None or profile.id in {"BooksAgent", "BrowserAgent"}
+                    or self.memory_orchestrator is None or any(k != "memory_handoff" for k in scoped)
+                    or bool(executor.can_handle(goal))
+                )
+            )
+            if use_handler:
                 if executor is None:
                     raise ValueError(f"{profile.id} requires a deterministic executor")
-                scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id) if self.pending_action_store is not None else {}
                 if action_request is not None:
                     execute = getattr(executor, "execute_action_request")
                     response = execute(action_request)
@@ -655,8 +678,7 @@ class DelegationRuntime:
                     response = executor.answer_delegated(goal, context)
                 else:
                     response = executor.answer(goal)
-                if self.pending_action_store is not None and callable(getattr(executor, "thread_context", None)):
-                    self.pending_action_store.set_specialist_context(parent_thread_id, profile.id, executor.thread_context(response, scoped))
+                self._retain_context(profile, executor, response, scoped, parent_thread_id, user_id, goal)
                 return response
             if action_request is not None:
                 raise ValueError("LLM profiles cannot execute confirmed actions")
@@ -665,7 +687,69 @@ class DelegationRuntime:
                 goal=goal,
                 context=context,
                 parent_thread_id=parent_thread_id,
+                executor=executor,
+                user_id=user_id,
             )
+
+    def _execution_scope(self, *, profile, goal, context, thread_id, user_id, memory_from, read_memory=True):
+        from agent.profiles.execution import ProfileExecution, profile_execution
+        from agent.llm.providers import get_provider_registry
+        packet = self.memory_orchestrator.build_memory_packet(thread_id=thread_id, query=goal,
+            agent_name=profile.id, read_scopes=profile.memory.read_scopes, live_honcho=False) if self.memory_orchestrator and read_memory else {}
+        if profile.id == "MusicAgent":
+            # The owning music path saves user-stated preferences in this scope.
+            # Global portraits, listening history and provider activity never
+            # become automatic model context for a playback/planning request.
+            packet = {"scopes":[f"agent:{profile.id}"], "saved_memories":[
+                row for row in packet.get("saved_memories", [])
+                if row.get("scope") == f"agent:{profile.id}" and row.get("kind") == "preference"
+            ]}
+        # Explicit references are resolved by the owner, not accepted as caller-authored evidence.
+        packet["handoffs"] = [self._memory_handoff(profile, peer, goal[:1000], thread_id, user_id) for peer in memory_from]
+        if read_memory and self.pending_action_store is not None and profile.id != "MusicAgent":
+            scoped = self.pending_action_store.get_specialist_context(thread_id, profile.id)
+            if scoped.get("memory_handoff", {}).get("user_id", user_id) != user_id:
+                scoped = {}
+            # Only this specialist's current thread state, never parent chat history.
+            if len(json.dumps(scoped, ensure_ascii=False, default=str)) <= 6000:
+                packet["specialist_context"] = scoped
+        # Preserve valid JSON and complete records within the per-run memory budget.
+        while len(json.dumps(packet, ensure_ascii=False, default=str)) > 12000 and packet.get("saved_memories"):
+            packet["saved_memories"].pop()
+        if len(json.dumps(packet, ensure_ascii=False, default=str)) > 20000:
+            raise ValueError("Profile memory packet exceeds its budget")
+        skill_text = []
+        for name in profile.skills.allow[:3]:
+            try:
+                skill_text.append(f"Allowed skill {name}:\n" + self._skill_for(profile, name)[:2000])
+            except (KeyError, ValueError, OSError):
+                skill_text.append(f"Allowed skill {name} is unavailable; do not claim it ran.")
+        model_id = profile.model or get_provider_registry().current_model().id
+        return profile_execution(ProfileExecution(profile.id, model_id, profile.reasoning_mode or self.reasoning_mode,
+            self.agent_catalog.instructions_for(profile), "\n".join(skill_text), packet, context, thread_id))
+
+    def _skill_for(self, profile, name):
+        from agent.skills import get_skill_registry
+        if name not in profile.skills.allow:
+            raise PermissionError("Skill is outside this profile")
+        return get_skill_registry().view(name).body[:6000]
+
+    def _memory_handoff(self, profile, source_agent, query, thread_id, user_id):
+        if self.memory_orchestrator is None:
+            raise ValueError("Memory owner unavailable")
+        source = self.agent_catalog.get(source_agent)
+        recent = self.pending_action_store.get_specialist_context(thread_id, source_agent).get("memory_handoff", {}) if self.pending_action_store else {}
+        return self.memory_orchestrator.build_agent_handoff(source=source, recipient=profile, query=query,
+            thread_id=thread_id, user_id=user_id, recent=recent)
+
+    def _retain_context(self, profile, executor, response, scoped, thread_id, user_id, goal):
+        if self.pending_action_store is None:
+            return
+        if callable(getattr(executor, "thread_context", None)):
+            scoped = executor.thread_context(response, scoped)
+        if response.status in {"error", "blocked"}:
+            scoped = {k:v for k,v in scoped.items() if k != "memory_handoff"}
+        self.pending_action_store.set_specialist_context(thread_id, profile.id, scoped)
 
     @staticmethod
     def _profile_fingerprint(profile: AgentProfile) -> str:
@@ -675,7 +759,7 @@ class DelegationRuntime:
         self, *, profile: AgentProfile, task: BooksDiscoveryTask, user_id: str, thread_id: str,
     ) -> SpecialistResponse:
         if (
-            profile.executor != "deterministic" or not profile.book_discovery_network
+            profile.executor not in {"deterministic", "hybrid"} or not profile.book_discovery_network
             or profile.source_egress != "external" or task.capability not in profile.tools.allow
             or self.pending_action_store is None
         ):
@@ -698,8 +782,12 @@ class DelegationRuntime:
         return response
 
     def _llm_for(self, model_id: str | None) -> Any:
-        if self.reasoning_mode is not None and self.llm_factory is get_routed_chat_model:
-            return get_routed_chat_model(model_id, reasoning_mode=self.reasoning_mode)
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        model_id = execution.model_id if execution is not None else model_id
+        reasoning = execution.reasoning_mode if execution is not None else self.reasoning_mode
+        if reasoning is not None and self.llm_factory is get_routed_chat_model:
+            return get_routed_chat_model(model_id, reasoning_mode=reasoning)
         return self.llm_factory(model_id)
 
     def _execute_llm(
@@ -709,10 +797,14 @@ class DelegationRuntime:
         goal: str,
         context: str,
         parent_thread_id: str,
+        executor=None,
+        user_id="default",
     ) -> SpecialistResponse:
         if self.memory_orchestrator is None:
             raise RuntimeError("LLM profiles require a memory orchestrator")
-        packet = self.memory_orchestrator.build_memory_packet(
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        packet = execution.memory if execution is not None else self.memory_orchestrator.build_memory_packet(
             thread_id=parent_thread_id,
             query=goal,
             agent_name=profile.id,
@@ -724,6 +816,21 @@ class DelegationRuntime:
             HumanMessage(content=_llm_task_packet(goal=goal, context=context, memory_packet=packet)),
         ]
         model = self._llm_for(profile.model)
+        if profile.tools.allow or profile.executor == "hybrid":
+            from agent.profiles.runner import run_profile
+            from agent.llm.providers import get_provider_registry
+            registry = get_provider_registry()
+            chosen = execution.model_id if execution is not None else profile.model
+            model_entry = next((m for m in registry.list_models() if m.id == chosen), None)
+            response = run_profile(profile=profile, executor=executor, registry=self.agent_catalog.tool_registry,
+                model=model, goal=goal, context=context,
+                thread_id=parent_thread_id,
+                memory_reader=lambda source_agent, query: self._memory_handoff(profile, source_agent, query, parent_thread_id, user_id),
+                skill_reader=lambda name: self._skill_for(profile, name),
+                action_handler=(lambda: self._handle_exact(executor, goal, context, parent_thread_id, profile.id)) if executor is not None else None,
+                native_tools=model_entry is None or model_entry.tool_calling_compatibility != "unsupported")
+            self._retain_context(profile, executor, response, {}, parent_thread_id, user_id, goal)
+            return response
         output = model.invoke(
             messages,
             config={"configurable": {"thread_id": parent_thread_id}},
@@ -735,6 +842,19 @@ class DelegationRuntime:
         if not summary:
             raise RuntimeError("LLM profile returned an empty response")
         return SpecialistResponse(agent=profile.id, status="answered", summary=summary, confidence=0.65)
+
+    def _handle_exact(self, executor, goal, context, thread_id, profile_id):
+        scoped = self.pending_action_store.get_specialist_context(thread_id, profile_id) if self.pending_action_store else {}
+        if callable(getattr(executor, "answer_with_memory", None)):
+            from agent.profiles.execution import get_profile_execution
+            execution = get_profile_execution()
+            return executor.answer_with_memory(goal, scoped, conversation_context=context,
+                memory_packet=execution.memory if execution else {})
+        if callable(getattr(executor, "answer_with_context", None)):
+            return executor.answer_with_context(goal, scoped)
+        if callable(getattr(executor, "answer_delegated", None)):
+            return executor.answer_delegated(goal, context)
+        return executor.answer(goal)
 
     def _complete(
         self,
@@ -748,6 +868,7 @@ class DelegationRuntime:
         cache_reason: str,
         goal: str,
         context: str,
+        user_id: str = "default",
     ) -> DelegationRunResult:
         result = DelegationRunResult(
             run_id=str(uuid4()),
@@ -762,6 +883,14 @@ class DelegationRuntime:
             finished_at=self._utc_now().isoformat(),
             response=response,
         )
+        # Export only responses that passed the runtime's schema validation.
+        if (self.pending_action_store is not None and response.status == "answered" and response.sources
+                and not response.action_request and profile.result_visibility == "full" and profile.id != "MusicAgent"):
+            scoped = self.pending_action_store.get_specialist_context(parent_thread_id, profile.id)
+            scoped["memory_handoff"] = {"reference":f"run:{result.run_id}", "user_id":user_id,
+                "purpose":goal[:1000], "summary":response.summary[:1600], "confidence":response.confidence,
+                "sources":[s.path_or_url for s in response.sources[:6]], "captured_at":self._utc_now().isoformat()}
+            self.pending_action_store.set_specialist_context(parent_thread_id, profile.id, scoped)
         self._write_audit(result=result, goal=goal, context=context)
         return result
 

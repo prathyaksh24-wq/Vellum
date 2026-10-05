@@ -21,7 +21,8 @@ class LocalDiscordSummarizer:
         from agent.llm.routing.models import provider_for_model
         from agent.llm.routing.runtime import get_routed_chat_model
 
-        model_id = (self.model_resolver or (lambda: get_provider_registry().current_model().id))()
+        from agent.profiles.execution import profile_model_id
+        model_id = profile_model_id(self.model_resolver or (lambda: get_provider_registry().current_model().id))
         if provider_for_model(model_id) != "ollama":
             raise ValueError("DISCORD_LOCAL_SUMMARY_REQUIRES_LOCAL_MODEL")
         packet = [

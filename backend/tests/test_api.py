@@ -1108,7 +1108,7 @@ def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, 
     assert response.status_code == 200
     body = response.json()
     sports = next(profile for profile in body["profiles"] if profile["id"] == "SportsAgent")
-    assert sports["executor"] == "deterministic"
+    assert sports["executor"] == "hybrid"
     assert sports["memory"]["write_scope"] == "agent:SportsAgent"
     assert "instructions" not in sports
     assert "diagnostics" in body

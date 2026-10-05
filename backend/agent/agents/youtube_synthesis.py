@@ -20,6 +20,8 @@ class LocalYoutubeSynthesizer:
             registry = get_provider_registry()
             registry.refresh_local_models()
             model_id = registry.current_model().id
+        from agent.profiles.execution import profile_model_id
+        model_id = profile_model_id(lambda: model_id)
         if provider_for_model(model_id) != 'ollama':
             raise ValueError('Personal YouTube synthesis requires a local model')
         packet = {}

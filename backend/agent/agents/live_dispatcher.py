@@ -186,7 +186,7 @@ class LiveAgentDispatcher:
             if selected is not None and selected.executor is not None:
                 matched_binding = selected
                 route_source = "selected"
-            elif selected is not None and selected.profile.executor == "llm":
+            elif selected is not None and selected.profile.executor in {"llm", "hybrid"}:
                 profile_only_id = selected.profile.id
                 route_source = "selected"
             else:
@@ -218,7 +218,7 @@ class LiveAgentDispatcher:
                     route_source = "skill"
                     break
                 profile = binding.profile if binding is not None else None
-                if profile is not None and profile.executor == "llm" and self.delegation_runtime is not None:
+                if profile is not None and profile.executor in {"llm", "hybrid"} and self.delegation_runtime is not None:
                     profile_only_id = profile.id
                     route_source = "skill"
                     break
@@ -235,7 +235,7 @@ class LiveAgentDispatcher:
             if previous is not None and previous.executor is not None:
                 matched_binding = previous
                 route_source = "contextual"
-            elif previous is not None and previous.profile.executor == "llm":
+            elif previous is not None and previous.profile.executor in {"llm", "hybrid"}:
                 profile_only_id = previous.profile.id
                 route_source = "contextual"
         if matched_binding is not None or profile_only_id:

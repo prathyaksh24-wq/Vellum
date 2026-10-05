@@ -43,7 +43,7 @@ def test_delegation_tool_schema_is_small_and_excludes_runtime_state():
     fields = delegation.delegate_to_agent.args_schema.model_fields
     schema = delegation.delegate_to_agent.args_schema.model_json_schema()
 
-    assert set(fields) == {"agent_id", "task", "context"}
+    assert set(fields) == {"agent_id", "task", "context", "memory_from"}
     assert schema["properties"]["task"]["maxLength"] == 4000
     assert schema["properties"]["context"]["maxLength"] == 8000
 

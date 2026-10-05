@@ -48,11 +48,20 @@ class SpotifyCapabilityService:
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
+        reads = {
+            "spotify_playback": {"get_state", "get_currently_playing"},
+            "spotify_devices": {"list"},
+            "spotify_queue": {"get"},
+            "spotify_playlists": {"list", "get", "tracks", "get_tracks"},
+            "spotify_library": {"list", "contains"},
+        }
         for name, record in self.context.tools.items():
             registry.register(CapabilityRecord(name=name, namespace="spotify",
                 access=CapabilityAccess.READ if name in {"spotify_search", "spotify_albums", "spotify_podcasts"} else CapabilityAccess.WRITE,
                 allowed_agents=frozenset({"MusicAgent"}), stream_label=name.replace("_", " "),
-                adapter=lambda payload, registered=record: self._invoke(registered, payload)))
+                adapter=lambda payload, registered=record: self._invoke(registered, payload),
+                read_actions=frozenset(reads[name]) if name in reads else None,
+                input_schema=record.schema.get("function", record.schema).get("parameters")))
         return registry
 
     @staticmethod
