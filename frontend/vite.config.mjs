@@ -57,10 +57,12 @@ function serveDesignUploads() {
         res.end(readFileSync(target));
       });
       server.middlewares.use((req, res, next) => {
-        const path = (req.url || '').split('?')[0];
-        if (['/Vellum Default Re-designed.html', '/ui/Vellum Default Re-designed.html'].includes(decodeURIComponent(path))) {
+        const url = req.url || '';
+        const path = url.split('?')[0];
+        if (['/', '/index.html', '/Vellum Default Re-designed.html', '/ui/Vellum Default Re-designed.html'].includes(decodeURIComponent(path))) {
+          const query = url.includes('?') ? url.slice(url.indexOf('?')) : '';
           res.statusCode = 302;
-          res.setHeader('Location', '/design-uploads/Vellum%20Default%20Re-designed.html');
+          res.setHeader('Location', '/design-uploads/Vellum%20Default%20Re-designed.html' + query);
           res.end();
           return;
         }
