@@ -23,6 +23,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - X posting intent recognizes omitted pronouns, shorthand, and corrections; self-introduction drafts identify Vellum and stay short. Music deduplicates song suggestions, accepts a clear single-choice yes, seeks within current audio, reads live podcast/song state, and verifies playlist names and songs before reporting success.
 
 ### Fixed
+- Personal YouTube reads honor the requested entity, quantity, creator filter, and format through validated local-model plans. Follow-up links use the actual displayed list; missing context and read failures explain the limitation instead of returning unrelated public results.
 - YouTube liked-video replies display every fetched video in a numbered list with clickable titles. Subscription-count questions return the full connected-account channel count, including common wording and typos; imported counts remain labeled as snapshots.
 - Personal liked-video requests, including “liked vidoes” and “what videos have I liked?”, read the connected YouTube account instead of searching public tutorials.
 - The browser address field searches ordinary words and accepts website addresses and local development URLs without turning search text into an invalid hostname.
