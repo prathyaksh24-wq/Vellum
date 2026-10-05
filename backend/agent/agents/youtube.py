@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 from agent.agents.base import SpecialistResponse, SpecialistSource
 from agent.tools.capabilities.youtube_service import YoutubeCapabilityService
@@ -31,6 +32,8 @@ class YoutubeAgent:
     )
     _SUBSCRIPTION_PATTERNS = (
         r"\b(?:my|our)\s+(?:youtube\s+)?subscriptions?\b",
+        r"\b(?:how\s+many|number\s+of|count)\b.*\b(?:channels?|subscriptions?|subscribes?)\b.*\b(?:i|we|my|our)\b",
+        r"\bchannels?\s+(?:i|we)\s+(?:have\s+|am\s+|are\s+)?subscribed\s+to\b",
         r"\b(?:which|what|who)\s+.+\bsubscribed\s+to\b",
         r"\bchannels?\s+(?:am|are)\s+.+\bsubscribed\s+to\b",
         r"\bsubscriptions?\s+(?:on|from)\s+youtube\b",
@@ -92,6 +95,7 @@ class YoutubeAgent:
             self._is_intelligence_query(lowered)
             or self._is_account_query(lowered)
             or self._is_liked_query(lowered)
+            or self._is_subscriptions_query(lowered)
             or self._is_takeout_query(lowered)
             or any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
             or any(re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS)
@@ -129,7 +133,7 @@ class YoutubeAgent:
         if self._is_subscription_feed_query(lowered):
             return self._answer_subscription_feed()
         if self._is_subscriptions_query(lowered):
-            return self._answer_subscriptions()
+            return self._answer_subscriptions(lowered)
         if self._is_account_query(lowered):
             return self._answer_account()
         try:
@@ -265,7 +269,7 @@ class YoutubeAgent:
             confidence=confidence,
         )
 
-    def _answer_subscriptions(self) -> SpecialistResponse:
+    def _answer_subscriptions(self, query: str = "") -> SpecialistResponse:
         try:
             result = self._subscriptions()
         except Exception as exc:
@@ -279,20 +283,27 @@ class YoutubeAgent:
                 confidence=0.95,
             )
         items = list(result.get("items") or [])
-        if not items:
-            summary = "The connected YouTube account has no visible subscriptions."
+        total = int(result.get("total", len(items)))
+        snapshot = result.get("provider") == "takeout"
+        intro = (f"Your imported YouTube snapshot lists {total:,} subscribed channels."
+            if snapshot else f"You're subscribed to {total:,} YouTube channels.")
+        if re.search(r"\b(?:how\s+many|number\s+of|count)\b", query):
+            summary = intro
+        elif not items:
+            summary = intro
         else:
             visible = items[:50]
-            lines = [f"[{index}] {str(item.get('title') or item.get('channel_id') or 'Unknown channel')}" for index, item in enumerate(visible, start=1)]
-            if len(items) > len(visible):
-                lines.append(f"...and {len(items) - len(visible)} more.")
-            label = "Your Takeout snapshot contains" if result.get("provider") == "takeout" else "Your YouTube account is subscribed to"
-            summary = f"{label} {int(result.get('total') or len(items))} channels:\n" + "\n".join(lines)
+            lines = [f"{index}. {self._account_item_label(item, 'channel_id', 'channel')}"
+                for index, item in enumerate(visible, start=1)]
+            if total > len(visible):
+                intro += f" Showing the first {len(visible)}."
+            summary = intro + "\n\n" + "\n".join(lines)
         return SpecialistResponse(
             agent=self.name,
             status="answered",
             summary=summary,
-            analysis="Used youtube.subscriptions through the official OAuth connector.",
+            analysis=("Used youtube.subscriptions from the imported Takeout snapshot." if snapshot
+                else "Used youtube.subscriptions through the official OAuth connector."),
             confidence=1.0,
         )
 
@@ -314,11 +325,11 @@ class YoutubeAgent:
             summary = "The connected YouTube account has no accessible liked videos."
         else:
             lines = []
-            for index, item in enumerate(items[:5], start=1):
-                title = str(item.get("title") or item.get("video_id") or "Unknown video")
-                channel = str(item.get("channel") or "")
-                lines.append(f"[{index}] {title}" + (f" by {channel}" if channel else ""))
-            summary = f"Your {len(items)} most recent accessible liked YouTube videos are:\n" + "\n".join(lines)
+            for index, item in enumerate(items, start=1):
+                title = self._account_item_label(item, "video_id", "video")
+                channel = self._markdown_label(str(item.get("channel") or ""))
+                lines.append(f"{index}. {title}" + (f" — {channel}" if channel else ""))
+            summary = f"Here are your {len(items)} most recent liked videos:\n\n" + "\n".join(lines)
         return SpecialistResponse(
             agent=self.name,
             status="answered",
@@ -496,7 +507,22 @@ class YoutubeAgent:
         )
 
     def _is_subscriptions_query(self, lowered_query: str) -> bool:
+        lowered_query = re.sub(r"\bsubscried\b", "subscribed", lowered_query)
         return any(re.search(pattern, lowered_query) is not None for pattern in self._SUBSCRIPTION_PATTERNS)
+
+    @staticmethod
+    def _markdown_label(value: str) -> str:
+        return re.sub(r"([\\\[\]*_`])", r"\\\1", " ".join(value.split()))
+
+    @classmethod
+    def _account_item_label(cls, item: dict, id_key: str, kind: str) -> str:
+        identifier = str(item.get(id_key) or "")
+        title = cls._markdown_label(str(item.get("title") or identifier or f"Unknown {kind}"))
+        if not identifier:
+            return title
+        target = ("https://www.youtube.com/watch?v=" if kind == "video"
+            else "https://www.youtube.com/channel/") + quote(identifier, safe="")
+        return f"[{title}]({target})"
 
     def _is_account_query(self, lowered_query: str) -> bool:
         return any(re.search(pattern, lowered_query) is not None for pattern in self._ACCOUNT_PATTERNS)
