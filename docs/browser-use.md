@@ -12,7 +12,9 @@ installed local chat model. Open **Browser** in the sidebar, or ask Vellum to
 open a website. The right panel shows the separate browser while chat remains
 available beside it. **More** exposes the remaining sidebar destinations.
 
-- Use the address field, Back, Forward, Reload and tab controls to browse.
+- Use the address field to enter a website or search Google. Local development
+  addresses such as `localhost:5173` use HTTP. Back, Forward, Reload and tab
+  controls work alongside the address field.
 - **Pause** stops subsequent agent actions; **Resume agent** returns ownership.
   If the task has already yielded, ask Vellum to continue it after resuming.
 - **Take over** allows clicks, typing, paste, keypresses and scrolling in the

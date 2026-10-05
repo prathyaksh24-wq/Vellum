@@ -19,7 +19,8 @@ class LocalBrowserPlanner:
         from agent.llm.routing.runtime import get_routed_chat_model
         registry = get_provider_registry()
         registry.refresh_local_models()
-        model_id = registry.current_model().id
+        from agent.profiles.execution import profile_model_id
+        model_id = profile_model_id(lambda: registry.current_model().id)
         if provider_for_model(model_id) != "ollama":
             raise ValueError("Select a local model before asking BrowserAgent to read browser pages.")
         model = get_routed_chat_model(model_id)

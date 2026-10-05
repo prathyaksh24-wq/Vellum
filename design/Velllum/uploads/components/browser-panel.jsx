@@ -64,7 +64,7 @@
       const input = address.trim();
       if (!input) return;
       editingAddress.current = false;
-      const url = /^https?:\/\//i.test(input) || input === 'about:blank' ? input : 'https://' + input;
+      const url = api.addressUrl(input);
       command('navigate', {url});
     };
     const click = event => {
@@ -112,7 +112,7 @@
           <button type="button" className="browser-icon" title="Back" onClick={() => command('back')} disabled={!active || busy}><Icon name="back"/></button>
           <button type="button" className="browser-icon" title="Forward" onClick={() => command('forward')} disabled={!active || busy}><Icon name="forward"/></button>
           <button type="button" className="browser-icon" title="Reload" onClick={() => command('reload')} disabled={!active || busy}><Icon name="reload"/></button>
-          <input aria-label="Browser address" placeholder="Enter a website" value={address} onFocus={() => { editingAddress.current = true; }} onBlur={() => { editingAddress.current = false; }} onChange={event => setAddress(event.target.value)} spellCheck={false}/>
+          <input aria-label="Browser address" placeholder="Search or enter a website" value={address} onFocus={() => { editingAddress.current = true; }} onBlur={() => { editingAddress.current = false; }} onChange={event => setAddress(event.target.value)} spellCheck={false}/>
           <button type="button" className="browser-icon" title="Downloads" aria-expanded={downloadsOpen} onClick={() => setDownloadsOpen(!downloadsOpen)}><Icon name="download"/></button>
         </form>
       </>}

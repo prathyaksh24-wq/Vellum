@@ -652,6 +652,53 @@ class MemoryOrchestrator:
             packet = _scrub_packet(packet)
         return packet
 
+    def build_agent_handoff(self, *, source, recipient, query: str, thread_id: str,
+                           user_id: str, recent: dict | None = None) -> dict[str, Any]:
+        """Resolve relevant evidence under both profiles' policies; never copy history."""
+        from datetime import UTC, datetime, timedelta
+        from agent.memory.packets import AgentMemoryPacket, PacketEvidence
+        from agent.privacy.scrubber import PrivacyScrubber
+        def contains_secret(text):
+            return any(pattern.search(text) for label, pattern, _ in PrivacyScrubber.regex_patterns
+                       if label in {"SECRET", "CRYPTO_KEY", "CREDIT_CARD", "GOVERNMENT_ID"}) or bool(
+                       re.search(r"auth_token|\bct0\b|\bbearer\s+\S+|-----BEGIN", text, re.I))
+        if source.id != recipient.id and (
+            recipient.id not in source.memory.share_with or source.id not in recipient.memory.receive_from
+            or recipient.source_egress != "local"
+        ):
+            raise PermissionError("This memory handoff is not allowed by both profiles")
+        now = datetime.now(UTC)
+        items = []
+        if self.store is not None and self.store.get_settings().get("memory_enabled", True):
+            authorized_scopes = source.memory.read_scopes if source.id == recipient.id else source.memory.share_scopes
+            scopes = [scope for scope in source.memory.read_scopes
+                      if scope in {"shared", f"agent:{source.id}"} and scope in authorized_scopes]
+            matches = self.store.search_saved(query, limit=4, scopes=scopes) if scopes else []
+            for item in matches:
+                if contains_secret(str(item["text"])):
+                    continue
+                items.append(PacketEvidence(reference=f"memory:{item['id']}", scope=item["scope"],
+                    text=str(item["text"])[:1600], confidence=float(item.get("confidence") or 0),
+                    updated_at=str(item.get("updated_at") or "")))
+            recent = recent or {}
+            captured = recent.get("captured_at", "")
+            try:
+                age = (now - datetime.fromisoformat(captured)).total_seconds()
+            except (ValueError, TypeError):
+                age = -1
+            tokens = lambda text: set(re.findall(r"[a-z0-9]{3,}", str(text).casefold())) - {"what","about","this","that","have","with","from","please","tell","know","does","your","their"}
+            if (recent.get("user_id") == user_id and 0 <= age <= 600
+                    and source.result_visibility == "full"
+                    and f"agent:{source.id}" in scopes
+                    and not contains_secret(json.dumps(recent, default=str))
+                    and tokens(query) & tokens(recent.get("purpose", ""))):
+                items.append(PacketEvidence(reference=str(recent["reference"]), scope=f"agent:{source.id}",
+                    text=str(recent.get("summary") or "")[:1600], confidence=float(recent.get("confidence") or 0),
+                    updated_at=captured, sources=[str(s)[:500] for s in recent.get("sources", [])[:6]]))
+        return AgentMemoryPacket(source_agent=source.id, recipient_agent=recipient.id, purpose=query[:1000],
+            thread_id=thread_id, user_id=user_id, captured_at=now, expires_at=now+timedelta(minutes=5),
+            items=items).model_dump(mode="json")
+
     def summary_view(self) -> dict[str, Any]:
         """Return one stable, UI-ready memory contract for every frontend surface."""
         if self.store is None:

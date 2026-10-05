@@ -33,6 +33,7 @@ class AgentCatalog:
         self.profile_dir = Path(profile_dir)
         self._builtins = dict(builtins or builtin_profiles())
         self._executors = dict(executors or {})
+        self.tool_registry = None
         self._diagnostics: list[dict[str, str]] = []
 
     @classmethod
@@ -59,6 +60,7 @@ class AgentCatalog:
         discord_runtime_service = discord_service()
         tools = build_shared_tool_registry(vault_root=root, discord_service=discord_runtime_service)
         catalog = cls(profile_dir=profile_dir)
+        catalog.tool_registry = tools
         books_profile = catalog.get("BooksAgent")
         agents = [
             BrowserAgent(tool_registry=tools),

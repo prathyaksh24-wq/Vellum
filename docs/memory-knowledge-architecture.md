@@ -32,6 +32,19 @@ remain active and the Knowledge Core operates in shadow mode.
    personal memory.
 4. Current conversation context always wins when older memory conflicts.
 
+## Specialist memory packets
+
+The same Memory Orchestrator builds `AgentMemoryPacket` handoffs. Source and
+recipient must permit the peer; only source-declared export scopes are eligible.
+Packets carry purpose, provenance, confidence, capture/expiry times, user/thread
+identity and `authority=evidence_only`. They contain relevant saved memories or
+recent source-backed specialist results, never whole conversations. Secrets,
+unrelated evidence, expired results and another user's thread results are omitted.
+Calendar/Discord private scopes are excluded from export by default.
+
+Packets remain ephemeral task evidence. They cannot confirm changes or directly
+alter another profile's memory. Durable learning still uses the write flow below.
+
 ## Write flow
 
 1. `/api/conversations` saves the canonical thread.

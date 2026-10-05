@@ -68,6 +68,7 @@ class DedicatedBrowser:
         self.playwright = None
         self._process = None
         self._cdp_browser = None
+        self._close_task: asyncio.Task | None = None
         self.active_page = None
         self.control = "closed"
         self.session_id = ""
@@ -84,6 +85,8 @@ class DedicatedBrowser:
         self._dialog = None
 
     async def open(self) -> None:
+        if self._close_task is not None:
+            await self.close()
         if self.context is not None:
             return
         ready, reason = browser_readiness()
@@ -222,6 +225,23 @@ class DedicatedBrowser:
             self._downloads[identity] = BrowserDownload(id=identity, name=name, state="failed")
 
     async def close(self) -> None:
+        # Cleanup can overlap idle reaping, worker shutdown and a cancelled UI
+        # request. Keep one owned task alive until the process releases its
+        # profile, and make every close/reopen caller wait for that same task.
+        task = self._close_task
+        if task is None:
+            task = asyncio.create_task(self._close_owned())
+            self._close_task = task
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            await asyncio.shield(task)
+            raise
+        finally:
+            if task.done() and self._close_task is task:
+                self._close_task = None
+
+    async def _close_owned(self) -> None:
         self.control = "closed"
         context, playwright, process, cdp_browser = self.context, self.playwright, self._process, self._cdp_browser
         self.context = None

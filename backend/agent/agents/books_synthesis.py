@@ -105,7 +105,8 @@ class RoutedBooksSynthesizer:
         ]
         # Pin the verified destination for this call. A concurrent model-picker
         # change cannot send evidence retrieved as local to an external model.
-        model_id = self.model_id or get_provider_registry().current_model().id
+        from agent.profiles.execution import profile_model_id
+        model_id = profile_model_id(lambda: self.model_id or get_provider_registry().current_model().id)
         policy = get_active_profile_policy()
         if provider_for_model(model_id) != "ollama" and (policy is None or policy.source_egress != "external"):
             raise ValueError("BOOK_EXTERNAL_PROCESSING_NOT_APPROVED")

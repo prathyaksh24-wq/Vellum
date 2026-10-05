@@ -134,6 +134,7 @@ class SportsAgent:
                     allowed_agents=frozenset({self.name}),
                     stream_label="Searching sports",
                     adapter=lambda payload: self.web_searcher(str(payload.get("query") or "")),
+                    input_schema={"type":"object","properties":{"query":{"type":"string"}},"required":["query"],"additionalProperties":False},
                 )
             )
 

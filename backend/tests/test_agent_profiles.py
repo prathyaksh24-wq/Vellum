@@ -50,13 +50,13 @@ def test_agent_catalog_resolves_complete_profile_and_executor(tmp_path: Path) ->
     assert binding.executor is executor
 
 
-def test_builtin_profiles_preserve_deterministic_specialists(tmp_path: Path) -> None:
+def test_builtin_profiles_preserve_action_handlers_with_hybrid_reasoning(tmp_path: Path) -> None:
     registry = AgentCatalog(profile_dir=tmp_path)
 
     sports = registry.get("SportsAgent")
     x_agent = registry.get("XAgent")
 
-    assert sports.executor == "deterministic"
+    assert sports.executor == "hybrid"
     assert sports.memory.write_scope == "agent:SportsAgent"
     assert sports.memory.read_scopes == ["user_profile", "shared", "agent:SportsAgent"]
     assert sports.memory.cache_first is True
@@ -127,7 +127,7 @@ def test_invalid_yaml_falls_back_to_builtin_and_records_diagnostic(tmp_path: Pat
 
     profile = registry.get("SportsAgent")
 
-    assert profile.executor == "deterministic"
+    assert profile.executor == "hybrid"
     assert registry.diagnostics()[0]["profile_id"] == "SportsAgent"
     assert registry.diagnostics()[0]["status"] == "fallback"
 
@@ -140,9 +140,9 @@ def test_profile_instruction_path_must_stay_inside_profile_directory(tmp_path: P
     assert registry.diagnostics()[0]["status"] == "blocked_instruction_path"
 
 
-def test_llm_profile_rejects_tools_until_allowlisted_tool_loop_exists() -> None:
-    with pytest.raises(ValidationError, match="LLM profile tools are not supported"):
-        AgentProfile(id="ResearchAgent", executor="llm", tools={"allow": ["web.search"]})
+def test_llm_profile_accepts_tools_for_allowlisted_tool_loop() -> None:
+    profile = AgentProfile(id="ResearchAgent", executor="llm", tools={"allow": ["web.search"]})
+    assert profile.tools.allow == ["web.search"]
 
 
 def test_memory_agent_cannot_widen_its_private_write_scope() -> None:
@@ -314,7 +314,7 @@ def test_default_agent_catalog_shares_tools_and_owns_builtin_profiles(tmp_path: 
     sports_binding = catalog.resolve("SportsAgent")
     books_binding = catalog.resolve("BooksAgent")
 
-    assert x_binding.profile.version == 2
+    assert x_binding.profile.version == 3
     assert x_binding.profile.instructions.inline
     assert {
         x_binding.profile.id,

@@ -44,8 +44,9 @@ class YoutubeAgent:
         r"\bcan\s+you\s+see\s+(?:my|our)\s+(?:youtube\s+)?channel\b",
     )
     _LIKED_PATTERNS = (
-        r"\b(?:my|our)\s+(?:latest\s+|recent\s+)?(?:youtube\s+)?liked\s+videos?\b",
-        r"\bvideos?\s+(?:i|we)\s+(?:have\s+)?liked\s+on\s+youtube\b",
+        r"\b(?:my|our)\s+(?:(?:latest|recent|recently|youtube|yt)\s+){0,3}liked\s+(?:(?:youtube|yt)\s+)?(?:videos?|vidoes?)\b",
+        r"\b(?:videos?|vidoes?)\s+(?:that\s+)?(?:i|we)\s+(?:have\s+)?liked\b",
+        r"\b(?:videos?|vidoes?)\s+(?:have|did)\s+(?:i|we)\s+(?:like|liked)\b",
     )
     _TAKEOUT_PATTERNS = (
         r"\b(?:videos?|what|which)\b.*\b(?:i|we)\s+(?:have\s+)?(?:watched|seen)\b",
@@ -90,6 +91,7 @@ class YoutubeAgent:
         return (
             self._is_intelligence_query(lowered)
             or self._is_account_query(lowered)
+            or self._is_liked_query(lowered)
             or self._is_takeout_query(lowered)
             or any(pattern.search(query) for pattern in self._INTENT_PATTERNS)
             or any(re.search(pattern, lowered) is not None for pattern in self._VIDEO_INTENT_PATTERNS)

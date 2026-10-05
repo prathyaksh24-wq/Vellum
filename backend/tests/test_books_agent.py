@@ -1207,6 +1207,9 @@ def test_private_books_proposals_are_not_stored_in_specialist_cache(tmp_path) ->
             _ = (profile, query)
             return CacheDecision(status="miss", reason="not_found")
 
+        def build_memory_packet(self, **kwargs):
+            return {}
+
         def store_specialist_response(self, *, profile, query, response):
             self.stored.append((profile, query, response))
 

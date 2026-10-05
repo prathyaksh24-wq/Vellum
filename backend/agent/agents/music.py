@@ -33,7 +33,8 @@ class LocalMusicPlanner:
         from agent.llm.routing.models import provider_for_model
         from agent.llm.routing.runtime import get_routed_chat_model
 
-        model_id = (self.model_resolver or self._local_model_id)()
+        from agent.profiles.execution import profile_model_id
+        model_id = profile_model_id(self.model_resolver or self._local_model_id)
         if provider_for_model(model_id) != "ollama":
             raise ValueError("Select a local model to interpret this music request.")
         model = (self.model_factory or get_routed_chat_model)(model_id)

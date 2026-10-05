@@ -24,6 +24,8 @@ class DelegateToAgentInput(BaseModel):
         max_length=8000,
         description="Only the minimum user-provided context needed; never copy the whole conversation.",
     )
+    memory_from: list[str] = Field(default_factory=list, max_length=4,
+        description="Optional source profile IDs for relevant memory packets. The owner checks both agents' policies; never paste their chat history.")
 
 
 def _thread_id(config: RunnableConfig | None) -> str:
@@ -75,6 +77,7 @@ def delegate_to_agent(
     agent_id: str,
     task: str,
     context: str = "",
+    memory_from: list[str] | None = None,
     config: RunnableConfig = None,
 ) -> str:
     """Delegate one bounded task to a listed specialist; Vellum validates and synthesizes its result."""
@@ -96,6 +99,7 @@ def delegate_to_agent(
             parent_thread_id=_thread_id(config),
             user_id=_user_id(config),
             context=clean_context,
+            memory_from=tuple(memory_from or ()),
         )
     )
     response = run.response

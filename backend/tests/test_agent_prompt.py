@@ -114,11 +114,12 @@ def test_vellum_prompt_uses_one_typed_specialist_surface():
 def test_prompt_routes_natural_and_vague_requests_without_agent_names():
     prompt = agent_graph.VELLUM_SYSTEM_PROMPT
 
-    assert "everyday, indirect, shorthand, or slightly vague language" in prompt
-    assert "they need not name an agent" in prompt
+    assert "shorthand or vague requests without named agents" in prompt
     assert '"live NBA score"' in prompt
     assert '"what did Naval tweet about AI?"' in prompt
-    assert "Apply the same routing to books, YouTube, Discord, calendars, and personal memory" in prompt
+    assert "Apply this to every specialist" in prompt
+    assert "Use memory_from for relevant peer packets" in prompt
+    assert "Preserve provenance" in prompt
     assert "If evidence is inadequate, report the gap" in prompt
     assert "if relevant specialists and authorized searches return no evidence, say you could not verify the answer" in prompt
     assert "Never substitute the runtime date, stale knowledge, a greeting, or a guess" in prompt

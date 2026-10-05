@@ -83,6 +83,11 @@ class RoutedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         del run_manager
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        if execution is not None:
+            messages = execution.messages(messages)
+            kwargs.setdefault("thread_id", execution.thread_id)
         invoke_kwargs = dict(self.tool_binding_kwargs)
         invoke_kwargs.update(kwargs)
         if stop is not None:
@@ -145,6 +150,11 @@ class RoutedChatModel(BaseChatModel):
         **kwargs: Any,
     ):
         del run_manager
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        if execution is not None:
+            messages = execution.messages(messages)
+            kwargs.setdefault("thread_id", execution.thread_id)
         stream_kwargs = dict(self.tool_binding_kwargs)
         stream_kwargs.update(kwargs)
         if stop is not None:
