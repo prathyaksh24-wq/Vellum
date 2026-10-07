@@ -23,6 +23,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - X posting intent recognizes omitted pronouns, shorthand, and corrections; self-introduction drafts identify Vellum and stay short. Music deduplicates song suggestions, accepts a clear single-choice yes, seeks within current audio, reads live podcast/song state, and verifies playlist names and songs before reporting success.
 
 ### Fixed
+
+- YouTube Agent reads recent watch history from the account signed into Vellum’s Browser, with a Refresh history button in overview and chat. Reads run in a temporary background tab without opening the panel or changing the visible page. Account-scoped local snapshots preserve visible day labels and video links; failed or changed-account reads never substitute older imports or public searches.
 - Personal YouTube reads honor the requested entity, quantity, creator filter, and format through validated local-model plans. Follow-up links use the actual displayed list; missing context and read failures explain the limitation instead of returning unrelated public results.
 - YouTube liked-video replies display every fetched video in a numbered list with clickable titles. Subscription-count questions return the full connected-account channel count, including common wording and typos; imported counts remain labeled as snapshots.
 - Personal liked-video requests, including “liked vidoes” and “what videos have I liked?”, read the connected YouTube account instead of searching public tutorials.

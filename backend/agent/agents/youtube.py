@@ -53,6 +53,8 @@ class YoutubeAgent:
         r"\b(?:videos?|vidoes?)\s+(?:have|did)\s+(?:i|we)\s+(?:like|liked)\b",
     )
     _TAKEOUT_PATTERNS = (
+        r"\bwatch\s+history\b",
+        r"\brefresh\s+(?:my\s+|youtube\s+)?history\b",
         r"\b(?:videos?|what|which)\b.*\b(?:i|we)\s+(?:have\s+)?(?:watched|seen)\b",
         r"\bwhat\s+(?:did|have)\s+(?:i|we)\s+(?:watch|watched|search|searched)(?:\s+(?:recently|lately|last))?\b",
         r"\b(?:my|our)\s+(?:recent\s+)?(?:watch|search|viewing)\s+history\b",
@@ -134,15 +136,19 @@ class YoutubeAgent:
         lowered = query.lower()
         if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
             return self._answer_takeout_library(lowered)
+        if self._is_takeout_query(lowered):
+            if not re.search(r"\b(?:takeout|imported|archive)\b|\bsearch history\b|\b(?:did|have)\s+(?:i|we)\s+(?:search|searched)\b", lowered):
+                return self._answer_browser_history(query, context or {})
+            return self._answer_takeout_history(lowered)
         if self._is_account_query(lowered):
             return self._answer_account()
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
-        if self._is_takeout_query(lowered):
-            return self._answer_takeout_history(lowered)
         if self._is_subscription_feed_query(lowered):
             return self._answer_subscription_feed()
         read_request = clear_read_request(query)
+        if read_request is not None and read_request.source == "previous":
+            return self._answer_read_request(read_request, context or {})
         if self.planner is not None:
             try:
                 planned = self.planner(query, context or {})
@@ -151,6 +157,7 @@ class YoutubeAgent:
                 return SpecialistResponse(agent=self.name, status="error",
                     summary="I couldn't reliably interpret this YouTube request. " +
                         ("Select a local model and try again." if isinstance(exc, ValueError) and "local model" in str(exc)
+                         else "The local request interpreter timed out. Try again when the local model is ready." if isinstance(exc, TimeoutError)
                          else "The local request interpreter failed. Please rephrase or try again."),
                     analysis="YouTube request interpretation failed: " + type(exc).__name__, confidence=1.0)
             if planned.source == "public" and read_request is not None:
@@ -252,7 +259,7 @@ class YoutubeAgent:
     def _answer_read_request(self, request: YoutubeReadRequest, context: dict) -> SpecialistResponse:
         def reply(summary, items=(), *, status="answered", analysis="Read verified YouTube account records."):
             return SpecialistResponse(agent=self.name, status=status, summary=summary, analysis=analysis, confidence=1.0,
-                structured_payload={"youtube_account":{"request":request.model_dump(), "items":list(items)[:50]}})
+                structured_payload={"youtube_account":{"request":request.model_dump(), "items":list(items)[:100]}})
 
         if request.source == "clarify" or request.view == "clarify":
             return reply("I couldn't determine a supported YouTube read for that request. "
@@ -281,9 +288,20 @@ class YoutubeAgent:
             response.structured_payload["youtube_account"]["request"] = previous
             return response
         try:
-            result = self._liked_videos(50 if request.view in {"channels", "count", "summary"} or request.creator else request.limit) \
-                if request.source == "liked" else self._subscriptions()
+            if request.source == 'history':
+                payload = {'limit':100, 'channel':request.creator, 'day_label':request.day_label}
+                result = self.tool_registry.invoke('youtube.watch_history', payload, agent_name=self.name) \
+                    if self.tool_registry is not None else self.youtube_service.watch_history(payload)
+            else:
+                result = self._liked_videos(50 if request.view in {"channels", "count", "summary"} or request.creator else request.limit) \
+                    if request.source == "liked" else self._subscriptions()
         except Exception as exc:
+            if request.source == 'history':
+                from agent.plugins.youtube_browser_history import HistoryReadError
+                return SpecialistResponse(agent=self.name, status='needs_fetch', confidence=1,
+                    summary=str(exc) if isinstance(exc, HistoryReadError) else
+                        'I could not read watch history from Vellum’s Browser. Check the browser and try again.',
+                    analysis='Browser history read failed: ' + type(exc).__name__)
             detail = str(exc).casefold()
             reason = ("YouTube's API quota is temporarily exhausted." if "quota" in detail else
                 "YouTube authorization is invalid or lacks the required read permission." if any(
@@ -300,8 +318,8 @@ class YoutubeAgent:
         snapshot = result.get("provider") == "takeout"
         if request.creator:
             items = [item for item in items if request.creator.casefold() in str(
-                item.get("channel") if request.source == "liked" else item.get("title") or "").casefold()]
-        if request.source == "liked" and (request.view == "channels" or request.view == "count" and request.count_kind == "channels"):
+                item.get("channel") if request.source in {"liked", "history"} else item.get("title") or "").casefold()]
+        if request.source in {"liked", "history"} and (request.view == "channels" or request.view == "count" and request.count_kind == "channels"):
             channels = {}
             for item in items:
                 name = str(item.get("channel") or "").strip()
@@ -315,15 +333,38 @@ class YoutubeAgent:
                 return reply(f"Your imported YouTube snapshot lists {total:,} subscribed channels." if snapshot else
                     f"You're subscribed to {total:,} YouTube channels.")
             if request.count_kind == "channels":
-                return reply(f"I found {len(items)} distinct channels in the {inspected} recent liked videos I read.")
+                return reply(f"I found {len(items)} distinct channels in the {inspected} recent {'browser history entries' if request.source == 'history' else 'liked videos'} I read.")
+            if request.source == 'history':
+                return reply(f"I found {len(items)} entries in the recent browser history snapshot. This is not an all-time watch count.")
             return reply(f"I read {len(items)} recent liked videos. This is a bounded recent sample; "
                 "the connector hasn't supplied your full liked-video total.")
         if request.view == "summary":
             names = list(dict.fromkeys(str(item.get("channel") or item.get("title") or "") for item in items))
+            if request.source == 'history':
+                return reply(f"The current browser snapshot contains {len(items)} recent watch-history entries. " +
+                    ("Channels include " + ", ".join(names[:5]) + ". " if names else "") +
+                    "This was refreshed just now; a recent page snapshot does not establish long-term viewing trends.")
             return reply(f"This {'imported snapshot' if snapshot else 'account read'} contains {len(items)} "
                 f"{'recent liked videos' if request.source == 'liked' else 'subscribed channels'}. "
                 + ("Channels include " + ", ".join(names[:5]) + "." if names else "No channel names were available."))
         visible = items[:request.limit]
+        if request.source == 'history':
+            suffix = '\n\nRefreshed from your browser just now. Coverage is the recent history page, not your full watch history.'
+            if not visible:
+                return reply(('No matching entries were visible in this browser history refresh.' if request.creator or request.day_label else
+                    'The signed-in YouTube account has no visible watch-history entries in this refresh.') + suffix)
+            label = 'channels' if request.view == 'channels' else 'entries'
+            intro = f"Here are {len(visible)} recent {label} from the YouTube account signed into Vellum’s Browser:"
+            lines = []
+            for index, item in enumerate(visible, 1):
+                key = 'channel_id' if request.view == 'channels' else 'video_id'
+                title = self._markdown_label(str(item.get('title') or 'Unknown')) if request.names_only else \
+                    self._account_item_label(item, key, 'channel' if key == 'channel_id' else 'video')
+                if not request.names_only and item.get('day_label'):
+                    title += ' (' + self._markdown_label(item['day_label']) + ')'
+                lines.append(f'{index}. {title}')
+            return reply(intro + '\n\n' + '\n'.join(lines) + suffix, visible,
+                analysis='Used youtube.watch_history from the current browser account; saved locally in Knowledge Core.')
         if not visible:
             return reply("I found no " + ("matching " if request.creator else "accessible ") +
                 ("channels" if request.view == "channels" else "liked videos") + " in this account read.")
@@ -407,6 +448,21 @@ class YoutubeAgent:
 
     def _answer_liked_videos(self) -> SpecialistResponse:
         return self._answer_read_request(YoutubeReadRequest(source="liked", view="videos"), {})
+
+    def _answer_browser_history(self, query: str, context: dict) -> SpecialistResponse:
+        request = clear_read_request(query) or YoutubeReadRequest(source="history")
+        if self.planner is not None:
+            try:
+                request = self.planner(query, context)
+                request = request if isinstance(request, YoutubeReadRequest) else YoutubeReadRequest.model_validate(request)
+            except Exception as exc:
+                return SpecialistResponse(agent=self.name, status="needs_fetch", confidence=1,
+                    summary="The local request interpreter timed out before reading watch history. Try again when the local model is ready."
+                        if isinstance(exc, TimeoutError) else "I couldn't reliably interpret this watch-history request with the local model. Please rephrase or try again.")
+        if request.source not in {"history", "previous", "clarify"}:
+            return SpecialistResponse(agent=self.name, status="needs_fetch", confidence=1,
+                summary="I couldn't reliably interpret that as a browser watch-history read. Please rephrase.")
+        return self._answer_read_request(request, context)
 
     def _answer_takeout_history(self, lowered_query: str) -> SpecialistResponse:
         kind = "search" if "search" in lowered_query else "watch"

@@ -2,11 +2,12 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/components/browser-panel.jsx": {"count":25,"sha256":"93689f8c1efb8899f4eab90685a51b1611adbf2bf07f982471a44c35c2eabbf1"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":852,"sha256":"d644b95edb585fa7f308b83ab687b5535014061e80d36375e2d34920afdc0aff"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":855,"sha256":"1e1cc966c7a218728cb3040c114226c1b46c45268558df767d945c348e872ec9"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
-    "design/Velllum/uploads/components/calendar-workspace.jsx": {"count":18,"sha256":"1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"}
+    "design/Velllum/uploads/components/calendar-workspace.jsx": {"count":18,"sha256":"1155070079d47c6ae3123035c8e47c347476cca7497366b98d79c36c14301790"},
+    "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
   },
   "covered": [
     {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input and downloads","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
@@ -83,7 +84,8 @@
     {"surface":"Spotify","name":"enable or disable embedded player","actionId":"spotify.playback.session","probe":{"path":"design/Velllum/uploads/components/spotify-playback.js","text":"action_id: 'spotify.playback.session'"}},
     {"surface":"Spotify","name":"playback controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playback.control'"}},
     {"surface":"Spotify","name":"connect or upgrade consent","actionId":"spotify.connection.start","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"}},
-    {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}}
+    {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}},
+    {"surface":"YouTube","name":"refresh browser watch history","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/components/youtube-history.jsx","text":"action_id:'youtube.history.refresh'"}}
   ],
   "exemptions": [
     {"scope":"More sidebar disclosure, browser address draft, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation and input drafts only; browser mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},

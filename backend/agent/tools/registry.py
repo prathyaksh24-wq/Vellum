@@ -39,6 +39,7 @@ class CapabilityRecord:
     requires_confirmation: bool = False
     required_env_flags: frozenset[str] = frozenset()
     runtime_tool: Any | None = None
+    input_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

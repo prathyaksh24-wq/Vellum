@@ -38,6 +38,7 @@ class BrowserStatus(BaseModel):
     available: bool
     reason: str = ""
     running: bool = False
+    presentation_requested: bool = True
     control: Literal["agent", "paused", "user", "closed"] = "closed"
     session_id: str = ""
     active_tab_id: str = ""
