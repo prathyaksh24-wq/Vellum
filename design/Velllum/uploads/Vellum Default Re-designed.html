@@ -31,6 +31,7 @@
 <script src="components/attachment-runtime.js"></script>
 <script src="components/agent-catalog.js"></script>
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
+<script type="text/babel" data-presets="react" src="components/youtube-history.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/calendar-workspace.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
@@ -4558,7 +4559,8 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
   const endRef = useRef(null);
   const Icon = agent.icon;
   const needsX = agent.id === 'x' && !xConnected;
-  const needsYT = agent.id === 'youtube' && !ytConnected;
+  const needsYT = false; // Browser history does not require the separate Google connector.
+  const HistoryControls = window.VellumUI.YouTubeHistoryControls;
   const needsConnect = needsX || needsYT;
   const convo = convos.find(c => c.id === activeConvoId);
   const msgs = convo ? convo.messages : [];
@@ -4579,7 +4581,7 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
             <span className="proj-mem">{agent.tag}</span>
             <div className="agent-head-acts">
               {agent.id === 'x' && xConnected && <button className="x-connpill" onClick={onDisconnectX} title="X connection settings"><span className="x-connpill-dot"/>{xHandle}<span className="x-connpill-x"><IcSettings size={11}/></span></button>}
-              {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onDisconnectYT} title="Disconnect YouTube account"><span className="x-connpill-dot yt-dot"/>{ytHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
+              {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onDisconnectYT} title="Disconnect Google connector for liked videos and subscriptions"><span className="x-connpill-dot yt-dot"/>Google: {ytHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
               <button className={'agent-status' + (enabled ? ' on' : '')} onClick={onToggleEnabled} title={enabled ? 'Turn agent off' : 'Turn agent on'}><span className="agent-status-dot"/>{enabled ? 'On' : 'Off'}</button>
               <button className="tbtn" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
             </div>
@@ -4609,6 +4611,8 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
               <button className="btn primary" onClick={onToggleEnabled}>Enable</button>
             </div>
           )}
+          {agent.id === 'youtube' && <HistoryControls onReceipt={composerExtras?.onAppActionReceipt}/>}
+          {agent.id === 'youtube' && !ytConnected && <button className="btn" onClick={onConnectYT}>Connect Google for liked videos and subscriptions</button>}
           <div className="tab-row">
             <button className="tab on">Chats</button>
             <div className="tab-spacer"/>
@@ -4651,6 +4655,7 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
         <button className="tbtn agent-head-set" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
       </div>
       <ConversationPreviewRail messages={msgs}/>
+      {agent.id === 'youtube' && <HistoryControls onReceipt={composerExtras?.onAppActionReceipt}/>}
       <div className="msgs"><div className="msgs-inner">
         {msgs.map(m => m.role === 'user' ? (
           <div key={m.id} id={'m-' + m.id} data-preview-message-id={String(m.id)} className="bubble-wrap">
@@ -8536,7 +8541,7 @@ const App = () => {
   const refreshBrowser = async () => {
     const status = await API.browser.status();
     setBrowserState(status);
-    if (status.running && status.session_id !== browserSeenSession.current) {
+    if (status.running && status.presentation_requested !== false && status.session_id !== browserSeenSession.current) {
       browserSeenSession.current = status.session_id;
       dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
     }

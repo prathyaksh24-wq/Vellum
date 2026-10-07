@@ -219,11 +219,12 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "YoutubeAgent": _profile(
             "YoutubeAgent",
             "YouTube videos and channels: find a video, search subscriptions or watch history, read a transcript, or summarize what was said.",
-            instructions="Use the user's imported or connected YouTube evidence for personal viewing questions. Resolve channel identity and aliases before filtering the full history. Explain useful patterns in plain language with the snapshot date and coverage limits. Distinguish watched, liked, subscribed and transcript content; never replace personal history with a how-to video search.",
+            instructions="Use youtube.watch_history for current watch-history questions; it reads the current signed-in Vellum browser account. Use Takeout for explicitly imported or archive history. The browser account and Google OAuth connector are separate. Browser snapshots cover recent entries and day labels, not exact watch timestamps or all-time totals. Explain useful patterns with coverage limits. Distinguish watched, liked, subscribed and transcript content; never replace personal history with a how-to video search.",
             tools=[
                 "youtube.account",
                 "youtube.subscriptions",
                 "youtube.liked_videos",
+                "youtube.watch_history",
                 "youtube.takeout_history",
                 "youtube.takeout_library",
                 "youtube.personal_context",

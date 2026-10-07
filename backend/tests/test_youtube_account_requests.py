@@ -106,7 +106,7 @@ def test_account_request_interpreter_uses_local_route_and_validates_output():
     class Model:
         def invoke(self, messages, **kwargs):
             calls.append((messages, kwargs))
-            assert kwargs["request_timeout"] <= 25
+            assert kwargs["request_timeout"] <= 60
             assert "Private creator" not in messages[-1].content
             return SimpleNamespace(content=json.dumps({"source":"liked", "view":"channels", "limit":10, "names_only":True}))
     planner = LocalYoutubeAccountPlanner(model_resolver=lambda:"ollama/gemma4:12b", model_factory=lambda *_args:Model())

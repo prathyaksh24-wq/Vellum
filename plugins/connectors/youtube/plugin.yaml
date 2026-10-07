@@ -10,6 +10,7 @@ capabilities:
   - youtube.account
   - youtube.subscriptions
   - youtube.liked_videos
+  - youtube.watch_history
   - youtube.connection.start
   - youtube.sync
   - youtube.connection.disconnect

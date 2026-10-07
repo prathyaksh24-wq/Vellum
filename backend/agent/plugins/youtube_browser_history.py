@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from agent.contracts.youtube_history import YouTubeHistoryConfig, YouTubeHistoryStatus
+from agent.contracts.youtube_history import BrowserHistorySnapshot, YouTubeHistoryConfig, YouTubeHistoryStatus
 from agent.knowledge.ingestion import IngestionCoordinator, IngestionResult
 from agent.knowledge.models import (ExternalPolicy, IngestionJobInput, ObservationActor,
     ObservationInput, Sensitivity, SourceItemInput, SyncCursorInput)
@@ -147,7 +147,7 @@ class YouTubeBrowserHistory:
                 trigger="youtube_history_page", source_id=source["source_id"], event_key=ORIGIN + ":" + key,
                 payload=item, sensitivity=Sensitivity.PRIVATE_LOCAL_ONLY, confidence=1.0, observed_at=now))
         inserted = self.store.record_observations(observations)
-        return IngestionResult(stats={"records": len(records), **inserted}, cursor=now.isoformat())
+        return IngestionResult(stats={"records": len(records), **inserted}, cursor=now.isoformat(), cursor_state={"source_id": source["source_id"]})
 
     def history(self, *, limit=20, channel=""):
         rows = self.store.list_observation_details(origin=ORIGIN, action=ACTION, limit=500)
@@ -168,3 +168,80 @@ class YouTubeBrowserHistory:
             "provider": ORIGIN, "freshness": self.status(), "coverage": "recent_loaded_history",
             "local_only": True,
             "timing_note": "Dates have day precision; repeat plays and watch duration are unavailable."}
+
+
+class HistoryReadError(ValueError):
+    pass
+
+
+ERRORS = {
+    'signed_out':'Sign into YouTube in Vellum’s Browser, then refresh history.',
+    'account_unknown':'I could not verify which YouTube browser account is active. No history was imported.',
+    'account_changed':'The YouTube account changed during the read. Refresh again after selecting your account.',
+    'page_unreadable':'I could not recognize the YouTube history page. Open Watch history in Vellum’s Browser and try again.',
+}
+
+
+def current_browser_history():
+    from agent.mcp.playwright_tools import browser_session
+    try:
+        return browser_session('youtube_history')
+    except Exception as exc:
+        reason = str(exc).casefold()
+        if any(word in reason for word in ('paused', 'takeover', 'taken over', 'user has control')):
+            raise HistoryReadError('Resume agent control in the Browser panel before refreshing history.') from None
+        raise HistoryReadError('The browser history read failed. Check Vellum’s Browser and try again.') from None
+
+
+class YouTubeBrowserHistoryService:
+    def __init__(self, *, store=None, browser_reader=current_browser_history):
+        self._store = store
+        self.browser_reader = browser_reader
+
+    @property
+    def store(self):
+        if self._store is None:
+            from agent.knowledge.runtime import get_knowledge_core
+            return get_knowledge_core().store
+        return self._store
+
+    def refresh(self):
+        try:
+            snapshot = BrowserHistorySnapshot.model_validate(self.browser_reader())
+        except HistoryReadError:
+            raise
+        except Exception:
+            raise HistoryReadError('The browser returned an invalid history response. No history was imported.') from None
+        if snapshot.status not in {'ready', 'empty'}:
+            raise HistoryReadError(ERRORS[snapshot.status])
+        if not snapshot.account_id:
+            raise HistoryReadError(ERRORS['account_unknown'])
+        refreshed_at = datetime.now(UTC)
+        items = [item.model_dump() for item in snapshot.items]
+        # Canonical URLs are constructed from validated IDs, never trusted page URLs.
+        for item in items:
+            item['url'] = 'https://www.youtube.com/watch?v=' + item['video_id']
+        # The settings, current snapshot and daily evidence share one ingestion owner.
+        owner = YouTubeBrowserHistory(store=self.store)
+        config = YouTubeHistoryConfig.model_validate(owner._state().get('config') or {})
+        records = owner._normalize(items, config=config, now=refreshed_at)
+        source_id = ''
+        def persist(_cursor):
+            nonlocal source_id
+            result = owner._import(records, snapshot.account_id, refreshed_at)
+            source_id = result.cursor_state['source_id']
+            return result
+        job = IngestionCoordinator(self.store).run(IngestionJobInput(connector=ORIGIN,
+            account_id=snapshot.account_id, job_type='recent_history', idempotency_key=uuid4().hex,
+            requested_by='user'), operation=persist)
+        if job.get('status') != 'completed':
+            raise HistoryReadError('History could not be saved locally. No successful refresh was recorded.')
+        with owner._lock:
+            state = owner._state()
+            state.update(account_fingerprint=snapshot.account_id, status='ready',
+                last_attempt_at=refreshed_at.isoformat(), last_success_at=refreshed_at.isoformat(),
+                message=MESSAGES['ready'])
+            owner._save(state)
+        return {'available':True, 'provider':'browser', 'local_only':True, 'freshness':'browser_refresh',
+            'source_id':source_id, 'account_id':snapshot.account_id, 'refreshed_at':refreshed_at.isoformat(),
+            'coverage':snapshot.coverage, 'truncated':snapshot.truncated, 'total':len(items), 'items':items}
