@@ -193,6 +193,11 @@ class YoutubeCapabilityService:
         from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService
         from agent.plugins.youtube_takeout import filter_channel_history
         payload = BrowserHistoryReadRequest.model_validate(payload).model_dump()
+        from agent.profiles.execution import get_profile_execution
+        from agent.llm.routing.models import provider_for_model
+        execution = get_profile_execution()
+        if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
+            raise ValueError("Watch history is local only. Select a local model to read it.")
         result = dict(self.browser_history_backend() if self.browser_history_backend else YouTubeBrowserHistoryService().refresh())
         limit = min(_positive_int(payload.get('limit'), default=20), 100)
         items = list(result.get('items') or [])
@@ -350,16 +355,10 @@ class YoutubeCapabilityService:
             return archive
         from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
         browser = YouTubeBrowserHistory(store=store).history(limit=limit, channel=channel)
-        if not browser["available"]:
+        if archive["available"] or not browser["available"]:
             return archive
-        # Prefer exact Takeout records over day-level browser presence. This
-        # reconciles displayed evidence without rewriting either source's records.
-        precise = {(item.get("video_id"), item.get("occurred_at", "")[:10]) for item in archive["items"]}
-        entries = list(archive["items"]) + [item for item in browser["items"]
-            if (item.get("video_id"), item.get("history_day")) not in precise]
-        entries.sort(key=lambda item: item.get("history_day") or item.get("occurred_at", "")[:10], reverse=True)
-        return {**archive, "available": True, "items": entries[:limit], "local_only": True,
-            "browser_history": {key: value for key, value in browser.items() if key != "items"}}
+        return {**archive, "available": True, "items": browser["items"], "total": browser["total"],
+            "local_only": True, "browser_history": {key: value for key, value in browser.items() if key != "items"}}
 
     def _default_personal_context(self, query: str, limit: int) -> dict[str, Any]:
         from agent.knowledge.runtime import get_knowledge_core

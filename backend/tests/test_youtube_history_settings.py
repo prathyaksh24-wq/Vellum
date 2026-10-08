@@ -46,8 +46,10 @@ def test_failure_and_account_switch_preserve_last_success(tmp_path):
     succeeded = reader.refresh()["last_success_at"]
     assert reader.refresh()["last_success_at"] == succeeded
     assert reader.status()["status"] == "page_changed"
-    assert reader.refresh()["status"] == "account_changed"
-    assert store.count_observations(origin=ORIGIN, action=ACTION) == 1
+    assert reader.refresh()["status"] == "ready"
+    assert reader.status()["records"] == 1
+    assert store.count_observations(origin=ORIGIN, action=ACTION) == 2
+    assert all(item["title"] == "A video" for item in reader.history()["items"])
 
 
 def test_localized_date_is_not_invented_and_remains_in_current_snapshot(tmp_path):

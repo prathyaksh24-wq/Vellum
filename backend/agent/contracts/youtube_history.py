@@ -46,8 +46,6 @@ class YouTubeHistoryStatus(BaseModel):
     local_only: bool = True
 
 
-
-
 class BrowserHistoryItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
     video_id: str = Field(pattern=r"^[A-Za-z0-9_-]{11}$")
@@ -63,8 +61,14 @@ class BrowserHistorySnapshot(BaseModel):
     status: Literal["ready", "empty", "signed_out", "account_unknown", "account_changed", "page_unreadable"]
     account_id: str = Field(default="", pattern=r"^(?:[a-f0-9]{64})?$")
     items: list[BrowserHistoryItem] = Field(default_factory=list, max_length=100)
-    coverage: str = "recent_page"
+    coverage: Literal["recent_page"] = "recent_page"
+    timezone: str = Field(default="UTC", max_length=80)
     truncated: bool = False
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return YouTubeHistoryConfig(timezone=value).timezone
 
 
 class BrowserHistoryReadRequest(BaseModel):

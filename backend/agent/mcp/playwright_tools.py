@@ -982,13 +982,8 @@ class _PlaywrightMcpClient:
         from agent.mcp.dedicated_browser import DedicatedBrowser, browser_readiness
 
         async with self._lock_for_current_loop():
-            if operation == "youtube_history" and arguments:
-                if (arguments or {}).get("automatic") and self._busy:
-                    return {"status": "browser_busy"}
-                if self._dedicated is None:
-                    return {"status": "browser_closed"}
-                from agent.mcp.youtube_history_page import read_history
-                return await read_history(self._dedicated, **(arguments or {}))
+            if operation == "youtube_history" and self._busy:
+                return {"status": "browser_busy"}
             if operation == "status" and self._dedicated is None:
                 ready, reason = browser_readiness()
                 return BrowserStatus(available=ready, reason=reason)
@@ -999,7 +994,7 @@ class _PlaywrightMcpClient:
                 self._dedicated = DedicatedBrowser()
             self._last_activity = time.monotonic()
             if operation == "youtube_history":
-                return await self._dedicated.youtube_history()
+                return await self._dedicated.youtube_history(url=(arguments or {}).get("url"))
             if operation == "status":
                 return await self._dedicated.status()
             if operation == "frame":

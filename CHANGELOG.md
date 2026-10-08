@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Continuous YouTube history refresh uses quiet temporary tabs and the existing opt-in automation. Knowledge Core retains deduplicated video/day evidence across refreshes, isolates browser accounts, and preserves saved history on failures. Fresh page counts stay separate from accumulated coverage; exact watch times and repeat plays remain unavailable.
+- Refresh the frontend lockfile to patched Vitest and source-map-js versions after CI dependency-audit findings.
+
 - Every built-in specialist has a complete hybrid profile: task-local instructions, pinned model/reasoning, own Hermes skills, scoped memory and an allowlisted reasoning/tool loop. Exact action handlers preserve confirmation and verified receipts.
 - Specialists can request bounded, attributed memory packets through the existing memory owner. Both profiles' sharing permissions, approved scopes, current thread/user, relevance, expiry and local processing are checked; packets cannot authorize actions or mutate shared memory.
 - Add local YouTube History reads through the existing browser, with day-level evidence, account binding, explicit freshness/failure status, and opt-in scheduled refresh.
