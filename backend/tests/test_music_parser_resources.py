@@ -29,12 +29,17 @@ cases = [
     (MusicAgent._history_plan, "what songs played by " + "from " * 24000 + "!"),
     (MusicAgent._language_request, "put " + padding + "! music"),
     (MusicAgent._language_request, "bro " * 24000 + "! music"),
+    (MusicAgent._language_request, "put " * 24000 + "! music"),
     (MusicAgent._kworb_plan, "show " + padding + "! charts"),
     (MusicAgent._kworb_plan, "show a" + padding + "! songs"),
     (MusicAgent._kworb_plan, "show charts from " + "from " * 24000 + "!"),
+    (MusicAgent._kworb_plan, "show " + "find a" * 24000 + "!"),
     (MusicAgent._fast_plan, "create playlist named Test with " + padding + "!"),
     (MusicAgent._fast_plan, "latest a" + padding + "!"),
     (MusicAgent._fast_plan, "play a" + padding + "! album"),
+    (MusicAgent._fast_plan, "set volume to 20" + padding + "!"),
+    (MusicAgent._fast_plan, "latest " + "latest a" * 24000 + "!"),
+    (MusicAgent._fast_plan, "play " + "play a" * 24000 + "!"),
     (MusicAgent._compound_clauses, "play Song and " + "also " * 24000 + "!"),
     (MusicAgent._compound_clauses, "play Song" + " and nope" * 24000),
     (_requests_fresh_public_data, "play it" + padding + "!"),
@@ -90,3 +95,10 @@ def test_create_playlist_retains_comma_and_and_separators():
         {'title': 'Two', 'artist': 'B'},
         {'title': 'Three', 'artist': 'C'},
     ]
+
+
+@pytest.mark.parametrize('suffix', ['20', '20%', '20 percent', '20 please', '20% please', '20 percent please'])
+def test_absolute_volume_keeps_units_and_polite_suffix(suffix):
+    plan = MusicAgent._fast_plan('set volume to ' + suffix)
+    assert plan.operation == 'set_volume'
+    assert plan.volume_percent == 20

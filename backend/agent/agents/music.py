@@ -194,7 +194,7 @@ class MusicAgent:
         text, _, explicit_provider = music_provider_request(text)
         if explicit_provider and re.match(r'(?:play|put on|resume|pause|skip)\b',text,re.I):
             return True
-        if re.match(r'(?:(?:can|could|would) (?:you|u) )?put .+ on for me$',text,re.I):
+        if re.match(r'^(?:(?:can|could|would) (?:you|u) )?put .+ on for me$',text,re.I):
             return True
         return bool(re.search(r'\b(?:songs?|tracks?|tunes?|playlists?|albums?|music|spotify|volume|shuffle|repeat)\b',text,re.I) and
             re.match(r'(?:(?:yo|hey|bro|pls|plz|please) )*+(?:play|put|spin|chuck|throw|queue|gimme|give|choose|pick|select|rewind|could|can|would|i (?:want|need|wanna))\b',text,re.I))
@@ -578,7 +578,7 @@ class MusicAgent:
         if found:
             return MusicPlan(operation='artist_stats',artist=found[1])
         found = re.fullmatch(r'(?:show|find|list|what (?:are|is))\s+(?:the\s+)?(?:(latest|newest|new|previous|old|older)\s+)?(albums?|songs?)\s+(?:by|from|of|for)\s+(.+)',text,re.I)
-        reverse = re.fullmatch(r'(?:show|find|list) (.+?)(?:[’\']s)? (?:(latest|newest|new|previous|old|older) )?(albums?|songs?)',text,re.I)
+        reverse = re.fullmatch(r'^(?:show|find|list) (.+?)(?:[’\']s)? (?:(latest|newest|new|previous|old|older) )?(albums?|songs?)$',text,re.I)
         if found or reverse:
             artist, category, order = (found[3],found[2],found[1]) if found else (reverse[1],reverse[3],reverse[2])
             return MusicPlan(operation='list_albums' if category.casefold().startswith('album') else 'artist_songs',artist=artist,
@@ -703,7 +703,7 @@ class MusicAgent:
         if relative_volume:
             delta = int(relative_volume[2]) * (-1 if relative_volume[1].casefold() in {"reduce","decrease","lower","turn down"} else 1)
             return MusicPlan(operation="adjust_volume", provider=provider, volume_delta_percent=delta)
-        absolute_volume = re.fullmatch(r'(?:set|reduce|decrease|lower|turn down|increase|raise|turn up)\s+(?:the\s+)?volume\s+to\s+(\d{1,3})\s*(?:%|percent)?(?:\s+(?:please|pls|plz))?', text, re.I)
+        absolute_volume = re.fullmatch(r'^(?:set|reduce|decrease|lower|turn down|increase|raise|turn up) (?:the )?volume to (\d{1,3}) ?(?:%|percent)?(?: (?:please|pls|plz))?$', text, re.I)
         if absolute_volume:
             return MusicPlan(operation='set_volume', provider=provider, volume_percent=int(absolute_volume[1]))
         max_volume = re.fullmatch(r'(?:set|increase|raise|turn up|put)\s+(?:the\s+)?volume\s+(?:to|at|on)\s+(?:max(?:imum)?|full)(?:\s+volume)?', text, re.I)
@@ -791,7 +791,7 @@ class MusicAgent:
         mix = re.fullmatch(r"(?:play|shuffle)\s+(?:something\s+from\s+)?(?:my\s+|the\s+)?(.+?\s+mix(?:\s+\d+)?)", text, re.I)
         if mix:
             return MusicPlan(operation="play_playlist", provider=provider, query=mix[1], shuffle=shuffle)
-        album = re.fullmatch(r"(?:(?:play|put on) )?(?:the )?(?:latest|newest|most recent) (?:album (?:by|from) (.+)|(.+?)(?:['’]s)? album)", text, re.I)
+        album = re.fullmatch(r"^(?:(?:play|put on) )?(?:the )?(?:latest|newest|most recent) (?:album (?:by|from) (.+)|(.+?)(?:['’]s)? album)$", text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, artist=(album[1] or album[2]).strip(), latest=True)
         album = re.fullmatch(r"(?:play|put on)\s+(.+?)(?:['’]s)?\s+(?:latest|newest|most recent)\s+album", text, re.I)
@@ -800,7 +800,7 @@ class MusicAgent:
         album = re.fullmatch(r"(?:play|put on)\s+(?:the\s+)?album\s+(.+?)(?:\s+by\s+(.+))?", text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
-        album = re.fullmatch(r'(?:play|put on) (?:the )?(.+?) album(?: (?:by|from) (.+))?', text, re.I)
+        album = re.fullmatch(r'^(?:play|put on) (?:the )?(.+?) album(?: (?:by|from) (.+))?$', text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
         song = re.fullmatch(r"(?:play|put on)\s+(?:the\s+song\s+)?(.+)", text, re.I)
