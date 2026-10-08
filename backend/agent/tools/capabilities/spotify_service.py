@@ -199,6 +199,14 @@ class SpotifyCapabilityService:
             if artist and all(artist):
                 groups.setdefault(artist, []).append(track)
         if len(groups) == 1:
+            if plan.version == 'original':
+                track = next(iter(groups.values()))[0]
+                artist = ', '.join(a.get('name', '') for a in track.get('artists', []))
+                raise MusicChoiceRequired(
+                    'Spotify returned only one artist for this title; I cannot verify the original recording. Give the original artist.',
+                    [{'title':track.get('name', ''), 'artist':artist,
+                      'artists':[a.get('name', '') for a in track.get('artists', [])]}],
+                )
             return next(iter(groups.values()))[0]
         dated = []
         for artist, tracks in groups.items():
