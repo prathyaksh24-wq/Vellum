@@ -1573,7 +1573,11 @@ def test_youtube_agent_uses_official_account_capabilities_without_public_search(
 
     assert account.summary == "Vellum is connected to YouTube as Pratyakksh."
     assert "youtube.account" in account.analysis
-    assert subscriptions.summary == "Your YouTube account is subscribed to 2 channels:\n[1] Channel One\n[2] Channel Two"
+    assert subscriptions.summary == (
+        "You're subscribed to 2 YouTube channels.\n\n"
+        "1. [Channel One](https://www.youtube.com/channel/UC-one)\n"
+        "2. [Channel Two](https://www.youtube.com/channel/UC-two)"
+    )
     assert "youtube.subscriptions" in subscriptions.analysis
     assert search_calls == []
 

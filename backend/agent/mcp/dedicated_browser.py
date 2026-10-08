@@ -73,6 +73,7 @@ class DedicatedBrowser:
         self.control = "closed"
         self.session_id = ""
         self.activity = ""
+        self.presentation_requested = True
         self._pages: dict[str, Any] = {}
         self._revision = 0
         self._refs: dict[str, Any] = {}
@@ -288,6 +289,7 @@ class DedicatedBrowser:
                     title = "Loading"
                 tabs.append(BrowserTab(id=key, index=index, title=title or "New tab", url=page.url, active=page is self.active_page))
         return BrowserStatus(available=ready, reason=reason, running=self.context is not None,
+            presentation_requested=self.presentation_requested,
             control=self.control, session_id=self.session_id, active_tab_id=self._page_id(), tabs=tabs,
             downloads=list(self._downloads.values())[-50:], activity=self.activity, snapshot_id=self.snapshot_id)
 
@@ -306,6 +308,7 @@ class DedicatedBrowser:
     async def ui_control(self, request: BrowserControl) -> BrowserStatus:
         operation = request.operation
         if operation == "open":
+            self.presentation_requested = True
             await self.open()
         elif operation == "close":
             await self.close()
@@ -405,7 +408,33 @@ class DedicatedBrowser:
             rows.append(f"Pending dialog: {self._dialog.type}: {self._dialog.message}")
         return "\n".join(rows), refs
 
+    async def youtube_history(self, *, url: str | None = None) -> dict:
+        """Read in a temporary background tab without changing the user's page."""
+        from agent.mcp.youtube_history import read_history_page
+        from agent.contracts.youtube_history import YouTubeHistoryConfig
+        history_url = YouTubeHistoryConfig(url=url).url if url else YouTubeHistoryConfig().url
+        if self.context is None:
+            self.presentation_requested = False
+        await self.open()
+        if self.control != "agent":
+            raise BrowserSessionError("The browser is paused or the user has control.")
+        previous_page, previous_activity = self.active_page, self.activity
+        page = await self.context.new_page()
+        self.active_page = previous_page
+        try:
+            await self._goto(page, history_url)
+            return await read_history_page(page, history_url=history_url, can_continue=lambda:self.control == "agent")
+        finally:
+            try:
+                await page.close()
+            finally:
+                if previous_page in self._pages.values():
+                    self.active_page = previous_page
+                if self.context is not None:
+                    self.activity = previous_activity
+
     async def tool(self, params: dict[str, Any]) -> str:
+        self.presentation_requested = True
         action = str(params.get("action") or "snapshot").lower()
         if self.control != "agent":
             raise BrowserSessionError("BrowserAgent is paused or the user has control. Resume it in Vellum.")

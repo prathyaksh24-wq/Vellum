@@ -7,6 +7,22 @@ ToolRegistry. The main model does not receive raw browser tools.
 
 ## Using the browser
 
+YouTube Agent has a **Refresh history** control in its overview and chat. After
+signing into YouTube in this browser, the control and watch-history questions
+read a bounded recent page snapshot through this same browser owner. General
+browser tools remain exclusive to BrowserAgent; the YouTube capability accepts
+no arbitrary URL or script. The local Knowledge Core snapshot is scoped to a
+hashed browser-account identity, with sign-out and account-switch checks. Google
+OAuth likes/subscriptions and Takeout archives use their separate account sources.
+The existing opt-in **YouTube history refresh** automation accumulates these recent
+pages every 15 minutes through the same quiet reader. Knowledge Core retains
+account-scoped video/day evidence without counting repeated refreshes as watches;
+the browser's page limit does not cap the saved history. See
+[YouTube browser history](youtube-browser-history.md).
+History reads use a temporary background tab and close it afterward, preserving
+the visible page and panel state. A background-only session does not request
+that the UI open the browser panel; explicitly opening Browser still does.
+
 Install the backend dependencies and Brave, then restart Vellum. Select an
 installed local chat model. Open **Browser** in the sidebar, or ask Vellum to
 open a website. The right panel shows the separate browser while chat remains

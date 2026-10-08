@@ -41,6 +41,7 @@ class YoutubeCapabilityService:
         takeout_history_backend: TakeoutHistoryBackend | None = None,
         takeout_library_backend: Callable[[str, int], dict[str, Any]] | None = None,
         personal_context_backend: PersonalContextBackend | None = None,
+        browser_history_backend: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.vault_root = Path(vault_root)
         self.serpapi_search_backend = serpapi_search_backend or self._default_serpapi_search_videos
@@ -55,10 +56,16 @@ class YoutubeCapabilityService:
         self._custom_history_backend = takeout_history_backend is not None
         self.takeout_library_backend = takeout_library_backend or self._default_takeout_library
         self.personal_context_backend = personal_context_backend or self._default_personal_context
+        self.browser_history_backend = browser_history_backend
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
         allowed_agents = frozenset({"YoutubeAgent", "VellumAgent", "ResearchAgent", "MemoryAgent"})
+        registry.register(CapabilityRecord(name="youtube.watch_history", namespace="youtube",
+            access=CapabilityAccess.READ, allowed_agents=frozenset({"YoutubeAgent"}),
+            stream_label="Read current browser watch history", adapter=self.watch_history,
+            input_schema={"type":"object", "properties":{"limit":{"type":"integer", "minimum":1, "maximum":100},
+                "channel":{"type":"string", "maxLength":200}, "day_label":{"enum":["","Today","Yesterday"]}}, "additionalProperties":False}))
         registry.register(
             CapabilityRecord(
                 name="youtube.account",
@@ -159,11 +166,13 @@ class YoutubeCapabilityService:
                 "items": [],
             }
         items = [self._normalize_subscription(item) for item in self.subscriptions_backend()]
+        items = [item for item in items if item["channel_id"]]
         return {
             "action": "youtube.subscriptions",
             "connected": True,
             "account": account,
-            "items": [item for item in items if item["channel_id"]],
+            "items": items,
+            "total": len(items),
         }
 
     def liked_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -178,6 +187,29 @@ class YoutubeCapabilityService:
             "account": account,
             "items": [item for item in items if item["video_id"]],
         }
+
+    def watch_history(self, payload: dict[str, Any]) -> dict[str, Any]:
+        from agent.contracts.youtube_history import BrowserHistoryReadRequest
+        from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService
+        from agent.plugins.youtube_takeout import filter_channel_history
+        payload = BrowserHistoryReadRequest.model_validate(payload).model_dump()
+        from agent.profiles.execution import get_profile_execution
+        from agent.llm.routing.models import provider_for_model
+        execution = get_profile_execution()
+        if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
+            raise ValueError("Watch history is local only. Select a local model to read it.")
+        result = dict(self.browser_history_backend() if self.browser_history_backend else YouTubeBrowserHistoryService().refresh())
+        limit = min(_positive_int(payload.get('limit'), default=20), 100)
+        items = list(result.get('items') or [])
+        channel = str(payload.get('channel') or '').strip()[:200]
+        if channel:
+            items = filter_channel_history(items, channel)
+        day = str(payload.get('day_label') or '')
+        if day:
+            items = [item for item in items if str(item.get('day_label') or '').casefold() == day.casefold()]
+        items = [{**item, 'channel':item.get('channel_title') or ''} for item in items]
+        return {**result, 'action':'youtube.watch_history', 'snapshot_total':result.get('total', len(items)),
+            'total':len(items), 'items':items[:limit]}
 
     def takeout_history(self, payload: dict[str, Any]) -> dict[str, Any]:
         kind = "search" if str(payload.get("kind") or "").casefold() == "search" else "watch"
@@ -269,6 +301,9 @@ class YoutubeCapabilityService:
             "transcript": _string(item.get("transcript") or item.get("transcriptText")),
         }
         provider = _string(item.get("provider"))
+        channel_id = _string(item.get("channel_id") or item.get("channelId") or item.get("videoOwnerChannelId"))
+        if channel_id:
+            record["channel_id"] = channel_id
         if not record["channel"]:
             record["channel"] = _string(item.get("channel_title") or item.get("videoOwnerChannelTitle"))
         if provider:
@@ -320,16 +355,10 @@ class YoutubeCapabilityService:
             return archive
         from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
         browser = YouTubeBrowserHistory(store=store).history(limit=limit, channel=channel)
-        if not browser["available"]:
+        if archive["available"] or not browser["available"]:
             return archive
-        # Prefer exact Takeout records over day-level browser presence. This
-        # reconciles displayed evidence without rewriting either source's records.
-        precise = {(item.get("video_id"), item.get("occurred_at", "")[:10]) for item in archive["items"]}
-        entries = list(archive["items"]) + [item for item in browser["items"]
-            if (item.get("video_id"), item.get("history_day")) not in precise]
-        entries.sort(key=lambda item: item.get("history_day") or item.get("occurred_at", "")[:10], reverse=True)
-        return {**archive, "available": True, "items": entries[:limit], "local_only": True,
-            "browser_history": {key: value for key, value in browser.items() if key != "items"}}
+        return {**archive, "available": True, "items": browser["items"], "total": browser["total"],
+            "local_only": True, "browser_history": {key: value for key, value in browser.items() if key != "items"}}
 
     def _default_personal_context(self, query: str, limit: int) -> dict[str, Any]:
         from agent.knowledge.runtime import get_knowledge_core

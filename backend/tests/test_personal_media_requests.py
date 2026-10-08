@@ -17,8 +17,9 @@ def test_watched_creator_request_never_uses_public_search(tmp_path):
     calls = []
     service = YoutubeCapabilityService(vault_root=tmp_path,
         search_backend=lambda *a: calls.append('public') or [],
-        takeout_history_backend=lambda *a: {'available':True,'total':1,'items':[
-            {'title':'A watched video','channel_title':'Jynxzi Live','video_id':'watched'}]})
+        takeout_history_backend=lambda *a: pytest.fail('Current history must not use an archive'),
+        browser_history_backend=lambda: {'available':True,'total':1,'items':[
+            {'title':'A watched video','channel_title':'Jynxzi Live','video_id':'abcdefghijk'}]})
     response = YoutubeAgent(tmp_path, youtube_service=service).answer('what videos have i watched from jynxzi')
     assert calls == []
     assert 'A watched video' in response.summary

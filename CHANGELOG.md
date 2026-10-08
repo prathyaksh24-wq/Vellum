@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Continuous YouTube history refresh uses quiet temporary tabs and the existing opt-in automation. Knowledge Core retains deduplicated video/day evidence across refreshes, isolates browser accounts, and preserves saved history on failures. Fresh page counts stay separate from accumulated coverage; exact watch times and repeat plays remain unavailable.
+- Refresh the frontend lockfile to patched Vitest and source-map-js versions after CI dependency-audit findings.
+
 - Every built-in specialist has a complete hybrid profile: task-local instructions, pinned model/reasoning, own Hermes skills, scoped memory and an allowlisted reasoning/tool loop. Exact action handlers preserve confirmation and verified receipts.
 - Specialists can request bounded, attributed memory packets through the existing memory owner. Both profiles' sharing permissions, approved scopes, current thread/user, relevance, expiry and local processing are checked; packets cannot authorize actions or mutate shared memory.
 - Add local YouTube History reads through the existing browser, with day-level evidence, account binding, explicit freshness/failure status, and opt-in scheduled refresh.
@@ -27,6 +30,10 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - X posting intent recognizes omitted pronouns, shorthand, and corrections; self-introduction drafts identify Vellum and stay short. Music deduplicates song suggestions, accepts a clear single-choice yes, seeks within current audio, reads live podcast/song state, and verifies playlist names and songs before reporting success.
 
 ### Fixed
+
+- YouTube Agent reads recent watch history from the account signed into Vellum’s Browser, with a Refresh history button in overview and chat. Reads run in a temporary background tab without opening the panel or changing the visible page. Account-scoped local snapshots preserve visible day labels and video links; failed or changed-account reads never substitute older imports or public searches.
+- Personal YouTube reads honor the requested entity, quantity, creator filter, and format through validated local-model plans. Follow-up links use the actual displayed list; missing context and read failures explain the limitation instead of returning unrelated public results.
+- YouTube liked-video replies display every fetched video in a numbered list with clickable titles. Subscription-count questions return the full connected-account channel count, including common wording and typos; imported counts remain labeled as snapshots.
 - Personal liked-video requests, including “liked vidoes” and “what videos have I liked?”, read the connected YouTube account instead of searching public tutorials.
 - The browser address field searches ordinary words and accepts website addresses and local development URLs without turning search text into an invalid hostname.
 - Opening the UI server's base address now redirects to Vellum instead of returning 404; entry redirects retain view and conversation query parameters.

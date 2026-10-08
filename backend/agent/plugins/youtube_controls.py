@@ -20,6 +20,7 @@ from agent.plugins.youtube_contract import (
     YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID,
     YOUTUBE_CONNECTION_START_ACTION_ID,
     YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID,
+    YOUTUBE_HISTORY_REFRESH_ACTION_ID,
     YOUTUBE_REDIRECT_URI,
     YOUTUBE_SYNC_ACTION_ID,
 )
@@ -53,6 +54,7 @@ class YouTubeControlService:
         state_factory=lambda: secrets.token_urlsafe(32),
         knowledge_core_provider=get_knowledge_core,
         intelligence_factory=YouTubeIntelligenceService,
+        history_factory=None,
     ) -> None:
         self._settings_provider = settings_provider
         self._status_provider = status_provider
@@ -64,6 +66,7 @@ class YouTubeControlService:
         self._state_factory = state_factory
         self._knowledge_core_provider = knowledge_core_provider
         self._intelligence_factory = intelligence_factory
+        self._history_factory = history_factory
 
     def start_connection(self) -> dict[str, Any]:
         settings = self._settings_provider()
@@ -141,14 +144,12 @@ class YouTubeControlService:
             ) from exc
 
     def execute(self, action_id: str, arguments: dict[str, Any], *, confirmed: bool = False) -> dict[str, Any]:
-        if action_id in {"youtube.history.refresh", "youtube.history.configure"}:
+        if action_id == "youtube.history.configure":
             from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
             history = YouTubeBrowserHistory(store=self._knowledge_core_provider().store)
-            result = history.configure(arguments) if action_id.endswith("configure") else history.refresh()
-            if action_id.endswith("refresh") and result["status"] != "ready":
-                raise PluginContributionActionError("YOUTUBE_HISTORY_UNAVAILABLE", result["message"], unavailable=True)
+            result = history.configure(arguments)
             return {"changed": True, "history": result, "_target_kind": "knowledge_projection",
-                "_target_id": "youtube_history", "_message": "History settings saved." if action_id.endswith("configure") else result["message"]}
+                "_target_id": "youtube_history", "_message": "History settings saved."}
         if action_id == YOUTUBE_CONNECTION_START_ACTION_ID:
             connection = self.start_connection()
             return {
@@ -168,6 +169,19 @@ class YouTubeControlService:
                 "_target_id": "youtube",
                 "_message": "Synchronized YouTube subscriptions into local Knowledge.",
             }
+        if action_id == YOUTUBE_HISTORY_REFRESH_ACTION_ID:
+            from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService, HistoryReadError
+            try:
+                reader = self._history_factory() if self._history_factory else YouTubeBrowserHistoryService(store=self._knowledge_core_provider().store)
+                history = reader.refresh()
+            except HistoryReadError as exc:
+                raise PluginContributionActionError('YOUTUBE_HISTORY_UNAVAILABLE', str(exc)) from None
+            from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+            receipt = YouTubeBrowserHistory(store=reader.store).status()
+            return {'changed':True, 'history':{**receipt, **{key:history[key] for key in
+                ('total','refreshed_at','account_id','source_id','local_only','truncated')}},
+                '_target_kind':'knowledge_projection', '_target_id':history['source_id'],
+                '_message':f"Refreshed {history['total']} recent YouTube history entries from Vellum’s Browser."}
         if action_id == YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID:
             if not confirmed:
                 raise PluginContributionActionError("CONFIRMATION_REQUIRED", "Confirm disconnecting YouTube.")
@@ -226,15 +240,12 @@ def youtube_plugin_contribution(
         "result_schema": {"type": "object", "required": ["changed"]},
     }
     return PluginContribution(owner="youtube", actions=(
-        contribution(
-            "youtube.history.refresh",
-            AppActionDefinition(id="youtube.history.refresh", title="Refresh YouTube history",
-                description="Read the active History page in Vellum's browser into local Knowledge.",
-                access_class=CapabilityAccess.WRITE.value, confirmation_rule="none",
-                argument_schema={"type":"object", "additionalProperties":False},
-                ui_reference="youtube.connection", audit_label="youtube.history.refresh",
-                required_permissions=["youtube.history.refresh"], **common),
-        ),
+        contribution(YOUTUBE_HISTORY_REFRESH_ACTION_ID, AppActionDefinition(
+            id=YOUTUBE_HISTORY_REFRESH_ACTION_ID, title='Refresh history',
+            description='Read recent watch history from the YouTube account signed into Vellum’s Browser and save it locally.',
+            access_class=CapabilityAccess.WRITE.value, confirmation_rule='none',
+            argument_schema={'type':'object', 'additionalProperties':False}, ui_reference='youtube.history',
+            audit_label='youtube.history.refresh', required_permissions=[YOUTUBE_HISTORY_REFRESH_ACTION_ID], **common)),
         contribution(
             "youtube.history.configure",
             AppActionDefinition(id="youtube.history.configure", title="Configure YouTube history",
