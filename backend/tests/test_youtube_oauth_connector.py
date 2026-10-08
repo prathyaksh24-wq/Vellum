@@ -48,6 +48,8 @@ def test_youtube_manifest_registers_read_only_connector() -> None:
     plugin.register(context)
 
     expected_capabilities = [
+        "youtube.history.refresh",
+        "youtube.history.configure",
         "youtube.account",
         "youtube.subscriptions",
         "youtube.liked_videos",

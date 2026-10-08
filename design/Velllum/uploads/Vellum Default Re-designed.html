@@ -1834,6 +1834,7 @@ const SpotifyAPI = {
   action: body => API.plugins.spotifyAction(body),
 };
 const YouTubeAPI = {
+  historyStatus: () => API.plugins.youtubeHistoryStatus(),
   status: () => API.plugins.youtubeStatus(),
   start: () => API.plugins.youtubeOAuthStart(),
   sync: key => API.plugins.youtubeSync(key || ''),
@@ -4846,8 +4847,10 @@ const GLogo = ({size=22}) => (
 const YTLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
 );
-const YouTubeConnectModal = ({onClose, onConnected, onAction}) => {
+const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onOpenAutomations}) => {
   const [status, setStatus] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [historyUrl, setHistoryUrl] = useState('https://www.youtube.com/feed/history');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const loadStatus = async () => {
@@ -4861,6 +4864,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction}) => {
     }
   };
   useEffect(() => {
+    YouTubeAPI.historyStatus().then(next => { setHistory(next); setHistoryUrl(next.config.url); }).catch(() => {});
     loadStatus();
     const onComplete = event => {
       if (!event.data || event.data.type !== 'vellum:youtube-oauth-complete') return;
@@ -4905,6 +4909,15 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction}) => {
     finally { setBusy(''); }
   };
   const connected = !!(status && status.connected);
+  const historyAction = async action => {
+    setBusy('history'); setError('');
+    try {
+      const arguments_ = action === 'youtube.history.configure' ? {url:historyUrl, timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'} : {};
+      const receipt = await onAction(action, arguments_);
+      if (!receipt || receipt.status !== 'applied') throw new Error(receipt && receipt.message || 'History action failed.');
+    } catch (err) { setError(err.message || 'History action failed.'); }
+    finally { setHistory(await YouTubeAPI.historyStatus().catch(() => null)); setBusy(''); }
+  };
   return (
     <React.Fragment>
       <div className="backdrop dim xc-backdrop" onClick={onClose}/>
@@ -4925,6 +4938,16 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction}) => {
               <div className="gc-perm"><YTLogo size={16}/>Read your channel subscriptions</div>
             </div>
             <div className="gc-trust">Vellum does not request your email, password, uploads, comments, or write access. OAuth tokens stay in your operating-system keyring.</div>
+            <div className="gc-perm-title">Watch history through Vellum's browser</div>
+            <div className="gc-note">Sign into YouTube once in Vellum's browser. Refresh reads up to 100 loaded history entries and saves them locally. Browser sign-in is separate from Google OAuth.</div>
+            {history && <div className="gc-note" aria-live="polite">{history.message}<br/>{history.records} dated history records saved. Last successful refresh: {history.last_success_at ? new Date(history.last_success_at).toLocaleString() : 'Never'}.</div>}
+            <label className="gc-note">History page URL<input aria-label="YouTube history page URL" value={historyUrl} onChange={event => setHistoryUrl(event.target.value)} style={{width:'100%',marginTop:6}}/></label>
+            <div className="gc-actions">
+              <button className="gc-cancel" disabled={!!busy} onClick={() => historyAction('youtube.history.configure')}>Save URL and timezone</button>
+              <button className="gc-cancel" disabled={!!busy} onClick={() => onOpenHistory(history && history.config.url || 'https://www.youtube.com/feed/history')}>Open History</button>
+              <button className="gc-btn" disabled={!!busy} onClick={() => historyAction('youtube.history.refresh')}>{busy === 'history' ? 'Working...' : 'Refresh history'}</button>
+            </div>
+            <div className="gc-note">For optional updates every 15 minutes, enable “YouTube history refresh” in Automations and resume browser agent control with History active. <button className="gc-cancel" onClick={onOpenAutomations}>Open Automations</button></div>
             {!status && !error && <div className="gc-note">Checking connection status...</div>}
             {status && !status.configured && <div className="gc-note">Set <b>YOUTUBE_OAUTH_CLIENT_ID</b> and <b>YOUTUBE_OAUTH_CLIENT_SECRET</b> in the local .env file, then restart Vellum.</div>}
             {error && <div className="gc-note" style={{color:'#ff7b72'}}>{error}</div>}
@@ -10610,6 +10633,17 @@ const [slashSkills, setSlashSkills] = useState([]);
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal
+          onOpenHistory={async url => {
+            try {
+              const state = await refreshBrowser();
+              if (!state.running) await API.browser.control({operation:'open'});
+              await API.browser.control({operation:'new_tab', url});
+              await refreshBrowser();
+              await dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+              setYtConnectOpen(false);
+            } catch (error) { pushToast(error.message || 'Could not open YouTube History.'); }
+          }}
+          onOpenAutomations={() => { setYtConnectOpen(false); nav('automations'); }}
           onClose={() => setYtConnectOpen(false)}
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>

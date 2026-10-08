@@ -89,6 +89,7 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
     assert jobs["memory_dreaming"][2]["hour"] == 2
     records = {r["builtin_key"]: r for r in store.list()}
     assert set(records) == {
+        "youtube_browser_history",
         "memory_dreaming",
         "nightly_digest",
         "vault_retention",
@@ -97,7 +98,9 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
         "skill_curator_tick",
     }
     assert all(r["builtin"] for r in records.values())
-    assert all(r["state"] == "active" for r in records.values())
+    assert records["youtube_browser_history"]["state"] == "paused"
+    assert records["youtube_browser_history"]["schedule"]["seconds"] == 900
+    assert all(r["state"] == "active" for key, r in records.items() if key != "youtube_browser_history")
     assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"
     assert records["youtube_intelligence_projection"]["schedule"]["expression"] == "30 2 * * *"
     assert records["discord_intelligence_sync"]["schedule"]["seconds"] == 60
@@ -105,6 +108,9 @@ def test_start_scheduler_seeds_builtins_and_registers_jobs(monkeypatch, tmp_path
     assert records["memory_dreaming"]["schedule"]["expression"] == "0 2 * * *"
     assert records["skill_curator_tick"]["schedule"]["seconds"] == 3600
     for record in records.values():
+        if record["state"] != "active":
+            assert f"automation-{record['id']}" not in jobs
+            continue
         assert f"automation-{record['id']}" in jobs
         assert jobs[f"automation-{record['id']}"][2]["max_instances"] == 1
 

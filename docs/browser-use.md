@@ -83,6 +83,23 @@ Manual UI controls express the user's direct intent and do not require this
 environment flag. No Playwright-managed Chromium download is required when
 using an installed browser executable.
 
+## If websites will not open
+
+- Start the backend and UI with `scripts/start.ps1` from the repository root.
+  A previously loaded Vellum page can remain visible after its servers stop;
+  the in-app browser needs the backend process to open and navigate websites.
+  Reload Vellum after the servers are ready.
+- Enter a website address such as `google.com` or `https://www.youtube.com` in
+  the browser address field and press Enter. Check the panel's error message if
+  navigation fails.
+- Address-bar navigation and manual input give you control. If chat says the
+  browser is paused or you have control, click **Resume agent**, then ask Vellum
+  to open the website again. Resuming does not rerun a task that already returned
+  a blocked response.
+- For chat tasks, select an installed local model and enable
+  `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true` in the local configuration before
+  starting the backend. Manual address-bar navigation does not need that flag.
+
 ## Ownership and privacy
 
 The existing Playwright worker and client own the session, browser lifecycle,

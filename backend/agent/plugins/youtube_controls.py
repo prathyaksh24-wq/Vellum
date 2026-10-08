@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from agent.app_actions.models import AppActionDefinition
 from agent.config import get_settings
+from agent.contracts.youtube_history import YouTubeHistoryConfig
 from agent.knowledge.runtime import get_knowledge_core
 from agent.plugins.contributions import (
     PluginActionContribution,
@@ -143,6 +144,14 @@ class YouTubeControlService:
             ) from exc
 
     def execute(self, action_id: str, arguments: dict[str, Any], *, confirmed: bool = False) -> dict[str, Any]:
+        if action_id == "youtube.history.configure" or (action_id == YOUTUBE_HISTORY_REFRESH_ACTION_ID and self._history_factory is None):
+            from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+            history = YouTubeBrowserHistory(store=self._knowledge_core_provider().store)
+            result = history.configure(arguments) if action_id.endswith("configure") else history.refresh()
+            if action_id.endswith("refresh") and result["status"] != "ready":
+                raise PluginContributionActionError("YOUTUBE_HISTORY_UNAVAILABLE", result["message"], unavailable=True)
+            return {"changed": True, "history": result, "_target_kind": "knowledge_projection",
+                "_target_id": "youtube_history", "_message": "History settings saved." if action_id.endswith("configure") else result["message"]}
         if action_id == YOUTUBE_CONNECTION_START_ACTION_ID:
             connection = self.start_connection()
             return {
@@ -236,6 +245,15 @@ def youtube_plugin_contribution(
             access_class=CapabilityAccess.WRITE.value, confirmation_rule='none',
             argument_schema={'type':'object', 'additionalProperties':False}, ui_reference='youtube.history',
             audit_label='youtube.history.refresh', required_permissions=[YOUTUBE_HISTORY_REFRESH_ACTION_ID], **common)),
+        contribution(
+            "youtube.history.configure",
+            AppActionDefinition(id="youtube.history.configure", title="Configure YouTube history",
+                description="Set the supported History URL and timezone used to interpret date headings.",
+                access_class=CapabilityAccess.WRITE.value, confirmation_rule="none",
+                argument_schema=YouTubeHistoryConfig.model_json_schema(),
+                ui_reference="youtube.connection", audit_label="youtube.history.configure",
+                required_permissions=["youtube.history.configure"], **common),
+        ),
         contribution(
             YOUTUBE_CONNECTION_START_ACTION_ID,
             AppActionDefinition(

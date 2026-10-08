@@ -22,6 +22,7 @@ def test_seed_builtins_creates_records(tmp_path):
     records = {r["builtin_key"]: r for r in store.list()}
     expected_keys = {
         "memory_dreaming",
+        "youtube_browser_history",
         "nightly_digest",
         "vault_retention",
         "youtube_intelligence_projection",
@@ -32,7 +33,7 @@ def test_seed_builtins_creates_records(tmp_path):
     assert set(records) == expected_keys
     for record in records.values():
         assert record["builtin"] is True
-        assert record["state"] == "active"
+        assert record["state"] == ("paused" if record["builtin_key"] == "youtube_browser_history" else "active")
         assert record["permission"]["full_access"] is True
         assert record["destination"]["kind"] == "new_chat"
     assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"

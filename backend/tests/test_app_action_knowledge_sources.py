@@ -110,6 +110,8 @@ def _youtube_runtime(tmp_path: Path, *, connected: bool = True):
     capabilities = "\n".join(
         f"  - {item}"
         for item in (
+            "youtube.history.refresh",
+            "youtube.history.configure",
             YOUTUBE_CONNECTION_START_ACTION_ID,
             YOUTUBE_SYNC_ACTION_ID,
             YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID,

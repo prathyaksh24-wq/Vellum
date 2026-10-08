@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 
 BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
+        "key": "youtube_browser_history",
+        "name": "YouTube history refresh",
+        "instructions": "Read recent history from the active YouTube History tab in Vellum's browser into local Knowledge. Skip while the browser is closed, paused, or under user control.",
+        "schedule": "every 15m",
+        "state": "paused",
+    },
+    {
         "key": "memory_dreaming",
         "name": "Memory dreaming",
         "instructions": (
@@ -84,7 +91,7 @@ def seed_builtins(
         )
         if existing is not None:
             continue
-        state = "active"
+        state = definition.get("state", "active")
         if enabled is not None and enabled.get(key) is False:
             state = "paused"
         record = store.create(
@@ -113,7 +120,7 @@ def reset_builtin(store: AutomationStore, record: dict[str, Any]) -> dict[str, A
         schedule=parse_schedule(definition["schedule"]).to_dict(),
         destination={"kind": "new_chat"},
         permission={"full_access": True},
-        state="active",
+        state=definition.get("state", "active"),
     )
 
 
@@ -166,7 +173,13 @@ async def _curator_tick_handler() -> None:
     await asyncio.to_thread(get_curator_runtime().tick)
 
 
+async def _youtube_history_handler() -> None:
+    from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+    await asyncio.to_thread(YouTubeBrowserHistory().refresh, automatic=True)
+
+
 _HANDLERS: dict[str, Any] = {
+    "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
     "nightly_digest": _nightly_digest_handler,
     "vault_retention": _vault_retention_handler,

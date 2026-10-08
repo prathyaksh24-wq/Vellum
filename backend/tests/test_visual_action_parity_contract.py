@@ -25,10 +25,13 @@ def test_covered_visual_controls_reference_registered_app_actions(monkeypatch, t
         automation_handler=lambda *_args: {},
         knowledge_source_handler=lambda *_args: {},
     )
-    from agent.plugins import google_calendar_controls, spotify_controls
+    from agent.plugins import google_calendar_controls, spotify_controls, youtube_controls
     monkeypatch.setattr(google_calendar_controls, "google_calendar_status", lambda: {"connected": True, "configured": True})
     runtime.register_plugin_contribution(google_calendar_controls.google_calendar_plugin_contribution())
     runtime.register_plugin_contribution(spotify_controls.spotify_plugin_contribution(authenticated=lambda: True))
+    runtime.register_plugin_contribution(youtube_controls.youtube_plugin_contribution(
+        status_provider=lambda: {"connected": True, "configured": True},
+    ))
     registered = {action.id for action in runtime.catalog().actions}
     assert inventory["covered"]
     assert len({(item["surface"], item["name"]) for item in inventory["covered"]}) == len(inventory["covered"])

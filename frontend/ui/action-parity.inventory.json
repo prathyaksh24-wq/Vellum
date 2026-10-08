@@ -2,7 +2,7 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/components/browser-panel.jsx": {"count":46,"sha256":"8e8915dc18e6df044c5e83c6581ec078b62dac1a8239ac3f910a440cf9fd780f"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":856,"sha256":"ccebda900f00b566d16bd7d8833f9380186e2605fc8804972c668fff9ab9e645"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":863,"sha256":"1648a90a25b7c16b0ea583d6feae0b4e250902533e2417990a02d29b6a957bed"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -10,6 +10,10 @@
     "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
   },
   "covered": [
+    {"surface":"YouTube","name":"history configuration and refresh","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.refresh')"}},
+    {"surface":"YouTube","name":"history URL and timezone","actionId":"youtube.history.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.configure')"}},
+    {"surface":"YouTube","name":"open history in owned browser","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"API.browser.control({operation:'new_tab', url})"}},
+
     {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input, downloads and homepage preferences","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
     {"surface":"Workspace Layout","name":"sidebar pin and rail expand","actionId":"ui.sidebar.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"}},
     {"surface":"Workspace Layout","name":"settings visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('settings', {visible:true})"}},

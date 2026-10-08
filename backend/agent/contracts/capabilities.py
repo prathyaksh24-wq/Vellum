@@ -109,6 +109,7 @@ def build_capability_contract() -> CapabilityContract:
                 plugin_owned=True,
                 endpoints={
                     "status": "/api/plugins/youtube/status",
+                    "history_status": "/api/plugins/youtube/history/status",
                     "oauth_start": "/api/plugins/youtube/oauth/start",
                     "oauth_callback": "/api/plugins/youtube/oauth/callback",
                     "sync": "/api/plugins/youtube/sync",

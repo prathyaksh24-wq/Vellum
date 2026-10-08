@@ -37,6 +37,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 - Every built-in specialist has a complete hybrid profile: task-local instructions, pinned model/reasoning, own Hermes skills, scoped memory and an allowlisted reasoning/tool loop. Exact action handlers preserve confirmation and verified receipts.
 - Specialists can request bounded, attributed memory packets through the existing memory owner. Both profiles' sharing permissions, approved scopes, current thread/user, relevance, expiry and local processing are checked; packets cannot authorize actions or mutate shared memory.
 - MusicAgent recalls available dated Spotify history using local-day boundaries and verified artist credits instead of model guesses. User-stated music preferences persist in its existing private memory scope; bounded conversation-based suggestions preview a real song and require one-time acceptance before playback. Spotify results are excluded from background AI memory learning.
+- Add local YouTube History reads through the existing browser, with day-level evidence, account binding, explicit freshness/failure status, and opt-in scheduled refresh.
+
 
 - Clear MusicAgent song additions and removals execute without a second confirmation, with captured targets, single writes and membership read-back. Liked playlist aliases, misspelled saved-song titles, version selections and destination-preserving corrections stay in the music workflow.
 - Mixed confirmations such as “NBA news and yes” separate the exact pending action from the independent specialist question and stream each result on completion. A single yes cannot authorize queued changes.

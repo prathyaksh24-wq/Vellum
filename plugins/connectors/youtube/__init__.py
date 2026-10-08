@@ -22,6 +22,8 @@ def register(ctx) -> None:
             "category": "Connectors",
             "status": "backend_managed",
             "capabilities": [
+                "youtube.history.refresh",
+                "youtube.history.configure",
                 "youtube.account",
                 "youtube.subscriptions",
                 "youtube.liked_videos",
@@ -35,6 +37,8 @@ def register(ctx) -> None:
         },
         service_factory=YouTubeClient,
         capabilities=[
+            "youtube.history.refresh",
+            "youtube.history.configure",
             "youtube.account",
             "youtube.subscriptions",
             "youtube.liked_videos",
