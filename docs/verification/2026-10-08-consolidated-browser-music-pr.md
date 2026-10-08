@@ -44,3 +44,32 @@ No public video playback QA was repeated for this publication step. Earlier live
 browser evidence remains in the scoped verification documents. Native WebView2
 setup and whole-Vellum themes are deferred; real websites retain the current
 streamed Brave transport.
+
+## CI audit repair after PR #213 landed
+
+CI run 37740600611 passed backend tests, frontend build/tests, gitleaks,
+Python dependency audit and dependency review. Only the frontend npm audit failed:
+the committed lock contained Vitest/@vitest/mocker 4.1.10 and source-map-js 1.2.1.
+A disposable copy of that lock reproduced the exact three advisory findings with
+npm 10.9.9. Local installed dependencies had already been newer, which explains
+why the earlier frontend tests did not expose the stale lock.
+
+Merged main at `3231746` to retain PR #213's account-scoped accumulation and quiet
+refresh changes. The merge includes its patched lock: Vitest/@vitest/mocker
+4.1.11 and source-map-js 1.2.2. Set the manifest's minimum Vitest version to 4.1.11.
+No audit threshold, allowlist or job was weakened.
+
+Verification after the merge and dependency repair:
+
+- Clean npm 10.9.9 install from the lockfile and npm audit: zero vulnerabilities.
+- Frontend: 294 tests passed across 36 files; production build passed.
+- Browser, YouTube history/settings/accumulation, OAuth and action-parity checks:
+  107 passed, two optional browser tests skipped.
+- Duplicate canonical history contracts/writers and identical inventory/test
+  entries produced by automatic merging were removed. Worker tests retain the
+  newly landed configured quiet-reader behavior and skip busy browser operations.
+- The preceding full-suite results above describe the earlier main revision.
+  The new GitHub run supplies full-suite validation for this merged revision.
+
+Advisories: [Vitest GHSA-82fw-gwwq-j7x9](https://github.com/vitest-dev/vitest/security/advisories/GHSA-82fw-gwwq-j7x9)
+and [source-map-js GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q).

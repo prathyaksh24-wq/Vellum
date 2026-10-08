@@ -54,7 +54,6 @@ def test_youtube_manifest_registers_read_only_connector() -> None:
         "youtube.subscriptions",
         "youtube.liked_videos",
         "youtube.watch_history",
-        "youtube.history.refresh",
         "youtube.connection.start",
         "youtube.sync",
         "youtube.connection.disconnect",

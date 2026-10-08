@@ -26,7 +26,7 @@ BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "youtube_browser_history",
         "name": "YouTube history refresh",
-        "instructions": "Read recent history from the active YouTube History tab in Vellum's browser into local Knowledge. Skip while the browser is closed, paused, or under user control.",
+        "instructions": "Accumulate recent YouTube watch-history entries locally from Vellum's signed-in browser profile. Read in a temporary background tab without presenting the Browser panel or switching the user's page. Skip during pause or user control; report sign-in or reader failures. Repeated reads do not duplicate saved video/day entries.",
         "schedule": "every 15m",
         "state": "paused",
     },
@@ -175,7 +175,9 @@ async def _curator_tick_handler() -> None:
 
 async def _youtube_history_handler() -> None:
     from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
-    await asyncio.to_thread(YouTubeBrowserHistory().refresh, automatic=True)
+    result = await asyncio.to_thread(YouTubeBrowserHistory().refresh, automatic=True)
+    if result["status"] not in {"ready", "empty", "browser_busy"}:
+        raise RuntimeError(result["message"])
 
 
 _HANDLERS: dict[str, Any] = {

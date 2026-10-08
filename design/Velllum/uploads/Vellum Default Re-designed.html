@@ -4947,7 +4947,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
               <button className="gc-cancel" disabled={!!busy} onClick={() => onOpenHistory(history && history.config.url || 'https://www.youtube.com/feed/history')}>Open History</button>
               <button className="gc-btn" disabled={!!busy} onClick={() => historyAction('youtube.history.refresh')}>{busy === 'history' ? 'Working...' : 'Refresh history'}</button>
             </div>
-            <div className="gc-note">For optional updates every 15 minutes, enable “YouTube history refresh” in Automations and resume browser agent control with History active. <button className="gc-cancel" onClick={onOpenAutomations}>Open Automations</button></div>
+            <div className="gc-note">For optional updates every 15 minutes, enable “YouTube history refresh” in Automations. Updates run quietly in a temporary tab while Vellum’s backend is running. Resume browser agent control if paused. <button className="gc-cancel" onClick={onOpenAutomations}>Open Automations</button></div>
             {!status && !error && <div className="gc-note">Checking connection status...</div>}
             {status && !status.configured && <div className="gc-note">Set <b>YOUTUBE_OAUTH_CLIENT_ID</b> and <b>YOUTUBE_OAUTH_CLIENT_SECRET</b> in the local .env file, then restart Vellum.</div>}
             {error && <div className="gc-note" style={{color:'#ff7b72'}}>{error}</div>}

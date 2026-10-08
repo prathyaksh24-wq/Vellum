@@ -144,14 +144,12 @@ class YouTubeControlService:
             ) from exc
 
     def execute(self, action_id: str, arguments: dict[str, Any], *, confirmed: bool = False) -> dict[str, Any]:
-        if action_id == "youtube.history.configure" or (action_id == YOUTUBE_HISTORY_REFRESH_ACTION_ID and self._history_factory is None):
+        if action_id == "youtube.history.configure":
             from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
             history = YouTubeBrowserHistory(store=self._knowledge_core_provider().store)
-            result = history.configure(arguments) if action_id.endswith("configure") else history.refresh()
-            if action_id.endswith("refresh") and result["status"] != "ready":
-                raise PluginContributionActionError("YOUTUBE_HISTORY_UNAVAILABLE", result["message"], unavailable=True)
+            result = history.configure(arguments)
             return {"changed": True, "history": result, "_target_kind": "knowledge_projection",
-                "_target_id": "youtube_history", "_message": "History settings saved." if action_id.endswith("configure") else result["message"]}
+                "_target_id": "youtube_history", "_message": "History settings saved."}
         if action_id == YOUTUBE_CONNECTION_START_ACTION_ID:
             connection = self.start_connection()
             return {
@@ -174,11 +172,14 @@ class YouTubeControlService:
         if action_id == YOUTUBE_HISTORY_REFRESH_ACTION_ID:
             from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService, HistoryReadError
             try:
-                history = (self._history_factory or YouTubeBrowserHistoryService)().refresh()
+                reader = self._history_factory() if self._history_factory else YouTubeBrowserHistoryService(store=self._knowledge_core_provider().store)
+                history = reader.refresh()
             except HistoryReadError as exc:
                 raise PluginContributionActionError('YOUTUBE_HISTORY_UNAVAILABLE', str(exc)) from None
-            return {'changed':True, 'history':{key:history[key] for key in
-                ('total','refreshed_at','account_id','coverage','source_id','local_only','truncated')},
+            from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
+            receipt = YouTubeBrowserHistory(store=reader.store).status()
+            return {'changed':True, 'history':{**receipt, **{key:history[key] for key in
+                ('total','refreshed_at','account_id','source_id','local_only','truncated')}},
                 '_target_kind':'knowledge_projection', '_target_id':history['source_id'],
                 '_message':f"Refreshed {history['total']} recent YouTube history entries from Vellum’s Browser."}
         if action_id == YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID:

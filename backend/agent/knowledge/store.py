@@ -3148,7 +3148,7 @@ class KnowledgeStore:
                     existing_count += 1
         return {"created": created, "existing": existing_count}
 
-    def count_observations(self, *, origin: str = "", action: str = "") -> int:
+    def count_observations(self, *, origin: str = "", action: str = "", source_id: str = "") -> int:
         clauses: list[str] = []
         params: list[Any] = []
         if origin:
@@ -3157,6 +3157,9 @@ class KnowledgeStore:
         if action:
             clauses.append("action = ?")
             params.append(action)
+        if source_id:
+            clauses.append("source_id = ?")
+            params.append(source_id)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         with closing(self._connect()) as connection:
             return int(connection.execute(f"SELECT COUNT(*) FROM observations {where}", params).fetchone()[0])
@@ -3482,6 +3485,7 @@ class KnowledgeStore:
         *,
         origin: str = "",
         action: str = "",
+        source_id: str = "",
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -3493,6 +3497,9 @@ class KnowledgeStore:
         if action:
             clauses.append("action = ?")
             params.append(action)
+        if source_id:
+            clauses.append("source_id = ?")
+            params.append(source_id)
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
         params.extend([max(1, min(int(limit), 500)), max(0, int(offset))])
         with closing(self._connect()) as connection:

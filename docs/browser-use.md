@@ -14,6 +14,11 @@ browser tools remain exclusive to BrowserAgent; the YouTube capability accepts
 no arbitrary URL or script. The local Knowledge Core snapshot is scoped to a
 hashed browser-account identity, with sign-out and account-switch checks. Google
 OAuth likes/subscriptions and Takeout archives use their separate account sources.
+The existing opt-in **YouTube history refresh** automation accumulates these recent
+pages every 15 minutes through the same quiet reader. Knowledge Core retains
+account-scoped video/day evidence without counting repeated refreshes as watches;
+the browser's page limit does not cap the saved history. See
+[YouTube browser history](youtube-browser-history.md).
 History reads use a temporary background tab and close it afterward, preserving
 the visible page and panel state. A background-only session does not request
 that the UI open the browser panel; explicitly opening Browser still does.

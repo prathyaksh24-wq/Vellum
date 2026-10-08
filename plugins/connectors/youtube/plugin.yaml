@@ -11,7 +11,6 @@ capabilities:
   - youtube.subscriptions
   - youtube.liked_videos
   - youtube.watch_history
-  - youtube.history.refresh
   - youtube.connection.start
   - youtube.sync
   - youtube.connection.disconnect

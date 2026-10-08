@@ -10,6 +10,7 @@
     "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
   },
   "covered": [
+    {"surface":"YouTube","name":"refresh browser watch history","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/components/youtube-history.jsx","text":"action_id:'youtube.history.refresh'"}},
     {"surface":"YouTube","name":"history configuration and refresh","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.refresh')"}},
     {"surface":"YouTube","name":"history URL and timezone","actionId":"youtube.history.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.configure')"}},
     {"surface":"YouTube","name":"open history in owned browser","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"API.browser.control({operation:'new_tab', url})"}},
@@ -89,8 +90,7 @@
     {"surface":"Spotify","name":"playback controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playback.control'"}},
     {"surface":"Spotify","name":"connect or upgrade consent","actionId":"spotify.connection.start","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"}},
     {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}},
-    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}},
-    {"surface":"YouTube","name":"refresh browser watch history","actionId":"youtube.history.refresh","probe":{"path":"design/Velllum/uploads/components/youtube-history.jsx","text":"action_id:'youtube.history.refresh'"}}
+    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}}
   ],
   "exemptions": [
     {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},

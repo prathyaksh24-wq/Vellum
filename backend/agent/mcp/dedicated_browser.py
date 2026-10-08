@@ -607,9 +607,11 @@ class DedicatedBrowser:
             rows.append(f"Pending dialog: {self._dialog.type}: {self._dialog.message}")
         return "\n".join(rows), refs
 
-    async def youtube_history(self) -> dict:
+    async def youtube_history(self, *, url: str | None = None) -> dict:
         """Read in a temporary background tab without changing the user's page."""
-        from agent.mcp.youtube_history import HISTORY_URL, read_history_page
+        from agent.mcp.youtube_history import read_history_page
+        from agent.contracts.youtube_history import YouTubeHistoryConfig
+        history_url = YouTubeHistoryConfig(url=url).url if url else YouTubeHistoryConfig().url
         if self.context is None:
             self.presentation_requested = False
         await self.open()
@@ -619,13 +621,16 @@ class DedicatedBrowser:
         page = await self.context.new_page()
         self.active_page = previous_page
         try:
-            await self._goto(page, HISTORY_URL)
-            return await read_history_page(page, can_continue=lambda:self.control == "agent")
+            await self._goto(page, history_url)
+            return await read_history_page(page, history_url=history_url, can_continue=lambda:self.control == "agent")
         finally:
-            await page.close()
-            if previous_page in self._pages.values():
-                self.active_page = previous_page
-            self.activity = previous_activity
+            try:
+                await page.close()
+            finally:
+                if previous_page in self._pages.values():
+                    self.active_page = previous_page
+                if self.context is not None:
+                    self.activity = previous_activity
 
     async def tool(self, params: dict[str, Any]) -> str:
         self.presentation_requested = True

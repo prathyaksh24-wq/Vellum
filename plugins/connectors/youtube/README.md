@@ -14,7 +14,7 @@ in Vellum's Browser. Watch-history questions also refresh automatically in a
 temporary background tab, without opening the panel or changing its current
 page. The
 fixed reader uses the existing dedicated browser owner and saves account-scoped
-snapshots in Knowledge Core with private-local-only sensitivity and deny-raw
+snapshots and deduplicated video/day observations in Knowledge Core with private-local-only sensitivity and deny-raw
 external disclosure. It reads up to 100 recent rendered entries, preserves the
 page's day labels and verified video links, and checks account identity before
 and after reading. It does not infer precise watch timestamps, watch duration,
@@ -25,7 +25,12 @@ Signed-out, paused, unidentified-account, changed-account and unrecognized-page
 states fail explicitly without returning an older account's snapshot or a public
 search. Current watch-history queries use the browser account; explicitly
 imported or Takeout history still uses the existing archive adapter. The archive
-and browser snapshots stay separate.
+and browser evidence stay separate. Enable **YouTube history refresh** in
+Automations to accumulate recent pages every 15 minutes while the backend runs.
+The automation starts paused, uses a temporary background tab, and retains saved
+dated records after they disappear from the latest page. Its 100-entry page limit
+is independent of the accumulated count. Saved retrieval is scoped to the last
+successfully read browser account.
 
 Vellum counts subscriptions from the complete paginated account read. Count-only
 questions return the total without a channel list; list questions show up to 50
