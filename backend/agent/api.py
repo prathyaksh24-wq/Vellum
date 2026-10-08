@@ -4170,7 +4170,8 @@ def _requests_fresh_public_data(message: str, thread_id: str | None = None) -> b
             plan = None
         if plan is not None and plan.operation not in {'clarify','curate_playlist'}:
             return True
-    return MusicAgent._current_detail(message) is not None or bool(re.fullmatch(r'\s*(?:please\s+)?play\s+(?:it|that|them|those(?:\s+songs)?|the\s+(?:chart|list|album))[.!?]*\s*',message,re.I)) or MusicAgent._kworb_plan(message) is not None or bool(re.search(r"\b(?:monthly\s+listeners?|latest|live|fresh|currently|right now|today's|todays|breaking|updated score)\b", message, re.IGNORECASE))
+    clean_message = MusicAgent._clean(message)
+    return MusicAgent._current_detail(message) is not None or bool(re.fullmatch(r'(?:please )?play (?:it|that|them|those(?: songs)?|the (?:chart|list|album))',clean_message,re.I)) or MusicAgent._kworb_plan(message) is not None or bool(re.search(r"\b(?:monthly\s+listeners?|latest|live|fresh|currently|right now|today's|todays|breaking|updated score)\b", message, re.IGNORECASE))
 
 
 def _with_forced_web_search_context(clean_message: str) -> str:

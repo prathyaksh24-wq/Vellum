@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Music-request parsing consumes repeated whitespace and polite prefixes without regex backtracking, preserving provider selection, quoted titles, history artist filters and playlist/album commands. CodeQL's reported slow-regex paths now use single-pass delimiters or non-overlapping normalized matches.
+
 - Browser new tabs now show the five approved local wallpaper homepages, with Google, Brave, DuckDuckGo, Startpage and SearXNG selection beside the title. Search preferences, SearXNG instance and custom shortcuts persist through the existing browser App Action. Native homepage input avoids streamed-frame latency; new tabs do not wait for a remote homepage. Compact controls and workspace expansion leave more room for the page and restore the previous split without losing tabs.
 
 - Browser engine menus fit within the homepage even during instance setup, with scrolling when space is limited. SearXNG stays centered when selected and opens configuration on request instead of moving the homepage upward.

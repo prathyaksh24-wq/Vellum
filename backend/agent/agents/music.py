@@ -14,7 +14,9 @@ from agent.tools.registry import ToolRegistry
 
 
 PROVIDER_NAMES = {"spotify":"spotify", "apple music":"apple_music", "youtube music":"youtube_music", "yt music":"youtube_music", "yt music/player":"youtube_music", "yt player":"youtube_music"}
-PROVIDER_SUFFIX = r'\s+(?:on|using|in|through)\s+(spotify|apple music|youtube music|yt music/player|yt music|yt player)(?:\s+(?:pls|plz|please))?$'
+# Search only at the beginning of a whitespace run, consuming it once. This
+# preserves the original title spacing without retrying every space as a start.
+PROVIDER_SUFFIX = r'(?<!\s)\s++(?:on|using|in|through)\s++(spotify|apple music|youtube music|yt music/player|yt music|yt player)(?:\s++(?:pls|plz|please))?$'
 PROVIDER_PREFIX = r'^(?:on|using|in|through)\s+(spotify|apple music|youtube music|yt music/player|yt music|yt player)\s*[,;:]\s*'
 
 
@@ -120,15 +122,24 @@ class MusicAgent:
 
     @staticmethod
     def _history_plan(text: str) -> MusicPlan | None:
+        text = ' '.join(text.split())
         if not re.search(r'\b(?:played|listened|listening history|did\s+(?:i|you|u|we)\s+(?:play|listen))\b', text, re.I) or not re.search(r'\b(?:what|which|show|history)\b', text, re.I):
             return None
         period = 'yesterday' if re.search(r'\byesterday\b', text, re.I) else 'today' if re.search(r'\btoday\b', text, re.I) else 'recent'
         date = re.search(r'\b\d{4}-\d{2}-\d{2}\b', text)
         if date:
             period = 'date'
-        before = re.search(r'\b(?:what|which)\s+(.+?)\s+(?:songs?|tracks?)\b', text, re.I)
-        after = re.search(r'\b(?:by|from)\s+(.+?)(?=\s+(?:did|have|i|yesterday|today|on|recently)\b|$)', text, re.I)
-        artist = (after[1] if after else before[1] if before else '').strip()
+        # Find each delimiter once instead of rescanning the remainder at
+        # every repeated "what" or "by" in an untrusted request.
+        before_start = re.search(r'\b(?:what|which) ', text, re.I)
+        before_end = re.search(r' (?:songs?|tracks?)\b', text[before_start.end():], re.I) if before_start else None
+        before = text[before_start.end():before_start.end() + before_end.start()] if before_end else ''
+        after_start = re.search(r'\b(?:by|from) ', text, re.I)
+        after = text[after_start.end():] if after_start else ''
+        after_end = re.search(r' (?:did|have|i|yesterday|today|on|recently)\b', after, re.I)
+        if after_end:
+            after = after[:after_end.start()]
+        artist = (after or before).strip()
         if artist.casefold() in {'the', 'my', 'all', 'any'}:
             artist = ''
         unsupported = bool(re.search(r'\b(?:last|ago|week|month|year)\b', text, re.I)) and not date
@@ -179,13 +190,14 @@ class MusicAgent:
 
     @staticmethod
     def _language_request(text: str) -> bool:
+        text = ' '.join(text.split())
         text, _, explicit_provider = music_provider_request(text)
         if explicit_provider and re.match(r'(?:play|put on|resume|pause|skip)\b',text,re.I):
             return True
-        if re.match(r'(?:(?:can|could|would)\s+(?:you|u)\s+)?put\s+.+\s+on\s+for\s+me$',text,re.I):
+        if re.match(r'(?:(?:can|could|would) (?:you|u) )?put .+ on for me$',text,re.I):
             return True
         return bool(re.search(r'\b(?:songs?|tracks?|tunes?|playlists?|albums?|music|spotify|volume|shuffle|repeat)\b',text,re.I) and
-            re.match(r'(?:(?:yo|hey|bro|pls|plz|please)\s+)*(?:play|put|spin|chuck|throw|queue|gimme|give|choose|pick|select|rewind|could|can|would|i\s+(?:want|need|wanna))\b',text,re.I))
+            re.match(r'(?:(?:yo|hey|bro|pls|plz|please) )*+(?:play|put|spin|chuck|throw|queue|gimme|give|choose|pick|select|rewind|could|can|would|i (?:want|need|wanna))\b',text,re.I))
 
     @staticmethod
     def _any_playlist_reply(text: str, context: dict) -> MusicPlan | None:
@@ -208,7 +220,7 @@ class MusicAgent:
         from agent.app_actions.runtime import AppActionRuntime
         # The shared parser respects quoted titles. Split only before another
         # action, keeping unquoted artist names such as Earth, Wind and Fire.
-        start = (r'(?:(?:also|please)\s+)*(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?'
+        start = (r'(?:(?:also|please)\s++)*+(?:(?:can|could|would)\s++(?:you|u)\s++)?(?:please\s++)?'
                  r'(?:play|put|pause|resume|stop|skip|next|previous|shuffle|repeat|loop|restart|replay|'
                  r'mute|unmute|set|turn|switch|enable|disable|increase|raise|reduce|decrease|lower|'
                  r'move|go|jump|undo|like|unlike|dislike|save|add|remove|delete|create|make|'
@@ -549,10 +561,14 @@ class MusicAgent:
         if regional or re.search(r'\b(?:charts?|top|trending|popular)\b', text, re.I) and re.search(r'\b(?:songs?|music|charts?)\b', text, re.I):
             if re.search(r'\b(?:yesterday|last week|20\d{2})\b',text,re.I):
                 return MusicPlan(operation='clarify', query='chart_date')
-            country = re.search(r'\b(?:in|for|from)\s+(.+?)(?:\s+(?:today|this week|daily|weekly|right now)|$)', text, re.I)
-            prefix = re.search(r'^(?:show|find|list|play|put on)\s+(.+?)\s+(?:(?:(?:daily|weekly)\s+)?charts?|top\s+\d+\s+songs?)', text, re.I)
-            country_name = (regional[1] if regional else country[1] if country else prefix[1] if prefix else 'global').strip()
-            country_name = re.sub(r'^the\s+|[’\']s(?=\s|$)|\s+(?:daily\s+|weekly\s+)?charts?$', '', country_name,flags=re.I).strip()
+            country_start = re.search(r'\b(?:in|for|from) ', text, re.I)
+            country = text[country_start.end():] if country_start else ''
+            country_end = re.search(r' (?:today|this week|daily|weekly|right now)', country, re.I)
+            if country_end:
+                country = country[:country_end.start()]
+            prefix = re.search(r'^(?:show|find|list|play|put on) (.+?) (?:(?:(?:daily|weekly) )?charts?|top \d+ songs?)', text, re.I)
+            country_name = (regional[1] if regional else country if country else prefix[1] if prefix else 'global').strip()
+            country_name = re.sub(r'^the |[’\']s(?= |$)| (?:daily |weekly )?charts?$', '', country_name,flags=re.I).strip()
             return MusicPlan(operation='play_chart' if re.match(r'(?:play|put on)\b',text,re.I) else 'show_chart',
                 country=country_name, limit=limit,
                 chart_period='weekly' if re.search(r'\b(?:weekly|this week)\b',text,re.I) else 'daily')
@@ -562,7 +578,7 @@ class MusicAgent:
         if found:
             return MusicPlan(operation='artist_stats',artist=found[1])
         found = re.fullmatch(r'(?:show|find|list|what (?:are|is))\s+(?:the\s+)?(?:(latest|newest|new|previous|old|older)\s+)?(albums?|songs?)\s+(?:by|from|of|for)\s+(.+)',text,re.I)
-        reverse = re.fullmatch(r'(?:show|find|list)\s+(.+?)(?:[’\']s)?\s+(?:(latest|newest|new|previous|old|older)\s+)?(albums?|songs?)',text,re.I)
+        reverse = re.fullmatch(r'(?:show|find|list) (.+?)(?:[’\']s)? (?:(latest|newest|new|previous|old|older) )?(albums?|songs?)',text,re.I)
         if found or reverse:
             artist, category, order = (found[3],found[2],found[1]) if found else (reverse[1],reverse[3],reverse[2])
             return MusicPlan(operation='list_albums' if category.casefold().startswith('album') else 'artist_songs',artist=artist,
@@ -714,7 +730,7 @@ class MusicAgent:
         create = re.fullmatch(r"(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?playlist\s+(?:called|named)\s+(.+?)\s+(?:with|containing)\s+(.+)", text, re.I)
         if create:
             songs = []
-            for item in re.split(r"\s*,\s*|\s+and\s+", create[2]):
+            for item in re.split(r",| and ", create[2]):
                 parts = re.split(r"\s+by\s+", item, maxsplit=1, flags=re.I)
                 songs.append({"title":parts[0].strip(' \"\u201c\u201d'), "artist":parts[1].strip() if len(parts)>1 else ""})
             return MusicPlan(operation="create_playlist", provider=provider, query=create[1].strip(' \"\u201c\u201d'), songs=songs)
@@ -775,7 +791,7 @@ class MusicAgent:
         mix = re.fullmatch(r"(?:play|shuffle)\s+(?:something\s+from\s+)?(?:my\s+|the\s+)?(.+?\s+mix(?:\s+\d+)?)", text, re.I)
         if mix:
             return MusicPlan(operation="play_playlist", provider=provider, query=mix[1], shuffle=shuffle)
-        album = re.fullmatch(r"(?:(?:play|put on)\s+)?(?:the\s+)?(?:latest|newest|most recent)\s+(?:album\s+(?:by|from)\s+(.+)|(.+?)(?:['’]s)?\s+album)", text, re.I)
+        album = re.fullmatch(r"(?:(?:play|put on) )?(?:the )?(?:latest|newest|most recent) (?:album (?:by|from) (.+)|(.+?)(?:['’]s)? album)", text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, artist=(album[1] or album[2]).strip(), latest=True)
         album = re.fullmatch(r"(?:play|put on)\s+(.+?)(?:['’]s)?\s+(?:latest|newest|most recent)\s+album", text, re.I)
@@ -784,7 +800,7 @@ class MusicAgent:
         album = re.fullmatch(r"(?:play|put on)\s+(?:the\s+)?album\s+(.+?)(?:\s+by\s+(.+))?", text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
-        album = re.fullmatch(r'(?:play|put on)\s+(?:the\s+)?(.+?)\s+album(?:\s+(?:by|from)\s+(.+))?', text, re.I)
+        album = re.fullmatch(r'(?:play|put on) (?:the )?(.+?) album(?: (?:by|from) (.+))?', text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
         song = re.fullmatch(r"(?:play|put on)\s+(?:the\s+song\s+)?(.+)", text, re.I)
