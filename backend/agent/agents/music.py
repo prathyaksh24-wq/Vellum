@@ -800,9 +800,23 @@ class MusicAgent:
         album = re.fullmatch(r"(?:play|put on)\s+(?:the\s+)?album\s+(.+?)(?:\s+by\s+(.+))?", text, re.I)
         if album:
             return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
-        album = re.fullmatch(r'^(?:play|put on) (?:the )?(.+?) album(?: (?:by|from) (.+))?$', text, re.I)
-        if album:
-            return MusicPlan(operation='play_album', provider=provider, query=album[1].strip(' "'), artist=album[2] or '')
+        album_start = re.match(r'^(?:play|put on) ', text, re.I)
+        if album_start:
+            body = text[album_start.end():]
+            bodies = (body[4:], body) if body.casefold().startswith('the ') else (body,)
+            for candidate in bodies:
+                # Scan delimiters once. Two free-text regex captures around
+                # "album by" otherwise retry overlapping titles/artists.
+                for delimiter in re.finditer(r' album(?= |$)', candidate, re.I):
+                    if delimiter.start() == 0:
+                        continue
+                    tail = delimiter.end()
+                    artist_marker = re.match(r' (?:by|from) ', candidate[tail:tail + 6], re.I)
+                    artist_start = tail + artist_marker.end() if artist_marker else None
+                    if tail == len(candidate) or artist_start is not None and artist_start < len(candidate):
+                        return MusicPlan(operation='play_album', provider=provider,
+                            query=candidate[:delimiter.start()].strip(' "'),
+                            artist=candidate[artist_start:] if artist_start is not None else '')
         song = re.fullmatch(r"(?:play|put on)\s+(?:the\s+song\s+)?(.+)", text, re.I)
         if song or (explicit_provider and " by " in text.casefold()):
             title = song[1] if song else text

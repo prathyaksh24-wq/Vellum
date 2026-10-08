@@ -40,6 +40,7 @@ cases = [
     (MusicAgent._fast_plan, "set volume to 20" + padding + "!"),
     (MusicAgent._fast_plan, "latest " + "latest a" * 24000 + "!"),
     (MusicAgent._fast_plan, "play " + "play a" * 24000 + "!"),
+    (MusicAgent._fast_plan, "play a album by " + "a album by a" * 24000 + "!"),
     (MusicAgent._compound_clauses, "play Song and " + "also " * 24000 + "!"),
     (MusicAgent._compound_clauses, "play Song" + " and nope" * 24000),
     (_requests_fresh_public_data, "play it" + padding + "!"),
@@ -102,3 +103,18 @@ def test_absolute_volume_keeps_units_and_polite_suffix(suffix):
     plan = MusicAgent._fast_plan('set volume to ' + suffix)
     assert plan.operation == 'set_volume'
     assert plan.volume_percent == 20
+
+
+@pytest.mark.parametrize(('text', 'title', 'artist'), [
+    ('play Abbey Road album', 'Abbey Road', ''),
+    ('put on the Abbey Road album from The Beatles', 'Abbey Road', 'The Beatles'),
+    ('play First album by My album', 'First', 'My album'),
+    ('play Record album notes album by Artist', 'Record album notes', 'Artist'),
+    ('play Straße album by Björk', 'Straße', 'Björk'),
+    ('play the album', 'the', ''),
+])
+def test_title_before_album_preserves_delimiter_precedence(text, title, artist):
+    plan = MusicAgent._fast_plan(text)
+    assert plan.operation == 'play_album'
+    assert plan.query == title
+    assert plan.artist == artist
