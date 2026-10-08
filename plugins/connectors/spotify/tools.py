@@ -192,6 +192,8 @@ def spotify_playback(args: dict, **kwargs) -> str:
         missing = _missing(args, "volume_percent")
         if missing:
             return _invalid(*missing)
+        if hasattr(service, 'set_player_volume'):
+            return _result(lambda: service.set_player_volume(args['volume_percent'], str(args.get('device_id') or '')))
         return _result(
             lambda: service.request(
                 "PUT", "/me/player/volume", params={"volume_percent": args["volume_percent"], **_target_params(service, args)}

@@ -8,7 +8,7 @@ import unicodedata
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
 
-from agent.contracts.music import MusicChoiceRequired, MusicPlan, MusicPlaylistCreateProposal, MusicCollectionChangeProposal
+from agent.contracts.music import MusicChoiceRequired, MusicPlan, MusicPlaybackProposal, MusicPlaylistCreateProposal, MusicCollectionChangeProposal
 from agent.plugins.registry import get_plugin_registry
 from agent.plugins.spotify_runtime import registered_spotify_context, spotify_catalog_query_gate
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermissionError, ToolRegistry
@@ -16,6 +16,12 @@ from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolPermiss
 
 def normalized_name(value: str) -> str:
     return " ".join("".join(c for c in unicodedata.normalize("NFKD", value.casefold()) if not unicodedata.combining(c)).split())
+
+
+def artist_key(value: str) -> str:
+    """Compare catalog names without punctuation; preserve non-Latin letters."""
+    return ' '.join(''.join(' ' if unicodedata.category(c).startswith('P') else c
+                           for c in normalized_name(value)).split())
 
 
 def title_key(value: str) -> str:
@@ -26,10 +32,25 @@ def title_key(value: str) -> str:
     return re.sub(r"^(?:the|a)\s+", "", title)
 
 
+def catalog_title_key(track: dict) -> str:
+    """A credited collaborator is metadata; remix/version labels remain identity."""
+    name = str(track.get('name') or '')
+    credit = re.search(r'\s*[\(\[]with\s+([^\)\]]+)[\)\]]\s*$', name, re.I)
+    if credit:
+        credited = {normalized_name(a.get('name', '')) for a in track.get('artists', [])}
+        labels = [normalized_name(n) for n in re.split(r'\s*(?:,|&|\band\b)\s*', credit[1])]
+        if normalized_name(credit[1]) in credited or labels and all(n and n in credited for n in labels):
+            name = name[:credit.start()]
+    return title_key(name)
+
+
 def playlist_key(value: str) -> str:
     # Preserve emoji symbols and joiners; presentation selectors do not change identity.
+    value = re.sub(r'\btelegu\b', 'telugu', normalized_name(value))
+    value = re.sub(r'\bdalily\b', 'daily', value)
+    value = re.sub(r'\bbolloywood\b', 'bollywood', value)
     return " ".join("".join(" " if unicodedata.category(c).startswith("P") else c
-                            for c in normalized_name(value) if c not in "\ufe0e\ufe0f").split())
+                            for c in value if c not in "\ufe0e\ufe0f").split())
 
 
 def song_key(value: str) -> str:
@@ -48,11 +69,20 @@ class SpotifyCapabilityService:
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
+        reads = {
+            "spotify_playback": {"get_state", "get_currently_playing"},
+            "spotify_devices": {"list"},
+            "spotify_queue": {"get"},
+            "spotify_playlists": {"list", "get", "tracks", "get_tracks"},
+            "spotify_library": {"list", "contains"},
+        }
         for name, record in self.context.tools.items():
             registry.register(CapabilityRecord(name=name, namespace="spotify",
                 access=CapabilityAccess.READ if name in {"spotify_search", "spotify_albums", "spotify_podcasts"} else CapabilityAccess.WRITE,
                 allowed_agents=frozenset({"MusicAgent"}), stream_label=name.replace("_", " "),
-                adapter=lambda payload, registered=record: self._invoke(registered, payload)))
+                adapter=lambda payload, registered=record: self._invoke(registered, payload),
+                read_actions=frozenset(reads[name]) if name in reads else None,
+                input_schema=record.schema.get("function", record.schema).get("parameters")))
         return registry
 
     @staticmethod
@@ -66,25 +96,52 @@ class SpotifyCapabilityService:
             raise ToolPermissionError("Confirm changing your Spotify library or playlist")
         return json.loads(record.handler(payload, privacy_gate=spotify_catalog_query_gate))
 
+    def suggest_song(self, plan: MusicPlan, invoke) -> MusicPlaybackProposal:
+        """Resolve a user-derived style query without returning provider data to AI."""
+        if not plan.query.strip():
+            raise ValueError('What kind of music would you like?')
+        search = plan.query + (' artist:"' + plan.artist.replace('"', '') + '"' if plan.artist else '')
+        found = invoke('spotify_search', {'query':search, 'types':['track'], 'limit':10})
+        songs = []
+        for track in found.get('tracks', {}).get('items', []):
+            if track.get('is_playable') is False or not track.get('name') or not track.get('artists'):
+                continue
+            if not re.fullmatch(r'spotify:track:[A-Za-z0-9]+', str(track.get('uri') or '')):
+                continue
+            artist = ', '.join(a.get('name', '') for a in track['artists'] if a.get('name'))
+            if not artist:
+                continue
+            if plan.artist and normalized_name(plan.artist) not in {normalized_name(a.get('name', '')) for a in track['artists']}:
+                continue
+            if track['uri'] not in {song.uri for song in songs}:
+                songs.append(MusicPlaybackProposal(uri=track['uri'], title=track['name'], artist=artist))
+        if songs:
+            return songs[0].model_copy(update={'continuation_uris':[song.uri for song in songs[1:]]})
+        raise ValueError('I could not find a playable song for that style. Try a different style or artist.')
+
     def resolve_song(self, plan: MusicPlan, invoke) -> dict:
         title = plan.query.replace('"', ' ').replace('\\', ' ').strip()
         query = 'track:"' + title + '"' + (" " + plan.artist if plan.artist else "")
         found = invoke("spotify_search", {"query":query, "types":["track"], "limit":10})
         tracks = [track for track in found.get("tracks", {}).get("items", []) if track.get("uri") and track.get("is_playable") is not False]
-        matching = [t for t in tracks if title_key(t.get("name", "")) == title_key(plan.query)]
+        def matches_title(track):
+            return title_key(plan.query) in {title_key(track.get('name', '')), catalog_title_key(track)}
+        matching = [t for t in tracks if matches_title(t)]
         if not matching:
             # The exact track filter often returns no results for a typo. One
             # bounded broad catalog query supplies candidates; ranking below
             # remains deterministic and never selects an unrelated popular hit.
-            broad = invoke('spotify_search', {'query':title + (' ' + plan.artist if plan.artist else ''), 'types':['track'], 'limit':10})
+            # A misspelled artist can suppress every result. Resolve catalog
+            # spelling against title-only candidates, then enforce artist credit.
+            broad = invoke('spotify_search', {'query':title, 'types':['track'], 'limit':10})
             additional = [t for t in broad.get('tracks', {}).get('items', []) if t and t.get('uri') and t.get('is_playable') is not False]
             tracks = list({t['uri']:t for t in tracks + additional}.values())
-            matching = [t for t in tracks if title_key(t.get('name', '')) == title_key(plan.query)]
+            matching = [t for t in tracks if matches_title(t)]
             if not matching:
-                scores = {song_key(t.get('name','')):SequenceMatcher(None, song_key(plan.query), song_key(t.get('name',''))).ratio() for t in tracks}
+                scores = {song_key(catalog_title_key(t)):SequenceMatcher(None, song_key(plan.query), song_key(catalog_title_key(t))).ratio() for t in tracks}
                 ranked = sorted(scores.items(), key=lambda pair:(-pair[1], pair[0]))
-                if plan.artist and ranked and ranked[0][1] >= .9 and (len(ranked)==1 or ranked[0][1]-ranked[1][1] >= .08):
-                    matching = [t for t in tracks if song_key(t.get('name','')) == ranked[0][0]]
+                if ranked and ranked[0][1] >= .9 and (len(ranked)==1 or ranked[0][1]-ranked[1][1] >= .08):
+                    matching = [t for t in tracks if song_key(catalog_title_key(t)) == ranked[0][0]]
         if not tracks:
             raise MusicChoiceRequired("No playable song matched " + plan.query + " on Spotify.", [])
         # A catalog search can return unrelated popular tracks. Ask about near
@@ -106,20 +163,89 @@ class SpotifyCapabilityService:
             candidates = [t for t in candidates if artist_matches(t)]
             if not candidates:
                 raise MusicChoiceRequired("I could not find that song by " + plan.artist + ". Try the song title and artist together.", [])
+        if not plan.artist:
+            preferred = self._original_recording(candidates, plan)
+            if preferred is not None:
+                return preferred
         artists = {}
         for candidate in candidates:
             label = ", ".join(a.get("name", "") for a in candidate.get("artists", []))
             artists.setdefault(normalized_name(label), {"title":candidate.get("name", ""), "artist":label,
                 "artists":[a.get("name", "") for a in candidate.get("artists", [])]})
-        if not plan.artist and matching and (len(artists) > 1 or plan.version == "original"):
+        if not plan.artist and matching and len(artists) > 1:
             choices = list(artists.values())[:5]
             raise MusicChoiceRequired("Which version did you mean? " + "; ".join(c["title"] + " by " + c["artist"] for c in choices) + ". Reply with the artist.", choices)
         return candidates[0]
 
     @staticmethod
+    def _original_recording(candidates: list[dict], plan: MusicPlan) -> dict | None:
+        """Prefer studio releases using catalog evidence, never generated artist names.
+
+        Spotify has no original-recording flag. Version labels exclude alternate
+        recordings; dated studio releases distinguish an earlier recording from
+        later covers. Insufficient or tied evidence retains the artist choice.
+        An explicitly named artist or version bypasses this default preference.
+        """
+        alternate = r'\b(?:remix(?:es)?|covers?|karaoke|tribute|live|acoustic|instrumental|re[ -]?recorded|sped[ -]?up|slowed|remaster(?:ed)?)\b'
+        if re.search(alternate, plan.query, re.I):
+            return candidates[0]
+        studio = [t for t in candidates if not re.search(alternate,
+            str(t.get('name') or '') + ' ' + str((t.get('album') or {}).get('name') or ''), re.I)]
+        if not studio:
+            raise MusicChoiceRequired('Only alternate recordings matched. Give the original artist, or name the cover or remix you want.', [])
+        groups = {}
+        for track in studio:
+            artist = tuple(normalized_name(a.get('name', '')) for a in track.get('artists', []))
+            if artist and all(artist):
+                groups.setdefault(artist, []).append(track)
+        if len(groups) == 1:
+            return next(iter(groups.values()))[0]
+        dated = []
+        for artist, tracks in groups.items():
+            dates = [str((t.get('album') or {}).get('release_date') or '') for t in tracks
+                     if (t.get('album') or {}).get('album_type') != 'compilation']
+            bounds = []
+            for date in dates:
+                format = {4:'%Y', 7:'%Y-%m', 10:'%Y-%m-%d'}.get(len(date))
+                try:
+                    if not format or not re.fullmatch(r'\d{4}(?:-\d{2}){0,2}', date):
+                        continue
+                    datetime.strptime(date, format)
+                except ValueError:
+                    continue
+                bounds.append((date + ('-01-01' if len(date) == 4 else '-01' if len(date) == 7 else ''),
+                               date + ('-12-31' if len(date) == 4 else '-31' if len(date) == 7 else '')))
+            if not bounds:
+                return None
+            dated.append((min(b[0] for b in bounds), min(b[1] for b in bounds), artist))
+        for _, latest, artist in dated:
+            if len(dated) > 1 and all(latest < earliest for earliest, _, other in dated if other != artist):
+                return groups[artist][0]
+        return None
+
+    @staticmethod
     def _spotify_id(value: str, kind: str) -> str | None:
         match = re.fullmatch(r"(?:spotify:" + kind + r":|https://open\.spotify\.com/" + kind + r"/)([A-Za-z0-9]+)(?:\?\S*)?", value)
         return match[1] if match else None
+
+    @staticmethod
+    def saved_playlists(invoke) -> list[dict]:
+        playlists, seen = [], set()
+        deadline = time.monotonic() + 12
+        for offset in range(0, 100001, 50):
+            if time.monotonic() >= deadline:
+                raise ValueError('Playlist lookup reached its time limit; the full saved list is not verified.')
+            page = invoke('spotify_playlists', {'action':'list', 'limit':50, 'offset':offset})
+            if not isinstance(page.get('items'), list):
+                raise ValueError('Spotify did not expose your saved-playlist list.')
+            new_entries = [p for p in page['items'] if p and p.get('id') and p['id'] not in seen]
+            playlists.extend(new_entries)
+            seen.update(p['id'] for p in new_entries)
+            if not page.get('next'):
+                return playlists
+            if not new_entries:
+                raise ValueError('Spotify repeated a playlist page; the full saved list is not verified.')
+        raise ValueError('Your saved playlists exceeded the lookup limit; the full list is not verified.')
 
     def resolve_playlist(self, plan: MusicPlan, invoke, *, saved_only=False) -> dict:
         direct = self._spotify_id(plan.source_uri or plan.query, "playlist")
@@ -128,35 +254,24 @@ class SpotifyCapabilityService:
             # 404. An explicit, validated link needs no catalog preflight.
             return {"id":direct, "uri":"spotify:playlist:"+direct,
                     "name":plan.query if plan.source_uri else "your linked Spotify playlist", "linked":True}
-        exact, partial, seen = [], [], set()
+        exact, partial = [], []
         wanted = playlist_key(plan.query)
-        for offset in range(0, 100001, 50):
-            page = invoke("spotify_playlists", {"action":"list", "limit":50, "offset":offset})
-            entries = page.get("items") or []
-            new_entries = [p for p in entries if p and p.get("id") not in seen]
-            if not new_entries:
-                break
-            for playlist in new_entries:
-                seen.add(playlist.get("id"))
-                label = playlist_key(playlist.get("name", ""))
-                if label == wanted:
-                    exact.append(playlist)
-                elif wanted and re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", label):
-                    partial.append(playlist)
-            if not page.get("next"):
-                break
+        emoji_request = bool(re.fullmatch(r'(?:the\s+)?emojis?(?:\s+only)?', wanted))
+        for playlist in self.saved_playlists(invoke):
+            label = playlist_key(playlist.get("name", ""))
+            if emoji_request and label and not any(c.isalnum() for c in label):
+                exact.append(playlist)
+            elif not emoji_request and label == wanted:
+                exact.append(playlist)
+            elif not emoji_request and wanted and re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", label):
+                partial.append(playlist)
         matches = exact or partial
         if len(matches) == 1:
             return matches[0]
         if not matches and re.search(r"\bdaily\s+mix\b", plan.query, re.I):
             raise MusicChoiceRequired("Spotify did not expose your " + plan.query + " in the saved-playlist list. Paste that playlist's Spotify link so I can try it directly.", [])
         if not matches:
-            if saved_only:
-                raise MusicChoiceRequired('No saved playlist matched ' + plan.query + '. Give its exact name or Spotify link.', [])
-            public = invoke("spotify_search", {"query":plan.query, "types":["playlist"], "limit":10})
-            matches = [p for p in public.get("playlists", {}).get("items", []) if p and p.get("uri") and
-                       wanted and re.search(r"(?<!\w)" + re.escape(wanted) + r"(?!\w)", playlist_key(p.get("name", "")))]
-            message = "That name is missing from your saved playlists. Spotify search found "
+            raise MusicChoiceRequired('No saved playlist matched ' + plan.query + '. Give its exact name or Spotify link; I have not substituted a public playlist.', [])
         else:
             message = "I found multiple saved playlists: "
         choices = [{"title":p.get("name", ""), "uri":p.get("uri") or "spotify:playlist:" + p["id"]} for p in matches[:5]]
@@ -165,35 +280,55 @@ class SpotifyCapabilityService:
         raise MusicChoiceRequired("Spotify did not return a playlist named " + plan.query + ". Paste its Spotify link to try it directly.", [])
 
     def resolve_album(self, plan: MusicPlan, invoke) -> dict:
+        album_id = self._spotify_id(plan.source_uri, 'album')
+        if album_id:
+            album = invoke('spotify_albums', {'action':'get','album_id':album_id})
+            if album.get('uri') != plan.source_uri or normalized_name(album.get('name','')) != normalized_name(plan.query) or (
+                plan.artist and not any(artist_key(a.get('name','')) == artist_key(plan.artist) for a in album.get('artists',[]))):
+                raise ValueError('Spotify did not verify the selected album identity; nothing was played.')
+            return album
         if not plan.latest:
             found = invoke('spotify_search', {'query':'album:"' + plan.query.replace('"', ' ') + '" ' + plan.artist, 'types':['album'], 'limit':10})
-            albums = [a for a in found.get('albums', {}).get('items', []) if a and a.get('uri') and
-                      normalized_name(a.get('name', '')) == normalized_name(plan.query) and
-                      (not plan.artist or any(normalized_name(x.get('name','')) == normalized_name(plan.artist) for x in a.get('artists', [])))]
+            exact = [a for a in found.get('albums', {}).get('items', []) if a and a.get('uri') and
+                     normalized_name(a.get('name', '')) == normalized_name(plan.query)]
+            if plan.artist and not exact:
+                # An incorrect collaborator can exclude the real album from
+                # Spotify's search. Recover title evidence, then enforce credits.
+                found = invoke('spotify_search', {'query':'album:"' + plan.query.replace('"', ' ') + '"', 'types':['album'], 'limit':10})
+                exact = [a for a in found.get('albums', {}).get('items', []) if a and a.get('uri') and
+                         normalized_name(a.get('name', '')) == normalized_name(plan.query)]
+            def artist_matches(album):
+                requested = artist_key(plan.artist)
+                names = [artist_key(x.get('name','')) for x in album.get('artists', [])]
+                return not requested or requested in names or requested == ' '.join(names)
+            albums = [a for a in exact if artist_matches(a)]
             identities = {(normalized_name(a['name']), tuple(x.get('id') or x.get('name') for x in a.get('artists', []))) for a in albums}
             if len(identities) != 1:
-                raise MusicChoiceRequired('Give the album title and artist so I can select the right album.', [])
+                choices = list({tuple(x.get('id') or x.get('name') for x in a.get('artists', [])):
+                    {'title':a['name'],'artist':', '.join(x.get('name','') for x in a.get('artists', [])),
+                     'artists':[x.get('name','') for x in a.get('artists', [])]} for a in exact}.values())[:5]
+                raise MusicChoiceRequired('Choose the album artist: ' + '; '.join(c['title']+' by '+c['artist'] for c in choices) + '. Reply with the artist.' if choices else 'No exact album matched. Give its title and artist.', choices)
             return sorted(albums, key=lambda a:a['uri'])[0]
         found = invoke('spotify_search', {'query':plan.artist, 'types':['artist'], 'limit':10})
         artists = {a['id']:a for a in found.get('artists', {}).get('items', []) if a and a.get('id') and
-                   normalized_name(a.get('name', '')) == normalized_name(plan.artist)}
+                   artist_key(a.get('name', '')) == artist_key(plan.artist)}
+        if len(artists) > 1:
+            # Identical display names can belong to different Spotify identities.
+            # Corroborate against the public ranking instead of selecting by order.
+            try:
+                ranked = invoke('music_kworb', {'action':'artist','artist':plan.artist})
+                matched = artists.get(ranked.get('artist_id'))
+                if matched and artist_key(ranked.get('name','')) == artist_key(plan.artist):
+                    artists = {matched['id']:matched}
+            except (ValueError, KeyError):
+                pass
         if len(artists) != 1:
-            raise MusicChoiceRequired('Spotify did not identify one artist named ' + plan.artist + '. Give the artist’s exact name.', [])
+            choices = [{'title':plan.query,'artist':a.get('name',''),'artists':[a.get('name','')]}
+                       for a in (artists.values() if artists else found.get('artists',{}).get('items',[])) if a and a.get('id') and a.get('name')][:5]
+            raise MusicChoiceRequired('Spotify did not identify one artist named ' + plan.artist + '. Give the artist’s exact name.' +
+                (' Catalog choices: ' + '; '.join(c['artist'] for c in choices) + '.' if choices else ''), choices)
         artist = next(iter(artists.values()))
-        albums = []
-        deadline = time.monotonic() + 12
-        for offset in range(0, 1000, 10):
-            if time.monotonic() >= deadline:
-                raise ValueError('Album lookup reached its time limit; I have not started an older release.')
-            page = invoke('spotify_albums', {'action':'artist_albums', 'artist_id':artist['id'], 'include_groups':'album', 'limit':10, 'offset':offset})
-            if not isinstance(page.get('items'), list):
-                raise ValueError('Spotify did not expose the artist’s album catalog.')
-            albums.extend(a for a in page['items'] if a and a.get('album_type') == 'album' and a.get('uri') and
-                          any(x.get('id') == artist['id'] for x in a.get('artists', [])))
-            if not page.get('next'):
-                break
-        else:
-            raise ValueError('The artist’s catalog exceeded the lookup limit; I cannot verify the latest album.')
+        albums = self.artist_album_catalog(artist['id'], invoke)
         today = datetime.now(UTC).date().isoformat()
         dated = [a for a in albums if re.fullmatch(r'\d{4}(?:-\d{2}(?:-\d{2})?)?', str(a.get('release_date') or '')) and a['release_date'] <= today]
         if not dated:
@@ -203,6 +338,23 @@ class SpotifyCapabilityService:
         if len({normalized_name(a['name']) for a in candidates}) > 1:
             raise MusicChoiceRequired('Multiple albums share the latest release date: ' + '; '.join(sorted({a['name'] for a in candidates})) + '. Give the album title.', [])
         return sorted(candidates, key=lambda a:a['uri'])[0]
+
+    def artist_album_catalog(self, artist_id: str, invoke) -> list[dict]:
+        albums = []
+        deadline = time.monotonic() + 12
+        for offset in range(0, 1000, 10):
+            if time.monotonic() >= deadline:
+                raise ValueError('Album lookup reached its time limit; I have not started an older release.')
+            page = invoke('spotify_albums', {'action':'artist_albums', 'artist_id':artist_id, 'include_groups':'album', 'limit':10, 'offset':offset})
+            if not isinstance(page.get('items'), list):
+                raise ValueError('Spotify did not expose the artist’s album catalog.')
+            albums.extend(a for a in page['items'] if a and a.get('album_type') == 'album' and a.get('uri') and
+                          any(x.get('id') == artist_id for x in a.get('artists', [])))
+            if not page.get('next'):
+                break
+        else:
+            raise ValueError('The artist’s catalog exceeded the lookup limit; I cannot verify the latest album.')
+        return list({a['uri']:a for a in albums}.values())
 
     def resolve_podcast(self, plan: MusicPlan, invoke) -> tuple[dict, dict]:
         show_id = self._spotify_id(plan.source_uri or plan.query, "show")
@@ -319,6 +471,15 @@ class SpotifyCapabilityService:
         return f"Created private playlist {proposal.name} with {count} {'song' if count == 1 else 'songs'}. https://open.spotify.com/playlist/{playlist_id}"
 
     def execute(self, plan: MusicPlan, invoke) -> str:
+        if plan.operation == 'list_playlists':
+            playlists = self.saved_playlists(invoke)
+            if plan.query == 'emoji':
+                playlists = [p for p in playlists if playlist_key(p.get('name','')) and not any(c.isalnum() for c in playlist_key(p.get('name','')))]
+                choices = [{'title':p.get('name',''), 'uri':p.get('uri') or 'spotify:playlist:'+p['id']} for p in playlists[:5]]
+                if choices:
+                    raise MusicChoiceRequired('Your saved emoji playlists: ' + '; '.join(c['title'] for c in choices) + '. Tell me the exact emoji to play.', choices)
+                return 'Spotify did not return any saved playlists with only symbols in their names.'
+            return f"Spotify returned {len(playlists)} saved playlists" + (': ' + '; '.join(p.get('name') or '(unnamed)' for p in playlists) + '.' if playlists else '.')
         if plan.operation=='check_current':
             return self.check_collection(plan,invoke)
         if plan.operation == 'play_album':
@@ -326,13 +487,14 @@ class SpotifyCapabilityService:
             invoke('spotify_playback', {'action':'play', 'context_uri':album['uri']})
             self._verify_control(invoke, lambda state:state.get('is_playing') and
                 (state.get('context') or {}).get('uri') == album['uri'], 'album playback', state_action='get_currently_playing')
-            return 'Playing ' + album['name'] + (' by ' + plan.artist if plan.artist else '') + '.'
-        if plan.operation == "seek":
+            artists = ', '.join(a.get('name', '') for a in album.get('artists', []) if a.get('name'))
+            return 'Playing ' + album['name'] + (' by ' + artists if artists else '') + '.'
+        if plan.operation in {"seek", "restart"}:
             state = invoke("spotify_playback", {"action":"get_state"})
             if not (state.get("track") or state.get("item")):
                 return "Nothing is playing on Spotify to seek within."
             before = int(state.get("progress_ms") or 0)
-            position = max(0, before + plan.seek_delta_ms)
+            position = 0 if plan.operation == 'restart' else max(0, before + plan.seek_delta_ms)
             duration = int(state.get("duration_ms") or (state.get("item") or {}).get("duration_ms") or 0)
             if duration:
                 position = min(position, max(0, duration - 1000))
@@ -353,25 +515,43 @@ class SpotifyCapabilityService:
                 changed_position = abs(observed-before-elapsed) > min(750,abs(position-before)/2)
                 return same_track and self._same_device(state, after) and reached and changed_position
             self._verify_control(invoke, changed, "seek")
+            if plan.operation == 'restart':
+                return 'Moved to the beginning of the current song.'
             return f"Moved {'forward' if position >= before else 'back'} {abs(position-before)/1000:g} seconds within the current audio."
-        if plan.operation in {"set_volume", "adjust_volume", "set_repeat", "set_shuffle"}:
+        if plan.operation in {"mute", "unmute", "set_volume", "adjust_volume", "set_repeat", "set_shuffle"}:
             state = invoke("spotify_playback", {"action":"get_state"})
             device = state.get('device') or {}
             if not (state.get('track') or state.get('item') or device):
                 return "No active Spotify playback device is available. Open Spotify or enable Vellum's player."
             args = self._device_args(state)
-            if plan.operation in {"set_volume", "adjust_volume"}:
+            if plan.operation in {"mute", "unmute", "set_volume", "adjust_volume"}:
                 before = device.get('volume_percent')
                 if device.get('supports_volume') is False or not isinstance(before, int):
                     return "This Spotify device does not expose volume control. Adjust its volume directly."
-                target = plan.volume_percent if plan.operation == 'set_volume' else max(0, min(100, before + plan.volume_delta_percent))
+                if plan.operation == 'unmute':
+                    if plan.volume_device_id and plan.volume_device_id != device.get('id'):
+                        raise MusicChoiceRequired('The playback device changed. Give a volume percentage for this device.', [])
+                    if before > 0:
+                        return f'This device is already unmuted at {before}%.'
+                    if not plan.volume_percent:
+                        raise MusicChoiceRequired('What volume should I restore? There is no verified pre-mute volume for this device in this chat.', [])
+                target = (0 if plan.operation == 'mute' else plan.volume_percent if plan.operation in {'unmute','set_volume'} else max(0, min(100, before + plan.volume_delta_percent)))
                 if target == before:
                     return f"Volume is already {target}%."
                 invoke('spotify_playback', {'action':'set_volume', 'volume_percent':target, **args})
                 self._verify_control(invoke, lambda after:self._same_device(state,after) and (after.get('device') or {}).get('volume_percent')==target, 'volume change')
+                if plan.operation == 'mute':
+                    plan.volume_percent,plan.volume_device_id=before,device.get('id','')
+                    return f'Muted the current device (was {before}%).'
+                if plan.operation == 'unmute':
+                    return f'Unmuted the current device to {target}%.'
                 return f"Volume changed from {before}% to {target}%."
             if plan.operation == 'set_repeat':
                 target = plan.repeat_state
+                if plan.query == 'undo_repeat' and plan.repeat_device_id != device.get('id'):
+                    raise MusicChoiceRequired('The playback device changed; I have not applied the earlier repeat mode to another device.', [])
+                plan.previous_repeat_state = state.get('repeat') if state.get('repeat') in {'track','context','off'} else None
+                plan.repeat_device_id = device.get('id','')
                 invoke('spotify_playback', {'action':'set_repeat', 'state':target, **args})
                 self._verify_control(invoke, lambda after:self._same_device(state,after) and after.get('repeat')==target, 'repeat change')
                 return {'track':'This song is now on repeat.', 'context':'The current collection is now on repeat.', 'off':'Repeat is off.'}[target]
@@ -390,14 +570,35 @@ class SpotifyCapabilityService:
                 raise MusicChoiceRequired("Give me the episode's full title and show name so I can select it correctly.", [])
             invoke("spotify_playback", {"action":"play", "uris":[episodes[0]["uri"]]})
             return "Playing podcast episode " + episodes[0]["name"] + "."
+        if plan.operation == 'play_artist':
+            found = invoke('spotify_search', {'query':'artist:"' + plan.artist.replace('"',' ') + '"', 'types':['track'], 'limit':10})
+            tracks = [t for t in (found.get('tracks') or {}).get('items', []) if t and
+                      t.get('is_playable') is not False and re.fullmatch(r'spotify:track:[A-Za-z0-9]+', str(t.get('uri') or '')) and
+                      any(artist_key(a.get('name','')) == artist_key(plan.artist) for a in t.get('artists', []))]
+            if not tracks:
+                raise MusicChoiceRequired('Spotify returned no playable songs credited to ' + plan.artist + '. Give the artist’s exact name or a song title.', [])
+            track = self.rng.choice(tracks)
+            invoke('spotify_playback', {'action':'play', 'uris':[track['uri']]})
+            return 'Playing ' + track.get('name', 'a song') + ' by ' + ', '.join(a.get('name','') for a in track.get('artists', [])) + '.'
         if plan.operation == "play_song":
             track = self.resolve_song(plan, invoke)
             invoke("spotify_playback", {"action":"play", "uris":[track["uri"]]})
             artists = ", ".join(a.get("name", "") for a in track.get("artists", []))
             return "Playing " + track.get("name", plan.query) + (" by " + artists if artists else "") + "."
-        if plan.operation == "play_playlist":
-            playlist = self.resolve_playlist(plan, invoke)
+        if plan.operation in {"play_playlist", "play_saved_playlist"}:
+            if plan.operation == 'play_saved_playlist':
+                choices = [p for p in self.saved_playlists(invoke) if
+                    ((p.get('items') or p.get('tracks') or {}).get('total') != 0)]
+                if not choices:
+                    raise MusicChoiceRequired('Spotify returned no nonempty saved playlists to play.', [])
+                playlist = self.rng.choice(choices)
+            else:
+                playlist = self.resolve_playlist(plan, invoke)
             uri = playlist.get("uri") or "spotify:playlist:" + playlist["id"]
+            # Retain the identity selected in this invocation in the existing
+            # per-thread context, without a new alias or listening-history store.
+            plan.source_uri = uri
+            plan.query = playlist.get('name') or plan.query
             body = {"action":"play", "context_uri":uri}
             if plan.position:
                 body["offset"] = {"position":plan.position-1}
@@ -439,6 +640,12 @@ class SpotifyCapabilityService:
             track = state.get("item") or state.get("track") or {}
             names = track.get("artists") or state.get("artists") or []
             artists = ", ".join(a.get("name", "") if isinstance(a, dict) else str(a) for a in names)
+            if plan.query == 'artist':
+                return ('The current song is ' + track.get('name','an unknown track') + ' by ' + artists + '.') if track and artists else 'The live player did not expose an artist for the current audio.'
+            if plan.query == 'album':
+                album = track.get('album') or state.get('album') or ''
+                title = album.get('name','') if isinstance(album,dict) else str(album)
+                return 'The current song is from ' + title + '.' if track and title else 'The live player did not expose an album for the current audio.'
             label = "Currently playing " if state.get("is_playing", True) else "Paused on "
             return label + track.get("name", "an unknown track") + (" by " + artists if artists else "") + "." if track else "Nothing is playing on Spotify."
         action = {"resume":"play"}.get(plan.operation, plan.operation)

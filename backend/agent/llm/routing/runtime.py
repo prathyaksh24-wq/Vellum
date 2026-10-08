@@ -143,6 +143,11 @@ def get_routing_runtime() -> RoutingRuntime:
 
 
 def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None) -> RoutedChatModel:
+    from agent.profiles.execution import get_profile_execution
+    execution = get_profile_execution()
+    if execution is not None:
+        model = execution.model_id or model
+        reasoning_mode = execution.reasoning_mode or reasoning_mode
     routed = get_routing_runtime().chat_model
     updates: dict[str, Any] = {}
     if model is not None:

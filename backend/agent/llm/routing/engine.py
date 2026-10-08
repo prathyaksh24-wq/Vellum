@@ -79,6 +79,12 @@ class RoutingEngine:
         return provider_for_model(model)
 
     def build_plan(self, primary_model: str, primary_provider: str | None = None) -> AttemptPlan:
+        from agent.profiles.execution import get_profile_execution
+        from agent.profiles.policy import get_active_profile_policy
+        from agent.privacy.disclosure import DisclosureBlocked
+        policy = get_active_profile_policy()
+        if get_profile_execution() is not None and policy is not None and policy.source_egress == "local" and (primary_provider or self._primary_provider(primary_model)) != "ollama":
+            raise DisclosureBlocked("This specialist profile permits local inference only")
         primary = FallbackTarget(
             provider=primary_provider or self._primary_provider(primary_model),
             model=primary_model,

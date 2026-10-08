@@ -862,9 +862,13 @@ class AppActionRuntime:
             flags=re.IGNORECASE,
         )
         if remember_explicit:
+            from agent.agents.music import MusicAgent
+            text = self._spoken_value(remember_explicit.group(1))
+            music_preference = MusicAgent.stated_music_preference('remember ' + text)
             return AppActionRequest(
                 action_id=MEMORY_ENTRY_CREATE_ACTION_ID,
-                arguments={"text": self._spoken_value(remember_explicit.group(1)), "kind": "manual", "scope": "global"},
+                arguments={"text": text, "kind": "preference" if music_preference else "manual",
+                           "scope": "agent:MusicAgent" if music_preference else "global"},
             )
 
         memory_update = re.fullmatch(
@@ -1688,7 +1692,7 @@ class AppActionRuntime:
         return items
 
     @staticmethod
-    def _split_mixed_clauses(submitted: str) -> list[str]:
+    def _split_mixed_clauses(submitted: str, *, clause_start: str | None = None) -> list[str]:
         separators = (
             " and also ",
             ", and then ",
@@ -1728,6 +1732,9 @@ class AppActionRuntime:
                 None,
             )
             if separator is None:
+                index += 1
+                continue
+            if clause_start is not None and not re.match(clause_start, submitted[index + len(separator):].lstrip(), re.I):
                 index += 1
                 continue
             clause = submitted[start:index].strip(" ,;")

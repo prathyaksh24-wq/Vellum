@@ -136,7 +136,6 @@ def test_device_registration_requires_owner_and_valid_contract(service):
     (spotify_playback, {"action": "play", "uris": ["spotify:track:example"]}),
     (spotify_playback, {"action": "next"}), (spotify_playback, {"action": "pause"}),
     (spotify_playback, {"action": "seek", "position_ms": 100}),
-    (spotify_playback, {"action": "set_volume", "volume_percent": 50}),
     (spotify_playback, {"action": "set_shuffle", "shuffle": True}),
     (spotify_playback, {"action": "set_repeat", "state": "context"}),
     (spotify_queue, {"action": "add", "uri": "spotify:track:example"}),
@@ -156,6 +155,77 @@ def test_existing_tools_target_vellum_and_do_not_require_external_devices(servic
     result = json.loads(handler(args, service=client))
     assert result["error"]["code"] == "no_active_device"
     assert len(requests) == before  # No random external-device fallback.
+
+
+def test_local_volume_waits_for_exact_sdk_ack_without_web_api_write(service):
+    from concurrent.futures import ThreadPoolExecutor
+    client, requests = service
+    owner=str(uuid4())
+    client.claim_web_player(owner); client.update_web_player(owner,'vellum-device')
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future=pool.submit(spotify_playback,{'action':'set_volume','volume_percent':17},service=client)
+        response={}
+        for _ in range(100):
+            response=client.update_web_player(owner,'vellum-device')
+            if response.get('volume_request'):break
+            time.sleep(.005)
+        command=response['volume_request']
+        assert command['percent']==17 and not future.done()
+        client.update_web_player(owner,'vellum-device',volume_ack='wrong',volume_percent=17)
+        assert not future.done()
+        client.update_web_player(owner,'vellum-device',volume_ack=command['id'],volume_percent=17)
+        assert json.loads(future.result(timeout=1))['ok']
+    assert not requests
+    assert json.loads(spotify_playback({'action':'set_volume','volume_percent':30,'device_id':'speaker'},service=client))['ok']
+    assert requests[-1].url.params['device_id']=='speaker'
+
+
+def test_fresh_sdk_state_wins_then_expires_and_cannot_cross_owner(service,monkeypatch):
+    client, requests=service
+    now=[1.0]; monkeypatch.setattr(time,'monotonic',lambda:now[0])
+    owner=str(uuid4()); client.claim_web_player(owner)
+    observation={'track':{'uri':'spotify:track:hindi','name':'Hindi song'},'artists':['Artist'],'is_playing':True}
+    client.update_web_player(owner,'vellum-device',observation=observation,volume_percent=23)
+    assert client.get_player()['track']['name']=='Hindi song'
+    assert client.get_player()['device']['volume_percent']==23
+    assert not requests
+    with pytest.raises(SpotifyNoActiveDevice):
+        client.update_web_player('other','vellum-device',observation={'track':{'name':'Wrong'}})
+    now[0]+=6
+    assert client.local_player_state() is None
+    assert client.get_player()['track'] is None
+    assert len(requests)==1
+    client.update_web_player(owner,'different-device')
+    assert client.local_player_state() is None
+
+
+def test_fresh_sdk_volume_remains_controllable_without_a_track_snapshot(service,monkeypatch):
+    client,_=service
+    owner=str(uuid4()); client.claim_web_player(owner)
+    client.update_web_player(owner,'vellum-device',volume_percent=50)
+    # Spotify can omit the active device when paused; local audio volume still exists.
+    monkeypatch.setattr(client,'request',lambda *args,**kwargs:{})
+    state=client.get_player()
+    assert state['track'] is None
+    assert state['device']['id']=='vellum-device'
+    assert state['device']['volume_percent']==50
+    monkeypatch.setattr(client,'request',lambda *args,**kwargs:{'device':{'id':'speaker','volume_percent':17}})
+    assert client.get_player()['device']['volume_percent']==17
+    client._web_player['volume_observed_at']-=6
+    monkeypatch.setattr(client,'request',lambda *args,**kwargs:{})
+    assert client.get_player()['device'] is None
+
+
+def test_observation_uses_existing_trusted_device_contract(service):
+    client,_=service; owner=str(uuid4()); client.claim_web_player(owner)
+    body={'owner_id':owner,'device_id':'vellum-device','observation':{
+        'track':{'id':'one','uri':'spotify:track:one','name':'Song'},'artists':['Artist'],'is_playing':True},'volume_percent':23}
+    with TestClient(api.app,base_url='http://127.0.0.1:8000',client=('127.0.0.1',50000)) as web:
+        assert web.post('/api/plugins/spotify/playback/device',json=body,headers={}).status_code==403
+        assert web.post('/api/plugins/spotify/playback/device',json=body,headers=HEADERS).status_code==200
+        assert client.get_player()['device']['volume_percent']==23
+        bad={**body,'observation':{**body['observation'],'secret':'never accepted'}}
+        assert web.post('/api/plugins/spotify/playback/device',json=bad,headers=HEADERS).status_code==422
 
 
 def test_expired_window_cannot_steal_device_or_release_new_owner(service, monkeypatch):
@@ -313,6 +383,26 @@ def test_skip_turn_is_checkpointed_with_its_own_acknowledgement(service, monkeyp
     assert response.status_code == 200
     assert checkpoints == [("skip", "Skipped to the next track.", "music-skip-qa")]
     assert len(requests) == 1
+
+
+def test_app_action_skip_retains_navigation_for_short_music_followup(service,monkeypatch,tmp_path):
+    from test_music_compound_actions import compound_dispatcher
+    dispatcher,calls,_,state=compound_dispatcher(tmp_path)
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    client,requests=service
+    owner=str(uuid4());client.claim_web_player(owner);client.update_web_player(owner,'vellum-device')
+    with TestClient(api.app,base_url='http://127.0.0.1:8000',client=('127.0.0.1',50000)) as web:
+        result=web.post('/api/chat/stream',json={'message':'skip','thread_id':'compound','store':False})
+        assert result.status_code==200
+        context=state.get_specialist_context('compound','MusicAgent')
+        assert context.get('last_plan',{}).get('operation')=='next'
+        result=web.post('/api/chat/stream',json={'message':'go back','thread_id':'compound','store':False})
+        assert 'Previous track requested' in result.text
+        assert any(name=='spotify_playback' and args['action']=='previous' for name,args in calls)
+        assert not any(args.get('action')=='seek' for _,args in calls)
+        result=web.post('/api/chat/stream',json={'message':'go back to the previous song','thread_id':'compound','store':False})
+        assert 'Previous track requested' in result.text
+        assert requests[-1].url.path.endswith('/player/previous')
 
 
 def test_playback_health_is_bounded_and_cannot_accept_arbitrary_diagnostic_content(service):

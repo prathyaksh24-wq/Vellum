@@ -161,9 +161,9 @@ Hermes-compatible skills, private memory scope, shared-memory policy, cache poli
 delegation policy, model or deterministic executor, and response schema.
 
 `AgentCatalog` is the single owner of profiles and runtime executors. It loads
-strict version-2 profiles from `data/agent_profiles/`, applies safe built-in
+strict version-2-or-newer profiles from `data/agent_profiles/`, applies safe built-in
 fallbacks, contains instruction paths, exposes redacted diagnostics, and binds
-the current deterministic X, YouTube, Memory, and Sports executors to their
+the current Browser, Music, X, YouTube, Memory, Sports, Books, Discord and Calendar executors to their
 profiles. There is no parallel pupil or delegation registry.
 
 The process-wide accessor in `agent/master/live_runtime.py` supplies the same
@@ -181,8 +181,26 @@ inherited.
 
 Deterministic agents invoke external capabilities through the shared
 `ToolRegistry`, where profile allowlists and confirmation narrowing are enforced.
-LLM profiles with nonempty tool allowlists are rejected until the allowlisted LLM
-tool loop is implemented; policy metadata is not presented as executable support.
+LLM and hybrid profiles use a bounded allowlisted loop for permitted reads,
+capability schema discovery, own skills and authorized memory packets. Mixed
+capabilities expose only declared read operations. Writes execute the unchanged
+task through the existing domain handler and return its exact receipt/preview;
+model text cannot supply confirmation or report unobserved success. Hybrid
+profiles retain fast handlers for recognized requests and confirmations.
+
+All inner planning/synthesis calls inherit a task-local profile execution context:
+contained instructions, selected/pinned model and reasoning, scoped memory,
+Hermes skills and the specialist's own thread context. They do not inherit the
+main conversation checkpoint. Local profiles reject external inference; the
+existing disclosure broker continues to govern profiles explicitly allowing it.
+
+Profiles declare `memory.share_with`, `receive_from` and `share_scopes`. Agents
+request relevant packets with `specialist_memory`; the main agent can request
+them through `delegate_to_agent(memory_from=[...])`. Memory Orchestrator checks
+both policies and retrieves attributed, bounded evidence with purpose, expiry,
+user/thread identity and evidence-only authority. Calendar and Discord share
+only approved shared-scope memories by default. Packet delivery is ephemeral;
+it neither grants action permission nor changes durable shared knowledge.
 
 Private agent memory remains in `agent:<AgentId>`. Agents may read validated
 shared Knowledge Core context when their profile allows it. Shared writes are
@@ -201,6 +219,16 @@ matching. Both entry points use the same catalog, delegation runtime, and
 pending-action store.
 
 Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
+
+MusicAgent's profile includes `music_kworb` in the shared capability registry for
+public listener statistics, artist/song rankings and dated daily/weekly country
+charts. Recognized reads use the existing typed delegation runtime and preserve
+source links, retrieval timestamps and chart dates. Kworb reads have bounded
+downloads and a six-hour, 16-page process cache; they receive no personal music
+history or credentials. Album discovery verifies release dates through the
+existing Spotify adapter. Explicit chart playback uses that adapter's existing
+playback tool; a chart read cannot authorize playback. Monthly-listener read
+failures retain the main agent's canonical public-web fallback.
 
 ### Specialist Response Cache
 

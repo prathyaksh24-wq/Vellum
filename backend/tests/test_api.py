@@ -325,6 +325,281 @@ def test_chat_endpoint_invokes_agent(monkeypatch, tmp_path):
     assert fake_agent.calls[0][1]["configurable"]["thread_id"] == "frontend"
 
 
+def test_artist_monthly_listeners_reach_main_agent_with_required_web_context(monkeypatch,tmp_path):
+    # Exercise the public-web fallback without a live Kworb read in this test.
+    monkeypatch.setattr(api._live_dispatcher,'maybe_handle',lambda *args,**kwargs:None)
+    from agent.tools import web
+    searches=[]
+    def search(args):
+        searches.append(args)
+        return json.dumps({'success':True,'data':{'web':[{'title':'David Guetta - artist statistics',
+            'url':'https://example.org/david-guetta','description':'David Guetta has 83.3 million monthly listeners.'}]}})
+    monkeypatch.setattr(web,'web_search',SimpleNamespace(invoke=search))
+    fake_agent=FakeAgent()
+    monkeypatch.setattr(api,'agent',fake_agent)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    def fake_create_task(coro):
+        coro.close()
+        return object()
+    monkeypatch.setattr(api.asyncio,'create_task',fake_create_task)
+    with TestClient(api.app) as client:
+        response=client.post('/api/chat',json={'message':'how many monthly listener does davide guttea have?','thread_id':'artist-web-test','store':False})
+    assert response.status_code==200
+    content=fake_agent.calls[0][0]['messages'][0]['content']
+    assert 'Use web_search' in content and 'monthly listener counts require current public web evidence' in content
+    assert 'davide guttea' in content
+    assert searches==[{'query':'davide guttea Spotify monthly listeners','limit':5}]
+    assert 'David Guetta has 83.3 million' in content and 'untrusted evidence' in content
+    assert response.json()['sources'][0]['url']=='https://example.org/david-guetta'
+    assert response.json()['sources'][0]['fetched_at']
+    assert 'web_search' in response.json()['tools']
+
+
+def test_streamed_artist_monthly_listeners_preserve_search_evidence_and_sources(monkeypatch,tmp_path):
+    monkeypatch.setattr(api._live_dispatcher,'maybe_handle',lambda *args,**kwargs:None)
+    from agent.tools import web
+    searches=[]
+    monkeypatch.setattr(web,'web_search',SimpleNamespace(invoke=lambda args: searches.append(args) or json.dumps({
+        'success':True,'data':{'web':[{'title':'David Guetta','url':'https://example.org/artist',
+            'description':'83.3 million monthly listeners'}]}})))
+    class StreamAgent(FakeAgent):
+        async def astream_events(self,payload,**kwargs):
+            self.calls.append((payload,kwargs,None))
+            yield {'event':'on_chat_model_stream','data':{'chunk':SimpleNamespace(content='About 83.3 million.')}}
+    fake=StreamAgent()
+    monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):
+        pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        response=client.post('/api/chat/stream',json={'message':'how many monthly listeners does David Guetta have?',
+            'thread_id':'artist-web-stream-test','store':False})
+    assert response.status_code==200
+    assert searches==[{'query':'David Guetta Spotify monthly listeners','limit':5}]
+    assert '83.3 million monthly listeners' in fake.calls[0][0]['messages'][0]['content']
+    final=next(data for event,data in _parse_sse(response.text) if event=='final')
+    assert final['sources'][0]['url']=='https://example.org/artist'
+    assert 'web_search' in final['tools']
+
+
+def test_artist_monthly_listener_prefetch_does_not_guess_pronouns_or_include_private_context(monkeypatch):
+    from agent.agents.music import MusicAgent
+    assert MusicAgent.public_research_query('how many monthly listeners does he have?') is None
+    assert MusicAgent.public_research_query('how many monthly listeners does this artist have?') is None
+    assert MusicAgent.public_research_query('how many monthly listeners does David Guetta have?\nMy secret note')=='David Guetta Spotify monthly listeners'
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+def test_kworb_monthly_listener_success_never_calls_public_web_search(monkeypatch,tmp_path,endpoint):
+    from agent.agents.music import MusicAgent
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    from agent.tools.capabilities.kworb_service import KworbCapabilityService
+    from agent.tools import web
+    html='<table><tr><td>14</td><td><a href="artist/guetta_songs.html">David Guetta</a></td><td>83,220,280</td><td>-107</td><td>4</td><td>89,315,609</td></tr></table>'
+    reader=KworbCapabilityService(fetch=lambda url:html)
+    specialist=MusicAgent(tool_registry=reader.build_registry(),integrations={})
+    dispatcher=LiveAgentDispatcher(vault_root=tmp_path,
+        agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),
+        state_store=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db'))
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    monkeypatch.setattr(web,'web_search',SimpleNamespace(invoke=lambda *_:pytest.fail('Kworb success must not spend a search request')))
+    fake=FakeAgent(); monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        reply=client.post(endpoint,json={'message':'how many monthly listener does davide guttea have?','thread_id':'kworb-first-test','store':False})
+    assert reply.status_code==200
+    result=reply.json() if endpoint=='/api/chat' else next(data for event,data in _parse_sse(reply.text) if event=='final')
+    assert '83,220,280' in result['answer']
+    assert result['sources'][0]['url']=='https://kworb.net/spotify/listeners.html'
+    assert result['tools']==['music_agent','music_kworb']
+    assert not fake.calls
+
+
+def test_music_statistics_requests_are_fresh_reads_despite_attached_conversation_context():
+    for query in ['show Japan weekly charts','show songs by David Guetta','show previous albums by Drake','play it','what is the artist name?','what album is this from?']:
+        assert api._requests_fresh_public_data(query)
+    assert not api._requests_fresh_public_data('what music did we discuss yesterday?')
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+def test_chart_followup_and_current_metadata_ignore_old_attached_artist_claims(monkeypatch,tmp_path,endpoint):
+    from dataclasses import replace
+    from test_kworb_music import chart_agent,service
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    specialist,registry,calls=chart_agent(planner=lambda *_:pytest.fail('No generated artist or chart title'))
+    reader,_=service();registry.register(reader.build_registry().get('music_kworb'))
+    original=registry.get('spotify_playback')
+    def playback(args):
+        if args['action']=='get_state':
+            return {'ok':True,'data':{'is_playing':True,'track':{'uri':'spotify:track:first','name':'Live song'},'artists':['David Guetta'],'album':'Live album'}}
+        return original.adapter(args)
+    registry._records['spotify_playback']=replace(original,adapter=playback)
+    state=MasterThreadStateStore(sessions_db=tmp_path/'sessions.db')
+    state.set_active_agent('music-live-metadata','YoutubeAgent',selected=True)
+    monkeypatch.setattr(api,'_live_dispatcher',LiveAgentDispatcher(vault_root=tmp_path,
+        agent_catalog=AgentCatalog(profile_dir=tmp_path/'profiles',executors={'MusicAgent':specialist}),state_store=state))
+    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An old assistant claimed the artist was Travis Scott.','attachments':[]}))
+    fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        for query,expected in [('top 10 songs from france','2026-10-04'),('play it','Started playback'),('what is the artist name?','David Guetta'),('what album is this from?','Live album')]:
+            reply=client.post(endpoint,json={'message':query,'thread_id':'music-live-metadata','store':False})
+            assert reply.status_code==200
+            result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+            assert expected in result['answer'] and 'Travis Scott' not in result['answer']
+    assert not fake.calls
+    assert len([a for n,a in calls if n=='spotify_playback' and a['action']=='play'])==1
+    assert state.get('music-live-metadata').active_agent=='YoutubeAgent'
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+@pytest.mark.parametrize('message',['play it and like this song that is playing','like this song and play the spain sogns'])
+def test_compound_music_requests_bypass_stale_chat_context_and_return_each_receipt(monkeypatch,tmp_path,endpoint,message):
+    from test_music_compound_actions import compound_dispatcher
+    dispatcher,calls,saved,state=compound_dispatcher(tmp_path)
+    dispatcher.maybe_handle('top 20 songs in spain','compound')
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An older chat discussed a song by Travis Scott.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
+    fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        reply=client.post(endpoint,json={'message':message,'action_message':message,'thread_id':'compound','store':False})
+    assert reply.status_code==200
+    result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+    assert 'Added Before Song' in result['answer'] and 'spain' in result['answer'].casefold()
+    assert saved=={'spotify:track:before'} and not fake.calls
+    assert len([a for n,a in calls if a.get('action')=='play'])==1
+    assert state.get('compound').active_agent=='YoutubeAgent'
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+def test_compound_player_controls_keep_all_raw_typed_actions(monkeypatch,tmp_path,endpoint):
+    from test_music_compound_actions import compound_dispatcher
+    dispatcher,calls,_,_=compound_dispatcher(tmp_path)
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    message='set volume to 25% and turn on shuffle and mute then unmute'
+    with TestClient(api.app) as client:
+        reply=client.post(endpoint,json={'message':message,'action_message':message,'thread_id':'compound','store':False})
+    assert reply.status_code==200
+    result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+    assert 'Shuffle is on' in result['answer'] and 'Unmuted the current device to 25%' in result['answer']
+    assert [a['volume_percent'] for n,a in calls if a.get('action')=='set_volume']==[25,0,25]
+    assert not fake.calls
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+def test_compound_artist_clarification_resumes_controls_through_chat_api(monkeypatch,tmp_path,endpoint):
+    from test_music_compound_actions import compound_dispatcher
+    tracks=[{'name':'Blinding Lights','uri':'spotify:track:'+key,'artists':[{'name':artist}]}
+            for key,artist in [('original','The Weeknd'),('cover','Loi')]]
+    dispatcher,calls,_,_=compound_dispatcher(tmp_path,tracks=tracks)
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'An older chat mentioned Loi.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
+    fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        for message,expected in [('play Blinding Lights then set volume to 25% and turn on shuffle','Which version'),('by weekend','Shuffle is on')]:
+            reply=client.post(endpoint,json={'message':message,'action_message':message,'thread_id':'compound','store':False})
+            assert reply.status_code==200
+            result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+            assert expected in result['answer']
+    assert [args['action'] for name,args in calls if name=='spotify_playback' and args['action']!='get_state']==['play','set_volume','set_shuffle']
+    assert not fake.calls
+
+
+@pytest.mark.parametrize('endpoint',['/api/chat','/api/chat/stream'])
+def test_latest_music_chat_playlist_count_and_correction_bypass_attached_old_context(monkeypatch,tmp_path,endpoint):
+    from test_music_compound_actions import compound_dispatcher
+    tracks=[{'name':'One Right Now','uri':'spotify:track:'+key,'artists':[{'name':artist}]}
+            for key,artist in [('original','Post Malone'),('other','David Shannon')]]
+    dispatcher,calls,_,state=compound_dispatcher(tmp_path,tracks=tracks)
+    monkeypatch.setattr(api,'_live_dispatcher',dispatcher)
+    monkeypatch.setattr(api,'_conversation_context_store',SimpleNamespace(resolve=lambda *_args,**_kwargs:{'context':'Old assistant claimed you have zero saved playlists.','attachments':[]},clear=lambda *_:None,copy=lambda *_:None))
+    fake=FakeAgent();monkeypatch.setattr(api,'agent',fake)
+    monkeypatch.setattr(api,'computer_use_runtime',ComputerUseRuntime(state_path=tmp_path/'mode.json',event_log_path=tmp_path/'events.jsonl'))
+    async def no_learn(*args,**kwargs):pass
+    monkeypatch.setattr(api,'_background_learn',no_learn)
+    with TestClient(api.app) as client:
+        for message,expected in [('retrieve my playlists','1 saved playlist'),
+                                 ('how many playlist i have saved?','1 saved playlist'),
+                                 ('how many playlist is have?','1 saved playlist'),
+                                 ('Play One Right Now by David Shannon, then set volume to 25% and turn on shuffle.','David Shannon'),
+                                 ('no from psot malone','Post Malone')]:
+            reply=client.post(endpoint,json={'message':message,'action_message':message,'thread_id':'compound','store':False})
+            assert reply.status_code==200
+            result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+            assert expected in result['answer'],result
+        context=state.get_specialist_context('compound','MusicAgent');context['at']-=1801
+        state.set_specialist_context('compound','MusicAgent',context)
+        reply=client.post(endpoint,json={'message':'no from Post Malone','thread_id':'compound','store':False})
+        result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+        assert 'Which song or album' in result['answer']
+        import time
+        from agent.contracts.music import MusicPlan
+        old=MusicPlan(operation='play_song',query='her loss album').model_dump()
+        state.set_specialist_context('compound','MusicAgent',{'last_plan':old,'last_song_plan':old,'at':time.time()})
+        registry=dispatcher.agent_catalog.resolve('MusicAgent').executor.tool_registry
+        original=registry.invoke
+        def album_catalog(name,args,**kwargs):
+            if name=='spotify_search' and args.get('types')==['album']:
+                return {'ok':True,'data':{'albums':{'items':[{'name':'Her Loss','uri':'spotify:album:drake','artists':[{'name':'Drake'},{'name':'21 Savage'}]}]}}}
+            return original(name,args,**kwargs)
+        registry.invoke=album_catalog
+        reply=client.post(endpoint,json={'message':'no the album by drake and metro boomin','thread_id':'compound','store':False})
+        result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+        assert 'Drake, 21 Savage' in result['answer']
+        def latest_catalog(name,args,**kwargs):
+            if name=='spotify_search' and args.get('types')==['artist']:
+                return {'ok':True,'data':{'artists':{'items':[{'id':'cole','name':'J. Cole'}]}}}
+            if name=='spotify_albums':
+                return {'ok':True,'data':{'items':[{'name':'Latest verified album','uri':'spotify:album:cole','album_type':'album','release_date':'2026-01-01','artists':[{'id':'cole','name':'J. Cole'}]}],'next':None}}
+            return original(name,args,**kwargs)
+        registry.invoke=latest_catalog
+        for message in ['can u play j cole latest album','latest album from j cole']:
+            reply=client.post(endpoint,json={'message':message,'thread_id':'compound','store':False})
+            result=reply.json() if endpoint=='/api/chat' else next(d for e,d in _parse_sse(reply.text) if e=='final')
+            assert 'Playing Latest verified album by J. Cole' in result['answer'],result
+    assert not fake.calls
+    assert len([args for name,args in calls if args.get('action')=='play'])==4
+
+
+def test_artist_metric_reads_official_page_instead_of_dating_a_stale_search_snippet(monkeypatch):
+    from agent.tools import web
+    from agent.tools import web_extract_pages as extract_module
+    url='https://open.spotify.com/artist/artist123'
+    monkeypatch.setattr(api,'_now_iso',lambda:'2026-10-06T05:43:00+00:00')
+    monkeypatch.setattr(web,'web_search',SimpleNamespace(invoke=lambda args:json.dumps({'success':True,'data':{'web':[
+        {'title':'David Guetta | Spotify','url':url,'description':'86.4 million monthly listeners'},
+        {'title':'David Guetta - Spotify Top Songs','url':'https://kworb.net/spotify/artist/artist456_songs.html','description':'Songs'}]}})))
+    extracts=[]
+    def extract(args):
+        extracts.append(args)
+        return json.dumps({'results':[{'url':url,'title':'David Guetta','content':'# David Guetta\n\n83.2M monthly listeners83,220,280 monthly listeners\n\n## Popular'}]})
+    monkeypatch.setattr(extract_module,'web_extract_pages',SimpleNamespace(invoke=extract))
+    result=asyncio.run(api._prefetch_artist_metric_evidence('how many monthly listeners does David Guetta have?'))
+    assert extracts[0]['urls']==[url,'https://open.spotify.com/artist/artist456']
+    context,sources,tools=result
+    assert '83,220,280' in context and '86.4 million' not in context
+    assert 'Lookup date: October 06, 2026' in context
+    assert 'web_extract_pages' in tools
+    assert sources[0]['snippet']=='# David Guetta\n\n83.2M monthly listeners83,220,280 monthly listeners\n\n## Popular'
+
+
 def test_chat_endpoint_forwards_reasoning_mode_to_agent(monkeypatch, tmp_path):
     from agent.llm.reasoning import ReasoningMode
 
@@ -1108,7 +1383,7 @@ def test_agent_profiles_endpoint_exposes_safe_public_configuration(monkeypatch, 
     assert response.status_code == 200
     body = response.json()
     sports = next(profile for profile in body["profiles"] if profile["id"] == "SportsAgent")
-    assert sports["executor"] == "deterministic"
+    assert sports["executor"] == "hybrid"
     assert sports["memory"]["write_scope"] == "agent:SportsAgent"
     assert "instructions" not in sports
     assert "diagnostics" in body

@@ -42,8 +42,60 @@ General capabilities remain available through progressive `tool_search` and
 
 Deterministic external capabilities pass through the shared `ToolRegistry`, where
 profile allowlists can only narrow capability permissions and require additional
-confirmation. LLM profiles with nonempty tool allowlists are rejected until an
-allowlisted LLM tool loop is implemented.
+confirmation. LLM/hybrid profiles now use the allowlisted loop described below;
+exact mutation execution remains in the canonical domain handler.
+
+## Specialist profile execution completion (2026-10-05)
+
+Built-in profiles now use `hybrid` execution. Exact domain handlers remain the
+first path for recognized requests, confirmations and retained domain context.
+Other requests use a bounded profile reasoning loop. Version-2 overrides and
+explicit deterministic/LLM profiles remain accepted; built-in versions advance
+to invalidate prior response caches.
+
+Every run enters one task-local `ProfileExecution` alongside the existing
+permission policy. It pins the model and reasoning choice, loads contained
+profile instructions and allowed Hermes skills, and builds scoped memory without
+unrestricted chat history or synchronous Honcho portrait retrieval. Inner
+planning/synthesis calls use the same profile context and thread identity.
+Context variables isolate concurrent runs and are reset on completion or failure.
+
+The profile reasoning loop supports native tool calls or validated structured
+steps for models without native tool support. Only permitted read capabilities,
+their input schemas, profile skills and memory packet requests are exposed.
+Mixed adapters declare their read operations. Model arguments cannot supply
+confirmation. A `specialist_action` call invokes the unchanged task through the
+existing domain handler and returns its exact receipt/preview immediately;
+the model cannot rewrite the action, acknowledge unobserved success or replay it.
+Iteration, error, result-size and model-request deadlines are bounded. A local
+profile cannot select an external inference destination; local routes already
+exclude external fallback targets.
+
+Books keeps its canonical evidence graph for grounded answers. Generic profile
+discussions return a partial envelope explicitly labeled as having no verified
+Book evidence; they cannot invent validated Book anchors. Spotify provider data
+remains in MusicAgent's deterministic integration path. Its raw reads are not
+exposed to the profile model loop, and automatic model memory includes only
+preferences from the private music scope.
+
+`DelegationRequest.memory_from` and `specialist_memory` request relevant packets
+by source profile ID. Memory Orchestrator resolves the evidence, checks both
+profiles' peer permissions and export scopes, and returns a typed packet with
+purpose, source/recipient, user/thread, evidence references, confidence,
+timestamps, expiry and an evidence-only authority marker. It reads saved memories
+and relevant recent source-backed results from the existing local thread owner;
+it creates no new store. Secret-bearing evidence, expired or unrelated results
+and another user's results are excluded. Calendar/Discord export only approved
+shared-scope memories by default; their private event/message context remains
+local to their profile. Packets cannot confirm actions, write another profile's
+memory or promote shared facts. Durable writes retain their existing proposal
+and review owners.
+
+`model: null` inherits and pins the current selected model for each run. Agents
+may therefore share one Ollama model while using separate contexts, skills and
+permissions. Profiles are application policies, not separate OS processes or
+duplicated model weights. Changing a YAML override affects subsequent runs;
+its tool authority still intersects the capability registry.
 
 Agent-private memory is scoped to `agent:<AgentId>`. Profiles may read validated
 shared Knowledge Core context. Shared writes are always proposals: Knowledge Core

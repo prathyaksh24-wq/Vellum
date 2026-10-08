@@ -4,18 +4,45 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+SearchEngine = Literal["google", "brave", "duckduckgo", "startpage", "searxng"]
+
+
+class BrowserShortcut(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=40)
+    url: str = Field(min_length=1, max_length=4096)
+
+
+class BrowserPreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    search_engine: SearchEngine = "google"
+    searxng_url: str = Field(default="", max_length=4096)
+    shortcuts: list[BrowserShortcut] = Field(default_factory=lambda: [
+        BrowserShortcut(id="github", name="GitHub", url="https://github.com/"),
+        BrowserShortcut(id="wikipedia", name="Wikipedia", url="https://www.wikipedia.org/"),
+        BrowserShortcut(id="youtube", name="YouTube", url="https://www.youtube.com/"),
+    ], max_length=12)
+
+
 class BrowserControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "click", "type", "press", "scroll", "show_download"]
+    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "click", "type", "press", "scroll", "show_download", "resize", "preferences"]
+    search_engine: SearchEngine | None = None
+    searxng_url: str | None = Field(default=None, max_length=4096)
+    shortcuts: list[BrowserShortcut] | None = Field(default=None, max_length=12)
     url: str = Field(default="", max_length=4096)
     tab_id: str = Field(default="", max_length=80)
     frame_id: str = Field(default="", max_length=160)
+    take_control: bool = False
     download_id: str = Field(default="", max_length=80)
     x: float = Field(default=0, ge=0, le=1920)
     y: float = Field(default=0, ge=0, le=1080)
     text: str = Field(default="", max_length=10000)
     key: str = Field(default="", max_length=80)
     delta: int = Field(default=0, ge=-2000, le=2000)
+    width: int = Field(default=1280, ge=240, le=1920)
+    height: int = Field(default=800, ge=160, le=1080)
 
 
 class BrowserTab(BaseModel):
@@ -24,6 +51,8 @@ class BrowserTab(BaseModel):
     title: str
     url: str
     active: bool
+    loading: bool = False
+    error: str = ""
 
 
 class BrowserDownload(BaseModel):
@@ -48,6 +77,7 @@ class BrowserStatus(BaseModel):
     snapshot_id: str = ""
     viewport_width: int = 1280
     viewport_height: int = 800
+    preferences: BrowserPreferences = Field(default_factory=BrowserPreferences)
 
 
 class BrowserFrame(BaseModel):

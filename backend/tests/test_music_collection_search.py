@@ -84,6 +84,50 @@ def test_latest_artist_album_is_typed_not_song(query):
     assert plan.operation == 'play_album' and plan.latest is True and plan.artist == 'drake'
 
 
+@pytest.mark.parametrize('query,artist', [('latest album from j cole','j cole'), ('latest album from lil baby','lil baby'), ('can u play j cole latest album','j cole'), ('latest album from The Game','The Game')])
+def test_latest_chat_album_shorthand_never_waits_for_a_model(query,artist):
+    agent=fixture_agent(planner=lambda *_:pytest.fail('Album wording must not wait for the model'))[0]
+    assert agent.can_handle(query)
+    plan=agent._fast_plan(query)
+    assert plan.operation=='play_album' and plan.latest and plan.artist==artist
+
+
+def test_playlist_count_latest_chat_typo_reads_library_without_model():
+    agent,_,calls=fixture_agent(planner=lambda *_:pytest.fail('A playlist count must read Spotify'))
+    assert agent.can_handle('how many playlist is have?')
+    result=agent.answer('how many playlist is have?')
+    assert result.status=='answered' and '1 saved playlist' in result.summary
+    assert any(name=='spotify_playlists' for name,_ in calls)
+
+
+@pytest.mark.parametrize('requested,catalog', [('j cole','J. Cole'), ('r e m','R.E.M.'), ('宇多田ヒカル','宇多田ヒカル')])
+def test_latest_album_matches_artist_punctuation_and_non_latin_names(requested,catalog):
+    def invoke(name,args):
+        if name=='spotify_search':
+            return {'artists':{'items':[{'name':catalog,'id':'artist'}]}}
+        assert name=='spotify_albums'
+        return {'items':[{'name':'Latest','uri':'spotify:album:latest','album_type':'album','release_date':'2026-01-01','artists':[{'id':'artist','name':catalog}]}],'next':None}
+    album=SpotifyCapabilityService().resolve_album(MusicPlan(operation='play_album',latest=True,artist=requested),invoke)
+    assert album['uri']=='spotify:album:latest'
+
+
+def test_named_album_artist_punctuation_uses_verified_credits():
+    def invoke(name,args):
+        assert name=='spotify_search' and args['types']==['album']
+        return {'albums':{'items':[{'name':'The Off-Season','uri':'spotify:album:cole','artists':[{'name':'J. Cole'}]}]}}
+    album=SpotifyCapabilityService().resolve_album(MusicPlan(operation='play_album',query='The Off-Season',artist='j cole'),invoke)
+    assert album['uri']=='spotify:album:cole'
+
+
+def test_artist_punctuation_collision_requires_choice_before_album_playback():
+    def invoke(name,args):
+        if name=='spotify_search': return {'artists':{'items':[{'id':'a','name':'A.B.C.'},{'id':'b','name':'A B C.'}]}}
+        if name=='music_kworb': return {}
+        pytest.fail('An ambiguous artist must not fetch or play albums')
+    with pytest.raises(MusicChoiceRequired):
+        SpotifyCapabilityService().resolve_album(MusicPlan(operation='play_album',latest=True,artist='a b c'),invoke)
+
+
 def test_latest_album_uses_artist_catalog_dates_not_search_ranking():
     calls = []
     def invoke(name, args):

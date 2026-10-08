@@ -39,7 +39,14 @@ class CapabilityRecord:
     requires_confirmation: bool = False
     required_env_flags: frozenset[str] = frozenset()
     runtime_tool: Any | None = None
+    # Mixed read/write adapters must declare each read operation explicitly.
+    read_actions: frozenset[str] | None = None
     input_schema: dict[str, Any] | None = None
+
+    def schema(self) -> dict[str, Any]:
+        if self.runtime_tool is not None:
+            return self.runtime_tool.args_schema.model_json_schema()
+        return self.input_schema or {"type":"object", "additionalProperties":True}
 
 
 @dataclass(frozen=True)

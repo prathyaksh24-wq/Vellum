@@ -23,13 +23,38 @@ installed local chat model. Open **Browser** in the sidebar, or ask Vellum to
 open a website. The right panel shows the separate browser while chat remains
 available beside it. **More** exposes the remaining sidebar destinations.
 
-- Use the address field to enter a website or search Google. Local development
+- Opening a blank session and creating a tab shows Vellum's local homepage.
+  Existing websites remain open when you reopen the panel. Exact names such as
+  `google`, `youtube`, `reddit`, `wikipedia`, `spotify`, `x` and `twitter` open
+  their websites directly; other search phrases use the selected engine. Full website
+  addresses open directly too. This removes the search detour when opening those
+  sites, but Google and destination sites can still require a human check.
+- Use the address field to enter a website or search with the selected engine. Local development
   addresses such as `localhost:5173` use HTTP. Back, Forward, Reload and tab
   controls work alongside the address field.
+- The picker beside the homepage title offers Google, Brave, DuckDuckGo,
+  Startpage and SearXNG. Each has its own approved wallpaper and control palette;
+  choosing a search engine does not change the dedicated Brave runtime. The
+  native homepage uses local DOM controls and stops frame streaming while visible.
+- SearXNG requires the URL of an instance you run or trust. Use **SearXNG instance**
+  in the picker to change it. Search URLs are constructed locally; this feature
+  uses ordinary search websites, not paid search APIs.
+- **Add shortcut** saves a named website; a shortcut's remove control appears on
+  hover or keyboard focus. The existing browser owner stores preferences in
+  `data/browser-session/preferences.json`; reads and writes use the typed
+  `browser.session.control` App Action with operation `preferences`. These local
+  preferences survive closing the session and are excluded from Git.
+- **Home** returns to the local homepage. **Expand browser** fills the workspace
+  and **Restore split view** restores chat without remounting the browser. The
+  browser menu contains session information and **Close session**. Escape stays
+  inside browser input; it does not hide the panel. Page/video fullscreen remains
+  separate from workspace expansion. Whole-Vellum themes are deferred.
 - **Pause** stops subsequent agent actions; **Resume agent** returns ownership.
   If the task has already yielded, ask Vellum to continue it after resuming.
-- **Take over** allows clicks, typing, paste, keypresses and scrolling in the
-  live preview. Navigation and tab controls also yield ownership to the user.
+- Clicking the page takes control and forwards that click after checking that
+  the displayed document is still current. **Take over** also allows typing,
+  paste, keypresses and scrolling. Navigation and tab controls yield ownership
+  to the user. **Resume agent** returns control when you finish.
 - Sign in manually in this dedicated session. Its profile survives closing and
   reopening. Your daily Brave profile and its tabs are separate.
 - **Downloads** lists files saved during this backend process. **Show in folder**
@@ -37,11 +62,20 @@ available beside it. **More** exposes the remaining sidebar destinations.
 - **Close session** closes the dedicated browser; hiding the panel leaves it
   running. Expand restores or enlarges the browser view.
 
-The default uses the installed Brave executable, running headlessly behind the
-in-app preview. An optional `BROWSER_EXECUTABLE_PATH` can select an installed
+The default uses the installed Brave executable. On Windows it uses Brave's
+normal renderer with its owned native windows hidden behind the in-app preview;
+other platforms currently run headlessly. An optional `BROWSER_EXECUTABLE_PATH` can select an installed
 Chromium browser such as Chrome or Edge. Other browser engines and daily-profile
 attachment are outside this slice. A Chromium override still uses the Brave
 label in this initial UI.
+
+On Windows the dedicated browser is assigned to a backend-owned job with
+`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`. Normal close saves the browser session
+before releasing that handle. If the backend is killed, Windows terminates the
+owned browser so its profile does not remain locked. Daily Brave processes are
+not assigned to this job. Pre-existing orphaned sessions from older backend
+versions require a one-time close before relaunch; Vellum does not discover or
+automatically attach to unknown running browsers.
 
 Set `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true` to enable BrowserAgent navigation and
 confirmed page interactions, consistent with the existing browser tool gate.
@@ -53,8 +87,11 @@ using an installed browser executable.
 
 The existing Playwright worker and client own the session, browser lifecycle,
 serialization and idle cleanup. On Windows it starts an owned, hidden browser
-process with an ephemeral loopback debugging port and attaches only to that
-process's application profile. This avoids the persistent-profile download crash
+process with an ephemeral loopback debugging port. It connects to the exact
+websocket announced by that child's private stderr pipe, rather than discovering
+another browser on a chosen port. Only windows belonging to that owned process
+are hidden. Closing the final tab retains a blank replacement so native Brave
+does not exit underneath the panel. This avoids the persistent-profile download crash
 on the branded Chromium pipe transport reported in
 [Playwright #42506](https://github.com/microsoft/playwright/issues/42506).
 It closes that owned process on session close or backend shutdown. Other
@@ -84,7 +121,10 @@ Manual controls dispatch the typed `browser.session.control` App Action through
 `VellumApi.browser`; NLP-originated controls are rejected and must delegate.
 Receipts include operation/session metadata rather than input text, page text,
 URLs, screenshots or cookies. Read-only `/api/browser/status` and
-`/api/browser/frame` return typed contracts with no-store caching. Readiness is
+`/api/browser/frame` return typed contracts with no-store caching. The read-only
+`/api/browser/stream` WebSocket publishes changed JPEG frames to loopback web
+origins; it accepts no browser input. All mutations retain the App Action path.
+Readiness is
 reported by browser status under the `/api/capabilities` feature contract.
 Panel placement uses the existing Workspace Layout right-panel owner. The
 debugging endpoint is local and ephemeral; software running as the same local
@@ -101,14 +141,40 @@ Local private data is stored in gitignored application directories:
 
 ## Limits and validation
 
-The preview is a JPEG capture of a 1280×800 browser viewport, refreshed roughly
-once per second while visible. It contains only the active page, with letterbox
-space where needed; it is not a virtual desktop or native browser window. Input
-coordinates account for scaling. Stale tab/document inputs are rejected.
+The preview uses Brave's live JPEG frame feed. Its viewport follows the panel
+size, bounded to 1920×1080; it reflows the website rather than centering a fixed
+1280×800 image. A read-only WebSocket delivers changed frames while visible,
+with HTTP frames as a fallback when sockets are unavailable. Rapid text and
+wheel events are ordered and batched, without a status read for each event.
+It contains the active page and remains a streamed browser view rather than
+a native browser window. Input coordinates account for scaling, and stale
+tab/document inputs are rejected.
 Keyboard Tab leaves the preview for accessible app navigation. There is no file
-picker/upload bridge, desktop control, audio/video streaming, native browser
+picker/upload bridge, desktop control, streamed audio transport, native browser
 menu, password-manager UI, or manual JavaScript-dialog control in this slice.
 CAPTCHA, DRM and sites that reject automation remain compatibility checks.
+Windows YouTube playback and captions passed a 95-second public-video check
+with this normal-renderer launch; longer playback and other videos remain live
+compatibility checks. Browser audio, when enabled, comes from the local Brave
+process rather than the JPEG stream.
+
+Escape in the page exits the remote document's fullscreen and is contained
+inside the browser panel. New tabs focus an empty address bar immediately and
+show the local homepage without a network load. Explicit website tabs load
+independently. Loading state/errors are additive fields on the existing tab
+contract; navigation or closing a tab cancels its pending load.
+Status and preview reads skip browser awaits on these loading documents.
+Background navigation does not stale the visible page's clicks; child-frame
+navigation invalidates agent confirmations while retaining the live feed.
+
+Use Alt+L to focus/select the address, Alt+T for a new tab, Alt+W to close the
+active dedicated tab, Alt+1–8/9 to select a tab/the last tab, Alt+Left/Right for
+history, and Alt+R or F5 to reload. Shortcuts apply while focus is inside the
+panel. Standard Ctrl/Meta shortcuts are also handled if the host delivers the
+key event. A regular Brave tab reserves shortcuts such as Ctrl+W/L/T before a
+webpage receives them; reliable interception requires a desktop browser surface.
+Sources selects the existing Activity drawer without closing the dedicated
+session. Reopening Browser restores its session.
 
 BrowserAgent is bounded to 12 decisions and a 180-second planning loop, with
 45-second model-call deadlines. It yields on pause or takeover and does not

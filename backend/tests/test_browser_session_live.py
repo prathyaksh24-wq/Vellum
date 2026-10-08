@@ -2,6 +2,9 @@
 import asyncio
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
+from pathlib import Path
+import subprocess
+import sys
 import threading
 import time
 
@@ -9,6 +12,97 @@ import pytest
 from agent.mcp import dedicated_browser, playwright_tools
 
 pytestmark = pytest.mark.skipif(os.environ.get('VELLUM_BROWSER_SMOKE') != '1', reason='Set VELLUM_BROWSER_SMOKE=1 for installed Brave')
+
+
+def visible_owned_windows(pid):
+    """Count windows only for the disposable browser, without titles/content."""
+    import ctypes
+    from ctypes import wintypes
+    user = ctypes.WinDLL('user32', use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.EnumWindows.argtypes = [callback_type, wintypes.LPARAM]
+    user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user.IsWindowVisible.argtypes = [wintypes.HWND]
+    count = 0
+    @callback_type
+    def observe(window, _):
+        nonlocal count
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(window, ctypes.byref(owner))
+        if owner.value == pid and user.IsWindowVisible(window): count += 1
+        return True
+    user.EnumWindows(observe, 0)
+    return count
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows process lifetime regression')
+def test_real_brave_exits_when_backend_process_is_killed(monkeypatch, tmp_path):
+    import ctypes
+    from ctypes import wintypes
+
+    child_code = '''
+import asyncio, sys
+from pathlib import Path
+from agent.mcp import dedicated_browser
+root = Path(sys.argv[1])
+dedicated_browser._resolve_against_repo = lambda path: root / path.name
+async def main():
+    browser = dedicated_browser.DedicatedBrowser()
+    await browser.open()
+    (root / 'ready.pid').write_text(str(browser._process.pid))
+    await asyncio.Future()
+asyncio.run(main())
+'''
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel.CloseHandle.restype = wintypes.BOOL
+    handle = None
+    monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', lambda path: tmp_path / path.name)
+    with (tmp_path / 'child-error.log').open('w') as errors:
+        child = subprocess.Popen([sys.executable, '-c', child_code, str(tmp_path)],
+            stdout=subprocess.DEVNULL, stderr=errors, creationflags=subprocess.CREATE_NO_WINDOW)
+        try:
+            deadline = time.monotonic() + 20
+            ready = tmp_path / 'ready.pid'
+            while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.05)
+            assert ready.exists(), 'Disposable browser helper did not become ready'
+            handle = kernel.OpenProcess(0x00100000, False, int(ready.read_text()))  # SYNCHRONIZE
+            assert handle, 'Dedicated browser exited before the backend termination probe'
+            child.terminate()
+            child.wait(timeout=10)
+            assert kernel.WaitForSingleObject(handle, 5000) == 0, 'Backend termination stranded Brave and its profile lock'
+            async def reopen():
+                browser = dedicated_browser.DedicatedBrowser()
+                try:
+                    await browser.open()
+                    assert (await browser.status()).running, 'Profile could not reopen after backend termination'
+                finally:
+                    await browser.close()
+            asyncio.run(reopen())
+        finally:
+            if child.poll() is None:
+                child.terminate()
+                child.wait(timeout=10)
+            if handle:
+                if kernel.WaitForSingleObject(handle, 0) != 0:
+                    # Clean the disposable orphan even when this regression goes red.
+                    async def close_orphan():
+                        from playwright.async_api import async_playwright
+                        port = int((tmp_path / 'browser-session/profile/DevToolsActivePort').read_text().splitlines()[0])
+                        async with async_playwright() as p:
+                            browser = await p.chromium.connect_over_cdp(f'http://127.0.0.1:{port}')
+                            session = await browser.new_browser_cdp_session()
+                            try:
+                                await session.send('Browser.close')
+                            except Exception:
+                                pass
+                    asyncio.run(close_orphan())
+                kernel.CloseHandle(handle)
 
 
 @pytest.mark.skipif(os.name != 'nt', reason='Owned CDP process transport is Windows-specific')
@@ -58,6 +152,8 @@ def test_real_brave_session_tabs_preview_takeover_download_and_shutdown(monkeypa
     control = lambda **args: playwright_tools.browser_session('control', args)
     try:
         opened = control(operation='open')
+        if os.name == 'nt':
+            assert visible_owned_windows(playwright_tools._client._dedicated._process.pid) == 0
         assert opened.running and opened.control == 'agent'
         assert (tmp_path/'browser-session/profile').is_dir()
         state = control(operation='navigate', url=base)

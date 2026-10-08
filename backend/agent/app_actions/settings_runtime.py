@@ -145,6 +145,8 @@ class SettingsRuntimeActionService:
             self._require_confirmation(confirmed)
             return self._update_memory_settings(arguments)
         if action_id == MEMORY_ENTRY_CREATE_ACTION_ID:
+            if arguments.get('scope') == 'agent:MusicAgent':
+                arguments = {**arguments, 'source_thread_id':_context.invocation_conversation_id}
             return self._create_memory(arguments)
         if action_id == MEMORY_ENTRY_UPDATE_ACTION_ID:
             return self._update_memory(arguments)
@@ -400,6 +402,8 @@ class SettingsRuntimeActionService:
         text = str(arguments.get("text") or "").strip()
         if not text:
             raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "memory text is required")
+        if arguments.get('scope') == 'agent:MusicAgent' and not self._memory_store().get_settings().get('memory_enabled', True):
+            raise SettingsRuntimeActionError('MEMORY_DISABLED', 'Memory is off. Your music preference was not saved.')
         memory = self._memory_creator(
             kind=str(arguments.get("kind") or "manual").strip() or "manual",
             text=text,

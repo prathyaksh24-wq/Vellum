@@ -10,7 +10,10 @@ mkdirSync(output,{recursive:true});
 const backend = 'http://127.0.0.1:8020';
 const browser = await chromium.launch({headless:true,executablePath:process.env.BROWSER_EXECUTABLE});
 const context = await browser.newContext({viewport:{width:1536,height:1024},ignoreHTTPSErrors:true});
-const page = await context.newPage(), errors = [], actions = [];
+const page = await context.newPage(), errors = [], actions = [], frameTimes = [];
+page.on('websocket', socket => {
+  if (socket.url().includes('/api/browser/stream')) socket.on('framereceived', () => frameTimes.push(Date.now()));
+});
 let releaseInitialStatus;
 const initialStatusGate = new Promise(resolve => { releaseInitialStatus = resolve; });
 let initialStatusHeld = false;
@@ -50,6 +53,7 @@ try {
   await sidebar.getByRole('button',{name:'Browser',exact:true}).click();
   const panel=page.getByRole('complementary',{name:'Vellum browser'});
   await panel.waitFor();
+  await panel.getByRole('button',{name:'Browser menu',exact:true}).click();
   await panel.getByRole('button',{name:'Close session',exact:true}).click();
   await wait(async()=> !(await status()).running);
   const rejectLaunch = route => {
@@ -78,6 +82,8 @@ try {
   const x=rect.x+(rect.width-frame.width*scale)/2+(details.box.x+30)*scale;
   const y=rect.y+(rect.height-frame.height*scale)/2+(details.box.y+20)*scale;
   await page.mouse.click(x,y);
+  const typingStarted = Date.now();
+  const typingActionsBefore = actions.filter(action=>action.operation==='type').length;
   await page.keyboard.type('Hello Brave');
   try {
     await wait(async()=> (await (await fetch(backend+'/fixture/details')).json()).value==='Hello Brave');
@@ -85,6 +91,14 @@ try {
     console.log(JSON.stringify({details:await (await fetch(backend+'/fixture/details')).json(),focused:await page.evaluate(()=>document.activeElement.outerHTML.slice(0,300)),alerts:await panel.getByRole('alert').allTextContents(),rect,frameId:frame.frame_id}));
     throw error;
   }
+  const typingLatencyMs = Date.now() - typingStarted;
+  const typingRequests = actions.filter(action=>action.operation==='type').length - typingActionsBefore;
+  assert(typingRequests < 'Hello Brave'.length, 'Rapid typing still sends a separate request for every character');
+  await panel.getByRole('button',{name:'Resume agent',exact:true}).click();
+  await wait(async()=> (await status()).control==='agent');
+  await page.mouse.click(x,y);
+  await wait(async()=> (await status()).control==='user');
+  assert.equal((await (await fetch(backend+'/fixture/details')).json()).value,'Hello Brave');
   await panel.getByRole('button',{name:'Resume agent',exact:true}).click();
   await wait(async()=> (await status()).control==='agent');
   await panel.getByRole('button',{name:'Pause',exact:true}).click();
@@ -93,8 +107,8 @@ try {
   const before=(await status()).tabs.length;
   await panel.getByRole('button',{name:'New tab',exact:true}).click();
   await wait(async()=> (await status()).tabs.length===before+1);
-  await wait(async()=> (await panel.locator('.browser-tab.active [role="tab"]').textContent())==='New tab');
-  await panel.locator('.browser-tab.active').getByRole('button',{name:'Close New tab',exact:true}).click();
+  await wait(async()=> (await status()).tabs.some(tab=>tab.active && tab.url==='https://www.google.com/'));
+  await panel.locator('.browser-tab.active').getByRole('button',{name:/^Close /}).click();
   await wait(async()=> (await status()).tabs.length===before);
   const downloadsBefore=(await status()).downloads.map(file=>file.id);
   await address.fill(backend+'/fixture/download'); await address.press('Enter');
@@ -113,16 +127,31 @@ try {
     const bounds=await panel.boundingBox();
     assert(bounds.x>=0 && bounds.y>=0 && bounds.x+bounds.width<=width+1,`${name} panel is clipped`);
     await panel.getByAltText('Live view of the dedicated browser tab').waitFor();
+    const screenBounds = await panel.locator('.browser-screen').boundingBox();
+    await wait(async()=> {
+      const currentFrame = await (await fetch(backend+'/api/browser/frame')).json();
+      return Math.abs(currentFrame.width/currentFrame.height - screenBounds.width/screenBounds.height) < .005;
+    });
     await page.screenshot({path:resolve(output,name+'.png'),fullPage:true});
   }
+  await address.fill(backend+'/fixture/animation'); await address.press('Enter');
+  await wait(async()=> (await status()).tabs.some(tab=>tab.active && tab.url===backend+'/fixture/animation'));
+  await page.waitForTimeout(800);
+  const framesBefore = frameTimes.length, animationStarted = Date.now();
+  await page.waitForTimeout(2000);
+  const liveFramesPerSecond = (frameTimes.length - framesBefore) / ((Date.now()-animationStarted)/1000);
+  assert(liveFramesPerSecond >= 5, `Live animation updates too slowly: ${liveFramesPerSecond} fps`);
+  await panel.getByRole('button',{name:'Browser menu',exact:true}).click();
   await panel.getByRole('button',{name:'Close session',exact:true}).click();
   await wait(async()=> !(await status()).running);
   await panel.getByRole('button',{name:'Open browser',exact:true}).click();
   await wait(async()=> (await status()).running);
+  await panel.getByRole('button',{name:'Browser menu',exact:true}).click();
   await panel.getByRole('button',{name:'Close session',exact:true}).click();
   await wait(async()=> !(await status()).running);
   assert.deepEqual(errors,[]);
-  const report={passed:true,checks:['sidebar launch before initial readiness response','visible rejected-launch message','real separate Brave launch','More disclosure','scaled manual click and keyboard input','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
+  assert(frameTimes.length>0, 'Live frame stream never connected');
+  const report={passed:true,typingLatencyMs,typingRequests,liveFrames:frameTimes.length,liveFramesPerSecond,checks:['sidebar launch before initial readiness response','visible rejected-launch message','real separate Brave launch','More disclosure','scaled manual click and batched keyboard input','click automatically takes ownership','live frame stream','adaptive viewport without letterboxing','pause/resume','tabs','download saving','close/reopen','desktop/mobile overflow','no page errors'],screenshots:['user-1536.png','desktop.png','mobile.png']};
   writeFileSync(resolve(output,'browser-smoke.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify(report));
 } catch (error) {

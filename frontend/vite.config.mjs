@@ -16,6 +16,7 @@ function copyStaticUiAssets() {
       cpSync(resolve(here, 'ui/terminal/vellum'), target, { recursive: true });
       cpSync(resolve(designUploadsRoot, 'api'), resolve(here, 'ui-dist/api'), { recursive: true });
       cpSync(resolve(designUploadsRoot, 'components'), resolve(here, 'ui-dist/components'), { recursive: true });
+      cpSync(resolve(designUploadsRoot, 'assets/browser-home'), resolve(here, 'ui-dist/assets/browser-home'), { recursive: true });
       const apiTarget = resolve(here, 'ui-dist/api');
       for (const file of readdirSync(apiTarget)) {
         if (file.endsWith('.test.js')) rmSync(resolve(apiTarget, file), { force: true });
@@ -35,6 +36,7 @@ function serveDesignUploads() {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
   };
   return {
     name: 'serve-design-uploads',
