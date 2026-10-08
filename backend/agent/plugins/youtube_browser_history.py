@@ -1,4 +1,7 @@
-"""Account-scoped browser history through the canonical Knowledge Core owner."""
+"""Fresh account-scoped snapshots and configured history through Knowledge Core."""
+
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 import json
@@ -14,6 +17,8 @@ from agent.knowledge.models import (ExternalPolicy, IngestionJobInput, Observati
     ObservationInput, Sensitivity, SourceItemInput, SyncCursorInput)
 from agent.knowledge.runtime import get_knowledge_core
 from agent.mcp.playwright_tools import browser_session
+
+
 
 ORIGIN = "youtube_browser_history"
 ACTION = "youtube.history_presence"

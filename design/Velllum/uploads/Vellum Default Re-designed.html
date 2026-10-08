@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
@@ -7362,6 +7362,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   const openRef = useRef(false);
   const playerRevisionRef = useRef(0);
   const refreshRequestRef = useRef(0);
+  const sdkStateRef = useRef(null);
   openRef.current = open;
   const playbackRef = useRef(null);
   const [playback, setPlayback] = useState({status:'loading',enabled:false,ready:false,message:''});
@@ -7376,6 +7377,10 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
       const controller = window.VellumSpotifyPlayback.create({onChange:setPlayback,
         onPlayer:state => {
           playerRevisionRef.current++;
+          sdkStateRef.current = {at:Object.hasOwn(state,'track') ? Date.now() : sdkStateRef.current?.at || 0,
+            volumeAt:state.device?.volume_percent != null ? Date.now() : sdkStateRef.current?.volumeAt || 0,
+            state:{...(sdkStateRef.current?.state || {}),...state,
+            device:{...(sdkStateRef.current?.state?.device || {}),...state.device}}};
           setPlayer(prev => ({...(prev || {}),...state,device:{...(prev?.device || {}),...state.device}}));
         }});
       playbackRef.current = controller; controller.prepare();
@@ -7390,8 +7395,14 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
       if (revision === playerRevisionRef.current && requestId === refreshRequestRef.current) {
         setPlayer(prev => {
           const changed = prev?.track?.uri !== next.track?.uri;
+          const local = sdkStateRef.current;
+          const sameDevice = local && local.state.device?.id && local.state.device.id === next.device?.id;
+          const useLocal = sameDevice && Date.now()-local.at <= 5000;
+          const useVolume = sameDevice && Date.now()-local.volumeAt <= 5000;
           return {...(prev || {}),...next,devices:next.devices || prev?.devices || [],
-            queue:Array.isArray(next.queue) ? next.queue : changed ? [] : prev?.queue || []};
+            queue:Array.isArray(next.queue) ? next.queue : changed ? [] : prev?.queue || [],
+            ...(useLocal ? {...local.state,device:next.device} : {}),
+            ...(useVolume ? {device:{...(next.device || {}),...local.state.device}} : {})};
         });
       }
       setError('');
@@ -7441,7 +7452,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   const artists = player && Array.isArray(player.artists) ? player.artists.join(', ') : '';
   const run = async body => {
     try { await SpotifyAPI.action(body); await refresh(open); }
-    catch (err) { setError(err && err.message ? err.message : 'Spotify action failed.'); }
+    catch (err) { await refresh(open).catch(() => {}); setError(err && err.message ? err.message : 'Spotify action failed.'); }
   };
   const toggle = event => { event.stopPropagation(); run({action:isPlaying ? 'pause' : 'play'}); };
   const repeatNext = !player || player.repeat === 'off' ? 'context' : player.repeat === 'context' ? 'track' : 'off';
@@ -7471,7 +7482,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
           <button className="spotify-control" aria-label="Next track" title="Next" onClick={() => run({action:'next'})}><I d="M6 5l9 7-9 7V5zM18 5v14" size={16}/></button>
           <button className={'spotify-control' + (player && player.repeat !== 'off' ? ' on' : '')} aria-label="Change repeat mode" title={'Repeat: ' + (player && player.repeat || 'off')} onClick={() => run({action:'set_repeat',state:repeatNext})}><I d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3" size={15}/></button>
         </div>
-        <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})}/></div>
+        <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}/><output aria-label="Spotify volume percentage">{player?.device?.volume_percent == null ? '—' : player.device.volume_percent + '%'}</output></div>
         {!playback.enabled && <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>}
         <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{upcoming.length ? upcoming.slice(0,5).map(item => <div className="spotify-queue-row" key={item.uri || item.id}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>) : <span style={{fontSize:10.5,color:'var(--dim2)'}}>No upcoming tracks in Spotify's queue.</span>}</div>
         {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
@@ -9094,6 +9105,7 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   useEffect(() => {
     const onKey = e => {
+      if (e.defaultPrevented || e.target.closest?.('.browser-panel')) return;
       if (e.key === 'Escape') { setMenu(null); setSearchOpen(false); setSearchPreset(null); setSpacePickerChatId(null); setEditProfileOpen(false); setRenamingId(null); setProjRenamingId(null); setCreateOpen(false); dispatchSurfacePresentation('settings', {visible:false}, {notify:false}); setViewer(null); dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false}); setActivityMsg(null); setShortcutsOpen(false); setCustomInstrOpen(false); }
     };
     window.addEventListener('keydown', onKey);
@@ -10526,7 +10538,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onShare={() => activeChatId && dispatchConversationAction('conversation.share', {conversation_id:activeChatId})}
               onViewImage={setViewer}
               browserMode={browserPanelVisible} filesOpen={rightPanelVisible && !browserPanelVisible} onCloseFiles={() => dispatchSurfacePresentation('right-panel', {visible:false}, {learn:true})}
-              onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }}
+              onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }}
               onAnswerNow={answerNow}
               activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
@@ -10549,7 +10561,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
           {browserPanelVisible && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
             onHide={() => dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false})}

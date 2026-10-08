@@ -41,6 +41,37 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     expect(f.api.spotifyPlaybackToken).not.toHaveBeenCalled();
   });
 
+  test('SDK volume is reflected in UI and trusted backend observations', async () => {
+    const f = await fixture();
+    f.player.getVolume = vi.fn(async () => .23);
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    await vi.advanceTimersByTimeAsync(20000); await flush();
+    expect(f.onPlayer).toHaveBeenCalledWith(expect.objectContaining({device:expect.objectContaining({volume_percent:23})}));
+  });
+
+  test('requested local volume uses SDK and acknowledges measured value', async () => {
+    const f = await fixture({api:{spotifyPlaybackDevice:vi.fn(async () => ({status:'ready',volume_request:{id:'v1',percent:17}}))}});
+    let volume=.5;
+    f.player.setVolume = vi.fn(async v => {volume=v;});
+    f.player.getVolume = vi.fn(async () => volume);
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'}); await flush();
+    expect(f.player.setVolume).toHaveBeenCalledTimes(1);
+    expect(f.player.setVolume).toHaveBeenCalledWith(.17);
+    expect(f.api.spotifyPlaybackDevice).toHaveBeenCalledWith(expect.objectContaining({volume_ack:'v1',volume_percent:17}));
+  });
+
+  test('volume-only heartbeats do not keep an old song observation fresh', async () => {
+    const f=await fixture(); f.player.getVolume=vi.fn(async () => .23);
+    f.player.getCurrentState=vi.fn(async () => null);
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    f.player.listeners.player_state_changed({paused:false,position:0,duration:10000,
+      track_window:{current_track:{id:'song',uri:'spotify:track:song',name:'Song',artists:[]}}});
+    await flush();
+    f.api.spotifyPlaybackDevice.mockClear();
+    await vi.advanceTimersByTimeAsync(7000);
+    expect(f.api.spotifyPlaybackDevice.mock.calls.every(([body]) => !body.observation)).toBe(true);
+  });
+
   test('a rejected page origin is not misreported as revoked Spotify authorization', async () => {
     const f = await fixture({api:{spotifyPlaybackToken:vi.fn(async () => {throw Object.assign(new Error('forbidden'),{status:403});})}});
     await f.controller.enable(); await flush();
@@ -85,6 +116,17 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     expect(f.actions.dispatch).toHaveBeenCalledWith(expect.objectContaining({action_id:'spotify.playback.session'}), {source:'ui'});
   });
 
+  test.each(['can u play j cole latest album', 'latest album from j cole', 'latest album from lil baby', 'latest album from The Game'])('album request %s activates audio before chat and waits for the device', async message => {
+    const f = await fixture();
+    const request = window.VellumSpotifyPlayback.beginRequest(message);
+    expect(request).toBeDefined();
+    expect(f.order).toEqual(['activate']);
+    await flush();
+    await f.player.listeners.ready({device_id:'vellum-device'});
+    await request.ready;
+    expect(f.controller.getSnapshot().ready).toBe(true);
+  });
+
   test('mixed requests activate music while unrelated play requests leave the player alone', async () => {
     const f = await fixture();
     expect(window.VellumSpotifyPlayback.beginRequest('play chess')).toBeUndefined();
@@ -92,6 +134,42 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     const request = window.VellumSpotifyPlayback.beginRequest('what videos have I watched and play a song');
     await flush(); await f.player.listeners.ready({device_id:'vellum-device'}); await request.ready;
     expect(f.player.activateElement).toHaveBeenCalledTimes(1);
+  });
+
+  test('casual music commands activate audio while other provider aliases leave Spotify alone',async () => {
+    const f=await fixture();
+    for(const name of ['yt music','YT music/player','yt player','apple music']) {
+      expect(window.VellumSpotifyPlayback.beginRequest('play a song on '+name)).toBeUndefined();
+      expect(window.VellumSpotifyPlayback.beginRequest('On '+name+', play Blinding Lights')).toBeUndefined();
+    }
+    const request=window.VellumSpotifyPlayback.beginRequest('yo chuck on a tune from my Hindi playlist pls');
+    expect(request).toBeDefined();
+    expect(f.order).toEqual(['activate']);
+    await flush();await f.player.listeners.ready({device_id:'vellum-device'});await request.ready;
+  });
+
+  test('polite recommendations and controls do not automatically enable playback',async () => {
+    const f=await fixture();
+    for(const message of ['Could you recommend music for winding down?','Would you pause the song?','Can you tell me which song is playing?']) {
+      expect(window.VellumSpotifyPlayback.beginRequest(message)).toBeUndefined();
+    }
+    expect(f.player.activateElement).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    'Would you mind picking a tune from whichever of my playlists you fancy?',
+    'Could you put Dynamite by BTS on for me?',
+    'play a song from 69',
+    'play a song from my playslist',
+    'can u play j cole latest album',
+  ])('persona playback automatically activates and registers the Vellum device: %s',async message => {
+    const f=await fixture();
+    const request=window.VellumSpotifyPlayback.beginRequest(message);
+    expect(request).toBeDefined();
+    expect(f.order).toEqual(['activate']);
+    await flush();await f.player.listeners.ready({device_id:'vellum-device'});await request.ready;
+    expect(f.controller.getSnapshot().ready).toBe(true);
+    expect(f.api.spotifyPlaybackDevice).toHaveBeenCalledWith(expect.objectContaining({device_id:'vellum-device'}));
   });
 
   test('explicit stop releases local playback only after Spotify verifies it is paused', async () => {
@@ -141,10 +219,10 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     for (let i=0; i<50; i++) f.player.listeners.player_state_changed({paused:false,position:i*1000,duration:200000,
       track_window:{current_track:{id:'private-track',uri:'spotify:track:private',name:'Private title',artists:[],album:{images:[],name:''}}}});
     f.player.listeners.playback_error(); await flush();
-    const body = f.api.spotifyPlaybackDevice.mock.calls.at(-1)[0];
+    const body = f.api.spotifyPlaybackDevice.mock.calls.map(call => call[0]).findLast(body => body.diagnostics?.length);
     expect(body.diagnostics).toHaveLength(32);
     expect(body.diagnostics.at(-1).event).toBe('playback_error');
-    expect(JSON.stringify(body)).not.toMatch(/fresh-access|private-track|Private title/);
+    expect(JSON.stringify(body.diagnostics)).not.toMatch(/fresh-access|private-track|Private title/);
   });
 
   test('refreshes a rejected token before reconnecting, with bounded authentication recovery', async () => {

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import threading
+from uuid import uuid4
 from typing import Any
 
 import httpx
@@ -66,16 +67,74 @@ class SpotifyClient:
             self._web_player = {"owner_id": owner_id, "device_id": "", "expires_at": time.monotonic() + 90}
             return {"status": "connecting"}
 
-    def update_web_player(self, owner_id: str, device_id: str, diagnostics: list[dict] | None = None) -> dict:
+    def update_web_player(self, owner_id: str, device_id: str, diagnostics: list[dict] | None = None,
+                          *, observation: dict | None = None, volume_percent: int | None = None, volume_ack: str = '') -> dict:
         with self._device_lock:
             if not self._web_player or self._web_player["owner_id"] != owner_id:
                 raise SpotifyNoActiveDevice("This window no longer owns Vellum playback. Enable playback again.")
             if self._web_player['device_id'] != device_id:
                 self._web_player['device_registered_at'] = time.monotonic()
+                self._web_player.pop('observation', None)
+                self._web_player.pop('volume_percent', None)
+                pending = self._web_player.pop('volume_request',None)
+                if pending:
+                    pending['done'].set()
             self._web_player.update(device_id=device_id, expires_at=time.monotonic() + 90)
             if diagnostics:
                 self._web_player["diagnostics"] = [*self._web_player.get("diagnostics", []), *diagnostics][-32:]
-            return {"status": "ready" if device_id else "reconnecting"}
+            if device_id and observation is not None:
+                self._web_player.update(observation=observation, observed_at=time.monotonic())
+            if device_id and volume_percent is not None:
+                self._web_player.update(volume_percent=volume_percent, volume_observed_at=time.monotonic())
+            pending = self._web_player.get('volume_request')
+            if pending and volume_ack == pending['id']:
+                pending['observed'] = volume_percent
+                pending['done'].set()
+                self._web_player.pop('volume_request', None)
+            pending = self._web_player.get('volume_request')
+            result = {"status": "ready" if device_id else "reconnecting"}
+            if pending:
+                result['volume_request'] = {'id':pending['id'], 'percent':pending['percent']}
+            return result
+
+    def set_player_volume(self, percent: int, device_id: str = '') -> dict:
+        """Use the leased SDK for its local volume; other devices use Web API."""
+        if not isinstance(percent, int) or not 0 <= percent <= 100:
+            raise SpotifyAPIError('Invalid volume percentage')
+        preferred = self.preferred_device_id()
+        selected = device_id or preferred
+        if not preferred or selected != preferred:
+            return self.request('PUT', '/me/player/volume', params={'volume_percent':percent, **({'device_id':selected} if selected else {})})
+        with self._device_lock:
+            current = self._web_player
+            if not current or current.get('device_id') != selected:
+                raise SpotifyNoActiveDevice('Vellum player is not ready')
+            if current.get('volume_request'):
+                raise SpotifyAPIError('A Vellum volume change is still pending; wait before trying again')
+            pending = {'id':str(uuid4()), 'percent':percent, 'done':threading.Event()}
+            current['volume_request'] = pending
+        completed = pending['done'].wait(5)
+        with self._device_lock:
+            if current.get('volume_request') is pending:
+                current.pop('volume_request',None)
+        if not completed or pending.get('observed') != percent:
+            raise SpotifyAPIError('Vellum did not verify the volume change; the command was not repeated')
+        return {'volume_percent':percent}
+
+    def local_player_state(self) -> dict | None:
+        with self._device_lock:
+            current = self._web_player
+            now = time.monotonic()
+            if not current or not current.get('device_id') or current['expires_at'] <= now:
+                return None
+            if 'observation' not in current or now-current.get('observed_at',0) > 5:
+                return None
+            state = dict(current['observation'])
+            device = {'id':current['device_id'], 'name':'Vellum', 'is_active':True}
+            if now-current.get('volume_observed_at',0) <= 5 and 'volume_percent' in current:
+                device.update(volume_percent=current['volume_percent'], supports_volume=True)
+            state.update(device=device, state_source='sdk')
+            return state
 
     def release_web_player(self, owner_id: str | None = None) -> dict:
         with self._device_lock:
@@ -298,7 +357,21 @@ class SpotifyClient:
         return self.request("GET", "/me/player/queue")
 
     def get_player(self) -> dict:
+        local = self.local_player_state()
+        if local is not None:
+            return local
         payload = self.request("GET", "/me/player", params={"additional_types":"track,episode"})
+        # Volume has its own freshness clock. A paused device can return no
+        # track snapshot while its SDK still measures controllable local audio.
+        with self._device_lock:
+            current = self._web_player
+            now = time.monotonic()
+            remote_device = payload.get('device') or {}
+            if (current and current.get('device_id') and current['expires_at'] > now
+                and 'volume_percent' in current and now-current.get('volume_observed_at',0) <= 5
+                and (not remote_device.get('id') or remote_device['id'] == current['device_id'])):
+                payload['device'] = {**remote_device, 'id':current['device_id'], 'name':'Vellum',
+                    'volume_percent':current['volume_percent'], 'supports_volume':True}
         item = payload.get("item") if isinstance(payload.get("item"), dict) else None
         if not item:
             return {

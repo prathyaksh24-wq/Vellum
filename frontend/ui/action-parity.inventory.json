@@ -1,8 +1,8 @@
 {
   "version": 1,
   "handlerFingerprints": {
-    "design/Velllum/uploads/components/browser-panel.jsx": {"count":25,"sha256":"93689f8c1efb8899f4eab90685a51b1611adbf2bf07f982471a44c35c2eabbf1"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":862,"sha256":"e99ff0c522de03451d69ebebc494e0f48ff61a46ca6b233c2f3d0656111607fb"},
+    "design/Velllum/uploads/components/browser-panel.jsx": {"count":46,"sha256":"8e8915dc18e6df044c5e83c6581ec078b62dac1a8239ac3f910a440cf9fd780f"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":863,"sha256":"1648a90a25b7c16b0ea583d6feae0b4e250902533e2417990a02d29b6a957bed"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -15,7 +15,7 @@
     {"surface":"YouTube","name":"history URL and timezone","actionId":"youtube.history.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"historyAction('youtube.history.configure')"}},
     {"surface":"YouTube","name":"open history in owned browser","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"API.browser.control({operation:'new_tab', url})"}},
 
-    {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input and downloads","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
+    {"surface":"Browser","name":"dedicated session controls, tabs, navigation, input, downloads and homepage preferences","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/api/browser.js","text":"action_id:'browser.session.control'"}},
     {"surface":"Workspace Layout","name":"sidebar pin and rail expand","actionId":"ui.sidebar.set","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTogglePin={() => dispatchSidebarVisibility(!sidebarPinned, {learn:true})}"}},
     {"surface":"Workspace Layout","name":"settings visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('settings', {visible:true})"}},
     {"surface":"Workspace Layout","name":"right panel visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('right-panel', {visible:true})"}},
@@ -89,10 +89,11 @@
     {"surface":"Spotify","name":"enable or disable embedded player","actionId":"spotify.playback.session","probe":{"path":"design/Velllum/uploads/components/spotify-playback.js","text":"action_id: 'spotify.playback.session'"}},
     {"surface":"Spotify","name":"playback controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playback.control'"}},
     {"surface":"Spotify","name":"connect or upgrade consent","actionId":"spotify.connection.start","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.start', {client_id:clientId, reuse_existing_client:!!spotify.connected})"}},
-    {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}}
+    {"surface":"Spotify","name":"disconnect","actionId":"spotify.connection.disconnect","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('spotify.connection.disconnect')"}},
+    {"surface":"Spotify","name":"keyboard volume adjustment","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}"}}
   ],
   "exemptions": [
-    {"scope":"More sidebar disclosure, browser address draft, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation and input drafts only; browser mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},
+    {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},
     {"scope":"scroll, pointer hover, focus and text selection","reason":"Input/navigation gesture only; does not commit product state."},
     {"scope":"draft typing and in-view search filters","reason":"No committed product state; a separate save or submit control commits the change."},
     {"scope":"tooltips, transient pickers and discard prompts","reason":"Non-persistent presentation only; the underlying committed action is reviewed separately."},

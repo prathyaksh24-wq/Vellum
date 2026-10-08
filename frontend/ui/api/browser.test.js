@@ -27,4 +27,22 @@ describe('Browser adapter contract', () => {
     expect(api.point(rect,frame,420,60)).toBeNull();
     expect(api.point(rect,frame,741,350)).toBeNull();
   });
+  test.each([
+    ['google','https://www.google.com/search?q='],
+    ['brave','https://search.brave.com/search?q='],
+    ['duckduckgo','https://duckduckgo.com/?q='],
+    ['startpage','https://www.startpage.com/sp/search?query='],
+    ['searxng','https://search.example.org/searx/search?q='],
+  ])('routes searches through %s while direct website names still open directly', async (search_engine, prefix) => {
+    const api = await adapter();
+    const preferences = {search_engine,searxng_url:'https://search.example.org/searx/'};
+    expect(api.searchUrl(' browser tools & tabs ',preferences)).toBe(prefix+'browser%20tools%20%26%20tabs');
+    expect(api.addressUrl('browser tools & tabs',preferences)).toBe(prefix+'browser%20tools%20%26%20tabs');
+    expect(api.addressUrl('youtube',preferences)).toBe('https://www.youtube.com/');
+    expect(api.addressUrl('https://example.com/',preferences)).toBe('https://example.com/');
+  });
+  test.each(['','file:///tmp','https://user:password@example.org','https://example.org/?q=test','https://example.org/#fragment'])('requires a usable SearXNG instance (%s)', async searxng_url => {
+    const api = await adapter();
+    expect(()=>api.searchUrl('test',{search_engine:'searxng',searxng_url})).toThrow();
+  });
 });

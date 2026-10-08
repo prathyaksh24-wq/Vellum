@@ -18,7 +18,7 @@ def test_watched_creator_request_never_uses_public_search(tmp_path):
     service = YoutubeCapabilityService(vault_root=tmp_path,
         search_backend=lambda *a: calls.append('public') or [],
         takeout_history_backend=lambda *a: pytest.fail('Current history must not use an archive'),
-        browser_history_backend=lambda: {'available':True,'total':1,'items':[
+        browser_history_backend=lambda: {'available':True,'provider':'browser','total':1,'items':[
             {'title':'A watched video','channel_title':'Jynxzi Live','video_id':'abcdefghijk'}]})
     response = YoutubeAgent(tmp_path, youtube_service=service).answer('what videos have i watched from jynxzi')
     assert calls == []
@@ -46,15 +46,12 @@ def test_yes_accepts_single_song_suggestion_without_replanning():
     assert any(n=='spotify_playback' for n,_ in calls)
 
 
-def test_repeated_catalog_versions_do_not_create_duplicate_questions():
+def test_repeated_catalog_versions_resolve_one_confident_title_match():
     track={'name':'Crazy in Love','artists':[{'name':'Beyoncé'},{'name':'JAY-Z'}]}
     agent, _, calls=fixture_agent(tracks=[{**track,'uri':'spotify:track:a'},{**track,'uri':'spotify:track:b'}])
-    choice=agent.answer('play Crazzy in Love')
-    assert len(choice.structured_payload['choices'])==1
-    assert 'Reply yes' in choice.summary
-    context=agent.thread_context(choice,{})
-    response=agent.answer_with_context('yes',context)
+    response=agent.answer('play Crazzy in Love')
     assert response.status=='answered'
+    assert 'Crazy in Love' in response.summary
     assert sum(n=='spotify_playback' for n,_ in calls)==1
 
 

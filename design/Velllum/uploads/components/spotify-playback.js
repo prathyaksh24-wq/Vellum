@@ -6,9 +6,17 @@
   function requestKind(message) {
     const text = String(message || '').trim().replace(/[.!?]+$/, '').toLowerCase();
     if (/^(?:please\s+)?stop(?:\s+(?:the\s+)?(?:music|song|track|playback|spotify|player))?$/.test(text)) return 'stop';
-    if (text.split(/\b(?:and|also|then)\b/).some(part =>
-      /^(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:play|put on|resume)\b/.test(part.trim())
-      && !/\b(?:chess|games?|videos?|youtube(?!\s+music))\b/.test(part))) return 'play';
+    if (text.split(/\b(?:and|also|then)\b/).some(part => {
+      let phrase=part.trim();
+      if (/^(?:on|using|in|through)\s+(?:apple music|youtube music|yt music(?:\/player)?|yt player)\s*[,;:]/.test(phrase) || /\b(?:on|using|in|through)\s+(?:apple music|youtube music|yt music(?:\/player)?|yt player)(?:\s+(?:pls|plz|please))?$/.test(phrase)) return false;
+      phrase=phrase.replace(/^(?:on|using|in|through)\s+spotify\s*[,;:]\s*/,'');
+      const direct=/^(?:please\s+)?(?:(?:can|could|would)\s+(?:you|u)\s+)?(?:please\s+)?(?:(?:play|put on|resume)\b|(?:the\s+)?(?:latest|newest|most recent)\s+album\s+(?:from|by)\s+\S)/.test(phrase);
+      const casual=/^(?:(?:yo|hey|bro|pls|plz|please)\s+)*(?:chuck|spin|throw|gimme|give|i\s+(?:want|need|wanna))\b/.test(phrase)
+        && /\b(?:songs?|tracks?|tunes?|music|playlists?|albums?)\b/.test(phrase);
+      const formal=/^(?:can|could|would)\s+(?:you|u)\s+(?:mind\s+)?(?:picking|pick|choosing|choose|putting|put|playing|play)\b/.test(phrase)
+        && (/\b(?:songs?|tracks?|tunes?|music|playlists?|albums?)\b/.test(phrase) || /\bput\s+.+\s+on\s+for\s+me$/.test(phrase));
+      return (direct || casual || formal) && (/\balbum\b/.test(phrase) || !/\b(?:chess|games?|videos?|youtube(?!\s+music))\b/.test(phrase));
+    })) return 'play';
     return '';
   }
   function loadSDK() {
@@ -40,6 +48,8 @@
     let player, enabled = false, disposed = false, fatal = false, generation = 0;
     let deviceId = '', ready = false, retries = 0, retryTimer, heartbeat, connecting = false;
     let updates = Promise.resolve();
+    let observation, measuredVolume, sampled = false, stateRevision = 0, publishedRevision = 0;
+    const volumeCommands = new Set();
     const startedAt = Date.now();
     let diagnostics = [];
     function record(event, values = {}) {
@@ -58,21 +68,57 @@
       const receipt = await actions.dispatch({action_id: 'spotify.playback.session', arguments: {owner_id: ownerId, operation}}, {source: 'ui'});
       if (receipt.status !== 'applied') throw new Error(receipt.message || 'Could not enable this Vellum player.');
     }
+    async function readVolume() {
+      if (!player?.getVolume || !enabled || disposed) return;
+      const epoch = generation;
+      const volume = await player.getVolume();
+      if (!enabled || disposed || epoch !== generation || !Number.isFinite(volume)) return;
+      measuredVolume = Math.round(Math.max(0,Math.min(1,volume))*100);
+      onPlayer({device:{id:deviceId,name:'Vellum',volume_percent:measuredVolume,supports_volume:true}});
+    }
+    function observeState(state) {
+      if (!state || !enabled || disposed) return;
+      stateRevision++;
+      const track = state.track_window?.current_track;
+      if (!track) return;
+      const show = track.show || {}, album = track.album || {};
+      const images = track.images || album.images || show.images || [];
+      observation = {is_playing:!state.paused, progress_ms:Math.max(0,state.position || 0), duration_ms:Math.max(0,state.duration || 0),
+        track:{id:track.id || '',uri:track.uri,name:track.name},
+        artists:track.artists?.map(a => a.name).filter(Boolean) || (show.name ? [show.name] : []),
+        artwork_url:images[0]?.url || '',album:album.name || show.name || '',
+        shuffle:!!state.shuffle,repeat:['off','context','track'][state.repeat_mode] || 'off'};
+      onPlayer({...observation,queue:state.track_window.next_tracks || [],
+        device:{id:deviceId,name:'Vellum',...(measuredVolume == null ? {} : {volume_percent:measuredVolume,supports_volume:true})}});
+    }
     function publish(id) {
       const epoch = generation;
       updates = updates.catch(() => {}).then(async () => {
         if (!enabled || disposed || epoch !== generation) return;
         const observations = diagnostics.splice(0);
-        const body = {owner_id:ownerId, device_id:id, ...(observations.length ? {diagnostics:observations} : {})};
+        const revision = stateRevision;
+        const body = {owner_id:ownerId, device_id:id, ...(observations.length ? {diagnostics:observations} : {}),
+          ...(id && observation && revision > publishedRevision ? {observation} : {}), ...(id && measuredVolume != null ? {volume_percent:measuredVolume} : {})};
+        let response;
         try {
-          await api.spotifyPlaybackDevice(body);
+          response = await api.spotifyPlaybackDevice(body);
         } catch (error) {
           // Restore the already-authorized session after a backend restart. An
           // active owner in another window rejects this claim rather than losing playback.
           if (error.status !== 409) { diagnostics = [...observations,...diagnostics].slice(-32); throw error; }
           await session('enable');
           if (!enabled || disposed || epoch !== generation) return;
-          await api.spotifyPlaybackDevice(body);
+          response = await api.spotifyPlaybackDevice(body);
+        }
+        const command = response?.volume_request;
+        if (body.observation) publishedRevision = revision;
+        if (command && enabled && !disposed && epoch === generation && id === deviceId && !volumeCommands.has(command.id)) {
+          volumeCommands.add(command.id);
+          try { await player.setVolume(command.percent/100); }
+          catch (_) { emit('error','Vellum could not change the local audio volume.'); }
+          await readVolume();
+          if (!enabled || disposed || epoch !== generation) return;
+          await api.spotifyPlaybackDevice({owner_id:ownerId,device_id:id,volume_ack:command.id,volume_percent:measuredVolume});
         }
       });
       return updates;
@@ -142,6 +188,7 @@
           const epoch = generation; deviceId = event.device_id;
           record('ready');
           try {
+            await readVolume();
             await publish(deviceId);
             if (disposed || !enabled || epoch !== generation || deviceId !== event.device_id) return;
             ready = true; retries = 0; authFailures = 0; clearTimeout(retryTimer); retryTimer = null; emit('ready');
@@ -163,17 +210,8 @@
         player.addListener('player_state_changed', state => {
           if (!state || !enabled || disposed) return;
           record('state', {paused:state.paused, position_ms:Math.max(0,state.position || 0)});
-            const track = state.track_window?.current_track;
-          if (!track) return;
-            const show = track.show || {};
-            const album = track.album || {};
-            const images = track.images || album.images || show.images || [];
-          onPlayer({is_playing: !state.paused, progress_ms: state.position, duration_ms: state.duration,
-              track: {id: track.id, uri: track.uri, name: track.name}, artists: track.artists?.map(a => a.name) || (show.name ? [show.name] : []),
-            queue: state.track_window.next_tracks || [],
-              artwork_url: images[0]?.url || '', album: album.name || show.name || '',
-            device: {id: deviceId, name: 'Vellum'},
-            shuffle: state.shuffle, repeat: ['off', 'context', 'track'][state.repeat_mode] || 'off'});
+          observeState(state);
+          if (deviceId) publish(deviceId).catch(() => {});
         });
         emit('available');
       } catch (_) { emit('error', 'Could not load Spotify playback. Try again.'); }
@@ -191,15 +229,22 @@
           await session('enable');
           if (disposed) { await session('disable'); return; }
           enabled = true; fatal = false; ready = false; generation++;
+          observation = undefined; measuredVolume = undefined; stateRevision = 0; publishedRevision = 0; volumeCommands.clear();
           clearInterval(heartbeat);
-          heartbeat = setInterval(() => {
-            if (!enabled || disposed || fatal) return;
-            if (player.getVolume) Promise.resolve(player.getVolume()).then(volume => {
-              if (enabled && !disposed) record('state', {volume_percent:Math.round(Math.max(0,Math.min(1,volume)) * 100)});
-            }).catch(() => {});
-            publish(deviceId).catch(() => offline('reconnecting', 'Vellum playback connection interrupted.'));
+          heartbeat = setInterval(async () => {
+            if (!enabled || disposed || fatal || sampled) return;
+            sampled = true;
+            const epoch = generation, revision = stateRevision;
+            try {
+              const state = player.getCurrentState ? await player.getCurrentState() : null;
+              if (!enabled || disposed || epoch !== generation) return;
+              if (state && revision === stateRevision) observeState(state);
+              await readVolume();
+              await publish(deviceId);
+            } catch (_) { if (enabled && !disposed && epoch === generation) offline('reconnecting','Vellum playback connection interrupted.'); }
+            finally { sampled = false; }
             if (!ready && !connecting) retry();
-          }, 20000);
+          }, 1000);
           await connect();
         } catch (error) {
           // A play request can use the existing canonical device without

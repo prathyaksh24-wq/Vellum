@@ -238,6 +238,27 @@ def context(source="nlp"):
     return AppActionContext(source=source, invocation_conversation_id="chat-1")
 
 
+def test_music_preferences_use_the_existing_private_memory_action():
+    runtime, memory, *_ = make_runtime()
+    request = runtime.match_submission('remember I prefer instrumental music when working')
+    assert request.arguments['scope'] == 'agent:MusicAgent'
+    assert request.arguments['kind'] == 'preference'
+    receipt = runtime.dispatch(request, context())
+    assert receipt.status == 'applied'
+    saved = next(iter(memory.memories.values()))
+    assert saved['scope'] == 'agent:MusicAgent'
+    assert saved['source_thread_id'] == 'chat-1'
+    assert runtime.match_submission('remember I prefer short answers').arguments['scope'] == 'global'
+
+
+def test_music_memory_action_honors_memory_off():
+    runtime, memory, *_ = make_runtime()
+    memory.settings['memory_enabled'] = False
+    receipt = runtime.dispatch(runtime.match_submission('remember I prefer quiet music'), context())
+    assert receipt.status == 'failed' and receipt.error_code == 'MEMORY_DISABLED'
+    assert not memory.memories
+
+
 def test_matcher_distinguishes_global_settings_from_chat_and_casual_questions() -> None:
     runtime, *_ = make_runtime()
 

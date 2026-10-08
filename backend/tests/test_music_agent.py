@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -11,7 +12,162 @@ from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
 from agent.tools.registry import ToolPermissionError
 
 
-def fixture_agent(planner=None, tracks=None, playlists=None, library=None, shows=None, episodes=None, public_playlists=None):
+@pytest.mark.parametrize('query', ['what drake songs did I play yesterday', 'what song did u play from drake yesterday?'])
+def test_yesterday_artist_recall_uses_history_credits_not_model_guesses(query):
+    zone = timezone(timedelta(hours=5, minutes=30))
+    clock = datetime(2026, 10, 5, 10, tzinfo=zone)
+    yesterday = clock.date() - timedelta(days=1)
+    stamp = datetime.combine(yesterday, datetime.min.time(), zone).replace(hour=12).isoformat()
+    history = {"items":[
+        {"played_at":stamp, "track":{"uri":"spotify:track:gucci", "name":"Step Out (feat. Future and Foogiano)", "artists":[{"id":"gucci", "name":"Gucci Mane"}]}},
+        {"played_at":stamp, "track":{"uri":"spotify:track:drake", "name":"The Ride", "artists":[{"id":"drake", "name":"Drake"}]}}
+    ], "next":None}
+    agent, _, calls = fixture_agent(history=history, planner=lambda *_:pytest.fail("Recall must never ask the model to invent history"))
+    agent.now = lambda: clock
+    assert agent.can_handle(query)
+    response = agent.answer(query)
+    assert response.status == "answered"
+    assert "The Ride" in response.summary
+    assert "Step Out" not in response.summary
+    assert calls and all(name == "spotify_playback" and args["action"] == "recently_played" for name,args in calls)
+    assert response.structured_payload["history"][0]["artists"] == ["Drake"]
+
+
+def test_mood_suggestion_reads_catalog_but_waits_for_acceptance():
+    agent, _, calls = fixture_agent(planner=lambda *_:{"operation":"suggest_music", "query":"mellow music"})
+    assert agent.can_handle("suggest music for a stressful evening")
+    response = agent.answer("suggest music for a stressful evening")
+    assert response.status == "needs_fetch"
+    assert response.action_request["action"] == "music.play_suggestion"
+    assert not any(name == "spotify_playback" for name,_ in calls)
+    accepted = agent.execute_action_request(response.action_request)
+    assert accepted.status == "answered"
+    assert calls[-1] == ("spotify_playback", {"action":"play", "uris":["spotify:track:original"]})
+
+
+def test_history_paginates_and_filters_local_day_and_exact_artist():
+    zone = timezone(timedelta(hours=5, minutes=30))
+    def row(stamp, artist, uri):
+        return {'played_at':stamp, 'track':{'uri':uri, 'name':'Verified song', 'artists':[{'name':artist}]}}
+    pages = [
+        {'items':[row('2026-10-04T18:30:00Z','Drake','spotify:track:today'), row('2026-10-04T12:00:00Z','Gucci Mane','spotify:track:gucci')], 'next':'provider-page', 'cursors':{'before':'1791115200000'}},
+        {'items':[row('2026-10-03T18:30:00Z','Drake','spotify:track:start'), row('2026-10-03T18:29:59Z','Drake','spotify:track:old')], 'next':None},
+    ]
+    agent, _, calls = fixture_agent(history=pages)
+    agent.now = lambda: datetime(2026, 10, 5, 10, tzinfo=zone)
+    result = agent.answer('what songs by drake did I play yesterday')
+    assert result.status == 'answered'
+    assert [r['uri'] for r in result.structured_payload['history']] == ['spotify:track:start']
+    assert len(calls) == 2
+    assert all(args['action'] == 'recently_played' for _,args in calls)
+
+
+def test_empty_history_is_not_a_claim_that_user_never_listened():
+    agent, _, calls = fixture_agent(planner=lambda *_:pytest.fail('No model history fallback'))
+    result = agent.answer('what drake songs I played yesterday')
+    assert result.status == 'answered'
+    assert 'available history' in result.summary
+    assert result.structured_payload['history'] == []
+    assert len(calls) == 1
+
+
+def test_suggestion_planner_cannot_turn_a_recommendation_into_playback():
+    agent, _, calls = fixture_agent(planner=lambda *_:{'operation':'play_song', 'query':'Blinding Lights'})
+    result = agent.answer('recommend music for my mood')
+    assert result.status == 'needs_fetch' and not result.action_request
+    assert not calls
+
+
+@pytest.mark.parametrize('confirmation', ['confirm', 'cancel'])
+def test_suggestion_acceptance_is_bound_to_one_pending_action(tmp_path, confirmation):
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    agent, _, calls = fixture_agent(planner=lambda *_:{'operation':'suggest_music', 'query':'mellow'})
+    state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
+    catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    assert dispatcher.maybe_handle('suggest music for my mood', 'music').status == 'needs_fetch'
+    assert not any(name == 'spotify_playback' for name,_ in calls)
+    result = dispatcher.maybe_handle(confirmation, 'music')
+    assert result.status == ('answered' if confirmation == 'confirm' else 'blocked')
+    assert len([args for name,args in calls if name == 'spotify_playback']) == (1 if confirmation == 'confirm' else 0)
+    repeated = dispatcher.delegation_runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='confirm', parent_thread_id='music', confirm_pending_action=True))
+    assert repeated.response.status == 'blocked'
+
+
+def test_music_preference_survives_reload_and_remains_scoped(tmp_path):
+    from test_delegation_runtime import build_runtime
+    from agent.memory.orchestrator import SQLiteMemoryStore
+    planner_queries = []
+    def planner(query, _):
+        planner_queries.append(query)
+        return {'operation':'suggest_music', 'query':'instrumental music'}
+    agent, _, calls = fixture_agent(planner=planner)
+    runtime, _ = build_runtime(tmp_path)
+    runtime.agent_catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
+    saved = runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='remember I prefer instrumental music when working', parent_thread_id='music'))
+    assert saved.response.status == 'answered'
+    assert saved.response.structured_payload['scope'] == 'agent:MusicAgent'
+    store = SQLiteMemoryStore(tmp_path / 'memory.db')
+    assert len(store.list_saved(scopes=['agent:MusicAgent'])) == 1
+    runtime.memory_orchestrator.store = store
+    store.save_memory(kind='preference', text='I like keeping my medical records private', source_thread_id='other', confidence=1, scope='global')
+    response = runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='recommend a song', parent_thread_id='new-thread', context='I am working on a report and want to concentrate'))
+    assert response.response.status == 'needs_fetch'
+    assert 'instrumental music' in planner_queries[-1]
+    assert 'want to concentrate' in planner_queries[-1]
+    assert 'medical' not in planner_queries[-1]
+    assert not any(name == 'spotify_playback' for name,_ in calls)
+    assert 'global' not in runtime.agent_catalog.get('MusicAgent').memory.read_scopes
+
+
+def test_artist_constrained_suggestion_never_substitutes_another_artist():
+    agent, _, calls = fixture_agent(tracks=[{'name':'Step Out', 'uri':'spotify:track:gucci', 'artists':[{'name':'Gucci Mane'}]}],
+        planner=lambda *_:{'operation':'suggest_music', 'query':'Drake songs', 'artist':'Drake'})
+    result = agent.answer('recommend songs by Drake')
+    assert result.status == 'error' and not result.action_request
+    assert not any(name == 'spotify_playback' for name,_ in calls)
+
+
+def test_disabled_profile_memory_scope_cannot_fall_back_to_global(tmp_path):
+    from test_delegation_runtime import build_runtime
+    from agent.profiles import builtin_profiles
+    agent, _, _ = fixture_agent()
+    runtime, _ = build_runtime(tmp_path)
+    profile = builtin_profiles()['MusicAgent']
+    profile = profile.model_copy(update={'memory':profile.memory.model_copy(update={'write_scope':''})})
+    runtime.agent_catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', builtins={'MusicAgent':profile}, executors={'MusicAgent':agent})
+    result = runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='remember I prefer quiet music', parent_thread_id='music'))
+    assert result.response.status == 'blocked'
+    assert not runtime.memory_orchestrator.store.list_saved(scopes=['global', 'agent:MusicAgent'])
+
+
+def test_exact_dated_recall_delegates_even_with_memory_agent_selected(tmp_path):
+    from agent.agents.live_dispatcher import LiveAgentDispatcher
+    from agent.master.state import MasterThreadStateStore
+    agent, _, calls = fixture_agent(planner=lambda *_:pytest.fail('No model recall'))
+    state = MasterThreadStateStore(sessions_db=tmp_path / 'sessions.db')
+    state.set_active_agent('music', 'MemoryAgent', selected=True)
+    catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
+    dispatcher = LiveAgentDispatcher(vault_root=tmp_path, agent_catalog=catalog, state_store=state)
+    result = dispatcher.maybe_handle('what song did u play from drake yesterday?', 'music')
+    assert result.agent_name == 'MusicAgent' and result.status == 'answered'
+    assert calls[0][1]['action'] == 'recently_played'
+    assert state.get('music').active_agent == 'MemoryAgent'
+
+
+def test_disabled_memory_blocks_preference_retention(tmp_path):
+    from test_delegation_runtime import build_runtime
+    agent, _, _ = fixture_agent()
+    runtime, _ = build_runtime(tmp_path)
+    runtime.agent_catalog = AgentCatalog(profile_dir=tmp_path / 'profiles', executors={'MusicAgent':agent})
+    runtime.memory_orchestrator.store.update_settings({'memory_enabled':False})
+    result = runtime.delegate(DelegationRequest(agent_id='MusicAgent', task='remember I prefer quiet music', parent_thread_id='music'))
+    assert result.response.status == 'blocked'
+    assert not runtime.memory_orchestrator.store.list_saved(scopes=['agent:MusicAgent'])
+
+
+def fixture_agent(planner=None, tracks=None, playlists=None, library=None, shows=None, episodes=None, public_playlists=None, history=None):
     calls = []
     created_playlist = {}
     saved_uris = []
@@ -38,6 +194,8 @@ def fixture_agent(planner=None, tracks=None, playlists=None, library=None, shows
                     choices = (playlists if playlists is not None else [{"id":"hindi", "name":"Hindi", "uri":"spotify:playlist:hindi"}]) + (public_playlists or [])
                     data = (next(({**p,"items":{"total":4}} for p in choices if p["id"] == args.get("playlist_id")), {"items":{"total":4}}) if args.get("action") == "get" else
                             {"items":playlists if playlists is not None else [{"id":"hindi", "name":"Hindi", "uri":"spotify:playlist:hindi"}], "next":None})
+            elif name == "spotify_playback" and args.get("action") == "recently_played":
+                data = history.pop(0) if isinstance(history, list) and history else history or {"items":[], "next":None}
             elif name == "spotify_library":
                 data = library or {"items":[], "total":0}
             else:
@@ -125,18 +283,19 @@ def test_emoji_playlist_names_keep_distinct_identity(query):
     assert calls[-1][1]["context_uri"] == ("spotify:playlist:fire" if "🔥" in query else "spotify:playlist:heat")
 
 
-def test_missing_public_playlist_requires_a_choice_before_playback():
+def test_missing_personal_playlist_requires_link_instead_of_public_substitution():
     agent, _, calls = fixture_agent(playlists=[], public_playlists=[{"id":"rizz", "name":"Rizz mix 👅", "uri":"spotify:playlist:rizz"}])
     response = agent.answer("play the rizz mix playlist")
     assert response.status == "needs_fetch"
-    assert "missing from your saved playlists" in response.summary
+    assert "No saved playlist matched" in response.summary
     assert not any(name == "spotify_playback" for name, _ in calls)
     context = agent.thread_context(response, {})
-    selected = agent.answer_with_context("1", context)
-    assert agent.can_handle_with_context("1", context)
+    assert not response.structured_payload['choices']
+    assert not any(name == 'spotify_search' for name,_ in calls)
     assert agent.can_handle_with_context("https://open.spotify.com/playlist/personal", context)
+    selected = agent.answer_with_context("https://open.spotify.com/playlist/personal", context)
     assert selected.status == "answered"
-    assert calls[-1] == ("spotify_playback", {"action":"play", "context_uri":"spotify:playlist:rizz"})
+    assert calls[-1] == ("spotify_playback", {"action":"play", "context_uri":"spotify:playlist:personal"})
 
 
 def test_daily_mix_does_not_substitute_someone_elses_public_playlist():
@@ -217,6 +376,240 @@ def test_screenshot_commands_play_one_resolved_track(query):
     assert "Playing Blinding Lights" in response.summary
     assert [name for name, _ in calls] == ["spotify_search", "spotify_playback"]
     assert calls[-1][1] == {"action":"play", "uris":["spotify:track:original"]}
+
+
+@pytest.mark.parametrize('message,expected', [
+    ('play Blinding Lights', 'original'),
+    ('play Blinding Light', 'original'),
+    ('play Blinding Lights by Loi', 'cover'),
+    ('play Blinding Lights - Major Lazer Remix', 'remix'),
+])
+def test_default_original_and_explicit_artist_or_remix_use_catalog_identity(message, expected):
+    tracks = [
+        {'name':'Blinding Lights', 'uri':'spotify:track:cover', 'artists':[{'name':'Loi'}],
+         'album':{'name':'Blinding Lights', 'release_date':'2021-09-17'}},
+        {'name':'Blinding Lights - Major Lazer Remix', 'uri':'spotify:track:remix', 'artists':[{'name':'The Weeknd'},{'name':'Major Lazer'}],
+         'album':{'name':'Blinding Lights (Remix)', 'release_date':'2020-09-11'}},
+        {'name':'Blinding Lights', 'uri':'spotify:track:original', 'artists':[{'name':'The Weeknd'}],
+         'album':{'name':'After Hours', 'release_date':'2020-03-20'}},
+    ]
+    agent, _, calls = fixture_agent(tracks=tracks)
+    result = agent.answer(message)
+    assert result.status == 'answered', result.summary
+    assert calls[-1][1]['uris'] == ['spotify:track:' + expected]
+
+
+def test_unlabelled_cover_does_not_outrank_earlier_studio_release_and_remix_album_is_excluded():
+    tracks = [
+        {'name':'Example Song', 'uri':'spotify:track:alternate', 'artists':[{'name':'Remixer'}],
+         'album':{'name':'Example Song Remixes', 'release_date':'1990-01-01'}},
+        {'name':'Example Song', 'uri':'spotify:track:cover', 'artists':[{'name':'Cover Artist'}],
+         'album':{'name':'Later Recording', 'release_date':'2024-01-01'}},
+        {'name':'Example Song', 'uri':'spotify:track:original', 'artists':[{'name':'Original Artist'}],
+         'album':{'name':'Studio Album', 'release_date':'2005-01-01'}},
+    ]
+    agent, _, calls = fixture_agent(tracks=tracks)
+    result = agent.answer('play Example Song')
+    assert result.status == 'answered' and 'Original Artist' in result.summary
+    assert calls[-1][1]['uris'] == ['spotify:track:original']
+
+
+def test_original_followup_uses_catalog_evidence_without_requiring_artist_again():
+    tracks = [
+        {'name':'Example Song', 'uri':'spotify:track:cover', 'artists':[{'name':'Cover Artist'}],
+         'album':{'name':'Later Recording', 'release_date':'2024-01-01'}},
+        {'name':'Example Song', 'uri':'spotify:track:original', 'artists':[{'name':'Original Artist'}],
+         'album':{'name':'Studio Album', 'release_date':'2005-01-01'}},
+    ]
+    agent, _, calls = fixture_agent(tracks=tracks)
+    context = agent.thread_context(agent.answer('play Example Song by Cover Artist'), {})
+    result = agent.answer_with_context('play the original', context)
+    assert result.status == 'answered', result.summary
+    assert calls[-1][1]['uris'] == ['spotify:track:original']
+
+
+def test_default_does_not_play_only_labelled_alternates_or_guess_tied_originals():
+    for tracks in [
+        [{'name':'Example Song', 'uri':'spotify:track:cover', 'artists':[{'name':'Other Artist'}],
+          'album':{'name':'Cover Songs', 'release_date':'2020-01-01'}}],
+        [{'name':'Example Song', 'uri':'spotify:track:'+key, 'artists':[{'name':key}],
+          'album':{'name':'Studio Album', 'release_date':'2020'}} for key in ['first','second']],
+    ]:
+        agent, _, calls = fixture_agent(tracks=tracks)
+        result = agent.answer('play Example Song')
+        assert result.status == 'needs_fetch'
+        assert not any(name == 'spotify_playback' for name, _ in calls)
+
+
+@pytest.mark.parametrize('dates,expected', [
+    (('2020-09-17', '2020-03-20'), 'answered'),
+    (('2020', '2020-03-20'), 'needs_fetch'),
+])
+def test_original_release_comparison_respects_catalog_date_precision(dates, expected):
+    tracks = [{'name':'Example Song','uri':'spotify:track:'+key,'artists':[{'name':key}],
+               'album':{'name':'Studio Album','release_date':date}}
+              for key,date in zip(['later','original'], dates)]
+    agent, _, calls = fixture_agent(tracks=tracks)
+    result = agent.answer('play Example Song')
+    assert result.status == expected
+    if expected == 'answered':
+        assert calls[-1][1]['uris'] == ['spotify:track:original']
+    else:
+        assert not any(name == 'spotify_playback' for name, _ in calls)
+
+
+@pytest.mark.parametrize('message', [
+    'play a random song from any of my saved playlist',
+    'play a random song from an of my saved playlist',
+    'play a song from my saved playlist',
+])
+def test_latest_chat_random_saved_playlist_is_a_collection_not_a_playlist_name(message):
+    agent, _, calls = fixture_agent(playlists=[{'id':'hindi','name':'Hindi','uri':'spotify:playlist:hindi'}])
+    result = agent.answer(message)
+    assert result.status == 'answered', result.summary
+    assert any(name=='spotify_playlists' and args['action']=='list' for name,args in calls)
+    assert any(name=='spotify_playback' and args.get('context_uri')=='spotify:playlist:hindi' for name,args in calls)
+
+
+def test_latest_chat_playlist_typo_and_saved_playlist_count_are_music_intents():
+    agent, _, calls = fixture_agent()
+    assert agent.can_handle('how many playlist i have saved?')
+    count = agent.answer('how many playlist i have saved?')
+    assert count.status == 'answered' and '1 saved playlist' in count.summary
+    played = agent.answer('play my hindi playlkist')
+    assert played.status == 'answered', played.summary
+    assert calls[-1][1]['context_uri'] == 'spotify:playlist:hindi'
+
+
+def test_latest_chat_collaboration_credit_does_not_hide_original_song():
+    tracks = [
+        {'name':'One Right Now (with The Weeknd)','uri':'spotify:track:original',
+         'artists':[{'name':'Post Malone'},{'name':'The Weeknd'}],
+         'album':{'name':'One Right Now','release_date':'2021-11-05'}},
+        {'name':'One Right Now','uri':'spotify:track:other',
+         'artists':[{'name':'David Shannon'},{'name':'Frank Rivers'}],
+         'album':{'name':'One Right Now','release_date':'2022-01-01'}},
+    ]
+    agent, _, calls = fixture_agent(tracks=tracks)
+    result = agent.answer('play one right now')
+    assert result.status == 'answered' and 'Post Malone' in result.summary
+    assert calls[-1][1]['uris'] == ['spotify:track:original']
+
+
+@pytest.mark.parametrize('artist',['Earth, Wind and Fire','Tyler, The Creator','The Weeknd'])
+def test_with_credit_recognizes_punctuation_in_actual_artist_name(artist):
+    tracks=[{'name':f'Example Song (with {artist})','uri':'spotify:track:original','artists':[{'name':'Lead Artist'},{'name':artist}]}]
+    agent,_,calls=fixture_agent(tracks=tracks)
+    result=agent.answer('play Example Song')
+    assert result.status=='answered',result.summary
+    assert calls[-1][1]['uris']==['spotify:track:original']
+
+
+def test_with_suffix_is_not_removed_when_it_is_not_a_credited_artist():
+    agent,_,calls=fixture_agent(tracks=[{'name':'Example Song (with feeling)','uri':'spotify:track:other','artists':[{'name':'Other Artist'}]}])
+    result=agent.answer('play Example Song')
+    assert result.status=='needs_fetch'
+    assert not any(name=='spotify_playback' for name,_ in calls)
+
+
+@pytest.mark.parametrize('message',['play the her loss album','play Her Loss album by Drake','play the album Her Loss'])
+def test_album_title_before_album_word_never_becomes_track_search(message):
+    agent, registry, calls = fixture_agent()
+    original = registry.invoke
+    observed = []
+    def invoke(name,args,**kwargs):
+        observed.append((name,dict(args)))
+        if name=='spotify_search':
+            assert args['types']==['album'], 'An album request must never search tracks'
+            return {'ok':True,'data':{'albums':{'items':[{'name':'Her Loss','uri':'spotify:album:herloss','artists':[{'name':'Drake'},{'name':'21 Savage'}]}]}}}
+        if name=='spotify_playback':
+            return {'ok':True,'data':{'is_playing':True,'context':{'uri':'spotify:album:herloss'}}}
+        return original(name,args,**kwargs)
+    registry.invoke=invoke
+    result=agent.answer(message)
+    assert result.status=='answered' and 'Her Loss' in result.summary, result.summary
+    assert any(name=='spotify_playback' and args.get('context_uri')=='spotify:album:herloss' for name,args in observed)
+
+
+def test_ambiguous_album_and_wrong_collaborator_remain_album_choices_and_accept_artist_reply():
+    agent,registry,_=fixture_agent(planner=lambda *_:pytest.fail('Album correction must not invoke the model'))
+    calls=[]
+    def invoke(name,args,**kwargs):
+        calls.append((name,dict(args)))
+        if name=='spotify_search':
+            assert args['types']==['album']
+            return {'ok':True,'data':{'albums':{'items':[
+                {'name':'Her Loss','uri':'spotify:album:other','artists':[{'name':'Other Artist'}]},
+                {'name':'Her Loss','uri':'spotify:album:drake','artists':[{'name':'Drake'},{'name':'21 Savage'}]},
+            ]}}}
+        return {'ok':True,'data':{'is_playing':True,'context':{'uri':'spotify:album:drake'}}}
+    registry.invoke=invoke
+    first=agent.answer('play the Her Loss album by Drake and Metro Boomin')
+    assert first.status=='needs_fetch' and 'Drake, 21 Savage' in first.summary
+    assert not any(name=='spotify_playback' for name,_ in calls)
+    context=agent.thread_context(first,{})
+    assert agent.can_handle_with_context('no from Drake',context)
+    result=agent.answer_with_context('no from Drake',context)
+    assert result.status=='answered' and 'Drake, 21 Savage' in result.summary
+    assert [args['context_uri'] for _,args in calls if args.get('action')=='play']==['spotify:album:drake']
+
+
+def test_latest_saved_album_correction_recovers_legacy_misclassified_song_context():
+    import time
+    agent,registry,_=fixture_agent(planner=lambda *_:pytest.fail('An album correction must not wait on a model'))
+    calls=[]
+    def invoke(name,args,**kwargs):
+        calls.append((name,dict(args)))
+        assert name=='spotify_search' and args['types']==['album']
+        return {'ok':True,'data':{'albums':{'items':[{'name':'Her Loss','uri':'spotify:album:drake','artists':[{'name':'Drake'},{'name':'21 Savage'}]}]}}}
+    registry.invoke=invoke
+    old=MusicPlan(operation='play_song',query='her loss album').model_dump()
+    context={'last_plan':old,'last_song_plan':old,'at':time.time()}
+    assert agent.can_handle_with_context('no the album by drake and metro boomin',context)
+    result=agent.answer_with_context('no the album by drake and metro boomin',context)
+    assert result.status=='needs_fetch' and 'Drake, 21 Savage' in result.summary
+    assert result.structured_payload['music_plan']['operation']=='play_album'
+    assert len(calls)==1
+
+
+def test_album_correction_recovers_when_artist_filtered_search_returns_nothing():
+    agent,registry,_=fixture_agent(planner=lambda *_:pytest.fail('Album correction must not invoke the model'))
+    calls=[]
+    def invoke(name,args,**kwargs):
+        calls.append((name,dict(args)))
+        if name=='spotify_search':
+            assert args['types']==['album']
+            items=[] if 'metro boomin' in args['query'].casefold() else [
+                {'name':'Her Loss','uri':'spotify:album:drake','artists':[{'name':'Drake'},{'name':'21 Savage'}]}]
+            return {'ok':True,'data':{'albums':{'items':items}}}
+        return {'ok':True,'data':{'is_playing':True,'context':{'uri':'spotify:album:drake'}}}
+    registry.invoke=invoke
+    first=agent.answer('play Her Loss album')
+    context=agent.thread_context(first,{})
+    calls.clear()
+    result=agent.answer_with_context('no the album by drake and metro boomin',context)
+    assert result.status=='needs_fetch' and 'Drake, 21 Savage' in result.summary,result.summary
+    assert len(calls)==2
+    assert all(name=='spotify_search' for name,_ in calls)
+    assert calls[-1][1]['query']=='album:"Her Loss"'
+    corrected=agent.answer_with_context('by Drake',agent.thread_context(result,context))
+    assert corrected.status=='answered' and 'Drake, 21 Savage' in corrected.summary
+    assert [args['context_uri'] for name,args in calls if name=='spotify_playback' and args.get('action')=='play']==['spotify:album:drake']
+
+
+def test_saved_playlist_selection_never_uses_empty_library_or_public_search():
+    agent,_,calls=fixture_agent(playlists=[])
+    result=agent.answer('play a random song from my saved playlists')
+    assert result.status=='needs_fetch'
+    assert not any(name in {'spotify_search','spotify_playback'} for name,_ in calls)
+
+
+def test_playlist_count_cannot_report_zero_when_api_failed():
+    agent,registry,_=fixture_agent()
+    registry.invoke=lambda *_args,**_kwargs:{'ok':False,'error':{'message':'Spotify temporarily unavailable'}}
+    result=agent.answer('how many playlist i have saved?')
+    assert result.status=='error' and 'unavailable' in result.summary
+    assert '0 saved playlists' not in result.summary
 
 
 def test_hindi_playlist_shuffle_uses_context_then_explicit_shuffle_setting():

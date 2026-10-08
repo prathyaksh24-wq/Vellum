@@ -14,15 +14,17 @@ import logging
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from agent.config import _resolve_against_repo, get_settings
-from agent.contracts.browser import BrowserControl, BrowserDownload, BrowserFrame, BrowserStatus, BrowserTab
+from agent.contracts.browser import BrowserControl, BrowserDownload, BrowserFrame, BrowserStatus, BrowserTab, BrowserPreferences
 
 logger = logging.getLogger(__name__)
+USER_HOME_URL = 'about:blank'  # Vellum renders the native new-tab homepage.
 
 
 class BrowserSessionError(ValueError):
@@ -67,6 +69,8 @@ class DedicatedBrowser:
         self.context = None
         self.playwright = None
         self._process = None
+        self._process_job = None
+        self._stderr_task: asyncio.Task | None = None
         self._cdp_browser = None
         self._close_task: asyncio.Task | None = None
         self.active_page = None
@@ -82,8 +86,58 @@ class DedicatedBrowser:
         self._downloads: dict[str, BrowserDownload] = {}
         self._paths: dict[str, Path] = {}
         self._tasks: set[asyncio.Task] = set()
+        self._tab_loads: dict[int, asyncio.Task] = {}
+        self._tab_errors: dict[int, str] = {}
         self._console: list[str] = []
         self._dialog = None
+        self._viewport = {"width":1280, "height":800}
+        self._preview_session = None
+        self._preview_identity = ""
+        self._preview_frame = None
+        self._preferences = None
+
+    def _browser_preferences(self) -> BrowserPreferences:
+        if self._preferences is None:
+            path = _resolve_against_repo(Path("data/browser-session/preferences.json"))
+            try:
+                self._preferences = self._validated_preferences(BrowserPreferences.model_validate_json(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError):
+                self._preferences = BrowserPreferences()
+        return self._preferences
+
+    @staticmethod
+    def _validated_preferences(preferences: BrowserPreferences) -> BrowserPreferences:
+        if preferences.searxng_url:
+            value = navigation_url(preferences.searxng_url)
+            parsed = urlsplit(value)
+            if parsed.scheme not in {"http", "https"} or parsed.query or parsed.fragment:
+                raise BrowserSessionError("Enter the SearXNG instance URL without a query or fragment.")
+            preferences.searxng_url = value.rstrip("/")
+        ids = set()
+        for shortcut in preferences.shortcuts:
+            if shortcut.id in ids:
+                raise BrowserSessionError("Shortcut identifiers must be unique.")
+            ids.add(shortcut.id)
+            if urlsplit(navigation_url(shortcut.url)).scheme not in {"http", "https"}:
+                raise BrowserSessionError("Shortcuts must use an http or https website.")
+            shortcut.name = shortcut.name.strip()
+            if not shortcut.name:
+                raise BrowserSessionError("Give the shortcut a name.")
+        return preferences
+
+    def _update_preferences(self, request: BrowserControl) -> None:
+        data = self._browser_preferences().model_dump()
+        patch = request.model_dump(include={"search_engine", "searxng_url", "shortcuts"}, exclude_none=True)
+        preferences = self._validated_preferences(BrowserPreferences.model_validate({**data, **patch}))
+        path = _resolve_against_repo(Path("data/browser-session/preferences.json"))
+        temporary = path.with_suffix(".tmp")
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary.write_text(preferences.model_dump_json(indent=2), encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            raise BrowserSessionError("Browser preferences could not be saved. Try again.") from None
+        self._preferences = preferences
 
     async def open(self) -> None:
         if self._close_task is not None:
@@ -134,43 +188,76 @@ class DedicatedBrowser:
         # Branded Chromium 152+ can crash on repeated persistent-profile downloads
         # over remote-debugging-pipe (Playwright #42506). Launch only our profile
         # on an ephemeral loopback port; never discover or attach a daily browser.
+        # Use Brave's normal renderer: headless/port=0 launches returned empty
+        # YouTube captions and stopped playback, unlike this native launch.
         profile = root / "profile"
         profile.mkdir(exist_ok=True)
         endpoint_file = profile / "DevToolsActivePort"
         endpoint_file.unlink(missing_ok=True)
+        from agent.mcp.windows_browser_job import WindowsBrowserJob
+        self._process_job = WindowsBrowserJob()
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1', 0))
+            port = reservation.getsockname()[1]
+        startup = subprocess.STARTUPINFO()
+        startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startup.wShowWindow = 0  # SW_HIDE; the user interacts through the panel.
         self._process = await asyncio.create_subprocess_exec(
-            str(browser_executable()), "--headless=new", f"--user-data-dir={profile}",
-            "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
+            str(browser_executable()), "--window-position=-32000,-32000", f"--user-data-dir={profile}",
+            "--remote-debugging-address=127.0.0.1", f"--remote-debugging-port={port}",
             "--no-first-run", "--no-default-browser-check", "--disable-sync", "about:blank",
-            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW, startupinfo=startup,
         )
+        self._process_job.assign(self._process.pid)
         deadline = asyncio.get_running_loop().time() + 15
         while asyncio.get_running_loop().time() < deadline:
             if self._process.returncode is not None:
                 raise BrowserSessionError("The dedicated browser could not start.")
             try:
-                port = int(endpoint_file.read_text().splitlines()[0])
-                if 0 < port < 65536:
-                    self._cdp_browser = await self.playwright.chromium.connect_over_cdp(f"http://127.0.0.1:{port}", timeout=5000)
+                line = await asyncio.wait_for(self._process.stderr.readline(),
+                    timeout=max(.01, deadline - asyncio.get_running_loop().time()))
+                if not line:
+                    break
+                endpoint = re.fullmatch(rb'DevTools listening on (ws://127\.0\.0\.1:(\d+)/devtools/browser/([a-f0-9-]+))', line.strip())
+                if endpoint and int(endpoint.group(2)) == port:
+                    # Read the exact websocket from our child's pipe. A port
+                    # allocation race must not attach an unrelated local process.
+                    address = endpoint.group(1).decode('ascii')
+                    endpoint_file.write_text(f'{port}\n{urlsplit(address).path}\n')
+                    stderr = self._process.stderr
+                    async def discard_stderr():
+                        while await stderr.read(4096):
+                            pass
+                    self._stderr_task = asyncio.create_task(discard_stderr())
+                    self._cdp_browser = await self.playwright.chromium.connect_over_cdp(address, timeout=5000)
                     self.context = self._cdp_browser.contexts[0]
+                    self._process_job.hide_windows()
                     return
-            except (FileNotFoundError, ValueError, IndexError):
-                pass
-            await asyncio.sleep(.1)
+            except asyncio.TimeoutError:
+                break
         raise BrowserSessionError("The dedicated browser did not become ready. Try reopening it.")
 
     def _add_page(self, page) -> None:
         if page in self._pages.values():
             return
         self._pages[uuid4().hex] = page
-        page.on("framenavigated", lambda _frame: self._invalidate())
+        page.on("framenavigated", lambda frame: self._frame_navigated(page, frame))
         page.on("close", lambda: self._page_closed(page))
         page.on("download", self._download)
         page.on("dialog", self._set_dialog)
         page.on("console", lambda message: self._log(message.text))
         self.active_page = page
+        if self._process_job is not None:
+            self._process_job.hide_windows()
         self._invalidate()
+
+    def _frame_navigated(self, page, frame) -> None:
+        if page is self.active_page:
+            # Background loads must not stale clicks on the visible page. Child
+            # frames invalidate agent observations, while their changed pixels
+            # already arrive through the existing live feed.
+            self._invalidate(view_changed=frame is page.main_frame)
 
     def _context_closed(self) -> None:
         self.context = None
@@ -188,13 +275,20 @@ class DedicatedBrowser:
         self._dialog = dialog
 
     def _page_closed(self, page) -> None:
+        was_active = self.active_page is page
+        task = self._tab_loads.pop(id(page), None)
+        if task is not None:
+            task.cancel()
+        self._tab_errors.pop(id(page), None)
         self._pages = {key: value for key, value in self._pages.items() if value is not page}
         if self.active_page is page:
             self.active_page = next(iter(self._pages.values()), None)
-        self._invalidate()
+        self._invalidate(view_changed=was_active)
 
-    def _invalidate(self) -> None:
-        self._revision += 1
+    def _invalidate(self, *, view_changed: bool = True) -> None:
+        if view_changed:
+            self._revision += 1
+            self._preview_frame = None
         self._refs = {}
         self.snapshot_id = ""
 
@@ -244,7 +338,10 @@ class DedicatedBrowser:
 
     async def _close_owned(self) -> None:
         self.control = "closed"
+        await self._stop_preview()
         context, playwright, process, cdp_browser = self.context, self.playwright, self._process, self._cdp_browser
+        process_job, self._process_job = self._process_job, None
+        stderr_task, self._stderr_task = self._stderr_task, None
         self.context = None
         self.playwright = None
         self._process = None
@@ -254,24 +351,36 @@ class DedicatedBrowser:
         if self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
         self._tasks.clear()
+        self._tab_loads.clear()
+        self._tab_errors.clear()
         try:
             if cdp_browser is not None and process is not None and process.returncode is None:
                 try:
-                    session = await cdp_browser.new_browser_cdp_session()
-                    await session.send("Browser.close")
+                    session = await asyncio.wait_for(cdp_browser.new_browser_cdp_session(), timeout=3)
+                    await asyncio.wait_for(session.send("Browser.close"), timeout=3)
                 except Exception:
                     pass  # Browser.close can disconnect before acknowledging.
             elif context is not None:
                 await context.close()
         finally:
-            if process is not None and process.returncode is None:
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5)
-                except asyncio.TimeoutError:
-                    process.terminate()
-                    await process.wait()
-            if playwright is not None:
-                await playwright.stop()
+            try:
+                if process is not None and process.returncode is None:
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5)
+                    except asyncio.TimeoutError:
+                        process.terminate()
+                        if process_job is not None:
+                            process_job.close()
+                            process_job = None
+                        await asyncio.wait_for(process.wait(), timeout=5)
+            finally:
+                if process_job is not None:
+                    process_job.close()
+                if stderr_task is not None:
+                    stderr_task.cancel()
+                    await asyncio.gather(stderr_task, return_exceptions=True)
+                if playwright is not None:
+                    await playwright.stop()
         self._pages.clear()
         self.active_page = None
         self._dialog = None
@@ -283,41 +392,109 @@ class DedicatedBrowser:
         tabs = []
         for index, (key, page) in enumerate(self._pages.items()):
             if not page.is_closed():
-                try:
-                    title = await page.title()
-                except Exception:
-                    title = "Loading"
-                tabs.append(BrowserTab(id=key, index=index, title=title or "New tab", url=page.url, active=page is self.active_page))
+                title = "New tab"
+                if page.url != "about:blank" and id(page) not in self._tab_loads:
+                    try:
+                        title = await page.title()
+                    except Exception:
+                        title = "Loading"
+                tabs.append(BrowserTab(id=key, index=index, title=title or "New tab", url=page.url, active=page is self.active_page,
+                    loading=id(page) in self._tab_loads, error=self._tab_errors.get(id(page), "")))
         return BrowserStatus(available=ready, reason=reason, running=self.context is not None,
             presentation_requested=self.presentation_requested,
             control=self.control, session_id=self.session_id, active_tab_id=self._page_id(), tabs=tabs,
-            downloads=list(self._downloads.values())[-50:], activity=self.activity, snapshot_id=self.snapshot_id)
+            downloads=list(self._downloads.values())[-50:], activity=self.activity, snapshot_id=self.snapshot_id,
+            viewport_width=self._viewport["width"], viewport_height=self._viewport["height"],
+            preferences=self._browser_preferences())
 
     async def frame(self) -> BrowserFrame:
         page = self.active_page
         if page is None or page.is_closed():
             raise BrowserSessionError("Open a browser tab first.")
+        if id(page) in self._tab_loads:
+            # Even CDP attachment/viewport setup can wait for an uncommitted page.
+            # Do not enter those awaits while a new tab is still loading.
+            raise BrowserSessionError("This tab is loading.")
+        if self._process_job is not None:
+            self._process_job.hide_windows()
+        if page.viewport_size != self._viewport:
+            await page.set_viewport_size(self._viewport)
+            self._invalidate()
         identity = self._frame_id()
-        await page.set_viewport_size({"width":1280, "height":800})
+        if self._preview_identity != identity:
+            await self._stop_preview()
+            # Brave pushes changed frames. Readers no longer force a screenshot
+            # and hold the shared tool lock for every refresh.
+            session = await self.context.new_cdp_session(page)
+            self._preview_session = session
+            self._preview_identity = identity
+            viewport = dict(self._viewport)
+            def receive(event):
+                if self._preview_session is session and identity == self._frame_id():
+                    self._preview_frame = BrowserFrame(frame_id=identity, tab_id=self._page_id(), **viewport,
+                        data_url="data:image/jpeg;base64," + event["data"])
+                task = asyncio.create_task(self._ack_preview(session, event["sessionId"]))
+                self._tasks.add(task)
+                task.add_done_callback(self._tasks.discard)
+            session.on("Page.screencastFrame", receive)
+            try:
+                await session.send("Page.startScreencast", {"format":"jpeg", "quality":85,
+                    "maxWidth":viewport["width"], "maxHeight":viewport["height"], "everyNthFrame":1})
+            except Exception:
+                await self._stop_preview()
+                raise BrowserSessionError("The live browser view could not start. Reopen the session.") from None
+        if self._preview_frame is not None:
+            return self._preview_frame
         raw = await page.screenshot(type="jpeg", quality=75, timeout=5000)
         if identity != self._frame_id():
             raise BrowserSessionError("The page changed. Refresh the browser view.")
-        return BrowserFrame(frame_id=identity, tab_id=self._page_id(), width=1280, height=800,
+        frame = BrowserFrame(frame_id=identity, tab_id=self._page_id(), **self._viewport,
             data_url="data:image/jpeg;base64," + base64.b64encode(raw).decode("ascii"))
+        if self._preview_frame is None:
+            self._preview_frame = frame
+        return self._preview_frame
+
+    async def _ack_preview(self, session, identity: int) -> None:
+        try:
+            await session.send("Page.screencastFrameAck", {"sessionId":identity})
+        except Exception:
+            pass  # Closing a tab also disconnects its preview.
+
+    async def _stop_preview(self) -> None:
+        session, self._preview_session = self._preview_session, None
+        self._preview_identity = ""
+        self._preview_frame = None
+        if session is not None:
+            try:
+                await asyncio.wait_for(session.send("Page.stopScreencast"), timeout=2)
+            except Exception:
+                pass
+            try:
+                await asyncio.wait_for(session.detach(), timeout=2)
+            except Exception:
+                pass
 
     async def ui_control(self, request: BrowserControl) -> BrowserStatus:
         operation = request.operation
-        if operation == "open":
+        if operation == "preferences":
+            self._update_preferences(request)
+        elif operation == "open":
             self.presentation_requested = True
             await self.open()
+            # The native frontend renders blank tabs immediately. Restored sites stay put.
+            if self.active_page is None:
+                self.active_page = await self.context.new_page()
         elif operation == "close":
             await self.close()
         elif operation in {"pause", "take_over", "resume"}:
             if self.context is None:
                 raise BrowserSessionError("Open the browser first.")
+            if operation == "take_over" and request.frame_id and request.frame_id != self._frame_id():
+                raise BrowserSessionError("The page changed. Click the current browser view again.")
             self.control = {"pause": "paused", "take_over": "user", "resume": "agent"}[operation]
             if operation == "take_over":
-                self._invalidate()
+                # Ownership invalidates agent confirmations, not unchanged pixels.
+                self._invalidate(view_changed=False)
         elif operation == "show_download":
             path = self._paths.get(request.download_id)
             if path is None or not path.is_file():
@@ -325,14 +502,27 @@ class DedicatedBrowser:
             if os.name != "nt":
                 raise BrowserSessionError("Show in folder is currently supported on Windows.")
             subprocess.Popen(["explorer.exe", "/select,", str(path)], creationflags=subprocess.CREATE_NO_WINDOW)
+        elif operation == "resize":
+            page = self.active_page
+            if page is None or not request.tab_id or request.tab_id != self._page_id():
+                raise BrowserSessionError("The active tab changed. Resize the current browser view.")
+            viewport = {"width":request.width, "height":request.height}
+            if viewport != self._viewport:
+                await page.set_viewport_size(viewport)
+                self._viewport = viewport
+                self._invalidate()
         else:
             if self.context is None:
                 raise BrowserSessionError("Open the browser first.")
             if operation in {"click", "type", "press", "scroll"}:
-                if self.control != "user":
+                if self.control != "user" and not (operation == "click" and request.take_control):
                     raise BrowserSessionError("Take over before interacting with the page.")
                 if not request.frame_id or request.frame_id != self._frame_id():
                     raise BrowserSessionError("The page changed. Refresh the browser view before interacting.")
+                if operation == "click" and (request.x >= self._viewport["width"] or request.y >= self._viewport["height"]):
+                    raise BrowserSessionError("Click is outside the browser view.")
+                if operation == "click" and request.take_control:
+                    self._invalidate(view_changed=False)
             # User navigation and tab controls also yield ownership before changing the page.
             self.control = "user"
             page = self.active_page
@@ -341,9 +531,12 @@ class DedicatedBrowser:
                     page = await self.context.new_page()
                 await self._goto(page, request.url)
             elif operation == "new_tab":
+                url = navigation_url(request.url or USER_HOME_URL)
                 page = await self.context.new_page()
-                if request.url:
-                    await self._goto(page, request.url)
+                self.active_page = page
+                self._invalidate()
+                if url != "about:blank":
+                    self._start_tab_load(page, url)
             elif operation in {"select_tab", "close_tab"}:
                 page = self._pages.get(request.tab_id)
                 if page is None:
@@ -352,20 +545,26 @@ class DedicatedBrowser:
                     self.active_page = page
                     self._invalidate()
                 else:
-                    await page.close()
+                    await self._close_tab(page)
             elif page is None:
                 raise BrowserSessionError("Open a browser tab first.")
             elif operation in {"back", "forward", "reload"}:
+                await self._cancel_tab_load(page)
                 await getattr(page, {"back":"go_back", "forward":"go_forward", "reload":"reload"}[operation])(wait_until="domcontentloaded")
             elif operation == "click":
-                if request.x >= 1280 or request.y >= 800:
-                    raise BrowserSessionError("Click is outside the browser view.")
                 await page.mouse.click(request.x, request.y)
             elif operation == "type":
                 await page.keyboard.insert_text(request.text)
             elif operation == "press":
+                if request.key == "Escape":
+                    # CDP dispatches a page key, not Brave's native fullscreen
+                    # shortcut. Exit the remote document's fullscreen first.
+                    await page.evaluate("async () => { if (document.fullscreenElement) await document.exitFullscreen(); }")
                 await page.keyboard.press(request.key)
             elif operation == "scroll":
+                if request.x >= self._viewport["width"] or request.y >= self._viewport["height"]:
+                    raise BrowserSessionError("Scroll is outside the browser view.")
+                await page.mouse.move(request.x, request.y)
                 await page.mouse.wheel(0, request.delta)
         self.activity = {"pause":"Paused", "take_over":"You have control", "resume":"Ready"}.get(operation, operation.replace("_", " ").capitalize())
         return await self.status()
@@ -454,7 +653,7 @@ class DedicatedBrowser:
                 except (ValueError, IndexError):
                     raise BrowserSessionError("Select a tab index from browser_tabs.") from None
                 if verb == "close":
-                    await page.close()
+                    await self._close_tab(page)
                 else:
                     self.active_page = page
                     self._invalidate()
@@ -517,7 +716,39 @@ class DedicatedBrowser:
         self.activity = action.replace("_", " ").capitalize()
         return await self.snapshot()
 
+    def _start_tab_load(self, page, url: str) -> None:
+        async def load():
+            try:
+                await self._goto(page, url)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self._tab_errors[id(page)] = "This tab could not load. Reload it or enter another website."
+            finally:
+                if self._tab_loads.get(id(page)) is asyncio.current_task():
+                    self._tab_loads.pop(id(page), None)
+        task = asyncio.create_task(load())
+        self._tab_loads[id(page)] = task
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _cancel_tab_load(self, page) -> None:
+        task = self._tab_loads.get(id(page))
+        if task is not None and task is not asyncio.current_task():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            self._tab_loads.pop(id(page), None)
+        self._tab_errors.pop(id(page), None)
+
+    async def _close_tab(self, page) -> None:
+        # A normal Brave process exits when its last native tab closes. Retain
+        # one blank tab so both UI and agent navigation can continue in-panel.
+        if len(self._pages) == 1:
+            self.active_page = await self.context.new_page()
+        await page.close()
+
     async def _goto(self, page, url: str) -> None:
+        await self._cancel_tab_load(page)
         from playwright.async_api import Error
         try:
             await page.goto(navigation_url(url), wait_until="domcontentloaded")

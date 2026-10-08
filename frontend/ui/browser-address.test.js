@@ -5,6 +5,13 @@ import {createRoot} from 'react-dom/client';
 import {expect, test, vi} from 'vitest';
 
 test.each([
+  ['google', 'https://www.google.com/'],
+  [' YouTube ', 'https://www.youtube.com/'],
+  ['reddit', 'https://www.reddit.com/'],
+  ['wikipedia', 'https://www.wikipedia.org/'],
+  ['spotify', 'https://open.spotify.com/'],
+  ['x', 'https://x.com/'],
+  ['twitter', 'https://x.com/'],
   [' youtube.com/feed/history ', 'https://youtube.com/feed/history'],
   ['http://localhost:5173/path', 'http://localhost:5173/path'],
   ['localhost:5173/path', 'http://localhost:5173/path'],
@@ -21,7 +28,7 @@ test.each([
   expect(window.VellumApi.browser.addressUrl(input)).toBe(expected);
 });
 
-test('submitting a search word navigates to search instead of an invalid single-label host', async () => {
+test('submitting a recognized website name opens that site without a search intermediary', async () => {
   vi.resetModules();
   window.VellumApi = {client:{request:vi.fn().mockResolvedValue({})},
     appActions:{dispatch:vi.fn().mockResolvedValue({status:'applied'})}};
@@ -53,7 +60,7 @@ test('submitting a search word navigates to search instead of an invalid single-
     });
     await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', {bubbles:true, cancelable:true})));
     expect(window.VellumApi.appActions.dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({arguments:{operation:'navigate',url:'https://www.google.com/search?q=google'}}),
+      expect.objectContaining({arguments:{operation:'navigate',url:'https://www.google.com/'}}),
       expect.objectContaining({source:'ui'}),
     );
   } finally {

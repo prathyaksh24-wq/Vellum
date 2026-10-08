@@ -220,6 +220,16 @@ pending-action store.
 
 Tool authorization is intersection-based: the capability registry's existing `allowed_agents` and confirmation rules still apply, and the active profile allowlist can only narrow them.
 
+MusicAgent's profile includes `music_kworb` in the shared capability registry for
+public listener statistics, artist/song rankings and dated daily/weekly country
+charts. Recognized reads use the existing typed delegation runtime and preserve
+source links, retrieval timestamps and chart dates. Kworb reads have bounded
+downloads and a six-hour, 16-page process cache; they receive no personal music
+history or credentials. Album discovery verifies release dates through the
+existing Spotify adapter. Explicit chart playback uses that adapter's existing
+playback tool; a chart read cannot authorize playback. Monthly-listener read
+failures retain the main agent's canonical public-web fallback.
+
 ### Specialist Response Cache
 
 `agent/memory/specialist_cache.py` is owned by `MemoryOrchestrator`. It stores serialized `SpecialistResponse` objects keyed by profile ID, profile version, and normalized query fingerprint. Conservative lexical related-query matching is permitted only within the same profile/version.

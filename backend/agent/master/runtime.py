@@ -672,6 +672,26 @@ class DelegationRuntime:
                 if action_request is not None:
                     execute = getattr(executor, "execute_action_request")
                     response = execute(action_request)
+                elif callable(getattr(executor, "answer_with_memory", None)):
+                    preference = executor.stated_music_preference(goal)
+                    if preference:
+                        if profile.memory.write_scope != f'agent:{profile.id}':
+                            return SpecialistResponse(agent=profile.id, status='blocked', summary='This profile does not allow private music memory writes.')
+                        if self.memory_orchestrator is None or not self.memory_orchestrator.store.get_settings().get('memory_enabled', True):
+                            return SpecialistResponse(agent=profile.id, status='blocked', summary='Memory is off. I have not saved this preference.')
+                        saved = self.memory_orchestrator.save_explicit_memory(
+                            kind='preference', text=preference, source_thread_id=parent_thread_id,
+                            confidence=1.0, scope=profile.memory.write_scope,
+                        )
+                        return SpecialistResponse(agent=profile.id, status='answered', summary='Remembered your music preference: ' + preference,
+                            structured_payload={'memory_id':saved['id'], 'scope':profile.memory.write_scope}, confidence=1.0)
+                    packet = {}
+                    if self.memory_orchestrator is not None and executor.needs_memory(goal):
+                        packet = self.memory_orchestrator.build_memory_packet(
+                            thread_id=parent_thread_id, query=goal, agent_name=profile.id,
+                            read_scopes=profile.memory.read_scopes, live_honcho=False,
+                        )
+                    response = executor.answer_with_memory(goal, scoped, conversation_context=context, memory_packet=packet)
                 elif callable(getattr(executor, "answer_with_context", None)):
                     response = executor.answer_with_context(goal, scoped)
                 elif callable(getattr(executor, "answer_delegated", None)):
@@ -741,6 +761,20 @@ class DelegationRuntime:
         recent = self.pending_action_store.get_specialist_context(thread_id, source_agent).get("memory_handoff", {}) if self.pending_action_store else {}
         return self.memory_orchestrator.build_agent_handoff(source=source, recipient=profile, query=query,
             thread_id=thread_id, user_id=user_id, recent=recent)
+
+    def record_music_control(self, thread_id: str, operation: str) -> None:
+        """Retain a successful external UI control without executing it again."""
+        if operation not in {'next','previous','pause','resume'} or self.pending_action_store is None:
+            return
+        from agent.agents.base import SpecialistResponse
+        from agent.contracts.music import MusicPlan
+        binding=self.agent_catalog.try_resolve('MusicAgent')
+        if binding is None or binding.executor is None:
+            return
+        scoped=self.pending_action_store.get_specialist_context(thread_id,'MusicAgent')
+        response=SpecialistResponse(agent='MusicAgent',status='answered',summary='Playback control applied.',
+            structured_payload={'music_plan':MusicPlan(operation=operation).model_dump()})
+        self._retain_context(binding.profile,binding.executor,response,scoped,thread_id,'','')
 
     def _retain_context(self, profile, executor, response, scoped, thread_id, user_id, goal):
         if self.pending_action_store is None:

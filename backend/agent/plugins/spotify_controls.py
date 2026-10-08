@@ -107,6 +107,35 @@ class SpotifyPlaybackDeviceRequest(BaseModel):
     owner_id: UUID
     device_id: str = Field(default="", max_length=256, pattern=r"^[A-Za-z0-9_-]*$")
     diagnostics: list["SpotifyPlaybackDiagnostic"] = Field(default_factory=list, max_length=32)
+    observation: "SpotifyPlaybackObservation | None" = None
+    volume_percent: int | None = Field(default=None, ge=0, le=100)
+    volume_ack: str = Field(default='', max_length=80)
+
+
+class SpotifyObservedTrack(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    id: str = Field(default='', max_length=100)
+    uri: str = Field(pattern=r'^spotify:(?:track|episode):[A-Za-z0-9]+$')
+    name: str = Field(max_length=500)
+
+
+class SpotifyPlaybackObservation(BaseModel):
+    """Transient SDK state from the currently leased, trusted playback window."""
+    model_config = ConfigDict(extra='forbid')
+    track: SpotifyObservedTrack | None = None
+    artists: list[str] = Field(default_factory=list, max_length=20)
+    is_playing: bool = False
+    progress_ms: int = Field(default=0, ge=0)
+    duration_ms: int = Field(default=0, ge=0)
+    artwork_url: str = Field(default='', max_length=2048)
+    album: str = Field(default='', max_length=500)
+    shuffle: bool = False
+    repeat: Literal['off','context','track'] = 'off'
+
+
+class SpotifyVolumeRequest(BaseModel):
+    id: str
+    percent: int = Field(ge=0, le=100)
 
 
 class SpotifyPlaybackDiagnostic(BaseModel):
@@ -120,6 +149,7 @@ class SpotifyPlaybackDiagnostic(BaseModel):
 
 class SpotifyPlaybackSessionResponse(BaseModel):
     status: Literal["connecting", "ready", "reconnecting", "disabled"]
+    volume_request: SpotifyVolumeRequest | None = None
 
 
 class SpotifyPlaybackTokenResponse(BaseModel):

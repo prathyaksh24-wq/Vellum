@@ -7,7 +7,7 @@ parity.
 
 The frontend contract test parses the JSX actually served by the main and
 coding workspace HTML pages, including their external React components. It
-locks the tag/event/handler-expression multiset for 1,080 reviewed handlers.
+locks the tag/event/handler-expression multiset for the reviewed handlers.
 An added, removed, or rewired handler fails the test until its Action mapping
 or narrow exemption is reviewed and the fingerprint is updated. Covered
 controls also have source probes; the backend contract test checks that each
@@ -43,6 +43,24 @@ This reconciliation preserves the validation limits below. Automated merge
 checks do not constitute a new live provider or browser acceptance run.
 
 ## Browser validation (disposable fixture)
+
+The browser panel's direct page gesture now combines bounded takeover and the
+original click in one `browser.session.control` action. The server checks the
+displayed document identity and coordinates before changing ownership. Buffered text, special
+keys and wheel input retain queue order and use the same Action; viewport resize
+also uses that Action without changing agent ownership. Hide remains a Workspace
+Layout presentation action, after flushing typed input. The 27 browser handlers
+were reviewed under those existing mappings before updating their fingerprint.
+Live frame streaming is read-only and is not an input or mutation channel.
+
+The panel's capture-phase shortcut handler dispatches the same tab/navigation
+App Actions. Address focus and Escape propagation are non-committing gestures;
+Escape's remote fullscreen exit remains a checked page-key action. Both chat
+and specialist Sources/Activity handlers now explicitly select the existing
+`files` content mode through Workspace Layout presentation, whose existing
+Activity drawer renders the selected message. This prevents a previously used
+`browser` mode from reopening when Sources is clicked. The two main-page
+handlers retain their canonical action mapping.
 
 The served Vite page was checked against `backend/tests/action_parity_live_server.py`.
 That fixture puts conversations, plugin enablement, and automations under a

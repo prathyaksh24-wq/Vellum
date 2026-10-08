@@ -74,6 +74,7 @@ class LiveAgentDispatcher:
 
     def maybe_handle(self, message: str, thread_id: str, *, on_result=None) -> LiveAgentResult | None:
         message = self._clean_surface_prefix(message)
+        from agent.agents.music import MusicAgent
         state = self.state_store.get(thread_id)
         active_agent = state.active_agent
         pending_action = self.state_store.get_pending_action(thread_id)
@@ -245,9 +246,18 @@ class LiveAgentDispatcher:
                 # A new explicit collection edit supersedes the older preview.
                 # Do not leave stale authority for a later unrelated yes.
                 executor = matched_binding.executor if matched_binding else None
-                fast_plan = executor._fast_plan(message) if callable(getattr(executor, '_fast_plan', None)) else None
-                if fast_plan is None and callable(getattr(executor, '_collection_followup', None)):
-                    fast_plan = executor._collection_followup(message, music_context)
+                clauses = executor._compound_clauses(message) if callable(getattr(executor, '_compound_clauses', None)) else []
+                fast_plan = None
+                for clause in clauses or [message]:
+                    try:
+                        candidate = executor._fast_plan(clause) if callable(getattr(executor, '_fast_plan', None)) else None
+                        if candidate is None and callable(getattr(executor, '_collection_followup', None)):
+                            candidate = executor._collection_followup(clause, music_context)
+                    except ValueError:
+                        candidate = None
+                    if candidate and candidate.operation in {'save_current', 'remove_current'}:
+                        fast_plan = candidate
+                        break
                 if fast_plan and fast_plan.operation in {'save_current', 'remove_current'}:
                     retained = [a for a in pending_action.get('queued_actions', []) if a.get('action') != 'music.change_collection']
                     if retained:
@@ -267,6 +277,10 @@ class LiveAgentDispatcher:
                     )
                 )
                 response = run.response
+                if MusicAgent.public_research_request(message) and response.status != 'answered' and not response.structured_payload.get('music_results'):
+                    # Missing/unavailable public statistics retain the main
+                    # agent's official-page/public-web fallback.
+                    return None
                 result = self._result_from_response(response, run=run, route_source=route_source)
                 if retained_preview:
                     result.answer += '\n\nNext change awaiting confirmation: ' + retained_preview
@@ -381,7 +395,10 @@ class LiveAgentDispatcher:
         uses_agent_reach = "agent-reach" in response.analysis.casefold() or any(
             str(event.get("name") or "").startswith("agent_reach_x_") for event in response.activity_events
         )
-        if any(source.kind == "web" for source in response.sources) and not uses_agent_reach:
+        uses_kworb = any(event.get("name") == "music_kworb" for event in response.activity_events)
+        if uses_kworb:
+            tools.append("music_kworb")
+        if any(source.kind == "web" and not source.path_or_url.startswith("https://kworb.net/spotify/") for source in response.sources) and not uses_agent_reach and not uses_kworb:
             tools.append("web_search")
         if "serpapi" in response.analysis.casefold():
             tools.append("serpapi")

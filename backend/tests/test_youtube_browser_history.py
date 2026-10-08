@@ -1,10 +1,14 @@
+from __future__ import annotations
+
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
 from agent.knowledge.store import KnowledgeStore
 from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService, HistoryReadError
+
 
 
 def snapshot(account='a', title='Actual video'):
@@ -202,3 +206,40 @@ def test_history_creator_filter_uses_creator_not_video_title(tmp_path):
         planner=lambda *_args:{'source':'history','creator':'Actual Creator','limit':3})
     result = agent.answer('show videos by Actual Creator from my watch history')
     assert result.status == 'answered' and 'A different title' in result.summary
+
+
+def test_worker_routes_fresh_history_to_background_reader(monkeypatch):
+    from agent.mcp.playwright_tools import _PlaywrightMcpClient
+    from agent.mcp import youtube_history_page
+
+    async def fresh_snapshot(*, url=None):
+        assert url is None
+        return snapshot()
+
+    async def unexpected_configured_read(*_args, **_kwargs):
+        pytest.fail('Fresh account history must use the temporary-tab reader')
+
+    worker = _PlaywrightMcpClient()
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot)
+    monkeypatch.setattr(youtube_history_page, 'read_history', unexpected_configured_read)
+    assert asyncio.run(worker.session('youtube_history'))['status'] == 'ready'
+
+
+def test_worker_configured_refresh_skips_busy_and_forwards_history_url(monkeypatch):
+    from agent.mcp.playwright_tools import _PlaywrightMcpClient
+    from agent.mcp import youtube_history_page
+
+    async def unexpected_read(*_args, **_kwargs):
+        pytest.fail('A skipped refresh must not read or launch a browser')
+
+    worker = _PlaywrightMcpClient()
+    monkeypatch.setattr(youtube_history_page, 'read_history', unexpected_read)
+    arguments = {'url': 'https://www.youtube.com/feed/history', 'automatic': True}
+    worker._busy = True
+    assert asyncio.run(worker.session('youtube_history', arguments))['status'] == 'browser_busy'
+    worker._busy = False
+    async def fresh_snapshot(*, url=None):
+        assert url == arguments['url']
+        return snapshot()
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot)
+    assert asyncio.run(worker.session('youtube_history', arguments))['status'] == 'ready'

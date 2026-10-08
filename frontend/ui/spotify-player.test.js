@@ -68,3 +68,20 @@ test('an older HTTP snapshot cannot overwrite a newer SDK song and queue', async
   expect(host.querySelector('.spotify-now b').textContent).toBe('New song');
   expect(host.querySelector('.spotify-queue-row span').textContent).toBe('Fresh next');
 });
+
+test('SDK volume changes update the range without a track event', async () => {
+  const api=await renderPlayer([],true);
+  await act(async () => api.emitState({device:{id:'vellum',volume_percent:23}}));
+  expect(host.querySelector('[aria-label="Spotify volume"]').value).toBe('23');
+  expect(host.querySelector('.spotify-now b').textContent).toBe('Current song');
+});
+
+test('a later poll cannot replace fresh local SDK song or volume with remote lag', async () => {
+  const api=await renderPlayer([],true);
+  await act(async () => api.emitState({track:track('spotify:track:hindi','Hindi song'),device:{id:'vellum',volume_percent:23},queue:[track('spotify:track:next','Real next')]}));
+  api.player.mockResolvedValue({track:track('spotify:track:sza','SOS'),device:{id:'vellum',volume_percent:50},queue:[]});
+  await act(async () => window.dispatchEvent(new Event('vellum:spotify-player-refresh')));
+  expect(host.querySelector('.spotify-now b').textContent).toBe('Hindi song');
+  expect(host.querySelector('[aria-label="Spotify volume"]').value).toBe('23');
+  expect(host.querySelector('.spotify-queue-row span').textContent).toBe('Real next');
+});

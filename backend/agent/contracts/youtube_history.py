@@ -1,9 +1,13 @@
-"""Contracts for local, browser-derived YouTube history."""
+"""Local browser history contracts with bounded observations and explicit coverage."""
+
+from __future__ import annotations
+
 from typing import Literal
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 
 HISTORY_URL = "https://www.youtube.com/feed/history"
 

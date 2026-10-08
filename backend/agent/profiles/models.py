@@ -141,10 +141,10 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "MusicAgent": _profile(
             "MusicAgent",
-            "Play music by song title or artist, control playback, play or shuffle the user's playlists and Liked Songs, and prepare confirmed playlist creation. Spotify is the first supported integration; other music services use adapters when installed.",
-            instructions="Use only the selected music integration and the profile-approved music skills. Interpret typed requests locally, validate intent, and report actual tool results. Never expose credentials or replay cached playback acknowledgements.",
-            tools=["spotify_playback", "spotify_devices", "spotify_queue", "spotify_search", "spotify_playlists", "spotify_albums", "spotify_library", "spotify_podcasts"],
-            skills=["spotify"], cache_first=False,
+            "Play music, control playback, manage playlists and Liked Songs, find artists and albums, read monthly listeners and daily/weekly country charts from Kworb, recall dated listening history with verified artist credits, and suggest music for a conversation's mood or situation using saved user-stated music preferences. Suggestions require acceptance before playback. Spotify is the first integration.",
+            instructions="Use only the selected music integration and the profile-approved music skills. Interpret typed requests locally, validate intent, and report actual tool results. Use music_kworb for public artist statistics and daily/weekly country charts; preserve source and snapshot dates. Kworb album entries are stream-ranked and incomplete; verify newest/older album order through Spotify release dates. Listing statistics or charts never authorizes playback. Verify listening-history dates and artist credits deterministically; never guess missing history. Use only bounded conversation context and saved user-stated preferences for suggestions. Treat emotional interpretation as tentative, suggest first, and play only after acceptance. Never infer a profile or mood from Spotify activity or feed Spotify data to AI. Never expose credentials or replay cached playback acknowledgements.",
+            tools=["music_kworb", "spotify_playback", "spotify_devices", "spotify_queue", "spotify_search", "spotify_playlists", "spotify_albums", "spotify_library", "spotify_podcasts"],
+            skills=["spotify"], cache_first=False, version=3,
             cache=CachePolicy(default_ttl_seconds=0, live_ttl_seconds=0, historical_ttl_seconds=0),
         ),
         "SportsAgent": _profile(
@@ -219,7 +219,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         "YoutubeAgent": _profile(
             "YoutubeAgent",
             "YouTube videos and channels: find a video, search subscriptions or watch history, read a transcript, or summarize what was said.",
-            instructions="Use youtube.watch_history for current watch-history questions; it reads the current signed-in Vellum browser account. Use Takeout for explicitly imported or archive history. The browser account and Google OAuth connector are separate. Browser snapshots cover recent entries and day labels, not exact watch timestamps or all-time totals. Explain useful patterns with coverage limits. Distinguish watched, liked, subscribed and transcript content; never replace personal history with a how-to video search.",
+            instructions="Use youtube.watch_history for current watch-history questions; it reads the current signed-in Vellum browser account. Use Takeout for explicitly imported or archive history. The browser account and Google OAuth connector are separate. Browser snapshots cover recent entries and day labels, not exact watch timestamps or all-time totals. Resolve channel identity and aliases before filtering available history. Explain useful patterns in plain language with the snapshot date and coverage limits. Distinguish watched, liked, subscribed and transcript content; never replace personal history with a how-to video search.",
             tools=[
                 "youtube.account",
                 "youtube.subscriptions",

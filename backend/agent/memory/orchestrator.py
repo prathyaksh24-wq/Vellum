@@ -585,6 +585,10 @@ class MemoryOrchestrator:
         saved: list[dict[str, Any]] = []
         if self.store is not None:
             baseline_scopes = [scope for scope in scopes if scope in {"global", "user_profile"} or scope.startswith("project:")]
+            if agent_name == 'MusicAgent' and 'agent:MusicAgent' in scopes:
+                # Vague suggestions still need this agent's approved preferences.
+                # Keep the existing scope policy; do not read global history.
+                baseline_scopes.append('agent:MusicAgent')
             baseline = _durable_memories(self.store.list_saved(scopes=baseline_scopes))[:4] if baseline_scopes else []
             matched = _durable_memories(self.store.search_saved(clean_query, limit=12, scopes=scopes))
             saved = _dedupe_memories([*baseline, *matched])[:8]
