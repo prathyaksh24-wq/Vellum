@@ -30,6 +30,13 @@ async def run_automation_now(
 ) -> dict[str, Any]:
     run = store.record_run(automation["id"], _run_id())
     try:
+        if automation.get("builtin") and automation.get("builtin_key") == "youtube_creator_tracking":
+            import asyncio
+            from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+            result = await asyncio.to_thread(YouTubeCreatorTracking().refresh,
+                deliver=lambda delivery_id, text: _deliver_creator_upload(automation, delivery_id, text))
+            return store.finish_run(automation["id"], run["id"], status="complete",
+                output=f"Creator tracking: {result['status']}. {result['requests']} feed requests; {result.get('fallback_checks', 0)} API fallback checks; {result['delivered']} delivered uploads.")
         answer = await _execute_reasoning_turn(automation)
         _deliver_result(automation, answer)
         return store.finish_run(automation["id"], run["id"], status="complete", output=answer)
@@ -58,6 +65,15 @@ async def _execute_reasoning_turn(automation: dict[str, Any]) -> str:
     messages = result.get("messages", []) if isinstance(result, dict) else []
     return api._message_content(messages[-1] if messages else None) or "No response."
 
+
+def _deliver_creator_upload(automation, delivery_id, text):
+    from agent import api
+    from agent.conversations.lifecycle import ConversationLifecycle
+    destination = automation.get("destination") or {}
+    return ConversationLifecycle(path=api._UI_CONVERSATIONS_PATH).deliver_automation(
+        delivery_id=delivery_id, text=text, name="YouTube creator upload",
+        thread_id=str(destination.get("thread_id") or "") if destination.get("kind") == "existing_chat" else "",
+        project_id=automation.get("project_id"))
 
 def _resolve_reasoning_mode(reasoning_mode: Any):
     if not reasoning_mode:

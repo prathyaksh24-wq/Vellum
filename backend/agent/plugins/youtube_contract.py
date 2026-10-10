@@ -7,6 +7,8 @@ YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID = "youtube.connection.disconnect"
 YOUTUBE_INTELLIGENCE_REBUILD_ACTION_ID = "youtube.intelligence.rebuild"
 YOUTUBE_HISTORY_REFRESH_ACTION_ID = "youtube.history.refresh"
 YOUTUBE_ACTION_IDS = frozenset({
+    "youtube.creators.configure",
+    "youtube.creators.refresh",
     YOUTUBE_HISTORY_REFRESH_ACTION_ID,
     "youtube.history.configure",
     YOUTUBE_CONNECTION_START_ACTION_ID,

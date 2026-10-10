@@ -10,6 +10,7 @@ from agent.config import get_settings
 from agent.tools.registry import CapabilityAccess, CapabilityRecord, ToolRegistry
 from agent.tools.serpapi import SerpApiClient
 from agent.tools.web import extract_web_sources, web_search
+from agent.contracts.youtube_tracking import CreatorTrackingRead
 
 
 logger = logging.getLogger(__name__)
@@ -131,9 +132,10 @@ class YoutubeCapabilityService:
                 name="youtube.subscription_feed",
                 namespace="youtube",
                 access=CapabilityAccess.READ,
-                allowed_agents=allowed_agents,
+                allowed_agents=frozenset({"YoutubeAgent"}),
                 stream_label="Check YouTube subscription feed",
                 adapter=self.subscription_feed,
+                input_schema=CreatorTrackingRead.model_json_schema(),
             )
         )
         registry.register(
@@ -244,11 +246,15 @@ class YoutubeCapabilityService:
         return {"action": "youtube.personal_context", **result}
 
     def subscription_feed(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "action": "youtube.subscription_feed",
-            "available": False,
-            "reason": "official_feed_unavailable",
-        }
+        from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+        from agent.profiles.execution import get_profile_execution
+        from agent.llm.routing.models import provider_for_model
+        execution = get_profile_execution()
+        if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
+            raise ValueError("Creator tracking is local only. Select a local model to read it.")
+        request = CreatorTrackingRead.model_validate(_payload)
+        result = YouTubeCreatorTracking().snapshot(limit=request.limit)
+        return {"action": "youtube.subscription_feed", "available": result["configured"], **result}
 
     def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query") or "").strip()

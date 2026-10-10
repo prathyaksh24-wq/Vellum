@@ -6,6 +6,8 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- YouTube creator tracking chooses channels from repeated recent saved activity and explicit long-term, seasonal, current, former, and excluded relationships. Public Atom polling has response and request limits, backoff, quiet first-run baselines, persistent video deduplication, and retryable delivery through the existing Automation and Conversation owners. Creator assessments are local and account scoped; searches and recommendations do not endorse creators.
+
 - Music-request parsing consumes repeated whitespace and polite prefixes without regex backtracking, preserving provider selection, quoted titles, history artist filters and playlist/album commands. CodeQL's reported slow-regex paths now use single-pass delimiters or non-overlapping normalized matches.
 
 - Browser new tabs now show the five approved local wallpaper homepages, with Google, Brave, DuckDuckGo, Startpage and SearXNG selection beside the title. Search preferences, SearXNG instance and custom shortcuts persist through the existing browser App Action. Native homepage input avoids streamed-frame latency; new tabs do not wait for a remote homepage. Compact controls and workspace expansion leave more room for the page and restore the previous split without losing tabs.

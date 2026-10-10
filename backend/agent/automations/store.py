@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from threading import RLock
 from typing import Any, Literal
@@ -204,4 +205,13 @@ class AutomationStore:
         self.root.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        os.replace(temporary, self.path)
+        # Windows scanners/readers can briefly hold a sharing lock. Preserve
+        # the old valid file and retry the atomic replacement, never truncate it.
+        for attempt in range(5):
+            try:
+                os.replace(temporary, self.path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.025 * 2**attempt)

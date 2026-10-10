@@ -46,6 +46,7 @@
     learn: function (source, threadId, category) { return client.request("/api/skills/learn", client.jsonOptions("POST", {source:source, thread_id:threadId || "skills-hub", category:category || "community"})); },
     capabilities: function () { return client.request("/api/capabilities"); },
     youtubeStatus: function () { return client.request("/api/plugins/youtube/status"); },
+    youtubeCreatorTracking: function (limit) { return client.request("/api/plugins/youtube/creators?limit=" + encodeURIComponent(limit || 20), {cache:"no-store"}); },
     youtubeHistoryStatus: function () { return client.request("/api/plugins/youtube/history/status", {cache:'no-store'}); },
     youtubeIntelligenceStatus: function () { return client.request("/api/plugins/youtube/intelligence/status"); },
     youtubeOAuthStart: function () { return client.request("/api/plugins/youtube/oauth/start", client.jsonOptions("POST")); },
