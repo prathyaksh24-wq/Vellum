@@ -226,7 +226,8 @@ class YouTubeCreatorTracking:
                 "state": state, "score": round(score, 3), "recent_video_days": count, "recent_days": days,
                 "total_video_days": row["total"], "last_watched": row["last_day"], "reason": reason,
                 "topic_terms": rule.topic_terms if rule else []})
-        creators.sort(key=lambda item: (-int(item["state"] == "monitoring" and item["relationship"] != "auto"), -item["score"], item["channel_id"]))
+        creators.sort(key=lambda item: (-int(item["state"] == "monitoring" and item["relationship"] != "auto"),
+            -int(item["state"] == "monitoring"), -item["score"], item["channel_id"]))
         # Capacity is explicit and deterministic. Protected exclusions still
         # remain visible through the separate exclusions field.
         selected = 0
@@ -236,6 +237,8 @@ class YouTubeCreatorTracking:
                 if selected > config.max_channels:
                     creator["state"] = "capacity_wait"
                     creator["reason"] = "Polling capacity is occupied by stronger current or explicit relationships."
+        active_topics = {creator["channel_id"]: creator["topic_terms"] for creator in creators
+                         if creator["state"] == "monitoring"}
         health = dict((self.store.get_sync_cursor("youtube_creator_health", config.account_id) or {}).get("state") or {})
         return CreatorTrackingSnapshot(configured=True, enabled=config.enabled, account_id=config.account_id,
             status=health.get("status", "awaiting_first_check") if config.enabled else "paused",
@@ -246,7 +249,7 @@ class YouTubeCreatorTracking:
             creators=creators[:max(1, min(limit, 100))], excluded=list(dict.fromkeys(rule.name for rule in config.rules if rule.relationship == "excluded")),
             uploads=[{key: str(row[key]) for key in ("channel_id", "video_id", "title", "creator", "published_at", "status")}
                      | {"url": "https://www.youtube.com/watch?v=" + row["video_id"]}
-                     for row in self.store.youtube_tracking_uploads(config.account_id, limit=limit)],
+                     for row in self.store.youtube_tracking_uploads(config.account_id, limit=limit, topic_filters=active_topics)],
             pending_attribution=self.store.youtube_tracking_pending_count(config.account_id),
             unavailable_attribution=self.store.youtube_tracking_unavailable_count(config.account_id)).model_dump()
 
@@ -387,7 +390,7 @@ class YouTubeCreatorTracking:
                     published = _time(item.get("published_at"))
                     relevant = not active[channel]["topic_terms"] or any(term.casefold() in item["title"].casefold() for term in active[channel]["topic_terms"])
                     eligible = published and now - timedelta(days=2) <= published <= now and relevant
-                    entries.append(item | {"status": "baseline" if baseline else "pending" if eligible else "suppressed"})
+                    entries.append(item | {"status": "baseline" if baseline and relevant else "pending" if not baseline and eligible else "suppressed"})
                 state.update(initialized=True, failures=0, error="", last_success=now.isoformat(), next_at=(now+timedelta(minutes=30)).isoformat())
                 for key in ("etag", "last_modified"):
                     if key in result:

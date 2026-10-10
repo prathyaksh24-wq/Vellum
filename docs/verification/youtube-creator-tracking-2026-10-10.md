@@ -130,3 +130,46 @@ creator automation completed an actual scheduled run with eight feed attempts,
 eight successful API fallback checks, and zero delivered historical uploads.
 That run brought baseline coverage to 16 of 20 selected creators. This proves
 startup and collection, while real future-upload delivery remains unverified.
+
+## Follow-up live QA and CI repair
+
+The running creator API returned uncached, typed reads with a median latency
+of 93.46 ms across five requests (maximum 185.09 ms). Invalid limits returned
+HTTP 422. The live App Action completed eight feed attempts and eight successful
+connected API fallbacks, bringing all 20 selected creators to a quiet baseline;
+status became `ready` with no warnings and no historical notifications. A
+subsequent run through the real Automation API completed with zero additional
+requests or notifications, confirming the shared rolling budget.
+
+Live specialist QA exposed two bugs: saved baseline uploads could ignore title
+topic rules, and quiet inferred creators could precede active creators in a
+bounded response. Reads now apply active-channel and title-topic gates before
+LIMIT, and active creators precede quiet candidates. New baselines mark
+irrelevant entries suppressed. Regression tests cover legacy baseline rows,
+small result limits, and inactive channels. The repeated UI question showed all
+20 monitored creators; live API assertions confirmed excluded/former channels
+were inactive and returned upload titles matched configured topic terms.
+
+The isolated expanded affected suite passed 394 tests with two opt-in browser
+checks skipped in 323.57 seconds. An earlier run failed four unrelated backup
+fixture operations because temporary paths exceeded Windows path limits;
+rerunning with shorter workspace temporary paths passed without source changes.
+The separate App Action, book migration, and digest suites passed 87 tests in
+42.82 seconds after correcting CI fixtures for creator permissions, additive
+schema 15, and the new paused-by-default creator automation. The original CI
+run had six such failures, with 2,837 tests passing and 27 skipped; production
+permission enforcement was not relaxed. Repository-wide rerun results belong
+to the new GitHub CI run, not these local affected-suite counts.
+
+API, UI, and Honcho health returned HTTP 200. Installed Knowledge Core integrity
+remained `ok`, and all 50,773 raw Takeout watch observations remained intact.
+Crash-after-delivery recovery and notification deduplication passed in isolated
+fixtures; real future-upload arrival remains unverified.
+
+The actual UI **Refresh history** action failed closed with `page_changed`:
+YouTube's current History page layout was not recognized, and no history was
+imported. This is an outstanding browser-history integration limitation.
+The creator service can poll uploads and assess already saved activity, but
+continuous adaptation to new viewing is not established while fresh browser
+history capture fails. No failed refresh was reported as a successful import.
+

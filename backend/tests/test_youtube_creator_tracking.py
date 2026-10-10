@@ -113,6 +113,33 @@ def test_incremental_scope_cross_source_dedup_and_search_is_not_endorsement(setu
     assert len(service.snapshot()["creators"]) == 1
 
 
+def test_active_creators_precede_higher_scoring_quiet_creators_in_bounded_read(setup):
+    store, source, _, _, service = setup
+    store.record_observations([watch(store, source, video=f"{i:011d}", day=NOW-timedelta(days=19+i)) for i in range(3)] +
+        [watch(store, source, video=f"{10+i:011d}", channel=C2, name="Quiet", day=NOW) for i in range(3)])
+    configure(service, max_channels=1)
+    service.project()
+    creators = service.snapshot(limit=1)["creators"]
+    assert len(creators) == 1 and creators[0]["channel_id"] == C1
+    assert creators[0]["state"] == "monitoring"
+    assert service.refresh()["requests"] == 1
+
+
+def test_saved_upload_reads_filter_topics_and_inactive_channels_before_limit(setup):
+    store, _, _, reader, service = setup
+    configure(service, [rule(topic_terms=["NBA"])])
+    reader.entries = [upload(title="NBA preview", published_at=(NOW-timedelta(hours=1)).isoformat()),
+                      upload("00000000002", title="NFL preview")]
+    assert service.refresh()["delivered"] == 0
+    assert [item["title"] for item in service.snapshot(limit=1)["uploads"]] == ["NBA preview"]
+    # Existing pre-fix baselines also obey the current filters at read time.
+    store.youtube_tracking_save_feed("me", C1, [upload("00000000003", title="NFL highlights", status="baseline")],
+        {"initialized": True}, NOW.isoformat())
+    assert [item["title"] for item in service.snapshot(limit=1)["uploads"]] == ["NBA preview"]
+    configure(service, [rule(relationship="former")])
+    assert not service.snapshot()["uploads"]
+
+
 def test_current_interest_fades_and_seasonal_relationship_survives(setup):
     store, source, clock, _, service = setup
     configure(service, [rule(relationship="current"), rule(C2, "Seasonal", "seasonal")])

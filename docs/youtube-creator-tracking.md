@@ -69,6 +69,15 @@ Missing-ownership attribution uses the connected read-only Data API, one
 batch of at most 50 public video IDs per 15 minutes; no search text or watch
 timestamps are sent. Provider failures defer attribution for an hour.
 
+The monitored-channel setting accepts 1–100 creators; 20 is its default.
+Increasing that setting does not increase the request budget. At the default
+eight checks per 15 minutes, an initial rotation takes approximately 45 minutes
+for 20 creators, 105 minutes for 50, or 195 minutes for 100, before failures or
+backoff. Creators outside the active group can remain in the saved assessment.
+Active creators precede quiet inferred creators in bounded status reads. Saved
+upload reads apply active-channel and title-topic filters before the result
+limit, including older baseline records created before those filters existed.
+
 Feed and API transports share baseline, outbox, and delivery identities, so a
 transport switch does not duplicate notifications. The API fallback reads only
 the newest 15 upload entries. Playlist ownership is validated before accepting

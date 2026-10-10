@@ -167,10 +167,24 @@ class YouTubeTrackingStoreMixin:
             self._upsert_sync_cursor(connection, SyncCursorInput(connector="youtube_creator_feed",
                 account_id=account+":"+channel, state=state), succeeded_at=now)
 
-    def youtube_tracking_uploads(self, account, *, pending=False, limit=100):
+    def youtube_tracking_uploads(self, account, *, pending=False, limit=100, topic_filters=None):
+        if topic_filters is not None and not topic_filters:
+            return []
         with closing(self._connect()) as connection:
-            rows = connection.execute("SELECT * FROM youtube_upload_outbox WHERE account_id=? AND status IN (?,?) ORDER BY published_at DESC LIMIT ?",
-                (account, "pending" if pending else "delivered", "pending" if pending else "baseline", min(limit, 100))).fetchall()
+            parameters = [account, "pending" if pending else "delivered", "pending" if pending else "baseline"]
+            scope = ""
+            if topic_filters is not None:
+                filters = {channel: [term.casefold() for term in terms] for channel, terms in topic_filters.items()}
+                # Filter before LIMIT so newer unrelated uploads cannot hide a
+                # relevant entry. Match Python's Unicode casefold semantics.
+                connection.create_function("youtube_title_matches", 2,
+                    lambda channel, title: int(channel in filters and (not filters[channel] or any(term in title.casefold() for term in filters[channel]))),
+                    deterministic=True)
+                marks = ",".join("?" for _ in filters)
+                scope = f" AND channel_id IN ({marks}) AND youtube_title_matches(channel_id,title)=1"
+                parameters.extend(filters)
+            rows = connection.execute("SELECT * FROM youtube_upload_outbox WHERE account_id=? AND status IN (?,?)" + scope +
+                " ORDER BY published_at DESC LIMIT ?", [*parameters, min(limit, 100)]).fetchall()
         return [dict(row) for row in rows]
 
     def youtube_tracking_ack(self, account, channel, video, status="delivered"):
