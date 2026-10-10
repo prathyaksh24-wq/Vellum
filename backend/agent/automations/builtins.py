@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 
 BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
+        "key": "youtube_creator_tracking",
+        "name": "YouTube creator uploads",
+        "instructions": "Assess saved creator activity locally and check selected public YouTube Atom feeds. Baseline quietly; deliver only new relevant uploads with creator, title, and link. Explicit exclusions override inferred activity. No language model is called for polling.",
+        "schedule": "every 15m",
+        "state": "paused",
+    },
+    {
         "key": "youtube_browser_history",
         "name": "YouTube history refresh",
         "instructions": "Accumulate recent YouTube watch-history entries locally from Vellum's signed-in browser profile. Read in a temporary background tab without presenting the Browser panel or switching the user's page. Skip during pause or user control; report sign-in or reader failures. Repeated reads do not duplicate saved video/day entries.",
@@ -180,7 +187,12 @@ async def _youtube_history_handler() -> None:
         raise RuntimeError(result["message"])
 
 
+async def _youtube_creator_handler() -> dict[str, Any]:
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+    return await asyncio.to_thread(YouTubeCreatorTracking().refresh)
+
 _HANDLERS: dict[str, Any] = {
+    "youtube_creator_tracking": _youtube_creator_handler,
     "youtube_browser_history": _youtube_history_handler,
     "memory_dreaming": _memory_dreaming_handler,
     "nightly_digest": _nightly_digest_handler,

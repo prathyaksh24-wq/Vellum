@@ -142,6 +142,25 @@ class ConversationLifecycle:
                 **effects,
             }
 
+    def deliver_automation(self, *, delivery_id: str, text: str, name: str,
+                           thread_id: str = "", project_id: str | None = None) -> bool:
+        """Atomically append an idempotent automation message using this owner."""
+        with self._lock:
+            conversations = self.list()
+            target = next((item for item in conversations if str(item.get("thread_id")) == thread_id), None) if thread_id else \
+                next((item for item in conversations if item.get("id") == delivery_id), None)
+            if thread_id and target is None:
+                raise ConversationLifecycleError("CONVERSATION_NOT_FOUND", "Automation destination conversation is unavailable.")
+            if target and any(message.get("id") == delivery_id for message in target.get("messages", [])):
+                return False
+            if target:
+                payload = deepcopy(target)
+            else:
+                payload = {"thread_id": delivery_id, "title": name, "messages": [], "projectId": project_id}
+            payload.setdefault("messages", []).append({"role": "assistant", "text": text, "id": delivery_id})
+            self.save(str(target["id"]) if target else delivery_id, payload)
+            return True
+
     def patch(
         self,
         conversation_id: str,

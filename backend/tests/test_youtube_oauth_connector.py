@@ -41,6 +41,29 @@ def youtube_module():
     return load_portable_plugin(Path("plugins/connectors/youtube")).module
 
 
+def test_public_uploads_fallback_validates_owner_and_reuses_playlist(tmp_path):
+    module = youtube_module()
+    store = module.auth.YouTubeAuthStore(tmp_path, keyring_backend=FakeKeyring())
+    store.save_tokens({"access_token": "fixture", "expires_at": time.time()+3600})
+    channel = "UC"+"a"*22
+    calls = []
+    def request(method, url, **kwargs):
+        calls.append(url)
+        if url.endswith("/channels"):
+            return FakeResponse({"items": [{"id": channel, "contentDetails": {"relatedPlaylists": {"uploads": "UU"+"a"*22}}}]})
+        return FakeResponse({"items": [
+            {"snippet": {"title": "Title", "videoOwnerChannelId": channel, "videoOwnerChannelTitle": "Creator"},
+             "contentDetails": {"videoId": "00000000001", "videoPublishedAt": "2026-10-10T12:00:00Z"}},
+            {"snippet": {"title": "Other", "videoOwnerChannelId": "UC"+"b"*22}, "contentDetails": {"videoId": "00000000002", "videoPublishedAt": "2026-10-10T12:00:00Z"}}
+        ]})
+    client = module.client.YouTubeClient(client_id="fixture", client_secret="", store=store, request_backend=request)
+    first = client.channel_uploads(channel)
+    second = client.channel_uploads(channel, playlist_id=first["uploads_playlist"])
+    assert len(calls) == 3
+    assert [item["video_id"] for item in second["entries"]] == ["00000000001"]
+    assert second["transport"] == "youtube_data_api"
+
+
 def test_youtube_manifest_registers_read_only_connector() -> None:
     plugin = load_portable_plugin(Path("plugins/connectors/youtube"))
     context = PortablePluginContext()
@@ -48,6 +71,9 @@ def test_youtube_manifest_registers_read_only_connector() -> None:
     plugin.register(context)
 
     expected_capabilities = [
+        "youtube.creators.configure",
+        "youtube.creators.refresh",
+        "youtube.subscription_feed",
         "youtube.history.refresh",
         "youtube.history.configure",
         "youtube.account",

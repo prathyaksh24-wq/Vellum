@@ -1834,6 +1834,7 @@ const SpotifyAPI = {
   action: body => API.plugins.spotifyAction(body),
 };
 const YouTubeAPI = {
+  creators: () => API.plugins.youtubeCreatorTracking(100),
   historyStatus: () => API.plugins.youtubeHistoryStatus(),
   status: () => API.plugins.youtubeStatus(),
   start: () => API.plugins.youtubeOAuthStart(),
@@ -4848,6 +4849,7 @@ const YTLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
 );
 const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onOpenAutomations}) => {
+  const [creators, setCreators] = useState(null);
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyUrl, setHistoryUrl] = useState('https://www.youtube.com/feed/history');
@@ -4864,6 +4866,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
     }
   };
   useEffect(() => {
+    YouTubeAPI.creators().then(setCreators).catch(() => {});
     YouTubeAPI.historyStatus().then(next => { setHistory(next); setHistoryUrl(next.config.url); }).catch(() => {});
     loadStatus();
     const onComplete = event => {
@@ -4939,6 +4942,13 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
             </div>
             <div className="gc-trust">Vellum does not request your email, password, uploads, comments, or write access. OAuth tokens stay in your operating-system keyring.</div>
             <div className="gc-perm-title">Watch history through Vellum's browser</div>
+            {creators && creators.configured && <div className="gc-note" aria-live="polite">
+              Creator tracking: {creators.enabled ? 'Enabled' : 'Paused'}.<br/>
+              Quiet baseline: {creators.baselined_channels} of {creators.monitored_channels} selected creators at the last check.<br/>
+              {creators.creators.filter(item => item.state === 'monitoring').map(item => item.name).join(', ') || 'Waiting for repeated recent activity.'}<br/>
+              {creators.excluded.length} explicit exclusions. Current interests fade; seasonal relationships are retained.<br/>
+              Manage creator uploads in Automations using the button below.
+            </div>}
             <div className="gc-note">Sign into YouTube once in Vellum's browser. Refresh reads up to 100 loaded history entries and saves them locally. Browser sign-in is separate from Google OAuth.</div>
             {history && <div className="gc-note" aria-live="polite">{history.message}<br/>{history.records} dated history records saved. Last successful refresh: {history.last_success_at ? new Date(history.last_success_at).toLocaleString() : 'Never'}.</div>}
             <label className="gc-note">History page URL<input aria-label="YouTube history page URL" value={historyUrl} onChange={event => setHistoryUrl(event.target.value)} style={{width:'100%',marginTop:6}}/></label>
