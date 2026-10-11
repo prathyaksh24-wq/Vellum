@@ -101,6 +101,8 @@ def build_capability_contract() -> CapabilityContract:
                     "player_action": "/api/plugins/spotify/player/action",
                     "playback_token": "/api/plugins/spotify/playback/token",
                     "playback_device": "/api/plugins/spotify/playback/device",
+                    "browse": "/api/plugins/spotify/browse",
+                    "search": "/api/plugins/spotify/search",
                 },
             ),
             "youtube": FeatureContract(

@@ -1905,6 +1905,17 @@ class AppActionRuntime:
                     message=str(exc), authorized=True)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             if definition.confirmation_rule == "operation_bound":
+                if request.action_id == 'spotify.playlist.edit':
+                    from agent.plugins.spotify_controls import prepare_spotify_playlist_edit
+                    try:
+                        binding = prepare_spotify_playlist_edit(request.arguments, context)
+                    except (ValueError, RuntimeError) as exc:
+                        return self._error_receipt(request=request, context=context, status='failed',
+                            access_class=definition.access_class, error_code=getattr(exc, 'code', 'PLAYLIST_REVIEW_FAILED'),
+                            message=str(exc), authorized=True)
+                    return self._domain_confirmation_receipt(request, context, definition,
+                        target_kind='spotify_playlist', target_reference=binding['playlist_id'],
+                        message=binding['message'], binding=binding)
                 return self._domain_confirmation_receipt(
                     request,
                     context,
@@ -2028,6 +2039,7 @@ class AppActionRuntime:
         definition: AppActionDefinition,
         *,
         confirmed: bool = False,
+        confirmation_binding: dict | None = None,
     ) -> ActionReceipt:
         try:
             raw_result = self._registry.invoke(
@@ -2036,6 +2048,7 @@ class AppActionRuntime:
                     "arguments": dict(request.arguments),
                     "context": context,
                     "confirmed": confirmed,
+                    "confirmation_binding": confirmation_binding,
                     # Only the runtime's bound confirmation (or Google's consent
                     # flow) authorizes an external plugin capability.
                     "confirm": confirmed or definition.confirmation_rule == "oauth_consent",
@@ -2851,6 +2864,7 @@ class AppActionRuntime:
         target_kind: str,
         target_reference: str,
         message: str,
+        binding: dict | None = None,
     ) -> ActionReceipt:
         token = self._confirmation_token_factory()
         expires_at = self._now() + _UNDO_TTL
@@ -2863,6 +2877,7 @@ class AppActionRuntime:
             target_reference=target_reference,
             expected_revision=0,
             expires_at=expires_at,
+            binding=binding,
         ))
         return ActionReceipt(
             receipt_id=self._receipt_id_factory(),
@@ -3362,7 +3377,7 @@ class AppActionRuntime:
             return self._dispatch_knowledge_source(request, context, definition, confirmed=True)
         if self._plugin_contributions and self._plugin_contributions.has_action(request.action_id):
             self._receipt_store.remove_confirmation(token)
-            return self._dispatch_plugin_action(request, context, definition, confirmed=True)
+            return self._dispatch_plugin_action(request, context, definition, confirmed=True, confirmation_binding=record.binding)
         try:
             current = self._conversation_service().get(record.target_reference)
         except ConversationLifecycleError as exc:

@@ -135,6 +135,7 @@ class AppActionContext(BaseModel):
     workspace_layout: WorkspaceLayoutSnapshot = Field(default_factory=WorkspaceLayoutSnapshot)
     focused_ui_reference: str = ""
     selected_ui_reference: str = ""
+    music_collection_uri: str = Field(default="", max_length=160, pattern=r'^(?:spotify:(?:playlist|album):[A-Za-z0-9]+)?$')
     visible_ui_references: list[str] = Field(default_factory=list)
     attachment_digests: list[str] = Field(default_factory=list)
     active_agent: str = ""

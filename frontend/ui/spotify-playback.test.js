@@ -32,6 +32,17 @@ describe('Vellum Spotify Connect player lifecycle', () => {
   beforeEach(() => { vi.useFakeTimers(); vi.resetModules(); controllers = []; });
   afterEach(async () => { controllers.forEach(c => c.dispose()); await flush(); vi.useRealTimers(); });
 
+  test('a transient backend heartbeat failure does not disconnect healthy audio', async () => {
+    const f=await fixture();
+    f.player.getCurrentState=vi.fn(async () => ({paused:false,position:45000,duration:200000,track_window:{current_track:{uri:'spotify:track:Song',name:'Song',artists:[]}}}));
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    f.player.disconnect.mockClear();
+    f.api.spotifyPlaybackDevice.mockRejectedValueOnce(new Error('temporary network failure'));
+    await vi.advanceTimersByTimeAsync(2500); await flush();
+    expect(f.player.disconnect).not.toHaveBeenCalled();
+    expect(f.controller.getSnapshot()).toMatchObject({status:'ready',ready:true});
+  });
+
   test('direct HTML file previews explain the required server origin before loading the SDK', async () => {
     const f = await fixture({pageUrl:'file:///C:/Vellum/design/Vellum.html'});
     expect(f.player).toBeUndefined();
@@ -39,6 +50,18 @@ describe('Vellum Spotify Connect player lifecycle', () => {
     await f.controller.enable();
     expect(f.actions.dispatch).not.toHaveBeenCalled();
     expect(f.api.spotifyPlaybackToken).not.toHaveBeenCalled();
+  });
+
+  test('a verified ownership conflict stops this SDK without retrying another windows lease', async () => {
+    const f=await fixture();
+    await f.controller.enable(); await f.player.listeners.ready({device_id:'vellum-device'});
+    f.player.disconnect.mockClear();
+    f.api.spotifyPlaybackDevice.mockRejectedValueOnce(Object.assign(new Error('owner changed'),{status:409}));
+    f.actions.dispatch.mockResolvedValueOnce({status:'failed',message:'Vellum playback is already running in another window'});
+    await vi.advanceTimersByTimeAsync(3000); await flush();
+    expect(f.controller.getSnapshot()).toMatchObject({status:'busy',ready:false});
+    expect(f.player.disconnect).toHaveBeenCalledTimes(1);
+    expect(f.player.connect).toHaveBeenCalledTimes(1);
   });
 
   test('SDK volume is reflected in UI and trusted backend observations', async () => {

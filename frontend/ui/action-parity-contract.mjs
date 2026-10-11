@@ -27,6 +27,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/calendar-workspace.jsx",
   "design/Velllum/uploads/components/browser-panel.jsx",
   "design/Velllum/uploads/components/youtube-history.jsx",
+  "design/Velllum/uploads/components/music-page.jsx",
 ];
 
 function reactScripts(content) {

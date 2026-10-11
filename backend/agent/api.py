@@ -130,6 +130,8 @@ from agent.plugins.spotify_controls import (
     SpotifyPlaybackTokenResponse, SpotifyPlaybackTokenRequest, spotify_plugin_contribution,
     SpotifyPlayerActionRequest,
 )
+from agent.contracts.music_surface import MusicCardPage, music_card, music_card_page, music_track_page
+from agent.plugins.spotify_runtime import _spotify_module, spotify_catalog_query_gate
 from agent.plugins.discord_api import router as discord_router
 from agent.plugins.discord_runtime import portable_discord_status
 from agent.plugins.google_calendar_api import (
@@ -1978,6 +1980,10 @@ def _spotify_result_or_http(result_text: str) -> dict:
         raise HTTPException(status_code=429, detail=message, headers={"Retry-After": str(retry_after)})
     if code in {"premium_required", "no_active_device"}:
         raise HTTPException(status_code=403, detail=message)
+    if code == 'access_denied':
+        raise HTTPException(status_code=403, detail=message)
+    if code == 'resource_unavailable':
+        raise HTTPException(status_code=404, detail=message)
     raise HTTPException(status_code=503, detail="Unreachable.")
 
 
@@ -2011,6 +2017,78 @@ async def spotify_player(details: bool = False) -> dict:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except SpotifyError as exc:
         raise HTTPException(status_code=503, detail="Unreachable.") from exc
+
+
+@router.get('/plugins/spotify/browse', response_model=MusicCardPage)
+async def spotify_browse(kind: Literal['playlists', 'liked', 'albums', 'artist_tracks', 'playlist_tracks', 'album_tracks', 'playlist_details'] = 'playlists',
+                         offset: int = Query(0, ge=0, le=100000), limit: int = Query(20, ge=1, le=50),
+                         artist_id: str = Query('', max_length=100, pattern=r'^[A-Za-z0-9]*$'),
+                         source_id: str = Query('', max_length=100, pattern=r'^[A-Za-z0-9]*$')) -> MusicCardPage:
+    if not _spotify_has_credentials():
+        raise HTTPException(status_code=401, detail='Spotify is not connected')
+    service = _spotify_client()
+    if kind == 'playlist_details':
+        if not isinstance(source_id, str) or not source_id:
+            raise HTTPException(status_code=422, detail='Choose a playlist')
+        raw = _spotify_result_or_http(await asyncio.to_thread(_spotify_module.tools.spotify_playlists,
+            {'action':'get', 'playlist_id':source_id}, service=service))
+        if raw.get('id') != source_id:
+            raise HTTPException(status_code=502, detail='Spotify did not verify this playlist identity')
+        card = music_card(raw, 'playlist')
+        profile = _spotify_result_or_http(await asyncio.to_thread(_spotify_module.tools._result, service.get_profile))
+        card.editable = bool(card.owner_id and card.owner_id == profile.get('id'))
+        return MusicCardPage(items=[card], total=1)
+    if kind in {'playlist_tracks', 'album_tracks'}:
+        if not isinstance(source_id, str) or not source_id:
+            raise HTTPException(status_code=422, detail='Choose a playlist or album')
+        handler = _spotify_module.tools.spotify_playlists if kind == 'playlist_tracks' else _spotify_module.tools.spotify_albums
+        identity = 'playlist_id' if kind == 'playlist_tracks' else 'album_id'
+        result = await asyncio.to_thread(handler,
+            {'action':'tracks', identity:source_id, 'offset':offset, 'limit':limit}, service=service)
+        return music_track_page(_spotify_result_or_http(result), offset, playlist=kind == 'playlist_tracks')
+    if kind == 'artist_tracks':
+        if not artist_id:
+            raise HTTPException(status_code=422, detail='Choose an artist')
+        raw = _spotify_result_or_http(await asyncio.to_thread(_spotify_module.tools._result,
+            lambda: service.request('GET', f'/artists/{artist_id}/top-tracks')))
+        tracks = raw.get('tracks') or []
+        return MusicCardPage(items=[music_card(item, 'track') for item in tracks], total=len(tracks))
+    args = {'action':'list', 'limit':limit, 'offset':offset}
+    if kind == 'playlists':
+        result = await asyncio.to_thread(_spotify_module.tools.spotify_playlists, args, service=service)
+        return music_card_page(_spotify_result_or_http(result), 'playlist', offset)
+    result = await asyncio.to_thread(_spotify_module.tools.spotify_library,
+        {**args, 'kind':'tracks' if kind == 'liked' else 'albums'}, service=service)
+    return music_card_page(_spotify_result_or_http(result), 'track' if kind == 'liked' else 'album', offset,
+                           unwrap='track' if kind == 'liked' else 'album')
+
+
+@router.get('/plugins/spotify/search', response_model=MusicCardPage)
+async def spotify_catalog_search(query: str = Query(min_length=1, max_length=500),
+                                 kind: Literal['track', 'album', 'artist', 'playlist'] = 'track',
+                                 offset: int = Query(0, ge=0, le=1000), limit: int = Query(10, ge=1, le=10)) -> MusicCardPage:
+    if not _spotify_has_credentials():
+        raise HTTPException(status_code=401, detail='Spotify is not connected')
+    safe_query, privacy_error = spotify_catalog_query_gate(query)
+    if privacy_error:
+        raise HTTPException(status_code=422, detail='This search contains private information. Use a song, artist or album name.')
+    # Explicit links resolve through the same identity parser as MusicAgent.
+    # No public-name search may substitute another user's similarly named mix.
+    from agent.tools.capabilities.spotify_service import SpotifyCapabilityService
+    playlist_id = SpotifyCapabilityService._spotify_id(safe_query.strip(), 'playlist')
+    if playlist_id:
+        reader = getattr(_spotify_client(), 'get_linked_playlists', None)
+        linked = await asyncio.to_thread(reader) if callable(reader) else []
+        known = next((row for row in linked if row.get('id') == playlist_id), None) if isinstance(linked, list) else None
+        if known:
+            return MusicCardPage(items=[music_card(known, 'playlist')], total=1)
+        return MusicCardPage(items=[music_card({'id':playlist_id,
+            'uri':'spotify:playlist:' + playlist_id, 'name':'Spotify playlist link',
+            'external_urls':{'spotify':'https://open.spotify.com/playlist/' + playlist_id}}, 'playlist')], total=1)
+    result = await asyncio.to_thread(_spotify_module.tools.spotify_search,
+        {'query':safe_query, 'types':[kind], 'offset':offset, 'limit':limit}, service=_spotify_client())
+    page = _spotify_result_or_http(result).get(kind + 's') or {}
+    return music_card_page(page, kind, offset)
 
 
 @router.post("/plugins/spotify/player/action")

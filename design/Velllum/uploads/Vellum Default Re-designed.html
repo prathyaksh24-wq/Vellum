@@ -18,6 +18,8 @@
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="components/spotify-playback.js"></script>
+<link rel="stylesheet" href="components/music-page.css"/>
+<script type="text/babel" data-presets="react" src="components/music-page.jsx"></script>
 <script src="api/automations.js"></script>
 <script src="api/settings.js?v=20260710-backend-routing"></script>
 <script src="api/knowledge.js?v=20260710-wiki"></script>
@@ -3187,6 +3189,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
         <div className="sb-tools">
           <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
           <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
+          <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></span>Music</button>
           {browserAvailable && <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>}
           <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
         </div>
@@ -3357,6 +3360,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <button className={'rail-btn' + (view === 'scheduled' ? ' active' : '')} title="Scheduled" onClick={() => onNav('scheduled')}><IcGCal size={17}/></button>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Observability · Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
+      <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></button>
       <button className={'rail-btn' + (view === 'kg' ? ' active' : '')} title="Knowledge graph" onClick={() => onNav('kg')}><IcGraph size={17}/></button>
       <button className={'rail-btn' + (view === 'skills' ? ' active' : '')} title="Skills ? Ctrl+Shift+K" onClick={() => onNav('skills')}><IcSkills size={17}/></button>
       <button className={'rail-btn' + (view === 'memory' ? ' active' : '')} title="Memory - Ctrl+Shift+E" onClick={() => onNav('memory')}><IcBrain size={17}/></button>
@@ -7362,7 +7366,7 @@ const fmtSpotifyTime = ms => {
   return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 };
 
-const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
+const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection}) => {
   const connected = !!(spotify && spotify.connected);
   const [player, setPlayer] = useState(null);
   const [open, setOpen] = useState(false);
@@ -7373,7 +7377,9 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   const playerRevisionRef = useRef(0);
   const refreshRequestRef = useRef(0);
   const sdkStateRef = useRef(null);
-  openRef.current = open;
+  const commandRef = useRef(false);
+  const [busy, setBusy] = useState(false);
+  openRef.current = open || !!musicPageTarget;
   const playbackRef = useRef(null);
   const [playback, setPlayback] = useState({status:'loading',enabled:false,ready:false,message:''});
   useEffect(() => {
@@ -7443,14 +7449,13 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
     tick();
     return () => { stoppedRef.current = true; clearTimeout(timerRef.current); document.removeEventListener('visibilitychange', onVisibility); };
   }, [connected]);
-  useEffect(() => { if (connected && open) refresh(true).catch(() => {}); }, [connected, open]);
+  useEffect(() => { if (connected && (open || musicPageTarget)) refresh(true).catch(() => {}); }, [connected, open, musicPageTarget]);
   useEffect(() => {
     if (!connected) return;
-    const onAgentAction = () => refresh(open).catch(() => {});
+    const onAgentAction = () => refresh(openRef.current).catch(() => {});
     window.addEventListener('vellum:spotify-player-refresh', onAgentAction);
     return () => window.removeEventListener('vellum:spotify-player-refresh', onAgentAction);
   }, [connected, open]);
-  if (!connected) return null;
   const isPlaying = !!(player && player.is_playing);
   const track = player && player.track;
   const queuedUris = new Set([track?.uri || track?.id]);
@@ -7461,13 +7466,27 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
   });
   const artists = player && Array.isArray(player.artists) ? player.artists.join(', ') : '';
   const run = async body => {
-    try { await SpotifyAPI.action(body); await refresh(open); }
-    catch (err) { await refresh(open).catch(() => {}); setError(err && err.message ? err.message : 'Spotify action failed.'); }
+    if (commandRef.current) return false;
+    commandRef.current = true; setBusy(true);
+    try {
+      if (body.action === 'play') {
+        const activation = window.VellumSpotifyPlayback.beginRequest?.('play music');
+        if (activation) await activation.ready;
+      }
+      await SpotifyAPI.action(body);
+      // Release the mutation guard after its receipt, not after slow queue reads.
+      refresh(false).catch(() => {}); return true;
+    }
+    catch (err) { setError(err && err.message ? err.message : 'Spotify action failed.'); return false; }
+    finally { commandRef.current = false; setBusy(false); }
   };
+  const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
+    music={{player,playback,upcoming,run,busy,error,refresh,enable:() => playbackRef.current?.enable()} }/>, musicPageTarget);
+  if (!connected || !compactVisible) return page;
   const toggle = event => { event.stopPropagation(); run({action:isPlaying ? 'pause' : 'play'}); };
   const repeatNext = !player || player.repeat === 'off' ? 'context' : player.repeat === 'context' ? 'track' : 'off';
   return (
-    <div className={'spotify-player-shell side-' + dockSide}>
+    <React.Fragment>{page}<div className={'spotify-player-shell side-' + dockSide}>
       <div className="spotify-player-pill" role="button" tabIndex="0" aria-label="Open Spotify player" onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}>
         {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6" size={17}/></span>}
         <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (playback.status === 'shared' ? playback.message : playback.ready ? 'Playing inside Vellum' : playback.enabled ? 'Vellum player reconnecting' : 'Enable playback inside Vellum')}</span></span>
@@ -7496,8 +7515,9 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect}) => {
         {!playback.enabled && <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>}
         <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{upcoming.length ? upcoming.slice(0,5).map(item => <div className="spotify-queue-row" key={item.uri || item.id}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>) : <span style={{fontSize:10.5,color:'var(--dim2)'}}>No upcoming tracks in Spotify's queue.</span>}</div>
         {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
+        {onOpenMusic && <button className="btn spotify-open-page" onClick={onOpenMusic}>Open Music</button>}
       </div>}
-    </div>
+    </div></React.Fragment>
   );
 };
 
@@ -8430,7 +8450,7 @@ const PetdexTab = ({manifest, loading, error, installed = [], active, size, hidd
     </React.Fragment>
   );
 };
-const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','memory','kg','archive','agent']);
+const APP_VIEW_IDS = new Set(['chat','library','projects','project','scheduled','ledger','skills','apps','music','memory','kg','archive','agent']);
 const isNotFoundLocation = () => {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -8555,6 +8575,7 @@ const mergeConversationRecords = (current, serverConversations) => {
 };
 
 const App = () => {
+  const [musicPageTarget, setMusicPageTarget] = useState(null);
   const navigationEpochRef = useRef(0);
   const [browserFeature, setBrowserFeature] = useState(false);
   const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
@@ -8620,12 +8641,14 @@ const App = () => {
     });
   }
   const workspaceContextRef = useRef({active_agent:'', project_id:''});
+  const musicCollectionRef = useRef('');
   const workspaceActionRuntimeRef = useRef(null);
   if (!workspaceActionRuntimeRef.current) {
     workspaceActionRuntimeRef.current = window.VellumUI.AppActions.createWorkspaceLayoutRuntime({
       client: API.appActions,
       contextResolver: () => ({
         ...workspaceContextRef.current,
+        music_collection_uri: musicCollectionRef.current,
         petdex: window.VellumUI.PetdexActions.context(petdexStateRef.current),
         device_settings: deviceSettingsRuntimeRef.current.snapshot(),
       }),
@@ -8899,7 +8922,9 @@ const [slashSkills, setSlashSkills] = useState([]);
     };
     window.addEventListener('message', onMessage);
     window.addEventListener('storage', onStorage);
-    return () => { alive = false; window.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); };
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshSpotify(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; window.removeEventListener('message', onMessage); window.removeEventListener('storage', onStorage); document.removeEventListener('visibilitychange', onVisible); };
   }, []);
   const disconnectSpotify = async () => {
     await dispatchConversationAction('spotify.connection.disconnect');
@@ -9293,7 +9318,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (request.action_id !== 'spotify.playback.control' && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (!['spotify.playback.control','spotify.playlist.edit'].includes(request.action_id) && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           actionReceipt: (receipt, turn) => {
             applyAppActionReceipt(receipt, {notify:true, turn});
@@ -9869,7 +9894,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             conversationActionRuntimeRef.current.rememberRequest(request);
             if (appActionRequested) return;
             appActionRequested = true;
-            if (request.action_id !== 'spotify.playback.control' && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
+            if (!['spotify.playback.control','spotify.playlist.edit'].includes(request.action_id) && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           sources: sources => {
             const liveSources = normalizeSources(sources);
@@ -10123,6 +10148,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         : receipt.action_id === 'memory.conversations.import' ? 'Import'
         : receipt.action_id === 'provider.credential.configure' ? 'Save key'
         : receipt.action_id === 'spotify.connection.disconnect' ? 'Disconnect'
+        : receipt.action_id === 'spotify.playlist.edit' ? 'Confirm change'
         : receipt.action_id === 'github.pull_request.create' ? 'Create PR'
         : receipt.action_id === 'youtube.connection.disconnect' ? 'Disconnect'
         : receipt.action_id === 'book.process' ? 'Process'
@@ -10135,6 +10161,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     });
   };
   const applyAppActionReceipt = (receipt, options = {}) => {
+    if (receipt?.status === 'applied' && receipt.action_id === 'spotify.playlist.edit') {
+      if (receipt.result?.removed && musicCollectionRef.current === 'spotify:playlist:' + receipt.result.playlist_id) musicCollectionRef.current = '';
+      window.dispatchEvent(new CustomEvent('vellum:spotify-library-refresh', {detail:receipt.result}));
+    }
+    if (receipt?.status === 'applied' && receipt.action_id === 'spotify.connection.disconnect') musicCollectionRef.current = '';
     try {
       workspaceActionRuntimeRef.current.applyReceipt(receipt);
       deviceSettingsRuntimeRef.current.applyReceipt(receipt);
@@ -10514,7 +10545,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
-        <div className={'body' + (browserPanelVisible ? ' browser-active' : '')}>
+        <div className={'body' + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')}>
           {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
@@ -10568,20 +10599,22 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
             {view === 'skills' && <SkillsHubView onSkillAction={dispatchSkillAction}/>}
             {view === 'apps' && <BackendConnectorsView apps={apps} onCalendarAction={dispatchKnowledgeAction} youtubeIntelligence={ytIntelligence} onOpenSkills={() => nav('skills')} onPluginState={(pluginId,enabled) => dispatchKnowledgeAction('plugin.state.set',{plugin_id:pluginId,enabled})}/>}
+            {view === 'music' && <div className="music-page-mount" ref={setMusicPageTarget}/>}
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
-          {browserPanelVisible && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
+          {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
             onHide={() => dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false})}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => applyAppActionReceipt(receipt, {notify:false})}/>}
         </div>
-        <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
+        {view !== 'music' && <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
           onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
-          onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>
-        <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)}/>
-        {!petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
+          onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>}
+        <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
+          compactVisible={['chat','agent','project'].includes(view) && !browserPanelVisible} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}/>
+        {view !== 'music' && !petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
         </React.Fragment>}
         {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
         {menuChat && <ChatMenu chat={menuChat} projectName={menuChatProject ? menuChatProject.name : null} pos={menu} onAction={a => chatMenuAction(menu.id, a)} onClose={() => setMenu(null)}/>}
