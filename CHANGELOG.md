@@ -6,6 +6,7 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Playlist edit commands use a token scan to avoid slow regex backtracking on malformed requests while preserving names, emoji and descriptions. ChromaDB dependency audit exceptions were rechecked against upstream advisories and embedded-only usage, with the next review due October 25, 2026.
 - Music collections and song lists have display sorting that preserves playback positions. Owned playlists expose name, description and song editing; followed playlists can be removed from the library. UI and typed playlist changes use one confirmed App Action, bind the account and playlist revision, verify Spotify results, and refresh the collection after saving.
 
 - Spotify playback preserves healthy audio through transient heartbeat failures, releases transport controls before queue refreshes, and keeps pending controls visually stable. Playlist permission failures expose an exact-context Play fallback; explicit linked playlists join the same paginated collection used by the Music page and MusicAgent.

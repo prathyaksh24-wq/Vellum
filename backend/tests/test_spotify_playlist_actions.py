@@ -140,6 +140,35 @@ def test_playlist_edit_matcher_does_not_intercept_conversation_renames(editing):
     assert spotify_controls.match_spotify_playlist_command('rename this chat to Music') is None
 
 
+@pytest.mark.parametrize('message', ['remove ""', "unfollow ''", 'delete', 'rename', 'set description of'])
+def test_incomplete_playlist_edits_do_not_dispatch(message):
+    assert spotify_controls.match_spotify_playlist_command(message) is None
+
+
+@pytest.mark.parametrize('message,arguments', [
+    ('rename  my  Tamil playlist  to  "Road  Trip"', {'operation':'update_details','playlist_name':'Tamil','name':'Road  Trip'}),
+    ('set my Tamil playlist’s name to Evening', {'operation':'update_details','playlist_name':'Tamil','name':'Evening'}),
+    ('edit the description of my 🔥 playlist to Songs  for tonight', {'operation':'update_details','playlist_name':'🔥','description':'Songs  for tonight'}),
+    ('remove my Tamil playlist from my Spotify library', {'operation':'remove','playlist_name':'Tamil'}),
+    ('unfollow playlist 🔥', {'operation':'remove','playlist_name':'🔥'}),
+])
+def test_playlist_edit_token_boundaries_preserve_values(message,arguments):
+    action=spotify_controls.match_spotify_playlist_command(message)
+    assert action.arguments == arguments
+
+
+@pytest.mark.parametrize('prefix', ['rename a', 'set a', 'set description of a', 'remove playlist a', 'remove a'])
+def test_playlist_edit_whitespace_does_not_block_the_request(prefix):
+    from time import perf_counter
+    started=perf_counter()
+    action=spotify_controls.match_spotify_playlist_command(prefix + ' ' * 30000)
+    if prefix == 'remove playlist a':
+        assert action.arguments == {'operation':'remove','playlist_name':'a'}
+    else:
+        assert action is None
+    assert perf_counter() - started < 1.0
+
+
 def test_confirmed_arguments_cannot_be_substituted(editing):
     runtime,state,writes=editing
     context=AppActionContext(source='ui')

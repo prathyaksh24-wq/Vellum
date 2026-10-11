@@ -107,29 +107,83 @@ class SpotifyPlaylistEditRequest(BaseModel):
 
 
 def match_spotify_playlist_command(command: str) -> AppActionRequest | None:
-    """Exact editing intent; ambiguous names are resolved from the saved library."""
+    """Read syntax tokens once; preserve original spelling and spacing of values."""
+    tokens = list(re.finditer(r'\S+', command))
+    words = [token.group().casefold() for token in tokens]
+    if not words:
+        return None
+
+    def fragment(start, stop):
+        return command[tokens[start].start():tokens[stop - 1].end()]
+
     def target(value):
         value = value.strip().strip('\"\'')
-        if value.casefold() in {'this playlist', 'that playlist', 'the playlist', 'my playlist'}:
+        if tuple(value.casefold().split()) in {('this', 'playlist'), ('that', 'playlist'), ('the', 'playlist'), ('my', 'playlist')}:
             return ''
-        value = re.sub(r'^(?:my|the)\s+', '', value, flags=re.I)
-        value = re.sub(r'^playlist\s+|\s+playlist$', '', value, flags=re.I)
+        parts = value.split(maxsplit=1)
+        if len(parts) == 2 and parts[0].casefold() in {'my', 'the'}:
+            value = parts[1]
+        parts = value.split(maxsplit=1)
+        if len(parts) == 2 and parts[0].casefold() == 'playlist':
+            value = parts[1]
+        parts = value.rsplit(maxsplit=1)
+        if len(parts) == 2 and parts[1].casefold() == 'playlist':
+            value = parts[0]
         return value.strip().strip('\"\'')
 
-    rename = re.fullmatch(r'(?:rename|change\s+(?:the\s+)?name\s+of)\s+(.+?)\s+to\s+(.+)', command, re.I)
-    if not rename:
-        rename = re.fullmatch(r'(?:change|set)\s+(.+?playlist)(?:[’\']s)?\s+name\s+to\s+(.+)', command, re.I)
-    if rename and 'playlist' in rename[1].casefold():
+    def edit(start, separator, field, possessive=False):
+        if separator <= start or separator + 1 >= len(words):
+            return None
+        value = fragment(start, separator)
+        if 'playlist' not in value.casefold():
+            return None
+        if possessive and value.casefold().endswith(("playlist's", 'playlist’s')):
+            value = value[:-2]
         return AppActionRequest(action_id=SPOTIFY_PLAYLIST_EDIT_ACTION_ID,
-            arguments={'operation':'update_details', 'playlist_name':target(rename[1]), 'name':rename[2].strip().strip('\"\'')})
-    description = re.fullmatch(r'(?:change|set|edit)\s+(?:the\s+)?description\s+of\s+(.+?)\s+to\s+(.+)', command, re.I)
-    if description and 'playlist' in description[1].casefold():
+            arguments={'operation':'update_details', 'playlist_name':target(value),
+                       field:fragment(separator + (2 if possessive else 1), len(words)).strip('\"\'')})
+
+    prefixes = [('rename',), ('change', 'name', 'of'), ('change', 'the', 'name', 'of')]
+    for prefix in prefixes:
+        if words[:len(prefix)] == list(prefix):
+            try:
+                separator = words.index('to', len(prefix) + 1)
+            except ValueError:
+                return None
+            return edit(len(prefix), separator, 'name')
+
+    if words[0] in {'change', 'set'}:
+        for index in range(2, len(words) - 2):
+            if words[index:index + 2] == ['name', 'to'] and words[index - 1] in {'playlist', "playlist's", 'playlist’s'}:
+                # "name to" occupies two tokens, followed by the new value.
+                return edit(1, index, 'name', possessive=True)
+
+    if words[0] in {'change', 'set', 'edit'}:
+        start = 2 if words[1:2] == ['the'] else 1
+        if words[start:start + 2] == ['description', 'of']:
+            start += 2
+            try:
+                separator = words.index('to', start + 1)
+            except ValueError:
+                return None
+            return edit(start, separator, 'description')
+
+    if words[0] in {'remove', 'delete', 'unsave', 'unfollow'} and len(words) > 1:
+        stop = len(words)
+        for suffix in [('from', 'my', 'spotify', 'library'), ('from', 'the', 'spotify', 'library'),
+                       ('from', 'my', 'library'), ('from', 'the', 'library')]:
+            if words[-len(suffix):] == list(suffix):
+                stop -= len(suffix)
+                break
+        if stop <= 1:
+            return None
+        value = fragment(1, stop).strip('\"\'')
+        if not value:
+            return None
+        if value.split(maxsplit=1)[0].casefold() != 'playlist' and value.rsplit(maxsplit=1)[-1].casefold() != 'playlist':
+            return None
         return AppActionRequest(action_id=SPOTIFY_PLAYLIST_EDIT_ACTION_ID,
-            arguments={'operation':'update_details', 'playlist_name':target(description[1]), 'description':description[2].strip().strip('\"\'')})
-    remove = re.fullmatch(r'(?:remove|delete|unsave|unfollow)\s+(.+?\bplaylist|playlist\s+.+?)(?:\s+from\s+(?:my|the)\s+(?:spotify\s+)?library)?', command, re.I)
-    if remove:
-        return AppActionRequest(action_id=SPOTIFY_PLAYLIST_EDIT_ACTION_ID,
-            arguments={'operation':'remove', 'playlist_name':target(remove[1])})
+            arguments={'operation':'remove', 'playlist_name':target(value)})
     return None
 
 
