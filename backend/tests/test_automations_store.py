@@ -109,6 +109,22 @@ def test_corrupt_file_recovered_and_preserved(tmp_path) -> None:
     assert (tmp_path / "automations.json.corrupt").exists()
 
 
+def test_atomic_write_recovers_from_transient_windows_sharing_lock(tmp_path, monkeypatch):
+    from agent.automations import store as module
+    replace = module.os.replace
+    failures = []
+    def locked_once(source, destination):
+        if not failures:
+            failures.append(True)
+            raise PermissionError("Transient sharing lock")
+        return replace(source, destination)
+    monkeypatch.setattr(module.os, "replace", locked_once)
+    store = AutomationStore(tmp_path)
+    record = _automation(store)
+    assert store.get(record["id"])["id"] == record["id"]
+    assert failures == [True]
+
+
 def test_list_filters_by_state(tmp_path) -> None:
     store = AutomationStore(tmp_path)
     first = _automation(store, name="one")

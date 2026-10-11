@@ -36,6 +36,7 @@ from agent.plugins.youtube_runtime import (
     youtube_store,
 )
 from agent.tools.registry import CapabilityAccess
+from agent.contracts.youtube_tracking import CreatorTrackingConfig
 
 
 class YouTubeControlService:
@@ -144,6 +145,12 @@ class YouTubeControlService:
             ) from exc
 
     def execute(self, action_id: str, arguments: dict[str, Any], *, confirmed: bool = False) -> dict[str, Any]:
+        if action_id in {"youtube.creators.configure", "youtube.creators.refresh"}:
+            from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+            tracking = YouTubeCreatorTracking(store=self._knowledge_core_provider().store)
+            result = tracking.configure(arguments) if action_id.endswith("configure") else tracking.refresh()
+            return {"changed": True, "tracking": result, "_target_kind": "knowledge_projection",
+                "_target_id": "youtube-creators", "_message": "Creator tracking settings saved." if action_id.endswith("configure") else "Creator feeds checked; queued uploads will be delivered by the creator automation."}
         if action_id == "youtube.history.configure":
             from agent.plugins.youtube_browser_history import YouTubeBrowserHistory
             history = YouTubeBrowserHistory(store=self._knowledge_core_provider().store)
@@ -240,6 +247,20 @@ def youtube_plugin_contribution(
         "result_schema": {"type": "object", "required": ["changed"]},
     }
     return PluginContribution(owner="youtube", actions=(
+        contribution("youtube.creators.configure", AppActionDefinition(
+            id="youtube.creators.configure", title="Configure creator tracking",
+            description="Save account-scoped creator relationships, hard exclusions, and public-feed request limits locally. Enabled tracking resolves missing ownership using public video IDs and can fall back to public uploads playlists through the connected YouTube API.",
+            access_class=CapabilityAccess.WRITE.value, confirmation_rule="none",
+            argument_schema=CreatorTrackingConfig.model_json_schema(),
+            ui_reference="youtube.connection", audit_label="youtube.creators.configure",
+            required_permissions=["youtube.creators.configure"], **common)),
+        contribution("youtube.creators.refresh", AppActionDefinition(
+            id="youtube.creators.refresh", title="Check creator uploads",
+            description="Assess saved watches locally and read bounded public channel feeds; queue new uploads for automation delivery.",
+            access_class=CapabilityAccess.WRITE.value, confirmation_rule="none",
+            argument_schema={"type": "object", "additionalProperties": False},
+            ui_reference="youtube.connection", audit_label="youtube.creators.refresh",
+            required_permissions=["youtube.creators.refresh"], **common)),
         contribution(YOUTUBE_HISTORY_REFRESH_ACTION_ID, AppActionDefinition(
             id=YOUTUBE_HISTORY_REFRESH_ACTION_ID, title='Refresh history',
             description='Read recent watch history from the YouTube account signed into Vellum’s Browser and save it locally.',

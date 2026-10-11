@@ -63,6 +63,8 @@ class YoutubeAgent:
         r"\bwhat\s+did\s+(?:i|we)\s+recently\s+watch\b",
     )
     _SUBSCRIPTION_FEED_PATTERNS = (
+        r"\b(?:which|what)\s+(?:youtube\s+)?(?:creators?|channels?)\b.*\b(?:tracking|monitoring|following)\b",
+        r"\b(?:my|our)\s+(?:youtube\s+)?creator\s+(?:tracking|uploads)\b",
         r"\b(?:latest|new|recent)\s+videos?\s+from\s+channels?\s+(?:i|we)\s+(?:am\s+|are\s+)?subscrib(?:e|ed)\s+to\b",
         r"\b(?:my|our)\s+youtube\s+subscriptions?\s+feed\b",
         r"\bwhat(?:'s|\s+is)\s+new\s+in\s+(?:my|our)\s+youtube\s+subscriptions?\b",
@@ -98,6 +100,7 @@ class YoutubeAgent:
             return False
         return (
             self._is_intelligence_query(lowered)
+            or self._is_subscription_feed_query(lowered)
             or clear_read_request(query) is not None
             or self._is_account_query(lowered)
             or self._is_liked_query(lowered)
@@ -534,15 +537,23 @@ class YoutubeAgent:
             analysis="Used local YouTube Takeout library metadata; no live account access or public search.", confidence=1.0)
 
     def _answer_subscription_feed(self) -> SpecialistResponse:
-        self._subscription_feed()
+        result = self._subscription_feed()
+        if result.get("available"):
+            from agent.plugins.youtube_creator_tracking import _literal
+            monitored = [creator for creator in result.get("creators", []) if creator["state"] == "monitoring"]
+            lines = [f"- {creator['name']}: {creator['reason']}" for creator in monitored]
+            uploads = result.get("uploads", [])[:10]
+            if uploads:
+                lines += ["\nSaved public uploads:"] + [f"- {_literal(item['creator'])}: {_literal(item['title'])}\n  {item['url']}" for item in uploads]
+            return SpecialistResponse(agent=self.name, status="answered", confidence=1.0,
+                summary=("Creator monitoring is enabled." if result.get("enabled") else "Creator monitoring is paused.") + "\n" + "\n".join(lines)
+                    + "\n\n" + result["coverage"],
+                analysis="Read the local creator assessment and saved Atom uploads; no live personal subscriptions-feed claim.",
+                structured_payload={"creator_tracking": result})
         return SpecialistResponse(
             agent=self.name,
             status="needs_fetch",
-            summary=(
-                "The official YouTube API does not expose the personalized subscriptions feed. "
-                "Vellum can retrieve a specific subscribed channel's latest public videos, but a complete personal feed "
-                "requires scheduled per-channel upload polling."
-            ),
+            summary="Creator tracking has not been configured yet. Set creator relationships and history account scope in the YouTube creator settings, then enable the YouTube creator uploads automation.",
             analysis="Used youtube.subscription_feed; no public-search substitute was used.",
             confidence=1.0,
         )

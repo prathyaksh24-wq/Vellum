@@ -112,6 +112,8 @@ def _youtube_runtime(tmp_path: Path, *, connected: bool = True):
         for item in (
             "youtube.history.refresh",
             "youtube.history.configure",
+            "youtube.creators.configure",
+            "youtube.creators.refresh",
             YOUTUBE_CONNECTION_START_ACTION_ID,
             YOUTUBE_SYNC_ACTION_ID,
             YOUTUBE_CONNECTION_DISCONNECT_ACTION_ID,

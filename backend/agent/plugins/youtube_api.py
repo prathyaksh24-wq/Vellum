@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from agent.contracts.youtube_history import YouTubeHistoryStatus
+from agent.contracts.youtube_tracking import CreatorTrackingSnapshot
 
 from agent.config import get_settings
 from agent.knowledge.runtime import get_knowledge_core
@@ -29,6 +30,13 @@ from agent.plugins.youtube_runtime import (
 
 
 router = APIRouter(prefix="/plugins/youtube", tags=["youtube"])
+
+
+@router.get("/creators", response_model=CreatorTrackingSnapshot)
+async def get_youtube_creators(response: Response, limit: int = Query(default=20, ge=1, le=100)) -> CreatorTrackingSnapshot:
+    from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
+    response.headers["Cache-Control"] = "no-store"
+    return CreatorTrackingSnapshot(**await asyncio.to_thread(YouTubeCreatorTracking().snapshot, limit=limit))
 
 
 @router.get("/history/status", response_model=YouTubeHistoryStatus)

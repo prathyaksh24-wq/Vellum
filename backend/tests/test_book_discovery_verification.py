@@ -368,7 +368,7 @@ def test_migration_preserves_v13_candidates_and_dismissals(tmp_path):
         db.execute("DROP TABLE preserved")
         db.execute("PRAGMA user_version = 13")
     upgraded = _core(tmp_path, _handler(_documents(), []))
-    assert upgraded.store.status()["schema_version"] == 14
+    assert upgraded.store.status()["schema_version"] == 15
     assert upgraded.store.get_book_discovery_candidate(user_id="tenant-one", candidate_id=candidate_id)["state"] == "dismissed"
     assert upgraded.store.integrity_check()["ok"] is True
-    assert _core(tmp_path, _handler(_documents(), [])).store.status()["schema_version"] == 14
+    assert _core(tmp_path, _handler(_documents(), [])).store.status()["schema_version"] == 15

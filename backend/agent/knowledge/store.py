@@ -40,7 +40,9 @@ from agent.knowledge.models import (
 from agent.privacy.scrubber import PrivacyScrubber
 
 
-SCHEMA_VERSION = 14
+from agent.knowledge.youtube_tracking import YouTubeTrackingStoreMixin, migrate_tracking
+
+SCHEMA_VERSION = 15
 
 
 class IngestionJobLeaseLost(RuntimeError):
@@ -517,7 +519,7 @@ class BlobStore:
         return target
 
 
-class KnowledgeStore:
+class KnowledgeStore(YouTubeTrackingStoreMixin):
     """Canonical source, evidence, observation, and projection repository."""
 
     def __init__(self, db_path: str | Path, blob_root: str | Path) -> None:
@@ -595,6 +597,8 @@ class KnowledgeStore:
                 version = 13
             if version < 14:
                 self._migrate_v14(connection)
+            if version < 15:
+                migrate_tracking(connection)
 
     @staticmethod
     def _migrate_v13(connection: sqlite3.Connection) -> None:

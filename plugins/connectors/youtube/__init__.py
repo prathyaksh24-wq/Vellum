@@ -22,6 +22,9 @@ def register(ctx) -> None:
             "category": "Connectors",
             "status": "backend_managed",
             "capabilities": [
+                "youtube.creators.configure",
+                "youtube.creators.refresh",
+                "youtube.subscription_feed",
                 "youtube.history.refresh",
                 "youtube.history.configure",
                 "youtube.account",
@@ -36,6 +39,9 @@ def register(ctx) -> None:
         },
         service_factory=YouTubeClient,
         capabilities=[
+            "youtube.creators.configure",
+            "youtube.creators.refresh",
+            "youtube.subscription_feed",
             "youtube.history.refresh",
             "youtube.history.configure",
             "youtube.account",

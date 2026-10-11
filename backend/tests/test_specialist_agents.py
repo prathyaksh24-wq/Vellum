@@ -1620,7 +1620,7 @@ def test_youtube_agent_routes_private_library_and_takeout_queries_without_public
     assert "youtube.liked_videos" in liked.analysis
     assert "A watched video" in history.summary
     assert "youtube.takeout_history" in history.analysis
-    assert "does not expose the personalized subscriptions feed" in feed.summary
+    assert "Creator tracking has not been configured" in feed.summary
     assert "youtube.subscription_feed" in feed.analysis
     assert search_calls == []
 
