@@ -487,7 +487,10 @@ class SpotifyCapabilityService:
                 if choices:
                     raise MusicChoiceRequired('Your saved emoji playlists: ' + '; '.join(c['title'] for c in choices) + '. Tell me the exact emoji to play.', choices)
                 return 'Spotify did not return any saved playlists with only symbols in their names.'
-            return f"Spotify returned {len(playlists)} saved playlists" + (': ' + '; '.join(p.get('name') or '(unnamed)' for p in playlists) + '.' if playlists else '.')
+            linked_count = sum(p.get('linked') is True for p in playlists)
+            description = (f"Your Vellum collection has {len(playlists)} playlists ({len(playlists)-linked_count} returned by Spotify and {linked_count} linked in Vellum)"
+                           if linked_count else f"Spotify returned {len(playlists)} saved playlists")
+            return description + (': ' + '; '.join(p.get('name') or '(unnamed)' for p in playlists) + '.' if playlists else '.')
         if plan.operation=='check_current':
             return self.check_collection(plan,invoke)
         if plan.operation == 'play_album':

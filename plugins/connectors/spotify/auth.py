@@ -61,6 +61,25 @@ class SpotifyAuthStore:
                 raise SpotifyAuthError("Spotify is not connected")
             return self._read_json(self.auth_path)
 
+    def linked_playlists(self) -> list[dict]:
+        """Connection-scoped references, removed together with this connection."""
+        rows = self.load_tokens().get("linked_playlists", [])
+        return rows if isinstance(rows, list) else []
+
+    def remember_playlists(self, account_id: str, rows: list[dict], *, connection_token: str = '') -> list[dict]:
+        with self.token_lock:
+            saved = self.load_tokens()
+            if connection_token and saved.get('refresh_token') != connection_token:
+                raise SpotifyAuthError('Spotify connection changed while linking playlists; try again')
+            previous = saved.get("linked_playlists", []) if saved.get("linked_account") == account_id else []
+            merged = {row["id"]: row for row in previous if isinstance(row, dict) and row.get("id")}
+            merged.update({row["id"]: row for row in rows})
+            if len(merged) > 500:
+                raise SpotifyAuthError("Vellum supports up to 500 linked playlists per connection")
+            saved.update(linked_account=account_id, linked_playlists=list(merged.values()))
+            self.save_tokens(saved)
+            return list(merged.values())
+
     def save_flow(self, payload: dict) -> None:
         self._atomic_write(self.flow_path, payload)
 

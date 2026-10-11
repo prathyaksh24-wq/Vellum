@@ -93,6 +93,7 @@ def test_typed_connection_reuses_saved_app_and_retains_playback_actions(service,
     assert {action.definition.id for action in contribution.actions} == {
         "spotify.connection.start", "spotify.connection.disconnect",
         "spotify.playback.control", "spotify.playback.session",
+        "spotify.playlist.edit",
     }
     runtime = AppActionRuntime(plugin_registry=PluginRegistry(
         Path(__file__).resolve().parents[2] / "plugins", state_path=tmp_path / "plugin-state.json"))

@@ -6,6 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Music collections and song lists have display sorting that preserves playback positions. Owned playlists expose name, description and song editing; followed playlists can be removed from the library. UI and typed playlist changes use one confirmed App Action, bind the account and playlist revision, verify Spotify results, and refresh the collection after saving.
+
+- Spotify playback preserves healthy audio through transient heartbeat failures, releases transport controls before queue refreshes, and keeps pending controls visually stable. Playlist permission failures expose an exact-context Play fallback; explicit linked playlists join the same paginated collection used by the Music page and MusicAgent.
+
+- Music collections open into paginated song lists with a collection Play button and exact-position song selection. Liked Songs remains a playlist-style collection item without a separate tab. Collection grid/list views use smaller complete square covers, and the vinyl player is circular and more compact.
+
+- Add the dedicated Music page with live Spotify search, paginated saved playlists/albums and Liked Songs, exact collection selection and an expandable selectable upcoming queue. The page retains the existing playback controller across chat navigation, displays measured controls and current artwork, and freezes/resumes a pixelated vinyl label with playback. Chat quick access is smaller, translucent and hidden during browser work; other music services show their actual unconnected state.
+
 - Music-request parsing consumes repeated whitespace and polite prefixes without regex backtracking, preserving provider selection, quoted titles, history artist filters and playlist/album commands. CodeQL's reported slow-regex paths now use single-pass delimiters or non-overlapping normalized matches.
 
 - Browser new tabs now show the five approved local wallpaper homepages, with Google, Brave, DuckDuckGo, Startpage and SearXNG selection beside the title. Search preferences, SearXNG instance and custom shortcuts persist through the existing browser App Action. Native homepage input avoids streamed-frame latency; new tabs do not wait for a remote homepage. Compact controls and workspace expansion leave more room for the page and restore the previous split without losing tabs.

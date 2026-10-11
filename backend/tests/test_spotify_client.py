@@ -50,6 +50,15 @@ def test_401_refreshes_and_retries_once(auth_store):
     assert auth_store.load_tokens()["refresh_token"] == "refresh-token"
 
 
+def test_playlist_permission_denial_has_a_distinct_safe_code(auth_store):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    client=SpotifyClient(auth_store=auth_store,transport=httpx.MockTransport(lambda request: httpx.Response(403,json={'error':{'message':'private upstream response'}})))
+    with pytest.raises(SpotifyAPIError) as exc:
+        client.request('GET','/playlists/Saved/items')
+    assert exc.value.code == 'access_denied'
+    assert 'private upstream response' not in str(exc.value)
+
+
 def test_204_is_inactive_state(auth_store):
     transport = httpx.MockTransport(lambda request: httpx.Response(204))
 
@@ -265,3 +274,55 @@ def test_raw_spotify_error_body_never_appears_in_exception(auth_store):
 
     assert "super-secret-value" not in str(caught.value)
     assert secret not in repr(caught.value)
+
+
+def test_linked_playlist_metadata_is_exact_public_and_survives_refresh(auth_store):
+    def handler(request):
+        if request.url.path == '/v1/me':
+            return httpx.Response(200,json={'id':'account-a'})
+        if request.url.path.startswith('/v1/playlists/'):
+            return httpx.Response(403,json={'error':{'message':'restricted'}})
+        if request.url.path == '/oembed':
+            assert 'authorization' not in request.headers
+            assert request.url.params['url'] == 'https://open.spotify.com/playlist/Mix'
+            return httpx.Response(200,json={'title':'Daily Mix 1','thumbnail_url':'https://i.scdn.co/image/cover'})
+        if request.url.path == '/api/token':
+            return httpx.Response(200,json={'access_token':'new','expires_in':3600})
+        raise AssertionError(request.url)
+    client=SpotifyClient(auth_store,transport=httpx.MockTransport(handler))
+    result=client.remember_playlist_links(['spotify:playlist:Mix','spotify:playlist:Mix'])
+    assert result['total'] == 1 and result['items'][0]['name'] == 'Daily Mix 1'
+    assert result['items'][0]['uri'] == 'spotify:playlist:Mix'
+    client.refresh()
+    assert SpotifyClient(SpotifyAuthStore(auth_store.root)).get_linked_playlists()[0]['id'] == 'Mix'
+    # Reauthorizing replaces the connection; no references leak to a new account.
+    auth_store.save_tokens({'access_token':'other','refresh_token':'other'})
+    assert client.get_linked_playlists() == []
+
+
+def test_unavailable_public_metadata_keeps_honest_exact_reference(auth_store):
+    def handler(request):
+        if request.url.path == '/v1/me': return httpx.Response(200,json={'id':'account'})
+        return httpx.Response(404,json={'error':{'message':'not found'}})
+    client=SpotifyClient(auth_store,transport=httpx.MockTransport(handler))
+    row=client.remember_playlist_links(['spotify:playlist:Unknown'])['items'][0]
+    assert row['name'].startswith('Linked playlist ') and row['uri'] == 'spotify:playlist:Unknown'
+    assert row['images'] == []
+    assert 'metadata_source' not in row
+    labelled=client.remember_playlist_links(['spotify:playlist:Unknown'],labels={'spotify:playlist:Unknown':'Your Top Songs 2022'})['items'][0]
+    assert labelled['name']=='Your Top Songs 2022' and labelled['metadata_source']=='provided_label'
+
+
+def test_link_import_validates_all_urls_before_any_network_or_storage(auth_store):
+    from plugins.connectors.spotify.errors import SpotifyAPIError
+    client=SpotifyClient(auth_store,transport=httpx.MockTransport(lambda request: pytest.fail('No network')))
+    with pytest.raises(SpotifyAPIError):
+        client.remember_playlist_links(['spotify:playlist:Valid','https://untrusted.test/private'])
+    assert client.get_linked_playlists() == []
+
+
+def test_unexposed_resource_404_has_distinct_safe_code(auth_store):
+    from plugins.connectors.spotify.errors import SpotifyResourceUnavailable
+    client=SpotifyClient(auth_store,transport=httpx.MockTransport(lambda request:httpx.Response(404,json={'error':{'message':'hidden provider detail'}})))
+    with pytest.raises(SpotifyResourceUnavailable) as exc:client.request('GET','/playlists/Mix/items')
+    assert exc.value.code=='resource_unavailable' and 'hidden provider detail' not in str(exc.value)

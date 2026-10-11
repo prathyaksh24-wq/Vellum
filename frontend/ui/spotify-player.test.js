@@ -1,5 +1,6 @@
 import React, {act, useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import * as ReactDOM from 'react-dom';
 import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname, resolve} from 'node:path';
@@ -22,18 +23,19 @@ const track = (uri, name) => ({uri, name, artists:[{name:'Artist'}]});
 
 async function renderPlayer(queue, sdk = false) {
   const current = track('spotify:track:current', 'Current song');
-  const api = {player:vi.fn(async details => ({track:current, is_playing:true, repeat:'off', ...(details ? {queue} : {})}))};
+  const api = {action:vi.fn(async () => ({})),player:vi.fn(async details => ({track:current, is_playing:true, repeat:'off', ...(details ? {queue} : {})}))};
   let emitState;
-  window.VellumSpotifyPlayback = {create:options => {
+  const dispose=vi.fn();
+  window.VellumSpotifyPlayback = {beginRequest:vi.fn(() => ({ready:Promise.resolve()})),create:vi.fn(options => {
     emitState = options.onPlayer;
-    return {prepare:vi.fn(async () => {}), dispose:vi.fn()};
-  }};
+    return {prepare:vi.fn(async () => {}), dispose};
+  })};
   const plugins = {capabilities:vi.fn(async () => ({features:{spotify:{enabled:true,endpoints:{playback_token:'token'}}}}))};
-  const Player = new Function('React','useState','useRef','useEffect','SpotifyAPI','API','I','fmtSpotifyTime',
-    compiled + '; return SpotifyPlayer;')(React,useState,useRef,useEffect,api,{plugins},() => null,() => '0:00');
+  const Player = new Function('React','useState','useRef','useEffect','SpotifyAPI','API','I','fmtSpotifyTime','ReactDOM',
+    compiled + '; return SpotifyPlayer;')(React,useState,useRef,useEffect,api,{plugins},() => null,() => '0:00',ReactDOM);
   await act(async () => root.render(React.createElement(Player, {spotify:{connected:true,web_playback_ready:sdk}})));
   await act(async () => host.querySelector('[aria-label="Open Spotify player"]').click());
-  return {...api, emitState};
+  return {...api, emitState, Player, dispose};
 }
 
 beforeEach(() => {
@@ -49,6 +51,16 @@ test('Up next shows distinct upcoming songs rather than copies of the current so
   const current = track('spotify:track:current','Current song'), next = track('spotify:track:next','Next song');
   await renderPlayer([current,current,next,next]);
   expect([...host.querySelectorAll('.spotify-queue-row span')].map(row => row.textContent)).toEqual(['Next song']);
+});
+
+test('an applied transport action releases controls before a slow queue read finishes', async () => {
+  const api=await renderPlayer([]);
+  let finish;
+  api.player.mockImplementation(() => new Promise(resolve => {finish=resolve;}));
+  await act(async () => host.querySelector('[aria-label="Pause"]').click());
+  await act(async () => host.querySelector('[aria-label="Next track"]').click());
+  expect(api.action.mock.calls.map(([body]) => body.action)).toEqual(['pause','next']);
+  await act(async () => finish({track:track('spotify:track:next','Next song'),is_playing:true}));
 });
 
 test('an open player refreshes the queue on its regular poll', async () => {
@@ -84,4 +96,20 @@ test('a later poll cannot replace fresh local SDK song or volume with remote lag
   expect(host.querySelector('.spotify-now b').textContent).toBe('Hindi song');
   expect(host.querySelector('[aria-label="Spotify volume"]').value).toBe('23');
   expect(host.querySelector('.spotify-queue-row span').textContent).toBe('Real next');
+});
+
+test('switching between the Music page and chat retains one playback controller and snapshot', async () => {
+  const api=await renderPlayer([],true);
+  api.player.mockResolvedValue({track:track('spotify:track:current','Current song'),device:{id:'vellum'},is_playing:true});
+  const target=document.createElement('div'); host.append(target);
+  window.VellumUI={MusicPage:({music}) => React.createElement('p',null,music.player?.track?.name)};
+  const props={spotify:{connected:true,web_playback_ready:true},musicPageTarget:target,compactVisible:false};
+  await act(async () => root.render(React.createElement(api.Player,props)));
+  await act(async () => api.emitState({track:track('spotify:track:live','Live song'),device:{id:'vellum'},is_playing:true}));
+  expect(target.textContent).toBe('Live song');
+  expect(host.querySelector('.spotify-player-pill')).toBe(null);
+  await act(async () => root.render(React.createElement(api.Player,{...props,musicPageTarget:null,compactVisible:true})));
+  expect(host.querySelector('.spotify-now b').textContent).toBe('Live song');
+  expect(window.VellumSpotifyPlayback.create).toHaveBeenCalledTimes(1);
+  expect(api.dispose).not.toHaveBeenCalled();
 });

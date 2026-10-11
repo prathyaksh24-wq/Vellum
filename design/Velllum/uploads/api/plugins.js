@@ -21,6 +21,11 @@
     spotifyLogout: () => client.request('/api/plugins/spotify/logout', client.jsonOptions('POST')),
     spotifyPlayer: details => client.request('/api/plugins/spotify/player' + (details ? '?details=true' : '')),
     spotifyAction,
+    spotifyPlaylistEdit: args => window.VellumApi.appActions.dispatch({action_id:'spotify.playlist.edit', arguments:args}, {source:'ui'}),
+    spotifyPlaylistConfirm: (receipt, args) => window.VellumApi.appActions.confirm(receipt.confirmation.token, {action_id:'spotify.playlist.edit', arguments:args}, {source:'ui'}),
+    spotifyPlaylistCancel: receipt => window.VellumApi.appActions.cancel(receipt.confirmation.token, {source:'ui'}),
+    spotifyBrowse: (params, signal) => client.request('/api/plugins/spotify/browse?' + new URLSearchParams(params || {}), {signal}),
+    spotifySearch: (params, signal) => client.request('/api/plugins/spotify/search?' + new URLSearchParams(params || {}), {signal}),
     spotifyPlaybackToken: forceRefresh => client.request('/api/plugins/spotify/playback/token', {
       ...client.jsonOptions('POST', {force_refresh: !!forceRefresh}), headers: {'Content-Type': 'application/json', 'X-Vellum-Spotify-Playback': '1'}, cache: 'no-store', signal: AbortSignal.timeout(25000),
     }),

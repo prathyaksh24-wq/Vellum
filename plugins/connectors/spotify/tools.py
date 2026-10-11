@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable
@@ -263,10 +264,36 @@ def spotify_search(args: dict, **kwargs) -> str:
 def spotify_playlists(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     action = args.get("action")
+    if action == "remember_links":
+        if args.get("confirm") is not True:
+            return _invalid("confirm")
+        return _result(lambda: service.remember_playlist_links(args.get("uris") or [], labels=args.get('labels')))
     if action == "list":
-        return _result(
-            lambda: service.request("GET", "/me/playlists", params=_params(args, "limit", "offset") or None)
-        )
+        def collection() -> dict:
+            reader = getattr(service, "get_linked_playlists", None)
+            linked = reader() if callable(reader) else []
+            if not isinstance(linked, list) or not linked:
+                return service.request("GET", "/me/playlists", params=_params(args, "limit", "offset") or None)
+            rows, seen = [], set()
+            deadline = time.monotonic() + 12
+            for offset in range(0, 100001, 50):
+                if time.monotonic() >= deadline:
+                    raise SpotifyError("Spotify playlist enumeration timed out; collection is incomplete")
+                page = service.request("GET", "/me/playlists", params={"limit": 50, "offset": offset})
+                entries = [row for row in page.get("items", []) if isinstance(row, dict) and row.get("id") not in seen]
+                rows.extend(entries)
+                seen.update(row.get("id") for row in entries)
+                if not page.get("next"):
+                    break
+                if not entries:
+                    raise SpotifyError("Spotify repeated a playlist page; collection is incomplete")
+            else:
+                raise SpotifyError("Spotify playlist enumeration exceeded its limit")
+            rows.extend(row for row in linked if row.get("id") not in seen)
+            offset, limit = int(args.get("offset") or 0), int(args.get("limit") or 50)
+            return {"items": rows[offset:offset+limit], "total": len(rows),
+                    "next": "linked-collection" if offset+limit < len(rows) else None}
+        return _result(collection)
     if action == "get":
         missing = _missing(args, "playlist_id")
         if missing:
@@ -365,8 +392,13 @@ def spotify_library(args: dict, **kwargs) -> str:
     service = _service(kwargs)
     kind = args.get("kind")
     action = args.get("action")
-    if kind not in {"tracks", "albums"}:
+    if kind not in {"tracks", "albums", "playlists"}:
         return _invalid("kind")
+    if kind == 'playlists' and action in {'save_current','remove_current'}:
+        return _invalid('action')
+    expected_uri = {'tracks':'spotify:track:', 'albums':'spotify:album:', 'playlists':'spotify:playlist:'}[kind]
+    if args.get('uris') and any(not isinstance(uri,str) or not uri.startswith(expected_uri) for uri in args['uris']):
+        return _invalid('uris')
     path = f"/me/{kind}"
     if action == 'contains':
         uris = args.get('uris') or []
@@ -390,7 +422,7 @@ def spotify_library(args: dict, **kwargs) -> str:
                     raise SpotifyNoActiveDevice("No Spotify track is currently playing")
                 uris = [str(uri)]
             if not uris:
-                singular = "track" if kind == "tracks" else "album"
+                singular = {"tracks":"track", "albums":"album", "playlists":"playlist"}[kind]
                 uris = [f"spotify:{singular}:{item_id}" for item_id in (args.get("ids") or [])]
             if not uris:
                 raise ValueError("ids or uris")

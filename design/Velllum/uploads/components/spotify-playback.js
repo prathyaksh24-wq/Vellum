@@ -66,7 +66,11 @@
     }
     async function session(operation) {
       const receipt = await actions.dispatch({action_id: 'spotify.playback.session', arguments: {owner_id: ownerId, operation}}, {source: 'ui'});
-      if (receipt.status !== 'applied') throw new Error(receipt.message || 'Could not enable this Vellum player.');
+      if (receipt.status !== 'applied') {
+        const error = new Error(receipt.message || 'Could not enable this Vellum player.');
+        error.ownershipLost = /already running in another window|no longer owns/i.test(error.message);
+        throw error;
+      }
     }
     async function readVolume() {
       if (!player?.getVolume || !enabled || disposed) return;
@@ -241,7 +245,15 @@
               if (state && revision === stateRevision) observeState(state);
               await readVolume();
               await publish(deviceId);
-            } catch (_) { if (enabled && !disposed && epoch === generation) offline('reconnecting','Vellum playback connection interrupted.'); }
+            } catch (error) {
+              // A failed observation/lease read is not an SDK disconnection.
+              // Keep audio and its device identity; the next heartbeat retries.
+              // Actual SDK not_ready/authentication events own reconnects.
+              if (error.ownershipLost) {
+                player.disconnect();
+                offline('busy', error.message, true);
+              }
+            }
             finally { sampled = false; }
             if (!ready && !connecting) retry();
           }, 1000);

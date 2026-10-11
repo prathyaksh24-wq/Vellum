@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import threading
+import re
 from uuid import uuid4
 from typing import Any
 
@@ -12,6 +13,8 @@ import httpx
 from .auth import SpotifyAuthStore
 from .errors import (
     SpotifyAPIError,
+    SpotifyAccessDenied,
+    SpotifyResourceUnavailable,
     SpotifyAuthError,
     SpotifyNoActiveDevice,
     SpotifyPremiumRequired,
@@ -35,6 +38,50 @@ class SpotifyClient:
         self._device_lock = threading.RLock()
         self._web_player = None
         self._sdk_refresh_at = float("-inf")
+
+    def get_linked_playlists(self) -> list[dict]:
+        return self.auth_store.linked_playlists()
+
+    def remember_playlist_links(self, uris: list[str], *, labels: dict | None = None) -> dict:
+        # Validate the entire batch before any read or write. No arbitrary URLs.
+        if not uris or len(uris) > 20 or any(not isinstance(uri, str) or not re.fullmatch(r"spotify:playlist:[A-Za-z0-9]+", uri) for uri in uris):
+            raise SpotifyAPIError("Use up to 20 exact Spotify playlist URIs")
+        labels = labels or {}
+        if not isinstance(labels, dict) or any(key not in uris or not isinstance(value, str) or not value.strip() or len(value) > 300 for key, value in labels.items()):
+            raise SpotifyAPIError('Labels must name one of these exact playlist URIs')
+        connection_token = str(self.auth_store.load_tokens().get('refresh_token') or '')
+        account = self.get_profile().get("id")
+        if not account:
+            raise SpotifyAuthError("Spotify did not verify the connected account")
+        rows = []
+        for uri in dict.fromkeys(uris):
+            identity = uri.rsplit(":", 1)[1]
+            url = "https://open.spotify.com/playlist/" + identity
+            row = {"id": identity, "uri": uri, "name": "Linked playlist " + identity[-6:],
+                   "external_urls": {"spotify": url}, "linked": True, "images": []}
+            try:
+                data = self.request("GET", "/playlists/" + identity)
+                row.update(name=data.get("name") or row["name"], images=data.get("images") or [], metadata_source="api")
+            except (SpotifyAccessDenied, SpotifyAPIError) as exc:
+                if isinstance(exc, (SpotifyAuthError, SpotifyRateLimited)):
+                    raise
+                # Public metadata for this exact link only; never send OAuth headers.
+                try:
+                    with httpx.Client(transport=self.transport, timeout=min(self.timeout, 8)) as public:
+                        response = public.get("https://open.spotify.com/oembed", params={"url": url})
+                        response.raise_for_status()
+                        data = response.json()
+                    if isinstance(data, dict) and data.get("title"):
+                        row.update(name=str(data["title"])[:300],
+                                   images=[{"url": data["thumbnail_url"]}] if data.get("thumbnail_url") else [],
+                                   metadata_source="oembed")
+                except (httpx.HTTPError, ValueError):
+                    pass  # Keep the exact reference with an explicitly unknown name.
+            if not row.get('metadata_source') and labels.get(uri):
+                row.update(name=labels[uri].strip(), metadata_source='provided_label')
+            rows.append(row)
+        self.auth_store.remember_playlists(str(account), rows, connection_token=connection_token)
+        return {"items": rows, "total": len(rows)}
 
     def playback_token(self, *, force_refresh: bool = False) -> dict:
         """Only the trusted playback view consumes this; never expose as a tool."""
@@ -345,6 +392,10 @@ class SpotifyClient:
             raise SpotifyPremiumRequired("Spotify Premium is required for this action")
         if response.status_code == 401:
             raise SpotifyAuthError("Spotify authorization expired")
+        if response.status_code == 403:
+            raise SpotifyAccessDenied("Spotify does not allow this app to access this resource")
+        if response.status_code == 404:
+            raise SpotifyResourceUnavailable("Spotify has not exposed this resource to Vellum")
         raise SpotifyAPIError(f"Spotify request failed with status {response.status_code}")
 
     def get_profile(self) -> dict:
