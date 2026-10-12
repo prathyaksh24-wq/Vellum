@@ -49,6 +49,76 @@ ownership alone cannot establish whether an old record was an advertisement.
 Unavailable videos remain unattributed, are counted separately from queued
 attribution, and do not starve later lookups.
 
+## Related interests and the local feed
+
+The profile combines explicitly linked browser/Takeout watch observations and
+Takeout searches locally. Repeated watches still select creators automatically.
+Related discovery examines title topic matches and cached public channel topic
+labels on at least three saved days within the last 367 days. A topic activates through viewing on three distinct
+days in the last 21 days, or two viewing days corroborated by two search days.
+Searches alone never activate notifications or endorse a creator. Basketball,
+American football, Formula One, chess, Clash Royale, technology and AI use
+bounded keyword patterns; this is transparent topic matching, not semantic
+understanding of every video.
+
+By default at most three additional related channels per active topic are
+selected, within the overall channel capacity. Their priority reflects supported
+days; broad inferred channels retain active-topic upload filters. Existing
+explicit topic filters, former relationships and exclusions are preserved.
+Related channels return to quiet when the supporting interest fades. The local
+upload feed ranks confirmed eligible uploads by freshness and creator activity
+and includes reasons. It reuses known channel identities from saved activity;
+it does not search the entire YouTube catalog for unknown creators.
+
+Public descriptions and topic categories help classify channels whose saved
+titles are generic. The existing connector reads at most 50 known channel IDs
+per batch, once per hour, with a default cap of 24 API units per UTC day reserved
+before I/O. Only derived topic labels are retained, at most 1,000 channel entries,
+and they are refreshed after 30 days. A public label requires saved watch support
+and does not itself endorse a creator. Failures remain visible and fall back to
+saved title evidence. No private search or conversation text is sent to Google.
+
+`topic_preferences` records explicit current or excluded topics. Current seeds
+last 30 days. Optional `conversation_topics` is off by default; when enabled,
+it reads direct, recent user interest declarations from eligible local
+conversations. Assistant text, quoted examples, hypothetical statements, archived,
+temporary, profile-ineligible and memory-disabled chats are excluded. Global memory/reference/history
+privacy settings remain authoritative. Only the latest user turn can use a
+chat-update timestamp when individual message timing is absent. This reader is
+bounded to 200 chats and 20 recent user messages each; ambiguous wording is
+ignored. No conversation text or search query is sent for public metadata reads.
+
+## Long-form upload policy
+
+`min_duration_seconds=180` means strictly longer than three minutes, including
+excluding regular videos of three minutes or less. Atom feeds have no duration;
+the existing read-only YouTube connector fetches `videos.list` metadata for up
+to 50 public IDs in one call. At most one duration batch per rolling 15 minutes
+and 96 API units per UTC day are reserved before I/O by default. Verified duration
+is bound to video and channel identity and expires after six hours for feed
+eligibility. The local cache retains at most 1,000 entries and 90 days. Provider
+failures defer retries for an hour; unresolved, upcoming or active-live entries
+stay queued without a ping. No media is downloaded. This policy needs the
+connected Google read-only API even when Atom reads succeed.
+
+Google `invalid_grant` responses mark the existing connector authorization as
+requiring renewal, without removing credentials, saved history or channel identity.
+Further automatic metadata reads do not repeat a rejected refresh until renewed
+tokens are saved. The YouTube agent's Google account button opens connection and
+creator status; the dialog exposes **Reconnect with Google** and coverage warnings.
+Transient provider failures continue to use bounded backoff and do not mark a
+grant revoked. Reconnecting preserves the existing read-only OAuth scope.
+
+"What did ohnePixel upload yesterday?" reads retained channel/day upload records
+before any model planner or public search. Publication timestamps use the profile
+timezone, and date filtering happens before the result limit. Current channel
+quietness does not hide historical uploads. Distinct main/raw/live channel
+identities remain separate; an unambiguous saved variant is labelled explicitly.
+Coverage is partial, and older retained records can have unverified duration.
+Personalized-feed requests use this same local assessment. YouTube's native bell
+inbox is not imported; the official Data API exposes subscriptions and public
+channel push events, not the personal notification inbox.
+
 ## Polling and delivery
 
 The paused-by-default **YouTube creator uploads** built-in runs every 15 minutes
@@ -95,10 +165,39 @@ same channel/video record and never create a fresh upload notification.
 
 Collection and outbox state commit together in Knowledge Core. A database
 lease prevents overlapping workers and expires after a crashed worker. Delivery
-uses a stable account/channel/video receipt through ConversationLifecycle;
-retrying after delivery but before acknowledgment does not duplicate the
-conversation message. Missing destinations fail visibly and leave the outbox
+uses a stable account/channel/video receipt. The default notification destination
+persists a ping in AutomationStore before acknowledgment, without creating a
+conversation. The notification bell retains video links and read state, and an
+open UI checks for new pings every 15 seconds. Chat destinations remain available
+through ConversationLifecycle. Retrying delivery does not duplicate either
+destination. Missing destinations fail visibly and leave the outbox
 pending. Exclusions and relevance are checked again before delivery.
+
+AutomationStore retains the latest 200 notifications per task and 100 runs.
+The canonical upload outbox retains upload identities independently of the visible
+notification window. Run now is visible in Scheduled task details; History lists
+local dates, start and finish times, duration, output, and errors. Notifications
+are in-app; retained unread items remain visible after reopening without replaying
+old toasts. Operating-system notifications are not implemented.
+
+Recent notifications are unread pings received within the last 24 hours. Older
+and read items are available in a separate History view, grouped by local date
+with creator/title search and 50-item pagination. Filtering happens before the
+response limit. The recent badge counts only that fresh unread set; marking recent
+items read uses the existing typed read action with `recent=true` and leaves older
+read state unchanged. The default API view and aggregate `unread_count` remain
+compatible; additional counts describe the fresh inbox and retained history.
+
+While the browser panel is visible, the floating bell and upload toasts are hidden.
+Opening the browser closes the notification panel; suppressed pings are not replayed
+when it closes. Notifications remain accessible from the sidebar (under More in the
+expanded sidebar). This is temporary presentation, not a tracking or retention
+preference. Panel/list transitions are subtle and honor reduced motion.
+
+Notification history remains bounded to the latest 200 pings per task. Moving an
+item out of Recent does not remove its saved upload record; the canonical creator
+outbox remains separately available to upload answers for its 90-day retention
+window. This is local retained evidence, not an indefinite notification archive.
 
 Poll errors and coverage gaps remain visible in creator status and Automation
 receipts. Initial feed collection progresses within the same request limits;

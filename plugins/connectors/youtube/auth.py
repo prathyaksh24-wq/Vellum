@@ -80,6 +80,7 @@ class YouTubeAuthStore:
                 "account_label": self.account_label,
                 "scope": tokens["scope"],
                 "expires_at": expires_at,
+                "authorization_status": "ready",
                 "updated_at": time.time(),
             }
         )
@@ -118,6 +119,12 @@ class YouTubeAuthStore:
         if not self.metadata_path.exists():
             return {}
         return self._read_json(self.metadata_path, "YouTube account metadata is unreadable")
+
+    def require_reauthorization(self) -> None:
+        """Keep credentials and saved identity while reporting a rejected grant."""
+        metadata = self.load_metadata()
+        metadata.update(authorization_status="authorization_required", updated_at=time.time())
+        self._atomic_write(self.metadata_path, metadata)
 
     def save_flow(self, payload: dict[str, Any]) -> None:
         self._atomic_write(self.flow_path, payload)

@@ -11,7 +11,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Response
+from agent.contracts.automation_notifications import AutomationNotifications as AutomationNotificationSnapshot
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from agent.automations.store import AutomationStore
@@ -75,7 +76,7 @@ def _notify_mutation(automation_id: str) -> None:
 class AutomationDestination(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["new_chat", "existing_chat"] = "new_chat"
+    kind: Literal["new_chat", "existing_chat", "notification"] = "new_chat"
     thread_id: str | None = None
 
 
@@ -176,6 +177,15 @@ def _validated_model_profile(profile: AutomationModelProfile | None) -> dict[str
 
 def _bad_request(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/notifications", response_model=AutomationNotificationSnapshot)
+def automation_notifications(response: Response, limit: int = Query(default=200, ge=1, le=200),
+                             view: Literal['all','recent','history'] = 'all',
+                             offset: int = Query(default=0, ge=0, le=10000),
+                             query: str = Query(default='', max_length=200)):
+    response.headers["Cache-Control"] = "no-store"
+    return AutomationNotificationSnapshot(**get_store().notification_snapshot(limit=limit, view=view, offset=offset, query=query))
 
 
 @router.get("")

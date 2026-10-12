@@ -44,7 +44,7 @@ def setup(tmp_path):
 
 
 def configure(service, rules=(), **options):
-    return service.configure({"account_id": "me", "history_accounts": ["me"], "enabled": True, "api_fallback": False, "rules": list(rules), **options})
+    return service.configure({"account_id": "me", "history_accounts": ["me"], "enabled": True, "api_fallback": False, "discovery_units_per_day":0, "rules": list(rules), **options})
 
 
 def test_api_fallback_baseline_and_later_upload_share_outbox_identity(setup):
@@ -98,6 +98,139 @@ def watch(store, source, *, video="00000000001", channel=C1, name="Creator", day
 
 def upload(video="00000000001", **values):
     return {"video_id": video, "title": "A new video", "creator": "Creator", "published_at": NOW.isoformat(), **values}
+
+
+def test_long_form_gate_suppresses_short_uploads_and_holds_unknown_durations(setup):
+    _,_,clock,reader,service=setup
+    configure(service,[rule()],min_duration_seconds=180)
+    service.refresh()
+    clock.value+=timedelta(hours=1)
+    reader.entries=[upload(f'{number:011d}') for number in range(1,5)]
+    durations={'00000000001':60,'00000000002':180,'00000000003':180.1}
+    service.duration_provider=lambda videos:{video:{'channel_id':C1,'duration_seconds':durations.get(video)} for video in videos}
+    calls=[]
+    result=service.refresh(deliver=lambda *args:calls.append(args))
+    assert result['delivered']==1 and '00000000003' in calls[0][1]
+    assert service.snapshot()['pending_duration_checks']==1
+    assert [row['video_id'] for row in service.snapshot()['uploads']]==['00000000003']
+
+
+def test_duration_failure_restart_and_budget_defer_without_leaking_notifications(setup):
+    store,_,clock,reader,service=setup
+    configure(service,[rule()],min_duration_seconds=180)
+    service.refresh()
+    clock.value+=timedelta(hours=1)
+    reader.entries=[upload()]
+    def unavailable(_):
+        raise RuntimeError('private provider response must not persist')
+    service.duration_provider=unavailable
+    assert service.refresh(deliver=lambda *_:pytest.fail('Unverified upload was delivered'))['delivered']==0
+    restarted=YouTubeCreatorTracking(store=store,reader=reader,clock=clock,duration_provider=lambda _:pytest.fail('Backoff was bypassed'))
+    restarted.refresh(deliver=lambda *_:pytest.fail('Unverified upload was delivered'))
+    assert store.get_sync_cursor('youtube_creator_feed','me:budget')['state']['duration_units']==1
+    clock.value+=timedelta(hours=1)
+    restarted.duration_provider=lambda ids:{video:{'channel_id':C1,'duration_seconds':600} for video in ids}
+    calls=[]
+    assert restarted.refresh(deliver=lambda *args:calls.append(args))['delivered']==1
+    assert len(calls)==1
+    assert restarted.refresh(deliver=lambda *args:calls.append(args))['delivered']==0
+
+
+def test_wrong_duration_owner_is_not_trusted(setup):
+    _,_,clock,reader,service=setup
+    configure(service,[rule()],min_duration_seconds=180)
+    service.refresh()
+    clock.value+=timedelta(hours=1)
+    reader.entries=[upload()]
+    service.duration_provider=lambda ids:{video:{'channel_id':C2,'duration_seconds':600} for video in ids}
+    assert service.refresh(deliver=lambda *_:pytest.fail('Mismatched ownership was accepted'))['delivered']==0
+    assert not service.snapshot()['uploads']
+
+
+def test_basketball_interest_automatically_reactivates_related_creator_then_fades(setup):
+    store,source,clock,_,service=setup
+    configure(service,[rule(name='Flight'),rule(C2,'ESPN',relationship='seasonal',topic_terms=['NBA','basketball'])])
+    rows=[watch(store,source,video=f'{number:011d}',day=NOW-timedelta(days=number),title='NBA basketball reaction') for number in range(1,4)]
+    rows+=[watch(store,source,video=f'{number+10:011d}',channel=C2,name='ESPN',day=NOW-timedelta(days=60+number),title='NBA finals') for number in range(1,4)]
+    store.record_observations(rows)
+    service.project()
+    result=service.snapshot()
+    espn=next(creator for creator in result['creators'] if creator['channel_id']==C2)
+    assert 'basketball' in result['active_topics'] and espn['state']=='monitoring'
+    assert 'Related to your current basketball' in espn['reason']
+    assert espn['topic_terms']==['NBA','basketball']
+    clock.value+=timedelta(days=22)
+    assert next(creator for creator in service.snapshot()['creators'] if creator['channel_id']==C2)['state']=='seasonal_quiet'
+
+
+def test_searches_are_weak_topic_evidence_and_former_creators_remain_blocked(setup):
+    store,source,_,_,service=setup
+    configure(service,[rule(C2,'ESPN',relationship='former')])
+    store.record_observations([ObservationInput(origin='youtube_takeout',action='youtube.search',actor=ObservationActor.IMPORTED,
+        source_id=source,observed_at=NOW-timedelta(days=number),payload={'query':'NBA basketball'},event_key=f'search-{number}') for number in range(3)])
+    service.project()
+    assert 'basketball' not in service.snapshot()['active_topics']
+    store.record_observations([watch(store,source,video=f'{number+20:011d}',day=NOW-timedelta(days=number),title='NBA basketball') for number in range(1,3)])
+    service.project()
+    result=service.snapshot()
+    assert 'basketball' in result['active_topics']
+    assert next(creator for creator in result['creators'] if creator['channel_id']==C2)['state']=='inactive'
+
+
+def test_saved_upload_answers_filter_day_before_limit_and_ignore_current_creator_quietness(setup):
+    store,source,clock,_,service=setup
+    configure(service,[rule(name='ohnepixel raw',relationship='seasonal')],timezone='Asia/Kolkata')
+    store.record_observations([watch(store,source=source,channel=C2,name='ohnepixel',video='00000000009')])
+    service.project()
+    clock.value=NOW+timedelta(days=2)
+    state={'initialized':True}
+    store.youtube_tracking_save_feed('me',C1,[upload('00000000001',published_at='2026-10-10T20:00:00Z',status='delivered'),
+        upload('00000000002',published_at='2026-10-11T20:00:00Z',status='delivered')],state,NOW.isoformat())
+    result=service.saved_uploads(creator='ohnepixel',day_label='Yesterday',limit=1)
+    assert result['date']=='2026-10-11'
+    assert [item['video_id'] for item in result['uploads']]==['00000000001']
+
+
+def test_recent_user_conversation_preferences_override_topics_without_learning_examples_or_assistant_text(setup):
+    _,_,clock,_,service=setup
+    configure(service,conversation_topics=True,topic_preferences={'basketball':'current'})
+    clock.value+=timedelta(minutes=1)
+    service.conversation_provider=lambda:[
+        {'id':'user','updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'I no longer watch basketball'}]},
+        {'id':'assistant','updated_at':clock.value.isoformat(),'messages':[{'role':'assistant','text':'I love chess'}]},
+        {'id':'quote','updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'For example, if I love NFL'}]},
+        {'id':'private','memory_enabled':False,'updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'I love chess'}]},
+        {'id':'temporary','temporary':True,'updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'I love chess'}]},
+        {'id':'ineligible','profile_eligible':False,'updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'I love chess'}]},
+        {'id':'pretend','updated_at':clock.value.isoformat(),'messages':[{'role':'user','text':'Pretend I love chess'}]}]
+    assert not service.snapshot()['active_topics']
+    service.conversation_provider=lambda:[{'id':'current','updated_at':clock.value.isoformat(),
+        'messages':[{'role':'user','text':'I am interested in chess'}]}]
+    assert 'chess' in service.snapshot()['active_topics']
+
+
+def test_public_channel_topics_select_known_related_creator_with_generic_titles(setup):
+    store,source,clock,_,service=setup
+    configure(service,[rule(name='Flight')],discovery_units_per_day=24)
+    store.record_observations([watch(store,source,video=f'{number+50:011d}',day=NOW-timedelta(days=number),title='NBA basketball') for number in range(1,4)] +
+        [watch(store,source,video=f'{number+60:011d}',channel=C2,name='Kenny',day=NOW-timedelta(days=number+60),title='My honest opinion') for number in range(1,4)])
+    service.project()
+    calls=[]
+    service.channel_profile_provider=lambda ids:calls.append(ids) or {C2:{'description':'Basketball and NBA analysis','categories':[]}}
+    service.refresh()
+    candidate=next(row for row in service.snapshot()['creators'] if row['channel_id']==C2)
+    assert candidate['state']=='monitoring' and 'Related to your current basketball' in candidate['reason']
+    restarted=YouTubeCreatorTracking(store=store,reader=service.reader,clock=clock,channel_profile_provider=lambda _:pytest.fail('Discovery cooldown bypassed'))
+    restarted.refresh()
+    assert len(calls)==1
+
+
+def test_topic_exclusion_suppresses_even_an_explicit_creator_seed(setup):
+    store,source,_,_,service=setup
+    configure(service,[rule(name='GothamChess',relationship='current')],topic_preferences={'chess':'excluded'})
+    store.record_observations([watch(store,source,video=f'{number+70:011d}',day=NOW-timedelta(days=number),title='Chess world championship') for number in range(1,4)])
+    service.project()
+    assert service.snapshot()['creators'][0]['state']=='inactive'
 
 
 def test_incremental_scope_cross_source_dedup_and_search_is_not_endorsement(setup):
@@ -212,6 +345,32 @@ def test_baseline_title_edit_restart_and_delivery_retry_are_idempotent(setup, tm
     assert "00000000002" in lifecycle.list()[0]["messages"][0]["text"]
     assert restarted.refresh(deliver=lambda *args: calls.append(args))["delivered"] == 0
     assert not calls
+
+
+def test_notification_ping_retry_after_crash_does_not_create_chats(setup, tmp_path):
+    from agent.automations.store import AutomationStore
+    from agent.automations.runner import _deliver_creator_upload
+    store, _, clock, reader, service = setup
+    notifications = AutomationStore(tmp_path / "automations")
+    job = notifications.create(name="Creator uploads", instructions="Check uploads",
+        schedule={"kind": "interval", "seconds": 900}, destination={"kind": "notification"})
+    configure(service, [rule()])
+    reader.entries = [upload()]
+    service.refresh()
+    clock.value += timedelta(hours=1)
+    reader.entries = [upload(), upload("00000000002")]
+    def crash_after_delivery(key, text):
+        assert _deliver_creator_upload(job, key, text, notifications)
+        raise RuntimeError("Simulated crash before acknowledgment")
+    with pytest.raises(RuntimeError):
+        service.refresh(deliver=crash_after_delivery)
+    restarted = YouTubeCreatorTracking(store=KnowledgeStore(store.db_path, store.blobs.root), reader=reader, clock=clock)
+    restarted_notifications = AutomationStore(notifications.root)
+    result = restarted.refresh(deliver=lambda key, text: _deliver_creator_upload(job, key, text, restarted_notifications))
+    assert result["delivered"] == 1
+    assert len(restarted_notifications.notification_snapshot()["items"]) == 1
+    assert not (tmp_path / "conversations.json").exists()
+    assert restarted.refresh()["delivered"] == 0
 
 
 def test_new_exclusion_suppresses_already_pending_notification(setup):
@@ -408,7 +567,7 @@ def test_automation_delivers_without_model_and_records_receipt(setup, tmp_path, 
     reader.entries = [upload()]
     lifecycle = ConversationLifecycle(path=tmp_path / "messages.json")
     monkeypatch.setattr(youtube_creator_tracking, "YouTubeCreatorTracking", lambda: service)
-    monkeypatch.setattr(runner, "_deliver_creator_upload", lambda automation, key, text:
+    monkeypatch.setattr(runner, "_deliver_creator_upload", lambda automation, key, text, store:
         lifecycle.deliver_automation(delivery_id=key, text=text, name="Creator upload"))
     async def no_model(*_):
         raise AssertionError("Creator polling must not call a chat model")

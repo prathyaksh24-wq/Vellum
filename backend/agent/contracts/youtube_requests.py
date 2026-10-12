@@ -3,11 +3,12 @@ import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from agent.contracts.youtube_tracking import CreatorUploadDayFilter
 
 
 class YoutubeReadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    source: Literal["liked", "subscriptions", "history", "previous", "public", "clarify"]
+    source: Literal["liked", "subscriptions", "history", "uploads", "previous", "public", "clarify"]
     view: Literal["videos", "channels", "count", "link", "summary", "clarify"] = "videos"
     limit: int = Field(default=20, ge=1, le=100)
     creator: str = Field(default="", max_length=200)
@@ -15,10 +16,12 @@ class YoutubeReadRequest(BaseModel):
     index: int | None = Field(default=None, ge=1, le=100)
     reference_kind: Literal["video", "channel", "item"] = "item"
     count_kind: Literal["videos", "channels"] = "videos"
-    day_label: Literal["", "Today", "Yesterday"] = ""
+    day_label: CreatorUploadDayFilter = ""
 
     @model_validator(mode="after")
     def validate_reference(self):
+        if self.source != "uploads" and self.day_label not in {"", "Today", "Yesterday"}:
+            raise ValueError("Explicit dates are supported for saved creator uploads only")
         if self.source in {'liked', 'subscriptions'} and self.limit > 50:
             raise ValueError('Liked-video and subscription lists support up to 50 entries per reply')
         if self.view == "link" and (self.source != "previous" or self.index is None):
@@ -33,6 +36,14 @@ class YoutubeReadRequest(BaseModel):
 def clear_read_request(query: str) -> YoutubeReadRequest | None:
     """Compatibility parser for unambiguous reads when no model planner is supplied."""
     text = " ".join(query.casefold().split())
+    upload = re.search(r"\bwhat\s+(?:did|has)\s+(.+?)\s+upload(?:ed)?\b", text) or re.search(
+        r"\buploads?\s+(?:from|by)\s+(.+?)(?=\s+(?:today|yesterday|on\s+\d{4}-\d{2}-\d{2})\b|[?.!]|$)", text)
+    if upload:
+        iso = re.search(r'\b\d{4}-\d{2}-\d{2}\b',text)
+        day = 'Yesterday' if re.search(r'\byesterday\b',text) else 'Today' if re.search(r'\btoday\b',text) else iso[0] if iso else ''
+        if re.search(r'\b(?:week|month|year|between|before|after)\b',text):
+            return YoutubeReadRequest(source='clarify',view='clarify')
+        return YoutubeReadRequest(source='uploads',creator=upload[1].strip(' ?.!'),day_label=day)
     ordinals = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}
     reference = re.search(r"\b(?:first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+(?:video|channel|one|item)\b", text)
     if reference and re.search(r"\b(?:link|url)\b", text):

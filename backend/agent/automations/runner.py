@@ -3,7 +3,8 @@
 Records the run, executes a full reasoning turn through the same agent path
 interactive chat uses (model profile + reasoning mode applied), delivers the
 result to the destination (append into the pinned thread for ``existing_chat``,
-a new conversation in the UI feed for ``new_chat``), and writes the outcome to
+a new conversation in the UI feed for ``new_chat``, or a persistent in-app ping
+for ``notification``), and writes the outcome to
 run history. Failures are recorded with the error surfaced; they never crash
 the API. Scheduled fires and the skip-if-busy / full-access gates live in
 ``agent.automations.scheduler``.
@@ -12,6 +13,7 @@ the API. Scheduled fires and the skip-if-busy / full-access gates live in
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -34,11 +36,14 @@ async def run_automation_now(
             import asyncio
             from agent.plugins.youtube_creator_tracking import YouTubeCreatorTracking
             result = await asyncio.to_thread(YouTubeCreatorTracking().refresh,
-                deliver=lambda delivery_id, text: _deliver_creator_upload(automation, delivery_id, text))
+                deliver=lambda delivery_id, text: _deliver_creator_upload(automation, delivery_id, text, store))
             return store.finish_run(automation["id"], run["id"], status="complete",
                 output=f"Creator tracking: {result['status']}. {result['requests']} feed requests; {result.get('fallback_checks', 0)} API fallback checks; {result['delivered']} delivered uploads.")
         answer = await _execute_reasoning_turn(automation)
-        _deliver_result(automation, answer)
+        if (automation.get("destination") or {}).get("kind") == "notification":
+            store.deliver_notification(automation["id"], run["id"], answer)
+        else:
+            _deliver_result(automation, answer)
         return store.finish_run(automation["id"], run["id"], status="complete", output=answer)
     except Exception as exc:
         return store.finish_run(automation["id"], run["id"], status="failed", error=str(exc))
@@ -66,7 +71,11 @@ async def _execute_reasoning_turn(automation: dict[str, Any]) -> str:
     return api._message_content(messages[-1] if messages else None) or "No response."
 
 
-def _deliver_creator_upload(automation, delivery_id, text):
+def _deliver_creator_upload(automation, delivery_id, text, store):
+    if (automation.get("destination") or {}).get("kind") == "notification":
+        link = re.search(r"https://www\.youtube\.com/watch\?v=[A-Za-z0-9_-]{11}(?![A-Za-z0-9_-])", text)
+        return store.deliver_notification(automation["id"], delivery_id, text,
+            title="New YouTube upload", url=link.group(0) if link else "")
     from agent import api
     from agent.conversations.lifecycle import ConversationLifecycle
     destination = automation.get("destination") or {}
@@ -74,6 +83,7 @@ def _deliver_creator_upload(automation, delivery_id, text):
         delivery_id=delivery_id, text=text, name="YouTube creator upload",
         thread_id=str(destination.get("thread_id") or "") if destination.get("kind") == "existing_chat" else "",
         project_id=automation.get("project_id"))
+
 
 def _resolve_reasoning_mode(reasoning_mode: Any):
     if not reasoning_mode:

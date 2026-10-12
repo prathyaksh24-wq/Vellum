@@ -27,6 +27,7 @@ AUTOMATION_RESUME_ACTION_ID = "automation.resume"
 AUTOMATION_RUN_ACTION_ID = "automation.run"
 AUTOMATION_HISTORY_ACTION_ID = "automation.history"
 AUTOMATION_REMOVE_ACTION_ID = "automation.remove"
+AUTOMATION_NOTIFICATIONS_READ_ACTION_ID = "automation.notifications.read"
 
 AUTOMATION_ACTION_IDS = frozenset({
     AUTOMATION_CREATE_ACTION_ID,
@@ -36,6 +37,7 @@ AUTOMATION_ACTION_IDS = frozenset({
     AUTOMATION_RUN_ACTION_ID,
     AUTOMATION_HISTORY_ACTION_ID,
     AUTOMATION_REMOVE_ACTION_ID,
+    AUTOMATION_NOTIFICATIONS_READ_ACTION_ID,
 })
 
 
@@ -123,6 +125,17 @@ class AutomationActionService:
         confirmed: bool,
         confirmation_binding: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        if action_id == AUTOMATION_NOTIFICATIONS_READ_ACTION_ID:
+            ids = arguments.get("ids", [])
+            all_items = arguments.get("all", False)
+            recent_only = arguments.get('recent', False)
+            if (not isinstance(ids, list) or len(ids) > 200 or any(not isinstance(item, str) or len(item) > 200 for item in ids)
+                    or not isinstance(all_items, bool) or not isinstance(recent_only, bool) or not (ids or all_items or recent_only)
+                    or recent_only and (ids or all_items)):
+                raise AutomationActionError("INVALID_ACTION_ARGUMENTS", "Choose notifications to mark read.")
+            count = self._store_provider().mark_notifications_read(ids, all_items=all_items, recent_only=recent_only)
+            return {"changed": bool(count), "read_count": count, "_target_kind": "automation_notifications",
+                    "_target_id": "local", "_message": "Notifications marked read."}
         if action_id == AUTOMATION_CREATE_ACTION_ID:
             return self._create(arguments)
         if action_id == AUTOMATION_UPDATE_ACTION_ID:
@@ -455,7 +468,7 @@ def automation_action_definitions() -> list[AppActionDefinition]:
     }
     destination = {
         "type": "object",
-        "properties": {"kind": {"type": "string", "enum": ["new_chat", "existing_chat"]}, "thread_id": {"type": "string"}},
+        "properties": {"kind": {"type": "string", "enum": ["new_chat", "existing_chat", "notification"]}, "thread_id": {"type": "string"}},
         "additionalProperties": False,
     }
     model_profile = {
@@ -475,6 +488,7 @@ def automation_action_definitions() -> list[AppActionDefinition]:
         "notifications": {"type": "object", "properties": {"level": {"type": "string", "enum": ["all", "important", "failures", "none"]}}, "additionalProperties": False},
     }
     specs = [
+        (AUTOMATION_NOTIFICATIONS_READ_ACTION_ID, "Mark notifications read", "Mark local automation pings as read.", CapabilityAccess.WRITE, "none", {"ids": {"type": "array", "maxItems": 200, "items": {"type": "string", "maxLength": 200}}, "all": {"type": "boolean"}, "recent": {"type":"boolean"}}, []),
         (AUTOMATION_CREATE_ACTION_ID, "Create automation", "Create a validated scheduled reasoning task.", CapabilityAccess.WRITE, "none", editable, ["name", "instructions", "schedule"]),
         (AUTOMATION_UPDATE_ACTION_ID, "Update automation", "Update a scheduled reasoning task.", CapabilityAccess.WRITE, "none", {**identity, **editable}, []),
         (AUTOMATION_PAUSE_ACTION_ID, "Pause automation", "Pause future scheduled runs.", CapabilityAccess.WRITE, "none", identity, []),
@@ -495,7 +509,7 @@ def automation_action_definitions() -> list[AppActionDefinition]:
             confirmation_rule=confirmation_rule,
             executor_location="server",
             supports_undo=False,
-            idempotent=action_id in {AUTOMATION_PAUSE_ACTION_ID, AUTOMATION_RESUME_ACTION_ID, AUTOMATION_HISTORY_ACTION_ID},
+            idempotent=action_id in {AUTOMATION_PAUSE_ACTION_ID, AUTOMATION_RESUME_ACTION_ID, AUTOMATION_HISTORY_ACTION_ID, AUTOMATION_NOTIFICATIONS_READ_ACTION_ID},
             argument_schema={
                 "type": "object",
                 "properties": properties,

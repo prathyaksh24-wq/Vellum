@@ -43,6 +43,11 @@ def build_capability_contract() -> CapabilityContract:
             canonical_entry="/design-uploads/Vellum%20Default%20Re-designed.html",
         ),
         features={
+            "automation_notifications": FeatureContract(
+                enabled=True, source="agent.automations.store",
+                endpoints={"list": "/api/automations/notifications", "read": "/api/app-actions/dispatch"},
+                notes="Local notification pings, a 24-hour unread inbox, and searchable retained history; no conversation is created.",
+            ),
             "browser": FeatureContract(
                 enabled=True, source="agent.mcp.playwright_tools",
                 endpoints={"status":"/api/browser/status", "frame":"/api/browser/frame", "stream":"/api/browser/stream", "suggestions":"/api/browser/suggestions", "control":"/api/app-actions/dispatch"},

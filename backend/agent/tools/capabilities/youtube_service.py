@@ -253,7 +253,9 @@ class YoutubeCapabilityService:
         if execution is not None and execution.model_id and provider_for_model(execution.model_id) != "ollama":
             raise ValueError("Creator tracking is local only. Select a local model to read it.")
         request = CreatorTrackingRead.model_validate(_payload)
-        result = YouTubeCreatorTracking().snapshot(limit=request.limit)
+        tracking=YouTubeCreatorTracking()
+        result = tracking.saved_uploads(creator=request.creator,day_label=request.day_label,limit=request.limit) \
+            if request.creator or request.day_label else tracking.snapshot(limit=request.limit)
         return {"action": "youtube.subscription_feed", "available": result["configured"], **result}
 
     def search_videos(self, payload: dict[str, Any]) -> dict[str, Any]:

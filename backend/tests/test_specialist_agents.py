@@ -1626,24 +1626,27 @@ def test_youtube_agent_routes_private_library_and_takeout_queries_without_public
 
 
 def test_youtube_agent_routes_upload_question_without_youtube_keyword(tmp_path):
+    search_calls = []
+    saved_calls = []
     youtube_service = YoutubeCapabilityService(
         vault_root=tmp_path / "Vault",
-        search_backend=lambda query, max_results: [
-            {
-                "title": "KSI uploaded a new challenge",
-                "url": "https://www.youtube.com/watch?v=abc123XYZ09",
-                "channel": "KSI",
-                "description": "Latest upload from the channel.",
-            }
-        ],
+        search_backend=lambda query, max_results: search_calls.append(query) or [],
     )
+    youtube_service.subscription_feed = lambda payload: saved_calls.append(payload) or {
+        "configured": True,
+        "uploads": [{"video_id": "abc123XYZ09", "title": "KSI uploaded a new challenge", "creator": "KSI"}],
+        "coverage": "Saved uploads only; feed coverage may be incomplete.",
+    }
     agent = YoutubeAgent(vault_root=tmp_path / "Vault", youtube_service=youtube_service)
 
     assert agent.can_handle("what did KSI upload")
     response = agent.answer("what did KSI upload")
 
     assert response.status == "answered"
-    assert response.sources[0].path_or_url == "https://www.youtube.com/watch?v=abc123XYZ09"
+    assert "KSI uploaded a new challenge" in response.summary
+    assert "https://www.youtube.com/watch?v=abc123XYZ09" in response.summary
+    assert saved_calls == [{"limit": 20, "creator": "ksi", "day_label": ""}]
+    assert search_calls == []
 
 
 def test_youtube_agent_does_not_route_meta_feedback_about_youtube(tmp_path):
