@@ -58,6 +58,21 @@ profile and notification work; separate browser changes are excluded.
 
 ## Limits of the evidence
 
+### Backend CI follow-up
+
+The initial draft CI run had one failure with 2,956 passed and 28 skipped:
+`test_youtube_agent_routes_upload_question_without_youtube_keyword` still supplied
+only a public-search fixture for a question now answered from saved uploads.
+The exact failure reproduced locally in isolation. The corrected test supplies
+saved records and checks the returned link, creator request and absence of search.
+Additional dated and undated missing-record cases verify that neither public
+search nor the model planner substitutes results for absent saved evidence.
+The specialist, saved-upload and account-request suites passed **107 tests**.
+This correction changes test coverage only; saved-upload runtime behavior is
+preserved. The complete follow-up CI result is available in the PR checks.
+
+### Live provider coverage
+
 The related-channel metadata provider and verified-duration delivery behavior passed
 fixture tests. Fresh Google metadata calls remain blocked by the rejected grant;
 they have not been claimed as successful live integrations. Reconnect Google from

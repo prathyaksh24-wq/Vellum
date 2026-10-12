@@ -24,3 +24,22 @@ def test_creator_upload_day_uses_saved_records_without_search(tmp_path, question
     assert 'Saved upload title' in response.summary
     assert 'https://www.youtube.com/watch?v=abcdefghijk' in response.summary
     assert calls==[{'limit':20,'creator':'ohnepixel','day_label':'Yesterday'}]
+
+
+@pytest.mark.parametrize('question',[
+    'what did KSI upload',
+    'what did ohnepixel upload yesterday',
+])
+def test_missing_saved_uploads_report_coverage_without_search_or_planner(tmp_path, question):
+    service=YoutubeCapabilityService(vault_root=tmp_path,
+        search_backend=lambda *_: pytest.fail('Missing saved uploads reached public search'))
+    service.subscription_feed=lambda payload: {
+        'configured':True,'uploads':[],
+        'coverage':'Saved uploads only; feed coverage may be incomplete.'}
+    agent=YoutubeAgent(vault_root=tmp_path,youtube_service=service,
+        planner=lambda *_: pytest.fail('Clear saved upload question reached the model planner'))
+    response=agent.answer(question)
+    assert response.status=='needs_fetch'
+    assert 'no saved uploads' in response.summary
+    assert 'feed coverage may be incomplete' in response.summary
+    assert response.structured_payload['youtube_account']['items']==[]
