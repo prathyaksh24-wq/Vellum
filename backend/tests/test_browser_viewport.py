@@ -8,6 +8,58 @@ from agent.contracts.browser import BrowserControl
 from agent.mcp.dedicated_browser import BrowserSessionError, DedicatedBrowser
 
 
+@pytest.mark.parametrize('control', ['agent', 'user', 'paused'])
+def test_manual_hover_moves_mouse_without_clicking_or_changing_ownership(monkeypatch, control):
+    async def check():
+        browser = DedicatedBrowser()
+        moves = []
+        async def move(x, y): moves.append((x, y))
+        async def status(): return SimpleNamespace(control=browser.control)
+        browser.context = object()
+        browser.control = control
+        browser.session_id = 'session'
+        browser.active_page = SimpleNamespace(mouse=SimpleNamespace(move=move))
+        browser._pages = {'tab':browser.active_page}
+        monkeypatch.setattr(browser, 'status', status)
+        request = BrowserControl(operation='hover', x=40, y=50, frame_id=browser._frame_id())
+        await browser.ui_control(request)
+        assert moves == [(40, 50)] and browser.control == control
+        with pytest.raises(BrowserSessionError, match='page changed'):
+            await browser.ui_control(request.model_copy(update={'frame_id':'old'}))
+        with pytest.raises(BrowserSessionError, match='outside'):
+            await browser.ui_control(request.model_copy(update={'x':1500}))
+        assert moves == [(40, 50)]
+    asyncio.run(check())
+
+
+@pytest.mark.skipif(os.environ.get('VELLUM_BROWSER_SMOKE') != '1', reason='Opt-in installed browser fixture')
+def test_real_hover_reveals_player_controls_without_a_click(monkeypatch, tmp_path):
+    from agent.mcp import dedicated_browser
+    monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', lambda path:tmp_path/path.name)
+    async def check():
+        browser = DedicatedBrowser()
+        try:
+            await browser.open()
+            page = browser.active_page
+            await page.set_content('''<style>
+                #player {position:absolute;left:100px;top:100px;width:400px;height:250px;background:#111}
+                #controls {opacity:0} #player:hover #controls {opacity:1}
+                </style><div id="player"><div id="controls">Timeline and playback controls</div></div>
+                <script>window.clicks=0; document.onclick=()=>window.clicks++;</script>''')
+            await page.mouse.move(0, 0)
+            assert await page.locator('#controls').evaluate("el=>getComputedStyle(el).opacity") == '0'
+            browser.control = 'user'
+            frame = await browser.frame()
+            await browser.ui_control(BrowserControl(operation='hover',x=200,y=150,frame_id=frame.frame_id))
+            assert await page.locator('#controls').evaluate("el=>getComputedStyle(el).opacity") == '1'
+            assert await page.evaluate('window.clicks') == 0
+            assert browser.control == 'user'
+        finally:
+            await browser.close()
+            assert browser.context is None and browser._process is None
+    asyncio.run(check())
+
+
 @pytest.mark.skipif(os.name != 'nt', reason='Windows launch transport')
 @pytest.mark.parametrize('endpoint_kind', ['owned', 'other_port', 'remote_host'])
 def test_windows_launch_uses_owned_normal_browser_endpoint(monkeypatch, tmp_path, endpoint_kind):
@@ -85,8 +137,7 @@ def test_user_open_and_new_tab_show_homepage(monkeypatch, operation, url, expect
     asyncio.run(check())
 
 
-@pytest.mark.parametrize('caller', ['ui', 'agent'])
-def test_closing_last_tab_keeps_native_session_alive(monkeypatch, caller):
+def test_agent_closing_last_tab_keeps_native_session_alive(monkeypatch):
     async def check():
         browser = DedicatedBrowser()
         page, blank = SimpleNamespace(), SimpleNamespace(url='about:blank')
@@ -104,9 +155,47 @@ def test_closing_last_tab_keeps_native_session_alive(monkeypatch, caller):
         page.close = close
         browser.context = SimpleNamespace(new_page=new_page)
         monkeypatch.setattr(browser, 'status', status)
-        if caller == 'ui': await browser.ui_control(BrowserControl(operation='close_tab', tab_id='old'))
-        else: await browser.tool({'action':'tabs', 'tab_action':'close', 'index':0})
+        await browser.tool({'action':'tabs', 'tab_action':'close', 'index':0})
         assert browser.active_page is blank and list(browser._pages) == ['replacement']
+    asyncio.run(check())
+
+
+def test_user_closing_last_tab_ends_owned_session(monkeypatch):
+    async def check():
+        browser = DedicatedBrowser()
+        browser.context = object()
+        browser._pages = {'only':object()}
+        closed = []
+        async def close():
+            closed.append(True)
+            browser.context = None
+            browser._pages.clear()
+        async def status(): return SimpleNamespace(running=browser.context is not None)
+        monkeypatch.setattr(browser,'close',close)
+        monkeypatch.setattr(browser,'status',status)
+        result = await browser.ui_control(BrowserControl(operation='close_tab',tab_id='only'))
+        assert not result.running and closed == [True]
+    asyncio.run(check())
+
+
+def test_status_does_not_wait_for_slow_titles_on_existing_tabs(monkeypatch):
+    async def check():
+        gate = asyncio.Event()
+        class Page:
+            url = 'https://example.org/'
+            def is_closed(self): return False
+            async def title(self):
+                await gate.wait()
+                return 'Document'
+        browser = DedicatedBrowser()
+        browser._pages = {str(n):Page() for n in range(8)}
+        browser.active_page = browser._pages['0']
+        result = await asyncio.wait_for(browser.status(), .1)
+        assert len(result.tabs) == 8
+        assert all(tab.title == 'example.org' for tab in result.tabs)
+        gate.set()
+        await asyncio.gather(*list(browser._tasks))
+        assert (await browser.status()).tabs[0].title == 'Document'
     asyncio.run(check())
 
 
@@ -120,6 +209,9 @@ def test_open_keeps_existing_website(monkeypatch):
         monkeypatch.setattr(browser, 'status', status)
         state = await browser.ui_control(BrowserControl(operation='open'))
         assert state.url == 'https://www.youtube.com/'
+        assert browser.presentation_revision == 1
+        await browser.ui_control(BrowserControl(operation='open'))
+        assert browser.presentation_revision == 2
     asyncio.run(check())
 
 

@@ -18,6 +18,7 @@ class BrowserPreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
     search_engine: SearchEngine = "google"
     searxng_url: str = Field(default="", max_length=4096)
+    suggestions_enabled: bool = True
     shortcuts: list[BrowserShortcut] = Field(default_factory=lambda: [
         BrowserShortcut(id="github", name="GitHub", url="https://github.com/"),
         BrowserShortcut(id="wikipedia", name="Wikipedia", url="https://www.wikipedia.org/"),
@@ -27,8 +28,9 @@ class BrowserPreferences(BaseModel):
 
 class BrowserControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "click", "type", "press", "scroll", "show_download", "resize", "preferences"]
+    operation: Literal["open", "close", "pause", "resume", "take_over", "navigate", "back", "forward", "reload", "new_tab", "select_tab", "close_tab", "click", "hover", "type", "press", "scroll", "show_download", "resize", "preferences"]
     search_engine: SearchEngine | None = None
+    suggestions_enabled: bool | None = None
     searxng_url: str | None = Field(default=None, max_length=4096)
     shortcuts: list[BrowserShortcut] | None = Field(default=None, max_length=12)
     url: str = Field(default="", max_length=4096)
@@ -55,6 +57,19 @@ class BrowserTab(BaseModel):
     error: str = ""
 
 
+class BrowserAddressSuggestion(BaseModel):
+    title: str = Field(max_length=512)
+    url: str = Field(max_length=4096)
+
+
+class BrowserAddressSuggestions(BaseModel):
+    contract_version: int = 1
+    items: list[BrowserAddressSuggestion] = Field(default_factory=list, max_length=8)
+    queries: list[str] = Field(default_factory=list, max_length=8)
+    search_engine: SearchEngine = "google"
+    suggestion_status: Literal["idle", "ready", "unavailable", "off"] = "idle"
+
+
 class BrowserDownload(BaseModel):
     id: str
     name: str
@@ -68,6 +83,7 @@ class BrowserStatus(BaseModel):
     reason: str = ""
     running: bool = False
     presentation_requested: bool = True
+    presentation_revision: int = Field(default=0, ge=0)
     control: Literal["agent", "paused", "user", "closed"] = "closed"
     session_id: str = ""
     active_tab_id: str = ""

@@ -2,11 +2,23 @@
 import asyncio
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisconnect
-from agent.contracts.browser import BrowserFrame, BrowserStatus
+from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from agent.contracts.browser import BrowserFrame, BrowserStatus, BrowserAddressSuggestions
 from agent.mcp.playwright_tools import browser_session
+from agent.mcp.browser_suggestions import search_completions
 
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+
+@router.get("/suggestions", response_model=BrowserAddressSuggestions)
+def suggestions(response: Response, q: str = Query(default="", max_length=256)):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        result, preferences = browser_session("suggestions", {"query": q, "with_preferences":True})
+        queries, status = search_completions(q, preferences)
+        return result.model_copy(update={"queries":queries, "search_engine":preferences.search_engine, "suggestion_status":status})
+    except Exception:
+        return BrowserAddressSuggestions()
 
 
 @router.get("/status", response_model=BrowserStatus)

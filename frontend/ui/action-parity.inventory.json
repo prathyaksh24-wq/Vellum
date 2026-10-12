@@ -2,8 +2,8 @@
   "version": 1,
   "handlerFingerprints": {
     "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
-    "design/Velllum/uploads/components/browser-panel.jsx": {"count":46,"sha256":"8e8915dc18e6df044c5e83c6581ec078b62dac1a8239ac3f910a440cf9fd780f"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":874,"sha256":"6225c7a0ad77b4d41cd5d922a2ac37b6a9dcd821113cb9263a5e675c5d616586"},
+    "design/Velllum/uploads/components/browser-panel.jsx": {"count":52,"sha256":"6098369e5a8f2df9f1da63843042658749dbcc28b92dc2decec1184575cf607d"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":874,"sha256":"df84fc2e95aee5bdac011787e3f8abf024731932fc866fa7d781e9c76f03a75d"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -11,6 +11,7 @@
     "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
   },
   "covered": [
+    {"surface":"Browser","name":"page hover and pointer leave","actionId":"browser.session.control","probe":{"path":"design/Velllum/uploads/components/browser-panel.jsx","text":"command('hover'"}},
     {"surface":"Music","name":"confirmed playlist rename description song edits and library removal","actionId":"spotify.playlist.edit","probe":{"path":"design/Velllum/uploads/api/plugins.js","text":"action_id:'spotify.playlist.edit'"}},
     {"surface":"Music","name":"selected collection and song position playback","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/components/music-page.jsx","text":"offset_position:item.position"}},
     {"surface":"Music","name":"measured seek volume mute shuffle repeat and track controls","actionId":"spotify.playback.control","probe":{"path":"design/Velllum/uploads/components/music-page.jsx","text":"run({action:'set_volume',volume_percent})"}},
@@ -98,7 +99,7 @@
   ],
   "exemptions": [
     {"scope":"Music page navigation, provider preview tabs, search categories, collection filters, display sorting, editor drafts, read-only catalog requests and queue disclosure","reason":"Ephemeral presentation and provider reads only. Sorting preserves Spotify source positions without rewriting playlists. Playlist writes use spotify.playlist.edit with an operation-bound review. Unconnected services have explicit unavailable states. Playback selections and controls use spotify.playback.control; audio activation retains spotify.playback.session."},
-    {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},
+    {"scope":"More sidebar disclosure, browser address and homepage form drafts, engine and session menu visibility, downloads disclosure and browser expansion","reason":"Temporary, reversible presentation, local address suggestions, offline panel dismissal and input drafts only; navigation, engine selection, SearXNG instance and shortcut mutations use browser.session.control and panel visibility uses the Workspace Layout owner."},
     {"scope":"scroll, pointer hover, focus and text selection","reason":"Input/navigation gesture only; does not commit product state."},
     {"scope":"draft typing and in-view search filters","reason":"No committed product state; a separate save or submit control commits the change."},
     {"scope":"tooltips, transient pickers and discard prompts","reason":"Non-persistent presentation only; the underlying committed action is reviewed separately."},

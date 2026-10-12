@@ -8,7 +8,7 @@
       {id:'startpage', name:'Startpage', wallpaper:'startpage.png', icon:'startpage.svg', mask:true},
       {id:'searxng', name:'SearXNG', wallpaper:'searxng.png', icon:'searxng.svg', mask:true},
     ],
-    defaultPreferences: {search_engine:'google', searxng_url:'', shortcuts:[
+    defaultPreferences: {search_engine:'google', searxng_url:'', suggestions_enabled:true, shortcuts:[
       {id:'github', name:'GitHub', url:'https://github.com/'},
       {id:'wikipedia', name:'Wikipedia', url:'https://www.wikipedia.org/'},
       {id:'youtube', name:'YouTube', url:'https://www.youtube.com/'},
@@ -46,6 +46,39 @@
       return this.searchUrl(value, preferences);
     },
     status: function () { return client.request('/api/browser/status', {cache:'no-store'}); },
+    suggestions: function (query) { return client.request('/api/browser/suggestions?q=' + encodeURIComponent(String(query || '').slice(0,256)), {cache:'no-store'}); },
+    addressSuggestions: function (query, tabs, shortcuts, history, preferences, queries) {
+      var value = String(query || '').trim();
+      var needle = value.toLowerCase();
+      var seen = new Set();
+      var items = [];
+      (tabs || []).map(function (tab) { return {title:tab.title, url:tab.url, tab_id:tab.id, kind:'tab'}; })
+        .concat((history || []).map(function (item) { return {title:item.title, url:item.url, kind:'history'}; }),
+          (shortcuts || []).map(function (item) { return {title:item.name, url:item.url, kind:'shortcut'}; }),
+          value ? [{title:'Spotify',url:'https://open.spotify.com/',kind:'website'},
+            {title:'GitHub',url:'https://github.com/',kind:'website'},
+            {title:'YouTube',url:'https://www.youtube.com/',kind:'website'},
+            {title:'Wikipedia',url:'https://www.wikipedia.org/',kind:'website'},
+            {title:'Reddit',url:'https://www.reddit.com/',kind:'website'},
+            {title:'Google',url:'https://www.google.com/',kind:'website'}] : [])
+        .forEach(function (item) {
+          try { var parsed = new URL(item.url); if (!/^https?:$/.test(parsed.protocol) || parsed.username || parsed.password) return; } catch (_) { return; }
+          if (seen.has(item.url) || needle && !(item.url + ' ' + item.title).toLowerCase().includes(needle)) return;
+          seen.add(item.url); items.push(item);
+        });
+      items = items.slice(0,4);
+      if (value) {
+        try { items.push({title:value, url:this.searchUrl(value,preferences), kind:'search'}); } catch (_) {}
+      }
+      (queries || []).forEach(function (text) {
+        if (typeof text !== 'string' || !text.trim() || text.length > 256 || text.toLowerCase() === needle) return;
+        try {
+          var url = this.searchUrl(text,preferences);
+          if (!items.some(function (item) { return item.url === url; })) items.push({title:text,url:url,kind:'query'});
+        } catch (_) {}
+      },this);
+      return items.slice(0,8);
+    },
     frame: function () { return client.request('/api/browser/frame', {cache:'no-store'}); },
     viewport: function (rect) {
       // Preserve the panel's aspect ratio within the transport's bounded viewport.

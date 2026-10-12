@@ -31,6 +31,8 @@ def test_preferences_persist_without_changing_browser_ownership(preferences_path
     assert DedicatedBrowser()._browser_preferences() == result
     browser._update_preferences(BrowserControl(operation='preferences',search_engine='brave'))
     assert DedicatedBrowser()._browser_preferences().shortcuts == result.shortcuts
+    browser._update_preferences(BrowserControl(operation='preferences',suggestions_enabled=False))
+    assert DedicatedBrowser()._browser_preferences().suggestions_enabled is False
 
 
 @pytest.mark.parametrize('value', ['file:///tmp', 'https://user:password@example.org', 'https://example.org/?q=test',

@@ -15,13 +15,14 @@ import os
 from pathlib import Path
 import re
 import socket
+import sqlite3
 import subprocess
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from agent.config import _resolve_against_repo, get_settings
-from agent.contracts.browser import BrowserControl, BrowserDownload, BrowserFrame, BrowserStatus, BrowserTab, BrowserPreferences
+from agent.contracts.browser import BrowserControl, BrowserDownload, BrowserFrame, BrowserStatus, BrowserTab, BrowserPreferences, BrowserAddressSuggestion, BrowserAddressSuggestions
 
 logger = logging.getLogger(__name__)
 USER_HOME_URL = 'about:blank'  # Vellum renders the native new-tab homepage.
@@ -65,7 +66,73 @@ def navigation_url(value: str) -> str:
 
 
 class DedicatedBrowser:
+    @staticmethod
+    def _read_address_history() -> list[BrowserAddressSuggestion] | None:
+        """Read our existing Chromium database; never open or clone a profile."""
+        history = _resolve_against_repo(Path("data/browser-session/profile/Default/History"))
+        if not history.is_file():
+            return []
+        items = []
+        seen = set()
+        try:
+            connection = sqlite3.connect(history.resolve().as_uri() + "?mode=ro", uri=True, timeout=.1)
+            try:
+                rows = connection.execute("SELECT url, substr(title, 1, 512) FROM urls WHERE length(url) <= 4096 ORDER BY last_visit_time DESC LIMIT 500").fetchall()
+            finally:
+                connection.close()
+            for url, title in rows:
+                if not isinstance(url, str) or len(url) > 4096 or url in seen:
+                    continue
+                try:
+                    navigation_url(url)
+                except ValueError:
+                    continue
+                if url == "about:blank":
+                    continue
+                title = str(title or url)[:512]
+                seen.add(url)
+                items.append(BrowserAddressSuggestion(title=title, url=url))
+        except (OSError, sqlite3.Error):
+            return None  # Chromium locks this database while running on Windows.
+        return items
+
+    @staticmethod
+    def _filter_addresses(items: list[BrowserAddressSuggestion], query: str) -> BrowserAddressSuggestions:
+        needle = query.strip().casefold()
+        matches = [item for item in items if not needle or needle in item.url.casefold() or needle in item.title.casefold()]
+        return BrowserAddressSuggestions(items=matches[:8])
+
+    @staticmethod
+    def address_suggestions(query: str = "") -> BrowserAddressSuggestions:
+        return DedicatedBrowser._filter_addresses(DedicatedBrowser._read_address_history() or [], query)
+
+    def session_address_suggestions(self, query: str = "") -> BrowserAddressSuggestions:
+        if self.context is None:
+            history = self._read_address_history()
+            if history is not None:
+                self._address_history = history
+        return self._filter_addresses(list(self._address_history), query)
+
+    def _remember_address(self, url: str, title: str = "", *, visited: bool = False) -> None:
+        if not url or len(url) > 4096 or url == "about:blank":
+            return
+        try:
+            navigation_url(url)
+        except ValueError:
+            return
+        index = next((index for index, item in enumerate(self._address_history) if item.url == url), None)
+        previous = self._address_history[index] if index is not None else None
+        item = BrowserAddressSuggestion(url=url, title=(title or (previous.title if previous else url))[:512])
+        if index is not None and not visited:
+            self._address_history[index] = item
+            return
+        if index is not None:
+            self._address_history.pop(index)
+        self._address_history.insert(0, item)
+        del self._address_history[500:]
+
     def __init__(self) -> None:
+        self._address_history = self._read_address_history() or []
         self.context = None
         self.playwright = None
         self._process = None
@@ -78,6 +145,7 @@ class DedicatedBrowser:
         self.session_id = ""
         self.activity = ""
         self.presentation_requested = True
+        self.presentation_revision = 0
         self._pages: dict[str, Any] = {}
         self._revision = 0
         self._refs: dict[str, Any] = {}
@@ -88,6 +156,9 @@ class DedicatedBrowser:
         self._tasks: set[asyncio.Task] = set()
         self._tab_loads: dict[int, asyncio.Task] = {}
         self._tab_errors: dict[int, str] = {}
+        self._tab_titles: dict[int, str] = {}
+        self._title_pending: dict[int, asyncio.Task] = {}
+        self._title_checked: dict[int, float] = {}
         self._console: list[str] = []
         self._dialog = None
         self._viewport = {"width":1280, "height":800}
@@ -98,12 +169,16 @@ class DedicatedBrowser:
 
     def _browser_preferences(self) -> BrowserPreferences:
         if self._preferences is None:
-            path = _resolve_against_repo(Path("data/browser-session/preferences.json"))
-            try:
-                self._preferences = self._validated_preferences(BrowserPreferences.model_validate_json(path.read_text(encoding="utf-8")))
-            except (OSError, ValueError):
-                self._preferences = BrowserPreferences()
+            self._preferences = self.read_preferences()
         return self._preferences
+
+    @staticmethod
+    def read_preferences() -> BrowserPreferences:
+        path = _resolve_against_repo(Path("data/browser-session/preferences.json"))
+        try:
+            return DedicatedBrowser._validated_preferences(BrowserPreferences.model_validate_json(path.read_text(encoding="utf-8")))
+        except (OSError, ValueError):
+            return BrowserPreferences()
 
     @staticmethod
     def _validated_preferences(preferences: BrowserPreferences) -> BrowserPreferences:
@@ -127,7 +202,7 @@ class DedicatedBrowser:
 
     def _update_preferences(self, request: BrowserControl) -> None:
         data = self._browser_preferences().model_dump()
-        patch = request.model_dump(include={"search_engine", "searxng_url", "shortcuts"}, exclude_none=True)
+        patch = request.model_dump(include={"search_engine", "searxng_url", "shortcuts", "suggestions_enabled"}, exclude_none=True)
         preferences = self._validated_preferences(BrowserPreferences.model_validate({**data, **patch}))
         path = _resolve_against_repo(Path("data/browser-session/preferences.json"))
         temporary = path.with_suffix(".tmp")
@@ -144,6 +219,9 @@ class DedicatedBrowser:
             await self.close()
         if self.context is not None:
             return
+        history = self._read_address_history()
+        if history is not None:
+            self._address_history = history
         ready, reason = browser_readiness()
         if not ready:
             raise BrowserSessionError(reason)
@@ -253,6 +331,10 @@ class DedicatedBrowser:
         self._invalidate()
 
     def _frame_navigated(self, page, frame) -> None:
+        if frame is page.main_frame and page in self._pages.values():
+            self._remember_address(getattr(page, "url", ""), visited=True)
+            self._tab_titles.pop(id(page), None)
+            self._title_checked.pop(id(page), None)
         if page is self.active_page:
             # Background loads must not stale clicks on the visible page. Child
             # frames invalidate agent observations, while their changed pixels
@@ -280,6 +362,11 @@ class DedicatedBrowser:
         if task is not None:
             task.cancel()
         self._tab_errors.pop(id(page), None)
+        self._tab_titles.pop(id(page), None)
+        self._title_checked.pop(id(page), None)
+        title_task = self._title_pending.pop(id(page), None)
+        if title_task is not None:
+            title_task.cancel()
         self._pages = {key: value for key, value in self._pages.items() if value is not page}
         if self.active_page is page:
             self.active_page = next(iter(self._pages.values()), None)
@@ -353,6 +440,9 @@ class DedicatedBrowser:
         self._tasks.clear()
         self._tab_loads.clear()
         self._tab_errors.clear()
+        self._tab_titles.clear()
+        self._title_pending.clear()
+        self._title_checked.clear()
         try:
             if cdp_browser is not None and process is not None and process.returncode is None:
                 try:
@@ -387,6 +477,28 @@ class DedicatedBrowser:
         self._invalidate()
         self.activity = "Closed"
 
+    def _request_title(self, page) -> None:
+        identity = id(page)
+        loop = asyncio.get_running_loop()
+        if identity in self._title_pending or loop.time() - self._title_checked.get(identity, -10) < 2:
+            return
+        self._title_checked[identity] = loop.time()
+        url = page.url
+        async def read():
+            try:
+                title = await asyncio.wait_for(page.title(), .5)
+                if page in self._pages.values() and page.url == url:
+                    self._tab_titles[identity] = title
+                    self._remember_address(url, title)
+            except Exception:
+                pass
+            finally:
+                self._title_pending.pop(identity, None)
+        task = asyncio.create_task(read())
+        self._title_pending[identity] = task
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     async def status(self) -> BrowserStatus:
         ready, reason = browser_readiness()
         tabs = []
@@ -394,14 +506,15 @@ class DedicatedBrowser:
             if not page.is_closed():
                 title = "New tab"
                 if page.url != "about:blank" and id(page) not in self._tab_loads:
-                    try:
-                        title = await page.title()
-                    except Exception:
-                        title = "Loading"
+                    title = self._tab_titles.get(id(page)) or urlsplit(page.url).hostname or "Page"
+                    self._request_title(page)
                 tabs.append(BrowserTab(id=key, index=index, title=title or "New tab", url=page.url, active=page is self.active_page,
                     loading=id(page) in self._tab_loads, error=self._tab_errors.get(id(page), "")))
+                if id(page) not in self._tab_loads:
+                    self._remember_address(page.url, title)
         return BrowserStatus(available=ready, reason=reason, running=self.context is not None,
             presentation_requested=self.presentation_requested,
+            presentation_revision=self.presentation_revision,
             control=self.control, session_id=self.session_id, active_tab_id=self._page_id(), tabs=tabs,
             downloads=list(self._downloads.values())[-50:], activity=self.activity, snapshot_id=self.snapshot_id,
             viewport_width=self._viewport["width"], viewport_height=self._viewport["height"],
@@ -481,6 +594,7 @@ class DedicatedBrowser:
         elif operation == "open":
             self.presentation_requested = True
             await self.open()
+            self.presentation_revision += 1
             # The native frontend renders blank tabs immediately. Restored sites stay put.
             if self.active_page is None:
                 self.active_page = await self.context.new_page()
@@ -511,6 +625,18 @@ class DedicatedBrowser:
                 await page.set_viewport_size(viewport)
                 self._viewport = viewport
                 self._invalidate()
+        elif operation == "hover":
+            page = self.active_page
+            if self.context is None or page is None:
+                raise BrowserSessionError("Open a browser tab first.")
+            if not request.frame_id or request.frame_id != self._frame_id():
+                raise BrowserSessionError("The page changed. Move over the current browser view.")
+            if request.x >= self._viewport["width"] or request.y >= self._viewport["height"]:
+                raise BrowserSessionError("Hover is outside the browser view.")
+            # Manual pointer movement reveals native page controls without a
+            # click, playback toggle, or transfer of agent/user ownership.
+            await page.mouse.move(request.x, request.y)
+            return await self.status()
         else:
             if self.context is None:
                 raise BrowserSessionError("Open the browser first.")
@@ -529,7 +655,7 @@ class DedicatedBrowser:
             if operation == "navigate":
                 if page is None:
                     page = await self.context.new_page()
-                await self._goto(page, request.url)
+                self._start_tab_load(page, navigation_url(request.url))
             elif operation == "new_tab":
                 url = navigation_url(request.url or USER_HOME_URL)
                 page = await self.context.new_page()
@@ -545,7 +671,10 @@ class DedicatedBrowser:
                     self.active_page = page
                     self._invalidate()
                 else:
-                    await self._close_tab(page)
+                    if len(self._pages) == 1:
+                        await self.close()
+                    else:
+                        await self._close_tab(page)
             elif page is None:
                 raise BrowserSessionError("Open a browser tab first.")
             elif operation in {"back", "forward", "reload"}:
@@ -717,6 +846,10 @@ class DedicatedBrowser:
         return await self.snapshot()
 
     def _start_tab_load(self, page, url: str) -> None:
+        previous = self._tab_loads.get(id(page))
+        if previous is not None:
+            previous.cancel()
+        self._tab_errors.pop(id(page), None)
         async def load():
             try:
                 await self._goto(page, url)
@@ -742,7 +875,7 @@ class DedicatedBrowser:
 
     async def _close_tab(self, page) -> None:
         # A normal Brave process exits when its last native tab closes. Retain
-        # one blank tab so both UI and agent navigation can continue in-panel.
+        # one blank tab for agent workflows; UI closure ends the last session.
         if len(self._pages) == 1:
             self.active_page = await self.context.new_page()
         await page.close()

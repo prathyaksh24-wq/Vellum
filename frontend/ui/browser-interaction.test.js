@@ -17,13 +17,195 @@ async function mountPanel(api, state) {
   const container = document.createElement('div'); document.body.append(container);
   const root = createRoot(container);
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const onHide = vi.fn();
   await act(async()=>root.render(React.createElement(window.VellumUI.BrowserPanel,
-    {state,onRefresh:async()=>state,onHide:vi.fn()})));
-  return {container, cleanup:async()=> {await act(async()=>root.unmount());container.remove();}};
+    {state,onRefresh:async()=>state,onHide})));
+  return {container, onHide, cleanup:async()=> {await act(async()=>root.unmount());container.remove();}};
 }
 const manualState = () => ({running:true,available:true,control:'user',session_id:'session',active_tab_id:'tab',downloads:[],
   tabs:[{id:'tab',active:true,title:'Fixture',url:'https://example.com/'}]});
 const sampleFrame = {frame_id:'session:tab:1',tab_id:'tab',width:900,height:700,data_url:'data:image/jpeg;base64,aQ=='};
+
+async function autocompleteApi() {
+  vi.resetModules();
+  window.VellumApi = {client:{request:vi.fn(async()=>({items:[]}))},appActions:{dispatch:vi.fn()}};
+  await import('../../design/Velllum/uploads/api/browser.js');
+  const api = window.VellumApi.browser;
+  api.frame = async()=>sampleFrame;
+  api.control = vi.fn(async()=>({status:'applied'}));
+  api.suggestions = vi.fn(async()=>({items:[{title:'Watch history - YouTube',url:'https://www.youtube.com/feed/history'}]}));
+  return api;
+}
+
+test('address suggestions complete a local URL and keyboard selection switches the existing tab', async()=> {
+  const api = await autocompleteApi();
+  const state = {...manualState(),preferences:api.defaultPreferences};
+  state.tabs.push({id:'youtube',active:false,title:'YouTube',url:'https://www.youtube.com/'});
+  const panel = await mountPanel(api,state);
+  try {
+    const input = panel.container.querySelector('[aria-label="Browser address"]');
+    await act(async()=>input.focus());
+    await act(async()=> {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'yo');
+      input.setSelectionRange(2,2);
+      input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:'o'}));
+    });
+    expect(input.value).toBe('youtube.com/');
+    expect(panel.container.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(panel.container.querySelector('[role="option"] [class="browser-suggestion-hint"]').textContent).toBe('Switch to tab');
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})));
+    expect(api.control).toHaveBeenCalledWith({operation:'select_tab',tab_id:'youtube'},undefined);
+    expect(panel.container.querySelector('[role="listbox"]')).toBeNull();
+  } finally {await panel.cleanup();}
+});
+
+test('search suggestion uses the selected engine and Escape dismisses only the suggestions', async()=> {
+  const api = await autocompleteApi();
+  const panel = await mountPanel(api,{...manualState(),preferences:{...api.defaultPreferences,search_engine:'brave'}});
+  try {
+    const input = panel.container.querySelector('[aria-label="Browser address"]');
+    await act(async()=>input.focus());
+    await act(async()=> {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'browser shortcuts');
+      input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));
+    });
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+    expect(panel.container.querySelector('[role="listbox"]')).toBeNull();
+    expect(panel.onHide).not.toHaveBeenCalled();
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})));
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})));
+    expect(api.control).toHaveBeenCalledWith({operation:'navigate',url:'https://search.brave.com/search?q=browser%20shortcuts'},undefined);
+  } finally {await panel.cleanup();}
+});
+
+test('the close control dismisses immediately and closes the owned session', async()=> {
+  const api = await autocompleteApi();
+  const panel = await mountPanel(api,manualState());
+  try {
+    await act(async()=>panel.container.querySelector('[aria-label="Close browser panel"]').click());
+    expect(panel.onHide).toHaveBeenCalledOnce();
+    expect(api.control).toHaveBeenCalledWith({operation:'close'},undefined);
+  } finally {await panel.cleanup();}
+});
+
+test('address candidates prioritize open tabs, deduplicate history and reject unsafe URLs', async()=> {
+  const api = await autocompleteApi();
+  const url = 'https://www.youtube.com/';
+  const items = api.addressSuggestions('yo',[{id:'yt',title:'YouTube',url}],api.defaultPreferences.shortcuts,
+    [{title:'Visited YouTube',url},{title:'Unsafe',url:'https://user:secret@example.com/'}],api.defaultPreferences);
+  expect(items.filter(item=>item.url===url)).toEqual([{title:'YouTube',url,tab_id:'yt',kind:'tab'}]);
+  expect(items.at(-1)).toMatchObject({kind:'search',url:'https://www.google.com/search?q=yo'});
+});
+
+test('a tab close button targets that tab without dismissing the whole panel', async()=> {
+  const api = await autocompleteApi();
+  const state = manualState(); state.tabs.push({id:'other',active:false,title:'Other',url:'about:blank'});
+  const panel = await mountPanel(api,state);
+  try {
+    await act(async()=>panel.container.querySelector('[aria-label="Close Fixture"]').click());
+    expect(api.control).toHaveBeenCalledWith({operation:'close_tab',tab_id:'tab'},undefined);
+    expect(panel.onHide).not.toHaveBeenCalled();
+  } finally {await panel.cleanup();}
+});
+
+test('history arrival keeps a completed shortcut selected and deletion does not reinsert its suffix', async()=> {
+  vi.useFakeTimers();
+  const api = await autocompleteApi();
+  const panel = await mountPanel(api,{...manualState(),preferences:api.defaultPreferences});
+  try {
+    const input = panel.container.querySelector('[aria-label="Browser address"]');
+    await act(async()=>input.focus());
+    const edit = inputType => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'yo');
+      input.setSelectionRange(2,2);
+      input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType}));
+    };
+    await act(async()=>edit('insertText'));
+    expect(input.value).toBe('youtube.com/');
+    await act(async()=>vi.advanceTimersByTimeAsync(100));
+    const selected = panel.container.querySelector('[role="option"][aria-selected="true"]');
+    expect(selected.querySelector('small').textContent).toBe('www.youtube.com/');
+    await act(async()=>edit('deleteContentBackward'));
+    await act(async()=>vi.advanceTimersByTimeAsync(100));
+    expect(input.value).toBe('yo');
+  } finally {await panel.cleanup();vi.useRealTimers();}
+});
+
+test('new tabs focus the address without suggestions until typing, and clearing hides them', async()=> {
+  vi.useFakeTimers();
+  const api = await autocompleteApi();
+  const panel = await mountPanel(api,{...manualState(),preferences:api.defaultPreferences});
+  try {
+    await act(async()=>panel.container.querySelector('[title="New tab"]').click());
+    const input = panel.container.querySelector('[aria-label="Browser address"]');
+    await act(async()=>vi.advanceTimersByTimeAsync(100));
+    expect(document.activeElement).toBe(input);
+    expect(panel.container.querySelector('[role="listbox"]')).toBeNull();
+    expect(api.suggestions).not.toHaveBeenCalled();
+    const edit = value => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+      input.setSelectionRange(value.length,value.length);
+      input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));
+    };
+    await act(async()=>edit('anime'));
+    expect(panel.container.querySelector('[role="listbox"]')).not.toBeNull();
+    await act(async()=>edit(''));
+    expect(panel.container.querySelector('[role="listbox"]')).toBeNull();
+  } finally {await panel.cleanup();vi.useRealTimers();}
+});
+
+test('unvisited Spotify and new search terms appear without a history match', async()=> {
+  vi.useFakeTimers();
+  const api = await autocompleteApi();
+  api.suggestions = vi.fn(async()=>({items:[],queries:['anime movies','anime news'],search_engine:'google'}));
+  const panel = await mountPanel(api,{...manualState(),preferences:api.defaultPreferences});
+  try {
+    expect(api.addressSuggestions('spot',[],[],[],api.defaultPreferences)[0]).toMatchObject({kind:'website',url:'https://open.spotify.com/'});
+    const input = panel.container.querySelector('[aria-label="Browser address"]');
+    await act(async()=>input.focus());
+    await act(async()=> {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'anime');
+      input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(Array.from(panel.container.querySelectorAll('[role="option"]')).map(el=>el.textContent)).toEqual(['animeSearch Google','anime moviesGoogle','anime newsGoogle']);
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})));
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true})));
+    await act(async()=>input.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true})));
+    expect(api.control).toHaveBeenCalledWith({operation:'navigate',url:'https://www.google.com/search?q=anime%20movies'},undefined);
+  } finally {await panel.cleanup();vi.useRealTimers();}
+});
+
+test('mounting a closed session shows its homepage without starting Brave', async()=> {
+  const api = await autocompleteApi();
+  const state = {...manualState(),running:false,control:'closed',tabs:[],active_tab_id:''};
+  const panel = await mountPanel(api,state);
+  try {
+    expect(panel.container.querySelector('[aria-label="Browser homepage"]')).not.toBeNull();
+    expect(panel.container.textContent).not.toContain('Open browser');
+    expect(panel.container.textContent).not.toContain('A browser for Vellum');
+    expect(api.control).not.toHaveBeenCalled();
+    await act(async()=>panel.container.querySelector('[aria-label="Close New tab"]').click());
+    expect(panel.onHide).toHaveBeenCalledOnce();
+    expect(api.control.mock.calls.map(call=>call[0].operation)).toEqual(['close']);
+  } finally {await panel.cleanup();}
+});
+
+test('hover forwards the latest pointer position without clicking or taking ownership', async()=> {
+  vi.useFakeTimers();
+  const api = {frame:async()=>sampleFrame,point:(_rect,_frame,x,y)=>({x,y}),control:vi.fn(async()=>({status:'applied'}))};
+  const panel = await mountPanel(api,manualState());
+  try {
+    const screen = panel.container.querySelector('.browser-screen');
+    await act(async()=> {
+      for (let x=100; x<110; x++) screen.dispatchEvent(new MouseEvent('pointermove',{bubbles:true,clientX:x,clientY:80}));
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(api.control).toHaveBeenCalledTimes(1);
+    expect(api.control).toHaveBeenCalledWith(expect.objectContaining({operation:'hover',x:109,y:80,frame_id:sampleFrame.frame_id}),undefined);
+    expect(api.control.mock.calls[0][0].take_control).toBeUndefined();
+  } finally {await panel.cleanup();vi.useRealTimers();}
+});
 
 test('Escape reaches the browser page without bubbling to Vellum global shortcuts', async()=> {
   const api = {frame:async()=>sampleFrame,control:vi.fn(async()=>({status:'applied'}))};
@@ -49,7 +231,7 @@ test('New tab focuses an empty address immediately while creation is pending', a
   } finally {await act(async()=>finish?.({status:'applied'}));await panel.cleanup();}
 });
 
-test('Alt+W closes the inner tab and Alt+L focuses its address', async()=> {
+test('Alt+W closes the last browser tab and Alt+L focuses its address', async()=> {
   const api = {frame:async()=>sampleFrame,control:vi.fn(async()=>({status:'applied'}))};
   const panel = await mountPanel(api,manualState());
   try {
@@ -57,7 +239,8 @@ test('Alt+W closes the inner tab and Alt+L focuses its address', async()=> {
     await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'l',altKey:true,bubbles:true,cancelable:true})));
     expect(document.activeElement).toBe(panel.container.querySelector('[aria-label="Browser address"]'));
     await act(async()=>screen.dispatchEvent(new KeyboardEvent('keydown',{key:'w',altKey:true,bubbles:true,cancelable:true})));
-    expect(api.control).toHaveBeenCalledWith(expect.objectContaining({operation:'close_tab',tab_id:'tab'}),undefined);
+    expect(api.control).toHaveBeenCalledWith({operation:'close'},undefined);
+    expect(panel.onHide).toHaveBeenCalledOnce();
   } finally {await panel.cleanup();}
 });
 
@@ -105,7 +288,7 @@ test('clicking the page takes ownership and retains the click; typing is batched
 
 test('native home never streams frames or forwards typing, and switching engines preserves the search draft', async () => {
   vi.resetModules();
-  window.VellumApi = {client:{request:vi.fn()},appActions:{dispatch:vi.fn()}};
+  window.VellumApi = {client:{request:vi.fn(async()=>({items:[]}))},appActions:{dispatch:vi.fn()}};
   await import('../../design/Velllum/uploads/api/browser.js');
   const api = window.VellumApi.browser;
   api.frame = vi.fn(); api.stream = vi.fn();
@@ -133,6 +316,8 @@ test('native home never streams frames or forwards typing, and switching engines
     await act(async()=>Array.from(rootContainer.querySelectorAll('[role="menuitemradio"]')).find(el=>el.textContent==='Brave').click());
     const braveSearch = rootContainer.querySelector('[aria-label="Search with Brave"]');
     expect(braveSearch.value).toBe('browser tools');
+    expect(document.activeElement).toBe(braveSearch);
+    expect(braveSearch.selectionStart).toBe('browser tools'.length);
     expect(rootContainer.querySelector('.browser-home').dataset.engine).toBe('brave');
     await act(async()=>rootContainer.querySelector('.browser-home-search').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
     expect(api.control).toHaveBeenLastCalledWith({operation:'navigate',url:'https://search.brave.com/search?q=browser%20tools'},undefined);

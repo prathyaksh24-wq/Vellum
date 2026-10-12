@@ -189,6 +189,11 @@
       safeSet(windowStorage, WINDOW_ID_KEY, windowId);
     }
     var sessionOverrides = {};
+    // Browser visibility is an explicit session choice, never a startup preference.
+    // Mask older saved layouts in this owner without rewriting device settings.
+    if (deviceState.surfaces['right-panel'].properties.content === 'browser') {
+      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, deviceState.surfaces['right-panel'], {visible:false}));
+    }
     var effectiveRevision = deviceState.revision;
     var listeners = [];
 
@@ -303,6 +308,17 @@
       return dispatch(SURFACE_ACTION_ID, actionArguments, dispatchOptions);
     }
 
+    function dismissRightPanel(dispatchOptions) {
+      // Closing local chrome cannot depend on a live backend. Keep this
+      // transient dismissal in the existing layout owner, never a second store
+      // or a fabricated applied receipt. Older show receipts become stale.
+      sessionOverrides['right-panel'] = normalizePresentation('right-panel', Object.assign({}, state.surfaces['right-panel'], {visible:false}));
+      effectiveRevision += 1;
+      state = composeState();
+      emit();
+      return dispatchSurface('right-panel', {visible:false}, Object.assign({}, dispatchOptions || {}, {persistence:'session'}));
+    }
+
     function reset(dispatchOptions) {
       return dispatch(RESET_ACTION_ID, {}, dispatchOptions || {});
     }
@@ -380,6 +396,7 @@
       dispatch: dispatch,
       dispatchSidebar: dispatchSidebar,
       dispatchSurface: dispatchSurface,
+      dismissRightPanel: dismissRightPanel,
       reset: reset,
       maybeApply: maybeApply,
       undo: undo,

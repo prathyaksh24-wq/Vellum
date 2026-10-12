@@ -8579,13 +8579,20 @@ const App = () => {
   const navigationEpochRef = useRef(0);
   const [browserFeature, setBrowserFeature] = useState(false);
   const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
-  const browserSeenSession = useRef('');
+  const browserSeenSession = useRef(null);
+  const browserSuppressed = useRef(false);
+  const browserRequestEpoch = useRef(0);
   const refreshBrowser = async () => {
     const status = await API.browser.status();
     setBrowserState(status);
-    if (status.running && status.presentation_requested !== false && status.session_id !== browserSeenSession.current) {
-      browserSeenSession.current = status.session_id;
-      dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+    const presentation = status.session_id + ':' + (status.presentation_revision || 0);
+    if (browserSeenSession.current === null) {
+      browserSeenSession.current = status.running && status.presentation_requested !== false ? presentation : '';
+      return status;
+    }
+    if (status.running && status.presentation_requested !== false && presentation !== browserSeenSession.current) {
+      browserSeenSession.current = presentation;
+      if (!browserSuppressed.current) dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
     }
     return status;
   };
@@ -10383,6 +10390,14 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  const hideBrowserPanel = () => {
+    browserRequestEpoch.current += 1;
+    browserSuppressed.current = true;
+    browserSeenSession.current = browserState.session_id + ':' + (browserState.presentation_revision || 0);
+    return workspaceActionRuntimeRef.current.dismissRightPanel({conversationId:activeChatId})
+      .then(receipt => { showAppActionReceipt(receipt, {notify:false}); return receipt; })
+      .catch(() => null);
+  };
   const resetWorkspaceLayout = async (options = {}) => {
     try {
       const receipt = await workspaceActionRuntimeRef.current.reset({conversationId:activeChatId});
@@ -10559,10 +10574,13 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onProjectRename={renameProject} onOpenProject={openProject}
                 browserAvailable={browserFeature} onBrowser={async () => {
                   try {
+                    const requestEpoch = ++browserRequestEpoch.current;
+                    browserSuppressed.current = false;
+                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
                     const status = await refreshBrowser();
+                    if (requestEpoch !== browserRequestEpoch.current) return;
                     if (!status.running && status.available) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
-                    await refreshBrowser();
-                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+                    if (requestEpoch === browserRequestEpoch.current) await refreshBrowser();
                   } catch (error) { pushToast(error.message); }
                 }}/>}
 
@@ -10606,8 +10624,11 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
-            onHide={() => dispatchSurfacePresentation('right-panel', {visible:false}, {notify:false})}
-            context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => applyAppActionReceipt(receipt, {notify:false})}/>}
+            onHide={hideBrowserPanel}
+            context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
+              if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
+              applyAppActionReceipt(receipt, {notify:false});
+            }}/>}
         </div>
         {view !== 'music' && <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
           onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
@@ -10682,7 +10703,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               if (!state.running) await API.browser.control({operation:'open'});
               await API.browser.control({operation:'new_tab', url});
               await refreshBrowser();
-              await dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false});
+              await dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
               setYtConnectOpen(false);
             } catch (error) { pushToast(error.message || 'Could not open YouTube History.'); }
           }}
