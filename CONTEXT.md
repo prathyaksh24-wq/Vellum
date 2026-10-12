@@ -28,10 +28,11 @@ A single execution of an Automation, fired by the scheduler at a schedule's next
 The timing rule of an Automation — how often / when a run fires. Expressible as a relative delay (`30m`), an interval (`every 2h`), a 5-field cron expression (`0 9 * * *`), or a specific ISO timestamp. An Automation has exactly one schedule.
 
 ### Destination
-Where a run's results are delivered. Two flavours, matching the Codex scheduled-tasks model:
+Where a run's results are delivered. Three flavours:
 
 - **New chat (standalone)** — each run happens in a fresh conversation, independent of other runs. Results collect in a "Scheduled" / automations view.
 - **Existing chat** — the automation is pinned to one ongoing conversation (`thread_id`); each run appends a turn/channel into that conversation, preserving its context.
+- **Notification ping** — results appear in the in-app notification list and produce a toast while the UI is open. The Automation store retains notifications and read state without creating conversations. Creator uploads use this destination by default.
 
 Run results are delivered to the UI surface (standalone feed or pinned conversation) only. Vellum is vault-first but automation output is **not** written to the Obsidian vault for this feature.
 

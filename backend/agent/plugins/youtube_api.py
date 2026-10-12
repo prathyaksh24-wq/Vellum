@@ -66,6 +66,7 @@ def _controls() -> Any:
 
 
 class YouTubeStatusResponse(BaseModel):
+    authorization_required: bool = False
     configured: bool
     connected: bool
     status: str

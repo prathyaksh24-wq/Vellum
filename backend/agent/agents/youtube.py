@@ -63,6 +63,8 @@ class YoutubeAgent:
         r"\bwhat\s+did\s+(?:i|we)\s+recently\s+watch\b",
     )
     _SUBSCRIPTION_FEED_PATTERNS = (
+        r"\b(?:my|our|personalized|personalised)\s+(?:youtube|yt)\s+(?:feed|recommendations?)\b",
+        r"\b(?:recommend|suggest)\b.*\b(?:youtube|yt)\b.*\b(?:channels?|creators?|videos?)\b.*\b(?:for me|my|based on)\b",
         r"\b(?:which|what)\s+(?:youtube\s+)?(?:creators?|channels?)\b.*\b(?:tracking|monitoring|following)\b",
         r"\b(?:my|our)\s+(?:youtube\s+)?creator\s+(?:tracking|uploads)\b",
         r"\b(?:latest|new|recent)\s+videos?\s+from\s+channels?\s+(?:i|we)\s+(?:am\s+|are\s+)?subscrib(?:e|ed)\s+to\b",
@@ -137,6 +139,8 @@ class YoutubeAgent:
 
     def answer(self, query: str, *, context: dict | None = None) -> SpecialistResponse:
         lowered = query.lower()
+        if self._is_subscription_feed_query(lowered):
+            return self._answer_subscription_feed()
         if re.search(r"\b(?:my|our)\b.*\b(?:youtube music|music library|watch later|playlists)\b", lowered):
             return self._answer_takeout_library(lowered)
         if self._is_takeout_query(lowered):
@@ -147,9 +151,9 @@ class YoutubeAgent:
             return self._answer_account()
         if self._is_intelligence_query(lowered):
             return self._answer_personal_context(query)
-        if self._is_subscription_feed_query(lowered):
-            return self._answer_subscription_feed()
         read_request = clear_read_request(query)
+        if read_request is not None and read_request.source == "uploads":
+            return self._answer_read_request(read_request, context or {})
         if read_request is not None and read_request.source == "previous":
             return self._answer_read_request(read_request, context or {})
         if self.planner is not None:
@@ -264,6 +268,24 @@ class YoutubeAgent:
             return SpecialistResponse(agent=self.name, status=status, summary=summary, analysis=analysis, confidence=1.0,
                 structured_payload={"youtube_account":{"request":request.model_dump(), "items":list(items)[:100]}})
 
+        if request.source == 'uploads':
+            from agent.plugins.youtube_creator_tracking import _literal
+            payload={'limit':request.limit,'creator':request.creator,'day_label':request.day_label}
+            try:
+                result=self.tool_registry.invoke('youtube.subscription_feed',payload,agent_name=self.name) \
+                    if self.tool_registry is not None else self.youtube_service.subscription_feed(payload)
+            except Exception:
+                return reply('Saved creator uploads are temporarily unavailable. I could not verify that day from local records.',status='needs_fetch')
+            if result.get('ambiguous'):
+                return reply('More than one saved channel matches that name. Use the full channel name: '+', '.join(result['matches']),status='needs_fetch')
+            items=result.get('uploads',[])
+            day=result.get('date') or 'the saved period'
+            if not items:
+                return reply(f'I have no saved uploads from {request.creator} for {day}. '+result.get('coverage','Saved feed coverage may be incomplete.'),status='needs_fetch')
+            lines=[f'Saved uploads from {items[0].get("creator") or request.creator} for {day}:']
+            lines.extend(f'{index}. [{_literal(item["title"])}](https://www.youtube.com/watch?v={item["video_id"]})' for index,item in enumerate(items,1))
+            lines.append(result.get('coverage','Saved feed coverage may be incomplete.'))
+            return reply('\n'.join(lines),items,analysis='Read canonical saved creator uploads; no public search was used.')
         if request.source == "clarify" or request.view == "clarify":
             return reply("I couldn't determine a supported YouTube read for that request. "
                 "Tell me whether you want videos, channel names, a count, or a link to an item I showed you.", status="needs_fetch")
@@ -541,7 +563,11 @@ class YoutubeAgent:
         if result.get("available"):
             from agent.plugins.youtube_creator_tracking import _literal
             monitored = [creator for creator in result.get("creators", []) if creator["state"] == "monitoring"]
-            lines = [f"- {creator['name']}: {creator['reason']}" for creator in monitored]
+            lines = [f"- [{_literal(creator['name'])}](https://www.youtube.com/channel/{creator['channel_id']}): {creator['reason']}" for creator in monitored]
+            if result.get('active_topics'):
+                lines.insert(0,'Current interests: '+', '.join(topic.replace('_',' ') for topic in result['active_topics'])+'.')
+            if result.get('min_duration_seconds'):
+                lines.insert(0,f"Upload notifications require verified videos longer than {result['min_duration_seconds']} seconds.")
             uploads = result.get("uploads", [])[:10]
             if uploads:
                 lines += ["\nSaved public uploads:"] + [f"- {_literal(item['creator'])}: {_literal(item['title'])}\n  {item['url']}" for item in uploads]

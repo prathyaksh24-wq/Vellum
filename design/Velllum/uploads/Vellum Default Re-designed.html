@@ -21,6 +21,8 @@
 <link rel="stylesheet" href="components/music-page.css"/>
 <script type="text/babel" data-presets="react" src="components/music-page.jsx"></script>
 <script src="api/automations.js"></script>
+<link rel="stylesheet" href="components/automation-notifications.css"/>
+<script type="text/babel" data-presets="react" src="components/automation-notifications.jsx"></script>
 <script src="api/settings.js?v=20260710-backend-routing"></script>
 <script src="api/knowledge.js?v=20260710-wiki"></script>
 <script src="api/books.js"></script>
@@ -1875,6 +1877,9 @@ const FolderIcon = ({open, onToggle}) => (
 const IcPanel = (p)=> <I {...p}><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9.5 4v16"/></I>;
 const IcDots = (p)=> <I {...p} sw={0}><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></I>;
 const IcPin = (p)=> <I {...p} d="M12 17v5 M9 4h6l1 7 2.5 2.5H5.5L8 11l1-7z"/>;
+const IcBell = (p)=> <I {...p} d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>;
+// Presentation only: the notification component remains the sole inbox owner.
+const openNotifications = () => window.dispatchEvent(new Event('vellum:notifications-open'));
 const IcArchive = (p)=> <I {...p}><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9 M10 13h4"/></I>;
 const IcTrash = (p)=> <I {...p} d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6 M10 11v6 M14 11v6"/>;
 const IcShare = (p)=> <I {...p} d="M12 3v13 M8 7l4-4 4 4 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>;
@@ -1973,6 +1978,7 @@ const AppsDrop = ({apps, sel, drop, onToggle, onConnect, onClose}) => (
 );
 const IcCheck = (p)=> <I {...p} d="M20 6L9 17l-5-5"/>;
 const VSelect = window.VellumUI.VSelect;
+const {AutomationRunHistory, AutomationNotificationCenter} = window.VellumAutomationNotifications;
 const BooksImportDialog = window.VellumUI.BooksImportDialog;
 
 const SHARED_LAYOUT_TARGETS = '.v-select-option,.sb-row,.chat-row,.project-row,.plus-item,.recent-row,.drop-item,.pdrop-item,.set-item,.ltr,.ltile,.tab,.ctx-item,.app-row,.pop-row';
@@ -3198,6 +3204,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
         {moreOpen && <div id="sidebar-more">
         <div className="sb-tools">
           <button className={'sb-row' + (view === 'scheduled' ? ' active' : '')} onClick={() => onNav('scheduled')}><span className="sb-ic"><IcGCal/></span>Scheduled</button>
+          <button className="sb-row" onClick={openNotifications}><span className="sb-ic"><IcBell/></span>Notifications</button>
           <button className={'sb-row' + (view === 'ledger' ? ' active' : '')} onClick={() => onNav('ledger')}><span className="sb-ic"><IcLedger/></span>Observability</button>
           <button className={'sb-row' + (view === 'memory' ? ' active' : '')} onClick={() => onNav('memory')}><span className="sb-ic"><IcBrain/></span>Memory</button>
           <button className={'sb-row' + (view === 'apps' ? ' active' : '')} onClick={() => onNav('apps')}><span className="sb-ic"><IcPlugins/></span>Plugins</button>
@@ -3358,6 +3365,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
         ))}
       </RailFly>
       <button className={'rail-btn' + (view === 'scheduled' ? ' active' : '')} title="Scheduled" onClick={() => onNav('scheduled')}><IcGCal size={17}/></button>
+      <button className="rail-btn" title="Notifications" onClick={openNotifications}><IcBell size={17}/></button>
       <button className={'rail-btn' + (view === 'ledger' ? ' active' : '')} title="Observability · Ctrl+Shift+G" onClick={() => onNav('ledger')}><IcLedger size={17}/></button>
       <button className={'rail-btn' + (view === 'apps' ? ' active' : '')} title="Plugins" onClick={() => onNav('apps')}><IcPlugins size={17}/></button>
       <button className={'rail-btn' + (view === 'music' ? ' active' : '')} title="Music" onClick={() => onNav('music')}><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></button>
@@ -4586,7 +4594,7 @@ const DefaultAgentView = ({agent, convos, activeConvoId, enabled, onToggleEnable
             <span className="proj-mem">{agent.tag}</span>
             <div className="agent-head-acts">
               {agent.id === 'x' && xConnected && <button className="x-connpill" onClick={onDisconnectX} title="X connection settings"><span className="x-connpill-dot"/>{xHandle}<span className="x-connpill-x"><IcSettings size={11}/></span></button>}
-              {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onDisconnectYT} title="Disconnect Google connector for liked videos and subscriptions"><span className="x-connpill-dot yt-dot"/>Google: {ytHandle}<span className="x-connpill-x"><IcX size={11}/></span></button>}
+              {agent.id === 'youtube' && ytConnected && <button className="x-connpill yt-connpill" onClick={onConnectYT} title="YouTube connection and creator tracking"><span className="x-connpill-dot yt-dot"/>Google: {ytHandle}<span className="x-connpill-x"><IcSettings size={11}/></span></button>}
               <button className={'agent-status' + (enabled ? ' on' : '')} onClick={onToggleEnabled} title={enabled ? 'Turn agent off' : 'Turn agent on'}><span className="agent-status-dot"/>{enabled ? 'On' : 'Off'}</button>
               <button className="tbtn" title={agent.name + ' settings'} onClick={onSettings}><IcSettings size={16}/></button>
             </div>
@@ -4852,9 +4860,9 @@ const GLogo = ({size=22}) => (
 const YTLogo = ({size=22}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="5" width="22" height="14" rx="4.5" fill="#FF0000"/><path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>
 );
-const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onOpenAutomations}) => {
-  const [creators, setCreators] = useState(null);
+const YouTubeConnectModal = ({onClose, onConnected, onDisconnect, onAction, onOpenHistory, onOpenAutomations}) => {
   const [status, setStatus] = useState(null);
+  const [creators, setCreators] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyUrl, setHistoryUrl] = useState('https://www.youtube.com/feed/history');
   const [busy, setBusy] = useState('');
@@ -4896,7 +4904,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
       const startedAt = Date.now();
       const poll = async () => {
         const next = await loadStatus();
-        if (next && next.connected) return;
+        if (next && next.connected && !next.authorization_required) return;
         if (Date.now() - startedAt < 180000) setTimeout(poll, 1800);
       };
       setTimeout(poll, 1200);
@@ -4916,6 +4924,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
     finally { setBusy(''); }
   };
   const connected = !!(status && status.connected);
+  const authorizationRequired = !!(status && status.authorization_required);
   const historyAction = async action => {
     setBusy('history'); setError('');
     try {
@@ -4937,7 +4946,7 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
         <div className="xc-body gc-body">
           <div className="gc-page">
             <div className="gc-logo"><GLogo size={28}/></div>
-            <div className="gc-h">{connected ? 'YouTube connected' : 'Connect YouTube'}</div>
+            <div className="gc-h">{authorizationRequired ? 'Reconnect YouTube' : connected ? 'YouTube connected' : 'Connect YouTube'}</div>
             <div className="gc-sub">{connected ? (status.channel_title || 'Your primary YouTube channel') : 'Google handles sign-in and consent in a secure browser window.'}</div>
             <div className="gc-perm-title">Read-only access</div>
             <div className="gc-perms">
@@ -4945,12 +4954,16 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
               <div className="gc-perm"><YTLogo size={16}/>Read your channel subscriptions</div>
             </div>
             <div className="gc-trust">Vellum does not request your email, password, uploads, comments, or write access. OAuth tokens stay in your operating-system keyring.</div>
+            {authorizationRequired && <div className="gc-note" role="alert">Google rejected the saved authorization. Reconnect YouTube to verify new video lengths and read public channel topics. Your saved history and creator choices remain available.</div>}
             <div className="gc-perm-title">Watch history through Vellum's browser</div>
             {creators && creators.configured && <div className="gc-note" aria-live="polite">
               Creator tracking: {creators.enabled ? 'Enabled' : 'Paused'}.<br/>
+              {creators.min_duration_seconds > 0 && <>Upload notifications: videos longer than {creators.min_duration_seconds / 60} minutes. {creators.pending_duration_checks} awaiting duration verification.<br/></>}
+              {!!creators.active_topics?.length && <>Current interests: {creators.active_topics.map(topic => topic.replaceAll('_',' ')).join(', ')}.<br/></>}
               Quiet baseline: {creators.baselined_channels} of {creators.monitored_channels} selected creators at the last check.<br/>
-              {creators.creators.filter(item => item.state === 'monitoring').map(item => item.name).join(', ') || 'Waiting for repeated recent activity.'}<br/>
+              <details><summary>{creators.creators.filter(item => item.state === 'monitoring').length} selected creators</summary>{creators.creators.filter(item => item.state === 'monitoring').map(item => item.name).join(', ') || 'Waiting for repeated recent activity.'}</details>
               {creators.excluded.length} explicit exclusions. Current interests fade; seasonal relationships are retained.<br/>
+              {!!creators.warnings?.length && <details><summary>Source checks needing attention: {creators.warnings.length}</summary>{creators.warnings.map(warning => warning.replaceAll('_',' ')).join(' ')}</details>}
               Manage creator uploads in Automations using the button below.
             </div>}
             <div className="gc-note">Sign into YouTube once in Vellum's browser. Refresh reads up to 100 loaded history entries and saves them locally. Browser sign-in is separate from Google OAuth.</div>
@@ -4965,10 +4978,11 @@ const YouTubeConnectModal = ({onClose, onConnected, onAction, onOpenHistory, onO
             {!status && !error && <div className="gc-note">Checking connection status...</div>}
             {status && !status.configured && <div className="gc-note">Set <b>YOUTUBE_OAUTH_CLIENT_ID</b> and <b>YOUTUBE_OAUTH_CLIENT_SECRET</b> in the local .env file, then restart Vellum.</div>}
             {error && <div className="gc-note" style={{color:'#ff7b72'}}>{error}</div>}
-            <div className="gc-actions">
+            <div className="gc-actions" style={{flexWrap:'wrap'}}>
               <button className="gc-cancel" onClick={onClose}>Cancel</button>
-              {!connected && <button className="gc-btn" disabled={busy === 'connect' || !!(status && !status.configured)} onClick={begin}>{busy === 'connect' ? 'Opening Google...' : 'Continue with Google'}</button>}
-              {connected && <button className="gc-cancel" disabled={busy === 'sync'} onClick={sync}>{busy === 'sync' ? 'Syncing...' : 'Sync subscriptions'}</button>}
+              {(!connected || authorizationRequired) && <button className="gc-btn" disabled={busy === 'connect' || !!(status && !status.configured)} onClick={begin}>{busy === 'connect' ? 'Opening Google...' : authorizationRequired ? 'Reconnect with Google' : 'Continue with Google'}</button>}
+              {connected && <button className="gc-cancel" disabled={busy === 'sync' || authorizationRequired} onClick={sync}>{busy === 'sync' ? 'Syncing...' : 'Sync subscriptions'}</button>}
+              {connected && <button className="gc-cancel" disabled={!!busy} onClick={onDisconnect}>Disconnect Google</button>}
               {connected && <button className="gc-btn" onClick={() => onConnected(status)}>Done</button>}
             </div>
           </div>
@@ -7893,6 +7907,7 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
 };
 
 const AUTOMATION_DESTINATIONS = [
+  {value: 'notification', label: 'Notification ping'},
   {value: 'new_chat', label: 'New chat'},
   {value: 'existing_chat', label: 'Existing chat'},
 ];
@@ -7955,6 +7970,7 @@ const scheduleLabel = schedule => {
   return schedule.expression || schedule.run_at || 'Not scheduled';
 };
 const destinationLabel = (destination, chats = []) => {
+  if (destination && destination.kind === 'notification') return 'Notification ping';
   if (!destination || destination.kind !== 'existing_chat') return 'New chat';
   const chat = chats.find(item => String(item.thread_id || item.id) === String(destination.thread_id));
   return chat ? 'Pinned · ' + chat.title : 'Pinned chat';
@@ -8191,7 +8207,7 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
   };
   const inspectHistory = async record => {
     setBusy(record.id); setError('');
-    try { const receipt = await onAction('automation.history', {automation_id:record.id}); if (!receipt || receipt.status !== 'applied') throw new Error('History unavailable'); setHistory({automationId:record.id, runs:(receipt.result && receipt.result.runs) || []}); }
+    try { const receipt = await onAction('automation.history', {automation_id:record.id}, {notify:false}); if (!receipt || receipt.status !== 'applied') throw new Error('History unavailable'); setHistory({automationId:record.id, runs:(receipt.result && receipt.result.runs) || []}); }
     catch (_) { setError('History unavailable'); }
     finally { setBusy(''); }
   };
@@ -8239,14 +8255,15 @@ const ScheduledView = ({automations = [], projects = [], chats = [], models = MO
           </section>
           <section className="au-detail-panel" aria-label="Scheduled task details">
             {editing ? <AutomationForm key={editing.mode + ':' + (editing.record ? editing.record.id : 'new')} record={editing.mode === 'edit' ? editing.record : null} projects={projects} chats={chats} models={models} onSave={saveAutomation} onCancel={() => setEditing(null)}/> : selected ? <div className="au-detail">
-              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn" onClick={() => inspectHistory(selected)}>History</button><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
+              <div className="au-detail-head"><div className="au-detail-head-copy"><div className="au-detail-status"><span className={'au-task-dot' + (selected.state === 'paused' ? ' paused' : '')}/>{selected.state === 'active' ? 'Active' : 'Paused'}</div><div className="au-detail-title">{selected.name}</div><div className="au-detail-sub">{selected.description || 'Scheduled reasoning task'}</div></div><div className="au-detail-actions"><button className="btn primary" disabled={busy === selected.id} onClick={() => runNow(selected)}>{busy === selected.id ? 'Working…' : 'Run now'}</button><button className="btn" disabled={busy === selected.id} onClick={() => inspectHistory(selected)}>History</button><button className="btn" onClick={() => setEditing({mode:'edit', record:selected})}>Edit</button><button className="tbtn" title="Close details" onClick={() => setSelectedId(null)}><I d="M6 6l12 12M18 6L6 18" size={16}/></button></div></div>
+              {history && history.automationId === selected.id ? <><button className="btn" onClick={() => setHistory(null)}>Back to details</button><AutomationRunHistory runs={selected.run_history || history.runs}/></> : <>
               <div className="au-prompt-card">{selected.instructions}</div>
               <div className="au-section-label">Details</div>
               <div className="au-detail-card"><div className="au-detail-row"><span>Runs in</span><strong>{destinationLabel(selected.destination, chats)}</strong></div><div className="au-detail-row"><span>Project</span><strong className={!selected.project_id ? 'au-detail-muted' : ''}>{selected.project_id ? ((projects.find(project => project.id === selected.project_id) || {}).name || selected.project_id) : 'None'}</strong></div><div className="au-detail-row"><span>Model</span><strong>{(selected.model_profile && selected.model_profile.model) || 'Default model'}</strong></div><div className="au-detail-row"><span>Reasoning</span><strong>{(selected.model_profile && selected.model_profile.reasoning_mode) || 'Default'}</strong></div></div>
               <div className="au-section-label">Frequency</div>
               <div className="au-detail-card"><div className="au-detail-row"><span>Repeat</span><strong>{scheduleLabel(selected.schedule)}</strong></div><div className="au-detail-row"><span>Notifications</span><strong>{automationNotificationLabel(selected.notifications && selected.notifications.level)}</strong></div></div>
               {lastRun(selected) && <div className="au-last-run">{runStatusLabel(lastRun(selected))}</div>}
-              {history && history.automationId === selected.id && <div className="au-last-run">{history.runs.length ? `${history.runs.length} recorded run${history.runs.length === 1 ? '' : 's'}` : 'No recorded runs yet'}</div>}
+              </>}
               {error && <div className="au-form-error" role="alert">{error}</div>}
             </div> : <div className="au-list-empty"><strong>Select a scheduled task</strong>Choose a task to see its instructions and details.</div>}
           </section>
@@ -10697,6 +10714,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal
+          onDisconnect={() => { disconnectYouTube(); setYtConnectOpen(false); }}
           onOpenHistory={async url => {
             try {
               const state = await refreshBrowser();
@@ -10712,7 +10730,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAction={dispatchKnowledgeAction}
           onConnected={status => { setYtConn(status); refreshYouTubeIntelligence(); setYtConnectOpen(false); pushToast('YouTube connected'); }}/>
         }
-        {toast && <div className="toast"><span>{toast.message}</span>{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
+        <AutomationNotificationCenter onAction={dispatchAutomationAction} onPing={pushToast} browserVisible={browserPanelVisible && view !== 'music'} sidebarPinned={sidebarPinned}/>{toast && !(toast.notificationPing && browserPanelVisible && view !== 'music') && <div className="toast" role="status"><span>{toast.message}</span>{toast.notificationPing && <span aria-hidden="true">🔔</span>}{toast.undoReceipt && <button type="button" className="toast-action" onClick={() => undoAppAction(toast.undoReceipt)}>Undo</button>}{toast.adaptiveRuleReceipt && <button type="button" className="toast-action" onClick={() => dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress', {rule_id:toast.adaptiveRuleReceipt.result.adaptive_rule.id})}>Don't learn this</button>}{toast.confirmationReceipt && <React.Fragment><button type="button" className="toast-action" onClick={() => cancelAppAction(toast.confirmationReceipt)}>Cancel</button><button type="button" className="toast-action" onClick={() => confirmAppAction(toast.confirmationReceipt)}>{toast.confirmationLabel || 'Confirm'}</button></React.Fragment>}</div>}
       </div>
     </div>
     </BackgroundContext.Provider>

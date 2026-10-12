@@ -64,6 +64,8 @@ def youtube_status() -> dict[str, Any]:
         connected = bool(store.load_tokens(required=False))
         metadata = store.load_metadata()
         credential_status = "ready" if connected else "not_connected"
+        if connected and metadata.get("authorization_status") == "authorization_required":
+            credential_status = "authorization_required"
     except YouTubeAuthError:
         connected = False
         metadata = {}
@@ -72,6 +74,7 @@ def youtube_status() -> dict[str, Any]:
         "configured": bool(settings.youtube_oauth_client_id),
         "connected": connected,
         "status": credential_status if settings.youtube_oauth_client_id else "not_configured",
+        "authorization_required": credential_status == "authorization_required",
         "account_label": settings.youtube_oauth_account_label,
         "channel_id": str(metadata.get("channel_id") or ""),
         "channel_title": str(metadata.get("channel_title") or ""),

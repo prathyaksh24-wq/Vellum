@@ -65,7 +65,7 @@ describe("Vellum default automations surface", () => {
     expect(html).toContain("record.state === 'active' ? 'automation.pause' : 'automation.resume'");
     expect(html).toContain("onAction('automation.remove', {automation_id:record.id}, {confirmedFromUi:true})");
     expect(html).toContain("onAction('automation.run', {automation_id:record.id})");
-    expect(html).toContain("onAction('automation.history', {automation_id:record.id})");
+    expect(html).toContain("onAction('automation.history', {automation_id:record.id}, {notify:false})");
     expect(html).toContain("onAction={dispatchAutomationAction}");
     expect(html).not.toContain("API.automations.create(payload)");
     expect(html).not.toContain("API.automations.update(editing.record.id, payload)");

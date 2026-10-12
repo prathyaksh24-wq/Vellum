@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 BUILTIN_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "youtube_creator_tracking",
+        "destination": {"kind": "notification"},
         "name": "YouTube creator uploads",
         "instructions": "Assess saved creator activity locally and check selected public YouTube Atom feeds. Baseline quietly; deliver only new relevant uploads with creator, title, and link. Explicit exclusions override inferred activity. No language model is called for polling.",
         "schedule": "every 15m",
@@ -105,7 +106,7 @@ def seed_builtins(
             name=definition["name"],
             instructions=definition["instructions"],
             schedule=parse_schedule(definition["schedule"]).to_dict(),
-            destination={"kind": "new_chat"},
+            destination=definition.get("destination", {"kind": "new_chat"}),
             permission={"full_access": True},
             builtin=True,
             builtin_key=key,
@@ -125,7 +126,7 @@ def reset_builtin(store: AutomationStore, record: dict[str, Any]) -> dict[str, A
         name=definition["name"],
         instructions=definition["instructions"],
         schedule=parse_schedule(definition["schedule"]).to_dict(),
-        destination={"kind": "new_chat"},
+        destination=definition.get("destination", {"kind": "new_chat"}),
         permission={"full_access": True},
         state=definition.get("state", "active"),
     )

@@ -24,13 +24,15 @@ def validate_destination(
     thread_id: str | None = None,
 ) -> dict[str, Any]:
     """Validate a destination; ``existing_chat`` requires a pinned thread_id."""
-    if kind not in ("new_chat", "existing_chat"):
+    if kind not in ("new_chat", "existing_chat", "notification"):
         raise ValueError(f"invalid destination kind: {kind!r}")
     fields: dict[str, Any] = {"kind": kind}
     if thread_id is not None:
         fields["thread_id"] = thread_id
     if kind == "existing_chat" and not fields.get("thread_id"):
         raise ValueError("existing_chat destination requires a thread_id")
+    if kind == "notification" and thread_id:
+        raise ValueError("notification destination cannot target a chat")
     return fields
 
 

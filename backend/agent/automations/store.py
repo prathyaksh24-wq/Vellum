@@ -7,7 +7,7 @@ atomic writes (temp file + rename), following the conventions of
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import hashlib
 import json
 import os
@@ -17,6 +17,10 @@ from threading import RLock
 from typing import Any, Literal
 
 MAX_RUN_HISTORY = 100
+MAX_NOTIFICATION_HISTORY = 200
+NOTIFICATION_RECENT_HOURS = 24
+_STORE_LOCKS: dict[str, RLock] = {}
+_STORE_LOCKS_GUARD = RLock()
 
 AutomationState = Literal["active", "paused"]
 RunStatus = Literal["running", "complete", "failed"]
@@ -30,7 +34,8 @@ class AutomationStore:
     def __init__(self, root: str | Path):
         self.root = Path(root)
         self.path = self.root / "automations.json"
-        self._lock = RLock()
+        with _STORE_LOCKS_GUARD:
+            self._lock = _STORE_LOCKS.setdefault(str(self.path.resolve()).casefold(), RLock())
 
     def create(
         self,
@@ -177,6 +182,71 @@ class AutomationStore:
     def runs(self, automation_id: str) -> list[dict[str, Any]]:
         record = self.get(automation_id)
         return [dict(run) for run in record.get("run_history", [])]
+
+    def deliver_notification(self, automation_id: str, delivery_id: str, message: str,
+                             *, title: str = "", url: str = "", read_at: str | None = None,
+                             created_at: str | None = None) -> bool:
+        """Persist once before the creator outbox is acknowledged; create no chat."""
+        with self._lock:
+            data = self._read()
+            record = data.get(automation_id)
+            if record is None:
+                raise ValueError(f"automation not found: {automation_id}")
+            if (record.get("notifications") or {}).get("level", "all") in {"none", "failures"}:
+                return False
+            history = record.setdefault("notification_history", [])
+            if any(item.get("id") == delivery_id for item in history):
+                return False
+            history.append({"id": delivery_id, "automation_id": automation_id,
+                "title": (title or record["name"])[:200], "message": message[:10000],
+                "url": url, "created_at": created_at or utc_now(), "read_at": read_at})
+            record["notification_history"] = history[-MAX_NOTIFICATION_HISTORY:]
+            self._write(data)
+            return True
+
+    @staticmethod
+    def _notification_recent(item: dict[str, Any], now: datetime) -> bool:
+        try:
+            created = datetime.fromisoformat(item['created_at'].replace('Z', '+00:00'))
+            return created.tzinfo is not None and now-timedelta(hours=NOTIFICATION_RECENT_HOURS) <= created <= now
+        except (KeyError, ValueError, TypeError):
+            return False
+
+    def notification_snapshot(self, *, limit: int = 200, view: str = 'all', offset: int = 0,
+                              query: str = '') -> dict[str, Any]:
+        if view not in {'all', 'recent', 'history'}:
+            raise ValueError('Unknown notification view')
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            items = [dict(item) for record in self._read().values()
+                     for item in record.get("notification_history", [])]
+        items.sort(key=lambda item: (item["created_at"], item["id"]), reverse=True)
+        recent = [item for item in items if not item.get('read_at') and self._notification_recent(item, now)]
+        selected = recent if view == 'recent' else items
+        term = query.strip().casefold()[:200]
+        if term:
+            selected = [item for item in selected if term in (item.get('title','')+' '+item.get('message','')).casefold()]
+        start, size = max(0, min(offset, 10000)), max(1, min(limit, 200))
+        return {"items": selected[start:start+size],
+                "unread_count": sum(not item.get("read_at") for item in items),
+                'recent_unread_count': len(recent), 'total_count': len(items), 'matched_count': len(selected),
+                'offset': start, 'has_more': start+size < len(selected),
+                'recent_hours': NOTIFICATION_RECENT_HOURS, 'retention_per_automation': MAX_NOTIFICATION_HISTORY}
+
+    def mark_notifications_read(self, ids: list[str], *, all_items: bool = False, recent_only: bool = False) -> int:
+        changed = 0
+        now = utc_now()
+        with self._lock:
+            data = self._read()
+            for record in data.values():
+                for item in record.get("notification_history", []):
+                    if not item.get("read_at") and (all_items or item["id"] in ids or
+                            recent_only and self._notification_recent(item, datetime.fromisoformat(now))):
+                        item["read_at"] = now
+                        changed += 1
+            if changed:
+                self._write(data)
+        return changed
 
     @staticmethod
     def _new_id(name: str) -> str:

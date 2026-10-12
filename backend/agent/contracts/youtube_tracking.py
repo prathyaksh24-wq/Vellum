@@ -1,8 +1,9 @@
 """Local, account-scoped creator monitoring contracts."""
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+CreatorUploadDayFilter = Literal["", "Today", "Yesterday"] | Annotated[str, StringConstraints(pattern=r"^\d{4}-\d{2}-\d{2}$")]
 
 
 class CreatorRule(BaseModel):
@@ -34,6 +35,13 @@ class CreatorTrackingConfig(BaseModel):
     requests_per_day: int = Field(default=768, ge=1, le=1000)
     api_fallback: bool = True
     fallback_units_per_day: int = Field(default=1536, ge=0, le=2000)
+    min_duration_seconds: int = Field(default=0, ge=0, le=86400)
+    duration_units_per_day: int = Field(default=96, ge=0, le=200)
+    discovery_units_per_day: int = Field(default=24, ge=0, le=100)
+    related_discovery: bool = True
+    related_channels_per_topic: int = Field(default=3, ge=0, le=5)
+    conversation_topics: bool = False
+    topic_preferences: dict[str, Literal["current", "excluded"]] = Field(default_factory=dict, max_length=8)
     timezone: str = Field(default="UTC", max_length=100)
 
     @model_validator(mode="after")
@@ -53,6 +61,20 @@ class CreatorTrackingConfig(BaseModel):
 class CreatorTrackingRead(BaseModel):
     model_config = ConfigDict(extra="forbid")
     limit: int = Field(default=20, ge=1, le=100)
+    creator: str = Field(default="", max_length=200)
+    day_label: CreatorUploadDayFilter = ""
+
+
+class SavedCreatorUploads(BaseModel):
+    contract_version: int = 1
+    local_only: bool = True
+    configured: bool = False
+    ambiguous: bool = False
+    matches: list[str] = Field(default_factory=list)
+    uploads: list[dict[str, str]] = Field(default_factory=list)
+    date: str = ""
+    timezone: str = "UTC"
+    coverage: str = "Saved uploads only; feed coverage may be incomplete. Older saved records may have unverified duration."
 
 
 class CreatorAssessment(BaseModel):
@@ -86,4 +108,8 @@ class CreatorTrackingSnapshot(BaseModel):
     baselined_channels: int = 0
     warnings: list[str] = Field(default_factory=list)
     polling_limits: dict[str, int] = Field(default_factory=dict)
-    coverage: str = "Saved watch history only; searches and recommendations do not endorse creators. Counts are distinct video/day records, not complete lifetime viewing. Topic-filtered creators count matching titles only."
+    min_duration_seconds: int = 0
+    pending_duration_checks: int = 0
+    active_topics: list[str] = Field(default_factory=list)
+    topic_evidence: dict[str, dict] = Field(default_factory=dict)
+    coverage: str = "Local profile from linked saved watch activity and Takeout data, weak search-topic hints and enabled direct conversational preferences. Related recommendations use known channels and title keywords; this is not a complete YouTube feed. Counts are distinct video/day records, not complete lifetime viewing. Searches alone do not endorse creators."

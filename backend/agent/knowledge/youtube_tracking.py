@@ -111,6 +111,22 @@ class YouTubeTrackingStoreMixin:
             rows = connection.execute("SELECT * FROM youtube_creator_stats WHERE account_id=? ORDER BY last_day DESC LIMIT 5000", (account,)).fetchall()
         return [dict(row) | {"days": json.loads(row["days_json"])} for row in rows]
 
+    def youtube_tracking_topic_rows(self, account, *, since, before):
+        """Bounded derived watch evidence; no traversal of complete lifetime history."""
+        with closing(self._connect()) as connection:
+            rows=connection.execute("SELECT channel_id,name,title,day FROM youtube_creator_activity WHERE account_id=? "
+                "AND day>=? AND day<=? AND channel_id LIKE 'UC%' ORDER BY day DESC LIMIT 50000",
+                (account,since,before)).fetchall()
+        return [dict(row) for row in rows]
+
+    def youtube_tracking_search_rows(self, accounts, *, since):
+        marks=','.join('?' for _ in accounts)
+        with closing(self._connect()) as connection:
+            rows=connection.execute(f"SELECT o.rowid AS position,o.observed_at,o.payload_json FROM observations o JOIN sources s ON s.id=o.source_id "
+                f"WHERE s.account_id IN ({marks}) AND s.status='active' AND o.origin='youtube_takeout' "
+                "AND o.action='youtube.search' AND o.observed_at>=? ORDER BY o.observed_at DESC,o.rowid DESC LIMIT 1000",[*accounts,since]).fetchall()
+        return [{'position':row['position'],'observed_at':row['observed_at'],'query':json.loads(row['payload_json']).get('query','')} for row in rows]
+
     def youtube_tracking_pending(self, account, limit=50):
         with closing(self._connect()) as connection:
             rows = connection.execute("SELECT DISTINCT video_id FROM youtube_creator_activity WHERE account_id=? AND channel_id='' ORDER BY day DESC LIMIT ?",
@@ -167,12 +183,17 @@ class YouTubeTrackingStoreMixin:
             self._upsert_sync_cursor(connection, SyncCursorInput(connector="youtube_creator_feed",
                 account_id=account+":"+channel, state=state), succeeded_at=now)
 
-    def youtube_tracking_uploads(self, account, *, pending=False, limit=100, topic_filters=None):
+    def youtube_tracking_uploads(self, account, *, pending=False, limit=100, topic_filters=None,
+                                min_duration_seconds=0, durations=None):
         if topic_filters is not None and not topic_filters:
             return []
         with closing(self._connect()) as connection:
             parameters = [account, "pending" if pending else "delivered", "pending" if pending else "baseline"]
             scope = ""
+            if min_duration_seconds:
+                connection.create_function("youtube_duration_matches", 2,
+                    lambda video,channel: int((durations or {}).get(video+":"+channel, 0) > min_duration_seconds), deterministic=True)
+                scope += " AND youtube_duration_matches(video_id,channel_id)=1"
             if topic_filters is not None:
                 filters = {channel: [term.casefold() for term in terms] for channel, terms in topic_filters.items()}
                 # Filter before LIMIT so newer unrelated uploads cannot hide a
@@ -181,7 +202,7 @@ class YouTubeTrackingStoreMixin:
                     lambda channel, title: int(channel in filters and (not filters[channel] or any(term in title.casefold() for term in filters[channel]))),
                     deterministic=True)
                 marks = ",".join("?" for _ in filters)
-                scope = f" AND channel_id IN ({marks}) AND youtube_title_matches(channel_id,title)=1"
+                scope += f" AND channel_id IN ({marks}) AND youtube_title_matches(channel_id,title)=1"
                 parameters.extend(filters)
             rows = connection.execute("SELECT * FROM youtube_upload_outbox WHERE account_id=? AND status IN (?,?)" + scope +
                 " ORDER BY published_at DESC LIMIT ?", [*parameters, min(limit, 100)]).fetchall()
@@ -191,3 +212,14 @@ class YouTubeTrackingStoreMixin:
         with closing(self._connect()) as connection, connection:
             connection.execute("UPDATE youtube_upload_outbox SET status=? WHERE account_id=? AND channel_id=? AND video_id=? AND status='pending'",
                                (status, account, channel, video))
+
+    def youtube_tracking_saved_uploads(self, account, channels, *, start="", end="", limit=20):
+        if not channels:
+            return []
+        marks = ",".join("?" for _ in channels)
+        dates = " AND julianday(published_at)>=julianday(?) AND julianday(published_at)<julianday(?)" if start else ""
+        params = [account, *channels, *([start,end] if start else []), min(max(limit,1),100)]
+        with closing(self._connect()) as connection:
+            rows=connection.execute(f"SELECT * FROM youtube_upload_outbox WHERE account_id=? AND channel_id IN ({marks}) "
+                "AND status IN ('delivered','baseline')"+dates+" ORDER BY published_at DESC LIMIT ?",params).fetchall()
+        return [dict(row) for row in rows]

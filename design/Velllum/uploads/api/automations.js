@@ -2,6 +2,7 @@
   var client = window.VellumApi.client;
   function withId(id) { return "/api/automations/" + encodeURIComponent(id); }
   window.VellumApi.automations = {
+    notifications: function (params) { var query = new URLSearchParams(params || {}).toString(); return client.request("/api/automations/notifications" + (query ? "?" + query : ""), {cache:"no-store"}); },
     list: function () { return client.request("/api/automations"); },
     create: function (payload) { return client.request("/api/automations", client.jsonOptions("POST", payload)); },
     update: function (id, payload) { return client.request(withId(id), client.jsonOptions("PATCH", payload)); },

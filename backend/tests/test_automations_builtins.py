@@ -36,7 +36,7 @@ def test_seed_builtins_creates_records(tmp_path):
         assert record["builtin"] is True
         assert record["state"] == ("paused" if record["builtin_key"] in {"youtube_browser_history", "youtube_creator_tracking"} else "active")
         assert record["permission"]["full_access"] is True
-        assert record["destination"]["kind"] == "new_chat"
+        assert record["destination"]["kind"] == ("notification" if record["builtin_key"] == "youtube_creator_tracking" else "new_chat")
     assert records["nightly_digest"]["schedule"]["expression"] == "15 2 * * *"
     assert records["skill_curator_tick"]["schedule"]["seconds"] == 3600
     assert records["discord_intelligence_sync"]["schedule"]["seconds"] == 60
