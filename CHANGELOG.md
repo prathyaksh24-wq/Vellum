@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Browser stays hidden when Vellum opens or restarts, including older saved layouts. Sidebar clicks and fresh chat browser requests explicitly open it. New tabs focus the address field without showing suggestions until typing; engine selection focuses the homepage search field and preserves the draft.
+- Chat and browser panes share a single divider with aligned chat insets when the sidebar opens or closes. The address bar completes local URLs and offers tabs, history, known websites and selected-engine search completions, with an external-suggestions switch. Browser opens straight to the themed homepage; new tabs display it and focus the address field immediately. Manual navigation and title reads no longer block tab status. The panel × and closing the last tab dismiss the panel and close its owned Brave session through canonical actions; local dismissal also works with an offline API.
+
 - Playlist edit commands use a token scan to avoid slow regex backtracking on malformed requests while preserving names, emoji and descriptions. ChromaDB dependency audit exceptions were rechecked against upstream advisories and embedded-only usage, with the next review due October 25, 2026.
 - Music collections and song lists have display sorting that preserves playback positions. Owned playlists expose name, description and song editing; followed playlists can be removed from the library. UI and typed playlist changes use one confirmed App Action, bind the account and playlist revision, verify Spotify results, and refresh the collection after saving.
 

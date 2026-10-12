@@ -50,17 +50,81 @@ test.each([false, true])('browser presentation is requested only for foreground 
   const body = html.match(/const refreshBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
   const present = vi.fn();
   const seen = {current:''};
-  const refresh = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation',
+  const refresh = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation','browserSuppressed',
     'return async()=>{' + body + '}')({browser:{status:async()=>({running:true, session_id:'same-session',
-      presentation_requested:foreground})}}, vi.fn(), seen, present);
+      presentation_requested:foreground})}}, vi.fn(), seen, present, {current:false});
   await refresh();
   expect(present).toHaveBeenCalledTimes(foreground ? 1 : 0);
   if (!foreground) {
     // Explicitly opening that same background session remains available.
-    const open = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation',
+    const open = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation','browserSuppressed',
       'return async()=>{' + body + '}')({browser:{status:async()=>({running:true,session_id:'same-session',
-        presentation_requested:true})}}, vi.fn(), seen, present);
+        presentation_requested:true})}}, vi.fn(), seen, present, {current:false});
     await open();
     expect(present).toHaveBeenCalledTimes(1);
   }
+});
+
+test('a startup receipt cannot reopen a dismissed browser, and a later session can present', async()=> {
+  const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
+  const body = html.match(/const refreshBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
+  const seen = {current:''}, suppressed = {current:true}, present = vi.fn();
+  let session = 'startup';
+  const refresh = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation','browserSuppressed',
+    'return async()=>{' + body + '}')({browser:{status:async()=>({running:true,session_id:session,presentation_requested:true})}},
+      vi.fn(),seen,present,suppressed);
+  await refresh();
+  suppressed.current = false;
+  await refresh();
+  expect(present).not.toHaveBeenCalled();
+  session = 'later-session';
+  await refresh();
+  expect(present).toHaveBeenCalledOnce();
+});
+
+test('the first status ignores an existing browser but a new foreground chat session presents', async()=> {
+  const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
+  const body = html.match(/const refreshBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
+  const seen = {current:null}, present = vi.fn();
+  let session = 'previous-window';
+  const refresh = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation','browserSuppressed',
+    'return async()=>{' + body + '}')({browser:{status:async()=>({running:true,session_id:session,presentation_requested:true})}},
+      vi.fn(),seen,present,{current:false});
+  await refresh(); await refresh();
+  expect(present).not.toHaveBeenCalled();
+  session = 'new-chat-request';
+  await refresh();
+  expect(present).toHaveBeenCalledOnce();
+});
+
+test('a fresh chat open request can reveal an existing session after a reload', async()=> {
+  const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
+  const body = html.match(/const refreshBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
+  const seen = {current:null}, present = vi.fn();
+  let revision = 1;
+  const refresh = Function('API','setBrowserState','browserSeenSession','dispatchSurfacePresentation','browserSuppressed',
+    'return async()=>{' + body + '}')({browser:{status:async()=>({running:true,session_id:'existing',presentation_requested:true,presentation_revision:revision})}},
+      vi.fn(),seen,present,{current:false});
+  await refresh(); await refresh();
+  expect(present).not.toHaveBeenCalled();
+  revision += 1;
+  await refresh(); await refresh();
+  expect(present).toHaveBeenCalledOnce();
+});
+
+test.each([false,true])('sidebar opens explicitly and a dismissal cancels a pending opening: %s', async cancelled=> {
+  const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
+  const body = html.match(/browserAvailable=\{browserFeature\} onBrowser=\{async \(\) => \{([\s\S]*?)\n                \}\}\/>/)[1];
+  let resolveStatus;
+  const refresh = vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{resolveStatus=resolve;})).mockResolvedValue({running:true});
+  const control = vi.fn(async()=>({status:'applied'})), present = vi.fn(), epoch = {current:0};
+  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast',
+    'return async()=>{' + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn());
+  const pending = open();
+  expect(present).toHaveBeenCalledWith('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'});
+  if (cancelled) epoch.current += 1;
+  resolveStatus({running:false,available:true});
+  await pending;
+  if (cancelled) expect(control).not.toHaveBeenCalled();
+  else expect(control).toHaveBeenCalledWith({operation:'open'},{invocation_conversation_id:'chat'});
 });

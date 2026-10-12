@@ -60,6 +60,10 @@ available beside it. **More** exposes the remaining sidebar destinations.
   the displayed document is still current. **Take over** also allows typing,
   paste, keypresses and scrolling. Navigation and tab controls yield ownership
   to the user. **Resume agent** returns control when you finish.
+- Moving the pointer over the preview forwards bounded hover positions to the
+  underlying page, so video timelines and controls appear without a click or
+  playback toggle. Hovering preserves ownership and rejects stale document
+  coordinates. Rapid movement keeps only the latest pending position.
 - Sign in manually in this dedicated session. Its profile survives closing and
   reopening. Your daily Brave profile and its tabs are separate.
 - **Downloads** lists files saved during this backend process. **Show in folder**
@@ -228,3 +232,63 @@ Playwright module and `BROWSER_EXECUTABLE` to Brave, then run
 input, pause/resume, tabs, downloads, close/reopen and desktop/mobile layouts.
 
 See [verification](verification/browser-use.md) for results and remaining gates.
+
+## Address suggestions and workspace split
+
+The chat and browser share one divider; sidebar expansion changes their available
+width without adding a second gutter. Browser mode reserves a chat header row
+and aligns message and composer insets. Homepage themes remain unchanged.
+
+The address field offers local open tabs, saved shortcuts and recent history
+from `data/browser-session/profile/Default/History`. The browser owner reads that
+existing Chromium database in read-only mode, with bounded results and a short
+lock timeout. Before Brave opens, the owner loads up to 500 address/title rows
+into a bounded session cache; owned navigation events and tab titles update it
+while Windows locks Chromium's database. No additional history database is
+written, no Brave process is opened for suggestions, and the user's default
+profile is never read. `GET /api/browser/suggestions?q=...` is typed, non-cached and accepts at
+most 256 query characters. Known website suggestions also include Spotify,
+GitHub, YouTube, Wikipedia, Reddit and Google without requiring prior visits.
+
+Search completions send only the typed query to the selected engine's public
+suggestion endpoint. No local history, browser cookies or account credentials
+are sent. The Browser menu's Search suggestions switch persists through the
+existing browser preferences App Action. Empty fields and full URLs do not
+request remote completions. Responses are bounded to six queries and 64 KB;
+provider failures leave local suggestions and the normal Search row usable.
+Google and DuckDuckGo returned live completions in this environment. Brave
+returned a rate limit response; availability depends on the provider. SearXNG
+uses the configured instance's `/autocompleter` endpoint.
+
+Matching URL prefixes fill the address field with the completion selected.
+Arrow keys select suggestions, Enter opens the selected result or switches to
+an already open tab, and Escape dismisses suggestions without closing the panel.
+The panel × immediately hides local chrome through the existing Workspace Layout
+owner and also dispatches `ui.surface.configure`. Its session-only dismissal
+survives an offline API without inventing a successful receipt or persisting a
+second layout. The panel × and Close session also dispatch the canonical
+browser close action. Closing the only tab ends the session and dismisses the
+panel; closing another tab retains the remaining tabs. Agent tool workflows
+still retain a blank page when their last tab closes.
+
+Vellum starts with its browser hidden, including when an older device layout
+saved that panel as visible. The Workspace Layout owner keeps this startup
+override transient. Opening the browser uses session-only presentation, so it
+does not become a startup preference. The first status snapshot records any
+already-running session without revealing it. A fresh explicit open request
+increments `presentation_revision`, allowing a chat request to reveal an
+existing session as well as a new one. Background history reads do not increment
+that revision or request presentation.
+
+Clicking Browser shows the themed local homepage immediately and explicitly
+starts the owned Brave session. There is no Closed/Open browser intermediate screen.
+New-tab requests focus the address field and show the local homepage while
+creation is queued; pending presentation never supplies synthetic server tab
+IDs. Manual navigation loads in a cancellable background task, and status
+reads cached tab titles rather than waiting for each tab's renderer. Pending
+startup cannot reopen a panel that the user just closed.
+
+Focusing an empty new tab does not display suggestions or request history.
+Suggestions appear after typing and disappear when the field is cleared.
+Selecting a search engine focuses the homepage search field with the caret at
+the end of the existing draft.

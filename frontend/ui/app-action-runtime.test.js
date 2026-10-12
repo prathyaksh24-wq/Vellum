@@ -81,6 +81,41 @@ async function loadRuntime() {
   return window.VellumUI.AppActions;
 }
 
+test('right-panel dismissal is immediate and survives an offline action API without persisting a second layout', async()=> {
+  const AppActions = await loadRuntime();
+  const storage = memoryStorage();
+  const client = {dispatch:vi.fn(async()=>{throw new Error('offline');})};
+  const runtime = AppActions.createWorkspaceLayoutRuntime({storage,client});
+  const before = runtime.snapshot();
+  runtime.applyReceipt(surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties:{content:'browser'}},baseRevision:before.revision,revision:before.revision+1}));
+  const writes = storage.setItem.mock.calls.length;
+  const pending = runtime.dismissRightPanel({conversationId:'chat'});
+  expect(runtime.snapshot().surfaces['right-panel'].visible).toBe(false);
+  await expect(pending).rejects.toThrow('offline');
+  expect(runtime.snapshot().surfaces['right-panel'].visible).toBe(false);
+  expect(storage.setItem).toHaveBeenCalledTimes(writes);
+  expect(client.dispatch).toHaveBeenCalledWith(expect.objectContaining({action_id:'ui.surface.configure',arguments:{reference:'right-panel',visible:false,persistence:'session'}}),expect.anything());
+  client.dispatch.mockImplementation(async(request,context)=>surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties:{content:'browser'}},baseRevision:context.workspace_layout.revision,revision:context.workspace_layout.revision+1}));
+  await runtime.dispatchSurface('right-panel',{visible:true,properties:{content:'browser'}});
+  expect(runtime.snapshot().surfaces['right-panel'].visible).toBe(true);
+});
+
+test.each(['browser','files'])('new windows restore %s content with browser hidden until explicitly requested', async content=> {
+  const AppActions = await loadRuntime();
+  const storage = memoryStorage();
+  const previous = AppActions.createWorkspaceLayoutRuntime({storage,client:{}});
+  previous.applyReceipt(surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties:{content}},baseRevision:0,revision:1}));
+  const writes = storage.setItem.mock.calls.length;
+  const client = {dispatch:vi.fn(async(request,context)=>surfaceReceipt({reference:'right-panel',presentation:{visible:true,properties:{content:'browser'}},
+    baseRevision:context.workspace_layout.revision,revision:context.workspace_layout.revision+1,persistence:'session'}))};
+  const fresh = AppActions.createWorkspaceLayoutRuntime({storage,client});
+  expect(fresh.snapshot().surfaces['right-panel'].visible).toBe(content !== 'browser');
+  expect(storage.setItem).toHaveBeenCalledTimes(writes);
+  await fresh.dispatchSurface('right-panel',{visible:true,properties:{content:'browser'}},{persistence:'session'});
+  expect(fresh.snapshot().surfaces['right-panel'].visible).toBe(true);
+  expect(AppActions.createWorkspaceLayoutRuntime({storage,client:{}}).snapshot().surfaces['right-panel'].visible).toBe(content !== 'browser');
+});
+
 describe("Workspace Layout App Action adapter", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

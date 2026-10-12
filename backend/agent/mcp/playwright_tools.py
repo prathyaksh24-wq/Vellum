@@ -981,12 +981,20 @@ class _PlaywrightMcpClient:
         from agent.contracts.browser import BrowserControl, BrowserStatus
         from agent.mcp.dedicated_browser import DedicatedBrowser, browser_readiness
 
+        if operation == "suggestions":
+            reader = self._dedicated.session_address_suggestions if self._dedicated is not None else DedicatedBrowser.address_suggestions
+            result = await asyncio.to_thread(reader, str((arguments or {}).get("query", "")))
+            if (arguments or {}).get("with_preferences"):
+                preferences = self._dedicated._browser_preferences() if self._dedicated is not None else DedicatedBrowser.read_preferences()
+                return result, preferences
+            return result
         async with self._lock_for_current_loop():
             if operation == "youtube_history" and self._busy:
                 return {"status": "browser_busy"}
-            if operation == "status" and self._dedicated is None:
+            if self._dedicated is None and (operation == "status" or
+                    operation == "control" and (arguments or {}).get("operation") == "close"):
                 ready, reason = browser_readiness()
-                return BrowserStatus(available=ready, reason=reason)
+                return BrowserStatus(available=ready, reason=reason, preferences=DedicatedBrowser.read_preferences())
             if self._dedicated is None:
                 if operation != "youtube_history" and (operation != "control" or (arguments or {}).get("operation") != "open"):
                     raise ValueError("Open the dedicated browser first.")

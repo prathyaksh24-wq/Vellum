@@ -1,4 +1,4 @@
-.browser-panel{display:flex;flex-direction:column;flex:1 1 62%;min-width:360px;margin:16px 16px 16px 0;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--bg) 94%,transparent);color:var(--txt);overflow:hidden;position:relative;container-type:inline-size}
+.browser-panel{display:flex;flex-direction:column;flex:1 1 62%;min-width:320px;margin:0;border:0;border-left:1px solid var(--line);border-radius:0;background:var(--bg);color:var(--txt);overflow:hidden;position:relative;container-type:inline-size}
 .browser-heading{display:flex;align-items:center;gap:8px;padding:0 10px;min-height:46px;background:var(--bg);flex-shrink:0;border-bottom:1px solid var(--line)}
 .browser-brand{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;white-space:nowrap}
 .browser-brand .brand-brave{color:#fa7336}
@@ -41,18 +41,23 @@
 .browser-downloads p{font-size:12px;color:var(--dim)}
 .browser-error{padding:10px 16px;display:flex;gap:16px;align-items:center;font-size:12px;line-height:1.5;background:var(--active);flex-shrink:0}
 .body.browser-active .sidebar{width:208px;background:color-mix(in srgb,var(--bg) 92%,transparent)}
-.body.browser-active>.main{flex:1 1 38%;min-width:340px;margin:16px 20px 16px 14px;border:1px solid var(--line);border-radius:16px;background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
-.body.browser-active .msgs-inner{padding:24px 24px 32px;max-width:none}
-.body.browser-active .composer-dock{padding:12px 16px 16px}
-.body.browser-active .chat-head{padding:16px 20px}
+.body.browser-active>.main{flex:1 1 38%;min-width:280px;margin:0;border:0;border-radius:0;background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
+.body.browser-active .msgs{padding:24px 24px 16px}
+.body.browser-active .msgs-inner{padding:0;max-width:none}
+.body.browser-active .landing{min-width:0;width:100%;box-sizing:border-box}
+.body.browser-active .landing .land-greet{white-space:normal;max-width:100%;text-align:center;text-wrap:balance}
+.body.browser-active .composer-wrap{min-width:0;max-width:100%}
+.body.browser-active .crow{flex-wrap:wrap}
+.body.browser-active .composer-dock{padding:12px 24px 20px}
+.body.browser-active .chat-head{position:relative;top:auto;right:auto;min-height:46px;flex-shrink:0;padding:8px 20px;border-bottom:1px solid var(--line)}
 .browser-chat-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:18px;line-height:1.4;margin-right:auto;font-weight:600}
 .sidebar-recent{padding:12px 0}
 .sidebar-recent>h2{font-size:11px;font-weight:400;color:var(--dim);padding:0 10px 8px;margin:0}
 .browser-more-arrow{margin-left:auto;transition:transform .15s ease}
 .browser-more-arrow.open{transform:rotate(90deg)}
-.browser-expanded{flex:1 1 100%;min-width:0;margin:16px;z-index:130}
+.browser-expanded{flex:1 1 100%;min-width:0;margin:0;z-index:130}
 .body.browser-active:has(>.browser-expanded)>.main{display:none}
-@media(max-width:1100px){.body.browser-active>.main{min-width:300px;margin-right:12px}.browser-panel{min-width:330px}.browser-status{display:none}.browser-heading{gap:6px;padding:0 8px}.browser-heading-actions{gap:2px}.browser-heading-actions .secondary{display:none}}
+@media(max-width:1100px){.body.browser-active>.main{min-width:280px}.browser-panel{min-width:320px}.browser-status{display:none}.browser-heading{gap:6px;padding:0 8px}.browser-heading-actions{gap:2px}.browser-heading-actions .secondary{display:none}}
 /* The companion stays outside the controlled surface while browsing. */
 .win:has(.browser-active) .px-floater{left:20px!important;right:auto!important;top:auto!important;bottom:80px!important;transform:none!important}
 /* Keep the floating music controls clear of browser navigation and page input. */
@@ -62,6 +67,20 @@ body:has(.browser-active) .spotify-player-pill .spotify-now{display:none}
 @media(max-width:900px){.browser-panel{position:absolute;inset:12px;margin:0;z-index:125;min-width:0;background:var(--bg)}.body.browser-active>.main{margin:0;border:0;border-radius:0}.browser-heading-actions{margin-left:auto}.browser-screen{min-height:200px}.win:has(.browser-active) .px-floater{display:none}}
 @media(prefers-reduced-motion:reduce){.browser-more-arrow{transition:none}}
 @media(max-width:900px){body:has(.browser-active) .shared-layout-pill{display:none}}
+
+/* Suggestions stay attached to the address field, above the live page. */
+.browser-omnibox-wrap{position:relative;flex:1;min-width:0}
+.browser-omnibox-wrap .browser-omnibox{width:100%;box-sizing:border-box}
+.browser-suggestions{position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:30;max-height:min(340px,50vh);overflow:auto;padding:4px;background:var(--menu-solid,var(--bg));border:1px solid var(--line);border-radius:10px;box-shadow:0 16px 32px -20px #0008;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.browser-suggestion{display:flex;gap:10px;align-items:center;width:100%;min-height:42px;padding:8px 10px;border:0;border-radius:6px;background:transparent;color:var(--txt);text-align:left;font:inherit;cursor:pointer}
+.browser-suggestion[aria-selected=true],.browser-suggestion:hover{background:var(--active)}
+.browser-suggestion-copy{flex:1;min-width:0}
+.browser-suggestion-copy span,.browser-suggestion-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.browser-suggestion-copy span{font-size:12px;line-height:1.5}
+.browser-suggestion-copy small{font-size:11px;color:var(--dim);line-height:1.5}
+.browser-suggestion-hint{font-size:10px;color:var(--dim);white-space:nowrap}
+.browser-suggestions-status{display:block;padding:8px 10px;color:var(--dim);font-size:11px}
+@container(max-width:440px){.browser-suggestion-hint{display:none}.browser-status{display:none}.browser-heading-actions .secondary{display:none}}
 
 /* Artwork belongs to the homepage; the surrounding Vellum theme stays intact. */
 .browser-glyph,.browser-brand-icon,.browser-shortcut-icon{display:inline-block;flex-shrink:0;background-color:currentColor;mask-repeat:no-repeat;mask-position:center;mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center;-webkit-mask-size:contain}
