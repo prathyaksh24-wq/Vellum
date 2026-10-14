@@ -60,10 +60,6 @@
 @media(max-width:1100px){.body.browser-active>.main{min-width:280px}.browser-panel{min-width:320px}.browser-status{display:none}.browser-heading{gap:6px;padding:0 8px}.browser-heading-actions{gap:2px}.browser-heading-actions .secondary{display:none}}
 /* The companion stays outside the controlled surface while browsing. */
 .win:has(.browser-active) .px-floater{left:20px!important;right:auto!important;top:auto!important;bottom:80px!important;transform:none!important}
-/* Keep the floating music controls clear of browser navigation and page input. */
-body:has(.browser-active) .spotify-player-shell{left:16px;right:auto;top:auto;bottom:16px;align-items:flex-start}
-body:has(.browser-active) .spotify-player-pill{max-width:72px}
-body:has(.browser-active) .spotify-player-pill .spotify-now{display:none}
 @media(max-width:900px){.browser-panel{position:absolute;inset:12px;margin:0;z-index:125;min-width:0;background:var(--bg)}.body.browser-active>.main{margin:0;border:0;border-radius:0}.browser-heading-actions{margin-left:auto}.browser-screen{min-height:200px}.win:has(.browser-active) .px-floater{display:none}}
 @media(prefers-reduced-motion:reduce){.browser-more-arrow{transition:none}}
 @media(max-width:900px){body:has(.browser-active) .shared-layout-pill{display:none}}

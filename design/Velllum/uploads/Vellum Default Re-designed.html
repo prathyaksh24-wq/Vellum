@@ -1713,20 +1713,34 @@ body{font-size:14px}
 .spotify-uri{display:flex;align-items:center;gap:8px;margin-top:7px;padding:8px 10px;border-radius:7px;background:rgba(0,0,0,.22);font-family:var(--font-m);font-size:10.5px;color:var(--txt);word-break:break-all;user-select:text}
 .spotify-client-field{margin-top:12px}.spotify-client-field label{display:block;color:var(--txt2);font-size:12px;margin-bottom:6px}.spotify-client-field input{width:100%;background:var(--input);border:1px solid var(--line2);border-radius:9px;color:var(--txt2);font:inherit;padding:10px 11px;outline:none}.spotify-client-field input:focus{border-color:rgba(30,215,96,.55);box-shadow:0 0 0 3px rgba(30,215,96,.08)}
 .spotify-error{margin-top:10px;color:var(--danger);font-size:11.5px}.spotify-wait{display:flex;align-items:center;gap:8px;margin-top:12px;color:var(--dim);font-size:11.5px}.spotify-wait::before{content:"";width:10px;height:10px;border:2px solid var(--line2);border-top-color:#1ed760;border-radius:50%;animation:spin .8s linear infinite}
-.spotify-player-shell{position:fixed;z-index:118;display:flex;flex-direction:column;align-items:flex-end;gap:8px;pointer-events:none}.spotify-player-shell.side-top{top:62px;right:18px}.spotify-player-shell.side-right{top:18px;right:72px}.spotify-player-shell.side-bottom{right:18px;bottom:72px}.spotify-player-shell.side-left{top:18px;left:72px;align-items:flex-start}
-.spotify-player-pill{pointer-events:auto;height:44px;max-width:310px;display:flex;align-items:center;gap:8px;padding:5px 7px 5px 5px;border:1px solid var(--line2);border-radius:13px;background:color-mix(in srgb,var(--menu-solid) 90%,transparent);backdrop-filter:blur(22px) saturate(150%);box-shadow:0 12px 38px rgba(0,0,0,.34);color:var(--txt);cursor:pointer}
+.spotify-player-shell{position:relative;display:flex;align-items:center;flex-shrink:0;pointer-events:auto}
+.spotify-player-pill{height:44px;display:flex;align-items:center;gap:5px;padding:0 3px;color:var(--txt)}
+.spotify-now-trigger{display:flex;align-items:center;gap:9px;min-width:0;padding:3px;border:0;border-radius:9px;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.spotify-now-trigger:hover,.spotify-now-trigger[aria-expanded=true]{background:var(--hover)}
+.spotify-now-trigger:focus-visible,.spotify-mini-btn:focus-visible,.spotify-control:focus-visible,.spotify-panel-close:focus-visible,.spotify-open-page:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+.spotify-now-trigger .spotify-art{width:32px;height:32px;border-radius:7px;object-fit:contain}
+.spotify-service-line{display:flex!important;align-items:center;gap:4px}.spotify-service-line svg{flex-shrink:0;color:#1ed760}.spotify-service-line i{font-style:normal;overflow:hidden;text-overflow:ellipsis}
+.spotify-player-pill .spotify-mini-btn.primary{background:var(--hover);color:var(--txt2);width:32px;height:32px}
+.dock.vertical .spotify-player-pill{height:auto;flex-direction:column;padding:2px 0;gap:4px}.dock.vertical .spotify-now{display:none}
 .spotify-art{width:34px;height:34px;border-radius:8px;object-fit:cover;background:rgba(30,215,96,.14);flex-shrink:0}.spotify-art-fallback{display:flex;align-items:center;justify-content:center;color:#1ed760}
 .spotify-now{min-width:0;width:132px}.spotify-now b,.spotify-now span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.spotify-now b{font-size:11.5px;color:var(--txt2);font-weight:500}.spotify-now span{font-size:10px;color:var(--dim);margin-top:1px}
 .spotify-mini-btn,.spotify-control{border:0;background:transparent;color:var(--txt);display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%;flex-shrink:0}.spotify-mini-btn{width:28px;height:28px}.spotify-mini-btn:hover,.spotify-control:hover{background:var(--hover);color:var(--txt2)}.spotify-mini-btn.primary,.spotify-control.primary{background:#1ed760;color:#07140b}.spotify-mini-btn.primary:hover,.spotify-control.primary:hover{filter:brightness(1.08)}
-.spotify-player-panel{pointer-events:auto;width:330px;border:1px solid var(--line2);border-radius:16px;background:color-mix(in srgb,var(--menu-solid) 94%,transparent);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 22px 60px rgba(0,0,0,.46);padding:14px;color:var(--txt)}
+.spotify-player-panel{position:absolute;z-index:8;width:min(300px,calc(100vw - 32px));max-height:calc(100dvh - 110px);overflow-y:auto;border:1px solid var(--line2);border-radius:16px;background:var(--menu-solid);padding:16px;color:var(--txt);scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+.side-top .spotify-player-panel{top:calc(100% + 12px);right:0}.side-bottom .spotify-player-panel{bottom:calc(100% + 12px);right:0}.side-left .spotify-player-panel{left:calc(100% + 16px);top:50%;transform:translateY(-50%)}.side-right .spotify-player-panel{right:calc(100% + 16px);top:50%;transform:translateY(-50%)}
+.spotify-player-panel::before{content:"";position:absolute;left:0;right:0;top:-13px;height:13px}.side-bottom .spotify-player-panel::before{top:auto;bottom:-13px}.side-left .spotify-player-panel::before,.side-right .spotify-player-panel::before{top:0;bottom:0;left:-17px;right:auto;width:17px;height:auto}.side-right .spotify-player-panel::before{left:auto;right:-17px}
+.spotify-panel-close{border:0;background:transparent;color:var(--dim);border-radius:7px;padding:5px;margin-left:auto;align-self:flex-start;cursor:pointer}.spotify-panel-close:hover{background:var(--hover);color:var(--txt2)}
+.spotify-player-panel .spotify-control.primary{background:var(--txt2);color:var(--modal)}.spotify-player-panel .spotify-range{accent-color:var(--txt2)}
+.spotify-open-page{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;border:0;border-top:1px solid var(--line);background:transparent;padding:12px 4px 0;margin-top:15px;font:inherit;font-size:11px;color:var(--txt);cursor:pointer}.spotify-open-page:hover{color:var(--txt2)}
 .spotify-playback-session{display:flex;flex-direction:column;gap:8px;padding-bottom:12px;min-width:0}.spotify-playback-session .btn{width:100%;flex-shrink:0;white-space:normal;text-align:center}.spotify-playback-session [role=status]{font-size:11px;line-height:1.5;color:var(--dim);overflow-wrap:anywhere}
 .spotify-panel-track{display:flex;gap:11px;align-items:center}.spotify-panel-track .spotify-art{width:52px;height:52px;border-radius:10px}.spotify-panel-copy{min-width:0}.spotify-panel-copy b,.spotify-panel-copy span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spotify-panel-copy b{color:var(--txt2);font-size:13px;font-weight:500}.spotify-panel-copy span{color:var(--dim);font-size:11px;margin-top:3px}
 .spotify-progress{margin:13px 0 4px}.spotify-range{width:100%;height:3px;accent-color:#1ed760;cursor:pointer}.spotify-times{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim2);font-family:var(--font-m);margin-top:3px}
 .spotify-controls{display:flex;align-items:center;justify-content:center;gap:9px;margin:8px 0 13px}.spotify-control{width:32px;height:32px}.spotify-control.primary{width:38px;height:38px}.spotify-control.on{color:#1ed760;background:rgba(30,215,96,.09)}
-.spotify-setting{display:grid;grid-template-columns:18px 1fr;align-items:center;gap:8px;margin-top:9px;color:var(--dim)}.spotify-setting select{min-width:0;width:100%;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:10.5px;padding:7px 8px;outline:none}
-.spotify-queue{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}.spotify-queue-h{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim2);margin-bottom:5px}.spotify-queue-row{display:flex;align-items:center;gap:7px;padding:5px 2px;min-width:0}.spotify-queue-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;color:var(--txt)}.spotify-queue-row i{font-style:normal;color:var(--dim2);font-size:9.5px;margin-left:auto;flex-shrink:0}
+.spotify-setting{display:grid;grid-template-columns:18px 1fr auto;align-items:center;gap:8px;margin-top:9px;color:var(--dim)}.spotify-setting select{min-width:0;width:100%;background:var(--input);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:10.5px;padding:7px 8px;outline:none}.spotify-setting output{min-width:30px;font-size:10px;font-variant-numeric:tabular-nums;text-align:right}.spotify-setting:has(select){grid-template-columns:18px 1fr}
+.spotify-queue{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}.spotify-queue-h{font-size:10px;color:var(--dim);margin-bottom:5px;cursor:pointer}.spotify-queue-row{display:flex;align-items:center;gap:7px;padding:5px 2px;min-width:0}.spotify-queue-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;color:var(--txt)}.spotify-queue-row i{font-style:normal;color:var(--dim2);font-size:9.5px;margin-left:auto;flex-shrink:0}
 .spotify-player-error{padding:8px 2px 2px;color:var(--danger);font-size:10.5px;line-height:1.4}.spotify-reconnect{margin-top:8px}
-@media(max-width:720px){.spotify-player-shell.side-top,.spotify-player-shell.side-right{top:58px;right:10px}.spotify-player-pill{max-width:178px}.spotify-now{display:none}.spotify-player-panel{width:min(310px,calc(100vw - 20px))}}
+@media(max-width:900px){.dock:not(.vertical) .spotify-now{width:100px}}
+@media(max-width:720px){.spotify-now{display:none}.spotify-player-pill{gap:2px;padding:0}.spotify-now-trigger{padding:0}.spotify-player-pill .spotify-mini-btn{width:28px;height:28px}.dock-shell.top,.dock-shell.bottom{max-width:calc(100% - 24px)}.dock:not(.vertical){gap:2px;padding:4px}.dock:not(.vertical) .dock-item{width:34px;height:40px}.dock:not(.vertical) .dock-separator{margin:0 2px}.dock:not(.vertical) .spotify-player-shell{position:static}.dock:not(.vertical) .spotify-player-panel{left:50%;right:auto;transform:translateX(-50%)}.side-left .spotify-player-panel,.side-right .spotify-player-panel{width:min(280px,calc(100vw - 112px))}}
+@media(max-width:420px){.dock:not(.vertical) .dock-item{width:28px}}
 @media(prefers-reduced-motion:reduce){.spotify-wait::before{animation:none}}
 .au-page{padding:28px 30px 34px}
 .au-page-shell{width:min(1180px,100%);height:100%;margin:0 auto;display:flex;flex-direction:column;min-height:0}
@@ -2883,7 +2897,7 @@ const DockItem = ({children, onClick, active=false, ariaLabel, tooltip, tooltipS
 
 const DockSeparator = () => <span className="dock-separator" aria-hidden="true"/>;
 
-const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings}) => {
+const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settingsOpen, agents = AGENTS, onNewChat, onSearch, onNav, onCoding, onOpenAgent, onSettings, music=null, musicOpen=false, onDismissMusic}) => {
   const [near, setNear] = useState(false);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const closeTimer = useRef(null);
@@ -2893,7 +2907,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
   const closeDock = () => {
     clearTimeout(closeTimer.current);
     closeTimer.current = setTimeout(() => {
-      if (!locked && !agentsOpen) setNear(false);
+      if (!locked && !rootRef.current?.contains(document.activeElement)) setNear(false);
     }, 360);
   };
   useEffect(() => () => clearTimeout(closeTimer.current), []);
@@ -2914,11 +2928,11 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
     document.addEventListener('pointerdown', closeAgents);
     return () => document.removeEventListener('pointerdown', closeAgents);
   }, []);
-  const visible = locked || near || agentsOpen;
+  const visible = locked || near || agentsOpen || musicOpen;
   const tooltipSide = side;
-  const run = action => { setAgentsOpen(false); action(); };
+  const run = action => { setAgentsOpen(false); onDismissMusic?.(); action(); };
   return (
-    <div ref={rootRef} className={`dock-layer ${visible ? 'open' : ''}`} data-dock-side={side} data-dock-locked={locked ? 'true' : 'false'}>
+    <div ref={rootRef} className={`dock-layer ${visible ? 'open' : ''}`} data-dock-side={side} data-dock-locked={locked ? 'true' : 'false'} onFocusCapture={openDock} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeDock(); }}>
       <div className={`dock-reveal-zone ${side}`} aria-hidden="true" onMouseEnter={openDock} onMouseLeave={closeDock}/>
       <button type="button" className={`dock-handle ${side}`} aria-label="Show dock" onMouseEnter={openDock} onMouseLeave={closeDock} onFocus={openDock} onBlur={closeDock} onClick={openDock}/>
       <div className={`dock-shell ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
@@ -2929,7 +2943,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
           <DockItem ariaLabel="Coding" tooltip="Coding" tooltipSide={tooltipSide} onClick={() => run(onCoding)}><IcTerminal size={18}/></DockItem>
           <DockSeparator/>
           <span className="dock-tooltip-wrap">
-            <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
+            <DockItem ariaLabel="Agents" tooltip="Agents" tooltipSide={tooltipSide} active={view === 'agent' || agentsOpen} onClick={() => { onDismissMusic?.(); openDock(); setAgentsOpen(open => !open); }}><I d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M2.5 20a6.5 6.5 0 0 1 13 0 M16 3.2a3 3 0 0 1 0 5.6 M21.5 20a6.5 6.5 0 0 0-4.5-6.2" size={18}/></DockItem>
             {agentsOpen && <div className={`dock-flyout ${side}`} onMouseEnter={openDock} onMouseLeave={closeDock}>
               <div className="dock-fly-head">Agents</div>
               {agents.map(agent => <button type="button" key={agent.id} className={`dock-agent ${view === 'agent' && activeAgentId === agent.id ? 'active' : ''}`} onClick={() => run(() => onOpenAgent(agent.id))}>
@@ -2938,6 +2952,7 @@ const GlobalDock = ({side, locked, onLockedChange, view, activeAgentId, settings
             </div>}
           </span>
           <DockItem ariaLabel="Settings" tooltip="Settings" tooltipSide={tooltipSide} active={settingsOpen} onClick={() => run(onSettings)}><IcSettings size={18}/></DockItem>
+          {music && <React.Fragment><DockSeparator/>{music}</React.Fragment>}
           <DockItem ariaLabel={locked ? 'Auto-hide dock' : 'Keep dock visible'} tooltip={locked ? 'Auto-hide dock' : 'Keep dock visible'} tooltipSide={tooltipSide} active={locked} onClick={() => onLockedChange(!locked)}><IcPin size={17}/></DockItem>
         </Dock>
       </div>
@@ -7380,10 +7395,12 @@ const fmtSpotifyTime = ms => {
   return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 };
 
-const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection}) => {
+const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnection, musicPageTarget=null, compactVisible=true, onOpenMusic, onCloseMusic, onSelectCollection, renderDock}) => {
   const connected = !!(spotify && spotify.connected);
   const [player, setPlayer] = useState(null);
   const [open, setOpen] = useState(false);
+  const compactRef = useRef(null);
+  const triggerRef = useRef(null);
   const [error, setError] = useState('');
   const timerRef = useRef(null);
   const stoppedRef = useRef(false);
@@ -7396,6 +7413,17 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   openRef.current = open || !!musicPageTarget;
   const playbackRef = useRef(null);
   const [playback, setPlayback] = useState({status:'loading',enabled:false,ready:false,message:''});
+  useEffect(() => { setOpen(false); }, [compactVisible, dockSide]);
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = event => { if (!compactRef.current?.contains(event.target)) setOpen(false); };
+    const onEscape = event => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener('pointerdown', onOutside);
+    document.addEventListener('keydown', onEscape);
+    return () => { document.removeEventListener('pointerdown', onOutside); document.removeEventListener('keydown', onEscape); };
+  }, [open]);
   useEffect(() => {
     if (!connected || !spotify.web_playback_ready) return;
     let stopped = false;
@@ -7478,7 +7506,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
     if (!key || queuedUris.has(key)) return false;
     queuedUris.add(key); return true;
   });
-  const artists = player && Array.isArray(player.artists) ? player.artists.join(', ') : '';
+  const artists = Array.isArray(player?.artists) ? player.artists.join(', ') : (track?.artists || []).map(artist => artist.name).join(', ');
   const run = async body => {
     if (commandRef.current) return false;
     commandRef.current = true; setBusy(true);
@@ -7496,26 +7524,27 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   };
   const page = musicPageTarget && ReactDOM.createPortal(<window.VellumUI.MusicPage spotify={spotify} onReconnect={onReconnect} onRefreshConnection={onRefreshConnection} onCloseMusic={onCloseMusic} onSelectCollection={onSelectCollection}
     music={{player,playback,upcoming,run,busy,error,refresh,enable:() => playbackRef.current?.enable()} }/>, musicPageTarget);
-  if (!connected || !compactVisible) return page;
   const toggle = event => { event.stopPropagation(); run({action:isPlaying ? 'pause' : 'play'}); };
   const repeatNext = !player || player.repeat === 'off' ? 'context' : player.repeat === 'context' ? 'track' : 'off';
-  return (
-    <React.Fragment>{page}<div className={'spotify-player-shell side-' + dockSide}>
-      <div className="spotify-player-pill" role="button" tabIndex="0" aria-label="Open Spotify player" onClick={() => setOpen(v => !v)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}>
+  const compact = connected && compactVisible ? (
+    <div ref={compactRef} className={'spotify-player-shell side-' + dockSide}>
+      <div className="spotify-player-pill">
+        <button type="button" ref={triggerRef} className="spotify-now-trigger" aria-label="Open Spotify player" aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? 'dock-music-controls' : undefined} title={track ? track.name + (artists ? ' · ' + artists : '') : 'Music controls'} onClick={() => setOpen(v => !v)}>
         {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M9 9l10-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6M16 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6" size={17}/></span>}
-        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span>{artists || (playback.status === 'shared' ? playback.message : playback.ready ? 'Playing inside Vellum' : playback.enabled ? 'Vellum player reconnecting' : 'Enable playback inside Vellum')}</span></span>
+        <span className="spotify-now"><b>{track ? track.name : 'Spotify idle'}</b><span className="spotify-service-line"><svg width="11" height="11" viewBox="0 0 24 24" aria-label="Spotify" role="img"><circle cx="12" cy="12" r="12" fill="currentColor"/><path d="M5 8.5c5-1.7 10-1.1 14 1M6 12c4-1.3 8.5-.7 12 1M7 15.5c3.5-.9 7-.5 10 1" fill="none" stroke="var(--modal)" strokeWidth="1.6" strokeLinecap="round"/></svg><i>{artists || (playback.ready ? 'Vellum player' : 'Connect playback')}</i></span></span>
+        </button>
         <button className="spotify-mini-btn primary" aria-label={isPlaying ? 'Pause Spotify' : 'Play Spotify'} title={isPlaying ? 'Pause' : 'Play'} onClick={toggle}>{isPlaying ? <I d="M9 6v12M15 6v12" size={14}/> : <I><path d="M8 5l11 7-11 7z" fill="currentColor" stroke="none"/></I>}</button>
-        <button className="spotify-mini-btn" aria-label="Next Spotify track" title="Next" onClick={e => { e.stopPropagation(); run({action:'next'}); }}><I d="M6 5l9 7-9 7V5zM18 5v14" size={14}/></button>
       </div>
-      {open && <div className="spotify-player-panel">
-        <div className="spotify-playback-session">
+      {open && <div className="spotify-player-panel" id="dock-music-controls" role="dialog" aria-label="Music playback controls">
+        {!playback.ready && <div className="spotify-playback-session">
           {playback.status === 'file_preview' || playback.status === 'origin_error' ? <a className="btn primary" href={window.VellumSpotifyPlayback.playerUrl}>Open Vellum player</a> : !spotify.web_playback_ready || playback.status === 'reauth_required' ? <button className="btn primary" onClick={onReconnect}>Allow playback in Vellum</button> : <button className="btn primary" disabled={playback.status === 'loading' || playback.status === 'connecting' || playback.status === 'unavailable' || playback.status === 'unsupported' || playback.status === 'account_error'} onClick={() => playbackRef.current?.enable()}>{playback.ready ? 'Vellum player ready' : playback.status === 'autoplay_required' ? 'Enable audio' : playback.status === 'loading' ? 'Loading player...' : 'Enable playback in Vellum'}</button>}
           {playback.enabled && <button className="btn" onClick={() => playbackRef.current?.disable().catch(err => setError(err.message))}>Disable Vellum player</button>}
           <span role="status">{playback.message || (playback.ready ? 'Ask Vellum to play a song. Spotify can stay closed.' : 'Keep this Vellum window open while listening.')}</span>
-        </div>
+        </div>}
         <div className="spotify-panel-track">
           {player && player.artwork_url ? <img className="spotify-art" src={player.artwork_url} alt=""/> : <span className="spotify-art spotify-art-fallback"><I d="M9 18V5l10-2v13M6 21a3 3 0 1 0 0-6" size={20}/></span>}
           <div className="spotify-panel-copy"><b>{track ? track.name : 'Nothing playing'}</b><span>{artists || 'Choose music in Spotify or ask Vellum'}</span></div>
+          <button type="button" className="spotify-panel-close" aria-label="Close music controls" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}><I d="M6 6l12 12M6 18L18 6" size={14}/></button>
         </div>
         <div className="spotify-progress"><input className="spotify-range" aria-label="Spotify playback position" type="range" min="0" max={Math.max(1,player && player.duration_ms || 1)} value={Math.min(player && player.progress_ms || 0,player && player.duration_ms || 1)} onChange={e => setPlayer(p => ({...(p || {}),progress_ms:Number(e.target.value)}))} onMouseUp={e => run({action:'seek',position_ms:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'seek',position_ms:Number(e.currentTarget.value)})}/><div className="spotify-times"><span>{fmtSpotifyTime(player && player.progress_ms)}</span><span>{fmtSpotifyTime(player && player.duration_ms)}</span></div></div>
         <div className="spotify-controls">
@@ -7527,12 +7556,13 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
         </div>
         <div className="spotify-setting"><I d="M11 5L6 9H2v6h4l5 4V5zM15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" size={14}/><input className="spotify-range" aria-label="Spotify volume" type="range" min="0" max="100" value={player && player.device && player.device.volume_percent != null ? player.device.volume_percent : 50} onChange={e => setPlayer(p => ({...(p || {}),device:{...((p && p.device) || {}),volume_percent:Number(e.target.value)}}))} onMouseUp={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onTouchEnd={e => run({action:'set_volume',volume_percent:Number(e.currentTarget.value)})} onKeyUp={e => {if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)) run({action:'set_volume',volume_percent:Number(e.currentTarget.value)});}}/><output aria-label="Spotify volume percentage">{player?.device?.volume_percent == null ? '—' : player.device.volume_percent + '%'}</output></div>
         {!playback.enabled && <div className="spotify-setting"><I d="M5 12h14M12 5l7 7-7 7" size={14}/><select aria-label="Spotify playback device" value={player && player.device && player.device.id || ''} onChange={e => run({action:'transfer',device_id:e.target.value,play:isPlaying})}><option value="" disabled>Select a device</option>{(player && player.devices || []).map(device => <option key={device.id} value={device.id}>{device.name}{device.is_active ? ' Â· active' : ''}</option>)}</select></div>}
-        <div className="spotify-queue"><div className="spotify-queue-h">Up next</div>{upcoming.length ? upcoming.slice(0,5).map(item => <div className="spotify-queue-row" key={item.uri || item.id}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>) : <span style={{fontSize:10.5,color:'var(--dim2)'}}>No upcoming tracks in Spotify's queue.</span>}</div>
+        <details className="spotify-queue"><summary className="spotify-queue-h">Up next{upcoming.length ? ' · ' + upcoming.length : ''}</summary>{upcoming.length ? upcoming.slice(0,5).map(item => <div className="spotify-queue-row" key={item.uri || item.id}><span>{item.name || 'Untitled'}</span><i>{item.artists && item.artists[0] && item.artists[0].name || ''}</i></div>) : <span style={{fontSize:10.5,color:'var(--dim2)'}}>No upcoming tracks in Spotify's queue.</span>}</details>
         {error && <div className="spotify-player-error">{error}{/authorization|not connected/i.test(error) && <div><button className="btn spotify-reconnect" onClick={onReconnect}>Reconnect Spotify</button></div>}</div>}
-        {onOpenMusic && <button className="btn spotify-open-page" onClick={onOpenMusic}>Open Music</button>}
+        {onOpenMusic && <button type="button" className="spotify-open-page" onClick={() => { setOpen(false); onOpenMusic(); }}>Open Music<I d="M15 3h6v6M21 3l-9 9M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4" size={12}/></button>}
       </div>}
-    </div></React.Fragment>
-  );
+    </div>
+  ) : null;
+  return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
 const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, onAdaptiveRuleAction, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
@@ -10647,11 +10677,11 @@ const [slashSkills, setSlashSkills] = useState([]);
               applyAppActionReceipt(receipt, {notify:false});
             }}/>}
         </div>
-        {view !== 'music' && <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
-          onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
-          onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>}
         <SpotifyPlayer spotify={spotify} dockSide={dockSide} onReconnect={() => setSpotifyConnectOpen(true)} onRefreshConnection={refreshSpotify} musicPageTarget={musicPageTarget} onSelectCollection={source => {musicCollectionRef.current = source?.uri || '';}}
-          compactVisible={['chat','agent','project'].includes(view) && !browserPanelVisible} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}/>
+          compactVisible={view !== 'music' && !browserPanelVisible} onOpenMusic={() => nav('music')} onCloseMusic={() => nav('chat')}
+          renderDock={(music, musicOpen, onDismissMusic) => view !== 'music' && <GlobalDock side={dockSide} locked={dockLocked} onLockedChange={setDockLocked} view={view} activeAgentId={activeAgentId} settingsOpen={settingsOpen} agents={availableAgents}
+            music={music} musicOpen={musicOpen} onDismissMusic={onDismissMusic} onNewChat={newChat} onSearch={() => openSearch()} onNav={navigateFromControl} onCoding={dispatchCodingAction} onOpenAgent={openAgent}
+            onSettings={() => { setSettingsTab('General'); dispatchSurfacePresentation('settings', {visible:true}); }}/>} />
         {view !== 'music' && !petHidden && activePetRecord && <PetFloater record={activePetRecord} state={petActivity.state} size={petSize} pos={petPos} onPos={petSetPosition} onJump={() => petActivity.trigger('jumping', 1200)} onHide={() => petSetHidden(true)} installed={petInstalled} active={petActive} onSwitch={petSetActive}/>}
         </React.Fragment>}
         {view === '404' && <NotFoundView onBack={leaveNotFound}/>}
