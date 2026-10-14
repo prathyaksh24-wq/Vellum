@@ -44,6 +44,19 @@ checks do not constitute a new live provider or browser acceptance run.
 
 ## Browser validation (disposable fixture)
 
+### Dock music controls
+
+The dock owns the compact music presentation while SpotifyPlayer keeps the
+existing controller and snapshot. The five removed and seven added inline
+handlers were reviewed before updating the main-page fingerprint: native button
+disclosure replaces the nested role-button/keyboard handler, close and focus
+capture are temporary presentation gestures, and Agents/Open Music dismiss the
+popover before their existing navigation. The compact Next shortcut was removed;
+Next remains in the expanded controls with the same `spotify.playback.control`
+mapping. Playback and audio-session adapters are unchanged. Component tests cover
+dock containment, transport dispatch, auto-hide, outside dismissal, keyboard
+focus, four dock positions, disconnection, and single-controller navigation.
+
 The browser panel's direct page gesture now combines bounded takeover and the
 original click in one `browser.session.control` action. The server checks the
 displayed document identity and coordinates before changing ownership. Buffered text, special
