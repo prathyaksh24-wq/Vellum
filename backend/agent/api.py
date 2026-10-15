@@ -770,6 +770,17 @@ def _continuity_request(message: str, thread_id: str) -> str:
     pending = state_store.get_pending_action(thread_id) if state_store is not None else None
     if pending and (LiveAgentDispatcher._is_confirmation(clean, pending) or LiveAgentDispatcher._is_rejection(clean)):
         return clean
+    from agent.agents.browser import BrowserAgent
+    if BrowserAgent.is_page_followup(clean):
+        # Resolve only user-authored requests in this conversation. Stop at a
+        # different task rather than reviving an older website from another topic.
+        for candidate in reversed(_thread_user_messages(thread_id, limit=12)):
+            candidate = candidate.strip()
+            if candidate.casefold() == clean.casefold() or BrowserAgent.is_page_followup(candidate) or _is_retry_followup(candidate):
+                continue
+            if BrowserAgent.is_page_request(candidate):
+                return candidate
+            break
     referenced_post = _referenced_x_post_request(clean, thread_id)
     if referenced_post:
         return referenced_post
@@ -2320,7 +2331,8 @@ def _resolve_reasoning_mode(reasoning_mode: str | None):
 async def _run_agent(*args, **kwargs):
     from agent.llm.providers import request_model_scope
 
-    with request_model_scope(kwargs.get("model")):
+    model = kwargs.get("model", args[2] if len(args) > 2 else None)
+    with request_model_scope(model):
         return await _run_agent_scoped(*args, **kwargs)
 
 
@@ -4405,6 +4417,7 @@ def _should_passthrough_live_result(live_result: LiveAgentResult | None) -> bool
         return True
     if live_result.agent_name not in {
         "BooksAgent",
+        "BrowserAgent",
         "CalendarAgent",
         "DiscordAgent",
         "MemoryAgent",

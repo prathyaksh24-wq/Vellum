@@ -20,6 +20,35 @@ from agent.app_actions.runtime import (
 )
 from agent.app_actions.models import AppActionContext, AppActionRequest
 from agent.conversations.lifecycle import ConversationLifecycle
+
+
+def test_conversation_save_retries_transient_windows_replace_lock(tmp_path, monkeypatch):
+    target=tmp_path/'conversations.json'
+    lifecycle=ConversationLifecycle(path=target)
+    lifecycle.save('one',{'title':'Before','messages':[]})
+    original=Path.replace
+    attempts=[]
+    def locked_then_available(source,destination):
+        attempts.append(source)
+        if len(attempts)<3:raise PermissionError('Temporary sharing lock')
+        return original(source,destination)
+    monkeypatch.setattr(Path,'replace',locked_then_available)
+    lifecycle.save('one',{'title':'After','messages':[]})
+    assert lifecycle.get('one')['title']=='After'
+    assert len(attempts)==3
+    assert not list(tmp_path.glob('*.tmp'))
+
+
+def test_conversation_save_preserves_previous_file_on_persistent_lock(tmp_path,monkeypatch):
+    target=tmp_path/'conversations.json'
+    lifecycle=ConversationLifecycle(path=target)
+    lifecycle.save('one',{'title':'Before','messages':[]})
+    before=target.read_bytes()
+    def denied(*_):raise PermissionError('Still locked')
+    monkeypatch.setattr(Path,'replace',denied)
+    with pytest.raises(PermissionError):lifecycle.save('one',{'title':'After','messages':[]})
+    assert target.read_bytes()==before
+    assert not list(tmp_path.glob('*.tmp'))
 from agent.conversations.sharing import ConversationShareService
 
 

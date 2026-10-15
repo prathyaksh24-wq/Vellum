@@ -199,9 +199,10 @@ def test_status_does_not_wait_for_slow_titles_on_existing_tabs(monkeypatch):
     asyncio.run(check())
 
 
-def test_open_keeps_existing_website(monkeypatch):
+def test_showing_running_browser_keeps_existing_website(monkeypatch):
     async def check():
         browser = DedicatedBrowser()
+        browser.context = object()
         browser.active_page = SimpleNamespace(url='https://www.youtube.com/')
         async def opened(): pass
         async def status(): return SimpleNamespace(url=browser.active_page.url)
@@ -258,7 +259,8 @@ def test_resize_preserves_agent_ownership_and_rejects_stale_clicks(monkeypatch):
         async def status(): return SimpleNamespace(control=browser.control)
         page.set_viewport_size = set_size
         page.screenshot = screenshot
-        page.mouse = SimpleNamespace(click=click)
+        async def move(*_): pass
+        page.mouse = SimpleNamespace(click=click,move=move)
         browser.context = object()
         class Preview:
             def on(self, _event, callback): self.receive = callback

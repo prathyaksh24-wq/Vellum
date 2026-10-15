@@ -47,7 +47,7 @@
     { reference: "workspace", title: "Workspace", supportedLocations: ["application"], configurableProperties: ["theme"], controlKernel: true },
     { reference: "sidebar", title: "Sidebar", supportedLocations: ["left"], configurableProperties: [], controlKernel: false },
     { reference: "settings", title: "Settings", supportedLocations: ["overlay"], configurableProperties: [], controlKernel: false },
-    { reference: "right-panel", title: "Right panel", supportedLocations: ["right"], configurableProperties: [], controlKernel: false },
+    { reference: "right-panel", title: "Right panel", supportedLocations: ["right"], configurableProperties: ["content", "chat_ratio"], controlKernel: false },
     { reference: "composer", title: "Composer", supportedLocations: ["bottom"], configurableProperties: ["size"], controlKernel: true },
     { reference: "composer.send", title: "Send button", supportedLocations: ["composer-action"], configurableProperties: ["label", "size"], controlKernel: true },
   ];

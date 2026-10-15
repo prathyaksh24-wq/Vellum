@@ -63,7 +63,7 @@ def browser_type(ref: str, text: str, element: str = "", submit: bool = False) -
 
 @tool
 def browser_scroll(direction: str = "down") -> str:
-    """Scroll the page up or down to reveal more content. direction: 'up' or 'down'."""
+    """Scroll a viewport up/down, or reach the page top/bottom in one action."""
 
     return _run_browser({"action": "scroll", "direction": direction})
 

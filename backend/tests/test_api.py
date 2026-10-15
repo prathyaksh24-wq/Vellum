@@ -2354,6 +2354,8 @@ def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
 
 
 def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
+    # Exercise the main graph's repair path, independently of specialist routing.
+    monkeypatch.setattr(api._live_dispatcher, 'maybe_handle', lambda *_: None)
     class FailingStreamAgent:
         def __init__(self):
             self.state_reads = 0

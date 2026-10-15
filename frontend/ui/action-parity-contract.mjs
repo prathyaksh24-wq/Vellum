@@ -26,6 +26,7 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/books-view.jsx",
   "design/Velllum/uploads/components/calendar-workspace.jsx",
   "design/Velllum/uploads/components/browser-panel.jsx",
+  "design/Velllum/uploads/components/browser-settings.jsx",
   "design/Velllum/uploads/components/youtube-history.jsx",
   "design/Velllum/uploads/components/music-page.jsx",
   "design/Velllum/uploads/components/automation-notifications.jsx",

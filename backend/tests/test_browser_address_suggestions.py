@@ -36,6 +36,7 @@ def test_owned_chromium_history_is_read_only_filtered_and_bounded(tmp_path, monk
         assert str(path).replace('\\', '/') == 'data/browser-session/profile/Default/History'
         return history
     monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', owned_path)
+    monkeypatch.setattr(DedicatedBrowser, 'read_preferences', staticmethod(lambda: BrowserPreferences()))
     result = DedicatedBrowser.address_suggestions('yo')
     assert [item.url for item in result.items] == ['https://www.youtube.com/feed/history']
     assert len(DedicatedBrowser.address_suggestions().items) == 8
@@ -67,8 +68,9 @@ def test_suggestions_route_is_typed_non_cached_and_bounds_query(monkeypatch):
         assert client.get('/api/browser/suggestions', params={'q':'x' * 257}).status_code == 422
 
 
-def test_running_session_retains_history_and_closed_tab_navigation_when_chromium_locks_sqlite(monkeypatch):
+def test_running_session_retains_history_and_closed_tab_navigation_when_chromium_locks_sqlite(monkeypatch, tmp_path):
     from agent.contracts.browser import BrowserAddressSuggestion
+    monkeypatch.setattr(dedicated_browser, '_resolve_against_repo', lambda path: tmp_path / path)
     cached = [BrowserAddressSuggestion(url='https://example.org/old',title='Old document')]
     monkeypatch.setattr(DedicatedBrowser, '_read_address_history', staticmethod(lambda: cached))
     browser = DedicatedBrowser()

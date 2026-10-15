@@ -4,7 +4,8 @@ import React, {act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {expect, test, vi} from 'vitest';
 
-const compile = () => execFileSync(process.execPath, ['-e', `
+let compiledPanel;
+const compile = () => compiledPanel ||= execFileSync(process.execPath, ['-e', `
  const {createRequire}=require('node:module');
  const esbuild=createRequire(require.resolve('vite'))('esbuild');
  process.stdout.write(esbuild.transformSync(require('node:fs').readFileSync(process.argv[1],'utf8'),
@@ -25,6 +26,65 @@ async function mountPanel(api, state) {
 const manualState = () => ({running:true,available:true,control:'user',session_id:'session',active_tab_id:'tab',downloads:[],
   tabs:[{id:'tab',active:true,title:'Fixture',url:'https://example.com/'}]});
 const sampleFrame = {frame_id:'session:tab:1',tab_id:'tab',width:900,height:700,data_url:'data:image/jpeg;base64,aQ=='};
+
+test('a silent live stream falls back to frames so cursor updates keep arriving',async()=>{
+  const api=await autocompleteApi();
+  vi.useFakeTimers({toFake:['setTimeout','clearTimeout','Date']});
+  api.stream=receive=>{setTimeout(()=>receive(sampleFrame),10);return ()=>{};};
+  api.frame=vi.fn(async()=>({...sampleFrame,pointer:{tab_id:'tab',x:300,y:240,action:'scroll'}}));
+  const panel=await mountPanel(api,{...manualState(),control:'agent'});
+  try {
+    await act(async()=>await vi.advanceTimersByTimeAsync(100));
+    api.frame.mockClear();
+    await act(async()=>await vi.advanceTimersByTimeAsync(2400));
+    expect(api.frame).toHaveBeenCalled();
+    expect(panel.container.querySelector('[aria-label="Agent cursor: scroll"]')).not.toBeNull();
+  } finally {await panel.cleanup();vi.useRealTimers();}
+});
+
+test('live pointer moves even when page pixels and frame identity are unchanged',async()=>{
+  const api=await autocompleteApi();
+  let publish;
+  api.stream=(receive)=>{publish=receive;return ()=>{};};
+  api.frame=async()=>sampleFrame;
+  const panel=await mountPanel(api,{...manualState(),control:'agent'});
+  try {
+    await act(async()=>publish({...sampleFrame,pointer:{tab_id:'tab',x:100,y:120,action:'click'}}));
+    const cursor=panel.container.querySelector('.browser-agent-pointer');
+    const initial=cursor.style.left;
+    await act(async()=>publish({...sampleFrame,pointer:{tab_id:'tab',x:500,y:300,action:'click'}}));
+    expect(panel.container.querySelector('.browser-agent-pointer')).toBe(cursor);
+    expect(cursor.style.left).not.toBe(initial);
+    expect(panel.container.querySelector('img[alt="Live view of the dedicated browser tab"]').getAttribute('src')).toBe(sampleFrame.data_url);
+    await act(async()=>publish({...sampleFrame,pointer:null}));
+    expect(panel.container.querySelector('.browser-agent-pointer')).toBeNull();
+  } finally {await panel.cleanup();}
+});
+
+test('agent pointer is visible on its current tab and yields on takeover',async()=>{
+  const api=await autocompleteApi();
+  api.frame=async()=>({...sampleFrame,pointer:{tab_id:'tab',x:180,y:140,action:'click'}});
+  const panel=await mountPanel(api,{...manualState(),control:'agent',preferences:{...api.defaultPreferences,cursor_style:'mint'}});
+  try {
+    await act(async()=>await new Promise(resolve=>setTimeout(resolve,20)));
+    expect(panel.container.querySelector('[aria-label="Agent cursor: click"]')).not.toBeNull();
+    expect(window.VellumUI.browserPointerLayout({...sampleFrame,pointer:{x:180,y:140}},450,350,{cursor_style:'custom',cursor_hotspot_x:2,cursor_hotspot_y:3})).toEqual({width:450,height:350,x:88,y:67});
+  } finally {await panel.cleanup();}
+});
+
+test('browser divider supports keyboard resize and restores the default split',async()=>{
+  Function('React','window',compile())(React,window);
+  const container=document.createElement('div');document.body.append(container);
+  const root=createRoot(container),changed=vi.fn();globalThis.IS_REACT_ACT_ENVIRONMENT=true;
+  await act(async()=>root.render(React.createElement(window.VellumUI.BrowserSplitter,{value:38,onChange:changed})));
+  try {
+    const handle=container.querySelector('[role="separator"]');
+    await act(async()=>handle.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true,cancelable:true})));
+    expect(changed).toHaveBeenLastCalledWith(40);
+    await act(async()=>handle.dispatchEvent(new MouseEvent('dblclick',{bubbles:true})));
+    expect(changed).toHaveBeenLastCalledWith(38);
+  } finally {await act(async()=>root.unmount());container.remove();}
+});
 
 async function autocompleteApi() {
   vi.resetModules();

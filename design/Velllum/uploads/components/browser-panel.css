@@ -1,4 +1,4 @@
-.browser-panel{display:flex;flex-direction:column;flex:1 1 62%;min-width:320px;margin:0;border:0;border-left:1px solid var(--line);border-radius:0;background:var(--bg);color:var(--txt);overflow:hidden;position:relative;container-type:inline-size}
+.browser-panel{display:flex;flex-direction:column;flex:calc(100 - var(--browser-chat-share,38)) 1 0;min-width:320px;margin:0;border:0;border-radius:0;background:var(--bg);color:var(--txt);overflow:hidden;position:relative;container-type:inline-size}
 .browser-heading{display:flex;align-items:center;gap:8px;padding:0 10px;min-height:46px;background:var(--bg);flex-shrink:0;border-bottom:1px solid var(--line)}
 .browser-brand{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:600;white-space:nowrap}
 .browser-brand .brand-brave{color:#fa7336}
@@ -24,7 +24,21 @@
 .browser-address-row input{flex:1;min-width:0;border:0;outline:none!important;background:transparent;padding:8px 0;color:var(--txt);font:inherit;font-size:13px;caret-color:var(--txt)}
 .browser-screen{flex:1;min-height:0;background:#151515;display:flex;align-items:center;justify-content:center;overflow:hidden;outline-offset:-3px!important}
 .browser-screen>img{width:100%;height:100%;object-fit:contain;user-select:none;pointer-events:none}
-.browser-screen{cursor:default;touch-action:none;overscroll-behavior:contain}
+.browser-screen{cursor:default;touch-action:none;overscroll-behavior:contain;position:relative}
+.browser-screen:has(.browser-local-pointer),.browser-screen:has(.browser-local-pointer) *{cursor:none!important}
+.browser-local-pointer{position:absolute;z-index:8;pointer-events:none}
+.browser-agent-pointer-layer{position:absolute;width:100%;max-height:100%;max-width:100%;height:auto;pointer-events:none;z-index:8}
+.browser-agent-pointer{position:absolute;transition:left .04s linear,top .04s linear;filter:drop-shadow(0 1px 2px #0005)}
+.browser-agent-pointer svg,.browser-agent-pointer img,.browser-local-pointer svg,.browser-local-pointer img{display:block;object-fit:contain}
+.browser-agent-pointer span{position:absolute;left:22px;top:23px;background:var(--bg);color:var(--txt);font-size:10px;line-height:1;padding:4px 6px;border:1px solid var(--line);border-radius:4px;white-space:nowrap}
+.browser-splitter{flex:0 0 1px;align-self:stretch;position:relative;cursor:col-resize;touch-action:none;z-index:9;outline-offset:3px}
+.browser-splitter span{display:block;position:absolute;inset:0 -5px;background:transparent}
+.browser-splitter span:after{content:"";position:absolute;inset:0 5px;background:var(--line)}
+.browser-splitter:hover span:after,.browser-splitter:focus-visible span:after,.browser-resizing .browser-splitter span:after{background:var(--ember)}
+.browser-resizing{cursor:col-resize;user-select:none}.browser-resizing>.browser-panel{pointer-events:none}
+.body:has(>.browser-expanded)>.browser-splitter{display:none}
+@media(max-width:900px){.browser-splitter{display:none}}
+@media(prefers-reduced-motion:reduce){.browser-agent-pointer{transition:none}}
 .browser-empty{text-align:center;max-width:340px;padding:40px 24px;color:var(--txt)}
 .browser-empty>svg{color:var(--ember);margin-bottom:16px}
 .browser-empty h2{font-size:18px;margin:0 0 12px;font-weight:500}
@@ -41,7 +55,7 @@
 .browser-downloads p{font-size:12px;color:var(--dim)}
 .browser-error{padding:10px 16px;display:flex;gap:16px;align-items:center;font-size:12px;line-height:1.5;background:var(--active);flex-shrink:0}
 .body.browser-active .sidebar{width:208px;background:color-mix(in srgb,var(--bg) 92%,transparent)}
-.body.browser-active>.main{flex:1 1 38%;min-width:280px;margin:0;border:0;border-radius:0;background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
+.body.browser-active>.main{flex:var(--browser-chat-share,38) 1 0;min-width:280px;margin:0;border:0;border-radius:0;background:color-mix(in srgb,var(--bg) 90%,transparent);overflow:hidden}
 .body.browser-active .msgs{padding:24px 24px 16px}
 .body.browser-active .msgs-inner{padding:0;max-width:none}
 .body.browser-active .landing{min-width:0;width:100%;box-sizing:border-box}

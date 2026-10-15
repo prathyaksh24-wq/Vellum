@@ -50,8 +50,8 @@ def build_capability_contract() -> CapabilityContract:
             ),
             "browser": FeatureContract(
                 enabled=True, source="agent.mcp.playwright_tools",
-                endpoints={"status":"/api/browser/status", "frame":"/api/browser/frame", "stream":"/api/browser/stream", "suggestions":"/api/browser/suggestions", "control":"/api/app-actions/dispatch"},
-                notes="Dedicated local Brave profile, BrowserAgent tools, manual takeover and downloads. Status reports installation readiness.",
+                endpoints={"status":"/api/browser/status", "frame":"/api/browser/frame", "stream":"/api/browser/stream", "suggestions":"/api/browser/suggestions", "settings":"/api/browser/settings", "control":"/api/app-actions/dispatch"},
+                notes="Named local Brave profiles, BrowserAgent tools, manual takeover, site permissions and download management. Status reports installation readiness.",
             ),
             "chat": FeatureContract(
                 enabled=True,

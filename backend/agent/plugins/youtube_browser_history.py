@@ -23,6 +23,7 @@ from agent.mcp.playwright_tools import browser_session
 ORIGIN = "youtube_browser_history"
 ACTION = "youtube.history_presence"
 MESSAGES = {
+    "history_access_blocked": "History access is blocked in Settings → Browser. Enable it there before refreshing YouTube history.",
     "ready": "Recent history was saved locally. Exact watch times and repeat plays are unavailable.",
     "empty": "YouTube shows an empty or paused history. Previously saved records remain available.",
     "browser_closed": "Sign into YouTube in Vellum's browser, then refresh history.",
