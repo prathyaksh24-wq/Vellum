@@ -7,6 +7,7 @@ from threading import Event
 
 import pytest
 
+from agent.contracts.browser import BrowserPreferences
 from agent.knowledge.store import KnowledgeStore
 from agent.plugins.youtube_browser_history import ACTION, ORIGIN, HistoryReadError, YouTubeBrowserHistory, YouTubeBrowserHistoryService
 
@@ -203,6 +204,8 @@ def test_browser_worker_uses_quiet_reader_for_automatic_and_manual_calls(monkeyp
     from agent.mcp import dedicated_browser, playwright_tools
     calls = []
     class Browser:
+        def _browser_preferences(self):
+            return BrowserPreferences(agent_history='allow')
         async def youtube_history(self, *, url):
             calls.append(url)
             return packet()

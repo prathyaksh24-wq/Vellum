@@ -85,15 +85,25 @@ def test_browser_result_is_not_rewritten_by_another_model():
 def test_chat_model_selection_reaches_the_specialist_with_positional_arguments(monkeypatch):
     import asyncio
     from agent import api
-    from agent.llm.providers import get_provider_registry
+    from agent.llm import providers
+    models = tuple(providers.ModelEntry(
+        id=model_id, label=model_id, provider='ollama', context=128_000,
+        tier='fast', open_weights=True,
+    ) for model_id in ('ollama/fixture-default', 'ollama/gemma4:12b'))
+    monkeypatch.setattr(providers, 'discover_ollama_models',
+        lambda *_: providers.LocalModelInventory(reachable=True, models=models))
+    registry = providers.ProviderRegistry()
+    registry.set_active('ollama/fixture-default')
+    monkeypatch.setattr(providers, 'get_provider_registry', lambda: registry)
     seen=[]
     async def run(*args,**kwargs):
-        seen.append(get_provider_registry().current_model().id)
+        seen.append(providers.get_provider_registry().current_model().id)
         from types import SimpleNamespace
         return SimpleNamespace(action_receipts=[])
     monkeypatch.setattr(api,'_run_agent_scoped',run)
     asyncio.run(api._run_agent('open wikipedia','model-thread','ollama/gemma4:12b'))
     assert seen==['ollama/gemma4:12b']
+    assert registry.current_model().id == 'ollama/fixture-default'
 
 
 @pytest.mark.parametrize('message', ['what is Wikipedia?', 'how does YouTube work?', 'open the calendar settings', 'play a song on Spotify'])
