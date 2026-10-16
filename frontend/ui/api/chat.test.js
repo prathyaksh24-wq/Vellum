@@ -42,6 +42,24 @@ describe("Vellum default chat stream trace", () => {
     vi.restoreAllMocks();
   });
 
+  test("keeps context compaction activity and budget metadata while streaming the answer", async () => {
+    const api = await loadChatApi(async () => ({ok:true, body:sseStream([
+      'event: response.created\ndata: {"thread_id":"context-qa"}\n\n',
+      'event: agent.activity\ndata: {"activity":{"id":"compact-1","type":"context_compacted","label":"Keeping earlier conversation context","status":"completed","metadata":{"context_window":32768,"estimated_input_tokens":14000,"compacted":true}}}\n\n',
+      'event: response.output_text.delta\ndata: {"delta":"ORBIT launches on 23 November."}\n\n',
+      'event: response.completed\ndata: {"response":{"thread_id":"context-qa","output_text":"ORBIT launches on 23 November.","tools":[],"sources":[]}}\n\n',
+    ])}));
+    const activities = [], traces = [];
+    let answer = "";
+    await api.stream({message:"What date did we choose?",thread_id:"context-qa"}, {
+      activity:items => activities.push(items), trace:value => traces.push(value), delta:value => {answer=value;},
+    });
+    expect(activities.flat()).toContainEqual(expect.objectContaining({type:"context_compacted",status:"completed",
+      metadata:expect.objectContaining({context_window:32768,compacted:true})}));
+    expect(traces.at(-1).status).toBe("done");
+    expect(answer).toBe("ORBIT launches on 23 November.");
+  });
+
   test('does not submit music until its existing player device is ready', async () => {
     const fetchImpl = vi.fn(async () => ({ok:true,body:sseStream([
       'event: response.completed\ndata: {"response":{"output_text":"Playing","tools":["music_agent"]}}\n\n',

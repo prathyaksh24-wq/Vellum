@@ -564,6 +564,7 @@ class MemoryOrchestrator:
         cloud_safe: bool = False,
         read_scopes: list[str] | None = None,
         live_honcho: bool = True,
+        include_history: bool = True,
     ) -> dict[str, Any]:
         clean_query = query.strip()
         scopes = list(dict.fromkeys(read_scopes)) if read_scopes is not None else _packet_scopes(
@@ -595,7 +596,7 @@ class MemoryOrchestrator:
         strict_profile_scope = read_scopes is not None
         docs = (
             self.fts5.search(_memory_search_query(clean_query), limit=5)
-            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            if include_history and settings.get("reference_history_enabled", True) and not strict_profile_scope
             else []
         )
         honcho_context = ""
@@ -606,7 +607,7 @@ class MemoryOrchestrator:
                 honcho_context = ""
         docs = docs or (
             self.fts5.recent_documents(limit=5)
-            if settings.get("reference_history_enabled", True) and not strict_profile_scope
+            if include_history and settings.get("reference_history_enabled", True) and not strict_profile_scope
             else []
         )
         external_context = (

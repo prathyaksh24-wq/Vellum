@@ -79,6 +79,7 @@ from agent.computer_use.session import ComputerUseSession, ComputerUseSessionErr
 from agent.computer_use_runtime import computer_use_runtime
 from agent.computer_use_workspace import WorkspaceActionError, WorkspaceActionResult, workspace_worker
 from agent.config import REPO_ROOT, get_settings
+from agent.llm.context import ContextBudgetExceeded
 from agent.contracts.capabilities import public_capability_contract
 from agent.contracts.conversations import (
     ConversationLibraryResponse,
@@ -913,6 +914,9 @@ def _conversation_recall_answer(
 ) -> str | None:
     """Answer simple conversation-history questions from the canonical UI store."""
     lowered = " ".join(clean_message.casefold().split()).replace(" lat time", " last time")
+    # Ordinary messages must not scan the entire saved conversation archive.
+    if not re.search(r'\b(?:first|last|previous|other than today|what did i ask)\b', lowered):
+        return None
     conversations = _read_ui_conversations()
     current = next(
         (
@@ -2278,6 +2282,13 @@ async def _ensure_fork_runtime_context(
     model: str | None,
     reasoning_mode: str | None,
 ) -> int:
+    get_state = getattr(agent, 'aget_state', None)
+    if get_state is None:
+        return 0
+    config = _thread_config(thread_id)
+    state = await get_state(config, model=model, reasoning_mode=reasoning_mode)
+    if _state_values(state).get('messages'):
+        return 0
     try:
         conversation = await asyncio.to_thread(_conversation_lifecycle().get, thread_id)
     except ConversationLifecycleError:
@@ -2286,10 +2297,6 @@ async def _ensure_fork_runtime_context(
         return 0
     seeded = _fork_runtime_seed(conversation)
     if not seeded:
-        return 0
-    config = _thread_config(thread_id)
-    state = await agent.aget_state(config, model=model, reasoning_mode=reasoning_mode)
-    if _state_values(state).get("messages"):
         return 0
     await agent.aupdate_state(
         config,
@@ -2328,6 +2335,70 @@ def _resolve_reasoning_mode(reasoning_mode: str | None):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _is_compact_command(message: str) -> bool:
+    from agent.agents.base import user_query_text
+    return bool(re.match(r'^/compact(?:\s|$)', user_query_text(message), re.I))
+
+
+async def _compact_conversation(message: str, thread_id: str, model: str | None, reasoning_mode=None):
+    from agent.agents.base import user_query_text
+    focus = re.sub(r'^/compact\s*', '', user_query_text(message), count=1, flags=re.I)
+    focus = re.sub(r'^focus(?:\s+on)?\s+', '', focus, count=1, flags=re.I)[:1000]
+    resolved = await _ensure_model(model)
+    reasoning = _resolve_reasoning_mode(reasoning_mode)
+    async with _agent_turns.hold(thread_id):
+        # Restored chats may have canonical history but no graph checkpoint yet.
+        state = await agent.aget_state(_thread_config(thread_id), model=resolved, reasoning_mode=reasoning)
+        if not _state_values(state).get('messages'):
+            try:
+                conversation = await asyncio.to_thread(_conversation_lifecycle().get, thread_id)
+            except ConversationLifecycleError:
+                conversation = {}
+            seed = []
+            for item in conversation.get('messages') or []:
+                if not isinstance(item, dict) or _message_role(item) not in {'user', 'assistant'}:
+                    continue
+                text = _message_text(item)
+                if text and not _is_compact_command(text):
+                    seed.append({'role': _message_role(item), 'content': text, 'id': item.get('id') or uuid4().hex})
+            if seed:
+                await agent.aupdate_state(_thread_config(thread_id), {'messages': seed}, model=resolved,
+                    reasoning_mode=reasoning, as_node='agent')
+        try:
+            report = await agent.acompact(_thread_config(thread_id), model=resolved, reasoning_mode=reasoning, focus=focus)
+        except ContextBudgetExceeded as exc:
+            return f'I could not compact this conversation: {exc}', {'compacted': False, 'reason': 'budget_exceeded'}
+    if report.get('reason') == 'unfinished_turn':
+        return 'This chat has an unfinished tool turn. Finish or resolve it before compacting; its checkpoint was preserved.', report
+    if not report.get('compacted'):
+        return 'This conversation is already short enough; there is no older working context to compact.', report
+    before, after = report['estimated_tokens_before'], report['estimated_input_tokens']
+    answer = (f'Compacted the working context from about {before:,} to {after:,} tokens. '
+              'Recent messages are kept exact, and the full saved conversation is available for recall.')
+    if focus:
+        answer += ' Prioritized your requested focus.'
+    return answer, report
+
+
+async def _compact_conversation_stream(request, thread_id):
+    response_id, item_id = _stream_id('resp'), _stream_id('msg')
+    yield _response_created(response_id=response_id, thread_id=thread_id)
+    yield _response_in_progress(response_id=response_id, thread_id=thread_id)
+    yield _agent_activity_event(response_id=response_id, thread_id=thread_id,
+        activity_type='context_compacting', label='Compacting conversation', name='conversation_context')
+    try:
+        answer, report = await _compact_conversation(request.message, thread_id, request.model, request.reasoning_mode)
+    except Exception:
+        _LOGGER.exception('Manual context compaction failed')
+        answer, report = 'I could not compact this conversation. Please try again.', {'compacted': False, 'reason': 'failed'}
+    yield _agent_activity_event(response_id=response_id, thread_id=thread_id,
+        activity_type='context_compacted', label='Conversation context saved' if report.get('compacted') else 'Context unchanged',
+        name='conversation_context', status='failed' if report.get('reason') in {'failed', 'budget_exceeded'} else 'completed', metadata=report)
+    yield _response_output_text_delta(response_id=response_id, thread_id=thread_id, item_id=item_id, delta=answer)
+    yield _sse('token', {'text': answer})
+    yield _response_completed(response_id=response_id, thread_id=thread_id, answer=answer, tools=[], sources=[])
+
+
 async def _run_agent(*args, **kwargs):
     from agent.llm.providers import request_model_scope
 
@@ -2350,6 +2421,9 @@ async def _run_agent_scoped(
         raise HTTPException(status_code=400, detail="message cannot be empty")
 
     active_thread_id = thread_id or get_settings().thread_id
+    if _is_compact_command(clean_message):
+        answer, _ = await _compact_conversation(clean_message, active_thread_id, model, reasoning_mode)
+        return ChatResponse(answer=answer, thread_id=active_thread_id, tools=[])
     try:
         book_context, attachments = await _prepare_book_attachments(attachments)
     except ValueError as exc:
@@ -2464,7 +2538,7 @@ async def _run_agent_scoped(
                 reasoning_mode=resolved_reasoning,
             )
             await _repair_incomplete_tool_history(active_thread_id)
-            agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
+            agent_message = _agent_message_for_runtime_mode(agent_input_message)
             result = await agent.ainvoke(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
@@ -2839,8 +2913,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     except asyncio.CancelledError:
         audit.finalize("cancelled")
         raise
-    except Exception:
+    except Exception as exc:
         audit.finalize("failed")
+        if isinstance(exc, ContextBudgetExceeded):
+            raise HTTPException(status_code=422, detail={"code":"CONTEXT_BUDGET_EXCEEDED", "message":str(exc)}) from exc
         raise
     audit.thread_id = response.thread_id
     audit.mark_first_token()
@@ -4120,108 +4196,17 @@ def _agent_message_for_runtime_mode(clean_message: str) -> str:
 
 
 def _recent_conversation_context(clean_message: str, thread_id: str) -> str:
-    lowered = clean_message.lower()
-    # Current-chat follow-ups use the current checkpoint, not a recall packet
-    # assembled from unrelated conversations containing words such as "chat".
-    if re.search(r"\b(?:this|current)\s+(?:chat|conversation|thread)\b", lowered) and not re.search(
-        r"\b(?:previous|older|other|past)\s+(?:chats?|conversations?|threads?)\b", lowered
-    ):
-        return ""
-    markers = (
-        "chat",
-        "conversation",
-        "discuss",
-        "earlier",
-        "first",
-        "fifth",
-        "last",
-        "old",
-        "older",
-        "previous",
-        "recall",
-        "remember",
-        "second",
-        "talk about",
-        "talked",
-        "today",
-        "we said",
-        "you said",
-        "i said",
-    )
-    recall_intent = any(marker in lowered for marker in markers) or _is_memory_recall_request(clean_message, thread_id)
-    if not recall_intent:
-        return ""
-    conversations = _read_ui_conversations()
-    profile_recall = _is_user_profile_recall(clean_message)
-    query_terms = set() if profile_recall else _text_terms(clean_message)
-    ranked: list[tuple[int, int, dict[str, Any]]] = []
-    for position, conversation in enumerate(conversations):
-        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
-        if cid and cid == thread_id:
-            continue
-        score = _conversation_relevance(conversation, query_terms)
-        if score or not query_terms:
-            ranked.append((score, position, conversation))
-
-    if not ranked:
-        ranked = [(0, position, conversation) for position, conversation in enumerate(conversations[:12])]
-
-    ranked.sort(key=lambda item: (-item[0], item[1]))
-    selected_conversations = [conversation for _score, _position, conversation in ranked[:6]]
-    lines: list[str] = []
-    for conversation in selected_conversations:
-        title = str(conversation.get("title") or "Untitled chat")
-        cid = str(conversation.get("thread_id") or conversation.get("id") or "")
-        messages = conversation.get("messages") if isinstance(conversation.get("messages"), list) else []
-        selected = [message for message in messages if _message_role(message) == "user"] if profile_recall else messages
-        if query_terms:
-            selected = [
-                message
-                for message in messages
-                if query_terms.intersection(_text_terms(_message_text(message)))
-            ] or messages[-12:]
-        selected = selected[-8:]
-        if not selected:
-            continue
-        lines.append(f"Conversation: {title} (thread: {cid})")
-        for message in selected:
-            role = _message_role(message)
-            text = _message_text(message)
-            if text.strip():
-                lines.append(f"- {role}: {text.strip()[:360]}")
-
-    try:
-        docs = [
-            doc
-            for doc in _memory_orchestrator.fts5.search(_fts_recall_query(clean_message), limit=12)
-            if str(doc.get("thread_id") or "") != str(thread_id)
-        ][:8]
-    except Exception:
-        docs = []
-    if docs:
-        lines.append("Indexed memory hits:")
-        for doc in docs[:6]:
-            content = str(doc.get("content") or "").strip()
-            if content:
-                lines.append(f"- {content[:500]}")
-    if not lines:
-        return ""
-    context = (
-        "[Recent Vellum conversation context]\n"
-        "This is private memory/chat-recall context. Use it before any public search. "
-        "If the user asks what happened in previous chats, answer from this context and do not use web_search, SerpAPI, SportsAgent, or public web tools unless the user explicitly asks for fresh/live/current public updates. "
-        "Summarize it naturally; do not claim this context is long-term memory unless it was stored there. "
-        "For questions about the user, rely on their own messages, separate explicit facts from cautious inference, and do not treat old assistant claims as user facts.\n"
-        + "\n".join(lines[:48])
-    )
-    return context[:6500].rstrip()
-
-
-def _with_recent_conversation_context(clean_message: str, thread_id: str) -> str:
-    context = _recent_conversation_context(clean_message, thread_id)
-    if not context:
-        return clean_message
-    return f"{clean_message}\n\n{context}"
+    """Compatibility reader; prompt assembly owns history injection."""
+    from agent.conversations.recall import history_block, recall_history
+    if re.search(r'\b(?:this|current)\s+(?:chat|conversation|thread)\b', clean_message, re.I):
+        return ''
+    if not _is_memory_recall_request(clean_message, thread_id):
+        return ''
+    settings = _memory_orchestrator.store.get_settings()
+    if not settings.get('memory_enabled', True) or not settings.get('reference_history_enabled', True):
+        return ''
+    return history_block(recall_history(_read_ui_conversations(), thread_id=thread_id,
+        query=clean_message, scope='previous'))
 
 
 def _with_attached_conversation_context(clean_message: str, resolved: dict[str, Any]) -> str:
@@ -4929,7 +4914,7 @@ async def _stream_agent_turn_scoped(
                         tool="computer_use_session",
                         data={"thread_id": active_thread_id, "source": source},
                     )
-            agent_message = _agent_message_for_runtime_mode(_with_recent_conversation_context(agent_input_message, active_thread_id))
+            agent_message = _agent_message_for_runtime_mode(agent_input_message)
             stream = agent.astream_events(
                 {"messages": [{"role": "user", "content": _agent_content_with_attachments(agent_message, attachments)}]},
                 config=_thread_config(active_thread_id),
@@ -4949,7 +4934,17 @@ async def _stream_agent_turn_scoped(
                     if specialist_summaries:
                         break
                     raise
+                if 'vellum_context_summary' in (event.get('tags') or []):
+                    # Internal handoffs are never streamed as the assistant answer.
+                    continue
                 kind = event.get("event")
+                if kind == "on_custom_event" and event.get("name") == "vellum_context_compacted":
+                    yield _agent_activity_event(
+                        response_id=response_id, thread_id=active_thread_id,
+                        activity_type="context_compacted", label="Keeping earlier conversation context",
+                        name="conversation_context", status="completed",
+                        metadata=event.get("data") or {},
+                    )
                 if kind == "on_chat_model_end":
                     if _is_primary_chat_model_stream_event(event):
                         last_chat_model_output = event.get("data", {}).get("output")
@@ -5486,7 +5481,8 @@ async def _stream_agent_turn_scoped(
             stream_skill_usage.__exit__(None, None, None)
             await _repair_incomplete_tool_history(active_thread_id)
             _LOGGER.exception("Agent stream failed")
-            public_error = "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable."
+            public_error = str(exc) if isinstance(exc, ContextBudgetExceeded) else (
+                "Model stream timed out." if isinstance(exc, TimeoutError) else "Unreachable.")
             yield _response_error(response_id=response_id, thread_id=active_thread_id, message=public_error)
             yield _sse("error", {"error": public_error})
 
@@ -5722,6 +5718,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     if not clean_message:
         raise HTTPException(status_code=400, detail="message cannot be empty")
     active_thread_id = request.thread_id or get_settings().thread_id
+    if _is_compact_command(clean_message):
+        return StreamingResponse(_compact_conversation_stream(request, active_thread_id), media_type='text/event-stream')
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
     action_turn = _app_action_runtime.plan_submission(action_message)

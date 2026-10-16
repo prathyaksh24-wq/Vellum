@@ -54,6 +54,7 @@ class AgentProfile(ProfileModel):
     description: str = ""
     executor: Literal["deterministic", "llm", "hybrid"] = "deterministic"
     model: str | None = None
+    context_length: int | None = Field(default=None, ge=4096, le=262144)
     reasoning_mode: Literal["light", "medium", "high", "extra high", "max", "ultra"] | None = None
     source_egress: Literal["local", "external"] = "local"
     book_discovery_network: bool = False
@@ -335,6 +336,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
         ),
         "MemoryAgent": AgentProfile(
             id="MemoryAgent",
+            version=3,
             description=(
                 "Durable personal memory: answer what the user previously shared or asked Vellum to remember, "
                 "and submit reviewed memory proposals."
@@ -353,7 +355,7 @@ def builtin_profiles() -> dict[str, AgentProfile]:
             ),
             skills=SkillPolicy(allow=["skill-retention-memory-v1"]),
             memory=MemoryPolicy(
-                read_scopes=["user_profile", "shared", "agent:MemoryAgent"],
+                read_scopes=["global", "user_profile", "shared", "agent:MemoryAgent"],
                 write_scope="agent:MemoryAgent",
             ),
             cache=CachePolicy(

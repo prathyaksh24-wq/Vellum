@@ -746,7 +746,8 @@ class DelegationRuntime:
                 skill_text.append(f"Allowed skill {name} is unavailable; do not claim it ran.")
         model_id = profile.model or get_provider_registry().current_model().id
         return profile_execution(ProfileExecution(profile.id, model_id, profile.reasoning_mode or self.reasoning_mode,
-            self.agent_catalog.instructions_for(profile), "\n".join(skill_text), packet, context, thread_id))
+            self.agent_catalog.instructions_for(profile), "\n".join(skill_text), packet, context, thread_id,
+            context_length=profile.context_length))
 
     def _skill_for(self, profile, name):
         from agent.skills import get_skill_registry

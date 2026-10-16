@@ -135,6 +135,7 @@ class RoutingEngine:
         max_tokens: int = 2048,
         thread_id: str = "background",
         reasoning_mode: Any = None,
+        context_role: str = "specialist",
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -151,6 +152,12 @@ class RoutingEngine:
                     )
                 )
                 continue
+
+            from agent.llm.context import context_budget, project_context
+            effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
+            budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
+                                    transport_limit=getattr(adapter, "context_length", None))
+            projection = project_context(messages, tools, budget)
 
             preferred_id: str | None = None
             transient_retries = 0
@@ -199,7 +206,6 @@ class RoutingEngine:
                                 self.store.get_model_policy(target.model),
                             )
                         )
-                    effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
                     model = adapter.build_model(
                         target=target,
                         thread_id=thread_id,
@@ -208,12 +214,13 @@ class RoutingEngine:
                         policy=policy,
                         max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
+                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
                     options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
-                    result = await model.ainvoke(list(messages), **options)
+                    result = await model.ainvoke(projection.messages, **options)
                     has_content = bool(getattr(result, "content", None))
                     has_tool_calls = bool(getattr(result, "tool_calls", None))
                     if not has_content and not has_tool_calls:
@@ -222,6 +229,8 @@ class RoutingEngine:
                             summary="provider returned an invalid response",
                         )
                     else:
+                        result.response_metadata = {**getattr(result, "response_metadata", {}),
+                                                    "vellum_context": projection.report}
                         await self.pool.mark_success(lease)
                         self._record_attempt(
                             RoutingAttempt(
@@ -354,6 +363,7 @@ class RoutingEngine:
         max_tokens: int = 2048,
         thread_id: str = "background",
         reasoning_mode: Any = None,
+        context_role: str = "specialist",
         **kwargs: Any,
     ):
         plan = self.build_plan(primary_model, primary_provider)
@@ -370,6 +380,12 @@ class RoutingEngine:
                     )
                 )
                 continue
+
+            from agent.llm.context import context_budget, project_context
+            effective_max_tokens = self._effective_max_tokens(max_tokens, reasoning_mode)
+            budget = context_budget(target.model, role=context_role, output_tokens=effective_max_tokens,
+                                    transport_limit=getattr(adapter, "context_length", None))
+            projection = project_context(messages, tools, budget)
 
             preferred_id: str | None = None
             transient_retries = 0
@@ -419,13 +435,15 @@ class RoutingEngine:
                         secret=secret,
                         temperature=temperature,
                         policy=policy,
-                        max_tokens=self._effective_max_tokens(max_tokens, reasoning_mode),
+                        max_tokens=effective_max_tokens,
                         reasoning_mode=reasoning_mode,
+                        **({"context_length": budget.window} if target.provider == "ollama" else {}),
                     )
                     attempt_tools = () if retry_without_tools else tools
                     if attempt_tools:
                         model = model.bind_tools(list(tools))
-                    async for chunk in model.astream(list(messages), **kwargs):
+                    options = adapter.invocation_kwargs(kwargs) if callable(getattr(adapter, "invocation_kwargs", None)) else kwargs
+                    async for chunk in model.astream(projection.messages, **options):
                         last_chunk = chunk
                         if not visible and not self._visible_chunk(chunk):
                             buffered.append(chunk)

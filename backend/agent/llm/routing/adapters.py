@@ -198,6 +198,7 @@ class OllamaAdapter:
         policy: ProviderRoutingPolicy | None = None,
         max_tokens: int = 2048,
         reasoning_mode: Any = None,
+        context_length: int | None = None,
         **kwargs: Any,
     ):
         del secret, policy, thread_id
@@ -215,6 +216,10 @@ class OllamaAdapter:
                 params = super()._chat_params(messages, stop=stop, **call_kwargs)
                 params["options"] = {**params.get("options", {})}
                 params["options"].setdefault("num_batch", self.num_batch)
+                # Per-call options cannot silently override the budget that was
+                # used to compact and reserve space for this request.
+                params["options"]["num_ctx"] = self.num_ctx
+                params["options"]["num_predict"] = self.num_predict
                 return params
 
             def _convert_messages_to_ollama_messages(self, messages):
@@ -244,7 +249,7 @@ class OllamaAdapter:
             base_url=self.base_url.removesuffix("/v1"),
             temperature=temperature,
             num_predict=max(256, max_tokens),
-            num_ctx=self.context_length,
+            num_ctx=min(self.context_length, context_length) if context_length is not None else self.context_length,
             num_batch=self.batch_size,
             reasoning=bool(profile),
             client_kwargs={"timeout": self.request_timeout},

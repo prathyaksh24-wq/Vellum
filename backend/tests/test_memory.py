@@ -220,10 +220,13 @@ def test_memory_context_block_includes_orchestrator_packet(monkeypatch):
     from agent.memory import memory_context
 
     class FakeOrchestrator:
+        from types import SimpleNamespace
+        store = SimpleNamespace(get_settings=lambda: {'memory_enabled': True})
         def build_memory_packet(self, **kwargs):
             assert kwargs["thread_id"] == "thread-1"
             assert kwargs["query"] == "What do you know about my Vellum project?"
             assert kwargs["live_honcho"] is False
+            assert kwargs['include_history'] is False
             return {
                 "global_summary": "User is building Vellum.",
                 "saved_memories": [{"text": "User prefers concise answers."}],
@@ -244,7 +247,7 @@ def test_memory_context_block_includes_orchestrator_packet(monkeypatch):
     assert "Vellum uses sub-agents." in block
 
 
-def test_memory_context_block_includes_hermes_style_context_files(monkeypatch, tmp_path):
+def test_memory_context_does_not_revive_stale_derived_snapshot_files(monkeypatch, tmp_path):
     from agent.memory import memory_context
 
     memory_dir = tmp_path / "memory"
@@ -253,6 +256,8 @@ def test_memory_context_block_includes_hermes_style_context_files(monkeypatch, t
     (memory_dir / "MEMORY.md").write_text("# Agent Memory\n\n- Vellum uses Memory Orchestrator.", encoding="utf-8")
 
     class EmptyOrchestrator:
+        from types import SimpleNamespace
+        store = SimpleNamespace(get_settings=lambda: {'memory_enabled': True})
         def build_memory_packet(self, **kwargs):
             return {}
 
@@ -263,9 +268,7 @@ def test_memory_context_block_includes_hermes_style_context_files(monkeypatch, t
 
     block = memory_context.build_memory_block("thread-1", query="What do you know about me?")
 
-    assert "Hermes-style persistent memory" in block
-    assert "User prefers direct answers" in block
-    assert "Vellum uses Memory Orchestrator" in block
+    assert block == ''
 
 
 def test_honcho_recall_excludes_temporary_chats_and_uses_canonical_session_allowlist(tmp_path):

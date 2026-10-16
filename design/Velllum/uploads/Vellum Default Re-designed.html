@@ -3628,6 +3628,7 @@ const PlusMenu = ({library, projects, drop, onAttachFile, onAttachRecent, onOpen
 
 const TRENDING = ['Kennedy Center live stream', 'SpaceX IPO', 'Christian Pulisic', 'NBA Finals', 'AI chip export rules', 'Aurora forecast tonight'];
 const SLASH_ITEMS = [
+  { k: 'compact', label: 'Compact context', description: 'Shorten working context and keep saved history', ic: IcSparkle, run: 'compact' },
   { k: 'files', label: 'Add photos & files', description: 'Attach local context to this turn', ic: IcUpload, run: 'file' },
   { k: 'web', label: 'Web search', description: 'Search current public sources', ic: IcGlobe, run: 'web' },
   { k: 'learn', label: 'Learn skill', description: 'Prepare a reusable Hermes skill', ic: IcLibrary, run: 'skills' },
@@ -3939,6 +3940,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
   const runSlashItem = item => {
     if (!item) return;
     if (item.kind === 'command') {
+      if (item.run === 'compact') { setText('/compact'); setSlashDismissed(true); focusComposer(); return; }
       if (item.run === 'file') { stripSlash(); fileRef.current.click(); return; }
       if (item.run === 'web') { enableSearch(); return; }
       stripSlash(); setSlashDismissed(true);

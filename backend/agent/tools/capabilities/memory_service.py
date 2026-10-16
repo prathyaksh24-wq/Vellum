@@ -71,14 +71,28 @@ class MemoryCapabilityService:
 
     def build_context_pack(self, payload: dict[str, Any]) -> dict[str, Any]:
         query = str(payload.get("query", ""))
+        from agent.profiles.execution import get_profile_execution
+        execution = get_profile_execution()
+        has_canonical_packet = execution is not None and ('saved_memories' in execution.memory or 'settings' in execution.memory)
+        canonical = []
+        if has_canonical_packet:
+            # The runtime already read the canonical SQLite owner under the
+            # profile policy. Do not make MemoryAgent depend on a stale export.
+            packet = execution.memory
+            if not packet.get('settings', {}).get('memory_enabled', True):
+                return {'action': 'memory.build_context_pack', 'query': query, 'cards': [], 'disabled': True}
+            for item in packet.get('saved_memories') or []:
+                if isinstance(item, dict) and item.get('text'):
+                    canonical.append({'text': str(item['text']), 'path': 'memory:' + str(item.get('id') or ''),
+                        'scope': str(item.get('scope') or ''), 'source_thread_id': str(item.get('source_thread_id') or '')})
         search_payload = {
             "query": query,
             "limit": 8,
             "agent_name": payload.get("agent_name"),
             "scopes": payload.get("scopes"),
         }
-        cards = self.search_cards(search_payload)["cards"]
-        if not cards:
+        cards = canonical if has_canonical_packet else self.search_cards(search_payload)["cards"]
+        if not cards and not has_canonical_packet:
             cards = self.search_cards({**search_payload, "query": ""})["cards"]
         return {
             "action": "memory.build_context_pack",

@@ -118,7 +118,7 @@ def build_routing_runtime(
             "ollama": OllamaAdapter(
                 base_url=getattr(settings, "ollama_base_url", "http://127.0.0.1:11434"),
                 request_timeout=getattr(settings, "ollama_request_timeout_seconds", 300.0),
-                context_length=getattr(settings, "ollama_context_length", 16384),
+                context_length=getattr(settings, "ollama_context_length", 32768),
                 batch_size=getattr(settings, "ollama_batch_size", 1024),
             ),
             "openrouter": DisclosureModelAdapter(
@@ -142,14 +142,14 @@ def get_routing_runtime() -> RoutingRuntime:
     return build_routing_runtime()
 
 
-def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None) -> RoutedChatModel:
+def get_routed_chat_model(model: str | None = None, reasoning_mode: Any = None, *, context_role: str = "specialist") -> RoutedChatModel:
     from agent.profiles.execution import get_profile_execution
     execution = get_profile_execution()
     if execution is not None:
         model = execution.model_id or model
         reasoning_mode = execution.reasoning_mode or reasoning_mode
     routed = get_routing_runtime().chat_model
-    updates: dict[str, Any] = {}
+    updates: dict[str, Any] = {"context_role": context_role}
     if model is not None:
         updates["primary_model_resolver"] = lambda: model
     if reasoning_mode is not None:

@@ -25,7 +25,10 @@ def test_every_builtin_has_complete_distinct_profile(agent):
     assert profile.executor == "hybrid"
     assert profile.instructions.inline and profile.skills.allow and profile.tools.allow
     assert profile.memory.write_scope == f"agent:{agent}"
-    assert profile.memory.read_scopes == ["user_profile", "shared", f"agent:{agent}"]
+    expected_scopes = ["user_profile", "shared", f"agent:{agent}"]
+    if agent == 'MemoryAgent':
+        expected_scopes.insert(0, 'global')
+    assert profile.memory.read_scopes == expected_scopes
     assert agent not in profile.memory.receive_from
 
 

@@ -830,7 +830,7 @@ def test_conversation_library_search_correction_and_rebuild(monkeypatch, tmp_pat
     assert reset.json()["conversation"]["organization"]["assignment"] == "automatic"
 
 
-def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatch, tmp_path):
+def test_recall_evidence_is_not_appended_to_the_actual_user_request(monkeypatch, tmp_path):
     fake_agent = FakeAgent()
     monkeypatch.setattr(api, "agent", fake_agent)
     monkeypatch.setattr(api, "_UI_CONVERSATIONS_PATH", tmp_path / "conversations.json")
@@ -856,8 +856,9 @@ def test_recent_conversation_context_is_injected_for_recall_questions(monkeypatc
 
     assert response.answer == "API fake answer"
     content = fake_agent.calls[0][0]["messages"][0]["content"]
-    assert "Recent Vellum conversation context" in content
-    assert "We fixed Vellum streaming and X OAuth today" in content
+    assert content == 'what did we talk about today?'
+    # History is assembled by the graph as a separately attributed evidence
+    # layer, rather than persisted as if the user had submitted its contents.
 
 
 def test_conversation_recall_answers_first_message_from_current_chat(monkeypatch, tmp_path):
@@ -1628,10 +1629,9 @@ def test_recent_conversation_context_includes_indexed_memory_hits(monkeypatch, t
 
     context = api._recent_conversation_context("what about the f1 from my chats", "new-thread")
 
-    assert "private memory/chat-recall context" in context
-    assert "You asked who led Formula One standings" in context
-    assert "current state from web search" not in context
-    assert "do not use web_search, SerpAPI, SportsAgent" in context
+    # An orphaned FTS row is not a canonical conversation. It must not revive
+    # deleted/missing source history or become proof of a past statement.
+    assert context == ''
 
 
 def test_memory_orchestrator_search_returns_indexed_conversation_hits(monkeypatch, tmp_path):
@@ -2310,7 +2310,7 @@ def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
         def __init__(self):
             self.events = []
 
-        async def aget_state(self, config):
+        async def aget_state(self, config, **kwargs):
             self.events.append(("get_state", config["configurable"]["thread_id"]))
             return SimpleNamespace(
                 values={
@@ -2344,27 +2344,30 @@ def test_chat_repairs_pending_tool_calls_before_next_turn(monkeypatch):
 
     assert response.answer == "recovered"
     assert fake_agent.events[0] == ("get_state", "frontend")
-    assert fake_agent.events[1][0] == "update_state"
-    repaired_messages = fake_agent.events[1][2]["messages"]
+    mutations = [event for event in fake_agent.events if event[0] != 'get_state']
+    assert mutations[0][0] == "update_state"
+    repaired_messages = mutations[0][2]["messages"]
     assert len(repaired_messages) == 1
     assert isinstance(repaired_messages[0], ToolMessage)
     assert repaired_messages[0].tool_call_id == "call-browser-tabs"
     assert "browser_tabs" in repaired_messages[0].content
-    assert fake_agent.events[2] == ("ainvoke", "frontend")
+    assert mutations[1] == ("ainvoke", "frontend")
 
 
 def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
     # Exercise the main graph's repair path, independently of specialist routing.
     monkeypatch.setattr(api._live_dispatcher, 'maybe_handle', lambda *_: None)
+    monkeypatch.setattr(api, '_conversation_lifecycle', lambda: SimpleNamespace(get=lambda _: {}))
     class FailingStreamAgent:
         def __init__(self):
             self.state_reads = 0
             self.repairs = []
+            self.failed = False
 
-        async def aget_state(self, config):
+        async def aget_state(self, config, **kwargs):
             self.state_reads += 1
             messages = []
-            if self.state_reads > 1:
+            if self.failed:
                 messages = [
                     SimpleNamespace(
                         content="",
@@ -2384,6 +2387,7 @@ def test_stream_repairs_pending_tool_calls_after_mid_turn_error(monkeypatch):
 
         async def astream_events(self, *args, **kwargs):
             yield {"event": "on_tool_start", "name": "browser_tabs"}
+            self.failed = True
             raise RuntimeError("tool node failed")
 
     fake_agent = FailingStreamAgent()
@@ -2522,8 +2526,14 @@ def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
 
 
 def test_active_model_switch_does_not_wait_for_active_stream(monkeypatch):
+    # Exercise coordination without repeatedly parsing the operator's archive.
+    monkeypatch.setattr(api, '_read_ui_conversations', lambda: [])
+    async def resolve_model(model):
+        return model
+    monkeypatch.setattr(api, '_ensure_model', resolve_model)
     async def run_case():
         from agent.llm import providers as providers_mod
+        monkeypatch.setattr(providers_mod.ProviderRegistry, 'refresh_local_models', lambda self, **kwargs: None)
 
         providers_mod.get_provider_registry.cache_clear()
         api._agent_turns = api._ThreadTurnCoordinator()
@@ -2606,6 +2616,10 @@ def test_active_model_switch_does_not_wait_for_active_stream(monkeypatch):
 
 
 def test_stalled_chat_does_not_block_another_conversation(monkeypatch):
+    monkeypatch.setattr(api, '_read_ui_conversations', lambda: [])
+    async def resolve_model(model):
+        return model
+    monkeypatch.setattr(api, '_ensure_model', resolve_model)
     async def run_case():
         api._agent_turns = api._ThreadTurnCoordinator()
 

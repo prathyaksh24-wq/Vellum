@@ -59,13 +59,15 @@ class MemoryAgent:
                 confidence=0.35,
             )
 
-        lines = ["MemoryAgent found relevant durable memory:"]
+        lines = []
         sources: list[SpecialistSource] = []
         for index, card in enumerate(cards[:3], start=1):
             text = str(card.get("text") or "").strip()
             path = str(card.get("path") or "")
             first_line = self._first_content_line(text)
-            lines.append(f"[{index}] {first_line}")
+            first_line = re.sub(r'^(?:the )?user prefers\b', 'You prefer', first_line, flags=re.I)
+            first_line = re.sub(r'^(?:the )?user is\b', 'You are', first_line, flags=re.I)
+            lines.append(first_line)
             if path:
                 sources.append(
                     SpecialistSource(
@@ -79,7 +81,7 @@ class MemoryAgent:
         return SpecialistResponse(
             agent=self.name,
             status="answered",
-            summary="\n".join(lines),
+            summary=" ".join(lines),
             analysis="Used memory.build_context_pack and memory.search_cards through MemoryCapabilityService.",
             sources=sources,
             confidence=0.76,

@@ -18,6 +18,7 @@ class RoutedChatModel(BaseChatModel):
     temperature: float = 0.3
     max_tokens: int = 2048
     reasoning_mode: Any = None
+    context_role: str = "specialist"
     bound_tools: tuple[Any, ...] = ()
     tool_binding_kwargs: dict[str, Any] = Field(default_factory=dict)
 
@@ -100,6 +101,7 @@ class RoutedChatModel(BaseChatModel):
             temperature=self.temperature,
             max_tokens=max_tokens,
             reasoning_mode=self.reasoning_mode,
+            context_role=self.context_role,
             **invoke_kwargs,
         )
         return ChatResult(generations=[ChatGeneration(message=message)])
@@ -159,13 +161,15 @@ class RoutedChatModel(BaseChatModel):
         stream_kwargs.update(kwargs)
         if stop is not None:
             stream_kwargs["stop"] = stop
+        max_tokens = stream_kwargs.pop("max_tokens", self.max_tokens)
         async for chunk in self.engine.astream(
             messages=messages,
             primary_model=self.primary_model_resolver(),
             tools=self.bound_tools,
             temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            max_tokens=max_tokens,
             reasoning_mode=self.reasoning_mode,
+            context_role=self.context_role,
             **stream_kwargs,
         ):
             yield ChatGenerationChunk(message=chunk)

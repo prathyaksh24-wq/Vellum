@@ -286,6 +286,12 @@ class ProviderRegistry:
                 return entry
         return None
 
+    def context_limit(self, model_id: str) -> int | None:
+        """Read the discovered/catalog limit without network work per model call."""
+        with self._lock:
+            entry = self._find_by_id(model_id)
+            return entry.context if entry is not None else None
+
     def refresh_local_models(self, *, force: bool = False) -> LocalModelInventory:
         now = time.monotonic()
         with self._lock:
