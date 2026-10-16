@@ -253,3 +253,33 @@ def test_voice_speak_returns_wav_for_replay(monkeypatch):
     assert response.status_code == 200
     assert response.headers["content-type"] == "audio/wav"
     assert response.content == b"RIFFfake-wave"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('preferences,status', [('{"voice":false}',409), ('{"warm":"invalid"}',422)])
+async def test_voice_preferences_reject_disabled_or_invalid_before_transcribing(monkeypatch,preferences,status):
+    from io import BytesIO
+    from fastapi import HTTPException, UploadFile
+    def forbidden():
+        pytest.fail('Voice must not transcribe when disabled or preferences are invalid')
+    monkeypatch.setattr(api,'get_stt_engine',forbidden)
+    with pytest.raises(HTTPException) as error:
+        await api.voice_turn(audio=UploadFile(filename='speech.wav',file=BytesIO(_wav_bytes())),thread_id='voice-prefs',model=None,personalization=preferences)
+    assert error.value.status_code==status
+
+
+@pytest.mark.asyncio
+async def test_voice_preferences_reach_the_existing_chat_stream(monkeypatch):
+    from io import BytesIO
+    from fastapi import UploadFile
+    received=[]
+    monkeypatch.setattr(api,'get_stt_engine',lambda:FakeStt('hello'))
+    async def stream(**kwargs):
+        received.append(kwargs)
+        yield api._sse('final',{'answer':'Hello.'})
+    monkeypatch.setattr(api,'_stream_agent_turn',stream)
+    response=await api.voice_turn(audio=UploadFile(filename='speech.wav',file=BytesIO(_wav_bytes())),thread_id='voice-prefs',model=None,personalization='{"baseStyle":"efficient","emoji":"less"}')
+    body=''.join([chunk async for chunk in response.body_iterator])
+    assert 'Hello.' in body
+    assert received[0]['personalization']=={'baseStyle':'efficient','emoji':'less'}
+    assert received[0]['synthesize_audio'] is True

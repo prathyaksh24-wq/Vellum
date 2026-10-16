@@ -6,6 +6,14 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+### Changed
+- Natural-language settings understand common typos and background shorthand, retain current/previous scenes and chat action messages, and continue provider selection after confirmed secure key entry. Saved personalization and profile preferences drive prompts and tool policy; failed receipts cannot become success claims.
+- Routine navigation and layout changes stay quiet, and Appearance focuses on theme, backgrounds, dock and accent. Location-aware clock answers use natural time-first wording; calendar shorthand such as "tom at 3" previews tomorrow at 3 PM with confirmation.
+
+### Added
+- Pattern Waves and Particles animated backgrounds, with picker previews, persistent selection, reduced-motion still frames, graphics fallbacks and GPU cleanup.
+
+
 - Add Settings → Browser with named sign-in profiles, browsing activity, download management, link destinations, site permissions and operation-bound data clearing.
 - Add cursor presets and local PNG cursor settings, a resizable chat/browser divider, fresh-homepage reopening and automatic control handoff for explicit browser tasks.
 - Route natural website requests and same-chat retries to BrowserAgent; publish actual cursor movement, observe search input state, and recover safely from changing controls and page navigation.

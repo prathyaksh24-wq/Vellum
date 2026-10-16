@@ -171,6 +171,10 @@ class ToolRegistry:
         return wrapped
 
     def _check_permission(self, record: CapabilityRecord, payload: dict[str, Any], *, agent_name: str) -> None:
+        from agent.personalization import tool_preference_error
+        preference_error = tool_preference_error(record.name, record.namespace)
+        if preference_error:
+            raise ToolPermissionError(preference_error)
         if agent_name not in record.allowed_agents:
             raise ToolPermissionError(f"{agent_name} cannot use {record.name}")
         policy = get_active_profile_policy()

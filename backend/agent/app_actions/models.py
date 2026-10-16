@@ -110,6 +110,8 @@ class DeviceSettingsValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     background: str | None = None
+    previous_background: str | None = None
+    profile: dict[str, str] = Field(default_factory=dict)
     accent: str | None = None
     dock_position: str | None = None
     dock_locked: bool | None = None

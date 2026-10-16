@@ -638,7 +638,8 @@ class AppActionRuntime:
     def match_submission(self, message: str) -> AppActionRequest | None:
         """Match only complete, explicitly submitted presentation instructions."""
 
-        submitted = " ".join(str(message or "").strip().split())
+        from agent.text_normalization import normalize_command_words
+        submitted = normalize_command_words(message)
         normalized = submitted.casefold()
         if not normalized:
             return None
@@ -660,6 +661,25 @@ class AppActionRuntime:
         normalized = normalized.rstrip(".!?")
         submitted = submitted.rstrip(".!?")
         polite = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
+
+        if re.fullmatch(polite + r'(?:restore|use|go\s+back\s+to|change\s+back\s+to)\s+(?:the\s+)?(?:previous|last|old)\s+(?:background|bg)', normalized):
+            return AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={'patch':{'background':'previous'}})
+
+        if re.fullmatch(r"(?:what(?:'s| is| was)|which|show|tell me)\s+(?:the\s+|my\s+)?(?:(?:current|previous|last|old)\s+)?background(?:\s+(?:is|was)\s+(?:set|used)(?:\s+before)?)?", normalized):
+            return AppActionRequest(action_id='settings.device.inspect')
+
+        provider_selection = re.fullmatch(
+            polite + r'(?:change|set|switch)\s+(?:(?:the|my)\s+)?(?:model\s+)?provider\s+(?:to\s+)?(openai|openrouter|anthropic|google|ollama|local)', normalized,
+        )
+        if provider_selection:
+            provider = provider_selection.group(1)
+            return AppActionRequest(action_id=MODEL_SELECT_ACTION_ID, arguments={'provider':'ollama' if provider == 'local' else provider})
+
+        natural_theme = re.fullmatch(
+            polite + r'(?:(?:turn|switch)\s+on\s+(dark|light)\s+(?:mode|theme)|(?:enable|activate)\s+(dark|light)\s+(?:mode|theme)|(?:switch|change)\s+from\s+(?:dark|light)\s+(?:mode\s+)?to\s+(dark|light)(?:\s+(?:mode|theme))?)', normalized,
+        )
+        if natural_theme:
+            return self._surface_request('workspace', properties={'theme':next(value for value in natural_theme.groups() if value)}, persistence=persistence)
 
         if self._plugin_contributions and self._plugin_contributions.action_available("spotify.playback.control"):
             from agent.plugins.spotify_controls import match_spotify_command
@@ -709,6 +729,15 @@ class AppActionRuntime:
                     arguments={"rule_action_id": inner.action_id, "rule_arguments": inner.arguments, "scope": scope},
                 )
 
+        next_background = re.fullmatch(
+            polite + r"(?:(?:change|switch|shuffle|randomize)\s+(?:the\s+|my\s+)?background"
+            r"(?:\s+to\s+(?:(?:a|any)\s+)?(?:different|another|random|new)(?:\s+(?:one|background))?)?"
+            r"|(?:use|pick|choose|switch\s+to)\s+(?:(?:a|any)\s+)?(?:different|another|random|new)\s+background)(?:\s+(?:of|in|for)\s+(?:the\s+)?(?:vellum|app))?[.!?]*",
+            submitted, flags=re.IGNORECASE,
+        )
+        if next_background:
+            return AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"background": "next"}})
+
         device_appearance = re.fullmatch(
             polite + r"(?:change|set|switch)\s+(?:the\s+|my\s+)?(background|accent(?:\s+palette)?|dock\s+position)\s+to\s+(.+)",
             submitted,
@@ -744,12 +773,13 @@ class AppActionRuntime:
 
         personalization_choice = re.fullmatch(
             polite
-            + r"set\s+(?:my\s+)?(base style|warmth|enthusiasm|headers|emoji)\s+to\s+(.+)",
+            + r"(?:set|change)\s+(?:my\s+|the\s+)?(base style(?: and tone)?|warmth|warm|enthusiasm|enthusiastic|headers(?: & lists)?|emoji)\s+to\s+(.+)",
             submitted,
             flags=re.IGNORECASE,
         )
         if personalization_choice:
             key = {
+                'base style and tone':'baseStyle', 'warm':'warm', 'enthusiastic':'enthusiastic', 'headers & lists':'headers',
                 "base style": "baseStyle",
                 "warmth": "warm",
                 "enthusiasm": "enthusiastic",
@@ -766,6 +796,12 @@ class AppActionRuntime:
                     }
                 },
             )
+
+        characteristic = re.fullmatch(polite + r'(?:be|make\s+(?:your\s+)?(?:responses|answers)|use)\s+(more|less|fewer|no)\s+(warm|enthusiastic|headers|lists|emojis?)', normalized)
+        if characteristic:
+            amount, label = characteristic.groups()
+            key = {'warm':'warm','enthusiastic':'enthusiastic','headers':'headers','lists':'headers','emoji':'emoji','emojis':'emoji'}[label]
+            return AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={'patch':{'personalization':{key:'more' if amount == 'more' else 'less'}}})
 
         personalization_toggle = re.fullmatch(
             polite
@@ -787,8 +823,22 @@ class AppActionRuntime:
                 arguments={"patch": {"personalization": {key: personalization_toggle.group(2) == "on"}}},
             )
 
+        toggle = re.fullmatch(polite + r'(enable|disable)\s+(?:the\s+)?(fast answers|record history|web search|canvas|voice|advanced voice|connector search|(?:a\s+|my\s+|the\s+)?pet)', normalized)
+        if toggle:
+            enabled = toggle.group(1) == 'enable'
+            label = toggle.group(2)
+            if label.endswith('pet'):
+                return AppActionRequest(action_id=PETDEX_VISIBILITY_SET_ACTION_ID, arguments={'visible':enabled})
+            key = {'fast answers':'fastAnswers','record history':'recordHist','web search':'webSearch','canvas':'canvas','voice':'voice','advanced voice':'advVoice','connector search':'connector'}[label]
+            return AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={'patch':{'personalization':{key:enabled}}})
+
+        profile_text = re.fullmatch(polite + r'(?:set|change)\s+(?:my\s+|the\s+)?(profile name|display name|username)\s+to\s+(.+)', submitted, flags=re.I)
+        if profile_text:
+            key = 'username' if profile_text.group(1).casefold() == 'username' else 'displayName'
+            return AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={'patch':{'profile':{key:self._spoken_value(profile_text.group(2))}}})
+
         personalization_text = re.fullmatch(
-            polite + r"set\s+(?:my\s+)?(nickname|occupation|about me|custom instructions)\s+to\s+(.+)",
+            polite + r"(?:set|change)\s+(?:my\s+|the\s+)?(nickname|occupation|about me|custom instructions)\s+to\s+(.+)",
             submitted,
             flags=re.IGNORECASE,
         )
@@ -4388,7 +4438,7 @@ class AppActionRuntime:
                 MODEL_SELECT_ACTION_ID,
                 "Select a model",
                 "Select an available model for this chat without changing the process default.",
-                {"model": {"type": "string"}, "model_id": {"type": "string"}},
+                {"model": {"type": "string"}, "model_id": {"type": "string"}, "provider": {"enum": ["openai", "openrouter", "anthropic", "google", "ollama"]}},
                 "none",
             ),
             (

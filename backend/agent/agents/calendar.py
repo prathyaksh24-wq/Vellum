@@ -22,7 +22,7 @@ class CalendarAgent:
         self._now = now or (lambda tz: datetime.now(tz))
 
     def can_handle(self, query: str) -> bool:
-        lowered = str(query or "").casefold()
+        lowered = self._normalize_query(query).casefold()
         if "calendar" in lowered or "agenda" in lowered:
             return True
         return bool(
@@ -40,7 +40,7 @@ class CalendarAgent:
         return self.answer_with_context(query, {})
 
     def answer_with_context(self, query: str, context: dict) -> SpecialistResponse:
-        clean = str(query or "").strip()
+        clean = self._normalize_query(query).strip()
         lowered = clean.casefold()
         try:
             account = self._account()
@@ -338,13 +338,27 @@ class CalendarAgent:
             analysis="Checked live calendar availability; the suggested time is awaiting confirmation.")
 
     @staticmethod
+    def _normalize_query(query: str) -> str:
+        # Keep names and quoted titles intact (e.g. a meeting with Tom).
+        parts = re.split(r'(["“].+?["”])', str(query or ""))
+        for index in range(0, len(parts), 2):
+            text = re.sub(r"\bapointments?\b", lambda m: "appointments" if m.group().lower().endswith("s") else "appointment", parts[index], flags=re.I)
+            parts[index] = re.sub(
+                r"(?<!with )(?<!called )(?<!named )\b(?:tom|tmrw|tmr)\b(?=\s+(?:at|from)\b|[.!?]*$)",
+                "tomorrow", text, flags=re.I,
+            )
+        return ''.join(parts)
+
+    @staticmethod
     def _natural_title(query: str, action: str) -> str:
         verb = r"(?:schedule|create|add|book)" if action == "calendar.create_event" else r"(?:delete|remove|cancel|reschedule|move|update|rename|change)"
         match = re.search(rf"\b{verb}\s+(?:(?:a|an|the|my)\s+)?(?:(?:calendar\s+)?(?:event|meeting|appointment)\s+(?:called|named|titled)\s+)?(.+)", query, re.I)
         if not match: return ""
         title = re.split(r"\s+(?:today|tomorrow|on|at|from|for|to)\b", match.group(1), maxsplit=1, flags=re.I)[0].strip()
         title = re.sub(r"\s+(?:in|on)\s+(?:my\s+)?(?:google\s+)?calendar.*$", "", title, flags=re.I).strip()
-        return "" if re.fullmatch(r"(?:a\s+)?(?:meeting|event|appointment)(?:\s+sometime)?", title, re.I) else title[:1024]
+        if re.fullmatch(r"(?:a\s+)?(?:meeting|event|appointment)(?:\s+sometime)?", title, re.I):
+            return title.removeprefix("a ").capitalize() if action == "calendar.create_event" else ""
+        return title[:1024]
 
     @staticmethod
     def _display_time(value: str, time_zone: str = "") -> str:
@@ -422,6 +436,16 @@ class CalendarAgent:
             hour = hour % 12 + (12 if meridiem == "pm" else 0)
         elif hour > 23:
             return None
+        elif (
+            not clock.group(1).startswith("0")
+            and not re.search(r"\b(?:morning|overnight|early|night)\b", lowered)
+            and (1 <= hour <= 6 or (1 <= hour <= 11 and re.search(r"\b(?:afternoon|evening)\b", lowered)))
+        ):
+            # Ordinary appointments use daytime hours: "at 3" means 3 PM.
+            # The explicit confirmation preview exposes the inferred hour.
+            hour += 12
+        elif 7 <= hour <= 11 and re.search(r"\bnight\b", lowered):
+            hour += 12
         if minute > 59:
             return None
         return datetime.combine(day, time(hour, minute), tz)

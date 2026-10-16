@@ -116,8 +116,11 @@ def search_my_notes(query: str) -> str:
         )
 
     allowed_chunks = []
+    from agent.personalization import recording_reference_allowed
     for score, chunk in ranked[: settings.max_context_chunks * 2]:
         metadata = chunk.get("metadata", {})
+        if not recording_reference_allowed(metadata):
+            continue
         folder = metadata.get("folder", "")
         path = metadata.get("path", "")
         if not can_send_to_llm(folder):

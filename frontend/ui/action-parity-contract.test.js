@@ -13,9 +13,11 @@ describe("served visual-control parity gate", () => {
   test("a newly added state-changing visual control fails until reviewed", () => {
     const sources = servedSources();
     const path = "design/Velllum/uploads/Vellum Default Re-designed.html";
+    const anchor = 'onClick={onNewChat}><span className="sb-ic"><IcPencilSq/></span>New chat</button>';
+    expect(sources[path]).toContain(anchor);
     sources[path] = sources[path].replace(
-      "onClick={onLayoutReset}>Reset surfaces</button>",
-      "onClick={onLayoutReset}>Reset surfaces</button><button onClick={() => setUnregisteredPreference(true)}>Save preference</button>",
+      anchor,
+      anchor + '<button onClick={() => setUnregisteredPreference(true)}>Save preference</button>',
     );
     expect(validateParityInventory(inventory, sources).join("\n")).toContain("visual handlers changed");
   });
@@ -29,7 +31,8 @@ describe("served visual-control parity gate", () => {
   test("a non-state text change does not require action registration", () => {
     const sources = servedSources();
     const path = "design/Velllum/uploads/Vellum Default Re-designed.html";
-    sources[path] = sources[path].replace("Reset surfaces</button>", "Reset workspace surfaces</button>");
+    expect(sources[path]).toContain('New chat</button>');
+    sources[path] = sources[path].replace("New chat</button>", "Start a chat</button>");
     expect(fingerprint(path, sources[path])).toEqual(inventory.handlerFingerprints[path]);
   });
 

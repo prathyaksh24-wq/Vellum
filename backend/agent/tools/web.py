@@ -38,6 +38,10 @@ def web_search(query: str, limit: int = 5) -> str:
     Use web_extract_pages to read full content from specific URLs.
     """
 
+    from agent.personalization import tool_preference_error
+    preference_error = tool_preference_error('web_search', 'web')
+    if preference_error:
+        return json.dumps({'success':False, 'error':preference_error})
     data_class, reason = classify(query)
     if data_class == DataClass.RED:
         return json.dumps(

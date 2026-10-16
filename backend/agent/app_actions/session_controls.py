@@ -129,6 +129,26 @@ class SessionControlService:
         return "".join(character for character in value.casefold() if character.isalnum())
 
     def _select_model(self, thread_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        provider = str(arguments.get('provider') or '').strip().casefold()
+        if provider:
+            if provider not in {'openai', 'openrouter', 'anthropic', 'google', 'ollama'}:
+                raise SessionControlError('PROVIDER_UNAVAILABLE', 'That model provider is not supported.', unavailable=True)
+            models = [entry for entry in self.provider_registry.list_models() if entry.provider == provider]
+            if not models:
+                if provider == 'ollama':
+                    raise SessionControlError('MODEL_UNAVAILABLE', 'No local models are available. Start Ollama and load a model first.', unavailable=True)
+                self.state_store.set_specialist_context(thread_id, 'AppActions', {'pending_provider':provider})
+                return {
+                    'changed':False, 'provider':provider, 'requires_user_selection':True,
+                    'client_effect':{'type':'settings.open','tab':'configuration','focus':f'provider-key-{provider}'},
+                    'target_kind':'conversation_runtime','target_id':thread_id,
+                    'message':f'Enter the {provider} API key in the secure field. After it is saved, I will finish switching this chat to {provider}.',
+                }
+            current_id = self.state_store.get(thread_id).selected_model
+            group = self.provider_registry.find_group(provider) if callable(getattr(self.provider_registry, 'find_group', None)) else None
+            preferred = getattr(group, 'default_id', '')
+            entry = next((model for model in models if model.id == current_id), None) or next((model for model in models if model.id == preferred), models[0])
+            arguments = {'model_id':entry.id}
         requested = str(arguments.get("model_id") or arguments.get("model") or "").strip()
         entry = self.provider_registry.resolve(requested)
         available_ids = {model.id for model in self.provider_registry.list_models()}
@@ -140,16 +160,29 @@ class SessionControlService:
             )
         previous = self.state_store.get(thread_id).selected_model
         self.state_store.set_selected_model(thread_id, entry.id)
+        self.state_store.set_specialist_context(thread_id, 'AppActions', {})
         return {
             "changed": previous != entry.id,
             "model": {"id": entry.id, "label": entry.label, "provider": entry.provider},
             "previous_model_id": previous,
             "session_control_patch": {"model_id": entry.id},
+            'session_control_conversation_id':thread_id,
             "turn_overrides": {"model": entry.id},
             "target_kind": "conversation_runtime",
             "target_id": thread_id,
             "message": f"Model set to {entry.label} for this chat.",
         }
+
+    def resume_provider_selection(self, provider: str, context: AppActionContext) -> dict[str, Any]:
+        thread_id = context.invocation_conversation_id
+        pending = self.state_store.get_specialist_context(thread_id, 'AppActions') if thread_id else {}
+        if pending.get('pending_provider') != provider:
+            return {}
+        result = self._select_model(thread_id, {'provider':provider})
+        result['provider_selection_resumed'] = bool(result.get('model'))
+        if result.get('requires_user_selection'):
+            result['message'] = f'The {provider} key was saved, but its models are not available yet. The provider switch is still pending.'
+        return result
 
     def _set_reasoning(self, thread_id: str, arguments: dict[str, Any]) -> dict[str, Any]:
         raw = str(arguments.get("mode") or "").strip()

@@ -68,6 +68,14 @@ def execute_petdex_action(
         visible = arguments.get("visible")
         if not isinstance(visible, bool):
             raise PetdexActionError("INVALID_ACTION_ARGUMENTS", "Pet visibility must be true or false.")
+        if visible and not current['active']:
+            candidates = current['installed'] or current['available']
+            if not candidates:
+                raise PetdexActionError('PET_UNAVAILABLE', 'No pet is available on this device. Install a pet first.', unavailable=True)
+            slug = candidates[0]
+            next_state['active'] = slug
+            if slug not in current['installed']:
+                next_state['installed'] = [*current['installed'], slug]
         next_state["hidden"] = not visible
         message = f"Pet {'shown' if visible else 'hidden'}."
     elif action_id == PETDEX_SIZE_SET_ACTION_ID:
