@@ -124,7 +124,7 @@ from agent.app_actions.petdex import (
 )
 from agent.conversations.lifecycle import ConversationLifecycle, ConversationLifecycleError
 from agent.conversations.sharing import ConversationShareError, ConversationShareService
-from agent.app_actions.browser import BROWSER_CONTROL_ACTION, browser_action_definitions, execute_browser_control
+from agent.app_actions.browser import BROWSER_CONTROL_ACTION, BROWSER_SETTINGS_ACTIONS, BROWSER_DATA_ACTION, browser_action_definitions, execute_browser_control, execute_browser_settings, validate_browser_settings
 from agent.plugins.contributions import (
     PluginContribution,
     PluginContributionActionError,
@@ -1895,6 +1895,8 @@ class AppActionRuntime:
             return self._dispatch_knowledge_source(request, context, definition)
         if request.action_id in PETDEX_ACTION_IDS:
             return self._dispatch_petdex_action(request, context, definition)
+        if request.action_id in BROWSER_SETTINGS_ACTIONS:
+            return self._dispatch_browser_settings(request, context, definition)
         if request.action_id == BROWSER_CONTROL_ACTION:
             try:
                 result = execute_browser_control(dict(request.arguments), context)
@@ -2855,6 +2857,23 @@ class AppActionRuntime:
             created_at=self._now(),
         )
 
+    def _dispatch_browser_settings(self, request, context, definition, *, confirmed=False):
+        try:
+            command = validate_browser_settings(request.action_id, dict(request.arguments), context)
+            if request.action_id == BROWSER_DATA_ACTION and not confirmed:
+                messages = {"delete_profile":"Delete this browser profile and its sign-ins?",
+                    "clear_data":"Clear the selected data in this profile? Its open session will close. Downloaded files will be kept.",
+                    "save_download":"Save this browser download to the selected folder?",
+                    "remove_download":"Remove this download from history? The saved file will be kept."}
+                return self._domain_confirmation_receipt(request, context, definition,
+                    target_kind="browser_profile", target_reference=command.profile_id,
+                    message=messages[command.operation])
+            result = execute_browser_settings(request.action_id, dict(request.arguments), context)
+            return self._domain_action_receipt(request, context, definition, result)
+        except (ValueError, RuntimeError) as exc:
+            return self._error_receipt(request=request, context=context, status="failed",
+                access_class=definition.access_class, error_code="BROWSER_SETTINGS_FAILED", message=str(exc), authorized=True)
+
     def _domain_confirmation_receipt(
         self,
         request: AppActionRequest,
@@ -3351,6 +3370,9 @@ class AppActionRuntime:
         if request.action_id in CONFIRMED_SETTINGS_RUNTIME_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_settings_runtime(request, context, definition, confirmed=True)
+        if request.action_id in BROWSER_SETTINGS_ACTIONS:
+            self._receipt_store.remove_confirmation(token)
+            return self._dispatch_browser_settings(request, context, definition, confirmed=True)
         if request.action_id in LIFECYCLE_CONTROL_ACTION_IDS:
             self._receipt_store.remove_confirmation(token)
             return self._dispatch_lifecycle_control(request, context, definition, confirmed=True)
@@ -4172,6 +4194,8 @@ class AppActionRuntime:
     ) -> Any:
         if schema.get("type") == "string" and not isinstance(value, str):
             raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be text.")
+        if schema.get("type") == "integer" and (isinstance(value,bool) or not isinstance(value,int) or value<schema.get('minimum',value) or value>schema.get('maximum',value)):
+            raise SurfaceActionError("INVALID_SURFACE_PROPERTY", f"{name} must be within the supported range.")
         if isinstance(value, str):
             value = value.strip()
             if len(value) < int(schema.get("minLength", 0)):
@@ -4252,7 +4276,7 @@ class AppActionRuntime:
                 aliases=["right panel", "details panel", "panel"],
                 default_presentation=SurfacePresentation(visible=False, location="right"),
                 supported_locations=["right"],
-                configurable_properties={"content":{"type":"string", "enum":["files", "browser"]}},
+                configurable_properties={"content":{"type":"string", "enum":["files", "browser"]}, "chat_ratio":{"type":"integer","minimum":20,"maximum":75}},
             ),
             UISurfaceDefinition(
                 reference="composer", owner="control-kernel", title="Composer",

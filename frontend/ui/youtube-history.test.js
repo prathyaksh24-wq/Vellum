@@ -114,12 +114,12 @@ test('a fresh chat open request can reveal an existing session after a reload', 
 
 test.each([false,true])('sidebar opens explicitly and a dismissal cancels a pending opening: %s', async cancelled=> {
   const html = readFileSync(resolve('../design/Velllum/uploads/Vellum Default Re-designed.html'), 'utf8');
-  const body = html.match(/browserAvailable=\{browserFeature\} onBrowser=\{async \(\) => \{([\s\S]*?)\n                \}\}\/>/)[1];
+  const body = html.match(/const openBrowser = async \(\) => \{([\s\S]*?)\n  \};/)[1];
   let resolveStatus;
   const refresh = vi.fn().mockImplementationOnce(()=>new Promise(resolve=>{resolveStatus=resolve;})).mockResolvedValue({running:true});
   const control = vi.fn(async()=>({status:'applied'})), present = vi.fn(), epoch = {current:0};
-  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast',
-    'return async()=>{' + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn());
+  const open = Function('API','browserSuppressed','browserRequestEpoch','dispatchSurfacePresentation','refreshBrowser','activeChatId','pushToast','setBrowserFeature',
+    'return async()=>{' + body + '}')({browser:{control}}, {current:false},epoch,present,refresh,'chat',vi.fn(),vi.fn());
   const pending = open();
   expect(present).toHaveBeenCalledWith('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'});
   if (cancelled) epoch.current += 1;

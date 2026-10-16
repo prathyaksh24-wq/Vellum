@@ -109,6 +109,13 @@
         return receipt;
       });
     },
+    settings: function () { return client.request('/api/browser/settings'); },
+    linkDestination: function (url, preferences) {
+      var target = new URL(url);
+      if (!['http:', 'https:'].includes(target.protocol)) throw new Error('Open an http or https website.');
+      var local = ['localhost','127.0.0.1','[::1]'].includes(target.hostname.toLowerCase());
+      return (preferences || {})[local ? 'local_link_destination' : 'web_link_destination'] || 'default';
+    },
     point: function (rect, frame, clientX, clientY) {
       var scale = Math.min(rect.width / frame.width, rect.height / frame.height);
       var x = (clientX - rect.left - (rect.width - frame.width * scale) / 2) / scale;

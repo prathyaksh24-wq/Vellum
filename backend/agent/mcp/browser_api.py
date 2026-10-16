@@ -3,11 +3,20 @@ import asyncio
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
-from agent.contracts.browser import BrowserFrame, BrowserStatus, BrowserAddressSuggestions
+from agent.contracts.browser import BrowserFrame, BrowserStatus, BrowserAddressSuggestions, BrowserSettingsView
 from agent.mcp.playwright_tools import browser_session
 from agent.mcp.browser_suggestions import search_completions
 
 router = APIRouter(prefix="/browser", tags=["browser"])
+
+
+@router.get("/settings", response_model=BrowserSettingsView)
+def settings(response: Response):
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return browser_session("settings")
+    except Exception:
+        raise HTTPException(503, "Browser settings are unavailable. Retry shortly.") from None
 
 
 @router.get("/suggestions", response_model=BrowserAddressSuggestions)

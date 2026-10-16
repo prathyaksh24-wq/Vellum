@@ -15,6 +15,8 @@
 <script src="api/browser.js"></script>
 <link rel="stylesheet" href="components/browser-panel.css"/>
 <script type="text/babel" data-presets="react" src="components/browser-panel.jsx"></script>
+<link rel="stylesheet" href="components/browser-settings.css"/>
+<script type="text/babel" data-presets="react" src="components/browser-settings.jsx"></script>
 <script src="api/conversations.js"></script>
 <script src="api/plugins.js"></script>
 <script src="components/spotify-playback.js"></script>
@@ -3211,7 +3213,7 @@ const Sidebar = ({chats, conversationLibrary, projects, activeChatId, view, rena
           <button className={'sb-row' + (view === 'kg' ? ' active' : '')} onClick={() => onNav('kg')}><span className="sb-ic"><IcGraph/></span>Knowledge graph</button>
           <button className={'sb-row' + (view === 'skills' ? ' active' : '')} onClick={() => onNav('skills')}><span className="sb-ic"><IcSkills/></span>Skills</button>
           <button className={'sb-row' + (view === 'music' ? ' active' : '')} onClick={() => onNav('music')}><span className="sb-ic"><img className="music-nav-icon" src="assets/music/icons/music.svg" alt=""/></span>Music</button>
-          {browserAvailable && <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>}
+          <button className="sb-row" onClick={onBrowser}><span className="sb-ic"><IcGlobe/></span>Browser</button>
           <button className="sb-row" aria-expanded={moreOpen} aria-controls="sidebar-more" onClick={() => setMoreOpen(!moreOpen)}><span className="sb-ic"><IcDots/></span>More<span className={'browser-more-arrow' + (moreOpen ? ' open' : '')}><IcChevR size={13}/></span></button>
         </div>
         {!moreOpen && <section className="sidebar-recent" aria-label="Recent chats"><h2>Recent</h2>{sorted.slice(0,8).map(chat => <ChatRow key={chat.id} chat={chat} active={view === 'chat' && chat.id === activeChatId}
@@ -3350,7 +3352,7 @@ const RailFly = ({btn, keepOpen, children}) => {
   );
 };
 
-const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject}) => {
+const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand, onNewChat, onSearch, onNav, onProfile, onOpenChat, onChatMenu, onOpenAgent, onNewProject, onProjectMenu, onOpenProject, onBrowser}) => {
   const recents = visibleChats(chats).slice(0, 10);
   const pinned = chats.filter(c => c.pinned && !c.archived && !c.projectId);
   return (
@@ -3358,6 +3360,7 @@ const Rail = ({view, profile, chats, projects, menuOpen, activeAgentId, onExpand
       <div className="rail-logo" title="Home ? Ctrl+Shift+H" onClick={onNewChat}><div className="rail-dot"/></div>
       <div className="rail-scroll">
       <button className="rail-btn" title="Expand sidebar ? Ctrl+Shift+S" onClick={onExpand}><IcPanel size={17}/></button>
+      <button className="rail-btn" title="Browser" aria-label="Browser" onClick={onBrowser}><IcGlobe size={17}/></button>
       <RailFly keepOpen={menuOpen} btn={<button className="rail-btn" title="Recent chats"><IcChat size={17}/></button>}>
         <div className="fly-head">Recents</div>
         {recents.length === 0 && <div className="sb-empty">No chats yet.</div>}
@@ -7565,7 +7568,7 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, onAdaptiveRuleAction, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, onAdaptiveRuleAction, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
@@ -7655,6 +7658,7 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
     {k: 'Plugins', ic: <IcPlugins size={14}/>},
     {k: 'Automations', ic: <IcSparkle size={14}/>},
     {k: 'Petdex', ic: <I d="M12 20s-7-4.6-9.2-8.6C1.2 8.6 3.2 5 6.6 5c2 0 3.6 1.1 4.6 2.7C12.2 6.1 13.8 5 15.8 5c3.4 0 5.4 3.6 3.6 6.4C19 15.4 12 20 12 20z" size={14}/>},
+    {k: 'Browser', ic: <IcGlobe size={14}/>},
     {k: 'Computer use', ic: <IcTerminal size={14}/>},
     {k: 'Shortcuts', ic: <I d="M3 6h18v12H3z M7 10h.01 M11 10h.01 M15 10h.01 M7 14h10" size={14}/>},
   ];
@@ -7888,6 +7892,7 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
           {tab === 'Petdex' && (
             <PetdexTab manifest={petManifest} loading={petLoading} error={petError} installed={petInstalled} active={petActive} size={petSize} hidden={petHidden} onToggleInstall={onPetToggleInstall} onSetActive={onPetSetActive} onSize={onPetSize} onHidden={onPetHidden}/>
           )}
+          {tab === 'Browser' && <window.VellumUI.BrowserSettings onAction={onBrowserSettings} onConfirm={onConfirmBrowserSettings} onCancel={onCancelBrowserSettings} onRefresh={onRefreshBrowser}/>}
           {tab === 'Computer use' && (
             <React.Fragment>
               <div className="set-h">Computer use</div>
@@ -8624,6 +8629,12 @@ const mergeConversationRecords = (current, serverConversations) => {
 const App = () => {
   const [musicPageTarget, setMusicPageTarget] = useState(null);
   const navigationEpochRef = useRef(0);
+  const browserLinkHandler = useRef(null);
+  useEffect(() => {
+    const handle = event => browserLinkHandler.current?.(event);
+    document.addEventListener('click', handle, true);
+    return () => document.removeEventListener('click', handle, true);
+  }, []);
   const [browserFeature, setBrowserFeature] = useState(false);
   const [browserState, setBrowserState] = useState({available:false, running:false, control:'closed', tabs:[], downloads:[]});
   const browserSeenSession = useRef(null);
@@ -9426,7 +9437,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
-      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : err?.vellumPlaybackError ? err.message : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}));
+      updateAgentTurn(agent.id, convoId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : API.chat.failureMessage(err), phase:'done', streaming: false}));
     }
   };
   const sendToAgent = (text, attach, opts = {}) => {
@@ -10005,7 +10016,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     } catch (err) {
       finishTurn(assistantId);
       const aborted = err && (err.name === 'AbortError' || String(err.message || '').toLowerCase().includes('abort'));
-      updateTurn(chatId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : err?.vellumPlaybackError ? err.message : 'Backend unreachable. Start the Vellum API and try again.', phase:'done', streaming: false}), true);
+      updateTurn(chatId, assistantId, m => ({...m, text: aborted ? (m.text || 'Stopped.') : API.chat.failureMessage(err), phase:'done', streaming: false}), true);
     }
   };
 
@@ -10215,6 +10226,10 @@ const [slashSkills, setSlashSkills] = useState([]);
     });
   };
   const applyAppActionReceipt = (receipt, options = {}) => {
+    if (receipt?.status === 'applied' && receipt.action_id?.startsWith('browser.settings.')) {
+      if (receipt.result?.running === false) hideBrowserPanel();
+      refreshBrowser().catch(() => {});
+    }
     if (receipt?.status === 'applied' && receipt.action_id === 'spotify.playlist.edit') {
       if (receipt.result?.removed && musicCollectionRef.current === 'spotify:playlist:' + receipt.result.playlist_id) musicCollectionRef.current = '';
       window.dispatchEvent(new CustomEvent('vellum:spotify-library-refresh', {detail:receipt.result}));
@@ -10437,6 +10452,29 @@ const [slashSkills, setSlashSkills] = useState([]);
       return null;
     }
   };
+  const openBrowser = async () => {
+    setBrowserFeature(true);
+                  try {
+                    const requestEpoch = ++browserRequestEpoch.current;
+                    browserSuppressed.current = false;
+                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
+                    const status = await refreshBrowser();
+                    if (requestEpoch !== browserRequestEpoch.current) return;
+                    if (status.available && (!status.running || !status.presentation_requested)) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
+                    if (requestEpoch === browserRequestEpoch.current) return await refreshBrowser();
+                  } catch (error) { pushToast(error.message); return null; }
+
+  };
+  browserLinkHandler.current = event => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest?.('a[href]');
+    if (!link || link.hasAttribute('download') || link.closest('.browser-settings')) return;
+    let destination;
+    try { destination = API.browser.linkDestination(link.href, browserState.preferences); } catch (_) { return; }
+    if (destination !== 'vellum') return;
+    event.preventDefault(); event.stopPropagation();
+    openBrowser().then(status => status?.running ? API.browser.control({operation:'new_tab',url:link.href}) : null).then(refreshBrowser).catch(error => pushToast(error.message));
+  };
   const hideBrowserPanel = () => {
     browserRequestEpoch.current += 1;
     browserSuppressed.current = true;
@@ -10607,7 +10645,7 @@ const [slashSkills, setSlashSkills] = useState([]);
         <AppBackground/>
         {view !== '404' && <React.Fragment>
         <SkillNotificationStack onOpenSkills={() => nav('skills')} maxVisible={3}/>
-        <div className={'body' + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')}>
+        <div className={'body' + (browserPanelVisible && view !== 'music' ? ' browser-active' : '')} style={{'--browser-chat-share':workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38}}>
           {sidebarPinned && <Sidebar chats={chats} conversationLibrary={conversationLibrary} projects={projects} activeChatId={activeChatId} view={view}
                 renamingId={renamingId} projRenamingId={projRenamingId} profile={profile}
                 secOpen={secOpen} expandedProj={expandedProj} onToggleSec={toggleSec} onToggleProj={toggleProj}
@@ -10619,20 +10657,10 @@ const [slashSkills, setSlashSkills] = useState([]);
                 onNewProject={newProject}
                 onProjectMenu={(id, e) => setMenu({type: 'project', id, x: e.clientX, y: e.clientY})}
                 onProjectRename={renameProject} onOpenProject={openProject}
-                browserAvailable={browserFeature} onBrowser={async () => {
-                  try {
-                    const requestEpoch = ++browserRequestEpoch.current;
-                    browserSuppressed.current = false;
-                    dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'browser'}}, {notify:false,persistence:'session'});
-                    const status = await refreshBrowser();
-                    if (requestEpoch !== browserRequestEpoch.current) return;
-                    if (!status.running && status.available) await API.browser.control({operation:'open'}, {invocation_conversation_id:activeChatId || ''});
-                    if (requestEpoch === browserRequestEpoch.current) await refreshBrowser();
-                  } catch (error) { pushToast(error.message); }
-                }}/>}
+                browserAvailable={browserFeature} onBrowser={openBrowser}/>}
 
           {!sidebarPinned && <Rail view={view} profile={profile} chats={chats} projects={projects} menuOpen={!!menu}
-            onExpand={() => dispatchSidebarVisibility(true, {learn:true})} onNewChat={newChat} onSearch={() => openSearch()}
+            onBrowser={openBrowser} onExpand={() => dispatchSidebarVisibility(true, {learn:true})} onNewChat={newChat} onSearch={() => openSearch()}
             onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY, preferLeft: true})}
             onNav={navigateFromControl} onProfile={openProfileMenu} onOpenChat={openChat} activeAgentId={activeAgentId} onOpenAgent={openAgent}
             onNewProject={newProject} onOpenProject={openProject}
@@ -10670,8 +10698,9 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
             {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
+          {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
-            onHide={hideBrowserPanel}
+            onHide={hideBrowserPanel} onSettings={() => {setSettingsTab('Browser');dispatchSurfacePresentation('settings',{visible:true},{notify:false});}}
             context={{invocation_conversation_id:activeChatId || ''}} onReceipt={receipt => {
               if (receipt.status === 'applied' && receipt.result?.control === 'closed' && receipt.result?.running === false) browserSuppressed.current = false;
               applyAppActionReceipt(receipt, {notify:false});
@@ -10717,6 +10746,11 @@ const [slashSkills, setSlashSkills] = useState([]);
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
         {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} workspaceLayout={workspaceLayout} onSurfaceChange={(reference, presentation) => dispatchSurfacePresentation(reference, presentation, {learn:true})} onLayoutReset={resetWorkspaceLayout} onAdaptiveRuleAction={dispatchAdaptiveRuleAction} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+          onBrowserSettings={async (actionId,args) => {
+            const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
+            if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
+            return receipt;
+          }} onConfirmBrowserSettings={confirmAppAction} onCancelBrowserSettings={cancelAppAction} onRefreshBrowser={refreshBrowser}
           feeds={feeds} onToggleFeed={toggleFeed}
           cu={cuEnabled} onCu={setCuEnabled}
           onMemoryChanged={refreshMemoryData}

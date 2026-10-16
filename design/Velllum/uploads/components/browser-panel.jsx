@@ -1,5 +1,46 @@
 (function () {
   const {useState, useEffect, useLayoutEffect, useRef} = React;
+  function BrowserCursorGraphic({preferences={}, size}) {
+    const style=preferences.cursor_style || 'classic';
+    const width=size || preferences.cursor_size || 28;
+    if (style==='custom' && preferences.cursor_image?.startsWith('data:image/png;base64,')) return <img src={preferences.cursor_image} width={width} height={width} alt=""/>;
+    const colors={classic:['#20252b','#ffffff'],light:['#ffffff','#20252b'],ember:['#ff8655','#332016'],mint:['#7ce8bd','#12372c'],pixel:['#fff5cf','#252525']};
+    const [fill,stroke]=colors[style] || colors.classic;
+    return <svg width={width} height={width} viewBox="0 0 32 32" aria-hidden="true"><path d={style==='pixel' ? 'M3 2h4v4h4v4h4v4h4v4h-8v4H7v-8H3Z' : 'M3 2 24 18l-10 1-5 9Z'} fill={fill} stroke={stroke} strokeWidth="1.6" strokeLinejoin="round"/></svg>;
+  }
+  function pointerLayout(frame,width,height,preferences={}) {
+    const scale=Math.min(width/frame.width,height/frame.height);
+    const size=preferences.cursor_size || 28;
+    return {width:frame.width*scale,height:frame.height*scale,
+      x:frame.pointer.x*scale-(preferences.cursor_style==='custom'?(preferences.cursor_hotspot_x||0):size*3/32),
+      y:frame.pointer.y*scale-(preferences.cursor_style==='custom'?(preferences.cursor_hotspot_y||0):size*2/32)};
+  }
+  function BrowserSplitter({value=38,onChange}) {
+    const ref=useRef(null),drag=useRef(null);
+    const [position,setPosition]=useState(value);
+    useEffect(()=>setPosition(value),[value]);
+    useEffect(()=>()=>{ref.current?.parentElement?.classList.remove('browser-resizing');},[]);
+    const apply=(x,commit=false)=>{
+      const body=ref.current?.parentElement;
+      if (!body) return;
+      const main=body.querySelector(':scope > .main'),panel=body.querySelector(':scope > .browser-panel');
+      if (!main || !panel) return;
+      const left=main.getBoundingClientRect().left,total=main.clientWidth+panel.clientWidth+ref.current.offsetWidth;
+      if (total<620) return;
+      const percent=Math.round(Math.max(280,Math.min(total-320,x-left))/total*100);
+      const next=Math.max(20,Math.min(75,percent));
+      body.style.setProperty('--browser-chat-share',next);setPosition(next);
+      if (commit) onChange(next);
+      return next;
+    };
+    return <div ref={ref} className="browser-splitter" role="separator" aria-label="Resize chat and browser" aria-orientation="vertical" aria-valuemin="20" aria-valuemax="75" aria-valuenow={position} tabIndex="0"
+      onPointerDown={event=>{if(event.button!==0)return;event.preventDefault();drag.current=event.clientX;event.currentTarget.setPointerCapture?.(event.pointerId);event.currentTarget.parentElement.classList.add('browser-resizing');}}
+      onPointerMove={event=>{if(drag.current!==null){drag.current=event.clientX;apply(event.clientX);}}}
+      onPointerUp={event=>{if(drag.current!==null){apply(event.clientX,true);drag.current=null;event.currentTarget.parentElement.classList.remove('browser-resizing');event.currentTarget.releasePointerCapture?.(event.pointerId);}}}
+      onPointerCancel={()=>{drag.current=null;ref.current.parentElement.classList.remove('browser-resizing');ref.current.parentElement.style.setProperty('--browser-chat-share',value);setPosition(value);}}
+      onDoubleClick={()=>onChange(38)}
+      onKeyDown={event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?38:Math.max(20,Math.min(75,position+(event.key==='ArrowLeft'?-2:2)));setPosition(next);onChange(next);}}><span/></div>;
+  }
   const assets = 'assets/browser-home/';
   const Icon = ({name, size=16}) => <span className="browser-glyph" aria-hidden="true" style={{width:size, height:size, maskImage:`url("${assets}icons/${name}.svg")`, WebkitMaskImage:`url("${assets}icons/${name}.svg")`}}/>;
   const BrandIcon = ({engine, size=20}) => engine.mask ? <span className={'browser-brand-icon brand-' + engine.id} aria-hidden="true" style={{width:size, height:size, maskImage:`url("${assets}${engine.icon}")`, WebkitMaskImage:`url("${assets}${engine.icon}")`}}/> : <img className="browser-brand-icon" src={assets + engine.icon} width={size} height={size} alt=""/>;
@@ -162,9 +203,10 @@
     </section>;
   }
 
-  function BrowserPanel({state, onRefresh, onHide, context, onReceipt}) {
+  function BrowserPanel({state, onRefresh, onHide, context, onReceipt, onSettings}) {
     const api = window.VellumApi.browser;
     const [frame, setFrame] = useState(null);
+    const [localPointer,setLocalPointer]=useState(null);
     const [error, setError] = useState('');
     const [viewError, setViewError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -193,6 +235,7 @@
     const hoverInFlight = useRef(false);
     const takingOver = useRef(false);
     const editingAddress = useRef(false);
+    const focusingBlankAddress = useRef(false);
     const closing = useRef(false);
     const started = useRef(false);
     const current = useRef({state, frame});
@@ -202,6 +245,11 @@
     const preferences = state.preferences || api.defaultPreferences || fallbackPreferences;
     const engines = api.engines || fallbackEngines;
     const engine = engines.find(item => item.id === preferences.search_engine) || engines[0];
+    const displayAddress = url => {
+      if (!url || url === 'about:blank') return '';
+      if (preferences.show_full_url !== false) return url;
+      try { return new URL(url).host; } catch (_) { return url; }
+    };
     const queries = completions.query === addressQuery && completions.engine === engine.id && preferences.suggestions_enabled !== false ? completions.items : [];
     const suggestions = addressQuery.trim() ? api.addressSuggestions?.(addressQuery, state.tabs, preferences.shortcuts, history, preferences, queries) || [] : [];
     selectedAddressItem.current = suggestions[selectedSuggestion] || null;
@@ -226,7 +274,9 @@
     const focusAddress = (empty=false) => {
       if (empty) setAddress('');
       editingAddress.current = true;
+      focusingBlankAddress.current = empty;
       addressRef.current?.focus({preventScroll:true});
+      focusingBlankAddress.current = false;
       if (!empty) addressRef.current?.select();
       setAddressQuery(empty ? '' : addressRef.current?.value || '');
       setAddressOpen(false); setSelectedSuggestion(-1);
@@ -266,11 +316,11 @@
       if (handled) { event.preventDefault(); event.stopPropagation(); }
     };
     useEffect(() => {
-      if (!editingAddress.current) setAddress(active?.url === 'about:blank' ? '' : active?.url || '');
-    }, [active?.url, active?.id]);
+      if (!editingAddress.current) setAddress(displayAddress(active?.url));
+    }, [active?.url, active?.id, preferences.show_full_url]);
     useEffect(() => {
       if (home) { setFrame(null); setViewError(''); return; }
-      let cancelled = false, timer, reconnect, stopStream, streaming = false;
+      let cancelled = false, timer, reconnect, stopStream, streaming = false, lastStreamFrame = 0;
       const display = next => {
         if (cancelled || next.tab_id !== current.current.state.active_tab_id) return;
         current.current.frame = next;
@@ -285,11 +335,13 @@
           clearTimeout(reconnect);
           if (!cancelled) reconnect = setTimeout(connect, 1500);
         };
-        try { stopStream = api.stream(next => { streaming = true; display(next); }, retry); }
+        try { stopStream = api.stream(next => { streaming = true; lastStreamFrame = Date.now(); display(next); }, retry); }
         catch (_) { retry(); } // HTTP frames remain available if sockets are blocked.
       };
       const refresh = async () => {
-        if (!cancelled && !streaming && state.running && state.active_tab_id && !document.hidden) {
+        // An idle socket and a stalled socket both stop sending pixels. Sample
+        // HTTP frames after a quiet interval so pointer-only changes still arrive.
+        if (!cancelled && (!streaming || Date.now() - lastStreamFrame > 1200) && state.running && state.active_tab_id && !document.hidden) {
           try {
             const next = await api.frame();
             display(next);
@@ -405,6 +457,8 @@
       });
     };
     const hover = event => {
+      const bounds=event.currentTarget.getBoundingClientRect();
+      setLocalPointer({x:event.clientX-bounds.left,y:event.clientY-bounds.top});
       if (home || !state.running || !frame || frame.tab_id !== state.active_tab_id || event.buttons) return;
       const point = api.point(event.currentTarget.getBoundingClientRect(), frame, event.clientX, event.clientY);
       if (!point) return;
@@ -514,7 +568,7 @@
           <button type="button" className="browser-icon" title="Reload" onClick={() => command('reload')} disabled={!active || busy}><Icon name="reload"/></button>
           <button type="button" className="browser-icon" title="Home" onClick={() => command('navigate', {url:'about:blank'})}><Icon name="home"/></button>
           <div className="browser-omnibox-wrap">
-            <label className="browser-omnibox"><BrandIcon engine={engine} size={16}/><input ref={addressRef} aria-label="Browser address" aria-keyshortcuts="Alt+L" role="combobox" aria-autocomplete="both" aria-expanded={addressOpen && suggestions.length > 0} aria-controls="browser-address-suggestions" aria-activedescendant={addressOpen && selectedSuggestion >= 0 ? 'browser-suggestion-' + selectedSuggestion : undefined} autoComplete="off" placeholder={'Search ' + engine.name + ' or enter address'} value={address} onFocus={() => { editingAddress.current = true; setAddressQuery(addressRef.current?.value || ''); setAddressOpen(false); setSelectedSuggestion(-1); addressRef.current?.select(); }} onBlur={() => { editingAddress.current = false; setAddressOpen(false); if (!address.trim()) setAddress(active?.url === 'about:blank' ? '' : active?.url || ''); }} onChange={changeAddress} onKeyDown={addressKeyDown} spellCheck={false}/></label>
+            <label className="browser-omnibox"><BrandIcon engine={engine} size={16}/><input ref={addressRef} aria-label="Browser address" aria-keyshortcuts="Alt+L" role="combobox" aria-autocomplete="both" aria-expanded={addressOpen && suggestions.length > 0} aria-controls="browser-address-suggestions" aria-activedescendant={addressOpen && selectedSuggestion >= 0 ? 'browser-suggestion-' + selectedSuggestion : undefined} autoComplete="off" placeholder={'Search ' + engine.name + ' or enter address'} value={address} onFocus={() => { editingAddress.current = true; if (!focusingBlankAddress.current && address === displayAddress(active?.url)) setAddress(active?.url === 'about:blank' ? '' : active?.url || ''); setAddressQuery(addressRef.current?.value || ''); setAddressOpen(false); setSelectedSuggestion(-1); addressRef.current?.select(); }} onBlur={() => { editingAddress.current = false; setAddressOpen(false); if (!address.trim() || address === active?.url) setAddress(displayAddress(active?.url)); }} onChange={changeAddress} onKeyDown={addressKeyDown} spellCheck={false}/></label>
             {addressOpen && suggestions.length > 0 && <div className="browser-suggestions" id="browser-address-suggestions" role="listbox" aria-label="Address suggestions">
               {suggestions.map((item,index) => <button type="button" className="browser-suggestion" id={'browser-suggestion-' + index} key={item.kind + ':' + item.url} role="option" aria-selected={index === selectedSuggestion} onPointerDown={event => event.preventDefault()} onClick={() => chooseSuggestion(item)}>
                 {['search','query'].includes(item.kind) ? <Icon name="search" size={16}/> : <ShortcutIcon url={item.url}/>}
@@ -527,7 +581,7 @@
           <button type="button" className="browser-icon" title="Downloads" aria-expanded={downloadsOpen} onClick={() => { setDownloadsOpen(!downloadsOpen); setMoreOpen(false); }}><Icon name="download"/></button>
         </form>
       </>
-      {moreOpen && <section className="browser-session-menu" aria-label="Browser session menu"><strong>Brave session</strong><p>Separate session · On this device</p><label><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Sends what you type to {engine.name}. History stays on this device.</p><button className="browser-button" onClick={closeWindow}><Icon name="close"/>Close session</button></section>}
+      {moreOpen && <section className="browser-session-menu" aria-label="Browser session menu"><strong>{preferences.profiles?.find(profile => profile.id===preferences.active_profile_id)?.name || 'Brave session'}</strong><p>Separate session · On this device</p><label><input type="checkbox" checked={preferences.suggestions_enabled !== false} onChange={event => command('preferences', {suggestions_enabled:event.target.checked})}/>Search suggestions</label><p>Sends what you type to {engine.name}. History stays on this device.</p><button className="browser-button" onClick={() => {setMoreOpen(false);onSettings?.();}}>Browser settings</button><button className="browser-button" onClick={closeWindow}><Icon name="close"/>Close session</button></section>}
       {downloadsOpen && <section className="browser-downloads" aria-label="Browser downloads">
         <div className="browser-downloads-head"><strong>Downloads</strong><button className="browser-icon" title="Close downloads" onClick={() => setDownloadsOpen(false)}><Icon name="close"/></button></div>
         {state.downloads.length ? state.downloads.map(file => <div className="browser-download" key={file.id}>
@@ -538,6 +592,7 @@
       {(error || viewError || active?.error) && <div className="browser-error" role="alert">{error || viewError || active.error}<button className="browser-link" onClick={() => onRefresh()}>Refresh</button></div>}
       <div ref={screenRef} className={'browser-screen' + (manual ? ' manual' : '') + (home ? ' browser-screen-home' : '')} tabIndex={state.running && !home ? 0 : -1} role="region" aria-label={home ? 'Browser homepage' : manual ? 'Browser page. Click to focus a field, then type. Tab leaves the preview.' : 'Live browser page. Click to take control.'}
         onPointerDown={click} onPointerMove={hover} onPointerLeave={() => {
+          setLocalPointer(null);
           clearTimeout(hoverTimer.current); hoverTimer.current = null; hoverPending.current = null;
           if (!home && frame && frame.tab_id === state.active_tab_id) command('hover', {x:0,y:0,frame_id:frame.frame_id});
         }} onKeyDown={keyDown} onWheel={event => {
@@ -554,9 +609,14 @@
         onPaste={event => { if (!home && manual) { event.preventDefault(); flushText(); command('type', {text:event.clipboardData.getData('text/plain').slice(0,10000)}); } }}
         onCompositionEnd={event => { if (!home && manual && event.data) { flushText(); command('type', {text:event.data}); } }}>
         {home ? <BrowserHome key={homeGeneration} api={api} preferences={preferences} engine={engine} engines={engines} command={command}/> : frame && state.running && frame.tab_id === state.active_tab_id ? <img src={frame.data_url} alt="Live view of the dedicated browser tab" draggable={false}/> : <div className="browser-empty"><Icon name="globe" size={32}/><h2>{active?.loading ? 'Loading page…' : 'Your browser is ready'}</h2><p>{state.reason || (active?.loading ? 'You can open another tab while this site loads.' : 'Enter a website above or ask Vellum to browse.')}</p></div>}
+        {localPointer && (manual || home) && preferences.cursor_style && preferences.cursor_style!=='classic' && <div className="browser-local-pointer" aria-hidden="true" style={{left:localPointer.x-(preferences.cursor_hotspot_x||0),top:localPointer.y-(preferences.cursor_hotspot_y||0)}}><BrowserCursorGraphic preferences={preferences}/></div>}
+        {!home && state.control==='agent' && frame?.pointer?.tab_id===state.active_tab_id && (()=>{const layout=pointerLayout(frame,screenRef.current?.clientWidth || frame.width,screenRef.current?.clientHeight || frame.height,preferences);return <div className="browser-agent-pointer-layer" role="img" aria-label={'Agent cursor: '+frame.pointer.action} style={{width:layout.width,height:layout.height}}><div className="browser-agent-pointer" style={{left:layout.x,top:layout.y}}><BrowserCursorGraphic preferences={preferences}/><span>{frame.pointer.action==='click'?'Click':frame.pointer.action==='type'?'Type':frame.pointer.action==='scroll'?'Scroll':'Agent'}</span></div></div>;})()}
       </div>
     </aside>;
   }
   window.VellumUI = window.VellumUI || {};
+  window.VellumUI.BrowserSplitter = BrowserSplitter;
+  window.VellumUI.BrowserCursorGraphic = BrowserCursorGraphic;
+  window.VellumUI.browserPointerLayout = pointerLayout;
   window.VellumUI.BrowserPanel = BrowserPanel;
 })();

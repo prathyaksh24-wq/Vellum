@@ -978,7 +978,7 @@ class _PlaywrightMcpClient:
             self._dedicated = None
 
     async def session(self, operation: str, arguments: dict[str, Any] | None = None) -> Any:
-        from agent.contracts.browser import BrowserControl, BrowserStatus
+        from agent.contracts.browser import BrowserControl, BrowserStatus, BrowserSettingsCommand
         from agent.mcp.dedicated_browser import DedicatedBrowser, browser_readiness
 
         if operation == "suggestions":
@@ -988,6 +988,12 @@ class _PlaywrightMcpClient:
                 preferences = self._dedicated._browser_preferences() if self._dedicated is not None else DedicatedBrowser.read_preferences()
                 return result, preferences
             return result
+        # A running page action must not freeze its already available live view.
+        # Read cached pixels only; lifecycle/viewport setup remains serialized.
+        if operation == "frame" and self._dedicated is not None and self._lock_for_current_loop().locked():
+            cached = self._dedicated.cached_frame()
+            if cached is not None:
+                return cached
         async with self._lock_for_current_loop():
             if operation == "youtube_history" and self._busy:
                 return {"status": "browser_busy"}
@@ -996,18 +1002,54 @@ class _PlaywrightMcpClient:
                 ready, reason = browser_readiness()
                 return BrowserStatus(available=ready, reason=reason, preferences=DedicatedBrowser.read_preferences())
             if self._dedicated is None:
-                if operation != "youtube_history" and (operation != "control" or (arguments or {}).get("operation") != "open"):
+                if operation not in {"youtube_history", "settings", "manage", "agent_open"} and (operation != "control" or (arguments or {}).get("operation") not in {"open", "preferences"}):
                     raise ValueError("Open the dedicated browser first.")
                 await self.close()
                 self._dedicated = DedicatedBrowser()
             self._last_activity = time.monotonic()
+            if operation == "settings":
+                return await self._dedicated.settings_view()
+            if operation == "manage":
+                return await self._dedicated.manage_settings(BrowserSettingsCommand.model_validate(arguments or {}))
+            if operation == "agent_open":
+                return await self._dedicated.request_agent_control()
+            if operation == "permission":
+                from agent.mcp.browser_settings import site_origin
+                from urllib.parse import urlsplit
+                url = str((arguments or {}).get("url") or "about:blank")
+                parsed = urlsplit(url)
+                origin = site_origin(parsed.scheme + "://" + parsed.netloc) if url != "about:blank" else url
+                policy = self._dedicated.agent_policy(url)
+                if policy == "ask" and origin in self._dedicated._approved_origins:
+                    policy = "allow"
+                return {"permission":policy}
+            if operation == "confirmed_navigation":
+                from agent.mcp.dedicated_browser import navigation_url
+                from agent.mcp.browser_settings import site_origin
+                from urllib.parse import urlsplit
+                from agent.contracts.browser import BrowserNavigationApproval
+                payload = BrowserNavigationApproval.model_validate(arguments or {})
+                if not payload.confirm:
+                    raise ValueError("Browsing this site requires explicit confirmation.")
+                url = navigation_url(payload.url)
+                if self._dedicated.control != "agent" or payload.snapshot_id != self._dedicated.snapshot_id or payload.session_id != self._dedicated.session_id:
+                    raise ValueError("The browser changed. Ask BrowserAgent to review this site again.")
+                if self._dedicated.agent_policy(url) == "block":
+                    raise ValueError("BrowserAgent is blocked for this site in Browser settings.")
+                parsed = urlsplit(url)
+                self._dedicated._approved_origins.add(site_origin(parsed.scheme + "://" + parsed.netloc))
+                return await self._dedicated.tool({"action":"navigate", "url":url})
             if operation == "youtube_history":
-                return await self._dedicated.youtube_history(url=(arguments or {}).get("url"))
+                if self._dedicated._browser_preferences().agent_history == "block":
+                    return {"status":"history_access_blocked"}
+                payload = arguments or {}
+                options = {"day_label":payload['day_label']} if payload.get('day_label') else {}
+                return await self._dedicated.youtube_history(url=payload.get("url"), **options)
             if operation == "status":
                 return await self._dedicated.status()
             if operation == "frame":
                 return await self._dedicated.frame()
-            if operation == "confirmed":
+            if operation in {"confirmed", "routine"}:
                 payload = arguments or {}
                 if not _mutations_allowed():
                     raise ValueError("Enable PLAYWRIGHT_MCP_ALLOW_MUTATIONS for confirmed browser interactions.")
@@ -1016,6 +1058,13 @@ class _PlaywrightMcpClient:
                 params = dict(payload.get("params") or {})
                 if params.get("action") not in {"click", "type", "press_key"}:
                     raise ValueError("Unsupported confirmed browser interaction.")
+                if operation == "routine":
+                    if self._dedicated._browser_preferences().agent_interactions != "allow":
+                        raise ValueError("Routine browser interactions require approval in Browser settings.")
+                    await self._dedicated.verify_routine_target(params)
+                    if await self._dedicated.sensitive_interaction(params):
+                        return {"requires_confirmation":True}
+                    return {"observation":await self._dedicated.tool(params)}
                 await self._dedicated.verify_snapshot()
                 return await self._dedicated.tool(params)
             return await self._dedicated.ui_control(BrowserControl.model_validate(arguments or {}))

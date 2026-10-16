@@ -114,7 +114,11 @@
     if (handlers && handlers.playbackRequest) await handlers.playbackRequest.ready;
     if (controller.signal.aborted) throw new DOMException('Stopped.', 'AbortError');
     var response = await fetch(client.backendBase() + "/api/chat/stream", client.jsonOptions("POST", payload, controller.signal));
-    if (!response.ok || !response.body) throw new Error("Backend stream failed: HTTP " + response.status);
+    if (!response.ok || !response.body) {
+      var failure = new Error("Backend stream failed: HTTP " + response.status);
+      failure.vellumHttpStatus = response.status;
+      throw failure;
+    }
     var reader = response.body.getReader();
     var decoder = new TextDecoder();
     var buffer = "";
@@ -356,5 +360,13 @@
     return { abort: function () { controller.abort(); } };
   }
 
-  window.VellumApi.chat = { stream: stream };
+  function failureMessage(error) {
+    if (error && error.vellumPlaybackError) return error.message;
+    if (error && error.vellumHttpStatus) return 'Vellum API returned HTTP ' + error.vellumHttpStatus + '. Try again shortly.';
+    if (error && error.name === 'TypeError' && /fetch|network|load failed|terminated/i.test(error.message || '')) {
+      return 'Backend unreachable. Check the Vellum API connection and try again.';
+    }
+    return 'Vellum could not finish this response. Try again.';
+  }
+  window.VellumApi.chat = { stream: stream, failureMessage: failureMessage };
 })();

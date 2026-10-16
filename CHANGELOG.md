@@ -6,6 +6,12 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Add Settings → Browser with named sign-in profiles, browsing activity, download management, link destinations, site permissions and operation-bound data clearing.
+- Add cursor presets and local PNG cursor settings, a resizable chat/browser divider, fresh-homepage reopening and automatic control handoff for explicit browser tasks.
+- Route natural website requests and same-chat retries to BrowserAgent; publish actual cursor movement, observe search input state, and recover safely from changing controls and page navigation.
+- Read and change the selected search engine through chat. Recover silent preview streams, avoid repeated planning after viewport resizing, and distinguish chat connection, HTTP and display errors.
+- Retry temporary Windows conversation-file replacement locks while preserving the previous file on persistent failure.
+
 - Compact music controls live inside the navigation dock, with an inward-opening player panel, keyboard/outside-click dismissal and focus-aware auto-hide. Dock visibility and Music-page navigation retain the same Spotify playback controller.
 - Browser stays hidden when Vellum opens or restarts, including older saved layouts. Sidebar clicks and fresh chat browser requests explicitly open it. New tabs focus the address field without showing suggestions until typing; engine selection focuses the homepage search field and preserves the draft.
 - Chat and browser panes share a single divider with aligned chat insets when the sidebar opens or closes. The address bar completes local URLs and offers tabs, history, known websites and selected-engine search completions, with an external-suggestions switch. Browser opens straight to the themed homepage; new tabs display it and focus the address field immediately. Manual navigation and title reads no longer block tab status. The panel × and closing the last tab dismiss the panel and close its owned Brave session through canonical actions; local dismissal also works with an offline API.

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.contracts.browser import BrowserPreferences
 from agent.knowledge.store import KnowledgeStore
 from agent.plugins.youtube_browser_history import YouTubeBrowserHistoryService, HistoryReadError
 
@@ -220,7 +221,8 @@ def test_worker_routes_fresh_history_to_background_reader(monkeypatch):
         pytest.fail('Fresh account history must use the temporary-tab reader')
 
     worker = _PlaywrightMcpClient()
-    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot)
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot,
+        _browser_preferences=lambda:BrowserPreferences(agent_history='allow'))
     monkeypatch.setattr(youtube_history_page, 'read_history', unexpected_configured_read)
     assert asyncio.run(worker.session('youtube_history'))['status'] == 'ready'
 
@@ -241,5 +243,6 @@ def test_worker_configured_refresh_skips_busy_and_forwards_history_url(monkeypat
     async def fresh_snapshot(*, url=None):
         assert url == arguments['url']
         return snapshot()
-    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot)
+    worker._dedicated = SimpleNamespace(youtube_history=fresh_snapshot,
+        _browser_preferences=lambda:BrowserPreferences(agent_history='allow'))
     assert asyncio.run(worker.session('youtube_history', arguments))['status'] == 'ready'

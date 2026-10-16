@@ -28,6 +28,15 @@ async function loadChatApi(fetchImpl) {
   return window.VellumApi.chat;
 }
 
+test('HTTP and rendering failures are not mislabeled as an unreachable API',async()=>{
+  const api=await loadChatApi(async()=>({ok:false,status:503}));
+  let failure;
+  try {await api.stream({},{});} catch(error) {failure=error;}
+  expect(api.failureMessage(failure)).toContain('HTTP 503');
+  expect(api.failureMessage(new Error('render callback failed'))).not.toContain('unreachable');
+  expect(api.failureMessage(new TypeError('Failed to fetch'))).toContain('unreachable');
+});
+
 describe("Vellum default chat stream trace", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

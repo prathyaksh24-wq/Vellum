@@ -7,6 +7,34 @@ ToolRegistry. The main model does not receive raw browser tools.
 
 ## Using the browser
 
+Requests such as “open Wikipedia and search for the Street Fighter movie,” “open
+YouTube,” and “visit https://example.com” reach BrowserAgent without requiring
+the word “browser.” Same-chat follow-ups such as “use the browser to open it”
+recover the preceding concrete site task from user messages in that conversation.
+They stop at a different task and do not infer permission from assistant claims.
+Pending confirmations retain their existing confirmation path.
+
+The first website frame shows the agent cursor while it plans. Search controls
+report their current query and focus so the agent can submit the form instead
+of retyping it. Password, file, OTP, token and payment controls do not export
+values through that search-field observation. Controls that change before an
+action are observed again at most twice; the old action is not replayed. Reads
+that race a navigation retry the observation, not the click. A search-only task
+finishes when the observed results title and URL query match the typed search;
+requests with further actions continue through the planner.
+
+BrowserAgent's result passes directly through the chat API. Another model does
+not rewrite a browser failure into an unobserved success. Both chat API paths
+retain the selected model for specialist execution.
+
+While BrowserAgent controls a website, its visible cursor travels to the actual
+page position before a click, text entry or scroll. The cursor uses the selected
+style in Settings → Browser → Cursor. Movement takes about 360 ms and follows
+the page mouse through the existing live-frame stream, including when the page
+pixels do not change. It remains at its last position during planning and after
+navigation in the same tab. Taking over or pausing hides it; switching tabs
+starts a new position rather than carrying another tab's cursor across.
+
 YouTube Agent has a **Refresh history** control in its overview and chat. After
 signing into YouTube in this browser, the control and watch-history questions
 read a bounded recent page snapshot through this same browser owner. General
@@ -20,7 +48,8 @@ account-scoped video/day evidence without counting repeated refreshes as watches
 the browser's page limit does not cap the saved history. See
 [YouTube browser history](youtube-browser-history.md).
 History reads use a temporary background tab and close it afterward, preserving
-the visible page and panel state. A background-only session does not request
+the visible page, tab list, input frame identity, ownership and panel state.
+They work while you have control or agent actions are paused. A background-only session does not request
 that the UI open the browser panel; explicitly opening Browser still does.
 
 Install the backend dependencies and Brave, then restart Vellum. Select an
@@ -29,7 +58,9 @@ open a website. The right panel shows the separate browser while chat remains
 available beside it. **More** exposes the remaining sidebar destinations.
 
 - Opening a blank session and creating a tab shows Vellum's local homepage.
-  Existing websites remain open when you reopen the panel. Exact names such as
+  Reopening a closed browser starts on one homepage tab; sign-ins and history
+  remain saved. Showing a session that is still running preserves its current
+  page. Exact names such as
   `google`, `youtube`, `reddit`, `wikipedia`, `spotify`, `x` and `twitter` open
   their websites directly; other search phrases use the selected engine. Full website
   addresses open directly too. This removes the search detour when opening those
@@ -102,9 +133,11 @@ using an installed browser executable.
   the browser address field and press Enter. Check the panel's error message if
   navigation fails.
 - Address-bar navigation and manual input give you control. If chat says the
-  browser is paused or you have control, click **Resume agent**, then ask Vellum
+  browser is explicitly paused, click **Resume agent**, then ask Vellum
   to open the website again. Resuming does not rerun a task that already returned
   a blocked response.
+  A new delegated browser task automatically takes control back after manual
+  browsing. Manual input during that task still yields control immediately.
 - For chat tasks, select an installed local model and enable
   `PLAYWRIGHT_MCP_ALLOW_MUTATIONS=true` in the local configuration before
   starting the backend. Manual address-bar navigation does not need that flag.
@@ -136,9 +169,14 @@ The specialist returns its result through the existing delegation visibility
 and disclosure rules.
 
 Page content is untrusted evidence. Agent clicks, typing and keypresses produce
-a pending action in the existing confirmation store. Execution requires that
-stored action, current agent ownership, its snapshot identity and unchanged
-page observation. Navigation, tabs, scroll and close are bounded tools. Login,
+a pending action when **Ask for each action** is selected or a sensitive control
+is detected. Routine interactions otherwise proceed under the delegated browser
+task through a BrowserAgent-only capability. Both paths enforce current agent
+ownership, snapshot identity, site policy and the existing mutation gate.
+Routine actions validate the retained control's label/type/link, visibility and
+enabled state instead of rejecting changes elsewhere in the document. Confirmed
+actions retain the full page-observation check. Navigation, tabs, scroll and close
+are bounded tools. Login,
 passwords, CAPTCHA, uploads, purchases, messaging, deletion and account changes
 are instructed to use manual takeover. This instruction is a model boundary,
 not a website transaction classifier.
@@ -175,6 +213,17 @@ wheel events are ordered and batched, without a status read for each event.
 It contains the active page and remains a streamed browser view rather than
 a native browser window. Input coordinates account for scaling, and stale
 tab/document inputs are rejected.
+The agent pointer is carried as typed metadata alongside cached frames, allowing
+the UI to show the target while an action is running. Routine actions do not
+freeze an already available preview. Snapshot metadata is collected in batches
+and action observations are reused; top/bottom scroll commands reach that end in
+one action. The snapshot reports scroll position so the agent can observe progress.
+
+On desktop-sized layouts, drag the divider between chat and browser to resize
+the panes. It preserves minimum widths and saves the ratio through the existing
+Workspace Layout App Action. Keyboard Left/Right adjusts it, and Home or a double
+click resets the split. The divider hides when the browser is expanded or uses
+the narrow-screen overlay layout.
 Keyboard Tab leaves the preview for accessible app navigation. There is no file
 picker/upload bridge, desktop control, streamed audio transport, native browser
 menu, password-manager UI, or manual JavaScript-dialog control in this slice.
@@ -292,3 +341,21 @@ Focusing an empty new tab does not display suggestions or request history.
 Suggestions appear after typing and disappear when the field is cleared.
 Selecting a search engine focuses the homepage search field with the caret at
 the end of the existing draft.
+
+See [Browser settings and profiles](browser-settings.md) for named sessions,
+activity, download management and permission behavior.
+
+Search-engine preferences are also available through BrowserAgent in chat:
+“Which search engine am I using?” reads the canonical browser preference;
+“Change the search engine to DuckDuckGo” updates it through the shared capability
+registry and the same preference writer as the engine menu. The supported
+choices are Google, Brave, DuckDuckGo, Startpage and SearXNG. These requests do
+not launch Brave, take control, navigate an existing tab or call the page planner.
+SearXNG still requires a configured instance URL before searching. Engine
+selection is a Vellum preference, separate from the installed Brave app's settings.
+
+The preview samples HTTP frames when its socket has been quiet for more than
+1.2 seconds, preserving cursor updates if the socket stalls without disconnecting.
+URL navigation without element references can survive a panel resize during
+planning; stale element actions still require a fresh observation. Neither change
+removes local-model planning latency or provides native browser embedding.

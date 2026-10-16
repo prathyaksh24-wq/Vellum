@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from contextlib import suppress
 from datetime import datetime, timezone
 import json
 from pathlib import Path
 from threading import Lock, RLock
+from time import sleep
 from typing import Any, Callable
 from uuid import uuid4
 
@@ -374,12 +376,25 @@ class ConversationLifecycle:
 
     def _write(self, conversations: list[dict[str, Any]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        temporary.write_text(
-            json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        temporary.replace(self.path)
+        temporary = self.path.with_name(f".{self.path.name}.{uuid4().hex}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            for attempt in range(5):
+                try:
+                    temporary.replace(self.path)
+                    break
+                except PermissionError:
+                    # A Windows reader or scanner can briefly deny replacement.
+                    # Keep the old file intact and bound the wait to 250 ms.
+                    if attempt == 4:
+                        raise
+                    sleep(.025 * (attempt + 1))
+        finally:
+            with suppress(OSError):
+                temporary.unlink(missing_ok=True)
 
     def _update_effects(
         self,
