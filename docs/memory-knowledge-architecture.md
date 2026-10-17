@@ -25,6 +25,12 @@ remain active and the Knowledge Core operates in shadow mode.
 
 ## Retrieval flow
 
+Working conversation compaction is a bounded projection in the existing
+LangGraph checkpoint, not a new durable-memory owner. Canonical chat history
+remains intact. Excerpts retain attribution and cannot authorize actions or
+promote user preferences. See [context budgets](architecture/context-budgets.md)
+for per-role windows, accounting, limits and restart behavior.
+
 1. The process-wide Memory Orchestrator builds the bounded memory packet.
 2. SQLite supplies summaries and saved memories; FTS5 supplies relevant past
    turns; Honcho and enabled extensions may add context.
@@ -32,6 +38,17 @@ remain active and the Knowledge Core operates in shadow mode.
    are read with `knowledge_wiki` on demand, so knowledge is not duplicated into
    personal memory.
 4. Current conversation context always wins when older memory conflicts.
+
+The main graph now assembles these as separate attributed evidence layers:
+bounded personal memory, checkpoint digest, retrieved original messages, then
+recent exact messages and the current request. Memory Orchestrator's prompt
+packet does not also inject FTS history or duplicate its generated snapshots.
+`conversation_history` reads original sources through ConversationLifecycle;
+orphaned FTS rows are not proof of a conversation that no longer exists.
+MemoryAgent reads the runtime's approved canonical memory packet instead of
+depending on generated vault cards. `/compact` saves only working checkpoint
+state, with an optional local semantic task map and extractive fallback. It
+creates no durable memory or new storage owner.
 
 ## Specialist memory packets
 

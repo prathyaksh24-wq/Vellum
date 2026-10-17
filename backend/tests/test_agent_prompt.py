@@ -53,13 +53,16 @@ def test_prompt_keeps_learning_context_below_kernel_and_preserves_correction(mon
 
     system = messages[0].content
     assert system.startswith(agent_graph.VELLUM_SYSTEM_PROMPT)
-    boundary = system.index("## Personal context boundary")
-    assert boundary < system.index("Older profile:")
-    assert boundary < system.index("Older inferred preference:")
+    evidence = messages[1]
+    assert evidence.additional_kwargs['vellum_context_layer'] == 'personal_memory'
+    boundary = evidence.content.index("## Personal context boundary")
+    assert boundary < evidence.content.index("Older profile:")
+    assert boundary < evidence.content.index("Older inferred preference:")
+    assert 'Older profile:' not in system
     assert "Current explicit statements and corrections take precedence" in system
     assert "default ambiguous stance to unknown" in system
     assert "report the proposal as pending" in system
-    assert messages[1] is correction
+    assert messages[-1] is correction
 
 
 def test_vellum_prompt_no_meta_falls_back(tmp_path: Path, monkeypatch):

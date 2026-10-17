@@ -13,7 +13,7 @@ from test_app_action_settings_runtime import make_runtime
 
 
 @pytest.fixture
-def prompt(monkeypatch):
+def prompt_messages(monkeypatch):
     model = SimpleNamespace(id='test/model',label='Test model',tool_calling_compatibility='compatible')
     monkeypatch.setattr(graph, 'get_provider_registry', lambda:SimpleNamespace(current_model=lambda:model))
     monkeypatch.setattr(graph, '_get_project_ctx', lambda:SimpleNamespace(build=lambda *a:'Private profile evidence'))
@@ -22,7 +22,12 @@ def prompt(monkeypatch):
     monkeypatch.setattr(graph, 'get_agent_catalog', lambda:SimpleNamespace(specialist_skill_ids=lambda:set()))
     monkeypatch.setattr(graph, '_specialist_directory_block', lambda:'')
     monkeypatch.setattr('agent.memory.memory_context.build_memory_block', lambda *a,**k:'Private memory evidence')
-    return lambda query:graph.vellum_prompt({'messages':[HumanMessage(content=query)]},{'configurable':{'thread_id':'prefs'}})[0].content
+    return lambda query:graph.vellum_prompt({'messages':[HumanMessage(content=query)]},{'configurable':{'thread_id':'prefs'}})
+
+
+@pytest.fixture
+def prompt(prompt_messages):
+    return lambda query:prompt_messages(query)[0].content
 
 
 def test_personalization_controls_reach_the_actual_model_prompt(prompt):
@@ -32,14 +37,28 @@ def test_personalization_controls_reach_the_actual_model_prompt(prompt):
         assert phrase in system
 
 
-def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_requests(prompt):
+def test_fast_answers_skip_private_context_for_general_facts_but_not_personal_requests(prompt_messages):
     with personalization_scope({'fastAnswers':True}, 'Why is the sky blue?'):
-        assert 'Private memory evidence' not in prompt('Why is the sky blue?')
-        assert 'Private profile evidence' not in prompt('Why is the sky blue?')
+        messages = prompt_messages('Why is the sky blue?')
+        content = '\n'.join(message.content for message in messages)
+        assert 'Private memory evidence' not in content
+        assert 'Private profile evidence' not in content
+        assert not any(message.additional_kwargs.get('vellum_context_layer') == 'personal_memory' for message in messages)
     with personalization_scope({'fastAnswers':True}, 'What do my notes say?'):
-        assert 'Private memory evidence' in prompt('What do my notes say?')
+        messages = prompt_messages('What do my notes say?')
+        evidence = [message for message in messages if message.additional_kwargs.get('vellum_context_layer') == 'personal_memory']
+        assert len(evidence) == 1
+        assert isinstance(evidence[0], HumanMessage)
+        assert 'Private memory evidence' in evidence[0].content
+        assert 'Private profile evidence' in evidence[0].content
+        assert 'Private memory evidence' not in messages[0].content
+        assert 'Private profile evidence' not in messages[0].content
+        assert messages[-1].content == 'What do my notes say?'
     with personalization_scope({'fastAnswers':True}, 'Why is the sky blue?'):
-        assert 'Private memory evidence' not in prompt('Why is the sky blue?\n\n[Recent Vellum conversation context]\nUser: I am a designer.')
+        messages = prompt_messages('Why is the sky blue?\n\n[Recent Vellum conversation context]\nUser: I am a designer.')
+        content = '\n'.join(message.content for message in messages)
+        assert 'Private memory evidence' not in content
+        assert 'Private profile evidence' not in content
 
 
 def test_preferences_do_not_leak_between_requests(prompt):

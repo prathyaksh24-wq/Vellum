@@ -55,7 +55,16 @@ class Settings(BaseSettings):
         default=300.0,
         alias="OLLAMA_REQUEST_TIMEOUT_SECONDS",
     )
-    ollama_context_length: int = Field(default=16384, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
+    # Transport ceiling; role budgets below choose the actual request window.
+    ollama_context_length: int = Field(default=32768, ge=4096, le=262144, alias="OLLAMA_CONTEXT_LENGTH")
+    main_context_length: int = Field(default=32768, ge=4096, le=262144, alias="MAIN_CONTEXT_LENGTH")
+    specialist_context_length: int = Field(default=16384, ge=4096, le=262144, alias="SPECIALIST_CONTEXT_LENGTH")
+    context_summary_enabled: bool = Field(default=True, alias="CONTEXT_SUMMARY_ENABLED")
+    context_summary_timeout_seconds: float = Field(default=20.0, ge=1, le=120, alias="CONTEXT_SUMMARY_TIMEOUT_SECONDS")
+    context_compaction_enabled: bool = Field(default=True, alias="CONTEXT_COMPACTION_ENABLED")
+    context_compaction_trigger_ratio: float = Field(default=.80, ge=.5, le=.95, alias="CONTEXT_COMPACTION_TRIGGER_RATIO")
+    context_compaction_target_ratio: float = Field(default=.55, ge=.2, le=.8, alias="CONTEXT_COMPACTION_TARGET_RATIO")
+    context_recent_turns: int = Field(default=4, ge=1, le=20, alias="CONTEXT_RECENT_TURNS")
     ollama_batch_size: int = Field(default=1024, ge=32, le=2048, alias="OLLAMA_BATCH_SIZE")
     primary_model: str = Field(default="ollama/qwen3.5:9b", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="qwen/qwen3.5-35b-a3b", alias="FALLBACK_MODEL")
@@ -291,6 +300,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_paths_and_privacy(self) -> "Settings":
+        if self.context_compaction_target_ratio >= self.context_compaction_trigger_ratio:
+            raise ValueError("CONTEXT_COMPACTION_TARGET_RATIO must be below CONTEXT_COMPACTION_TRIGGER_RATIO.")
         # Resolve relative paths against the REPO ROOT, not CWD. Embedded Chroma
         # uses the path as its storage location, so a CWD-dependent path would
         # produce split-brain databases (one when started from Vellum/, another

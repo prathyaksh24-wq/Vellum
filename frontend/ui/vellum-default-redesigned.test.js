@@ -20,6 +20,11 @@ const mcpSetup = readFileSync(
 );
 
 describe("Vellum default redesigned frontend", () => {
+  test('offers manual compaction through the existing composer slash menu', () => {
+    expect(html).toContain("k: 'compact', label: 'Compact context'");
+    expect(html).toContain("item.run === 'compact'");
+    expect(html).toContain("setText('/compact')");
+  });
   test("the production inline React script parses as JSX", () => {
     const require = createRequire(import.meta.url);
     const babel = createRequire(require.resolve('@vitejs/plugin-react'))('@babel/parser');

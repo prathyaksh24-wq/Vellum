@@ -21,6 +21,7 @@ class ProfileExecution:
     memory: dict[str, Any]
     context: str
     thread_id: str
+    context_length: int | None = None
 
     def messages(self, messages):
         from langchain_core.messages import HumanMessage, SystemMessage

@@ -6,6 +6,9 @@ The project follows Semantic Versioning once tagged releases begin. Vellum is cu
 
 ## [Unreleased]
 
+- Add `/compact` and focused manual compaction through chat and the composer slash menu. Assemble protected instructions, personal memory, a source-attributed task digest, retrieved originals and exact recent messages in a fixed order. Add optional bounded local summaries with extractive fallback and a read-only original-history tool; keep deleted/temporary history and generated memory exports from resurfacing as new evidence. MemoryAgent now reads its approved canonical memory packet without waiting for vault-card export.
+
+- Add 32k main-agent and 16k specialist context budgets, output/tool-schema accounting, and local extractive conversation compaction persisted in the existing graph checkpoint. Preserve saved chat history and complete current tool exchanges, guard oversized requests, and report compaction through the existing frontend activity stream.
 ### Changed
 - Validate personalization choices at request boundaries, and parse clock follow-ups and protected command values without repeated regex backtracking on long input.
 - Natural-language settings understand common typos and background shorthand, retain current/previous scenes and chat action messages, and continue provider selection after confirmed secure key entry. Saved personalization and profile preferences drive prompts and tool policy; failed receipts cannot become success claims.

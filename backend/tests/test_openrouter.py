@@ -224,19 +224,21 @@ def test_langchain_agent_uses_shared_routed_model(monkeypatch):
     sentinel = object()
     captured = {}
 
-    def fake_routed(model=None, reasoning_mode=None):
+    def fake_routed(model=None, reasoning_mode=None, *, context_role="specialist"):
         captured["model"] = model
+        captured["context_role"] = context_role
         return sentinel
 
     monkeypatch.setattr(react_agent, "get_routed_chat_model", fake_routed)
 
     assert react_agent.build_llm("primary/test") is sentinel
+    assert captured["context_role"] == "main"
     assert captured["model"] == "primary/test"
 
 
 def test_legacy_fallback_builder_is_alias_for_routed_model(monkeypatch):
     sentinel = object()
-    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None, reasoning_mode=None: sentinel)
+    monkeypatch.setattr(react_agent, "get_routed_chat_model", lambda model=None, reasoning_mode=None, **kwargs: sentinel)
 
     assert react_agent.build_llm_with_fallback("primary/test") is sentinel
 

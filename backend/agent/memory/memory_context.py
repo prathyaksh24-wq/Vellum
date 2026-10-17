@@ -125,42 +125,46 @@ def _refresh_user_model_now(thread_id: str, honcho) -> None:
         logger.warning("[MEMORY] user-model refresh failed: %s", exc)
 
 
-def build_memory_block(thread_id: str, *, query: str = "", active_project: str | None = None, cloud_safe: bool = True) -> str:
+def build_memory_block(thread_id: str, *, query: str = "", active_project: str | None = None, cloud_safe: bool = True,
+                       include_soul: bool = True) -> str:
     """System-prompt block: SOUL personality + the evolving user model.
 
     Returns "" when nothing is available (e.g. day one, no SOUL.md), so the
     base prompt is unchanged for new users.
     """
     parts: list[str] = []
-    soul = load_soul()
+    soul = load_soul() if include_soul else ''
     if soul:
         parts.append("# Who you are (SOUL)\n" + soul)
-    user_model = get_user_model(thread_id)
+    orchestrator = _default_orchestrator()
+    if not orchestrator.store.get_settings().get('memory_enabled', True):
+        return '\n\n'.join(parts)
+    user_model = get_user_model(thread_id)[:1800]
     if user_model:
         parts.append(
             "# What you know about this user\n"
-            "Your evolving model of the user, built from past conversations. Let it shape "
+            "Cached, inferred portrait from past conversations; not a direct user statement. Let it shape "
             "how you respond — their tone, depth, and what they care about. Do not recite it "
             "back unless they ask what you remember.\n\n" + user_model
         )
-    context_files = load_memory_files()
-    if context_files:
-        parts.append(context_files)
     try:
-        packet = _default_orchestrator().build_memory_packet(
+        packet = orchestrator.build_memory_packet(
             thread_id=thread_id,
             query=query,
             agent_name="VellumAgent",
             active_project=active_project,
             cloud_safe=cloud_safe,
             live_honcho=False,
+            include_history=False,
         )
         packet_block = _format_memory_packet(packet)
         if packet_block:
             parts.append(packet_block)
     except Exception as exc:  # pragma: no cover - storage edge
         logger.warning("[MEMORY] memory packet build failed: %s", exc)
-    return "\n\n".join(parts).strip()
+    # Snapshots are derived from this same store. Do not inject a duplicate copy
+    # (or silently revive a deleted fact from a stale generated file).
+    return "\n\n".join(parts).strip()[:6000]
 
 
 def load_memory_files(memory_dir: Path | None = None) -> str:
@@ -199,7 +203,13 @@ def _format_memory_packet(packet: dict[str, Any]) -> str:
         for item in saved[:8]:
             text = str(item.get("text") if isinstance(item, dict) else item).strip()
             if text:
-                lines.append("- " + text)
+                provenance = ''
+                if isinstance(item, dict):
+                    anchors = {key: item[key] for key in ('id', 'scope', 'source_thread_id', 'confidence', 'updated_at') if item.get(key) is not None}
+                    if anchors:
+                        import json
+                        provenance = ' [memory source: ' + json.dumps(anchors, ensure_ascii=False) + ']'
+                lines.append("- " + text + provenance)
         if lines:
             sections.append("## Saved memories\n" + "\n".join(lines))
     honcho_context = str(packet.get("honcho_context") or "").strip()

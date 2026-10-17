@@ -76,3 +76,26 @@ def test_memory_card_search_enforces_agent_scope_and_visibility(tmp_path):
     assert not any("Sports private context" in card["text"] for card in x_cards)
     assert any("X private context" in card["text"] for card in vellum_cards)
     assert not any("Sports private context" in card["text"] for card in vellum_cards)
+
+
+def test_profile_memory_lookup_uses_approved_sqlite_packet_without_export(tmp_path):
+    from agent.profiles.execution import ProfileExecution, profile_execution
+    from agent.agents.memory_agent import MemoryAgent
+    service = MemoryCapabilityService(vault_root=tmp_path, sessions_db=tmp_path / 'sessions.db')
+    execution = ProfileExecution('MemoryAgent', None, None, '', '', {
+        'saved_memories': [{'id': 7, 'text': 'The user prefers terse writing with no emojis.', 'scope': 'global'}]}, '', 'current')
+    with profile_execution(execution):
+        result = MemoryAgent(vault_root=tmp_path, memory_service=service).answer('What do you remember about my writing style?')
+    assert result.status == 'answered'
+    assert result.summary == 'You prefer terse writing with no emojis.'
+    assert result.sources[0].path_or_url == 'memory:7'
+
+
+def test_empty_profile_packet_does_not_revive_stale_export_cards(tmp_path):
+    from agent.profiles.execution import ProfileExecution, profile_execution
+    memory_dir = tmp_path / 'Agent/Memories'
+    memory_dir.mkdir(parents=True)
+    (memory_dir / 'stale.md').write_text('Deleted preference: long answers.')
+    service = MemoryCapabilityService(vault_root=tmp_path, sessions_db=tmp_path / 'sessions.db')
+    with profile_execution(ProfileExecution('MemoryAgent', None, None, '', '', {'saved_memories': []}, '', 'current')):
+        assert service.build_context_pack({'query': 'answers'})['cards'] == []
