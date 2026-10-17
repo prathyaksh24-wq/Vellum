@@ -26,6 +26,19 @@ present through main. Existing clock/CodeQL fixes and frontend changes were
 retained. No tests or builds were run for this merge, as requested; only Git
 conflict-marker and diff whitespace checks were performed.
 
+### Backend CI contract repair — 17 October 2026
+
+CI run `38997017521` on merge commit `ab2acf1` reported 3,187 passes,
+28 skips and one failure in the fast-answer personalization test. Its fixture
+returned only the system message, so it could no longer observe personal memory
+after this PR moved that memory into a separate attributed evidence layer.
+Split the fixture into full-message and system-only readers. The fast-answer
+check now asserts exclusion across all messages for general questions, inclusion
+in the tagged HumanMessage for personal requests, exclusion from system
+authority, and preservation of the exact current request. The runtime was not
+changed for this repair. No local tests were run, as requested; the next CI run
+must establish the result on this revision.
+
 ## Implementation
 
 - `agent/llm/context.py` still owns accounting/projection. It understands the
