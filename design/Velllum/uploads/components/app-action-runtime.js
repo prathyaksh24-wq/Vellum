@@ -23,10 +23,12 @@
   var DEVICE_SETTINGS_UPDATE_ACTION_ID = "settings.device.update";
   var DEVICE_SETTINGS_DEFAULTS = {
     background: "galaxy",
+    previous_background: null,
     accent: "default",
     dock_position: "auto",
     dock_locked: false,
     computer_use_preview: false,
+    profile: {},
     personalization: {
       baseStyle: "default", warm: "default", enthusiastic: "default", headers: "default", emoji: "default",
       fastAnswers: true, custom: "", nickname: "", occupation: "", about: "", recordHist: true,
@@ -411,6 +413,7 @@
       version: Number.isInteger(source.version) && source.version > 0 ? source.version : 1,
       revision: Number.isInteger(source.revision) && source.revision >= 0 ? source.revision : 0,
       values: Object.assign({}, DEVICE_SETTINGS_DEFAULTS, rawValues, {
+        profile: Object.assign({}, rawValues.profile || {}),
         personalization: Object.assign({}, DEVICE_SETTINGS_DEFAULTS.personalization, rawValues.personalization || {}),
       }),
     };
@@ -485,6 +488,9 @@
       var nextValues = Object.assign({}, state.values, patch.values);
       if (patch.values.personalization) {
         nextValues.personalization = Object.assign({}, state.values.personalization, patch.values.personalization);
+      }
+      if (patch.values.profile) {
+        nextValues.profile = Object.assign({}, state.values.profile, patch.values.profile);
       }
       state = normalizeDeviceSettings({ version: patch.version, revision: patch.revision, values: nextValues });
       persist();

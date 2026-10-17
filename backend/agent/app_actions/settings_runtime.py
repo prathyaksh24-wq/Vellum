@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot
+from agent.app_actions.models import AppActionContext, AppActionDefinition, DeviceSettingsSnapshot, DevicePersonalizationSettings
 from agent.llm.providers import canonical_model_id
 from agent.llm.routing.models import CredentialStrategy, FallbackTarget, ProviderRoutingPolicy
 from agent.tools.registry import CapabilityAccess
@@ -13,6 +13,11 @@ from agent.tools.registry import CapabilityAccess
 
 DEFAULT_MODEL_SET_ACTION_ID = "settings.default_model.set"
 DEVICE_SETTINGS_UPDATE_ACTION_ID = "settings.device.update"
+DEVICE_SETTINGS_INSPECT_ACTION_ID = "settings.device.inspect"
+BACKGROUND_IDS = (
+    "galaxy", "liquid-metal", "drifting-clouds", "god-rays", "grain-pastel",
+    "pattern-waves", "particles", "rocket-blast", "ember-clouds", "teal-horizon", "serenox-home",
+)
 MEMORY_SETTINGS_UPDATE_ACTION_ID = "memory.settings.update"
 MEMORY_ENTRY_CREATE_ACTION_ID = "memory.entry.create"
 MEMORY_ENTRY_UPDATE_ACTION_ID = "memory.entry.update"
@@ -33,6 +38,7 @@ ROUTING_CREDENTIAL_STRATEGY_SET_ACTION_ID = "llm.routing.credential_strategy.set
 ROUTING_POOL_RESET_ACTION_ID = "llm.routing.pool.reset"
 
 SETTINGS_RUNTIME_ACTION_IDS = frozenset({
+    DEVICE_SETTINGS_INSPECT_ACTION_ID,
     DEFAULT_MODEL_SET_ACTION_ID,
     DEVICE_SETTINGS_UPDATE_ACTION_ID,
     MEMORY_SETTINGS_UPDATE_ACTION_ID,
@@ -84,6 +90,7 @@ _DEVICE_SETTING_KEYS = frozenset({
     "dock_locked",
     "computer_use_preview",
     "personalization",
+    'profile',
 })
 _PERSONALIZATION_TEXT_KEYS = frozenset({"custom", "nickname", "occupation", "about"})
 _PERSONALIZATION_TOGGLE_KEYS = frozenset({
@@ -119,6 +126,7 @@ class SettingsRuntimeActionService:
         memory_dreaming_runner: Callable[[], dict[str, Any]],
         conversation_memory_importer: Callable[[int | None], dict[str, int]],
         obsidian_memory_importer: Callable[[], dict[str, Any]],
+        provider_selection_resumer: Callable[[str, AppActionContext], dict[str, Any]] | None = None,
     ) -> None:
         self._memory_store_provider = memory_store_provider
         self._memory_creator = memory_creator
@@ -128,6 +136,7 @@ class SettingsRuntimeActionService:
         self._memory_dreaming_runner = memory_dreaming_runner
         self._conversation_memory_importer = conversation_memory_importer
         self._obsidian_memory_importer = obsidian_memory_importer
+        self._provider_selection_resumer = provider_selection_resumer
 
     def execute(
         self,
@@ -141,6 +150,16 @@ class SettingsRuntimeActionService:
             return self._set_default_model(arguments)
         if action_id == DEVICE_SETTINGS_UPDATE_ACTION_ID:
             return self._update_device_settings(arguments, _context)
+        if action_id == DEVICE_SETTINGS_INSPECT_ACTION_ID:
+            values = DeviceSettingsSnapshot.model_validate(_context.device_settings).values
+            previous = values.previous_background
+            current = values.background or 'galaxy'
+            return {
+                'changed':False, 'background':current, 'previous_background':previous,
+                'device_settings':values.model_dump(exclude_none=True, exclude_unset=True),
+                '_target_kind':'device_setting', '_target_id':_context.device_id,
+                '_message':f"The current background is {current.replace('-', ' ').title()}. " + (f"Before that it was {previous.replace('-', ' ').title()}." if previous else 'No previous background has been saved yet.'),
+            }
         if action_id == MEMORY_SETTINGS_UPDATE_ACTION_ID:
             self._require_confirmation(confirmed)
             return self._update_memory_settings(arguments)
@@ -167,7 +186,7 @@ class SettingsRuntimeActionService:
             self._require_confirmation(confirmed)
             return self._import_obsidian_memories()
         if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID:
-            return self._configure_provider_credential(arguments, confirmed=confirmed)
+            return self._configure_provider_credential(arguments, confirmed=confirmed, context=_context)
         if action_id == ROUTING_POLICY_SET_ACTION_ID:
             return self._set_routing_policy(arguments)
         if action_id == ROUTING_MODEL_POLICY_SET_ACTION_ID:
@@ -236,7 +255,6 @@ class SettingsRuntimeActionService:
                 "INVALID_ACTION_ARGUMENTS",
                 "Unknown device setting: " + ", ".join(sorted(unknown)),
             )
-        normalized = self._validate_device_patch(patch)
         snapshot = DeviceSettingsSnapshot.model_validate(context.device_settings).model_dump(
             exclude_none=True,
             exclude_defaults=True,
@@ -244,12 +262,24 @@ class SettingsRuntimeActionService:
         version = int(snapshot.get("version") or 1)
         revision = int(snapshot.get("revision") or 0)
         current = dict(snapshot.get("values") or {})
+        if str(patch.get('background') or '').casefold() == 'previous':
+            previous = current.get('previous_background')
+            if previous not in BACKGROUND_IDS:
+                raise SettingsRuntimeActionError('PREVIOUS_BACKGROUND_UNAVAILABLE', 'There is no previous background saved on this device yet.', unavailable=True)
+            patch['background'] = previous
+        if str(patch.get("background") or "").casefold() == "next":
+            previous = current.get("background", "galaxy")
+            index = BACKGROUND_IDS.index(previous) if previous in BACKGROUND_IDS else -1
+            patch["background"] = BACKGROUND_IDS[(index + 1) % len(BACKGROUND_IDS)]
+        normalized = self._validate_device_patch(patch)
         next_values = dict(current)
         for key, value in normalized.items():
-            if key == "personalization":
+            if key in {"personalization", 'profile'}:
                 next_values[key] = {**dict(current.get(key) or {}), **value}
             else:
                 next_values[key] = value
+        if 'background' in normalized and normalized['background'] != current.get('background', 'galaxy'):
+            next_values['previous_background'] = current.get('background', 'galaxy')
         changed = next_values != current
         next_revision = revision + (1 if changed else 0)
         changed_values = {
@@ -257,6 +287,8 @@ class SettingsRuntimeActionService:
             for key in normalized
             if key != "personalization" and current.get(key) != next_values[key]
         }
+        if next_values.get('previous_background') != current.get('previous_background'):
+            changed_values['previous_background'] = next_values['previous_background']
         if "personalization" in normalized:
             changed_personalization = {
                 key: value
@@ -275,7 +307,7 @@ class SettingsRuntimeActionService:
             },
             "_target_kind": "device_setting",
             "_target_id": context.device_id,
-            "_message": "Device settings updated." if changed else "Device settings were already set.",
+            "_message": (f"Background changed to {str(next_values['background']).replace('-', ' ').title()}." if changed and 'background' in normalized else "Device settings updated." if changed else "Device settings were already set."),
         }
 
     @staticmethod
@@ -302,12 +334,18 @@ class SettingsRuntimeActionService:
                 normalized[key] = accent
             elif key == "background":
                 background = str(value or "").strip().casefold()
-                if background not in {
-                    "galaxy", "liquid-metal", "drifting-clouds", "god-rays", "grain-pastel",
-                    "rocket-blast", "ember-clouds", "teal-horizon", "serenox-home",
-                }:
+                if background not in BACKGROUND_IDS:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "Unsupported background.")
                 normalized[key] = background
+            elif key == 'profile':
+                if not isinstance(value, dict) or not value or set(value) - {'displayName', 'username'}:
+                    raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Profile supports displayName and username.')
+                profile = {}
+                for field, text in value.items():
+                    if not isinstance(text, str) or not text.strip() or len(text) > 120:
+                        raise SettingsRuntimeActionError('INVALID_ACTION_ARGUMENTS', 'Profile names must contain 1 to 120 characters.')
+                    profile[field] = text.strip()
+                normalized[key] = profile
             elif key == "personalization":
                 if not isinstance(value, dict) or not value:
                     raise SettingsRuntimeActionError("INVALID_ACTION_ARGUMENTS", "personalization must be a non-empty object")
@@ -320,7 +358,15 @@ class SettingsRuntimeActionService:
                     )
                 personal: dict[str, Any] = {}
                 for personal_key, personal_value in value.items():
+                    if personal_key in _PERSONALIZATION_CHOICE_KEYS and isinstance(personal_value, str):
+                        aliases = {'high':'more','low':'less','normal':'default','standard':'default'}
+                        if personal_key == 'emoji':
+                            aliases.update({'none':'less','off':'less','never':'less','no':'less'})
+                        personal_value = aliases.get(personal_value.casefold(), personal_value)
                     if personal_key in _PERSONALIZATION_TOGGLE_KEYS:
+                        if personal_key in {'canvas', 'advVoice'} and personal_value is True:
+                            feature = 'Canvas editing' if personal_key == 'canvas' else 'Advanced voice'
+                            raise SettingsRuntimeActionError('FEATURE_UNAVAILABLE', f'{feature} is not available in this build.', unavailable=True)
                         if not isinstance(personal_value, bool):
                             raise SettingsRuntimeActionError(
                                 "INVALID_ACTION_ARGUMENTS",
@@ -572,6 +618,7 @@ class SettingsRuntimeActionService:
         arguments: dict[str, Any],
         *,
         confirmed: bool,
+        context: AppActionContext,
     ) -> dict[str, Any]:
         provider = self._credential_provider(arguments)
         secret = str(arguments.get("secret") or arguments.get("api_key") or "").strip()
@@ -597,13 +644,20 @@ class SettingsRuntimeActionService:
                 "PROVIDER_CREDENTIAL_SAVE_FAILED",
                 "The provider credential could not be saved.",
             ) from exc
+        resumed = {}
+        if self._provider_selection_resumer:
+            try:
+                resumed = self._provider_selection_resumer(provider, context)
+            except (RuntimeError, ValueError, OSError):
+                resumed = {'message':'The key was saved, but the pending provider switch could not be completed yet. Retry selecting the provider.'}
         return {
+            **resumed,
             "changed": True,
             "provider": provider,
             "configured": True,
             "_target_kind": "application_credential",
             "_target_id": f"provider-credential:{provider}",
-            "_message": f"{provider} credential configured.",
+            "_message": f"{provider} credential configured." + (f" {resumed['message']}" if resumed.get('message') else ''),
         }
 
     def _set_routing_policy(self, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -817,21 +871,36 @@ class SettingsRuntimeActionService:
 
 
 def settings_runtime_action_definitions() -> list[AppActionDefinition]:
+    personalization_schema = DevicePersonalizationSettings.model_json_schema()
+    personalization_schema['description'] = 'Patch only the requested preferences. Omitted fields remain unchanged.'
+    personalization_schema['properties']['baseStyle']['enum'] = ['default','professional','friendly','candid','quirky','efficient','cynical']
+    for name in ('warm','enthusiastic','headers','emoji'):
+        personalization_schema['properties'][name]['enum'] = ['more','default','less']
+    device_properties = {
+        'background':{'type':'string','enum':[*BACKGROUND_IDS,'next','previous']},
+        'accent':{'type':'string'},
+        'dock_position':{'type':'string','enum':['auto','top','right','bottom','left']},
+        'dock_locked':{'type':'boolean'}, 'computer_use_preview':{'type':'boolean'},
+        'personalization':personalization_schema,
+        'profile':{'type':'object','additionalProperties':False,'minProperties':1,'properties':{'displayName':{'type':'string','minLength':1,'maxLength':120},'username':{'type':'string','minLength':1,'maxLength':120}}},
+    }
     specs = [
+        (DEVICE_SETTINGS_INSPECT_ACTION_ID, 'Inspect device settings', 'Read current device settings, profile, personalization and previous background.', 'device', 'none', {}, 'settings-device'),
         (
             DEVICE_SETTINGS_UPDATE_ACTION_ID,
             "Update device settings",
-            "Update device-local appearance, personalization, or preview controls.",
+            "Update device-local appearance, profile, personalization, or preview controls. Use background='next' to choose another background.",
             "device",
             "none",
             {
-                "patch": {"type": "object"},
-                "background": {"type": "string"},
+                "patch": {"type": "object", 'additionalProperties':False, 'minProperties':1, 'properties':device_properties},
+                "background": {"type": "string", "enum": [*BACKGROUND_IDS, "next", "previous"]},
                 "accent": {"type": "string"},
                 "dock_position": {"type": "string"},
                 "dock_locked": {"type": "boolean"},
                 "computer_use_preview": {"type": "boolean"},
-                "personalization": {"type": "object"},
+                "personalization": personalization_schema,
+                'profile': device_properties['profile'],
             },
             "settings-device",
         ),
@@ -1050,7 +1119,7 @@ def settings_runtime_action_definitions() -> list[AppActionDefinition]:
             title=title,
             description=description,
             scope=scope,
-            access_class=CapabilityAccess.WRITE.value,
+            access_class=CapabilityAccess.READ.value if action_id == DEVICE_SETTINGS_INSPECT_ACTION_ID else CapabilityAccess.WRITE.value,
             confirmation_rule=confirmation,
             executor_location="server_and_client" if action_id == PROVIDER_CREDENTIAL_CONFIGURE_ACTION_ID else "server",
             supports_undo=False,

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 
-test("main and specialist chat retain Spotify control turns and acknowledgements", () => {
+test("main and specialist chat retain all submitted action turns and acknowledgements", () => {
   const html = readFileSync("../design/Velllum/uploads/Vellum Default Re-designed.html", "utf8");
   const blocks = [...html.matchAll(/actionRequested: \(request, turn\) => \{[\s\S]*?\n\s*\},/g)];
   expect(blocks).toHaveLength(2);
@@ -16,7 +16,7 @@ test("main and specialist chat retain Spotify control turns and acknowledgements
     const workspace = new Function("conversationActionRuntimeRef", "opts", "let appActionRequested = false; return {" + block + "};")(
       {current:{rememberRequest:remember}}, {onAppAction:rollback});
     workspace.actionRequested({action_id:"conversation.new"}, {turn_kind:"action"});
-    expect(rollback).toHaveBeenCalledOnce();
+    expect(rollback).not.toHaveBeenCalled();
   }
 });
 

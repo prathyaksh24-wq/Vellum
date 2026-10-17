@@ -986,7 +986,7 @@ def test_current_datetime_question_is_answered_without_model_call():
         now=datetime(2026, 9, 28, 14, 5, tzinfo=ZoneInfo("Asia/Kolkata")),
     )
 
-    assert answer == "Today is Monday, September 28, 2026, and the time is 2:05 PM IST."
+    assert answer == "It's 2:05 PM IST on Monday, September 28, 2026."
 
 
 def test_tweet_this_resolves_to_previous_assistant_message(monkeypatch, tmp_path):
@@ -2183,6 +2183,10 @@ def test_computer_use_session_task_records_instruction(monkeypatch, tmp_path):
 
     monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
+    # Recording a queued instruction must not depend on a real desktop lease
+    # left behind by another test.
+    session = api.ComputerUseSession(runtime=runtime, overlay=FakeOverlay(), input_guard=SimpleNamespace(status=lambda: {'lease_active':True}, heartbeat=lambda: None))
+    monkeypatch.setattr(api, '_computer_use_session', lambda source='ui': session)
     with TestClient(api.app) as client:
         response = client.post(
             "/api/computer-use/session/task",
@@ -2522,8 +2526,14 @@ def test_api_lifespan_starts_and_stops_scheduler_and_watcher(monkeypatch):
 
 
 def test_active_model_switch_does_not_wait_for_active_stream(monkeypatch):
+    # Exercise coordination without repeatedly parsing the operator's archive.
+    monkeypatch.setattr(api, '_read_ui_conversations', lambda: [])
+    async def resolve_model(model):
+        return model
+    monkeypatch.setattr(api, '_ensure_model', resolve_model)
     async def run_case():
         from agent.llm import providers as providers_mod
+        monkeypatch.setattr(providers_mod.ProviderRegistry, 'refresh_local_models', lambda self, **kwargs: None)
 
         providers_mod.get_provider_registry.cache_clear()
         api._agent_turns = api._ThreadTurnCoordinator()
@@ -2606,6 +2616,10 @@ def test_active_model_switch_does_not_wait_for_active_stream(monkeypatch):
 
 
 def test_stalled_chat_does_not_block_another_conversation(monkeypatch):
+    monkeypatch.setattr(api, '_read_ui_conversations', lambda: [])
+    async def resolve_model(model):
+        return model
+    monkeypatch.setattr(api, '_ensure_model', resolve_model)
     async def run_case():
         api._agent_turns = api._ThreadTurnCoordinator()
 

@@ -97,7 +97,7 @@ describe("Vellum default redesigned frontend", () => {
   });
 
   test("keeps mixed App Action turns in the visible conversation", () => {
-    expect(html).toContain("turn.turn_kind !== 'mixed'");
+    expect(html).not.toContain('rollbackAppActionTurn');
   });
 
   test("normalizes picker, drop, paste, and NLP attachment routes through one record path", () => {

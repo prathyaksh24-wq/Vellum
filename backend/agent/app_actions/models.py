@@ -99,17 +99,19 @@ class DevicePersonalizationSettings(BaseModel):
     voice: bool = False
     advVoice: bool = False
     connector: bool = False
-    baseStyle: str = "default"
-    warm: str = "default"
-    enthusiastic: str = "default"
-    headers: str = "default"
-    emoji: str = "default"
+    baseStyle: Literal["default", "professional", "friendly", "candid", "quirky", "efficient", "cynical"] = "default"
+    warm: Literal["default", "more", "less"] = "default"
+    enthusiastic: Literal["default", "more", "less"] = "default"
+    headers: Literal["default", "more", "less"] = "default"
+    emoji: Literal["default", "more", "less"] = "default"
 
 
 class DeviceSettingsValues(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     background: str | None = None
+    previous_background: str | None = None
+    profile: dict[str, str] = Field(default_factory=dict)
     accent: str | None = None
     dock_position: str | None = None
     dock_locked: bool | None = None
