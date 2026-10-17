@@ -382,16 +382,16 @@ class ConversationLifecycle:
                 json.dumps({"conversations": conversations}, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
-            for attempt in range(5):
+            for attempt in range(7):
                 try:
                     temporary.replace(self.path)
                     break
                 except PermissionError:
                     # A Windows reader or scanner can briefly deny replacement.
-                    # Keep the old file intact and bound the wait to 250 ms.
-                    if attempt == 4:
+                    # Keep the old file intact and bound the wait to 1.6 seconds.
+                    if attempt == 6:
                         raise
-                    sleep(.025 * (attempt + 1))
+                    sleep(.025 * (2 ** attempt))
         finally:
             with suppress(OSError):
                 temporary.unlink(missing_ok=True)

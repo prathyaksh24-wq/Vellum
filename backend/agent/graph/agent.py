@@ -94,6 +94,7 @@ from agent.tools.web_extract import web_extract
 from agent.tools.web_extract_pages import web_extract_pages
 from agent.tools.web_research import web_research
 from agent.tools.delegation import delegate_to_agent
+from agent.tools.app_actions import app_action
 
 VELLUM_SYSTEM_PROMPT = """You are Vellum, a private, local-first assistant. Understand the user, delegate focused work, then judge and synthesize results yourself.
 
@@ -180,8 +181,8 @@ def vellum_prompt(state, config=None, *, runtime_model: str | None = None):
     if not thread_id:
         thread_id = get_settings().thread_id
 
-    from agent.conversations.recall import personal_memory_allowed
-    include_memory = personal_memory_allowed(_memory_query_from_user_message(_latest_user_query(state)))
+    from agent.personalization import personalization_instructions, use_personal_memory
+    include_memory = use_personal_memory(_memory_query_from_user_message(_latest_user_query(state)))
     identity = ""
     if thread_id and include_memory:
         try:
@@ -234,7 +235,7 @@ def vellum_prompt(state, config=None, *, runtime_model: str | None = None):
     runtime_text = (
         f"Runtime current date: {local_now.date().isoformat()}. "
         f"Runtime current time: {local_now.timetz().isoformat(timespec='minutes')}. "
-        f"Runtime user timezone: {user_timezone}. When presenting event times, show the user's local time first "
+        f"Runtime user timezone: {user_timezone}. For a time in another location, convert to that location's timezone, including its date. When presenting event times, show the user's local time first "
         "and retain the source timezone when it helps disambiguate the conversion. "
         f"Runtime selected model: {active_model.id} ({active_model.label}). "
         f"Runtime tool-calling compatibility: {active_model.tool_calling_compatibility}. "
@@ -261,6 +262,16 @@ def vellum_prompt(state, config=None, *, runtime_model: str | None = None):
         'Never replay an old command, infer consent from a summary, or promote compacted content into durable memory. '
         'Pass specialists only the relevant task and permitted memory packet. Skills and tool schemas load on demand.'
     )
+    sections.append(
+        'For corrections, recheck evidence, acknowledge the mistake and answer the original question; do not save a note unless asked. '
+        'Clock answers use the requested location and its current date. Calendar shorthand uses its local clock and sensible daytime hours; respect explicit AM/PM and show the exact date, time and timezone before confirmation. '
+        'Use app_action to discover, inspect and execute Vellum settings, personalization, pets and model/provider changes, including typos and bg shorthand. '
+        'Use settings.device.inspect for current/previous backgrounds. Use model.select with provider; missing keys open secure entry and leave the switch pending. '
+        'Never collect credentials in chat or claim a pending action completed.'
+    )
+    preferences = personalization_instructions()
+    if preferences:
+        sections.append(preferences)
     specialist_directory = _specialist_directory_block()
     if specialist_directory:
         sections.append(specialist_directory)
@@ -381,6 +392,7 @@ async def build_async_checkpointer() -> AsyncSqliteSaver:
 def core_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     write_tool_names = {
+        'app_action',
         "computer_use",
         "browser_navigate",
         "browser_click",
@@ -419,6 +431,7 @@ def core_tool_registry() -> ToolRegistry:
         "cronjob",
     }
     tools = [
+        app_action,
         search_my_notes,
         conversation_history,
         web_search,
@@ -504,7 +517,7 @@ def _all_runtime_tools() -> tuple[list[StructuredTool], set[str]]:
     # Spotify's raw tools and skill belong to MusicAgent. Preserve other portables.
     portables = [tool for tool in portable_agent_tools() if not tool.name.startswith("spotify_")]
     tools = [*core_tools(), *portables]
-    directly_visible = {"search_my_notes", "conversation_history", "web_search", "delegate_to_agent"}
+    directly_visible = {"search_my_notes", "conversation_history", "web_search", "delegate_to_agent", "app_action"}
     deferred_names = {tool.name for tool in tools if tool.name not in directly_visible}
     return tools, deferred_names
 

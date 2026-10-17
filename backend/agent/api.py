@@ -6,6 +6,7 @@ import asyncio
 import base64
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 import importlib.util
 import inspect
 import hashlib
@@ -26,6 +27,7 @@ import urllib.parse
 import urllib.request
 from uuid import uuid4
 from zoneinfo import ZoneInfo
+from agent.personalization import request_personalization
 
 import httpx
 
@@ -443,6 +445,7 @@ class ChatResponse(BaseModel):
     thread_id: str
     tools: list[str] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
+    action_receipts: list[ActionReceipt] = Field(default_factory=list)
 
 
 class VoiceChatResponse(ChatResponse):
@@ -797,6 +800,10 @@ def _continuity_request(message: str, thread_id: str) -> str:
             )
     if not _is_retry_followup(clean):
         return clean
+    # A clock correction must retain the correction itself and its requested
+    # location, rather than replaying the earlier question as a new request.
+    if _clock_followup_answer(clean, thread_id) is not None:
+        return clean
     # Keep explicit retries bound to the locally stored Calendar action;
     # replaying a preceding "yes" would renew authorization accidentally.
     pending = _live_dispatcher.state_store.get_pending_action(thread_id)
@@ -1061,14 +1068,88 @@ def _format_clock_time(value: datetime) -> str:
     return value.strftime("%I:%M %p").lstrip("0")
 
 
+_CLOCK_LOCATIONS = {
+    "south korea": "Asia/Seoul", "korea": "Asia/Seoul", "seoul": "Asia/Seoul", "kst": "Asia/Seoul",
+    'netherlands':'Europe/Amsterdam', 'the netherlands':'Europe/Amsterdam', 'holland':'Europe/Amsterdam', 'belgium':'Europe/Brussels',
+    'france':'Europe/Paris', 'germany':'Europe/Berlin', 'italy':'Europe/Rome', 'spain':'Europe/Madrid', 'portugal':'Europe/Lisbon',
+    'nepal':'Asia/Kathmandu', 'pakistan':'Asia/Karachi', 'bangladesh':'Asia/Dhaka', 'thailand':'Asia/Bangkok', 'vietnam':'Asia/Ho_Chi_Minh',
+    "india": "Asia/Kolkata", "kolkata": "Asia/Kolkata", "new delhi": "Asia/Kolkata", "delhi": "Asia/Kolkata", "mumbai": "Asia/Kolkata", "ist": "Asia/Kolkata",
+    "japan": "Asia/Tokyo", "tokyo": "Asia/Tokyo", "singapore": "Asia/Singapore",
+    "china": "Asia/Shanghai", "beijing": "Asia/Shanghai", "shanghai": "Asia/Shanghai",
+    "dubai": "Asia/Dubai", "london": "Europe/London", "uk": "Europe/London",
+    "united kingdom": "Europe/London", "paris": "Europe/Paris", "berlin": "Europe/Berlin",
+    "new york": "America/New_York", "los angeles": "America/Los_Angeles",
+    "san francisco": "America/Los_Angeles", "chicago": "America/Chicago",
+    "sydney": "Australia/Sydney", "melbourne": "Australia/Melbourne", "perth": "Australia/Perth",
+    "toronto": "America/Toronto", "vancouver": "America/Vancouver", "utc": "UTC", "gmt": "Etc/GMT",
+}
+
+
+@lru_cache(maxsize=1)
+def _canonical_clock_zones() -> dict[str, str]:
+    from zoneinfo import available_timezones
+    return {name.casefold(): name for name in available_timezones()}
+
+
+def _clock_target(message: str) -> str | None:
+    """Extract a location without repeatedly scanning a variable-length suffix."""
+    text = ' '.join(message.split()).rstrip('.!?').rstrip()
+    preposition = re.search(r'\b(?:in|for|at|meant) ', text, re.I)
+    if preposition is None:
+        return None
+    target = text[preposition.end():]
+    lowered = target.casefold()
+    for suffix in (' right now', ' now', ' today', ' currently'):
+        if lowered.endswith(suffix):
+            return target[:-len(suffix)]
+    return target
+
+
+def _clock_location(message: str) -> tuple[str | None, bool]:
+    """Return an explicitly requested zone and whether a location was supplied."""
+    from zoneinfo import ZoneInfoNotFoundError
+    text = " ".join(message.strip().rstrip('.!?').casefold().split())
+    # Tokenization consumes each word once, including long malformed zone names.
+    # Anchored validation avoids retrying a failing zone pattern at every letter.
+    for token in re.finditer(r'\b[a-z_][a-z0-9_/+-]*', text):
+        candidate = token.group()
+        if '/' in candidate and re.fullmatch(r'[a-z_]+/[a-z0-9_+-]+(?:/[a-z0-9_+-]+)?', candidate):
+            return _canonical_clock_zones().get(candidate), True
+    # Do not mistake a mentioned wrong answer ("you gave me India time") for
+    # a new target. Explicit location changes such as "I meant Seoul" do count.
+    target = _clock_target(text)
+    if target:
+        name = target
+        zone = _CLOCK_LOCATIONS.get(name)
+        if not zone:
+            candidates = {
+                canonical for canonical in _canonical_clock_zones().values()
+                if canonical.rsplit('/', 1)[-1].replace('_', ' ').casefold() == name
+            }
+            if len(candidates) == 1:
+                zone = candidates.pop()
+        if zone:
+            try:
+                ZoneInfo(zone)
+            except ZoneInfoNotFoundError:
+                return None, True
+        return zone, True
+    return None, False
+
+
 def _current_datetime_answer(clean_message: str, *, now: datetime | None = None) -> str | None:
+    from agent.text_normalization import normalize_clock_question
+    clean_message = normalize_clock_question(clean_message)
     lowered = " ".join(clean_message.casefold().split())
+    if re.search(r"\b(?:calendar|appointments?|meetings?|events?|games?|matches|complexity|convert)\b", lowered):
+        return None
     asks_for_tomorrow = bool(
         re.search(r"\bwhat\s+(?:date|day)\s+is\s+(?:tomorrow|tom|tmrw)\b", lowered)
         or re.search(r"\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:date|day)\s+(?:tomorrow|tom|tmrw)\b", lowered)
     )
     asks_for_current_datetime = bool(
-        re.search(
+        re.search(r"^(?:(?:tell|show|give)\s+me\s+)?(?:what\s+)?(?:the\s+)?(?:current\s+)?(?:time|date)\s+(?:in|for|at)\s+", lowered)
+        or re.search(
             r"\b(?:what|which)\s+(?:is|'s)\s+(?:the\s+)?(?:current\s+)?(?:date|day|time|year)\b",
             lowered,
         )
@@ -1081,20 +1162,90 @@ def _current_datetime_answer(clean_message: str, *, now: datetime | None = None)
     )
     if not asks_for_current_datetime and not asks_for_tomorrow:
         return None
+    requested_zone, has_location = _clock_location(clean_message)
+    if has_location and not requested_zone:
+        return "Which city or IANA timezone should I use for that location?"
     user_zone = ZoneInfo(os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata"))
-    local_now = now or datetime.now(user_zone)
+    answer_zone = ZoneInfo(requested_zone) if requested_zone else user_zone
+    local_now = now or datetime.now(answer_zone)
     if local_now.tzinfo is None:
         local_now = local_now.replace(tzinfo=user_zone)
-    else:
-        local_now = local_now.astimezone(user_zone)
+    local_now = local_now.astimezone(answer_zone)
     zone_label = local_now.tzname() or os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata")
     if asks_for_tomorrow:
         tomorrow = local_now + timedelta(days=1)
-        return f"Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}."
-    return (
-        f"Today is {local_now.strftime('%A, %B %d, %Y')}, and the time is "
-        f"{_format_clock_time(local_now)} {zone_label}."
-    )
+        return f"Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}." + (f" ({requested_zone})" if requested_zone else "")
+    place = ''
+    if requested_zone:
+        label = _clock_target(clean_message) or requested_zone
+        label = label.rstrip('.!?')
+        if '/' in label:
+            label = requested_zone.rsplit('/', 1)[-1].replace('_', ' ')
+        else:
+            label = label.title() if len(label) > 3 else label.upper()
+        place = f' in {label}'
+    return f"It's {_format_clock_time(local_now)} {zone_label}{place} on {local_now.strftime('%A, %B %d, %Y')}."
+
+
+def _clock_followup_answer(message: str, thread_id: str) -> str | None:
+    text = " ".join(message.casefold().split())
+    if re.search(r"\b(?:save|remember|note|book|schedule|appointment|calendar|convert)\b", text):
+        return None
+    bare = text.rstrip('.!?')
+    short_text = bare.removeprefix('and ').removeprefix('also ')
+    for prefix in ("what's ", 'what is '):
+        if short_text.startswith(prefix):
+            short_text = short_text[len(prefix):]
+            break
+    short_text = short_text.removeprefix('the ')
+    for suffix in (' there', ' now'):
+        if short_text.endswith(suffix):
+            short_text = short_text[:-len(suffix)]
+            break
+    short = short_text in {'time', 'date', 'day'}
+    correction = re.search(r"\b(?:wrong|incorrect|you (?:gave|said|told)|i (?:meant|asked)|actually|no[, ])", text)
+    supplied_clock = re.search(r"\b(?:it(?:'s| is)|the time is)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b", text)
+    offset = 0
+    while True:
+        prefix = next((item for item in ('and ', 'what about ', 'how about ', 'in ') if bare.startswith(item, offset)), None)
+        if prefix is None:
+            break
+        offset += len(prefix)
+    location_question = bare[offset:] if offset and offset < len(bare) else None
+    if location_question:
+        offset = 0
+        while True:
+            prefix = next((item for item in ('also ', 'the ') if location_question.startswith(item, offset)), None)
+            if prefix is None:
+                break
+            offset += len(prefix)
+        if re.match(r'(?:time|date|day)\b', location_question[offset:]):
+            location_question = None
+    if not (short or correction or supplied_clock or location_question):
+        return None
+    previous = _thread_user_messages(thread_id, limit=6)
+    if previous and previous[-1].strip().casefold() == message.strip().casefold():
+        previous = previous[:-1]
+    zone, has_location = _clock_location(message)
+    if location_question and not short and not has_location:
+        zone, has_location = _clock_location('in ' + location_question)
+    found_clock = False
+    for prior in reversed(previous[-4:]):
+        is_clock = _current_datetime_answer(prior) is not None
+        if not is_clock and not re.search(r"\b(?:time|date|there|wrong|meant)\b", prior, re.I):
+            break
+        found_clock = found_clock or is_clock
+        if not has_location:
+            zone, has_location = _clock_location(prior)
+        if found_clock and has_location:
+            break
+    if found_clock:
+        question = 'what is the current time?' + (f' in {zone}' if zone else '')
+        if has_location and not zone:
+            return 'Which city or IANA timezone should I use for that location?'
+        answer = _current_datetime_answer(question)
+        return ("Sorry, I used the wrong time or timezone. " if correction or supplied_clock else "") + answer
+    return None
 
 
 def _user_profile_recall_answer(clean_message: str, thread_id: str) -> str | None:
@@ -1263,6 +1414,23 @@ def _time_conversion_answer(clean_message: str, thread_id: str) -> str | None:
     )
 
 
+def _contextual_presentation_message(message: str, thread_id: str) -> str:
+    from agent.text_normalization import normalize_command_words
+    normalized = normalize_command_words(message).casefold().rstrip('.!?')
+    if not re.fullmatch(r'(?:please )?(?:change|switch|go) back(?: to)? (?:the )?(?:previous|last|old) one', normalized):
+        return message
+    previous = _thread_user_messages(thread_id, limit=4)
+    if previous and previous[-1].strip().casefold() == message.strip().casefold():
+        previous = previous[:-1]
+    if previous:
+        request = _app_action_runtime.match_submission(previous[-1])
+        if request and request.action_id in {'settings.device.update', 'settings.device.inspect'} and (
+            request.action_id == 'settings.device.inspect' or 'background' in request.arguments.get('patch', {})
+        ):
+            return 'restore the previous background'
+    return message
+
+
 def _direct_contextual_answer(clean_message: str, thread_id: str) -> str | None:
     if any(marker in clean_message for marker in ("[Current conversation follow-up]", "[Conversation follow-up context]")):
         return None
@@ -1271,7 +1439,7 @@ def _direct_contextual_answer(clean_message: str, thread_id: str) -> str | None:
     failure_answer = _failed_tool_followup_answer(clean_message, thread_id)
     if failure_answer is not None:
         return failure_answer
-    date_answer = _current_datetime_answer(clean_message)
+    date_answer = _clock_followup_answer(clean_message, thread_id) or _current_datetime_answer(clean_message)
     if date_answer is None and re.fullmatch(
         r"(?:and )?(?:also )?(?:what(?:'s| is) )?(?:the )?time\??",
         " ".join(clean_message.split()),
@@ -1556,12 +1724,18 @@ def _write_provider_credential(provider: str, secret: str) -> None:
         raise
 
 
+def _resume_provider_selection(provider: str, context: AppActionContext) -> dict[str, Any]:
+    _session_control_service.provider_registry = get_provider_registry()
+    return _session_control_service.resume_provider_selection(provider, context)
+
+
 _settings_runtime_actions = SettingsRuntimeActionService(
     memory_store_provider=lambda: _memory_orchestrator.store,
     memory_creator=lambda **values: _memory_orchestrator.save_explicit_memory(**values),
     provider_registry_provider=get_provider_registry,
     routing_runtime_provider=get_routing_runtime,
     credential_writer=_write_provider_credential,
+    provider_selection_resumer=_resume_provider_selection,
     memory_dreaming_runner=lambda: _run_memory_dreaming_action(),
     conversation_memory_importer=lambda limit: _import_ui_conversations_to_memory(limit),
     obsidian_memory_importer=lambda: _memory_orchestrator.import_obsidian_memories(
@@ -2401,10 +2575,19 @@ async def _compact_conversation_stream(request, thread_id):
 
 async def _run_agent(*args, **kwargs):
     from agent.llm.providers import request_model_scope
+    from agent.personalization import personalization_scope
+    from agent.tools.app_actions import app_action_session, drain_app_action_events
 
-    model = kwargs.get("model", args[2] if len(args) > 2 else None)
-    with request_model_scope(model):
-        return await _run_agent_scoped(*args, **kwargs)
+    model = kwargs.get('model', args[2] if len(args) > 2 else None)
+    preferences = kwargs.pop('personalization', None)
+    explicit_web_search = kwargs.pop('explicit_web_search', False)
+    query = kwargs.get('message', args[0] if args else '')
+    action_context = kwargs.pop('app_action_context', None)
+    thread_id = kwargs.get('thread_id', args[1] if len(args) > 1 else get_settings().thread_id)
+    with request_model_scope(model), personalization_scope(preferences, query, explicit_web_search=explicit_web_search), app_action_session(action_context, thread_id, _app_action_runtime):
+        response = await _run_agent_scoped(*args, **kwargs)
+        response.action_receipts.extend(ActionReceipt.model_validate(event['receipt']) for event in drain_app_action_events())
+        return response
 
 
 async def _run_agent_scoped(
@@ -2565,6 +2748,8 @@ async def _run_agent_scoped(
 
     messages = result.get("messages", []) if isinstance(result, dict) else []
     answer = _clean_answer_body(_message_content(messages[-1] if messages else None)) or "No response."
+    from agent.tools.app_actions import app_action_result_guard
+    answer = app_action_result_guard() or answer
     tools = list(dict.fromkeys([*delegated_tools, *_tool_call_names(messages)]))
     skill_usage_scope.finish("completed", tool_count=len(tools))
     skill_usage_scope.__exit__(None, None, None)
@@ -2909,6 +3094,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
             audit,
             reasoning_mode=request.reasoning_mode,
             store=request.store,
+            personalization=request_personalization(request.action_context),
+            app_action_context=request.action_context,
+            explicit_web_search=request.force_web_search,
         )
     except asyncio.CancelledError:
         audit.finalize("cancelled")
@@ -4262,6 +4450,10 @@ def _with_forced_web_search_context(clean_message: str) -> str:
 async def _prefetch_artist_metric_evidence(message: str) -> tuple[str, list[dict[str, Any]], list[str]]:
     from agent.agents.music import MusicAgent
     from agent.tools.web import web_search
+    from agent.personalization import tool_preference_error
+
+    if tool_preference_error('web_search', 'web'):
+        return '', [], []
 
     query = MusicAgent.public_research_query(message)
     if not query:
@@ -4510,8 +4702,13 @@ async def _checkpoint_specialist_exchange(message: str, answer: str, thread_id: 
 
 async def _stream_agent_turn(**kwargs):
     from agent.llm.providers import request_model_scope
+    from agent.personalization import personalization_scope
+    from agent.tools.app_actions import app_action_session
 
-    with request_model_scope(kwargs.get("model")):
+    preferences = kwargs.pop('personalization', None)
+    explicit_web_search = kwargs.pop('explicit_web_search', False)
+    action_context = kwargs.pop('app_action_context', None)
+    with request_model_scope(kwargs.get("model")), personalization_scope(preferences, kwargs.get('clean_message', ''), explicit_web_search=explicit_web_search), app_action_session(action_context, kwargs['active_thread_id'], _app_action_runtime):
         async for event in _stream_agent_turn_scoped(**kwargs):
             yield event
 
@@ -4529,6 +4726,7 @@ async def _stream_agent_turn_scoped(
     turn_audit: TurnAudit | None = None,
     reasoning_mode: str | None = None,
 ):
+    from agent.tools.app_actions import app_action_result_guard
     response_id = _stream_id("resp")
     message_item_id = _stream_id("msg")
     yield _response_created(response_id=response_id, thread_id=active_thread_id)
@@ -5009,6 +5207,8 @@ async def _stream_agent_turn_scoped(
                                 name=str(item.get("name") or "function"),
                             )
                     text = _chunk_text(chunk)
+                    if app_action_result_guard():
+                        text = ''
                     if text and not (specialist_gap and not sources):
                         answer_parts.append(text)
                         if specialist_summaries:
@@ -5113,6 +5313,11 @@ async def _stream_agent_turn_scoped(
                         yield _sse("activity", {"label": label, "detail": detail})
                 elif kind == "on_tool_end":
                     tool_name = str(event.get("name") or "")
+                    from agent.tools.app_actions import drain_app_action_events
+                    for action_event in drain_app_action_events():
+                        turn = {'turn_kind':'mixed','thread_id':active_thread_id}
+                        yield _sse('app.action.requested', {**turn,'request':action_event['request']})
+                        yield _sse('app.action.receipt', {**turn,'receipt':action_event['receipt']})
                     if tool_name == "web_search":
                         output_text = _tool_output_text(event.get("data", {}).get("output"))
                         for record in extract_web_sources(output_text):
@@ -5274,7 +5479,7 @@ async def _stream_agent_turn_scoped(
                 and last_chat_model_output is not None
                 and not (specialist_gap and not sources)
             ):
-                final_text = _clean_answer_body(_message_content(last_chat_model_output))
+                final_text = app_action_result_guard() or _clean_answer_body(_message_content(last_chat_model_output))
                 if final_text:
                     answer_parts.append(final_text)
                     if specialist_summaries:
@@ -5422,6 +5627,7 @@ async def _stream_agent_turn_scoped(
                     yield _sse("token", {"text": delta})
             else:
                 answer = _clean_answer_body("".join(answer_parts)) or "No response."
+            answer = app_action_result_guard() or answer
             stream_skill_usage.finish("completed", tool_count=len(set(tool_names)))
             stream_skill_usage.__exit__(None, None, None)
             source_models = [Source(**record) for record in sources]
@@ -5722,7 +5928,8 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         return StreamingResponse(_compact_conversation_stream(request, active_thread_id), media_type='text/event-stream')
     submitted_text = str(request.action_message or "").strip()
     action_message = submitted_text if submitted_text and submitted_text in clean_message else clean_message
-    action_turn = _app_action_runtime.plan_submission(action_message)
+    resolved_action_message = _contextual_presentation_message(action_message, active_thread_id)
+    action_turn = _app_action_runtime.plan_submission(resolved_action_message)
     submitted_actions = list(action_turn.actions)
     action_receipts = []
     for attachment in request.attachments:
@@ -5963,6 +6170,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             attachments=turn_attachments,
             turn_audit=turn_audit,
             reasoning_mode=effective_reasoning_mode,
+            personalization=request_personalization(request.action_context, action_receipts),
+            app_action_context=request.action_context,
+            explicit_web_search=request.force_web_search,
         )
     )
 
@@ -6000,7 +6210,17 @@ async def voice_turn(
     audio: UploadFile = File(...),
     thread_id: str | None = Form(default=None),
     model: str | None = Form(default=None),
+    personalization: str | None = Form(default=None),
 ) -> StreamingResponse:
+    preferences = None
+    if personalization is not None:
+        from agent.app_actions.models import DevicePersonalizationSettings
+        try:
+            preferences = DevicePersonalizationSettings.model_validate_json(personalization).model_dump(exclude_unset=True)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="Invalid voice personalization.") from exc
+        if preferences.get('voice') is False:
+            raise HTTPException(status_code=409, detail="Voice is off in Personalization.")
     result = await _read_voice_transcript(audio)
     active_thread_id = thread_id or get_settings().thread_id
     computer_use_intent = _computer_use_mode_intent(result.transcript)
@@ -6025,6 +6245,7 @@ async def voice_turn(
             source="voice",
             voice=True,
             synthesize_audio=True,
+            personalization=preferences,
         ):
             yield item
 

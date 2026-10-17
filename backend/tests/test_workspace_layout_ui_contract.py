@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,18 +27,25 @@ def test_visible_workspace_controls_dispatch_through_app_actions() -> None:
     assert "dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})" in ui_source
     assert "dispatchSurfacePresentation('settings', {visible:true})" in ui_source
     assert "dispatchSurfacePresentation('right-panel', {visible:true})" in ui_source
-    assert "onSurfaceChange('composer', {properties:{size}})" in ui_source
-    assert "onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}})" in ui_source
-    assert "onLayoutReset" in ui_source
+    appearance = ui_source.split("{tab === 'Appearance' && (", 1)[1].split("{tab === '", 1)[0]
+    assert "Workspace layout controls" not in appearance
+    assert "Adaptive UI" not in appearance
+    assert "onSurfaceChange" not in appearance
+    assert "Live &amp; animated" in appearance
+    assert "Static scenes" in appearance
 
 
-def test_interface_actions_remove_the_optimistic_chat_turn() -> None:
+def test_interface_actions_retain_submitted_chat_turns_and_receipts() -> None:
     ui_source = UI_PATH.read_text(encoding="utf-8")
 
-    assert "actionRequested: (request, turn) =>" in ui_source
-    assert "rollbackAppActionTurn" in ui_source
-    assert "messages:c.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)" in ui_source
-    assert "cs.filter(c => c.id !== chatId)" in ui_source
+    requested = re.findall(r"actionRequested: \(request, turn\) => \{(.*?)\n\s*\},", ui_source, re.S)
+    assert len(requested) == 2  # Main and specialist chats.
+    for handler in requested:
+        assert "conversationActionRuntimeRef.current.rememberRequest(request);" in handler
+        assert "onAppAction" not in handler
+    assert "rollbackAppActionTurn" not in ui_source
+    assert "messages:c.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)" not in ui_source
+    assert ui_source.count("applyAppActionReceipt(receipt, {notify:true, turn});") == 2
     assert "action_message: opts.submittedText || message" in ui_source
     assert "setAgentConvos(ac =>" in ui_source
 

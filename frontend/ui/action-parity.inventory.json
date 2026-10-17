@@ -1,11 +1,13 @@
 {
   "version": 1,
   "handlerFingerprints": {
+    "design/Velllum/uploads/components/PatternWaves.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+    "design/Velllum/uploads/components/Particles.jsx": {"count":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
     "design/Velllum/uploads/components/browser-settings.jsx": {"count":68,"sha256":"53c253a55c986c8e8b334fc29ad630fbe453ebd50b1f0c982c161f9e524b8543"},
     "design/Velllum/uploads/components/automation-notifications.jsx": {"count":11,"sha256":"50f80c1904e400380023faa7fc6324d1ec74c4c0902d2b6c5ce6148191246cc0"},
     "design/Velllum/uploads/components/music-page.jsx": {"count":55,"sha256":"bb9f14d284290ccf9dbb36b634acdc16edd8c39cd32c9e7e46fd7255a57ea4b9"},
     "design/Velllum/uploads/components/browser-panel.jsx": {"count":59,"sha256":"f34ebc91657d5089cfe5e4f91f4e3cbe33229dfffc2f3d45d872f82b921a351e"},
-    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":896,"sha256":"fd993573f61ac36a01edfe22ac94ab25b1f1ecc4363fcd01333e465b6d625799"},
+    "design/Velllum/uploads/Vellum Default Re-designed.html": {"count":883,"sha256":"7a7d36b7823f4d2fec6ed2fe41ba3117d7b7aed22901168cd435c5de25dd95a0"},
     "design/Velllum/uploads/vellum-workspace.html": {"count":178,"sha256":"403291beb9de5adef93382ebc4ebf12628d01b205d9e214bad01b7f2e3cbc8c5"},
     "design/Velllum/uploads/components/v-select.jsx": {"count":5,"sha256":"4e4c0616712154cf2ce38f29933514025686658c14acef2e93f1c93177cd4ecb"},
     "design/Velllum/uploads/components/books-view.jsx": {"count":36,"sha256":"7abd93c45560513232dfa33602e8bd579e873f446ec86b2aeae967627cbd7583"},
@@ -13,6 +15,7 @@
     "design/Velllum/uploads/components/youtube-history.jsx": {"count":1,"sha256":"43ab3456f08fa593edd8bae157ef5a4272f00d7d7f018b2b09b65a2425cc8c29"}
   },
   "covered": [
+    {"surface":"Profile and custom instructions","name":"saved display name username and response instructions","actionId":"settings.device.update","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchDeviceSettings({profile:p})"}},
     {"surface":"Browser","name":"drag keyboard and reset split ratio through workspace layout","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"properties:{chat_ratio}"}},
     {"surface":"Browser settings","name":"local cursor presets PNG upload size and click point","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"patch({cursor_style:style})"}},
     {"surface":"Browser settings","name":"routine interactions under the explicit browser request","actionId":"browser.settings.manage","probe":{"path":"design/Velllum/uploads/components/browser-settings.jsx","text":"patch({agent_interactions:value})"}},
@@ -34,12 +37,6 @@
     {"surface":"Workspace Layout","name":"settings visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('settings', {visible:true})"}},
     {"surface":"Workspace Layout","name":"right panel visibility","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchSurfacePresentation('right-panel', {visible:true})"}},
     {"surface":"Workspace Layout","name":"theme","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}"}},
-    {"surface":"Workspace Layout","name":"composer size","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSurfaceChange('composer', {properties:{size}})"}},
-    {"surface":"Workspace Layout","name":"send button label","actionId":"ui.surface.configure","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}})"}},
-    {"surface":"Workspace Layout","name":"reset surfaces","actionId":"ui.workspace.reset","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onClick={onLayoutReset}>Reset surfaces"}},
-    {"surface":"Adaptive UI","name":"explain learned rule","actionId":"ui.adaptive.rule.explain","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAdaptiveRuleAction('ui.adaptive.rule.explain'"}},
-    {"surface":"Adaptive UI","name":"enable or disable learned rule","actionId":"ui.adaptive.rule.set_enabled","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAdaptiveRuleAction('ui.adaptive.rule.set_enabled'"}},
-    {"surface":"Adaptive UI","name":"remove learned rule","actionId":"ui.adaptive.rule.remove","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"onAdaptiveRuleAction('ui.adaptive.rule.remove'"}},
     {"surface":"Adaptive UI","name":"suppress learning toast","actionId":"ui.adaptive.rule.suppress","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchAdaptiveRuleAction('ui.adaptive.rule.suppress'"}},
     {"surface":"Conversations","name":"new chat","actionId":"conversation.new","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.new', {}, {applyNavigation:false})"}},
     {"surface":"Conversations","name":"open chat","actionId":"conversation.open","probe":{"path":"design/Velllum/uploads/Vellum Default Re-designed.html","text":"dispatchConversationAction('conversation.open'"}},

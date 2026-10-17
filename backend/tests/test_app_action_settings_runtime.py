@@ -1,5 +1,9 @@
 from datetime import datetime, timezone
+from pathlib import Path
+import re
 from types import SimpleNamespace
+
+import pytest
 
 from agent.app_actions.models import AppActionContext, AppActionRequest
 from agent.app_actions.runtime import AppActionRuntime
@@ -369,6 +373,41 @@ def test_device_settings_advance_context_between_actions_in_one_turn() -> None:
 
     assert [receipt.result["device_settings_patch"]["base_revision"] for receipt in receipts] == [4, 5]
     assert [receipt.result["device_settings_patch"]["revision"] for receipt in receipts] == [5, 6]
+
+
+def _selectable_frontend_background_ids() -> list[str]:
+    page = Path(__file__).resolve().parents[2] / "design/Velllum/uploads/Vellum Default Re-designed.html"
+    registry = page.read_text(encoding="utf-8").split("const BACKGROUND_REGISTRY = [", 1)[1].split("const BACKGROUND_INDEX", 1)[0]
+    # Ambient is the legacy, hidden fallback; it isn't offered by the picker.
+    return [background for background in re.findall(r"\bid:'([^']+)'", registry) if background != "ambient"]
+
+
+@pytest.mark.parametrize("background", _selectable_frontend_background_ids())
+def test_selectable_frontend_background_returns_applied_device_receipt(background: str) -> None:
+    runtime, *_ = make_runtime()
+    action_context = context("ui").model_copy(update={
+        "device_settings": {"version": 1, "revision": 4, "values": {"background": "galaxy"}},
+    })
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"background": background}}),
+        action_context,
+    )
+    assert receipt.status == "applied", receipt.model_dump()
+    assert receipt.target.kind == "device_setting"
+    patch = receipt.result["device_settings_patch"]
+    assert patch["base_revision"] == 4
+    assert patch["revision"] == (4 if background == "galaxy" else 5)
+    assert patch["values"] == ({} if background == "galaxy" else {"background": background, 'previous_background':'galaxy'})
+
+
+def test_unknown_background_still_fails_without_a_device_patch() -> None:
+    runtime, *_ = make_runtime()
+    receipt = runtime.dispatch(
+        AppActionRequest(action_id=DEVICE_SETTINGS_UPDATE_ACTION_ID, arguments={"patch": {"background": "unregistered-background"}}),
+        context("ui"),
+    )
+    assert receipt.status == "failed"
+    assert "device_settings_patch" not in receipt.result
 
 
 def test_memory_privacy_change_requires_confirmation_and_persists_to_memory_owner() -> None:

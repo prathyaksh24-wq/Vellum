@@ -216,7 +216,7 @@ def test_agent_refuses_ambiguous_calendar_changes() -> None:
 
     assert response.status == "blocked"
     assert response.action_request == {}
-    assert "title in quotes" in response.summary
+    assert "unambiguous date and start time" in response.summary
 
 
 def test_agent_reports_account_probe_failure_as_connector_error() -> None:

@@ -15,6 +15,17 @@ per-turn personalization runtime is an optional integration: when installed,
 recall uses its existing policy; otherwise canonical memory/history settings
 still apply. Unrelated settings tools and voice/account changes are excluded.
 
+### Merge update — 17 October 2026
+
+Merged `main` at `55d7dd1` after conversational settings landed in PR #221.
+Resolved the changelog and main-graph conflicts by retaining both feature sets:
+the ordered evidence layers, separate protected SOUL, memory gating and response
+preferences, settings instructions, and both directly visible tools
+`conversation_history` and `app_action`. The personalization runtime is now
+present through main. Existing clock/CodeQL fixes and frontend changes were
+retained. No tests or builds were run for this merge, as requested; only Git
+conflict-marker and diff whitespace checks were performed.
+
 ## Implementation
 
 - `agent/llm/context.py` still owns accounting/projection. It understands the

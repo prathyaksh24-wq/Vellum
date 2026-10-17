@@ -529,6 +529,25 @@ describe("Device Settings App Action adapter", () => {
     expect(runtime.snapshot().values.accent).toBe("default");
   });
 
+  test("retains both current and previous background after a device reload", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage();
+    const runtime = AppActions.createDeviceSettingsRuntime({storage,client:{}});
+    runtime.applyReceipt({status:"applied",result:{device_settings_patch:{version:1,base_revision:0,revision:1,values:{background:"aurora",previous_background:"galaxy"}}}});
+    const reloaded = AppActions.createDeviceSettingsRuntime({storage,client:{}});
+    expect(reloaded.snapshot().values).toMatchObject({background:"aurora",previous_background:"galaxy"});
+  });
+
+  test("saves profile and custom instructions through the same device owner", async () => {
+    const AppActions = await loadRuntime();
+    const storage = memoryStorage();
+    const runtime = AppActions.createDeviceSettingsRuntime({storage,client:{}});
+    runtime.applyReceipt({status:"applied",result:{device_settings_patch:{version:1,base_revision:0,revision:1,values:{profile:{displayName:"Test Person",username:"test-user"},personalization:{custom:"Use short examples."}}}}});
+    const reloaded = AppActions.createDeviceSettingsRuntime({storage,client:{}});
+    expect(reloaded.snapshot().values.profile).toEqual({displayName:"Test Person",username:"test-user"});
+    expect(reloaded.snapshot().values.personalization.custom).toBe("Use short examples.");
+  });
+
   test("keeps the previous device state when an action fails", async () => {
     const AppActions = await loadRuntime();
     const client = {

@@ -36,6 +36,10 @@ class ProfileExecution:
         )
         timezone = os.getenv("VELLUM_USER_TIMEZONE", "Asia/Kolkata")
         instruction += f"\nRuntime user time: {datetime.now(ZoneInfo(timezone)).isoformat()}; timezone: {timezone}."
+        from agent.personalization import personalization_instructions
+        preferences = personalization_instructions()
+        if preferences:
+            instruction += '\n' + preferences
         # Keep evidence separate from the instruction section and bounded per run.
         evidence = json.dumps({"memory": self.memory, "context": self.context[:8000]}, ensure_ascii=False, default=str)
         return [SystemMessage(content=instruction, additional_kwargs={"vellum_profile": self.profile_id}),

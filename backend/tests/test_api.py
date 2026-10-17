@@ -987,7 +987,7 @@ def test_current_datetime_question_is_answered_without_model_call():
         now=datetime(2026, 9, 28, 14, 5, tzinfo=ZoneInfo("Asia/Kolkata")),
     )
 
-    assert answer == "Today is Monday, September 28, 2026, and the time is 2:05 PM IST."
+    assert answer == "It's 2:05 PM IST on Monday, September 28, 2026."
 
 
 def test_tweet_this_resolves_to_previous_assistant_message(monkeypatch, tmp_path):
@@ -2183,6 +2183,10 @@ def test_computer_use_session_task_records_instruction(monkeypatch, tmp_path):
 
     monkeypatch.setattr(api, "_computer_use_overlay", lambda: FakeOverlay())
 
+    # Recording a queued instruction must not depend on a real desktop lease
+    # left behind by another test.
+    session = api.ComputerUseSession(runtime=runtime, overlay=FakeOverlay(), input_guard=SimpleNamespace(status=lambda: {'lease_active':True}, heartbeat=lambda: None))
+    monkeypatch.setattr(api, '_computer_use_session', lambda source='ui': session)
     with TestClient(api.app) as client:
         response = client.post(
             "/api/computer-use/session/task",

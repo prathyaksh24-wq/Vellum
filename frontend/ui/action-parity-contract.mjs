@@ -30,6 +30,8 @@ export const SOURCE_FILES = [
   "design/Velllum/uploads/components/youtube-history.jsx",
   "design/Velllum/uploads/components/music-page.jsx",
   "design/Velllum/uploads/components/automation-notifications.jsx",
+  "design/Velllum/uploads/components/PatternWaves.jsx",
+  "design/Velllum/uploads/components/Particles.jsx",
 ];
 
 function reactScripts(content) {

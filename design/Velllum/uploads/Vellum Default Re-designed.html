@@ -39,6 +39,10 @@
 <script type="text/babel" data-presets="react" src="components/books-view.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/youtube-history.jsx"></script>
 <script type="text/babel" data-presets="react" src="components/calendar-workspace.jsx"></script>
+<link rel="stylesheet" href="components/PatternWaves.css"/>
+<script type="text/babel" data-presets="react" src="components/PatternWaves.jsx"></script>
+<link rel="stylesheet" href="components/Particles.css"/>
+<script type="text/babel" data-presets="react" src="components/Particles.jsx"></script>
 <script type="module" src="/books-entry.js"></script>
 <link rel="stylesheet" href="components/books-view.css"/>
 <script src="api/runtimes.js"></script>
@@ -418,7 +422,6 @@ body{background:#050404;color:var(--txt);font-family:"Lexend","Helvetica Neue",H
 .set-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:13px;color:var(--txt)}
 .set-row .sr-sub{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
 .set-row .sr-end{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
-.layout-action-settings{margin-top:12px;border-top:1px solid var(--line)}.layout-label-row input{width:132px;background:var(--input);border:1px solid var(--line2);border-radius:8px;color:var(--txt2);font:inherit;padding:7px 9px;outline:none}.layout-label-row input:focus{border-color:var(--ember);box-shadow:0 0 0 3px color-mix(in srgb,var(--ember) 12%,transparent)}
 .set-note{font-size:11.5px;color:var(--dim2);font-style:italic;margin-top:14px}
 .ap-seg{display:inline-flex;padding:3px;border:1px solid var(--line2);border-radius:10px;background:var(--input)}
 .ap-seg-b{display:flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:7px;background:transparent;color:var(--dim);font:inherit;font-size:11.5px;cursor:pointer;transition:background .16s,color .16s,box-shadow .16s}
@@ -2770,6 +2773,18 @@ const BACKGROUND_REGISTRY = [
     theme:{tone:'light',base:'#d8bfe2',surfaceRgb:'249,237,246',foreground:'#493b51',foregroundStrong:'#211928',muted:'#6e5b77',faint:'#907d98',accent:'#7b5da9',accent2:'#3d806f',shadow:'#725c7d',darkDensity:.77,lightDensity:.70,textShadow:'0 1px 2px rgba(255,255,255,.95),0 0 18px rgba(255,255,255,.58)'}
   },
   {
+    id:'pattern-waves', label:'Pattern Waves', description:'Fine dots flowing over a softly lit silk surface.', kind:'shader', component:window.VellumUI.PatternWaves,
+    installCmd:'npx shadcn@latest add @react-bits/PatternWaves-JS-CSS', props:{loadGraphics:loadOgl,preset:'silk',color:'#c8b8a8',backgroundColor:'#100e0d',speed:.22,opacity:.4,intro:false}, previewProps:{interactive:false,pixelRatio:.65,opacity:.8},
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#100e0d',surfaceRgb:'25,22,20',foreground:'#eadfd5',foregroundStrong:'#fff5eb',muted:'#b5a496',faint:'#87766a',accent:'#c5a88c',accent2:'#a88c73',shadow:'#050403',darkDensity:.80,lightDensity:.72,textShadow:'0 2px 4px rgba(0,0,0,.94),0 0 18px rgba(0,0,0,.72)'}
+  },
+  {
+    id:'particles', label:'Particles', description:'Warm luminous particles drifting through a deep, quiet field.', kind:'shader', component:window.VellumUI.Particles,
+    installCmd:'npx shadcn@latest add @react-bits/Particles-JS-CSS', props:{particleCount:280,particleColors:['#eedcc5','#c5a88c','#fff5e6'],particleBaseSize:85,speed:.07,glow:.35,twinkle:.15,opacity:.8,intro:false,clickBurst:false}, previewProps:{particleCount:90,moveParticlesOnHover:false,pixelRatio:.65},
+    tokens:{dark:{cover:'0%',sideCover:'74%',blur:'0px'},light:{cover:'0%',sideCover:'84%',blur:'0px'}},
+    theme:{tone:'dark',base:'#0b0d12',surfaceRgb:'19,21,28',foreground:'#e9e3da',foregroundStrong:'#fff8ed',muted:'#b8aea1',faint:'#877d72',accent:'#d4b891',accent2:'#a48f75',shadow:'#030407',darkDensity:.80,lightDensity:.72,textShadow:'0 2px 4px rgba(0,0,0,.94),0 0 18px rgba(0,0,0,.72)'}
+  },
+  {
     id:'rocket-blast', label:'Rocket Blast', description:'ASCII rocket exhaust rendered from the original 115-frame animation.', kind:'ascii', component:RocketBlast,
     installCmd:'npx shadcn@latest add https://asciistudio.space/r/rocket-blast-2.json', registryUrl:ROCKET_BLAST_REGISTRY_URL, previewProps:{fps:18},
     tokens:{dark:{cover:'0%',sideCover:'78%',blur:'0px'},light:{cover:'0%',sideCover:'78%',blur:'0px'}},
@@ -3825,7 +3840,7 @@ const PerCharacterRise = ({text='',phase='enter',speed=1,className=''}) => {
   );
 };
 
-const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}}) => {
+const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onStop, busy, ph, drop = 'up', library, projects, onOpenLibrary, onOpenProject, onViewImage, apps, skills = [], agents = AGENTS, appSel = [], onToggleSel, onConnectApp, onOpenAgent, onOpenPlugins, onOpenSkills, memoryEnabled = true, onMemoryChange, onAppActionReceipt, presentation = {}, voiceEnabled = true}) => {
   const [attach, setAttach] = useState([]);
   const [attachError, setAttachError] = useState('');
   const [epubImport, setEpubImport] = useState(null);
@@ -3838,6 +3853,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
   const VOICE_SCRIPT = 'Hello, how are you doing today? Can you help me set up a project for next week?';
   const endVoice = () => { voiceRef.current.timers.forEach(clearTimeout); voiceRef.current.timers = []; setVoiceState('idle'); };
   const startVoice = () => {
+    if (!voiceEnabled) return;
     if (voiceState !== 'idle') { endVoice(); return; }
     setText('');
     setVoiceState('connecting');
@@ -4117,7 +4133,7 @@ const Composer = ({text, setText, model, setModel, models = MODELS, onSend, onSt
             ? <button className="csend stop-btn" title="Stop answering" onClick={onStop}><IcStop size={15}/></button>
             : text.trim()
               ? <button className={'csend send-size-' + sendSize + (showSendLabel ? ' has-label' : '')} title={busy ? 'Queue message' : sendLabel} aria-label={sendLabel} data-ui-reference="composer.send" onClick={send}><IcSend size={15}/>{showSendLabel && <span className="csend-label">{busy ? 'Queue' : sendLabel}</span>}</button>
-              : <button className="csend voice-btn" title="Use Voice  ?  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
+              : <button className="csend voice-btn" disabled={!voiceEnabled} title="Use Voice  ?  Ctrl + Shift + V" onClick={startVoice}><IcVoice size={15}/></button>)}
           {voiceState === 'connecting' && (
             <button className="voice-pill voice-pill-cancel" onClick={endVoice} title="Cancel"><span className="voice-spin"/>Cancel</button>)}
           {voiceState === 'listening' && (
@@ -7570,15 +7586,12 @@ const SpotifyPlayer = ({spotify, dockSide='top', onReconnect, onRefreshConnectio
   return <React.Fragment>{page}{renderDock ? renderDock(compact, open, () => setOpen(false)) : compact}</React.Fragment>;
 };
 
-const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayoutReset, onAdaptiveRuleAction, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
+const SettingsModal = ({theme, onTheme, dockPosition='auto', onDockPosition, dockLocked=false, accent='default', personalization=DEFAULT_PERS, onDeviceSettings, feeds, onToggleFeed, cu, onCu, model, models = MODELS, onModel, backendSettings, apps = [], automations = [], memoryData = {facts: [], entries: []}, spotify, onSpotifyConnect, onSpotifyDisconnect, initialTab, onProviderKey, onMemorySettings, onMemoryAction, onMemoryChanged, onStartAutomationChat, onOpenScheduled, onBrowserSettings, onConfirmBrowserSettings, onCancelBrowserSettings, onRefreshBrowser, petManifest, petLoading, petError, petInstalled = [], petActive, petSize, petHidden, onPetToggleInstall, onPetSetActive, onPetSize, onPetHidden, onClose}) => {
   const [tab, setTab] = useState(initialTab || 'General');
   const {backgroundId, setBackgroundId, selectableBackgrounds} = useBackground();
   const [keys, setKeys] = useState({});
   const [savingKey, setSavingKey] = useState('');
   const [keyStatus, setKeyStatus] = useState({});
-  const sendPresentation = workspaceLayout && workspaceLayout.surfaces && workspaceLayout.surfaces['composer.send'];
-  const [sendLabelDraft, setSendLabelDraft] = useState(() => String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send'));
-  useEffect(() => setSendLabelDraft(String(sendPresentation && sendPresentation.properties && sendPresentation.properties.label || 'Send')), [sendPresentation && sendPresentation.properties && sendPresentation.properties.label]);
   const setAccent = id => onDeviceSettings && onDeviceSettings({accent:id});
   const [pers, setPers] = useState(() => ({...DEFAULT_PERS, ...(personalization || {})}));
   useEffect(() => setPers(current => ({...current, ...(personalization || {})})), [personalization]);
@@ -7641,14 +7654,6 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
       if (!receipt || receipt.status !== 'confirmation_required') setSavingKey('');
     } catch (_) { setSavingKey(''); }
   };
-  const adaptiveRules = (workspaceLayout && workspaceLayout.adaptive_ui && workspaceLayout.adaptive_ui.rules) || [];
-  const adaptiveRuleLabel = rule => {
-    const args = rule.arguments || {};
-    const value = Object.prototype.hasOwnProperty.call(args, 'visible')
-      ? (args.visible ? 'shown' : 'hidden')
-      : Object.values(args.properties || {})[0];
-    return `${String(args.reference || 'Surface').replaceAll('-', ' ')}: ${value}`;
-  };
   const SECTIONS = [
     {k: 'General', ic: <IcSettings size={14}/>},
     {k: 'Appearance', ic: <IcSun size={14}/>},
@@ -7703,25 +7708,6 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
                   </div>
                 </span>
               </div>
-              {workspaceLayout && <div className="layout-action-settings" aria-label="Workspace layout controls">
-                <div className="set-row">Sidebar<span className="sr-end"><button className="btn" aria-pressed={workspaceLayout.surfaces.sidebar.visible} onClick={() => onSurfaceChange('sidebar', {visible:!workspaceLayout.surfaces.sidebar.visible})}>{workspaceLayout.surfaces.sidebar.visible ? 'Hide' : 'Show'}</button></span></div>
-                <div className="set-row">Right panel<span className="sr-end"><button className="btn" aria-pressed={workspaceLayout.surfaces['right-panel'].visible} onClick={() => onSurfaceChange('right-panel', {visible:!workspaceLayout.surfaces['right-panel'].visible})}>{workspaceLayout.surfaces['right-panel'].visible ? 'Hide' : 'Show'}</button></span></div>
-                <div className="set-row">Settings surface<span className="sr-end"><button className="btn" aria-pressed="true" onClick={() => onSurfaceChange('settings', {visible:false})}>Hide now</button></span></div>
-                <div className="set-row">Composer size<span className="sr-end"><div className="ap-seg">{['compact','comfortable','large'].map(size => <button key={size} className={'ap-seg-b' + (workspaceLayout.surfaces.composer.properties.size === size ? ' on' : '')} aria-pressed={workspaceLayout.surfaces.composer.properties.size === size} onClick={() => onSurfaceChange('composer', {properties:{size}})}>{size === 'comfortable' ? 'Normal' : size[0].toUpperCase()+size.slice(1)}</button>)}</div></span></div>
-                <form className="set-row layout-label-row" onSubmit={event => { event.preventDefault(); onSurfaceChange('composer.send', {properties:{label:sendLabelDraft}}); }}><label htmlFor="workspace-send-label">Send button label</label><span className="sr-end"><input id="workspace-send-label" value={sendLabelDraft} maxLength="24" onChange={event => setSendLabelDraft(event.target.value)}/><button className="btn" disabled={!sendLabelDraft.trim()}>Apply</button></span></form>
-                <div className="set-row">Workspace surface defaults<span className="sr-end"><button className="btn" onClick={onLayoutReset}>Reset surfaces</button></span></div>
-              </div>}
-              <div className="cfg-sec">Adaptive UI</div>
-              <div className="cfg-note">Vellum can learn reversible presentation choices after three matching changes in one context. Rules stay on this device and can be disabled or removed here.</div>
-              {adaptiveRules.length === 0 && <div className="set-row">No learned interface rules yet.</div>}
-              {adaptiveRules.map(rule => <div className="set-row" key={rule.id}>
-                <div>{adaptiveRuleLabel(rule)}<span className="sr-sub">{rule.origin === 'explicit' ? 'Always instruction' : `${rule.evidence_count} matching changes`} · {rule.scope === 'global' ? 'All contexts' : rule.scope}{rule.suppressed ? ' · suppressed' : ''}</span></div>
-                <span className="sr-end">
-                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.explain', {rule_id:rule.id})}>Why?</button>
-                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.set_enabled', {rule_id:rule.id, enabled:!rule.enabled})}>{rule.enabled ? 'Disable' : 'Enable'}</button>
-                  <button className="btn" onClick={() => onAdaptiveRuleAction('ui.adaptive.rule.remove', {rule_id:rule.id})}>Remove</button>
-                </span>
-              </div>)}
               <div className="appearance-backgrounds">
                 <div className="appearance-backgrounds-head">
                   <div className="appearance-backgrounds-title">Live &amp; animated</div>
@@ -7799,10 +7785,10 @@ const SettingsModal = ({theme, onTheme, workspaceLayout, onSurfaceChange, onLayo
               <div className="set-row"><div>Reference record history<span className="sr-sub">Let Vellum reference all previous recording transcripts and notes when responding.</span></div><span className="sr-end"><div className={'sw' + (pers.recordHist ? ' on' : '')} role="switch" aria-checked={pers.recordHist} onClick={() => setP('recordHist', !pers.recordHist)}/></span></div>
 
               <div className="pers-h">Advanced</div>
-              {[['webSearch','Web search','Let Vellum automatically search the web for answers.'],['canvas','Canvas','Collaborate with Vellum on text and code.'],['voice','Vellum Voice','Enable Voice in Vellum.'],['advVoice','Advanced voice','Have more natural conversations in Voice.'],['connector','Connector search','Let Vellum automatically search connected sources for answers.']].map(([k,lbl,sub]) => (
-                <div key={k} className="set-row"><div>{lbl}<span className="sr-sub">{sub}</span></div><span className="sr-end"><div className={'sw' + (pers[k] ? ' on' : '')} role="switch" aria-checked={pers[k]} onClick={() => setP(k, !pers[k])}/></span></div>
+              {[['webSearch','Web search','Let Vellum automatically search the web for answers.'],['canvas','Canvas','Canvas editing is not available in this build.'],['voice','Vellum Voice','Enable Voice in Vellum.'],['advVoice','Advanced voice','Advanced voice is not available in this build.'],['connector','Connector search','Let Vellum automatically search connected sources for answers.']].map(([k,lbl,sub]) => (
+                <div key={k} className="set-row"><div>{lbl}<span className="sr-sub">{sub}</span></div><span className="sr-end">{['canvas','advVoice'].includes(k) ? <span className="sr-sub">Unavailable</span> : <div className={'sw' + (pers[k] ? ' on' : '')} role="switch" aria-checked={pers[k]} onClick={() => setP(k, !pers[k])}/>}</span></div>
               ))}
-              <div className="set-note">Preview \u2014 personalization is saved on this device only.</div>
+              <div className="set-note">Applied to responses and automatic tool use on this device. Current instructions and privacy permissions still take priority.</div>
             </React.Fragment>
           )}
           {tab === 'Configuration' && (
@@ -8678,6 +8664,7 @@ const App = () => {
     position: pxLsGet(PETDEX_LS.pos, {}),
     available: ['boba'],
   });
+  const providerCredentialChatsRef = useRef({});
   const deviceSettingsRuntimeRef = useRef(null);
   if (!deviceSettingsRuntimeRef.current) {
     deviceSettingsRuntimeRef.current = window.VellumUI.AppActions.createDeviceSettingsRuntime({
@@ -8803,7 +8790,7 @@ const App = () => {
   const [conversationLibrary, setConversationLibrary] = useState({spaces: [], smart_views: [], conversations: []});
   const [library, setLibrary] = useState(SEED_LIBRARY);
   const [projects, setProjects] = useState([]);
-  const [profile, setProfile] = useState(PROFILE_DEFAULT);
+  const profile = {...PROFILE_DEFAULT, ...deviceSettings.values.profile};
   const [memory, setMemory] = useState(SEED_MEMORY);
   const [feeds, setFeeds] = useState(SEED_FEEDS);
   const [selModel, setSelModel] = useState(readDefaultModel);
@@ -8958,7 +8945,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   const [devMode, setDevMode] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [customInstrOpen, setCustomInstrOpen] = useState(false);
-  const [customInstr, setCustomInstr] = useState('');
+  const customInstr = deviceSettings.values.personalization.custom;
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const libraryRefreshTimer = useRef(null);
@@ -9323,7 +9310,6 @@ const [slashSkills, setSlashSkills] = useState([]);
       ? `[Vellum UI context: the user is currently chatting in the ${agent.name} view. Answer normally and allow casual conversation. Use ${agent.name} as a specialist tool only when it is actually useful for this request.]\n\n${message}`
       : message;
     const completedSpotifyTools = new Set();
-    let appActionRequested = false;
     try {
       await API.chat.stream(
         {message: routedMessage, action_message: opts.submittedText || message, thread_id: convoId, model: selModel, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', convoId)},
@@ -9383,9 +9369,6 @@ const [slashSkills, setSlashSkills] = useState([]);
           },
           actionRequested: (request, turn) => {
             conversationActionRuntimeRef.current.rememberRequest(request);
-            if (appActionRequested) return;
-            appActionRequested = true;
-            if (!['spotify.playback.control','spotify.playlist.edit'].includes(request.action_id) && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           actionReceipt: (receipt, turn) => {
             applyAppActionReceipt(receipt, {notify:true, turn});
@@ -9446,16 +9429,11 @@ const [slashSkills, setSlashSkills] = useState([]);
     const ag = availableAgents.find(a => a.id === activeAgentId)
       || window.VellumUI.AgentCatalog.placeholder(activeAgentId, IcSparkle);
     if (!ag) return;
-    if (!selModel || !models.some(model => model.id === selModel)) {
-      pushToast('Choose a model or connect a cloud provider before sending.');
-      return;
-    }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = agentReply(ag, text);
     const act = activitySeedForMode(text);
     let cid = activeConvo[ag.id];
-    const createdForTurn = !cid;
     const existingConvo = cid ? (agentConvos[ag.id] || []).find(c => c.id === cid) : null;
     const queuedBehindTurn = !!(existingConvo && existingConvo.messages.some(m => m.streaming));
     const aMsg = {id: uid(), role: 'assistant', text: '', full: reply, streaming: true, queued:queuedBehindTurn, activity: [], sources: act.sources, tools: [], phase:queuedBehindTurn ? 'queued' : 'thinking', refShown:0, refLines:act.refLines, steps:act.steps, duration:act.duration, leadIn:act.leadIn, suppressActivity: !!act.suppressActivity};
@@ -9468,21 +9446,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       setAgentConvos(ac => ({...ac, [ag.id]: (ac[ag.id] || []).map(cv => cv.id === cid ? {...cv, messages: [...cv.messages, userMsg, aMsg]} : cv)}));
     }
     if (FEATURE_FLAGS.realChat) {
-      const rollbackAppActionTurn = () => {
-        finishTurn(aMsg.id);
-        setAgentConvos(ac => ({
-          ...ac,
-          [ag.id]: createdForTurn
-            ? (ac[ag.id] || []).filter(cv => cv.id !== cid)
-            : (ac[ag.id] || []).map(cv => cv.id === cid
-              ? {...cv, messages:cv.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)}
-              : cv),
-        }));
-        if (createdForTurn) setActiveConvo(current => ({...current, [ag.id]:null}));
-      };
       enqueueTurn('agent:' + ag.id + ':' + cid, () => {
         updateAgentTurn(ag.id, cid, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
-        return streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, existingConvo), attach, {...opts, playbackRequest, submittedText:text, onAppAction:rollbackAppActionTurn});
+        return streamBackendAgentReply(ag, cid, aMsg.id, messageForBackend(text, attach, existingConvo), attach, {...opts, playbackRequest, submittedText:text});
       });
     } else {
       streamAgentReply(ag.id, cid, aMsg.id, {...act, answer: reply});
@@ -9634,7 +9600,10 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const saveConversation = conversation => {
     if (!FEATURE_FLAGS.realConversations || !conversation) return;
-    API.conversations.save(conversation).then(scheduleConversationLibraryRefresh).catch(err => console.warn('conversation save failed', err));
+    return API.conversations.save(conversation).then(scheduleConversationLibraryRefresh).catch(err => {
+      console.warn('conversation save failed', err);
+      pushToast({message:"This chat couldn't be saved. Your messages are still visible here.", duration:6000});
+    });
   };
 
   const attachKnowledgeContext = async (page, forceNew) => {
@@ -9889,7 +9858,6 @@ const [slashSkills, setSlashSkills] = useState([]);
 
   const streamBackendReply = async (chatId, assistantId, message, threadId, attachments = [], opts = {}, modelId = selModel) => {
     const completedSpotifyTools = new Set();
-    let appActionRequested = false;
     try {
       await API.chat.stream(
         {message, action_message: opts.submittedText || message, thread_id: threadId || chatId, model: modelId, reasoning_mode: opts.reasoningMode || null, store: opts.storeToMemory !== false, attachments, force_web_search: !!opts.forceWebSearch, action_context: workspaceActionRuntimeRef.current.context('nlp', chatId)},
@@ -9959,9 +9927,6 @@ const [slashSkills, setSlashSkills] = useState([]);
           },
           actionRequested: (request, turn) => {
             conversationActionRuntimeRef.current.rememberRequest(request);
-            if (appActionRequested) return;
-            appActionRequested = true;
-            if (!['spotify.playback.control','spotify.playlist.edit'].includes(request.action_id) && turn.turn_kind !== 'mixed' && typeof opts.onAppAction === 'function') opts.onAppAction(request);
           },
           sources: sources => {
             const liveSources = normalizeSources(sources);
@@ -10026,13 +9991,8 @@ const [slashSkills, setSlashSkills] = useState([]);
     navigationEpochRef.current += 1;
     let chatId = opts.forceNew ? null : activeChatId;
     const existingChat = chatId ? chats.find(c => c.id === chatId) : null;
-    const createdForTurn = !chatId;
     const requestedModel = (existingChat && existingChat.model) || selModel;
     const turnModel = models.some(model => model.id === requestedModel) ? requestedModel : selModel;
-    if (!turnModel || !models.some(model => model.id === turnModel)) {
-      pushToast('Choose a model or connect a cloud provider before sending.');
-      return;
-    }
     const userMsg = {id: uid(), role: 'user', text, attachments: attach};
     const playbackRequest = FEATURE_FLAGS.realChat ? window.VellumSpotifyPlayback?.beginRequest?.(text) : undefined;
     const reply = vellumReply(text);
@@ -10066,22 +10026,9 @@ const [slashSkills, setSlashSkills] = useState([]);
       try { localStorage.setItem('vellum-active-chat-id', chatId); } catch {}
     }
     if (FEATURE_FLAGS.realChat) {
-      const rollbackAppActionTurn = () => {
-        finishTurn(aMsg.id);
-        setChats(cs => createdForTurn
-          ? cs.filter(c => c.id !== chatId)
-          : cs.map(c => c.id === chatId
-            ? {...c, messages:c.messages.filter(m => m.id !== userMsg.id && m.id !== aMsg.id)}
-            : c));
-        if (createdForTurn) {
-          delete threadRef.current[chatId];
-          setActiveChatId(null);
-          try { localStorage.removeItem('vellum-active-chat-id'); } catch {}
-        }
-      };
       enqueueTurn('chat:' + chatId, () => {
         updateTurn(chatId, aMsg.id, m => ({...m, queued:false, phase:'thinking'}));
-        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, playbackRequest, submittedText:text, onAppAction:rollbackAppActionTurn, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
+        return streamBackendReply(chatId, aMsg.id, backendMessage, threadRef.current[chatId], attach, {...opts, playbackRequest, submittedText:text, reasoningMode:existingChat && existingChat.reasoning_mode, storeToMemory:!existingChat || existingChat.store_to_memory !== false}, turnModel);
       });
     } else {
       streamReply(chatId, aMsg.id, {...act, answer: reply});
@@ -10150,7 +10097,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     },
     sideEffectError: error => pushToast((error && error.message) || 'Native window could not be opened.'),
     applySessionControl: (controlPatch, receipt) => {
-      const runtimeTargetId = receipt && receipt.target && receipt.target.id;
+      const runtimeTargetId = receipt?.result?.session_control_conversation_id || (receipt && receipt.target && receipt.target.id);
       const targetChat = chats.find(chat => chat.id === runtimeTargetId || chat.thread_id === runtimeTargetId);
       const targetChatId = targetChat ? targetChat.id : runtimeTargetId;
       const targetAgentId = availableAgents.find(agent => (agentConvos[agent.id] || []).some(convo => convo.id === runtimeTargetId))?.id;
@@ -10193,6 +10140,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   const showAppActionReceipt = (receipt, options = {}) => {
     if (!receipt) return;
+    // Navigation and layout changes already give direct visual feedback.
+    // Keep failures and confirmations visible, including for learned rules.
+    const routineTransition = ['ui.sidebar.set', 'ui.surface.configure', 'ui.adaptive.apply', 'conversation.open', 'conversation.new', 'agent.select', 'observability.open', 'coding.workspace.open'].includes(receipt.action_id);
+    if (routineTransition && ['applied', 'undone'].includes(receipt.status) && !receipt.confirmation) return;
     const notify = options.notify !== false;
     if (!notify) return;
     const share = receipt.result && receipt.result.share;
@@ -10269,6 +10220,9 @@ const [slashSkills, setSlashSkills] = useState([]);
         setSettingsTab(requestedTab.charAt(0).toUpperCase() + requestedTab.slice(1));
         dispatchSurfacePresentation('settings', {visible:true}, {notify:false});
         const focusId = receipt.result.client_effect.focus;
+        if (receipt.action_id === 'model.select' && focusId?.startsWith('provider-key-')) {
+          providerCredentialChatsRef.current[focusId.slice('provider-key-'.length)] = receipt.target.id;
+        }
         if (focusId) setTimeout(() => { const field = document.getElementById(focusId); if (field) field.focus(); }, 80);
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'settings.default_model.set' && receipt.result && receipt.result.model) {
@@ -10277,6 +10231,17 @@ const [slashSkills, setSlashSkills] = useState([]);
       }
       if (receipt && receipt.status === 'applied' && receipt.action_id === 'provider.credential.configure') {
         const provider = receipt.result && receipt.result.provider;
+        if (receipt.result?.provider_selection_resumed) {
+          const conversationId = receipt.result.session_control_conversation_id;
+          const completion = {id:'provider-' + receipt.receipt_id,role:'assistant',text:receipt.message,actionReceipts:[receipt],streaming:false,phase:'done',sources:[],tools:[]};
+          const agentId = availableAgents.find(agent => (agentConvos[agent.id] || []).some(convo => convo.id === conversationId))?.id;
+          if (agentId) updateAgentConvo(agentId, conversationId, chat => chat.messages.some(message => message.id === completion.id) ? chat : {...chat,messages:[...chat.messages,completion]});
+          else {
+            const chat = chats.find(chat => chat.id === conversationId || chat.thread_id === conversationId);
+            if (chat) updateChat(chat.id, current => current.messages.some(message => message.id === completion.id) ? current : {...current,messages:[...current.messages,completion]}, true);
+          }
+          delete providerCredentialChatsRef.current[provider];
+        }
         setTimeout(() => window.dispatchEvent(new CustomEvent('vellum:provider-configured', {detail:{provider}})), 0);
         API.settings.models().then(result => {
           const liveModels = Array.isArray(result && result.models) ? result.models.map(m => ({id:m.id,label:m.label || m.id,provider:m.provider || String(m.id).split('/')[0]})) : [];
@@ -10392,7 +10357,7 @@ const [slashSkills, setSlashSkills] = useState([]);
   };
   skillActionDispatcher = dispatchSkillAction;
   const dispatchAutomationAction = async (actionId, arguments_, options = {}) => {
-    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId, notify:!options.confirmedFromUi});
+    const receipt = await dispatchConversationAction(actionId, arguments_, {conversationId:activeChatId, notify:options.notify !== false && !options.confirmedFromUi});
     if (options.confirmedFromUi && receipt && receipt.status === 'confirmation_required') return confirmAppAction(receipt);
     applyAutomationReceipt(receipt);
     return receipt;
@@ -10410,9 +10375,10 @@ const [slashSkills, setSlashSkills] = useState([]);
   const confirmAppAction = async receipt => {
     try {
       const agentConversationId = view === 'agent' && activeAgentId ? activeConvo[activeAgentId] : null;
-      const confirmationConversationId = receipt && receipt.action_id === 'memory.conversation.set'
+      const credentialChatId = receipt?.action_id === 'provider.credential.configure' ? providerCredentialChatsRef.current[String(receipt.target?.id || '').split(':').pop()] : null;
+      const confirmationConversationId = credentialChatId || (receipt && receipt.action_id === 'memory.conversation.set'
         ? (agentConversationId || (activeChat && (activeChat.thread_id || activeChat.id)) || activeChatId)
-        : activeChatId;
+        : activeChatId);
       const confirmed = await conversationActionRuntimeRef.current.confirm(receipt, {conversationId:confirmationConversationId});
       return applyAppActionReceipt(confirmed);
     } catch (_) {
@@ -10560,7 +10526,7 @@ const [slashSkills, setSlashSkills] = useState([]);
     const receipt = await dispatchConversationAction(
       'provider.credential.configure',
       {provider, secret:apiKey},
-      {},
+      {conversationId:providerCredentialChatsRef.current[provider] || activeChatId},
     );
     if (receipt) applyAppActionReceipt(receipt, {notify:false});
     return receipt;
@@ -10679,7 +10645,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null}
               onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }}
               onHeadMenu={e => setMenu({type: 'chathead', x: e.clientX, y: e.clientY})}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+              composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), memoryEnabled:!activeChat || activeChat.store_to_memory !== false, onMemoryChange:setConversationMemory, onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'library' && <LibraryView library={library} setLibrary={setLibrary}/>}
             {view === 'projects' && <ProjectsView projects={projects} chats={chats} onNewProject={newProject} onOpenProject={openProject}/>}
             {view === 'project' && activeProject && <ProjectPage project={activeProject} chats={chats}
@@ -10688,7 +10654,7 @@ const [slashSkills, setSlashSkills] = useState([]);
               onAddSource={addSource}
               onChatMenu={(id, e) => setMenu({type: 'chat', id, x: e.clientX, y: e.clientY})}
               onViewImage={setViewer}
-              composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+              composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: currentSel, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
             {view === 'project' && !activeProject && <div className="placeholder">project not found</div>}
             {view === 'scheduled' && <ScheduledView automations={automations} projects={projects} chats={chats} models={models} onStartChat={startAutomationChat} onItemsChange={setAutomations} onAction={dispatchAutomationAction}/>}
             {view === 'ledger' && <ObservabilityView control={observabilityControl} onAction={dispatchObservabilityAction}/>}
@@ -10698,7 +10664,7 @@ const [slashSkills, setSlashSkills] = useState([]);
             {view === 'memory' && <MemoryConsole page memoryData={memoryData} onRefresh={refreshMemoryData} onBack={() => newChat()} onDreamComplete={refreshMemoryData} onMemoryAction={dispatchMemoryAction}/>}
             {view === 'kg' && <KnowledgeGraphView onBack={() => newChat()} onAttachContext={attachKnowledgeContext} onAction={dispatchKnowledgeAction}/>}
             {view === 'archive' && <ArchiveView chats={chats} onRestore={restoreChat} onDelete={deleteChat}/>}
-            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
+            {view === 'agent' && activeAgentId && <AgentView agent={activeAgent} convos={agentConvos[activeAgentId] || []} activeConvoId={activeConvo[activeAgentId] || null} enabled={!agentCfg[activeAgentId] || agentCfg[activeAgentId].enabled} onToggleEnabled={() => setAgentCfg(m => ({...m, [activeAgentId]: {...m[activeAgentId], enabled: !(m[activeAgentId] && m[activeAgentId].enabled)}}))} onNewConvo={agentNewConvo} onOpenConvo={openAgentConvo} model={selModel} setModel={selectModel} models={models} onSend={sendToAgent} onStop={() => stopActiveAgentTurn(activeAgentId)} onRegen={regenAgent} onViewImage={setViewer} onSettings={() => setAgentSettingsOpen(true)} onKnowledgeAction={dispatchKnowledgeAction} onAppActionReceipt={applyAppActionReceipt} onAnswerNow={answerNow} onOpenActivity={message => { setActivityMsg(message); dispatchSurfacePresentation('right-panel', {visible:true, properties:{content:'files'}}, {notify:false}); }} activity={rightPanelVisible && !browserPanelVisible ? activityMsg : null} onCloseActivity={() => { setActivityMsg(null); dispatchSurfacePresentation('right-panel', {visible:false}); }} xConnected={xConn.connected} xHandle={xConn.handle} onConnectX={() => setXConnectOpen(true)} onDisconnectX={() => setXConnectOpen(true)} ytConnected={ytConn.connected} ytHandle={ytConn.channel_title || 'YouTube'} onConnectYT={() => setYtConnectOpen(true)} onDisconnectYT={disconnectYouTube} composerExtras={{voiceEnabled:deviceSettings.values.personalization.voice !== false, library, projects, onOpenLibrary: () => nav('library'), onOpenProject: openProject, apps, skills: slashSkills, agents: availableAgents, appSel: draftApps, onToggleSel: toggleSel, onConnectApp: connectApp, onOpenAgent: openAgent, onOpenPlugins: () => nav('apps'), onOpenSkills: () => nav('skills'), onAppActionReceipt:applyAppActionReceipt, presentation:composerPresentation}}/>}
           </div>
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserSplitter value={workspaceLayout.surfaces['right-panel'].properties.chat_ratio || 38} onChange={chat_ratio=>dispatchSurfacePresentation('right-panel',{properties:{chat_ratio}},{notify:false})}/>}
           {browserPanelVisible && view !== 'music' && <window.VellumUI.BrowserPanel state={browserState} onRefresh={refreshBrowser}
@@ -10747,7 +10713,7 @@ const [slashSkills, setSlashSkills] = useState([]);
           onPersonalization={() => { setMenu(null); setSettingsTab('Personalization'); dispatchSurfacePresentation('settings', {visible:true}); }}
           onAddAccount={() => { setMenu(null); pushToast('Add account \u2014 not in this preview'); }}
           onClose={() => setMenu(null)}/>}
-        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} workspaceLayout={workspaceLayout} onSurfaceChange={(reference, presentation) => dispatchSurfacePresentation(reference, presentation, {learn:true})} onLayoutReset={resetWorkspaceLayout} onAdaptiveRuleAction={dispatchAdaptiveRuleAction} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
+        {settingsOpen && <SettingsModal theme={theme} initialTab={settingsTab} onTheme={nextTheme => dispatchSurfacePresentation('workspace', {properties:{theme:nextTheme}}, {learn:true})} dockPosition={dockPosition} onDockPosition={setDockPosition} dockLocked={dockLocked} onDockLocked={setDockLocked} accent={deviceSettings.values.accent} personalization={deviceSettings.values.personalization} onDeviceSettings={dispatchDeviceSettings} model={defaultModel} models={models} onModel={selectDefaultModel} onProviderKey={saveProviderKey} onMemorySettings={updateMemorySettings} onMemoryAction={dispatchMemoryAction} backendSettings={backendSettings} apps={apps} automations={automations} memoryData={memoryData} spotify={spotify} onSpotifyConnect={() => setSpotifyConnectOpen(true)} onSpotifyDisconnect={disconnectSpotify}
           onBrowserSettings={async (actionId,args) => {
             const receipt = await dispatchConversationAction(actionId,args,{conversationId:activeChatId,notify:false});
             if (receipt?.status === 'applied' && args.operation === 'open_profile') { browserSuppressed.current=false; dispatchSurfacePresentation('right-panel',{visible:true,properties:{content:'browser'}},{notify:false,persistence:'session'}); }
@@ -10774,10 +10740,10 @@ const [slashSkills, setSlashSkills] = useState([]);
         )}
         {viewer && <div className="lightbox" onClick={() => setViewer(null)}><img src={viewer} alt="attachment"/></div>}
         {editProfileOpen && <EditProfileModal profile={profile}
-          onSave={p => { setProfile(pr => ({...pr, ...p})); setEditProfileOpen(false); }}
+          onSave={async p => { const receipt = await dispatchDeviceSettings({profile:p}); if (receipt?.status === 'applied') setEditProfileOpen(false); }}
           onClose={() => setEditProfileOpen(false)}/>}
         {shortcutsOpen && <ShortcutsModal onClose={() => setShortcutsOpen(false)}/>}
-        {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={v => { setCustomInstr(v); setCustomInstrOpen(false); pushToast('Custom instructions saved'); }} onClose={() => setCustomInstrOpen(false)}/>}
+        {customInstrOpen && <CustomInstructionsModal value={customInstr} onSave={async v => { const receipt = await dispatchDeviceSettings({personalization:{custom:v}}); if (receipt?.status === 'applied') setCustomInstrOpen(false); }} onClose={() => setCustomInstrOpen(false)}/>}
         {xConnectOpen && <XConnectModal onClose={() => setXConnectOpen(false)} onConnected={(h) => { setXConn({connected:true, handle:h}); setXConnectOpen(false); pushToast('X account connected'); }}/>}
         {ytConnectOpen && <YouTubeConnectModal
           onDisconnect={() => { disconnectYouTube(); setYtConnectOpen(false); }}
