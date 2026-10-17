@@ -99,11 +99,11 @@ class DevicePersonalizationSettings(BaseModel):
     voice: bool = False
     advVoice: bool = False
     connector: bool = False
-    baseStyle: str = "default"
-    warm: str = "default"
-    enthusiastic: str = "default"
-    headers: str = "default"
-    emoji: str = "default"
+    baseStyle: Literal["default", "professional", "friendly", "candid", "quirky", "efficient", "cynical"] = "default"
+    warm: Literal["default", "more", "less"] = "default"
+    enthusiastic: Literal["default", "more", "less"] = "default"
+    headers: Literal["default", "more", "less"] = "default"
+    emoji: Literal["default", "more", "less"] = "default"
 
 
 class DeviceSettingsValues(BaseModel):

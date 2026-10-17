@@ -1090,19 +1090,35 @@ def _canonical_clock_zones() -> dict[str, str]:
     return {name.casefold(): name for name in available_timezones()}
 
 
+def _clock_target(message: str) -> str | None:
+    """Extract a location without repeatedly scanning a variable-length suffix."""
+    text = ' '.join(message.split()).rstrip('.!?').rstrip()
+    preposition = re.search(r'\b(?:in|for|at|meant) ', text, re.I)
+    if preposition is None:
+        return None
+    target = text[preposition.end():]
+    lowered = target.casefold()
+    for suffix in (' right now', ' now', ' today', ' currently'):
+        if lowered.endswith(suffix):
+            return target[:-len(suffix)]
+    return target
+
+
 def _clock_location(message: str) -> tuple[str | None, bool]:
     """Return an explicitly requested zone and whether a location was supplied."""
     from zoneinfo import ZoneInfoNotFoundError
     text = " ".join(message.strip().rstrip('.!?').casefold().split())
-    named_zone = re.search(r"\b[a-z_]+/[a-z0-9_+-]+(?:/[a-z0-9_+-]+)?(?=\s|[.!?]|$)", text)
-    if named_zone:
-        name = _canonical_clock_zones().get(named_zone.group())
-        return name, True
+    # Tokenization consumes each word once, including long malformed zone names.
+    # Anchored validation avoids retrying a failing zone pattern at every letter.
+    for token in re.finditer(r'\b[a-z_][a-z0-9_/+-]*', text):
+        candidate = token.group()
+        if '/' in candidate and re.fullmatch(r'[a-z_]+/[a-z0-9_+-]+(?:/[a-z0-9_+-]+)?', candidate):
+            return _canonical_clock_zones().get(candidate), True
     # Do not mistake a mentioned wrong answer ("you gave me India time") for
     # a new target. Explicit location changes such as "I meant Seoul" do count.
-    target = re.search(r"\b(?:in|for|at|meant)\s+(.+?)(?:\s+(?:right now|now|today|currently))?$", text)
+    target = _clock_target(text)
     if target:
-        name = target.group(1).strip()
+        name = target
         zone = _CLOCK_LOCATIONS.get(name)
         if not zone:
             candidates = {
@@ -1160,8 +1176,7 @@ def _current_datetime_answer(clean_message: str, *, now: datetime | None = None)
         return f"Tomorrow is {tomorrow.strftime('%A, %B %d, %Y')}." + (f" ({requested_zone})" if requested_zone else "")
     place = ''
     if requested_zone:
-        target = re.search(r'\b(?:in|for|at)\s+(.+?)(?:\s+(?:right now|now|today|currently))?[.!?]*$', clean_message, re.I)
-        label = target.group(1).strip() if target else requested_zone
+        label = _clock_target(clean_message) or requested_zone
         label = label.rstrip('.!?')
         if '/' in label:
             label = requested_zone.rsplit('/', 1)[-1].replace('_', ' ')
@@ -1175,12 +1190,36 @@ def _clock_followup_answer(message: str, thread_id: str) -> str | None:
     text = " ".join(message.casefold().split())
     if re.search(r"\b(?:save|remember|note|book|schedule|appointment|calendar|convert)\b", text):
         return None
-    short = re.fullmatch(r"(?:and )?(?:also )?(?:what(?:'s| is) )?(?:the )?(?:time|date|day)(?:\s+(?:there|now))?[.!?]*", text)
+    bare = text.rstrip('.!?')
+    short_text = bare.removeprefix('and ').removeprefix('also ')
+    for prefix in ("what's ", 'what is '):
+        if short_text.startswith(prefix):
+            short_text = short_text[len(prefix):]
+            break
+    short_text = short_text.removeprefix('the ')
+    for suffix in (' there', ' now'):
+        if short_text.endswith(suffix):
+            short_text = short_text[:-len(suffix)]
+            break
+    short = short_text in {'time', 'date', 'day'}
     correction = re.search(r"\b(?:wrong|incorrect|you (?:gave|said|told)|i (?:meant|asked)|actually|no[, ])", text)
     supplied_clock = re.search(r"\b(?:it(?:'s| is)|the time is)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b", text)
-    location_question = re.fullmatch(r"(?:and |what about |how about |in )+(.+?)[.!?]*", text)
-    if location_question and re.match(r"(?:(?:also|the)\s+)*(?:time|date|day)\b", location_question.group(1)):
-        location_question = None
+    offset = 0
+    while True:
+        prefix = next((item for item in ('and ', 'what about ', 'how about ', 'in ') if bare.startswith(item, offset)), None)
+        if prefix is None:
+            break
+        offset += len(prefix)
+    location_question = bare[offset:] if offset and offset < len(bare) else None
+    if location_question:
+        offset = 0
+        while True:
+            prefix = next((item for item in ('also ', 'the ') if location_question.startswith(item, offset)), None)
+            if prefix is None:
+                break
+            offset += len(prefix)
+        if re.match(r'(?:time|date|day)\b', location_question[offset:]):
+            location_question = None
     if not (short or correction or supplied_clock or location_question):
         return None
     previous = _thread_user_messages(thread_id, limit=6)
@@ -1188,7 +1227,7 @@ def _clock_followup_answer(message: str, thread_id: str) -> str | None:
         previous = previous[:-1]
     zone, has_location = _clock_location(message)
     if location_question and not short and not has_location:
-        zone, has_location = _clock_location('in ' + location_question.group(1))
+        zone, has_location = _clock_location('in ' + location_question)
     found_clock = False
     for prior in reversed(previous[-4:]):
         is_clock = _current_datetime_answer(prior) is not None

@@ -39,8 +39,15 @@ def normalize_command_words(message: str) -> str:
         return text
     # Only the command prefix is repaired. Quoted text and the value following
     # "to" are not spellchecked (names, instructions, secrets and model IDs).
-    pieces = re.split(r'("[^"]*"|“[^”]*”|\s+to\s+)', text, flags=re.I)
-    prefix = pieces[0]
+    protected = len(text)
+    for opening, closing in (('"', '"'), ('“', '”')):
+        start = text.find(opening)
+        if start >= 0 and text.find(closing, start + 1) >= 0:
+            protected = min(protected, start)
+    target = re.search(' to ', text, flags=re.I)
+    if target:
+        protected = min(protected, target.start())
+    prefix = text[:protected]
     count = 0
     def repair(match):
         nonlocal count
@@ -52,8 +59,7 @@ def normalize_command_words(message: str) -> str:
             return match.group()
         candidates = [candidate for candidate in _WORDS if _near_word(word, candidate)]
         return candidates[0] if len(candidates) == 1 else match.group()
-    pieces[0] = re.sub(r'\b[a-zA-Z]+\b', repair, prefix)
-    return ''.join(pieces)
+    return re.sub(r'\b[a-zA-Z]+\b', repair, prefix) + text[protected:]
 
 
 def normalize_clock_question(message: str) -> str:

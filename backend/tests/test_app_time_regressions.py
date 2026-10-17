@@ -31,6 +31,39 @@ def test_clock_answer_leads_with_the_requested_time_and_keeps_date_natural():
     assert 'Today is' not in answer
 
 
+@pytest.mark.parametrize('suffix', [' right now?!', ' currently!!!', '\u2003today?', ' now', ' ?', ' right now ?!'])
+def test_clock_location_and_display_label_share_the_same_suffix_boundary(suffix):
+    answer = api._current_datetime_answer('what time is it in Belgium' + suffix, now=datetime(2026, 10, 15, 12, tzinfo=timezone.utc))
+    assert answer == "It's 2:00 PM CEST in Belgium on Thursday, October 15, 2026."
+
+
+def test_clock_zone_label_does_not_include_space_before_punctuation():
+    answer = api._current_datetime_answer('what time is it in utc ?', now=datetime(2026, 10, 15, 12, tzinfo=timezone.utc))
+    assert answer == "It's 12:00 PM UTC in UTC on Thursday, October 15, 2026."
+
+
+def test_long_unknown_clock_location_returns_clarification():
+    assert 'timezone' in api._current_datetime_answer('time in ' + 'a' * 100_000)
+
+
+@pytest.mark.parametrize('prefix', ['and ', 'what about ', 'how about '])
+def test_repeated_followup_prefixes_and_punctuation_keep_the_requested_zone(monkeypatch, prefix):
+    monkeypatch.setattr(api, '_thread_user_messages', lambda *a, **kw: ['what time is it in South Korea?'])
+    answer = api._clock_followup_answer(prefix * 5_000 + 'Belgium' + '!' * 10_000, 'clock-thread')
+    assert 'CEST in Brussels ' in answer
+
+
+def test_location_followup_keeps_the_first_explicit_preposition(monkeypatch):
+    monkeypatch.setattr(api, '_thread_user_messages', lambda *a, **kw: ['what time is it in South Korea?'])
+    assert 'CEST in Brussels ' in api._clock_followup_answer('in Belgium?!', 'clock-thread')
+    assert 'timezone' in api._clock_followup_answer('in in Belgium?!', 'clock-thread')
+
+
+def test_repeated_articles_in_short_time_followup_do_not_become_a_location(monkeypatch):
+    monkeypatch.setattr(api, '_thread_user_messages', lambda *a, **kw: ['what time is it in South Korea?'])
+    assert api._clock_followup_answer('and ' + 'the ' * 10_000 + 'time', 'clock-thread') is None
+
+
 def test_unrelated_message_does_not_scan_the_saved_archive(monkeypatch):
     def forbidden():
         pytest.fail('Unrelated messages must not load all saved chats')

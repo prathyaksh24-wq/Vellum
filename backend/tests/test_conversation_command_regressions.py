@@ -114,6 +114,23 @@ def test_spelling_repair_never_changes_saved_text_or_setting_values():
     assert normalize_command_words('chnage my custom instructions to use drak chocolate as an example') == 'change my custom instructions to use drak chocolate as an example'
 
 
+@pytest.mark.parametrize('value', ['"drak theme"', '“drak theme”', '"" drak theme', 'TO drak theme', 'to\u2003drak theme'])
+def test_spelling_repair_preserves_the_first_protected_value(value):
+    from agent.text_normalization import normalize_command_words
+    assert normalize_command_words('chnage ' + value) == 'change ' + ' '.join(value.split())
+
+
+def test_unmatched_quotes_do_not_hide_the_remaining_command():
+    from agent.text_normalization import normalize_command_words
+    assert normalize_command_words('chnage “drak theme') == 'change “dark theme'
+
+
+def test_many_unmatched_quotes_preserve_the_entire_normalized_message():
+    from agent.text_normalization import normalize_command_words
+    quotes = '“' * 100_000
+    assert normalize_command_words('chnage ' + quotes) == 'change ' + quotes
+
+
 def test_profile_name_change_uses_the_saved_device_owner_and_response_context():
     from agent.personalization import request_personalization
     runtime,*_=make_runtime()

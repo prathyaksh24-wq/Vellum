@@ -256,7 +256,10 @@ def test_voice_speak_returns_wav_for_replay(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('preferences,status', [('{"voice":false}',409), ('{"warm":"invalid"}',422)])
+@pytest.mark.parametrize('preferences,status', [
+    ('{"voice":false}', 409),
+    *[(json.dumps({field: 'invalid'}), 422) for field in ('baseStyle', 'warm', 'enthusiastic', 'headers', 'emoji')],
+])
 async def test_voice_preferences_reject_disabled_or_invalid_before_transcribing(monkeypatch,preferences,status):
     from io import BytesIO
     from fastapi import HTTPException, UploadFile
